@@ -5,7 +5,8 @@
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.observation.services.movement_interruption_service import (
@@ -19,8 +20,8 @@ from ai_rpg_world.application.observation.services.observation_timestamp_resolve
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
-from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 
 
@@ -67,7 +68,7 @@ class ObservationEventHandler(EventHandler[Any]):
                 original_exception=e,
             ) from e
 
-    def _execute_in_separate_transaction(self, operation: Callable[[], None], context: dict) -> None:
+    def _execute_in_separate_transaction(self, operation: Callable[[], None], context: dict[str, Any]) -> None:
         """別トランザクションで操作を実行。非同期ハンドラ方針に従う。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:

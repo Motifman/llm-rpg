@@ -10,10 +10,10 @@ from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.event.inventory_events import ItemDroppedFromInventoryEvent
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import GroundItemComponent
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 
 
 class ItemDroppedFromInventoryDropHandler(EventHandler[ItemDroppedFromInventoryEvent]):

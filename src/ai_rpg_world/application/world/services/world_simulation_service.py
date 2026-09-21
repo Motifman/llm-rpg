@@ -1,42 +1,11 @@
 import logging
-from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
-from ai_rpg_world.domain.monster.repository.monster_repository import (
-    MonsterRepository,
-    MonsterTemplateRepository,
-)
-from ai_rpg_world.domain.monster.repository.spawn_table_repository import SpawnTableRepository
-from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
-from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
-from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
-from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
-from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
-from ai_rpg_world.domain.world.service.world_time_config_service import (
-    WorldTimeConfigService,
-)
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.combat.service.hit_box_config_service import (
-    HitBoxConfigService,
-)
-from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.world.aggro_store import AggroStore
-from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.application.world.services.pursuit_continuation_service import (
     PursuitContinuationService,
 )
@@ -44,6 +13,40 @@ from ai_rpg_world.application.world.services.world_simulation_collaborator_facto
     WorldSimulationCollaboratorFactory,
     WorldSimulationDefaultDependencies,
 )
+from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
+from ai_rpg_world.domain.combat.service.hit_box_config_service import (
+    HitBoxConfigService,
+)
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
+from ai_rpg_world.domain.monster.repository.monster_repository import (
+    MonsterRepository,
+    MonsterTemplateRepository,
+)
+from ai_rpg_world.domain.monster.repository.spawn_table_repository import SpawnTableRepository
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
+    MonsterSkillExecutionDomainService,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
+from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
+from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    WorldTimeConfigService,
+)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
@@ -69,19 +72,19 @@ class WorldSimulationApplicationService:
         monster_action_resolver_factory: Callable[
             [PhysicalMapAggregate, WorldObject], "IMonsterActionResolver"
         ],
-        hit_box_config_service: Optional[HitBoxConfigService] = None,
-        hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
-        aggro_store: Optional[AggroStore] = None,
-        world_time_config_service: Optional[WorldTimeConfigService] = None,
-        spawn_table_repository: Optional[SpawnTableRepository] = None,
-        monster_template_repository: Optional[MonsterTemplateRepository] = None,
-        loot_table_repository: Optional[LootTableRepository] = None,
-        connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
-        map_transition_service: Optional[MapTransitionService] = None,
-        llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
-        movement_service: Optional[Any] = None,
-        pursuit_continuation_service: Optional[PursuitContinuationService] = None,
-        harvest_command_service: Optional[Any] = None,
+        hit_box_config_service: HitBoxConfigService | None = None,
+        hit_box_collision_service: HitBoxCollisionDomainService | None = None,
+        aggro_store: AggroStore | None = None,
+        world_time_config_service: WorldTimeConfigService | None = None,
+        spawn_table_repository: SpawnTableRepository | None = None,
+        monster_template_repository: MonsterTemplateRepository | None = None,
+        loot_table_repository: LootTableRepository | None = None,
+        connected_spots_provider: IConnectedSpotsProvider | None = None,
+        map_transition_service: MapTransitionService | None = None,
+        llm_turn_trigger: ILlmTurnTrigger | None = None,
+        movement_service: Any | None = None,
+        pursuit_continuation_service: PursuitContinuationService | None = None,
+        harvest_command_service: Any | None = None,
     ):
         self._time_provider = time_provider
         self._llm_turn_trigger = llm_turn_trigger
@@ -196,7 +199,7 @@ class WorldSimulationApplicationService:
             self._environment_stage.run(current_tick, maps)
 
             # プレイヤーIDと所属マップの対応を保持（環境効果の一括適用のため）
-            player_map_map: Dict[PlayerId, PhysicalMapAggregate] = {}
+            player_map_map: dict[PlayerId, PhysicalMapAggregate] = {}
 
             # 3.1.5 プレイヤーの継続移動を進める
             if self._movement_service is not None:
@@ -218,7 +221,7 @@ class WorldSimulationApplicationService:
                 self._environment_effect_service.apply_bulk(player_map_map)
 
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
-            active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
+            active_spot_ids: set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
 
             blocked_actor_ids = self._monster_lifecycle_stage.run(
                 maps,
@@ -242,7 +245,7 @@ class WorldSimulationApplicationService:
 
     def _actors_sorted_by_distance_to_players(
         self, physical_map: PhysicalMapAggregate
-    ) -> List[WorldObject]:
+    ) -> list[WorldObject]:
         """
         同一マップ上のプレイヤー位置との距離が近い順にアクターを返す。
         プレイヤーが誰もいない場合は physical_map.actors の順のまま返す。
@@ -292,7 +295,7 @@ class WorldSimulationApplicationService:
             )
         except DomainException as e:
             self._logger.warning(
-                f"Monster skill skipped for actor {actor_id} due to domain rule: {str(e)}"
+                f"Monster skill skipped for actor {actor_id} due to domain rule: {e!s}"
             )
             return
 
@@ -321,7 +324,7 @@ class WorldSimulationApplicationService:
             # ドメイン例外をアプリケーション例外に変換
             raise ApplicationException(str(e), cause=e, **context)
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)

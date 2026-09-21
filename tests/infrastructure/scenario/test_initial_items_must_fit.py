@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -20,8 +20,8 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 #: 所持枠。集約が持っている値をそのまま使う (テストに数字を写さない)。
@@ -31,7 +31,7 @@ _TOWN = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "market_tow
 
 
 def _load_with_initial_items(tmp_path: Path, count: int) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["players"][0]["initial_items"] = ["herb"] * count
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

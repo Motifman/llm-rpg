@@ -1,7 +1,6 @@
 """スポット単位のスポーンテーブル。出現しうるスロット一覧を保持する。"""
 
 from dataclasses import dataclass
-from typing import List
 
 from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -11,9 +10,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 class SpotSpawnTable:
     """このスポットで出現しうるスポーンスロットの一覧。設定の入れ替えが可能な骨格用。"""
     spot_id: SpotId
-    slots: List[SpawnSlot]
+    slots: list[SpawnSlot]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.slots, list):
             raise TypeError("slots must be a list")
         for i, slot in enumerate(self.slots):

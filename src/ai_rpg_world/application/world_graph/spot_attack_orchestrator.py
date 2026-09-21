@@ -26,7 +26,7 @@ event 発火 + save パスが無料で付いてくる。
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
@@ -94,12 +94,12 @@ class SpotAttackOrchestrator:
         monster_repository: MonsterRepository,
         player_status_repository: PlayerStatusRepository,
         *,
-        monster_attack_service: Optional[SpotMonsterAttackService] = None,
-        player_attack_service: Optional[SpotPlayerAttackService] = None,
-        perception_service: Optional[SpotPerceptionService] = None,
-        visibility_service: Optional[MonsterVisibilityService] = None,
-        random_source: Optional[Any] = None,
-        event_publisher: Optional[Any] = None,
+        monster_attack_service: SpotMonsterAttackService | None = None,
+        player_attack_service: SpotPlayerAttackService | None = None,
+        perception_service: SpotPerceptionService | None = None,
+        visibility_service: MonsterVisibilityService | None = None,
+        random_source: Any | None = None,
+        event_publisher: Any | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
@@ -210,8 +210,8 @@ class SpotAttackOrchestrator:
         monster_repository: MonsterRepository,
         player_status_repository: PlayerStatusRepository,
         event_publisher: Any,
-        random_source: Optional[Any] = None,
-    ) -> "SpotAttackOrchestrator":
+        random_source: Any | None = None,
+    ) -> SpotAttackOrchestrator:
         """既存policyを保ち、command専用repositoryとevent収集口へ束縛する。"""
         return SpotAttackOrchestrator(
             spot_graph_repository=spot_graph_repository,
@@ -520,7 +520,7 @@ class SpotAttackOrchestrator:
         ため tick 1 回の処理として今は省略。
         """
         node = graph.get_spot(spot_id)
-        atmosphere: Optional[SpotAtmosphere] = node.atmosphere
+        atmosphere: SpotAtmosphere | None = node.atmosphere
         return self._perception.compute_effective_lighting(
             atmosphere, spot_has_any_light_bearer=False
         )

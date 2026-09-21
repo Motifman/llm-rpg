@@ -8,7 +8,7 @@ application 層サービスが「object_id からオブジェクトとオーナ�
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -25,9 +25,9 @@ if TYPE_CHECKING:
 
 def find_owner_spot_id(
     object_id: SpotObjectId,
-    graph: "SpotGraphAggregate",
+    graph: SpotGraphAggregate,
     interior_repository: ISpotInteriorRepository,
-) -> Optional[SpotId]:
+) -> SpotId | None:
     """object_id を含むスポットの ID を返す。見つからなければ None。"""
     for node in graph.iter_spot_nodes():
         interior = interior_repository.find_by_spot_id(node.spot_id)
@@ -40,9 +40,9 @@ def find_owner_spot_id(
 
 def find_object_in_graph(
     object_id: SpotObjectId,
-    graph: "SpotGraphAggregate",
+    graph: SpotGraphAggregate,
     interior_repository: ISpotInteriorRepository,
-) -> Optional[SpotObject]:
+) -> SpotObject | None:
     """object_id のオブジェクトを返す。見つからなければ None。"""
     owner = find_owner_spot_id(object_id, graph, interior_repository)
     if owner is None:
@@ -55,9 +55,9 @@ def find_object_in_graph(
 
 def find_object_with_owner(
     object_id: SpotObjectId,
-    graph: "SpotGraphAggregate",
+    graph: SpotGraphAggregate,
     interior_repository: ISpotInteriorRepository,
-) -> Tuple[Optional[SpotObject], Optional[SpotId]]:
+) -> tuple[SpotObject | None, SpotId | None]:
     """object_id のオブジェクトとオーナースポット ID を一度に返す。"""
     owner = find_owner_spot_id(object_id, graph, interior_repository)
     if owner is None:

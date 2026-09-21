@@ -5,10 +5,8 @@ SectionBuildResult: セクション描画の戻り値（lines + targets）を表
 """
 
 from dataclasses import dataclass
-from typing import Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
-
 
 # UiContextBuilder が使用する全 label prefix の初期値
 DEFAULT_LABEL_PREFIXES = (
@@ -23,7 +21,7 @@ class SectionBuildResult:
     """セクション描画の結果。lines と targets を一括で返す。"""
 
     lines: list[str]
-    targets: Dict[str, ToolRuntimeTargetDto]
+    targets: dict[str, ToolRuntimeTargetDto]
 
     def __post_init__(self) -> None:
         if not isinstance(self.lines, list):
@@ -48,7 +46,7 @@ class LabelAllocator:
     def __init__(
         self,
         *,
-        initial_counters: Dict[str, int] | None = None,
+        initial_counters: dict[str, int] | None = None,
     ) -> None:
         if initial_counters is not None:
             if not isinstance(initial_counters, dict):
@@ -75,6 +73,6 @@ class LabelAllocator:
         """指定 prefix の現在カウントを返す（次の next で使われる値ではない）。"""
         return self._counters.get(prefix, 0)
 
-    def counters_snapshot(self) -> Dict[str, int]:
+    def counters_snapshot(self) -> dict[str, int]:
         """現在のカウンタのスナップショットを返す（読み取り専用用途）。"""
         return dict(self._counters)

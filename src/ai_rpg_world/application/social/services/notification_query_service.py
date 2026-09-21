@@ -1,12 +1,15 @@
 import logging
-from typing import List, Callable, Any, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.social.contracts.dtos import NotificationDto
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.application.social.exceptions import ApplicationException
-from ai_rpg_world.application.social.exceptions import ApplicationExceptionFactory
-from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.application.social.exceptions import (
+    ApplicationException,
+    ApplicationExceptionFactory,
+    SystemErrorException,
+)
 from ai_rpg_world.domain.sns.exception import SnsDomainException
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
@@ -33,12 +36,12 @@ class NotificationQueryService:
                 **{k: v for k, v in context.items() if k in ['notification_id']}
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def get_user_notifications(self, user_id: int, limit: int = 50, offset: int = 0) -> List[NotificationDto]:
+    def get_user_notifications(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:
         """ユーザーの通知一覧を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_user_notifications_impl(user_id, limit, offset),
@@ -50,7 +53,7 @@ class NotificationQueryService:
             }
         )
 
-    def _get_user_notifications_impl(self, user_id: int, limit: int = 50, offset: int = 0) -> List[NotificationDto]:
+    def _get_user_notifications_impl(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:
         """ユーザーの通知一覧を取得"""
         user_id_vo = UserId(user_id)
         notifications = self._notification_repository.find_by_user_id(user_id_vo, limit, offset)
@@ -75,7 +78,7 @@ class NotificationQueryService:
             for notification in notifications
         ]
 
-    def get_unread_notifications(self, user_id: int) -> List[NotificationDto]:
+    def get_unread_notifications(self, user_id: int) -> list[NotificationDto]:
         """ユーザーの未読通知を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_unread_notifications_impl(user_id),
@@ -85,7 +88,7 @@ class NotificationQueryService:
             }
         )
 
-    def _get_unread_notifications_impl(self, user_id: int) -> List[NotificationDto]:
+    def _get_unread_notifications_impl(self, user_id: int) -> list[NotificationDto]:
         """ユーザーの未読通知を取得の実装"""
         user_id_vo = UserId(user_id)
         notifications = self._notification_repository.find_unread_by_user_id(user_id_vo)

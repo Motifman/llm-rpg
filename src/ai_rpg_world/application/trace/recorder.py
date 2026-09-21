@@ -19,9 +19,11 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional, TextIO
+from types import TracebackType
+from typing import Any, TextIO
 
 from ai_rpg_world.application.trace.events import TraceEvent
 
@@ -36,8 +38,8 @@ class ITraceRecorder(ABC):
         self,
         kind: str,
         *,
-        tick: Optional[int] = None,
-        player_id: Optional[int] = None,
+        tick: int | None = None,
+        player_id: int | None = None,
         **payload: Any,
     ) -> TraceEvent:
         """1 イベント記録し、振った TraceEvent を返す。"""
@@ -46,10 +48,15 @@ class ITraceRecorder(ABC):
     def close(self) -> None:
         """背後のリソース (ファイル等) を閉じる。"""
 
-    def __enter__(self) -> "ITraceRecorder":
+    def __enter__(self) -> ITraceRecorder:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.close()
 
 
@@ -67,8 +74,8 @@ class NullTraceRecorder(ITraceRecorder):
         self,
         kind: str,
         *,
-        tick: Optional[int] = None,
-        player_id: Optional[int] = None,
+        tick: int | None = None,
+        player_id: int | None = None,
         **payload: Any,
     ) -> TraceEvent:
         with self._lock:
@@ -98,7 +105,7 @@ class JsonlTraceRecorder(ITraceRecorder):
         if not isinstance(path, Path):
             raise TypeError("path must be Path")
         self._path = path
-        self._fh: Optional[TextIO] = open(path, "w", encoding="utf-8")
+        self._fh: TextIO | None = open(path, "w", encoding="utf-8")
         self._seq = 0
         # Issue #311 後続 (#325 結果): 非同期 LLM 主観文付与 scheduler のワーカー
         # thread が close 後に record を呼ぶ "close race" を観測可能にするカウンタ。
@@ -126,8 +133,8 @@ class JsonlTraceRecorder(ITraceRecorder):
         self,
         kind: str,
         *,
-        tick: Optional[int] = None,
-        player_id: Optional[int] = None,
+        tick: int | None = None,
+        player_id: int | None = None,
         **payload: Any,
     ) -> TraceEvent:
         with self._lock:
@@ -188,7 +195,7 @@ def load_trace_events(path: Path) -> Iterable[TraceEvent]:
     """JSONL ファイルから TraceEvent を順次返すジェネレータ (viewer 用)。"""
     if not isinstance(path, Path):
         raise TypeError("path must be Path")
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line:

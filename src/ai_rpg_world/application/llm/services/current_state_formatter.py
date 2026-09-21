@@ -5,7 +5,6 @@
 LlmUiContextBuilder が担当し、二重に過剰列挙しない。
 """
 
-from typing import List
 
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -22,7 +21,7 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
         world = dto.world_state
         runtime = dto.runtime_context
         app = dto.app_session_state
-        lines: List[str] = []
+        lines: list[str] = []
 
         # 場所
         if world.current_spot_name is not None:

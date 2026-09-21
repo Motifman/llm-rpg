@@ -1,6 +1,5 @@
-from typing import List, Set, Tuple, Any
-from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.common.domain_event import DomainEvent
+from typing import Any
+
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -13,16 +12,18 @@ from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
     ObstacleCollisionPolicy,
     TargetCollisionPolicy,
 )
-from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
-from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
+from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class HitBoxAggregate(AggregateRoot):
@@ -45,7 +46,7 @@ class HitBoxAggregate(AggregateRoot):
         attacker_stats: BaseStats | None = None,
         target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
-        hit_effects: Tuple[HitEffect, ...] = (),
+        hit_effects: tuple[HitEffect, ...] = (),
         movement_capability: MovementCapability = MovementCapability.normal_walk(),
         activation_tick: int | None = None,
         skill_id: str | None = None,
@@ -72,8 +73,8 @@ class HitBoxAggregate(AggregateRoot):
         self._activation_tick = activation_tick or start_tick.value
         self._skill_id = skill_id
         self._is_active = True
-        self._hit_targets: Set[WorldObjectId] = set()
-        self._hit_obstacle_coordinates: Set[Coordinate] = set()
+        self._hit_targets: set[WorldObjectId] = set()
+        self._hit_obstacle_coordinates: set[Coordinate] = set()
 
     @classmethod
     def create(
@@ -90,7 +91,7 @@ class HitBoxAggregate(AggregateRoot):
         attacker_stats: BaseStats | None = None,
         target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
-        hit_effects: List[HitEffect] | None = None,
+        hit_effects: list[HitEffect] | None = None,
         movement_capability: MovementCapability | None = None,
         activation_tick: int | None = None,
         skill_id: str | None = None,
@@ -172,7 +173,7 @@ class HitBoxAggregate(AggregateRoot):
         return self._velocity
 
     @property
-    def hit_effects(self) -> Tuple[HitEffect, ...]:
+    def hit_effects(self) -> tuple[HitEffect, ...]:
         return self._hit_effects
 
     @property
@@ -192,7 +193,7 @@ class HitBoxAggregate(AggregateRoot):
         return current_tick.value >= self._activation_tick
 
     @property
-    def precise_position(self) -> Tuple[float, float, float]:
+    def precise_position(self) -> tuple[float, float, float]:
         """内部的な連続位置（衝突判定前の計算用）を返す。"""
         return (self._precise_x, self._precise_y, self._precise_z)
 
@@ -247,15 +248,15 @@ class HitBoxAggregate(AggregateRoot):
         self._precise_x, self._precise_y, self._precise_z = next_x, next_y, next_z
         self._move_to_step(projected)
 
-    def teleport_to(self, new_coordinate: Coordinate):
+    def teleport_to(self, new_coordinate: Coordinate) -> None:
         """指定した座標にテレポートする。小数精度の位置も同期される。"""
         self._update_location(new_coordinate, sync_precise=True)
 
-    def _move_to_step(self, new_coordinate: Coordinate):
+    def _move_to_step(self, new_coordinate: Coordinate) -> None:
         """サブステップ移動用の内部メソッド。小数精度の位置は更新済みであることを前提とする。"""
         self._update_location(new_coordinate, sync_precise=False)
 
-    def _update_location(self, new_coordinate: Coordinate, sync_precise: bool):
+    def _update_location(self, new_coordinate: Coordinate, sync_precise: bool) -> None:
         """位置を更新し、移動前の位置を保持する（経路判定のため）"""
         if not self._is_active:
             raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
@@ -277,7 +278,7 @@ class HitBoxAggregate(AggregateRoot):
             to_coordinate=new_coordinate,
         ))
 
-    def move_to(self, new_coordinate: Coordinate, sync_precise: bool = True):
+    def move_to(self, new_coordinate: Coordinate, sync_precise: bool = True) -> None:
         """
         【非推奨】teleport_to または内部の移動処理を使用してください。
         後方互換性とテストのために残していますが、将来的に削除される可能性があります。
@@ -289,7 +290,7 @@ class HitBoxAggregate(AggregateRoot):
         # 寿命は有効化されてからの経過時間で判定すべき
         return current_tick.value >= (self._activation_tick + self._duration)
 
-    def deactivate(self, reason: str = "manual"):
+    def deactivate(self, reason: str = "manual") -> None:
         """HitBoxを無効化する（寿命終了や衝突消滅時）"""
         if not self._is_active:
             return
@@ -305,7 +306,7 @@ class HitBoxAggregate(AggregateRoot):
         """指定したターゲットに既にヒット済みか確認する"""
         return target_id in self._hit_targets
 
-    def record_hit(self, target_id: WorldObjectId):
+    def record_hit(self, target_id: WorldObjectId) -> None:
         """ヒットしたターゲットを記録する（多段ヒット防止用）"""
         if not self._is_active:
             raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
@@ -345,13 +346,13 @@ class HitBoxAggregate(AggregateRoot):
         if not self.can_pass_through_obstacles():
             self.deactivate(reason="obstacle_collision")
 
-    def get_aggregated_events(self) -> List[DomainEvent]:
+    def get_aggregated_events(self) -> list[DomainEvent]:
         """
         蓄積されたイベントを重複抑制して返す。
         同一ティック内での冗長な移動や衝突イベントを集約する。
         """
         events = self.get_events()
-        aggregated: List[DomainEvent] = []
+        aggregated: list[DomainEvent] = []
         seen_keys = set()
 
         for event in events:
@@ -372,7 +373,7 @@ class HitBoxAggregate(AggregateRoot):
 
         return aggregated
 
-    def get_all_covered_coordinates(self) -> List[Coordinate]:
+    def get_all_covered_coordinates(self) -> list[Coordinate]:
         """
         現在の位置、および前回の位置からの移動経路上に含まれる全ての絶対座標を返す。
         リアルタイムの当たり判定精度を向上させるためのロジック。
@@ -381,13 +382,13 @@ class HitBoxAggregate(AggregateRoot):
         # ここでは簡易的なグリッド補間（直線上の座標を全て取得）を実装
         path = self._calculate_path(self._previous_coordinate, self._current_coordinate)
         
-        covered: Set[Coordinate] = set()
+        covered: set[Coordinate] = set()
         for pos in path:
             covered.update(self._shape.to_absolute(pos))
         
         return list(covered)
 
-    def _calculate_path(self, start: Coordinate, end: Coordinate) -> List[Coordinate]:
+    def _calculate_path(self, start: Coordinate, end: Coordinate) -> list[Coordinate]:
         """
         2点間のグリッド上の直線座標リストを計算する。
         Amanatides-Wooのアルゴリズムに基づいた 3D DDA (Supercover) を採用し、

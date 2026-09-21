@@ -6,27 +6,30 @@ ItemDroppedFromInventoryEvent が発行され、同期的なハンドラが GROU
 """
 
 import logging
-from typing import Callable, Any
+from collections.abc import Callable
+from typing import Any
 
+from ai_rpg_world.application.world.contracts.commands import DropItemCommand
+from ai_rpg_world.application.world.exceptions.base_exception import (
+    WorldApplicationException,
+    WorldSystemErrorException,
+)
+from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
+    DropCommandException,
+    DropPlayerOrInventoryNotFoundException,
+    ItemReservedForDropException,
+    NoItemInSlotForDropException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemNotInSlotException,
     ItemReservedException,
 )
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.world.contracts.commands import DropItemCommand
-from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
-from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
-    DropCommandException,
-    NoItemInSlotForDropException,
-    ItemReservedForDropException,
-    DropPlayerOrInventoryNotFoundException,
-)
+from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 class DropItemApplicationService:
@@ -72,7 +75,7 @@ class DropItemApplicationService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 

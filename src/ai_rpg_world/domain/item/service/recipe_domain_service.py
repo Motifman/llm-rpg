@@ -1,8 +1,8 @@
-from typing import List, Dict
+
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
-from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
-from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 
 
 class RecipeDomainService:
@@ -11,8 +11,8 @@ class RecipeDomainService:
     @staticmethod
     def find_recipes_by_result_item(
         item_spec_id: ItemSpecId,
-        recipes: List[RecipeAggregate]
-    ) -> List[RecipeAggregate]:
+        recipes: list[RecipeAggregate]
+    ) -> list[RecipeAggregate]:
         """指定アイテムを作成できるレシピを取得
 
         Args:
@@ -30,8 +30,8 @@ class RecipeDomainService:
     @staticmethod
     def find_recipes_by_ingredient(
         item_spec_id: ItemSpecId,
-        recipes: List[RecipeAggregate]
-    ) -> List[RecipeAggregate]:
+        recipes: list[RecipeAggregate]
+    ) -> list[RecipeAggregate]:
         """指定アイテムを材料として使用するレシピを取得
 
         Args:
@@ -50,7 +50,7 @@ class RecipeDomainService:
     @staticmethod
     def can_player_craft_recipe(
         recipe: RecipeAggregate,
-        player_inventory: List[ItemAggregate]
+        player_inventory: list[ItemAggregate]
     ) -> bool:
         """プレイヤーが指定レシピで合成可能かチェック
 
@@ -68,9 +68,9 @@ class RecipeDomainService:
 
     @staticmethod
     def get_available_recipes_for_player(
-        recipes: List[RecipeAggregate],
-        player_inventory: List[ItemAggregate]
-    ) -> List[RecipeAggregate]:
+        recipes: list[RecipeAggregate],
+        player_inventory: list[ItemAggregate]
+    ) -> list[RecipeAggregate]:
         """プレイヤーが合成可能なレシピを取得
 
         Args:

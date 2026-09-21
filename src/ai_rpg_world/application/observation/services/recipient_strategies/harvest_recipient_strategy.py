@@ -1,6 +1,6 @@
 """採集（Harvest）イベントの観測配信先解決戦略"""
 
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -33,7 +33,7 @@ class HarvestRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if not isinstance(
             event, (HarvestStartedEvent, HarvestCancelledEvent, HarvestCompletedEvent)
         ):

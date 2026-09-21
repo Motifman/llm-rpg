@@ -2,9 +2,11 @@
 TradeQueryService専用のアプリケーション例外
 """
 
-from typing import Optional
-from ai_rpg_world.domain.common.exception import DomainException
+
+from typing import Any
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.domain.common.exception import DomainException
 
 
 class TradeQueryApplicationException(ApplicationException):
@@ -68,7 +70,7 @@ class TradeQueryApplicationException(ApplicationException):
         )
 
     @classmethod
-    def invalid_filter(cls, message: str, **context) -> "TradeQueryApplicationException":
+    def invalid_filter(cls, message: str, **context: Any) -> "TradeQueryApplicationException":
         """無効なフィルタ条件の場合の例外
 
         Args:

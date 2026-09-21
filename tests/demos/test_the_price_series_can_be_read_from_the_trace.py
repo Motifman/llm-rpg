@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -42,7 +41,7 @@ class _CapturingTraceRecorder:
     """記録された trace をそのまま覚えておくだけの recorder。"""
 
     def __init__(self) -> None:
-        self.records: List[Tuple[str, Dict[str, Any]]] = []
+        self.records: list[tuple[str, dict[str, Any]]] = []
 
     def record(self, kind, **payload) -> None:
         self.records.append((str(getattr(kind, "value", kind)), payload))
@@ -50,7 +49,7 @@ class _CapturingTraceRecorder:
 
 @pytest.fixture()
 def town(tmp_path: Path) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
         raw["players"].append({
@@ -89,7 +88,7 @@ def _list_bread(runtime: Any, seller: PlayerId, *, quantity: int, price: int) ->
     )
 
 
-def _market_events(runtime: Any) -> List[Dict[str, Any]]:
+def _market_events(runtime: Any) -> list[dict[str, Any]]:
     return [
         payload
         for kind, payload in runtime._trace_recorder.records
@@ -97,7 +96,7 @@ def _market_events(runtime: Any) -> List[Dict[str, Any]]:
     ]
 
 
-def _price_series(runtime: Any, item_name: str, kinds: Tuple[str, ...]) -> List[Tuple[int, int]]:
+def _price_series(runtime: Any, item_name: str, kinds: tuple[str, ...]) -> list[tuple[int, int]]:
     """trace から、その品目の (手番, 単価) の並びを組み立てる。
 
     **これができることが要件**。run 後の分析はこの形で値動きを読む。

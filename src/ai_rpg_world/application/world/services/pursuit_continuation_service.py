@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from ai_rpg_world.application.world.contracts.dtos import (
     PlayerCurrentStateDto,
@@ -60,10 +60,10 @@ class PursuitContinuationDecision:
     replan_attempted: bool
     has_visible_target: bool
     has_active_path: bool
-    target_world_object_id: Optional[int] = None
-    visible_target: Optional[VisibleObjectDto] = None
-    current_state: Optional[PlayerCurrentStateDto] = None
-    failure_reason: Optional[PursuitFailureReason] = None
+    target_world_object_id: int | None = None
+    visible_target: VisibleObjectDto | None = None
+    current_state: PlayerCurrentStateDto | None = None
+    failure_reason: PursuitFailureReason | None = None
     pursuit_updated: bool = False
 
 
@@ -73,9 +73,9 @@ class PursuitContinuationService:
     def __init__(
         self,
         world_query_service: WorldQueryService,
-        movement_service: Optional[PursuitPathReplanner] = None,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        physical_map_repository: Optional[PhysicalMapRepository] = None,
+        movement_service: PursuitPathReplanner | None = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        physical_map_repository: PhysicalMapRepository | None = None,
     ) -> None:
         self._world_query_service = world_query_service
         self._movement_service = movement_service
@@ -359,7 +359,7 @@ class PursuitContinuationService:
     def _find_visible_target(
         current_state: PlayerCurrentStateDto,
         target_world_object_id: int,
-    ) -> Optional[VisibleObjectDto]:
+    ) -> VisibleObjectDto | None:
         return next(
             (
                 visible_object

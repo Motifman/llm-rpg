@@ -14,15 +14,14 @@
 from pathlib import Path
 
 import pytest
+from tests.demos._world_runtime_helpers import create_world_runtime_session
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from tests.demos.station_drill_lighting_helpers import darken_spot
-from tests.demos._world_runtime_helpers import create_world_runtime_session
-
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"

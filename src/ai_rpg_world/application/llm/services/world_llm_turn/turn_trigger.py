@@ -8,10 +8,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.world_llm_turn.wiring import WorldLlmWiring
@@ -76,7 +75,7 @@ class WorldLlmTurnTrigger:
     新コードでも同じパターンが再現する。
     """
 
-    wiring: "WorldLlmWiring"
+    wiring: WorldLlmWiring
     # 自己 reschedule チェインの連続上限。これに達したら pending から外す。
     # 他者観測経由の起床は影響を受けないので、ping-pong は影響なし。
     max_self_reschedule_streak: int = 5
@@ -114,14 +113,34 @@ class WorldLlmTurnTrigger:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
                 logger.exception("check_game_end raised; continuing turn execution")
 
-        to_run = list(self.pending_player_ids)
+        scheduled = list(self.pending_player_ids)
         self.pending_player_ids.clear()
+        to_run = list(scheduled)
+        # tick 単位の門: 候補を「未読の観測がある人」全員に広げ、一人ひとりに
+        # ついて未読をまとめて「いま動く必要があるか」を問い、本当に不要と判定
+        # できた人だけ回さない。観測は buffer に残る。前の tick に寝た人は、新しい
+        # 観測が届かなくても溜まった未読で判断し直される。
+        turn_gate = getattr(self.wiring, "turn_gate", None)
+        if turn_gate is not None:
+            to_run = [
+                pid.value for pid in turn_gate.candidates([PlayerId(v) for v in to_run])
+            ]
         # #363 Fix 1b: 行動不可 (is_down / outcome 確定) のプレイヤーを除外。
         # 死亡したプレイヤーが speech 観測などで起こされるケースがあるため、
         # to_run の filter は確実に必要。
         to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
+        if turn_gate is not None:
+            to_run = [
+                pid.value
+                for pid in turn_gate.decide_wave(
+                    [PlayerId(v) for v in to_run],
+                    scheduled=[PlayerId(v) for v in scheduled],
+                )
+            ]
+            if not to_run:
+                return
 
         cfg = getattr(runtime, "_runtime_config", None)
         workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)

@@ -24,8 +24,9 @@ Noul なら意味で判定できる。
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
-from typing import Any, List, Mapping, Optional, Sequence, Union
+from typing import Any, Union
 
 import pytest
 
@@ -60,16 +61,16 @@ class _MemoStore(MemoRepository):
             )
             for i, content in enumerate(contents)
         ]
-        self.completed: List[str] = []
+        self.completed: list[str] = []
 
-    def list_uncompleted_by_being(self, being_id: BeingId) -> List[MemoEntry]:
+    def list_uncompleted_by_being(self, being_id: BeingId) -> list[MemoEntry]:
         return list(self._memos)
 
-    def list_all_by_being(self, being_id: BeingId) -> List[MemoEntry]:
+    def list_all_by_being(self, being_id: BeingId) -> list[MemoEntry]:
         return list(self._memos)
 
     def add_by_being(
-        self, being_id: BeingId, content: str, *, added_at_tick: Optional[int] = None
+        self, being_id: BeingId, content: str, *, added_at_tick: int | None = None
     ) -> MemoEntry:  # pragma: no cover
         raise AssertionError("hint の検出で memo を追加してはいけない")
 
@@ -95,17 +96,17 @@ class _RecordingPort(ITypedJudgmentPort):
 
     def __init__(
         self,
-        probabilities_by_content: Optional[Mapping[str, float]] = None,
+        probabilities_by_content: Mapping[str, float] | None = None,
         *,
         raises: bool = False,
     ) -> None:
-        self.calls: List[tuple[Any, Mapping[str, Question]]] = []
+        self.calls: list[tuple[Any, Mapping[str, Question]]] = []
         self._by_content = dict(probabilities_by_content or {})
         self._raises = raises
 
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         self.calls.append((state, questions))
@@ -133,7 +134,7 @@ class _RecordingPort(ITypedJudgmentPort):
 
 def _service(
     contents: Sequence[str],
-    port: Optional[ITypedJudgmentPort],
+    port: ITypedJudgmentPort | None,
     *,
     min_probability: float = 0.7,
 ) -> tuple[MemoCompletionHintService, _MemoStore]:
@@ -311,7 +312,7 @@ class _PartialAnswerPort(ITypedJudgmentPort):
 
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         first = next(iter(questions))

@@ -22,8 +22,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
-from typing import Callable, Optional, Sequence
 
 from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
     SemanticPassiveRecallService,
@@ -43,12 +43,12 @@ DEFAULT_UNCONSCIOUS_CONTEXT_BELIEF_TOP_K = 5
 def build_unconscious_context_provider(
     *,
     semantic_recall_service_provider: Callable[
-        [], Optional[SemanticPassiveRecallService]
+        [], SemanticPassiveRecallService | None
     ],
     resolve_being: Callable[[PlayerId], BeingId | None],
-    long_summary_text_provider: Optional[Callable[[int], str]] = None,
+    long_summary_text_provider: Callable[[int], str] | None = None,
     top_k: int = DEFAULT_UNCONSCIOUS_CONTEXT_BELIEF_TOP_K,
-    now_provider: Optional[Callable[[], datetime]] = None,
+    now_provider: Callable[[], datetime] | None = None,
 ) -> Callable[[int, Sequence[EpisodicCue]], str]:
     """belief top-K (+ L5 自己像/世界観) を 1 本のテキストに束ねる provider を作る。
 
@@ -75,7 +75,7 @@ def build_unconscious_context_provider(
     def _provider(player_id: int, cues: Sequence[EpisodicCue]) -> str:
         lines: list[str] = []
 
-        service: Optional[SemanticPassiveRecallService] = None
+        service: SemanticPassiveRecallService | None = None
         try:
             service = semantic_recall_service_provider()
         except Exception:

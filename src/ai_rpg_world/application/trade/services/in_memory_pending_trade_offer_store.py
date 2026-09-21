@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Dict, Iterable, Optional, Tuple
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import (
@@ -25,7 +25,7 @@ class InMemoryPendingTradeOfferStore:
     """返事待ちの提案を保持する。返事のついた提案は保持しない。"""
 
     def __init__(self) -> None:
-        self._offers: Dict[int, PendingTradeOffer] = {}
+        self._offers: dict[int, PendingTradeOffer] = {}
         self._next_id = 1
         self._lock = threading.RLock()
 
@@ -47,22 +47,22 @@ class InMemoryPendingTradeOfferStore:
             else:
                 self._offers.pop(offer.offer_id.value, None)
 
-    def find(self, offer_id: TradeOfferId) -> Optional[PendingTradeOffer]:
+    def find(self, offer_id: TradeOfferId) -> PendingTradeOffer | None:
         with self._lock:
             return self._offers.get(offer_id.value)
 
-    def list_all(self) -> Tuple[PendingTradeOffer, ...]:
+    def list_all(self) -> tuple[PendingTradeOffer, ...]:
         """保持している提案を、提案 ID の順で返す。"""
         with self._lock:
             return tuple(self._offers[k] for k in sorted(self._offers))
 
-    def list_for_target(self, player_id: PlayerId) -> Tuple[PendingTradeOffer, ...]:
+    def list_for_target(self, player_id: PlayerId) -> tuple[PendingTradeOffer, ...]:
         """その人に宛てられた提案を、古い順で返す。"""
         return tuple(
             offer for offer in self.list_all() if offer.target_player_id == player_id
         )
 
-    def list_from_offerer(self, player_id: PlayerId) -> Tuple[PendingTradeOffer, ...]:
+    def list_from_offerer(self, player_id: PlayerId) -> tuple[PendingTradeOffer, ...]:
         """その人が出している提案を、古い順で返す。"""
         return tuple(
             offer for offer in self.list_all() if offer.offerer_player_id == player_id
@@ -75,12 +75,12 @@ class InMemoryPendingTradeOfferStore:
             for offer in self.list_all()
         )
 
-    def committed_item_quantities(self, offerer: PlayerId) -> Dict[int, int]:
+    def committed_item_quantities(self, offerer: PlayerId) -> dict[int, int]:
         """その人が提案に出している品の合計数を item_spec_id ごとに返す。
 
         凍結 (次の PR) が「同じ品を 2 件の提案に出す」を弾くのに使う。
         """
-        totals: Dict[int, int] = {}
+        totals: dict[int, int] = {}
         for offer in self.list_from_offerer(offerer):
             for spec_id, quantity in offer.gives.items:
                 totals[spec_id] = totals.get(spec_id, 0) + quantity
@@ -90,7 +90,7 @@ class InMemoryPendingTradeOfferStore:
         """その人が提案に出している gold の合計。"""
         return sum(offer.gives.gold for offer in self.list_from_offerer(offerer))
 
-    def expired_offers(self, current_tick: int) -> Tuple[PendingTradeOffer, ...]:
+    def expired_offers(self, current_tick: int) -> tuple[PendingTradeOffer, ...]:
         """その tick で期限を過ぎている提案を返す (状態は変えない)。
 
         状態遷移と観測の発火は呼び出し側 (tick stage) の仕事にする。store が
@@ -104,14 +104,14 @@ class InMemoryPendingTradeOfferStore:
         with self._lock:
             self._offers.pop(offer_id.value, None)
 
-    def rollback_snapshot(self) -> tuple[Tuple[PendingTradeOffer, ...], int]:
+    def rollback_snapshot(self) -> tuple[tuple[PendingTradeOffer, ...], int]:
         """command失敗時に提案集合と次IDを厳密に戻すsnapshotを返す。"""
         with self._lock:
             return self.list_all(), self._next_id
 
     def restore_rollback_snapshot(
         self,
-        snapshot: tuple[Tuple[PendingTradeOffer, ...], int],
+        snapshot: tuple[tuple[PendingTradeOffer, ...], int],
     ) -> None:
         """rollback用snapshotを観測や新規ID払い出しなしで復元する。"""
         offers, next_id = snapshot

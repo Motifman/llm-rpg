@@ -55,7 +55,6 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     # 他者との関係を動かす手なので SOCIAL に置く。
     "vote": IntentPhase.SOCIAL,
     "report_body": IntentPhase.SOCIAL,
-    "prepare_action": IntentPhase.INTERACTION,
     # 商人との売買は NPC 相手のやり取りで、他のエージェントとの関係を動かす
     # 行為ではない。物と金が動く操作なので、拾う・置くと同じ INTERACTION に
     # 置く (give_item を SOCIAL にしたのは相手が同席のエージェントだから)。

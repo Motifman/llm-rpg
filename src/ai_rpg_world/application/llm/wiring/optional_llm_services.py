@@ -14,7 +14,7 @@ wiring 本体を削除して軽量化することで解消する。)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 def optional_semantic_gist_service(
     llm_client: ILLMClient,
     enabled: bool,
-) -> Optional["SemanticGistService"]:
+) -> SemanticGistService | None:
     """``SEMANTIC_LLM_GIST_ENABLED=1`` かつ LiteLLM クライアントあるときだけ
     ``SemanticGistService`` を返す。
 
@@ -55,11 +55,11 @@ def optional_semantic_gist_service(
 
 def optional_episodic_reinterpretation_completion(
     llm_client: ILLMClient,
-    explicit: Optional[IEpisodicReinterpretationCompletionPort],
-) -> Optional[IEpisodicReinterpretationCompletionPort]:
+    explicit: IEpisodicReinterpretationCompletionPort | None,
+) -> IEpisodicReinterpretationCompletionPort | None:
     """explicit 指定があればそれを、無ければ LiteLLM クライアントを reinterpretation
     completion ポートとして返す (非 LiteLLM なら None)。"""
-    port: Optional[IEpisodicReinterpretationCompletionPort] = explicit
+    port: IEpisodicReinterpretationCompletionPort | None = explicit
     if port is None:
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 

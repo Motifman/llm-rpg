@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.shop.exception.shop_exception import ShopIdValidationException
 
 
@@ -11,12 +12,12 @@ class ShopId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise ShopIdValidationException(f"Shop ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ShopId":
+    def create(cls, value: int | str) -> "ShopId":
         """intまたはstrからShopIdを作成"""
         if isinstance(value, str):
             try:

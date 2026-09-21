@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -17,18 +17,18 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
     EpisodicReinterpretationJournalRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
     EpisodicRecallObservation,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 # PR7 (R4): noun_matcher に通す追加テキストの上限。直近 N 件の観測 / 行動結果
 # を対象にする。長すぎる prose は per-text char cap で打ち切り、Aho-Corasick
@@ -40,8 +40,8 @@ _module_logger = logging.getLogger(__name__)
 
 
 def _gather_additional_freetexts_for_recall(
-    observations: List[ObservationEntry],
-    action_results: List[ActionResultEntry],
+    observations: list[ObservationEntry],
+    action_results: list[ActionResultEntry],
 ) -> list[str]:
     """PR7 (R4): recall 用に noun_matcher に通す追加文字列を集める。
 
@@ -77,7 +77,7 @@ def _gather_additional_freetexts_for_recall(
 
 
 def _format_afterglow_section(
-    afterglow_index: Optional[tuple[Any, ...]],
+    afterglow_index: tuple[Any, ...] | None,
 ) -> str:
     """afterglow index を 1 行見出しの section text に整形する。
 
@@ -174,7 +174,7 @@ def emit_episodic_recall_trace(
     situation_cues: tuple,
     candidates: list,
     relevant_memories_text: str = "",
-    retrieval_debug: Optional[EpisodicPassiveRecallRetrievalDebug] = None,
+    retrieval_debug: EpisodicPassiveRecallRetrievalDebug | None = None,
 ) -> None:
     """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。
 
@@ -191,7 +191,7 @@ def emit_episodic_recall_trace(
     recorder = builder._resolve_trace_recorder()
     if recorder is None:
         return
-    tick: Optional[int] = None
+    tick: int | None = None
     if builder._current_tick_provider is not None:
         try:
             tick = builder._current_tick_provider()
@@ -318,15 +318,15 @@ def run_episodic_passive_recall(
     *,
     player_id: PlayerId,
     being_id: BeingId,
-    observations: List[ObservationEntry],
-    action_results: List[Any],
+    observations: list[ObservationEntry],
+    action_results: list[Any],
     ui_context: Any,
     current_state_text: str,
     recent_events_text: str,
     player_info: SystemPromptPlayerInfoDto,
-    current_state_dto: Optional[Any] = None,
-    prediction_context_id: Optional[str] = None,
-) -> tuple[str, Optional[int], tuple[str, ...]]:
+    current_state_dto: Any | None = None,
+    prediction_context_id: str | None = None,
+) -> tuple[str, int | None, tuple[str, ...]]:
     """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数, episode_id 群) を返す。
 
     ``prediction_context_id`` が渡されたとき、生成する各
@@ -393,10 +393,10 @@ def run_episodic_passive_recall(
             player_id.value,
         )
         raw_oldest = None
-    min_recall_dt: Optional[datetime] = raw_oldest
+    min_recall_dt: datetime | None = raw_oldest
     # #526 段階 2: 慣化ペナルティのため現在 tick を retrieve に渡す。
     # provider が None / 例外を返したときは慣化を skip (= 既存挙動)。
-    current_tick_for_habituation: Optional[int] = None
+    current_tick_for_habituation: int | None = None
     if builder._current_tick_provider is not None:
         try:
             tick_val = builder._current_tick_provider()

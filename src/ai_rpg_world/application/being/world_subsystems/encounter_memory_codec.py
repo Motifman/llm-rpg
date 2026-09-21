@@ -27,7 +27,7 @@ agent の連続性そのものに直結する。
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
@@ -41,7 +41,6 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_record import (
     EncounterRecord,
 )
-
 
 SUBSYSTEM_KEY = "encounter_memory"
 SCHEMA_VERSION = 1
@@ -88,7 +87,7 @@ class EncounterMemorySubsystemCodec(WorldSubsystemCodec):
         # = {player_id_int → {canonical_key_string → record}}。
         # 直接 iterate して double round-trip (canonical → EncounterKey →
         # canonical) を回避する。
-        store: Dict[int, Dict[str, EncounterRecord]] = memory._store
+        store: dict[int, dict[str, EncounterRecord]] = memory._store
         entries = [
             {
                 "player_id": int(pid_value),
@@ -125,7 +124,7 @@ class EncounterMemorySubsystemCodec(WorldSubsystemCodec):
         memory = self._require_in_memory(runtime)
         # InMemoryEncounterMemory._store: Dict[int, Dict[str, EncounterRecord]]。
         # 全消ししてから書き戻す (= 部分復元による不整合を防ぐ)。
-        store: Dict[int, Dict[str, EncounterRecord]] = memory._store
+        store: dict[int, dict[str, EncounterRecord]] = memory._store
         store.clear()
 
         # entries 欠落は空として扱う (forward-compat: 上位 schema 変更への防衛)

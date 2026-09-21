@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import FrozenSet
 
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -21,7 +20,7 @@ class MonsterSpotPresence:
     """
 
     spot_id: SpotId
-    present_monster_ids: FrozenSet[MonsterId]
+    present_monster_ids: frozenset[MonsterId]
 
     def is_present(self, monster_id: MonsterId) -> bool:
         return monster_id in self.present_monster_ids
@@ -29,7 +28,7 @@ class MonsterSpotPresence:
     def count(self) -> int:
         return len(self.present_monster_ids)
 
-    def add(self, monster_id: MonsterId) -> "MonsterSpotPresence":
+    def add(self, monster_id: MonsterId) -> MonsterSpotPresence:
         if monster_id in self.present_monster_ids:
             raise MonsterPresenceInvariantException(
                 f"Monster {monster_id} is already present at spot {self.spot_id}"
@@ -38,7 +37,7 @@ class MonsterSpotPresence:
         new_ids.add(monster_id)
         return MonsterSpotPresence(self.spot_id, frozenset(new_ids))
 
-    def remove(self, monster_id: MonsterId) -> "MonsterSpotPresence":
+    def remove(self, monster_id: MonsterId) -> MonsterSpotPresence:
         if monster_id not in self.present_monster_ids:
             raise MonsterPresenceInvariantException(
                 f"Monster {monster_id} is not present at spot {self.spot_id}"
@@ -48,5 +47,5 @@ class MonsterSpotPresence:
         return MonsterSpotPresence(self.spot_id, frozenset(new_ids))
 
     @staticmethod
-    def empty(spot_id: SpotId) -> "MonsterSpotPresence":
+    def empty(spot_id: SpotId) -> MonsterSpotPresence:
         return MonsterSpotPresence(spot_id, frozenset())

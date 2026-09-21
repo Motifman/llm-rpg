@@ -1,6 +1,7 @@
 """モンスター系イベントの観測配信先解決戦略"""
 
-from typing import Any, List, Optional, Set, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -12,6 +13,8 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 )
 from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     Add as _Add,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     RecipientRuleWiringError,
     RuleTable,
     verify_rules_cover_registry,
@@ -19,6 +22,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies._dispatc
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
+    MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDecidedToInteractEvent,
     MonsterDecidedToMoveEvent,
@@ -29,17 +33,18 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
-    MonsterCreatedEvent,
     MonsterSpawnedEvent,
     TargetLostEvent,
     TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class MonsterRecipientStrategy(IRecipientResolutionStrategy):
@@ -51,9 +56,9 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        physical_map_repository: Optional[PhysicalMapRepository],
+        physical_map_repository: PhysicalMapRepository | None,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
-        monster_repository: Optional[MonsterRepository] = None,
+        monster_repository: MonsterRepository | None = None,
     ) -> None:
         # physical_map_repository は tile-map ベース世界でのみ意味を持つ。
         # spot_graph 専用ランタイムでは None で渡され、
@@ -70,12 +75,12 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     @classmethod
-    def handled_event_types(cls) -> Tuple[type, ...]:
+    def handled_event_types(cls) -> tuple[type, ...]:
         """配信規則を持つイベント型の一覧 (「配らない」宣言のものは含まない)。"""
         return tuple(_RECIPIENT_RULES)
 
     @classmethod
-    def event_types_delivered_to_nobody(cls) -> Tuple[type, ...]:
+    def event_types_delivered_to_nobody(cls) -> tuple[type, ...]:
         """意図的に誰にも配らないイベント型の一覧。"""
         return tuple(_DELIVERS_TO_NOBODY)
 
@@ -88,7 +93,7 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
             delivers_to_nobody=_DELIVERS_TO_NOBODY,
         )
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         """配信先プレイヤーIDのリストを返す（重複は除く）。
 
         以前は重複を残していた (``recipients.append`` を直接呼んでいた)。同じ
@@ -115,8 +120,8 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
                 "(構築時の検査を通っているはずなので、表が実行中に変わっています)"
             )
 
-        recipients: List[PlayerId] = []
-        seen: Set[int] = set()
+        recipients: list[PlayerId] = []
+        seen: set[int] = set()
 
         def add(player_id: PlayerId) -> None:
             if player_id.value in seen:
@@ -131,7 +136,7 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
     # 配信規則。表 (_RECIPIENT_RULES) から引かれる。
     # ------------------------------------------------------------------
 
-    def _add_all_at_spot(self, spot_id: Optional[SpotId], add: _Add) -> None:
+    def _add_all_at_spot(self, spot_id: SpotId | None, add: _Add) -> None:
         """スポットが判っていれば、そこに居る全プレイヤーを足す。"""
         if spot_id is None:
             return
@@ -185,12 +190,12 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         """
         self._add_all_at_spot(self._spot_id_from_world_object(event.actor_id), add)
 
-    def _spot_id_from_world_object(self, object_id) -> Optional[SpotId]:
+    def _spot_id_from_world_object(self, object_id: WorldObjectId) -> SpotId | None:
         if self._physical_map_repository is None:
             return None
         return self._physical_map_repository.find_spot_id_by_object_id(object_id)
 
-    def _spot_id_from_monster(self, monster_id) -> Optional[SpotId]:
+    def _spot_id_from_monster(self, monster_id: MonsterId) -> SpotId | None:
         if self._monster_repository is None:
             return None
         monster = self._monster_repository.find_by_id(monster_id)

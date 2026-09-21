@@ -20,11 +20,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

@@ -21,10 +21,9 @@ from __future__ import annotations
 
 import pathlib
 import shutil
-from typing import Any, Dict, List
+from typing import Any, ClassVar
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
@@ -71,7 +70,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any], who: PlayerId):
+    def call(self, tool: str, args: dict[str, Any], who: PlayerId):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )
@@ -83,7 +82,7 @@ class _Town:
         )
 
     #: 市場の広場からの道順。``travel_to`` は隣接 spot しか受け付けない。
-    _ROUTES = {
+    _ROUTES: ClassVar[dict[str, tuple[str, ...]]] = {
         "薬草の土手": ("薬草の土手",),
         "井戸端": ("井戸端",),
         "かまど小屋": ("かまど小屋",),
@@ -129,7 +128,7 @@ class _Town:
             == wanted
         )
 
-    def tool_names_for(self, who: PlayerId) -> List[str]:
+    def tool_names_for(self, who: PlayerId) -> list[str]:
         capture = _ToolCapture()
         self._state.llm_wiring.llm_client = capture
         self._state.llm_wiring.run_turn(who)
@@ -138,7 +137,7 @@ class _Town:
 
 class _ToolCapture:
     def __init__(self) -> None:
-        self.tools: List[Any] = []
+        self.tools: list[Any] = []
 
     def invoke(self, messages, tools, tool_choice="required", **kwargs):
         self.tools = tools

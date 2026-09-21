@@ -1,7 +1,10 @@
 import logging
-from typing import Callable, List, Set
+from collections.abc import Callable
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
+    MonsterBehaviorCoordinator,
+)
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -19,10 +22,6 @@ from ai_rpg_world.domain.world.value_object.time_of_day import (
 )
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
-from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
-    MonsterBehaviorCoordinator,
-)
-
 
 class WorldSimulationMonsterBehaviorStageService:
     """アクティブスポット上の actor behavior を処理する stage service。"""
@@ -32,7 +31,7 @@ class WorldSimulationMonsterBehaviorStageService:
         world_time_config_service: WorldTimeConfigService,
         logger: logging.Logger,
         actors_sorted_by_distance_to_players: Callable[
-            [PhysicalMapAggregate], List[WorldObject]
+            [PhysicalMapAggregate], list[WorldObject]
         ],
         behavior_coordinator: MonsterBehaviorCoordinator,
     ) -> None:
@@ -43,10 +42,10 @@ class WorldSimulationMonsterBehaviorStageService:
 
     def run(
         self,
-        maps: List[PhysicalMapAggregate],
-        active_spot_ids: Set[SpotId],
+        maps: list[PhysicalMapAggregate],
+        active_spot_ids: set[SpotId],
         current_tick: WorldTick,
-        skipped_actor_ids: Set[WorldObjectId] | None = None,
+        skipped_actor_ids: set[WorldObjectId] | None = None,
     ) -> None:
         skipped = skipped_actor_ids or set()
         for physical_map in maps:

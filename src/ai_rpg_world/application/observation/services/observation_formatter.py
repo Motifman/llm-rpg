@@ -1,29 +1,18 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.name_resolver import (
-    ObservationNameResolver,
+from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
+    CombatObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
     ConversationObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
-    QuestObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.shop_formatter import (
-    ShopObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
-    TradeObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.sns_formatter import (
-    SnsObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
@@ -31,20 +20,14 @@ from ai_rpg_world.application.observation.services.formatters.guild_formatter im
 from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
     HarvestObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
-    MonsterObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
-    CombatObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.item_use_formatter import (
     ItemUseObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
-    SkillObservationFormatter,
+from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
+    MonsterObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.world_formatter import (
-    WorldObservationFormatter,
+from ai_rpg_world.application.observation.services.formatters.name_resolver import (
+    ObservationNameResolver,
 )
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
@@ -52,25 +35,51 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
 from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
     PursuitObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
+    QuestObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.shop_formatter import (
+    ShopObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
+    SkillObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.sns_formatter import (
+    SnsObservationFormatter,
+)
 from ai_rpg_world.application.observation.services.formatters.spot_graph_formatter import (
     SpotGraphObservationFormatter,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
+    TradeObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.world_formatter import (
+    WorldObservationFormatter,
+)
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+    from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
     from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
     from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-    from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
-    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
-    from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
     from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
         ISpotGraphRepository,
     )
+
+
+class _EventFormatter(Protocol):
+    """下位 formatter の共通形。attention_level は受け取らない。"""
+
+    def format(
+        self, event: Any, recipient_player_id: PlayerId
+    ) -> ObservationOutput | None: ...
 
 
 class ObservationFormatter(IObservationFormatter):
@@ -93,12 +102,12 @@ class ObservationFormatter(IObservationFormatter):
         spot_graph_repository: Optional["ISpotGraphRepository"] = None,
         # 実験 #26 で発覚: object_name resolver が graph 経由で interior を
         # 引けず "何か" fallback に落ちていた。interior は別 repo にある。
-        spot_interior_repository: Optional[Any] = None,
-        death_semantics: Optional[Any] = None,
-        departed_position_store: Optional[Any] = None,
-        departed_player_checker: Optional[Callable[[PlayerId], bool]] = None,
+        spot_interior_repository: Any | None = None,
+        death_semantics: Any | None = None,
+        departed_position_store: Any | None = None,
+        departed_player_checker: Callable[[PlayerId], bool] | None = None,
         downed_self_becomes_departed: bool = False,
-        effective_lighting_resolver: Optional[Any] = None,
+        effective_lighting_resolver: Any | None = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -130,7 +139,7 @@ class ObservationFormatter(IObservationFormatter):
             downed_self_becomes_departed=downed_self_becomes_departed,
             effective_lighting_resolver=effective_lighting_resolver,
         )
-        self._formatters = [
+        self._formatters: list[_EventFormatter] = [
             ConversationObservationFormatter(self._context),
             QuestObservationFormatter(self._context),
             ShopObservationFormatter(self._context),
@@ -152,10 +161,10 @@ class ObservationFormatter(IObservationFormatter):
         self,
         event: Any,
         recipient_player_id: PlayerId,
-        attention_level: Optional[AttentionLevel] = None,
-    ) -> Optional[ObservationOutput]:
+        attention_level: AttentionLevel | None = None,
+    ) -> ObservationOutput | None:
         """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップする。"""
-        output: Optional[ObservationOutput] = None
+        output: ObservationOutput | None = None
         for formatter in self._formatters:
             output = formatter.format(event, recipient_player_id)
             if output is not None:
@@ -164,9 +173,9 @@ class ObservationFormatter(IObservationFormatter):
 
     def _apply_attention_filter(
         self,
-        output: Optional[ObservationOutput],
-        attention_level: Optional[AttentionLevel],
-    ) -> Optional[ObservationOutput]:
+        output: ObservationOutput | None,
+        attention_level: AttentionLevel | None,
+    ) -> ObservationOutput | None:
         if output is None:
             return None
         if attention_level is None or attention_level == AttentionLevel.FULL:

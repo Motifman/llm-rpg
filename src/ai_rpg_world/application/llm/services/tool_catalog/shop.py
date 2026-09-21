@@ -1,6 +1,5 @@
 """ショップ系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -68,7 +67,7 @@ SHOP_UNLIST_ITEM_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_shop_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_shop_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """ショップ系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (SHOP_PURCHASE_DEFINITION, ShopPurchaseAvailabilityResolver()),

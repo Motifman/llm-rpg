@@ -1,7 +1,8 @@
 """観測対象イベント全体を扱うデフォルト配信先解決戦略（既存ロジックを集約）"""
 
 import logging
-from typing import Any, List, Optional, Set, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -13,34 +14,36 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 )
 from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     Add as _Add,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     RecipientRuleWiringError,
     RuleTable,
     verify_rules_cover_registry,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.event.map_events import (
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ItemTakenFromChestEvent,
-    ItemStoredInChestEvent,
-    ResourceHarvestedEvent,
-    SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
-)
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerLocationChangedEvent,
-    PlayerDownedEvent,
-    PlayerRevivedEvent,
-    PlayerLevelUpEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
-)
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
+)
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerGoldPaidEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+    PlayerRevivedEvent,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemStoredInChestEvent,
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    LocationExitedEvent,
+    ResourceHarvestedEvent,
+    SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
@@ -62,7 +65,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
-        spot_graph_repository: Optional[ISpotGraphRepository] = None,
+        spot_graph_repository: ISpotGraphRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
@@ -75,7 +78,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     @classmethod
-    def handled_event_types(cls) -> Tuple[type, ...]:
+    def handled_event_types(cls) -> tuple[type, ...]:
         """配信規則を持つイベント型の一覧。
 
         ``ObservedEventRegistry`` が default に割り当てた型と一致していることを
@@ -91,10 +94,10 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             rules=_RECIPIENT_RULES,
         )
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         """配信先プレイヤーIDのリストを返す（重複あり。Resolver が重複除去する）。"""
-        result: List[PlayerId] = []
-        seen: Set[int] = set()
+        result: list[PlayerId] = []
+        seen: set[int] = set()
 
         def add(pid: PlayerId) -> None:
             if pid.value in seen:
@@ -159,14 +162,14 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             add(player_id)
 
     def _resolve_location_entered(
-        self, event: LocationEnteredEvent, add
+        self, event: LocationEnteredEvent, add: Callable[[PlayerId], None]
     ) -> None:
         if event.player_id_value is not None:
             add(PlayerId(event.player_id_value))
         for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
-    def _resolve_location_exited(self, event: LocationExitedEvent, add) -> None:
+    def _resolve_location_exited(self, event: LocationExitedEvent, add: Callable[[PlayerId], None]) -> None:
         pid = self._world_object_to_player_resolver.resolve_player_id(
             event.object_id
         )
@@ -174,21 +177,21 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             add(pid)
 
     def _resolve_player_location_changed(
-        self, event: PlayerLocationChangedEvent, add
+        self, event: PlayerLocationChangedEvent, add: Callable[[PlayerId], None]
     ) -> None:
         add(event.aggregate_id)
         for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
             add(pid)
 
     def _resolve_item_stored_in_chest(
-        self, event: ItemStoredInChestEvent, add
+        self, event: ItemStoredInChestEvent, add: Callable[[PlayerId], None]
     ) -> None:
         add(PlayerId(event.player_id_value))
         for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
     def _resolve_spot_weather_changed(
-        self, event: SpotWeatherChangedEvent, add
+        self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]
     ) -> None:
         # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接
         # 見えない前提）。SpotGraph 上で is_outdoor=False のスポットは配信先から外す。

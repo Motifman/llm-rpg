@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.combat.exception.combat_exceptions import DamageValidationException
 
 
@@ -9,7 +10,7 @@ class Damage:
     is_critical: bool = False
     is_evaded: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise DamageValidationException(f"Damage value cannot be negative: {self.value}")
 

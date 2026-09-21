@@ -1,9 +1,9 @@
 """PlayerObservationFormatter の単体テスト。"""
 
 from dataclasses import replace
+from unittest.mock import MagicMock
 
 import pytest
-from unittest.mock import MagicMock
 
 # observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
 # observation formatter を直接 import する単体テストでは prompt_builder を先に初期化する。
@@ -18,35 +18,35 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerDownedEvent,
-    PlayerLocationChangedEvent,
-    PlayerLevelUpEvent,
-    PlayerRevivedEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
-)
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
 )
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerGoldPaidEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+    PlayerRevivedEvent,
+)
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
+from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
 
 def _make_context(

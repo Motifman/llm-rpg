@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
@@ -7,6 +7,6 @@ class IConnectedSpotsProvider(ABC):
     """指定スポットから接続されているスポットID一覧を提供するポート。接続は各 PhysicalMap のゲートウェイから導出する。"""
 
     @abstractmethod
-    def get_connected_spots(self, spot_id: SpotId) -> List[SpotId]:
+    def get_connected_spots(self, spot_id: SpotId) -> list[SpotId]:
         """指定されたスポットに接続されているスポットIDのリストを返す"""
         pass

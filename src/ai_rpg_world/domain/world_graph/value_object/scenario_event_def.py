@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
@@ -16,13 +15,13 @@ class ScenarioEventDef:
     event_id: str
     trigger: str
     once: bool
-    conditions: Tuple[ScenarioEventCondition, ...]
-    effects: Tuple[InteractionEffect, ...]
+    conditions: tuple[ScenarioEventCondition, ...]
+    effects: tuple[InteractionEffect, ...]
     observation_category: str = "environment"
     recipients: str = "all_players"
-    target_spot_id: Optional[int] = None
+    target_spot_id: int | None = None
     schedules_turn: bool = True
     breaks_movement: bool = False
     # 脱出ゲーム拡張: イベントチェーン
-    next_event_id: Optional[str] = None
+    next_event_id: str | None = None
     delay_ticks: int = 0

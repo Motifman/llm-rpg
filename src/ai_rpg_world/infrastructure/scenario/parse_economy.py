@@ -1,17 +1,8 @@
 """loot / merchants / item_specs / needs の読み取り。"""
 
 from __future__ import annotations
-from ai_rpg_world.domain.player.exception.player_exceptions import (
-    PlayerAttributeSpecValidationException,
-)
-from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
-    AttributeVisibility,
-    PlayerAttributeSpec,
-    PlayerAttributeSpecs,
-)
 
-
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect,
@@ -25,6 +16,14 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     SatisfyNeedEffect,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.exception.player_exceptions import (
+    PlayerAttributeSpecValidationException,
+)
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    AttributeVisibility,
+    PlayerAttributeSpec,
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
@@ -47,10 +46,11 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import parse_bool
 from ai_rpg_world.infrastructure.scenario.parse_interactions import parse_interaction_def
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
+
 def parse_loot_tables(
-    raw_list: List[Dict[str, Any]],
+    raw_list: list[dict[str, Any]],
     mapper: ScenarioIdMapper,
-) -> Tuple[ScenarioLootTableDefinition, ...]:
+) -> tuple[ScenarioLootTableDefinition, ...]:
     """`loot_tables` block を解析する (PR #1 動的 loot)。
 
     スキーマ:
@@ -68,7 +68,7 @@ def parse_loot_tables(
 
     IDs は mapper に "loot_table" 名前空間で登録する。
     """
-    out: List[ScenarioLootTableDefinition] = []
+    out: list[ScenarioLootTableDefinition] = []
     for raw in raw_list:
         string_id = raw.get("id")
         if not isinstance(string_id, str) or not string_id:
@@ -81,7 +81,7 @@ def parse_loot_tables(
             raise ScenarioLoadError(
                 f"loot_tables[{string_id!r}].entries must be non-empty"
             )
-        entries: List[ScenarioLootEntry] = []
+        entries: list[ScenarioLootEntry] = []
         for index, e in enumerate(entries_raw):
             item_sid = e.get("item_spec")
             if not isinstance(item_sid, str):
@@ -132,7 +132,7 @@ def parse_loot_tables(
 def parse_merchants(
     raw_block: Any,
     mapper: ScenarioIdMapper,
-) -> Tuple[ScenarioMerchantDefinition, ...]:
+) -> tuple[ScenarioMerchantDefinition, ...]:
     """`merchants` block を解析する (経済統合 Phase 0)。
 
     スキーマ:
@@ -157,7 +157,7 @@ def parse_merchants(
             f"merchants は配列で宣言してください (got {type(raw_block).__name__})"
         )
 
-    merchants: List[ScenarioMerchantDefinition] = []
+    merchants: list[ScenarioMerchantDefinition] = []
     seen_ids: set = set()
     seen_names: set = set()
     for index, raw in enumerate(raw_block):
@@ -245,7 +245,7 @@ def parse_merchant_price_list(
     *,
     string_id: str,
     section: str,
-) -> Tuple[ScenarioMerchantPriceEntry, ...]:
+) -> tuple[ScenarioMerchantPriceEntry, ...]:
     """`merchants[].sells` / `.buys` を解析する。
 
     同じ item_spec を同一リスト内に 2 度書くのは、どちらの価格が効くか
@@ -260,7 +260,7 @@ def parse_merchant_price_list(
             f"(got {type(raw_list).__name__})"
         )
 
-    entries: List[ScenarioMerchantPriceEntry] = []
+    entries: list[ScenarioMerchantPriceEntry] = []
     seen_item_specs: set = set()
     for index, raw in enumerate(raw_list):
         if not isinstance(raw, dict):
@@ -306,7 +306,7 @@ def parse_merchant_price_list(
     return tuple(entries)
 
 def parse_item_interaction_registry(
-    items_raw: List[Dict[str, Any]],
+    items_raw: list[dict[str, Any]],
     mapper: ScenarioIdMapper,
     *,
     player_attribute_specs: PlayerAttributeSpecs,
@@ -339,7 +339,7 @@ def parse_item_interaction_registry(
             InteractionEffectTypeEnum.SHOW_PLAYER_TEXT,
         }
     )
-    entries: Dict[ItemSpecId, Tuple[InteractionDef, ...]] = {}
+    entries: dict[ItemSpecId, tuple[InteractionDef, ...]] = {}
     for item in items_raw:
         with declaring(f"item_spec {item.get('id')!r} の"):
             interactions = tuple(
@@ -375,7 +375,7 @@ def parse_item_interaction_registry(
     return ItemInteractionRegistry(entries)
 
 def parse_consume_effect( raw: Any, sid: str,
-) -> Optional[ItemEffect]:
+) -> ItemEffect | None:
     """JSON の consume_effect (単一 dict or list) を ItemEffect に変換する。
 
     対応形式:
@@ -395,7 +395,7 @@ def parse_consume_effect( raw: Any, sid: str,
         return parsed[0]
     return CompositeItemEffect(effects=tuple(parsed))
 
-def parse_single_consume_effect( entry: Dict[str, Any], sid: str,
+def parse_single_consume_effect( entry: dict[str, Any], sid: str,
 ) -> ItemEffect:
     """1 つの effect dict を ItemEffect サブクラスに変換する。"""
     if not isinstance(entry, dict):
@@ -438,14 +438,14 @@ def parse_single_consume_effect( entry: Dict[str, Any], sid: str,
         "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need / revive)"
     )
 
-def parse_item_specs( items_raw: List[Dict[str, Any]], mapper: ScenarioIdMapper,
-) -> List[ItemSpecDefinition]:
-    defs: List[ItemSpecDefinition] = []
+def parse_item_specs( items_raw: list[dict[str, Any]], mapper: ScenarioIdMapper,
+) -> list[ItemSpecDefinition]:
+    defs: list[ItemSpecDefinition] = []
     for item in items_raw:
         sid = item["id"]
         numeric = mapper.register("item_spec", sid)
         spoils_raw = item.get("spoils_after_ticks")
-        spoils_after_ticks: Optional[int] = None
+        spoils_after_ticks: int | None = None
         if spoils_raw is not None:
             # 不正値はシナリオ作家ミスとして boundary で弾く。ItemSpec の
             # __post_init__ でも弾かれるが、ここで明示しておくと loader 段で
@@ -584,8 +584,8 @@ def _parse_market_positive_int(raw: Any, *, field: str, index: int) -> int:
 def _parse_market_initial_orders(
     raw_list: Any,
     mapper: ScenarioIdMapper,
-    merchants: Tuple[ScenarioMerchantDefinition, ...],
-) -> Tuple[ScenarioMarketInitialOrder, ...]:
+    merchants: tuple[ScenarioMerchantDefinition, ...],
+) -> tuple[ScenarioMarketInitialOrder, ...]:
     """`market.initial_orders` を解析する。
 
     参照 (商人 / item_spec) はこの時点で解決し、実在しない名前は実行前に落とす。
@@ -598,7 +598,7 @@ def _parse_market_initial_orders(
             f"(got {type(raw_list).__name__})"
         )
     by_string_id = {m.string_id: m for m in merchants}
-    orders: List[ScenarioMarketInitialOrder] = []
+    orders: list[ScenarioMarketInitialOrder] = []
     for index, raw in enumerate(raw_list):
         if not isinstance(raw, dict):
             raise ScenarioLoadError(
@@ -649,10 +649,10 @@ def _parse_market_initial_orders(
 
 
 def parse_market(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
-    merchants: Tuple[ScenarioMerchantDefinition, ...],
-) -> Optional[ScenarioMarketConfig]:
+    merchants: tuple[ScenarioMerchantDefinition, ...],
+) -> ScenarioMarketConfig | None:
     """`market` block を解析する (経済統合 Phase 3)。
 
     スキーマ:

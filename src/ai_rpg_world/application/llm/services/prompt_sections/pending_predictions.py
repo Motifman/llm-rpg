@@ -1,6 +1,6 @@
 """保留中予測の再浮上 section 本文組み立て。"""
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -15,7 +15,7 @@ def build_pending_predictions_text(
     *,
     player_id: PlayerId,
     being_id: BeingId,
-    current_state_dto: Optional[Any],
+    current_state_dto: Any | None,
 ) -> str:
     """U10a (予測誤差統一設計 部品6): pending prediction store から
 

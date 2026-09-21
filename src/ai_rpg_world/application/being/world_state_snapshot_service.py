@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ai_rpg_world.application.being.world_state_snapshot import (
     CURRENT_WORLD_SNAPSHOT_VERSION,

@@ -16,16 +16,15 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import pytest
 
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _WorldLlmTurnTrigger,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
+    _WorldLlmTurnTrigger,
 )
 
 

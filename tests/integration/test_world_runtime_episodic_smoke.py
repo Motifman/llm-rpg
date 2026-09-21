@@ -19,12 +19,17 @@ PR #292 で配線したばかりの ``LLM_EPISODIC_ENABLED`` フラグが本番�
 実 LLM 試走前の sanity check として CI で常時回す。
 """
 from __future__ import annotations
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 being_id = BeingId('being_w1_p1')
 from datetime import datetime, timezone
 from pathlib import Path
+
 import pytest
+
 from tests.runtime_config_helpers import episodic_config, runtime_config
+
 _SCENARIO_PATH = Path(__file__).resolve().parents[2] / 'data' / 'scenarios' / 'forbidden_library_demo.json'
 
 def _build_runtime(enabled: bool, **overrides):
@@ -114,7 +119,7 @@ class TestSmokeWriteSide:
         all_cues_canonical = [c.to_canonical() for ep in episodes for c in ep.cues]
         assert 'action:unknown_tool' not in all_cues_canonical, f'episode cue に unknown_tool が混入: {all_cues_canonical}'
         expected_tools = {'wait', 'travel_to', 'interact', 'explore', 'listen'}
-        assert any((c.startswith('action:') and c.split(':', 1)[1] in expected_tools for c in all_cues_canonical)), f'action: 軸の tool name cue が立っていない: {all_cues_canonical}'
+        assert any(c.startswith('action:') and c.split(':', 1)[1] in expected_tools for c in all_cues_canonical), f'action: 軸の tool name cue が立っていない: {all_cues_canonical}'
 
 class TestSmokePromptBuilds:
     """env=1 で prompt 構築が完走する。"""
@@ -144,13 +149,13 @@ class TestSmokeRecallSide:
         4. リンの prompt を組むと、user message に過去 episode の recall_text が
            現れる
         """
+        from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
         from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
         from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
         from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
         from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
         from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
         from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-        from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
         runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
@@ -174,7 +179,7 @@ class TestSmokeRecallSide:
         stack.episode_store.put_by_being(rin_being, past_episode)
         runtime._obs_buffer.append(rin_id, ObservationEntry(occurred_at=datetime.now(), output=ObservationOutput(prose='カイトの声が聞こえる: 「リン、書架Aで待ってる！」', structured={'type': 'speech_message', 'speaker': 'カイト', 'content': 'リン、書架Aで待ってる！'}, observation_category='social', schedules_turn=True), game_time_label=None))
         prompt = runtime.build_full_prompt(rin_id)
-        full_text = '\n'.join((m.get('content', '') for m in prompt['messages']))
+        full_text = '\n'.join(m.get('content', '') for m in prompt['messages'])
         assert 'SMOKE_RECALL_MARKER' in full_text, '観測 prose に「書架A」が含まれているのに、過去の書架A 訪問 episode の recall_text が prompt に現れていない。自由文 cue 抽出 → passive recall → prompt 注入のどこかが切れている。'
 
 class TestSmokeMemoryRecallTool:
@@ -200,6 +205,7 @@ class TestSmokeMemoryRecallTool:
     def test_run_llm_auxiliary_tool_dispatches_memory_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``run_llm_auxiliary_tool`` で memory_recall_episodes を呼ぶと、過去 episode が返る。"""
         from datetime import datetime, timedelta, timezone
+
         from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
         from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
         from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -298,11 +304,16 @@ class TestSmokeSubjectiveServiceMergesText:
     def test_subjective_service_chunk_recall_text_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """draft の `compute_template_recall` 結果が、注入した stub の文字列で上書きされる。"""
         from typing import Any
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_world_episodic_stack
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         assert runtime._episodic_stack is not None
 
@@ -322,9 +333,9 @@ class TestSmokeSubjectiveServiceMergesText:
         eps = runtime._episodic_stack.episode_store.list_recent_by_being(being_id, limit=20)
         assert len(eps) > 0
         recall_texts = [ep.recall_text for ep in eps]
-        assert any((rt == 'STUB_RECALL_TEXT_FROM_LLM' for rt in recall_texts)), f'subjective service 注入時に LLM の recall_text で上書きされていない: {recall_texts}'
+        assert any(rt == 'STUB_RECALL_TEXT_FROM_LLM' for rt in recall_texts), f'subjective service 注入時に LLM の recall_text で上書きされていない: {recall_texts}'
         interpreteds = [ep.interpreted for ep in eps]
-        assert any((it == 'STUB_INTERPRETED' for it in interpreteds))
+        assert any(it == 'STUB_INTERPRETED' for it in interpreteds)
 
 class TestSmokeAsyncSubjectiveSchedulerIntegration:
     """``ThreadPoolEpisodicSubjectiveScheduler`` を chunk_coordinator に注入し、
@@ -334,13 +345,22 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
     def test_async_scheduler_via_chunk_after_llm_overwritten(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """async scheduler 経由で chunk 書き込み後に LLM 文で上書きされる。"""
         from typing import Any
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import ThreadPoolEpisodicSubjectiveScheduler
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
+        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+            ThreadPoolEpisodicSubjectiveScheduler,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_world_episodic_stack
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
 
         class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
@@ -365,7 +385,7 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
         eps = shared_store.list_recent_by_being(being_id, 20)
         assert len(eps) > 0
         recall_texts = [ep.recall_text for ep in eps]
-        assert any((rt == 'ASYNC_RECALL_TEXT_FROM_WORKER' for rt in recall_texts)), f'非同期 scheduler 経由で LLM の recall_text 上書きが完了していない: {recall_texts}'
+        assert any(rt == 'ASYNC_RECALL_TEXT_FROM_WORKER' for rt in recall_texts), f'非同期 scheduler 経由で LLM の recall_text 上書きが完了していない: {recall_texts}'
 
 class TestSmokeBeliefEvidenceWiring:
     """U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED の配線が
@@ -386,7 +406,9 @@ class TestSmokeBeliefEvidenceWiring:
 
     def test_flag_belief_evidence_buffer_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """flag ON なら belief evidence buffer store が公開される。"""
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         runtime = _build_runtime(enabled=True, belief_evidence_enabled=True)
         assert isinstance(runtime._episodic_stack.belief_evidence_buffer_store, InMemoryBeliefEvidenceBufferStore)
 
@@ -409,6 +431,8 @@ class TestSmokeMemoDistillWiring:
 
     def test_flag_todo_tool_executor_transcriber_injected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """flag ON なら todo tool executor に transcriber が注入される。"""
-        from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import MemoDistillEvidenceTranscriber
+        from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
+            MemoDistillEvidenceTranscriber,
+        )
         runtime = _build_runtime(enabled=True, belief_evidence_enabled=True, memo_distill_enabled=True)
         assert isinstance(runtime._todo_tool_executor._memo_distill_transcriber, MemoDistillEvidenceTranscriber)

@@ -1,5 +1,7 @@
 """ショップコマンド関連の例外"""
-from typing import Optional
+
+from typing import Any
+
 from ai_rpg_world.application.shop.exceptions.base_exception import ShopApplicationException
 
 
@@ -9,12 +11,12 @@ class ShopCommandException(ShopApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        user_id: Optional[int] = None,
-        shop_id: Optional[int] = None,
-        listing_id: Optional[int] = None,
-        **context,
-    ):
+        error_code: str | None = None,
+        user_id: int | None = None,
+        shop_id: int | None = None,
+        listing_id: int | None = None,
+        **context: Any,
+    ) -> None:
         all_context = dict(context)
         if user_id is not None:
             all_context["user_id"] = user_id

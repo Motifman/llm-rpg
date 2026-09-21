@@ -15,14 +15,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
-
 
 _logger = logging.getLogger(__name__)
 _FLAG_PREFIX = "sync_prep:"
@@ -88,10 +86,10 @@ class SynchronizedActionRegistry:
         )
         return entry
 
-    def entries_for(self, action_id: str) -> List[SyncPrepareEntry]:
+    def entries_for(self, action_id: str) -> list[SyncPrepareEntry]:
         """指定 action_id に対する全 prepare を返す。"""
         prefix = f"{_FLAG_PREFIX}{action_id}:"
-        out: List[SyncPrepareEntry] = []
+        out: list[SyncPrepareEntry] = []
         for f in self._world_flag_state.as_frozen_set():
             if not f.startswith(prefix):
                 continue
@@ -115,7 +113,7 @@ class SynchronizedActionRegistry:
                 continue
         return out
 
-    def clear_entries(self, entries: List[SyncPrepareEntry]) -> None:
+    def clear_entries(self, entries: list[SyncPrepareEntry]) -> None:
         """指定 entries の flag を削除する。"""
         for e in entries:
             self._world_flag_state.remove(
@@ -126,9 +124,9 @@ class SynchronizedActionRegistry:
                 ),
             )
 
-    def all_entries(self) -> List[SyncPrepareEntry]:
+    def all_entries(self) -> list[SyncPrepareEntry]:
         """登録されている全 sync prepare を返す（resolver でのスキャン用）。"""
-        out: List[SyncPrepareEntry] = []
+        out: list[SyncPrepareEntry] = []
         for f in self._world_flag_state.as_frozen_set():
             if not f.startswith(_FLAG_PREFIX):
                 continue
@@ -148,7 +146,7 @@ class SynchronizedActionRegistry:
                 continue
         return out
 
-    def find_oldest_for_action(self, action_id: str) -> Optional[SyncPrepareEntry]:
+    def find_oldest_for_action(self, action_id: str) -> SyncPrepareEntry | None:
         """指定 action_id の最も古い prepare を返す。"""
         entries = self.entries_for(action_id)
         if not entries:

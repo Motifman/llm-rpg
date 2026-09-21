@@ -1,8 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
+        PhysicalMapAggregate,
+    )
 
 
 class PhysicalMapRepository(Repository["PhysicalMapAggregate", SpotId], ABC):
@@ -19,6 +25,6 @@ class PhysicalMapRepository(Repository["PhysicalMapAggregate", SpotId], ABC):
         pass
 
     @abstractmethod
-    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
+    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> SpotId | None:
         """指定した WorldObjectId が配置されているスポットIDを返す。見つからなければ None。"""
         pass

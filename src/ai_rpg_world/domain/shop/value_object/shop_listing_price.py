@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.shop.exception.shop_exception import ShopListingPriceValidationException
 
 
@@ -10,7 +11,7 @@ class ShopListingPrice:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise ShopListingPriceValidationException(
                 f"Shop listing price must be 1 or more. value: {self.value}"

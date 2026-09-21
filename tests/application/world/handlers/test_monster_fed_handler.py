@@ -1,24 +1,25 @@
 """MonsterFedEvent を購読し record_feed を実行する MonsterFedHandler のテスト。"""
 
 import pytest
+
 from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
-from ai_rpg_world.domain.monster.event.monster_events import MonsterFedEvent
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.event.monster_events import MonsterFedEvent
+from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterAlreadyDeadException
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.enum.player_enum import Race
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
-from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterAlreadyDeadException
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
@@ -98,8 +99,8 @@ class TestMonsterFedHandler:
 
     def test_skip_when_starvation_disabled(self, handler, monster_repo):
         """starvation_ticks が 0 のときは record_feed が何もしない（飢餓変化なし）"""
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.common.value_object import WorldTick
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         t_disabled = _template_with_feed(hunger_decrease_on_feed=0.4, starvation_ticks=0)
         loadout = SkillLoadoutAggregate.create(
             SkillLoadoutId(1), owner_id=101, normal_capacity=5, awakened_capacity=5

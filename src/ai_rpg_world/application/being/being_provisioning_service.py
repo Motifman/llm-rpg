@@ -31,11 +31,11 @@ LLM 実行なので問題なし)。
 
 from __future__ import annotations
 
-from ai_rpg_world.domain.being.aggregate.being import Being
-from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
+from ai_rpg_world.domain.being.aggregate.being import Being
+from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity

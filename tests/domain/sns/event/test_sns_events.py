@@ -1,25 +1,27 @@
 """SNSイベントクラスの包括的なテスト"""
 
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
+
 from ai_rpg_world.domain.sns.event import (
-    # User events
-    SnsUserCreatedEvent,
-    SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
-    SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
-    SnsUserProfileUpdatedEvent,
-    SnsUserSubscribedEvent,
-    SnsUserUnsubscribedEvent,
+    SnsContentDeletedEvent,
+    SnsContentLikedEvent,
+    SnsContentMentionedEvent,
     # Post events
     SnsPostCreatedEvent,
     SnsReplyCreatedEvent,
-    SnsContentLikedEvent,
-    SnsContentDeletedEvent,
-    SnsContentMentionedEvent,
+    SnsUserBlockedEvent,
+    # User events
+    SnsUserCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserProfileUpdatedEvent,
+    SnsUserSubscribedEvent,
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserUnsubscribedEvent,
 )
-from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention, Like
+from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
 class TestSnsUserCreatedEvent:

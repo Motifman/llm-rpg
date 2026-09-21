@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-
 
 _DEFAULT_TEMPLATES: Mapping[PlayerOutcomeEnum, str] = {
     PlayerOutcomeEnum.DEAD: "{player_name}は死亡した。もう蘇生できない。",
@@ -20,7 +19,7 @@ class PlayerOutcomeObservationFormatter:
 
     def __init__(
         self,
-        templates: Optional[Mapping[PlayerOutcomeEnum, str]] = None,
+        templates: Mapping[PlayerOutcomeEnum, str] | None = None,
     ) -> None:
         self._templates = {**_DEFAULT_TEMPLATES, **dict(templates or {})}
 
@@ -29,7 +28,7 @@ class PlayerOutcomeObservationFormatter:
         *,
         player_name: str,
         outcome: PlayerOutcomeEnum,
-    ) -> Optional[str]:
+    ) -> str | None:
         """確定結果の観測文を返し、UNRESOLVED なら None を返す。"""
         template = self._templates.get(outcome)
         if template is None:

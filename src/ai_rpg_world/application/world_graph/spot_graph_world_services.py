@@ -8,26 +8,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
     SpotExplorationApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
-    ISpotExplorationProgressStore,
     InMemorySpotExplorationProgressStore,
+    ISpotExplorationProgressStore,
 )
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
+    SpotGraphSimulationApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
     SpotGraphTravelContextProvider,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
-    SpotGraphSimulationApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
@@ -55,9 +54,9 @@ class SpotGraphWorldServices:
     world_flags: MutableWorldFlagState
     game_end_evaluator: GameEndConditionEvaluator
     exploration_progress: ISpotExplorationProgressStore
-    movement: Optional[SpotGraphMovementApplicationService] = None
-    travel_stage: Optional[SpotGraphTravelStageService] = None
-    simulation: Optional[SpotGraphSimulationApplicationService] = None
+    movement: SpotGraphMovementApplicationService | None = None
+    travel_stage: SpotGraphTravelStageService | None = None
+    simulation: SpotGraphSimulationApplicationService | None = None
 
 
 def create_spot_graph_world_services(
@@ -68,12 +67,12 @@ def create_spot_graph_world_services(
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,
     *,
-    world_flag_state: Optional[MutableWorldFlagState] = None,
-    exploration_progress_store: Optional[ISpotExplorationProgressStore] = None,
-    movement_service: Optional[SpotGraphMovementApplicationService] = None,
-    travel_context: Optional[SpotGraphTravelContextProvider] = None,
-    travel_stage: Optional[SpotGraphTravelStageService] = None,
-    simulation_service: Optional[SpotGraphSimulationApplicationService] = None,
+    world_flag_state: MutableWorldFlagState | None = None,
+    exploration_progress_store: ISpotExplorationProgressStore | None = None,
+    movement_service: SpotGraphMovementApplicationService | None = None,
+    travel_context: SpotGraphTravelContextProvider | None = None,
+    travel_stage: SpotGraphTravelStageService | None = None,
+    simulation_service: SpotGraphSimulationApplicationService | None = None,
     event_publisher=None,
 ) -> SpotGraphWorldServices:
     """スポットグラフ用サービス束を組み立てる。

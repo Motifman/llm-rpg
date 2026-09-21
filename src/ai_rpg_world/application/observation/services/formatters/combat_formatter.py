@@ -1,6 +1,6 @@
 """戦闘（HitBox）イベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -26,7 +26,7 @@ class CombatObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, HitBoxCreatedEvent):
             return self._format_hit_box_created(event, recipient_player_id)
         if isinstance(event, HitBoxMovedEvent):
@@ -41,17 +41,17 @@ class CombatObservationFormatter:
 
     def _format_hit_box_created(
         self, event: HitBoxCreatedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         return None
 
     def _format_hit_box_moved(
         self, event: HitBoxMovedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         return None
 
     def _format_hit_box_hit_recorded(
         self, event: HitBoxHitRecordedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "攻撃が命中しました。"
         owner_id = (
             getattr(event.owner_id, "value", event.owner_id)
@@ -63,7 +63,7 @@ class CombatObservationFormatter:
             if event.target_id
             else None
         )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "hitbox_hit",
             "owner_world_object_id": owner_id,
             "target_world_object_id": target_id,
@@ -78,10 +78,10 @@ class CombatObservationFormatter:
 
     def _format_hit_box_deactivated(
         self, event: HitBoxDeactivatedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         return None
 
     def _format_hit_box_obstacle_collided(
         self, event: HitBoxObstacleCollidedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         return None

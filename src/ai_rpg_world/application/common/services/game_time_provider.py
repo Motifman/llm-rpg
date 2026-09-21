@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+
 from ai_rpg_world.domain.common.value_object import WorldTick
+
 
 class GameTimeProvider(ABC):
     """現在のゲーム内時間を取得・管理するためのインターフェース（ポート）"""

@@ -20,18 +20,18 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import Any
 
 import pytest
+from scripts.run_scenario_experiment import _build_report, _drive_scenario
 
 from ai_rpg_world.application.trace import JsonlTraceRecorder, TraceEventKind
-from scripts.run_scenario_experiment import _build_report, _drive_scenario
 
 
 class _Runtime:
     """指定した tick から `llm_abort_reason` を返しはじめる runtime。"""
 
-    def __init__(self, *, abort_at: Optional[int]) -> None:
+    def __init__(self, *, abort_at: int | None) -> None:
         self.tick = 0
         self._abort_at = abort_at
 
@@ -54,7 +54,7 @@ class _Runtime:
 
         return GameEndResult(is_ended=False, result=None, reason="ゲーム続行中")
 
-    def llm_abort_reason(self) -> Optional[str]:
+    def llm_abort_reason(self) -> str | None:
         if self._abort_at is None or self.tick < self._abort_at:
             return None
         return "LLM 呼び出しが 8 件連続で失敗した (LLM_API_CALL_FAILED: 8)"

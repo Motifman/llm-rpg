@@ -10,10 +10,10 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     EcologyTypeEnum,
     MonsterFactionEnum,
 )
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
     AttackStatusEffectChance,
 )
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -172,8 +172,8 @@ def _optional_bool(row: object, key: str, *, default: bool) -> bool:
 
 
 def _optional_temperature(
-    row: object, key: str, *, default: "TemperatureEnum",
-) -> "TemperatureEnum":
+    row: object, key: str, *, default: TemperatureEnum,
+) -> TemperatureEnum:
     """row[key] が無い (旧スキーマ) なら default、あれば TemperatureEnum 化。"""
     try:
         value = row[key]

@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from tests.application.world_graph.test_spot_graph_item_transfer_service import (
+    PLAYER_ID,
+    SPOT_ID,
+    _make_graph_with_player,
+)
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
@@ -10,9 +15,13 @@ from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.infrastructure.events.command_event_dispatcher import CommandEventDispatcher
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import InMemoryItemTransferCommandRepositoryProviderFactory
+from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
+    InMemoryItemTransferCommandRepositoryProviderFactory,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import InMemorySpotGraphRepository
-from ai_rpg_world.infrastructure.repository.sqlite_item_transfer_command_repository_provider import SqliteItemTransferCommandRepositoryProviderFactory
+from ai_rpg_world.infrastructure.repository.sqlite_item_transfer_command_repository_provider import (
+    SqliteItemTransferCommandRepositoryProviderFactory,
+)
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionFactory,
     SqliteUnitOfWorkTransactionAdapter,
@@ -21,11 +30,6 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
     RollbackParticipantTransactionAdapter,
     RollbackParticipantTransactionFactory,
-)
-from tests.application.world_graph.test_spot_graph_item_transfer_service import (
-    PLAYER_ID,
-    SPOT_ID,
-    _make_graph_with_player,
 )
 
 

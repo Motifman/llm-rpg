@@ -4,7 +4,7 @@ UoW の commit から非同期配信トリガーを分離し、commit 後の
 get_committed_events → publish_async_events → clear_committed_events の流れを
 本 scope が担う。with uow: 互換を維持するため、戻り値の第一要素として使われる。
 """
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.domain_event import BaseDomainEvent

@@ -23,7 +23,8 @@ encounter 対象 (entity / spot / event-type) を判定して
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -155,7 +156,7 @@ class EncounterObservationCollector:
             return
         self._memory.observe(player_id, key, current_tick)
 
-    def _safe_current_tick(self) -> Optional[int]:
+    def _safe_current_tick(self) -> int | None:
         try:
             tick = self._current_tick_provider()
         except Exception:

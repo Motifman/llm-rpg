@@ -28,7 +28,6 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

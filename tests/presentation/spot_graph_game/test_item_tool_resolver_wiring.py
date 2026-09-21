@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -40,11 +40,11 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
-    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -70,7 +70,7 @@ def _inventory_target(
     )
 
 
-def _runtime_context(targets: Dict[str, Any]) -> ToolRuntimeContextDto:
+def _runtime_context(targets: dict[str, Any]) -> ToolRuntimeContextDto:
     return ToolRuntimeContextDto(targets=targets)
 
 
@@ -122,9 +122,9 @@ class TestAdapterWithResolver:
 
     def test_resolver_executor(self) -> None:
         """resolver の出力が executor に渡る。"""
-        seen_args: Dict[str, Any] = {}
+        seen_args: dict[str, Any] = {}
 
-        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             seen_args.update(args)
             return LlmCommandResultDto(success=True, message="ok")
 
@@ -143,7 +143,7 @@ class TestAdapterWithResolver:
 
     def test_resolver_llm_command_result_dto_raises_exception(self) -> None:
         """resolver 例外は名前指定の remediation を持つ LlmCommandResultDto に変換。"""
-        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
         resolver = MagicMock()
@@ -182,7 +182,7 @@ class TestAdapterWithResolver:
         forbidden_phrase: str,
     ) -> None:
         """resolver 汎用失敗でも、各 tool の対象種別に合う復帰ヒントを返す。"""
-        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             pytest.fail("resolver 失敗時に executor が呼ばれてはいけない")
 
         resolver = MagicMock()
@@ -211,7 +211,7 @@ class TestAdapterWithResolver:
         化けて発生源が分かりにくくなる。"""
         called = {"n": 0}
 
-        def fake_executor(pid_int: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        def fake_executor(pid_int: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
             called["n"] += 1
             return LlmCommandResultDto(success=False, message="raw")
 

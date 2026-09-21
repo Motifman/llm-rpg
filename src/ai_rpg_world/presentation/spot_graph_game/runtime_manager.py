@@ -11,10 +11,11 @@ import json
 import logging
 import threading
 import uuid
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional
+from typing import Any
 
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
@@ -22,17 +23,21 @@ from ai_rpg_world.application.intent.action_failed_observation_emitter import (
 from ai_rpg_world.application.intent.intent_id_generator import (
     IntentIdGenerator,
 )
+from ai_rpg_world.application.inventory.services.player_inventory_query_service import (
+    PlayerInventoryQueryService,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import TurnGate
+from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+    create_llm_client_from_config,
 )
 from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
     create_typed_judgment_port_from_config,
 )
-from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-    create_llm_client_from_config,
-)
+from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
 )
@@ -41,9 +46,6 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
-)
-from ai_rpg_world.application.inventory.services.player_inventory_query_service import (
-    PlayerInventoryQueryService,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
@@ -78,8 +80,14 @@ logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E402
     list_destination_labels as _list_destination_labels,
+)
+from ai_rpg_world.application.llm.services.failure_helpers import (
     list_object_labels as _list_object_labels,
+)
+from ai_rpg_world.application.llm.services.failure_helpers import (
     list_player_labels as _list_player_labels,
+)
+from ai_rpg_world.application.llm.services.failure_helpers import (
     list_targets_of_kind as _list_targets_of_kind,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (  # noqa: E402
@@ -105,9 +113,38 @@ from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noq
     WorldLlmWiring as _WorldLlmWiring,
 )
 
+
+def _build_turn_gate(runtime: Any, judgment_port: Any) -> TurnGate | None:
+    """tick の終わりに「いま動く必要があるか」を問う門を、profile が求めたときだけ組む。
+
+    provider が off なら判断ポートが無く、門も無い。門が無い run と門が全員回した
+    run は trace の TYPED_JUDGMENT で見分ける。
+    """
+    config = runtime._runtime_config
+    if judgment_port is None or not config.typed_judgment_turn_gate_enabled:
+        return None
+    player_names = {
+        int(spawn.player_id): spawn.name for spawn in runtime.scenario.player_spawns
+    }
+
+    def _pending(player_id: PlayerId) -> list[ObservationOutput]:
+        return [entry.output for entry in runtime._obs_buffer.get_observations(player_id)]
+
+    return TurnGate(
+        judgment_port,
+        current_tick_provider=runtime.current_tick,
+        player_name_resolver=lambda pid: player_names.get(int(pid.value), ""),
+        pending_observations_provider=_pending,
+        is_meeting_provider=runtime._game_phase_store.is_meeting,
+        all_player_ids_provider=lambda: [PlayerId(pid) for pid in player_names],
+        skip_below=config.typed_judgment_turn_gate_skip_below,
+        trace_recorder_provider=lambda: runtime.trace_recorder,
+    )
+
+
 def _character_to_prompt_input(
-    character: Optional[CharacterDetailResponse],
-) -> Optional[CharacterPromptInput]:
+    character: CharacterDetailResponse | None,
+) -> CharacterPromptInput | None:
     if character is None:
         return None
     return CharacterPromptInput(
@@ -144,7 +181,7 @@ def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
         return str(numeric_id)
 
 
-def _read_scenario_metadata(path: Path) -> Optional[Dict[str, Any]]:
+def _read_scenario_metadata(path: Path) -> dict[str, Any] | None:
     """Read only the metadata section from a scenario JSON without full parse."""
     try:
         with open(path, encoding="utf-8") as f:
@@ -189,19 +226,19 @@ class GameRuntimeManager:
 
     scenarios_dir: Path = field(default_factory=lambda: Path("data/scenarios"))
     characters_path: Path = field(default_factory=lambda: Path("var/characters.json"))
-    runtime_config: Optional[Any] = field(default=None, repr=False)
+    runtime_config: Any | None = field(default=None, repr=False)
 
-    _scenario_cache: Dict[str, Dict[str, Any]] = field(
+    _scenario_cache: dict[str, dict[str, Any]] = field(
         default_factory=dict, repr=False
     )
-    _characters: Dict[str, CharacterDetailResponse] = field(
+    _characters: dict[str, CharacterDetailResponse] = field(
         default_factory=dict, repr=False
     )
     _characters_loaded: bool = field(default=False, repr=False)
-    _sessions: Dict[str, _SessionState] = field(
+    _sessions: dict[str, _SessionState] = field(
         default_factory=dict, repr=False
     )
-    _chat_histories: Dict[str, list[ChatMessageResponse]] = field(
+    _chat_histories: dict[str, list[ChatMessageResponse]] = field(
         default_factory=dict, repr=False
     )
     # 長走時の保険:
@@ -217,7 +254,7 @@ class GameRuntimeManager:
 
     # ── Worlds ──
 
-    def _load_scenario_raw(self, world_id: str) -> Optional[Dict[str, Any]]:
+    def _load_scenario_raw(self, world_id: str) -> dict[str, Any] | None:
         if world_id in self._scenario_cache:
             return self._scenario_cache[world_id]
         path = self.scenarios_dir / f"{world_id}.json"
@@ -250,7 +287,7 @@ class GameRuntimeManager:
             )
         return worlds
 
-    def get_world_detail(self, world_id: str) -> Optional[WorldDetailResponse]:
+    def get_world_detail(self, world_id: str) -> WorldDetailResponse | None:
         raw = self._load_scenario_raw(world_id)
         if raw is None:
             return None
@@ -328,7 +365,7 @@ class GameRuntimeManager:
             for character in sorted(self._characters.values(), key=lambda c: c.name)
         ]
 
-    def get_character(self, character_id: str) -> Optional[CharacterDetailResponse]:
+    def get_character(self, character_id: str) -> CharacterDetailResponse | None:
         self._load_characters()
         return self._characters.get(character_id)
 
@@ -359,7 +396,7 @@ class GameRuntimeManager:
 
     def update_character(
         self, character_id: str, request: CharacterUpdateRequest
-    ) -> Optional[CharacterDetailResponse]:
+    ) -> CharacterDetailResponse | None:
         self._load_characters()
         current = self._characters.get(character_id)
         if current is None:
@@ -419,6 +456,7 @@ class GameRuntimeManager:
             llm_session_run_id=sid,
             llm_session_world_id=request.world_id,
         )
+        llm_wiring.turn_gate = _build_turn_gate(runtime, llm_wiring.typed_judgment_port)
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
             llm_player_resolver=llm_resolver,
@@ -510,7 +548,7 @@ class GameRuntimeManager:
 
     def get_session_state(
         self, session_id: str
-    ) -> Optional[SessionStateResponse]:
+    ) -> SessionStateResponse | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
@@ -576,7 +614,7 @@ class GameRuntimeManager:
         state.speed_multiplier = speed_multiplier
         return True
 
-    def iter_running_runtimes(self) -> "Iterator[tuple[str, Any]]":
+    def iter_running_runtimes(self) -> Iterator[tuple[str, Any]]:
         """Yield ``(session_id, runtime)`` pairs for sessions in 'running' status.
 
         Used by the background tick loop to advance game time. Skips
@@ -607,9 +645,9 @@ class GameRuntimeManager:
         self,
         session_id: str,
         *,
-        character_id: Optional[str] = None,
-        spot_id: Optional[str] = None,
-    ) -> Optional[SpotViewResponse]:
+        character_id: str | None = None,
+        spot_id: str | None = None,
+    ) -> SpotViewResponse | None:
         state = self._sessions.get(session_id)
         if state is None or state.runtime is None:
             return None
@@ -696,7 +734,7 @@ class GameRuntimeManager:
 
     def get_event_log(
         self, session_id: str, *, limit: int = 50, offset: int = 0
-    ) -> Optional[EventLogResponse]:
+    ) -> EventLogResponse | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
@@ -704,7 +742,7 @@ class GameRuntimeManager:
 
     def get_inventory(
         self, session_id: str, character_id: str
-    ) -> Optional[InventoryResponse]:
+    ) -> InventoryResponse | None:
         state = self._sessions.get(session_id)
         if state is None or state.runtime is None:
             return None
@@ -820,7 +858,7 @@ class GameRuntimeManager:
 
     def get_chat_history(
         self, character_id: str
-    ) -> Optional[ChatHistoryResponse]:
+    ) -> ChatHistoryResponse | None:
         with self._chat_history_lock:
             return ChatHistoryResponse(
                 messages=list(self._chat_histories.get(character_id, []))
@@ -830,17 +868,17 @@ class GameRuntimeManager:
 
     def get_result_impressions(
         self, session_id: str
-    ) -> Optional[ResultImpressionResponse]:
+    ) -> ResultImpressionResponse | None:
         return None
 
     def get_result_timeline(
         self, session_id: str
-    ) -> Optional[ResultTimelineResponse]:
+    ) -> ResultTimelineResponse | None:
         return None
 
     def get_result_relationships(
         self, session_id: str
-    ) -> Optional[ResultRelationshipResponse]:
+    ) -> ResultRelationshipResponse | None:
         return None
 
     # ── Saves (stub) ──
@@ -848,8 +886,8 @@ class GameRuntimeManager:
     def list_saves(self) -> SaveListResponse:
         return SaveListResponse()
 
-    def save_session(self, session_id: str) -> Optional[SaveSlotResponse]:
+    def save_session(self, session_id: str) -> SaveSlotResponse | None:
         return None
 
-    def load_save(self, save_id: str) -> Optional[SaveSlotResponse]:
+    def load_save(self, save_id: str) -> SaveSlotResponse | None:
         return None

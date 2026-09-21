@@ -1,37 +1,38 @@
 import logging
-from typing import Optional, Tuple, Callable, Any, TYPE_CHECKING
+from collections.abc import Callable
 from functools import wraps
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.repository import UserRepository
-from ai_rpg_world.domain.sns.aggregate import UserAggregate
 from ai_rpg_world.application.social.contracts.commands import (
-    CreateUserCommand,
-    UpdateUserProfileCommand,
-    FollowUserCommand,
-    UnfollowUserCommand,
     BlockUserCommand,
-    UnblockUserCommand,
+    CreateUserCommand,
+    FollowUserCommand,
     SubscribeUserCommand,
-    UnsubscribeUserCommand
+    UnblockUserCommand,
+    UnfollowUserCommand,
+    UnsubscribeUserCommand,
+    UpdateUserProfileCommand,
 )
+from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
 from ai_rpg_world.application.social.exceptions import (
+    ApplicationExceptionFactory,
     SystemErrorException,
     UserCommandException,
-    ApplicationExceptionFactory,
 )
-from ai_rpg_world.application.social.exceptions.command.user_command_exception import UserNotFoundForCommandException
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
-from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
+from ai_rpg_world.application.social.exceptions.command.user_command_exception import UserNotFoundForCommandException
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.sns.aggregate import UserAggregate
 from ai_rpg_world.domain.sns.exception import (
     SnsDomainException,
     UserNotFoundException,
 )
+from ai_rpg_world.domain.sns.repository import UserRepository
 from ai_rpg_world.domain.sns.service.relationship_domain_service import RelationshipDomainService
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 
 class UserCommandService:
@@ -58,9 +59,9 @@ class UserCommandService:
                 target_user_id=context.get('target_user_id')
             )
         except Exception as e:
-            self.logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self.logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
     
     def _register_event_handlers(self) -> None:

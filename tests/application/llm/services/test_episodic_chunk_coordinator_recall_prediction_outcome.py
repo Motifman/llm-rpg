@@ -8,24 +8,31 @@ merge し終えた直後」。非同期経路 (scheduler) の対応テストは
 ``test_episodic_subjective_completion_schedulers.py`` にある。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Any
+
+from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
-from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
 
 class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
     """chunk 主観補完 LLM のスタブ。固定の JSON を返すだけ (実 LLM 呼び出しなし)。"""
@@ -113,7 +120,9 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
     def test_flag_expected_result_count_incremented(self) -> None:
         """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         recall_success = InMemoryEpisodicRecallSuccessStore()
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=True)
@@ -123,7 +132,9 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
     def test_prediction_error_not_incremented(self) -> None:
         """外れたときは U9a の対象であり、的中側には加算しない。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         recall_success = InMemoryEpisodicRecallSuccessStore()
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '外れた'}, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=True)
@@ -133,7 +144,9 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
     def test_expected_result_action_not_incremented(self) -> None:
         """何もしなかっただけの的中で hit を水増ししない (U4 CONFIRMATION と同型)。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         recall_success = InMemoryEpisodicRecallSuccessStore()
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=True)
@@ -143,7 +156,9 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
 
     def test_flag_off_default_not_incremented(self) -> None:
         """recall_hit_boost_enabled=False (既定) は導入前と一致。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
         recall_buffer = InMemoryEpisodicRecallBufferStore()
         recall_success = InMemoryEpisodicRecallSuccessStore()
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=False)

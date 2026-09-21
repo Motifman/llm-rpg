@@ -13,7 +13,8 @@ audience_resolver (Optional) が注入されると、speech 実行直後に
 
 import random
 import re
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -40,7 +41,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 # PR β (実験 #29 後続): 疲労 severe 以上で発話を朦朧化する設定。
 # 発火は ``PlayerStatusAggregate.is_severely_fatigued()`` が決める。
@@ -78,7 +78,7 @@ def _apply_speech_blur(content: str, *, rng: random.Random) -> str:
     return blurred
 
 
-_CHANNEL_STRING_TO_ENUM: Dict[str, SpeechChannel] = {
+_CHANNEL_STRING_TO_ENUM: dict[str, SpeechChannel] = {
     SPEECH_CHANNEL_WHISPER: SpeechChannel.WHISPER,
     SPEECH_CHANNEL_SAY: SpeechChannel.SAY,
     SPEECH_CHANNEL_SHOUT: SpeechChannel.SHOUT,
@@ -96,11 +96,11 @@ class SpeechToolExecutor:
 
     def __init__(
         self,
-        speech_service: Optional[PlayerSpeechApplicationService] = None,
+        speech_service: PlayerSpeechApplicationService | None = None,
         *,
-        audience_resolver: Optional[SpeechAudienceResolver] = None,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        rng: Optional[random.Random] = None,
+        audience_resolver: SpeechAudienceResolver | None = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self._speech_service = speech_service
         self._audience_resolver = audience_resolver
@@ -109,7 +109,7 @@ class SpeechToolExecutor:
         self._player_status_repository = player_status_repository
         self._rng = rng or random.Random()
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。speech_service が None の場合は空辞書。"""
         if self._speech_service is None:
             return {}
@@ -120,7 +120,7 @@ class SpeechToolExecutor:
     def _execute_speech(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         """speech_speak の実行。channel で whisper/say/shout に分岐する。"""
         if self._speech_service is None:
@@ -152,7 +152,7 @@ class SpeechToolExecutor:
             )
 
         # whisper 限定: target_player_id 必須
-        target_player_id: Optional[int] = None
+        target_player_id: int | None = None
         if channel_enum == SpeechChannel.WHISPER:
             raw_target = args.get("target_player_id")
             if raw_target is None:
@@ -231,8 +231,8 @@ class SpeechToolExecutor:
         *,
         speaker_player_id: int,
         channel: SpeechChannel,
-        target_player_id: Optional[int],
-        args: Dict[str, Any],
+        target_player_id: int | None,
+        args: dict[str, Any],
     ) -> tuple[str, bool]:
         """channel ごとの result message + omit flag を返す。
 

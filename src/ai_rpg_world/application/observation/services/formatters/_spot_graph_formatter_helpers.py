@@ -21,7 +21,6 @@ from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import 
     StateDeltaEntry,
 )
 
-
 # 攻撃で対象が「行動不能」になった際の suffix。被害者ごとに自然な日本語を
 # 維持するため、player target / monster target を分けて持つ (field 自体は
 # `target_incapacitated` で対称化済み)。
@@ -51,7 +50,7 @@ class _SpotGraphFormatterBase:
         self._context = context
 
     def _is_self(self, entity_id: Any, recipient_id: PlayerId) -> bool:
-        return entity_id.value == recipient_id.value
+        return bool(entity_id.value == recipient_id.value)
 
     def _resolve_entity_name(self, entity_id: Any) -> str:
         return self._context.name_resolver.player_name(PlayerId(entity_id.value))
@@ -83,7 +82,7 @@ class _SpotGraphFormatterBase:
                 if spot.interior is not None:
                     obj = spot.interior.get_object(object_id)
                     if obj is not None:
-                        return obj.name
+                        return str(obj.name)
             interior_repo = getattr(
                 self._context, "spot_interior_repository", None
             )
@@ -92,18 +91,20 @@ class _SpotGraphFormatterBase:
                 if interior is not None:
                     obj = interior.get_object(object_id)
                     if obj is not None:
-                        return obj.name
+                        return str(obj.name)
         except Exception:
             pass
         return "何か"
 
 
-def _derive_delta(old_state: dict, new_state: dict):
+def _derive_delta(
+    old_state: dict[str, Any], new_state: dict[str, Any]
+) -> tuple[StateDeltaEntry, ...]:
     """formatter 側のフォールバック: event に state_delta が無いとき
     old_state / new_state を比較して StateDeltaEntry tuple を作る。
     """
     keys = set(old_state.keys()) | set(new_state.keys())
-    out = []
+    out: list[StateDeltaEntry] = []
     _SENTINEL = object()
     for key in sorted(keys, key=str):
         b = old_state.get(key, _SENTINEL)
@@ -120,7 +121,7 @@ def _derive_delta(old_state: dict, new_state: dict):
     return tuple(out)
 
 
-def _format_delta_text(delta) -> str:
+def _format_delta_text(delta: tuple[StateDeltaEntry, ...]) -> str:
     """StateDeltaEntry tuple を観測テキスト用の短い日本語に変換する。"""
     if not delta:
         return ""

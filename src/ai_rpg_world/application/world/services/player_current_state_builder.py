@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveHarvestDto,
     AvailableLocationAreaDto,
@@ -15,16 +16,17 @@ from ai_rpg_world.application.world.contracts.dtos import (
     VisibleObjectDto,
 )
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
+from ai_rpg_world.application.world.services.player_runtime_context_builder import (
+    PlayerRuntimeContextBuilder,
+)
 from ai_rpg_world.application.world.services.visible_object_read_model_builder import (
     VisibleObjectReadModelBuilder,
 )
 from ai_rpg_world.application.world.services.visible_tile_map_builder import (
     VisibleTileMapBuilder,
 )
-from ai_rpg_world.application.world.services.player_runtime_context_builder import (
-    PlayerRuntimeContextBuilder,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
     NotAnActorException,
@@ -32,18 +34,19 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     TileNotFoundException,
     WorldObjectIdValidationException,
 )
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.repository.transition_policy_repository import (
     ITransitionPolicyRepository,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
-
-from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+    from ai_rpg_world.application.conversation.services.conversation_command_service import (
+        ConversationCommandService,
+    )
     from ai_rpg_world.application.social.services.sns_mode_session_service import (
         SnsModeSessionService,
     )
@@ -51,14 +54,14 @@ if TYPE_CHECKING:
         SnsPageQueryService,
         SnsPageSessionService,
     )
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
     from ai_rpg_world.application.trade.trade_virtual_pages import (
         TradePageQueryService,
         TradePageSessionService,
     )
-    from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-    from ai_rpg_world.application.conversation.services.conversation_command_service import (
-        ConversationCommandService,
-    )
+    from ai_rpg_world.application.world.contracts.dtos import VisibleTileMapDto
     from ai_rpg_world.application.world.services.transition_condition_evaluator import (
         TransitionConditionEvaluator,
     )
@@ -79,9 +82,6 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
-        PersonalTradeQueryService,
-    )
     from ai_rpg_world.domain.skill.repository.skill_repository import (
         SkillDeckProgressRepository,
         SkillLoadoutRepository,
@@ -89,8 +89,8 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
         PhysicalMapAggregate,
     )
-    from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
     from ai_rpg_world.domain.world.entity.spot import Spot
+    from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
     from ai_rpg_world.domain.world.service.world_time_config_service import (
         WorldTimeConfigService,
     )
@@ -101,30 +101,30 @@ class PlayerCurrentStateBuilder:
 
     def __init__(
         self,
-        player_status_repository: "PlayerStatusRepository",
-        player_profile_repository: "PlayerProfileRepository",
-        spot_repository: "SpotRepository",
+        player_status_repository: PlayerStatusRepository,
+        player_profile_repository: PlayerProfileRepository,
+        spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
-        monster_repository: Optional["MonsterRepository"] = None,
-        transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
-        transition_condition_evaluator: Optional["TransitionConditionEvaluator"] = None,
-        player_inventory_repository: Optional["PlayerInventoryRepository"] = None,
-        item_repository: Optional["ItemRepository"] = None,
-        conversation_command_service: Optional["ConversationCommandService"] = None,
-        skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
-        skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
-        game_time_provider: Optional["GameTimeProvider"] = None,
-        world_time_config_service: Optional["WorldTimeConfigService"] = None,
-        quest_repository: Optional["QuestRepository"] = None,
-        guild_repository: Optional["GuildRepository"] = None,
-        shop_repository: Optional["ShopRepository"] = None,
-        personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
-        player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
-        sns_mode_session: Optional["SnsModeSessionService"] = None,
-        sns_page_session: Optional["SnsPageSessionService"] = None,
-        sns_page_query_service: Optional["SnsPageQueryService"] = None,
-        trade_page_session: Optional["TradePageSessionService"] = None,
-        trade_page_query_service: Optional["TradePageQueryService"] = None,
+        monster_repository: MonsterRepository | None = None,
+        transition_policy_repository: ITransitionPolicyRepository | None = None,
+        transition_condition_evaluator: TransitionConditionEvaluator | None = None,
+        player_inventory_repository: PlayerInventoryRepository | None = None,
+        item_repository: ItemRepository | None = None,
+        conversation_command_service: ConversationCommandService | None = None,
+        skill_loadout_repository: SkillLoadoutRepository | None = None,
+        skill_deck_progress_repository: SkillDeckProgressRepository | None = None,
+        game_time_provider: GameTimeProvider | None = None,
+        world_time_config_service: WorldTimeConfigService | None = None,
+        quest_repository: QuestRepository | None = None,
+        guild_repository: GuildRepository | None = None,
+        shop_repository: ShopRepository | None = None,
+        personal_trade_query_service: PersonalTradeQueryService | None = None,
+        player_audience_query: IPlayerAudienceQueryPort | None = None,
+        sns_mode_session: SnsModeSessionService | None = None,
+        sns_page_session: SnsPageSessionService | None = None,
+        sns_page_query_service: SnsPageQueryService | None = None,
+        trade_page_session: TradePageSessionService | None = None,
+        trade_page_query_service: TradePageQueryService | None = None,
     ) -> None:
         if player_audience_query is None:
             raise ValueError(
@@ -176,11 +176,11 @@ class PlayerCurrentStateBuilder:
         self,
         *,
         query: GetPlayerCurrentStateQuery,
-        player_status: "PlayerStatusAggregate",
+        player_status: PlayerStatusAggregate,
         player_name: str,
-        spot: "Spot",
-        physical_map: "PhysicalMapAggregate",
-        available_moves_result: Optional[PlayerMovementOptionsDto],
+        spot: Spot,
+        physical_map: PhysicalMapAggregate,
+        available_moves_result: PlayerMovementOptionsDto | None,
     ) -> PlayerCurrentStateDto:
         """
         PlayerCurrentStateDto を組み立てる。
@@ -350,11 +350,11 @@ class PlayerCurrentStateBuilder:
     def build_visible_objects(
         self,
         *,
-        physical_map: "PhysicalMapAggregate",
+        physical_map: PhysicalMapAggregate,
         origin: Coordinate,
         distance: int,
         player_id: PlayerId,
-    ) -> List[VisibleObjectDto]:
+    ) -> list[VisibleObjectDto]:
         return self._visible_object_builder.build_visible_objects(
             physical_map=physical_map,
             origin=origin,
@@ -366,30 +366,30 @@ class PlayerCurrentStateBuilder:
         self,
         *,
         query: GetPlayerCurrentStateQuery,
-        player_status: "PlayerStatusAggregate",
+        player_status: PlayerStatusAggregate,
         player_name: str,
-        spot: "Spot",
+        spot: Spot,
         coord: Coordinate,
-        area_ids: List[int],
-        area_names: List[str],
-        area_id: Optional[int],
-        area_name: Optional[str],
-        area_description: Optional[str],
-        current_player_ids: Set[int],
-        connected_spot_ids: Set[int],
-        connected_spot_names: Set[str],
+        area_ids: list[int],
+        area_names: list[str],
+        area_id: int | None,
+        area_name: str | None,
+        area_description: str | None,
+        current_player_ids: set[int],
+        connected_spot_ids: set[int],
+        connected_spot_names: set[str],
         weather_state: WeatherState,
-        current_terrain_type: Optional[str],
-        visible_objects: List[VisibleObjectDto],
+        current_terrain_type: str | None,
+        visible_objects: list[VisibleObjectDto],
         distance: int,
-        available_moves: Optional[list],
-        total_available_moves: Optional[int],
-        available_location_areas: Optional[List[AvailableLocationAreaDto]],
+        available_moves: list | None,
+        total_available_moves: int | None,
+        available_location_areas: list[AvailableLocationAreaDto] | None,
         is_busy: bool,
-        busy_until_tick: Optional[int],
+        busy_until_tick: int | None,
         has_active_path: bool,
-        visible_tile_map: Optional["VisibleTileMapDto"],
-        current_game_time_label: Optional[str],
+        visible_tile_map: VisibleTileMapDto | None,
+        current_game_time_label: str | None,
     ) -> PlayerWorldStateDto:
         return PlayerWorldStateDto(
             player_id=query.player_id,
@@ -431,10 +431,10 @@ class PlayerCurrentStateBuilder:
         query: GetPlayerCurrentStateQuery,
         player_id: PlayerId,
         current_spot_id: int,
-        physical_map: "PhysicalMapAggregate",
-        visible_objects: List[VisibleObjectDto],
-        area_ids: List[int],
-        active_harvest: Optional[ActiveHarvestDto],
+        physical_map: PhysicalMapAggregate,
+        visible_objects: list[VisibleObjectDto],
+        area_ids: list[int],
+        active_harvest: ActiveHarvestDto | None,
     ) -> PlayerRuntimeContextDto:
         actionable_objects = self._visible_object_builder.build_actionable_objects(
             visible_objects
@@ -490,11 +490,11 @@ class PlayerCurrentStateBuilder:
     def _build_app_session_state(self, *, player_id: int) -> PlayerAppSessionStateDto:
         from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
 
-        sns_virtual_page_kind: Optional[str] = None
-        sns_home_tab: Optional[str] = None
+        sns_virtual_page_kind: str | None = None
+        sns_home_tab: str | None = None
         sns_page_snapshot_generation = 0
-        sns_current_page_snapshot_json: Optional[str] = None
-        sns_profile_is_self: Optional[bool] = None
+        sns_current_page_snapshot_json: str | None = None
+        sns_profile_is_self: bool | None = None
         if (
             self._sns_page_session is not None
             and self._sns_mode_session is not None
@@ -521,10 +521,10 @@ class PlayerCurrentStateBuilder:
                 sns_page_snapshot_generation = snapshot.snapshot_generation
                 sns_current_page_snapshot_json = sns_snapshot_to_json(snapshot)
 
-        trade_virtual_page_kind: Optional[str] = None
-        trade_my_trades_tab: Optional[str] = None
+        trade_virtual_page_kind: str | None = None
+        trade_my_trades_tab: str | None = None
         trade_page_snapshot_generation = 0
-        trade_current_page_snapshot_json: Optional[str] = None
+        trade_current_page_snapshot_json: str | None = None
         if (
             self._trade_page_session is not None
             and self._sns_mode_session is not None
@@ -582,10 +582,10 @@ class PlayerCurrentStateBuilder:
     def _build_active_harvest(
         self,
         *,
-        physical_map: "PhysicalMapAggregate",
+        physical_map: PhysicalMapAggregate,
         player_id: PlayerId,
-        visible_objects: List[VisibleObjectDto],
-    ) -> Optional[ActiveHarvestDto]:
+        visible_objects: list[VisibleObjectDto],
+    ) -> ActiveHarvestDto | None:
         actor_object_id = WorldObjectId.create(int(player_id))
         visible_names = {obj.object_id: (obj.display_name or obj.object_type) for obj in visible_objects}
         for obj in physical_map.get_all_objects():

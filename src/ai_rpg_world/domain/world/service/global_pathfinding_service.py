@@ -1,14 +1,14 @@
-from typing import List, Optional, Tuple
 from collections import deque
+
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.value_object.area import CircleArea, PointArea, RectArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea, CircleArea
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 
 
 class GlobalPathfindingService:
@@ -27,7 +27,7 @@ class GlobalPathfindingService:
         connected_spots_provider: IConnectedSpotsProvider,
         world_object_id: WorldObjectId,
         capability: MovementCapability
-    ) -> Tuple[Optional[Coordinate], List[Coordinate]]:
+    ) -> tuple[Coordinate | None, list[Coordinate]]:
         """
         目的地までの経路（現在のスポット内での暫定目的地とそのパス）を計算する。
         スポットを跨ぐ場合は、最適なゲートウェイを中継地点としてパスを生成する。
@@ -81,7 +81,7 @@ class GlobalPathfindingService:
         )
         return gateway_coord, path
 
-    def _get_gateway_entry_coordinate(self, gateway: Gateway) -> Optional[Coordinate]:
+    def _get_gateway_entry_coordinate(self, gateway: Gateway) -> Coordinate | None:
         """ゲートウェイエリア内の代表的な進入座標を取得"""
         if isinstance(gateway.area, PointArea):
             return gateway.area.coordinate
@@ -97,12 +97,12 @@ class GlobalPathfindingService:
         start_id: SpotId,
         goal_id: SpotId,
         connected_spots_provider: IConnectedSpotsProvider,
-    ) -> Optional[SpotId]:
+    ) -> SpotId | None:
         """接続グラフ上で最短経路を探索し、次に向かうべき隣接スポットIDを返す"""
         if start_id == goal_id:
             return None
 
-        queue = deque([(start_id, [])])
+        queue: deque[tuple[SpotId, list[SpotId]]] = deque([(start_id, [])])
         visited = {start_id}
 
         while queue:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.player.exception import HpValidationException
 
 
@@ -13,7 +14,7 @@ class Hp:
     value: int
     max_hp: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.max_hp < 0:
             raise HpValidationException(f"max_hpは0以上の値である必要があります。max_hp: {self.max_hp}")
@@ -114,7 +115,7 @@ class Hp:
             return 0.0
         return self.value / self.max_hp
 
-    def describe(self, delta: Union[int, None] = None) -> str:
+    def describe(self, delta: int | None = None) -> str:
         """HPの状態を自然言語で返す（プロンプトの「身体の状態」用）。
 
         ``AgentNeed.describe`` と対称の表示。値・最大値・危険度の tier を出し、

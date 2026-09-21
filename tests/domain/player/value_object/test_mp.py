@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.player.value_object.mp import Mp
+
 from ai_rpg_world.domain.player.exception import MpValidationException
+from ai_rpg_world.domain.player.value_object.mp import Mp
 
 
 class TestMp:

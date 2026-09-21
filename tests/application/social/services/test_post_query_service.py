@@ -1,18 +1,20 @@
-import pytest
 from datetime import datetime
-from ai_rpg_world.application.social.services.post_query_service import PostQueryService
+
+import pytest
+
 from ai_rpg_world.application.social.contracts.dtos import PostDto
 from ai_rpg_world.application.social.exceptions.query.post_query_exception import (
-    PostQueryException,
+    PostAccessDeniedException,
     PostNotFoundException,
-    PostAccessDeniedException
+    PostQueryException,
 )
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
-from ai_rpg_world.domain.sns.value_object import UserId, PostId, PostContent
-from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.application.social.services.post_query_service import PostQueryService
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
-from ai_rpg_world.domain.sns.exception import UserIdValidationException, PostIdValidationException
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.exception import PostIdValidationException, UserIdValidationException
+from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 
@@ -111,7 +113,7 @@ class TestPostQueryService:
         post_repository._posts[PostId(20)] = popular_post4
 
         # トレンド計算用のテストポストを追加（過去24時間以内）
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         recent_time = datetime.now() - timedelta(hours=1)  # 1時間前
 
         # ハッシュタグを含むポストを複数追加
@@ -319,9 +321,9 @@ class TestPostQueryService:
         """get_postの著者ユーザーが見つからない場合のテスト"""
         # テスト用のポストを作成（存在しない著者ユーザーIDを使用）
         from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+        from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
         from ai_rpg_world.domain.sns.value_object import PostId, UserId
         from ai_rpg_world.domain.sns.value_object.post_content import PostContent
-        from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
 
         # 存在しない著者ユーザーID（999）のポストを作成
         test_content = PostContent(
@@ -353,9 +355,9 @@ class TestPostQueryService:
         """get_home_timelineの著者ユーザーが見つからない場合のテスト"""
         # テスト用のポストを作成（存在しない著者ユーザーIDを使用）
         from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+        from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
         from ai_rpg_world.domain.sns.value_object import PostId, UserId
         from ai_rpg_world.domain.sns.value_object.post_content import PostContent
-        from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
 
         # 存在しない著者ユーザーID（999）のポストを作成
         test_content = PostContent(
@@ -388,6 +390,7 @@ class TestPostQueryService:
     def test_unexpected_exception_handling(self, post_query_service, post_repository, user_repository):
         """予期せぬ例外のハンドリングテスト"""
         from unittest.mock import patch
+
         from ai_rpg_world.application.social.exceptions import SystemErrorException
 
         # post_repository.find_by_user_id で予期せぬ例外を発生させる
@@ -401,6 +404,7 @@ class TestPostQueryService:
     def test_domain_exception_conversion(self, post_query_service, post_repository, user_repository):
         """ドメイン例外からアプリケーション例外への変換テスト"""
         from unittest.mock import patch
+
         from ai_rpg_world.domain.sns.exception.user_profile_exceptions import UserProfileException
 
         # _user_repository.find_by_id でドメイン例外を発生させる
@@ -596,7 +600,7 @@ class TestPostQueryService:
         post_repository.clear()
 
         # トレンド計算用のテストデータのみを追加
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         recent_time = datetime.now() - timedelta(hours=1)
 
         # ハッシュタグを含むポストを追加

@@ -6,7 +6,12 @@ todo_store として共有する。
 """
 
 import pytest
+from tests.application.llm._memo_being_test_helpers import (
+    MemoBeingTestSetup,
+    make_memo_being_setup,
+)
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
@@ -17,11 +22,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_LIST,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.application.llm._memo_being_test_helpers import (
-    MemoBeingTestSetup,
-    make_memo_being_setup,
-)
-from ai_rpg_world.application.being.acting_being import ActingBeing
 
 
 @pytest.fixture
@@ -253,8 +253,9 @@ class TestMemoExecutorBatchComplete:
         として個別報告される。"""
         # uuid4 はランダムなので、無理やり同じ先頭にするためにモンキーパッチで対応
         # ここでは being store に直接 ID を仕込む簡易テスト
-        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         from datetime import datetime
+
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         being_id = being_setup.being_id_for(1)
         todo_store._being_store[being_id] = [
             MemoEntry(

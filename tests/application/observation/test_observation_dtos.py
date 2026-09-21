@@ -4,12 +4,13 @@
 省略時はデフォルト self_only。テストでは仕様に合わせて category を明示する。
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationOutput,
     ObservationEntry,
+    ObservationOutput,
 )
 
 

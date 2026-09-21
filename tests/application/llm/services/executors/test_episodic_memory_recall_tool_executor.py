@@ -4,16 +4,22 @@
 ``memory_recall_episodes`` tool の executor 単体テスト。
 """
 from __future__ import annotations
-from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+
 import pytest
+
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_tool_executor import DEFAULT_MAX_RESULTS, EMPTY_RESULT_MESSAGE, EpisodicMemoryRecallToolExecutor
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_tool_executor import (
+    DEFAULT_MAX_RESULTS,
+    EMPTY_RESULT_MESSAGE,
+    EpisodicMemoryRecallToolExecutor,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.world_noun_matcher import WorldNounMatcherBuilder
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_RECALL_EPISODES
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -23,6 +29,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
 _NOW = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
 _PLAYER_ID_INT = 7
 
@@ -33,7 +40,7 @@ def _make_acting(player_id: int=_PLAYER_ID_INT) -> tuple[ActingBeing, BeingId]:
     acting = ActingBeing(player_id=PlayerId(player_id), being_id=being_id)
     return (acting, being_id)
 
-def _episode(*, episode_id: str, occurred_at: datetime, spot_id: int=1, what: str='閲覧室で覚書を読んだ', recall_text: str='QUALITY_RECALL: 閲覧室で覚書を読んだ', cues: Optional[tuple]=None) -> SubjectiveEpisode:
+def _episode(*, episode_id: str, occurred_at: datetime, spot_id: int=1, what: str='閲覧室で覚書を読んだ', recall_text: str='QUALITY_RECALL: 閲覧室で覚書を読んだ', cues: tuple | None=None) -> SubjectiveEpisode:
     if cues is None:
         cues = (EpisodicCue(axis='place_spot', value=str(spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),)
     return SubjectiveEpisode(episode_id=episode_id, player_id=_PLAYER_ID_INT, being_id=BeingId(f'being_w1_p{_PLAYER_ID_INT}'), occurred_at=occurred_at, game_time_label=None, source=EpisodeSource(event_ids=(f'evt-{episode_id}',)), location=EpisodeLocation(spot_id=spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what=what, why=None, observed=what, expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=cues, recall_text=recall_text)

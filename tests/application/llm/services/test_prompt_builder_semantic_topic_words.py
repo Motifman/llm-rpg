@@ -2,11 +2,10 @@
 
 from types import SimpleNamespace
 
-from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
-
 from ai_rpg_world.application.llm.services.prompt_builder import (
     _gather_semantic_topic_words_for_recall,
 )
+from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 
 
 class TestPromptBuilderSemanticTopicWords:

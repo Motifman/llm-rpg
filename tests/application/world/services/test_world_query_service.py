@@ -1,9 +1,8 @@
 """WorldQueryService のテスト。正常・例外を網羅する。"""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from typing import List, Dict
-from unittest.mock import patch
-from unittest.mock import MagicMock
 
 from ai_rpg_world.application.conversation.contracts.dtos import (
     ConversationNodeDto,
@@ -12,63 +11,64 @@ from ai_rpg_world.application.conversation.contracts.dtos import (
 from ai_rpg_world.application.social.services.sns_mode_session_service import (
     SnsModeSessionService,
 )
-from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
-from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world.contracts.queries import (
+    GetAvailableMovesQuery,
+    GetPlayerCurrentStateQuery,
     GetPlayerLocationQuery,
     GetSpotContextForPlayerQuery,
     GetVisibleContextQuery,
-    GetAvailableMovesQuery,
-    GetPlayerCurrentStateQuery,
-)
-from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
 )
 from ai_rpg_world.application.world.exceptions.base_exception import WorldSystemErrorException
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.player.enum.player_enum import Role, AttentionLevel
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
-from ai_rpg_world.domain.world.entity.world_object_component import InteractableComponent
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
-from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
-    InMemoryGameTimeProvider,
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MapNotFoundException,
+    PlayerNotFoundException,
 )
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
+from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, Role
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    ChestComponent,
+    InteractableComponent,
+)
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, InteractionTypeEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.service.world_time_config_service import (
     DefaultWorldTimeConfigService,
+)
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
+    InMemoryGameTimeProvider,
 )
 
 
@@ -127,7 +127,7 @@ class TestWorldQueryService:
             role=Role.CITIZEN,
         )
 
-    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: List = None):
+    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: list | None = None):
         tiles = {}
         for x in range(width):
             for y in range(height):
@@ -392,8 +392,8 @@ class TestWorldQueryService:
         """ゲートウェイで接続されたスポットが connected_spot_ids / names に含まれること"""
         service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
         from ai_rpg_world.domain.world.entity.gateway import Gateway
-        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
         from ai_rpg_world.domain.world.value_object.area import RectArea
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 
         spot_repo.save(Spot(SpotId(1), "SpotA", "First"))
         spot_repo.save(Spot(SpotId(2), "SpotB", "Second"))
@@ -625,8 +625,8 @@ class TestWorldQueryService:
         """ゲートウェイで接続されたスポットが available_moves に含まれること"""
         service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
         from ai_rpg_world.domain.world.entity.gateway import Gateway
-        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
         from ai_rpg_world.domain.world.value_object.area import RectArea
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 
         spot_repo.save(Spot(SpotId(1), "Here", ""))
         spot_repo.save(Spot(SpotId(2), "There", ""))

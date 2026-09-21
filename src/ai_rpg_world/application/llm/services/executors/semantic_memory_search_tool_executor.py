@@ -17,18 +17,18 @@ semantic_store を能動的に検索する。passive top-K (Phase 1c) と直交�
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_SEARCH_SEMANTIC
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_SEARCH_SEMANTIC
-
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 
 DEFAULT_TOP_K = 5
 MAX_TOP_K = 32
@@ -46,19 +46,19 @@ class SemanticMemorySearchToolExecutor:
 
     semantic_store: SemanticMemoryRepository
 
-    def _list_entries(self, being_id: BeingId) -> List[SemanticMemoryEntry]:
+    def _list_entries(self, being_id: BeingId) -> list[SemanticMemoryEntry]:
         """being_id 経路で entry 一覧を返す。"""
         return list(self.semantic_store.list_for_being(being_id))
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[ActingBeing, dict[str, Any]], LlmCommandResultDto]]:
         return {TOOL_NAME_MEMORY_SEARCH_SEMANTIC: self._run_search_semantic}
 
     def _run_search_semantic(
         self,
         acting: ActingBeing,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> LlmCommandResultDto:
         query = str(arguments.get("query", "")).strip()
         raw_top = arguments.get("top_k", DEFAULT_TOP_K)
@@ -106,7 +106,7 @@ class _Ranked:
 
 
 def _rank_entries(
-    entries: List[SemanticMemoryEntry],
+    entries: list[SemanticMemoryEntry],
     *,
     query: str,
 ) -> list[_Ranked]:

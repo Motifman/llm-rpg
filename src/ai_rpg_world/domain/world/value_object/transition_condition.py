@@ -1,7 +1,7 @@
 """ゲートウェイ遷移条件の値オブジェクト。追加条件は同パターンで拡張する。"""
 
 from dataclasses import dataclass
-from typing import List, Optional
+
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 
 
@@ -22,15 +22,15 @@ class RequireToll(TransitionCondition):
     """通行料が必要。許可時の支払い実行は別ユースケースで行う。"""
     amount_gold: int
     recipient_type: str = "spot"
-    recipient_id: Optional[str] = None
+    recipient_id: str | None = None
 
 
 @dataclass(frozen=True)
 class BlockIfWeather(TransitionCondition):
     """指定天候では通行不可（例: 沼地＋悪天候で通行止め）"""
-    blocked_weather_types: tuple  # Tuple[WeatherTypeEnum, ...]
+    blocked_weather_types: tuple[WeatherTypeEnum, ...]
 
 
-def block_if_weather(weather_types: List[WeatherTypeEnum]) -> BlockIfWeather:
+def block_if_weather(weather_types: list[WeatherTypeEnum]) -> BlockIfWeather:
     """BlockIfWeather を生成するヘルパー"""
     return BlockIfWeather(blocked_weather_types=tuple(weather_types))

@@ -1,6 +1,5 @@
 """LLM 向け表示・記憶層の例外"""
 
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 
@@ -28,7 +27,7 @@ class PlayerProfileNotFoundForPromptException(LlmApplicationException):
 class LlmApiCallException(LlmApplicationException):
     """LLM API 呼び出し（LiteLLM 等）が失敗した場合"""
 
-    def __init__(self, message: str, error_code: str = "LLM_API_CALL_FAILED", cause: Optional[Exception] = None, **context):
+    def __init__(self, message: str, error_code: str = "LLM_API_CALL_FAILED", cause: Exception | None = None, **context):
         super().__init__(message, cause=cause, error_code=error_code, **context)
         self.cause = cause
 

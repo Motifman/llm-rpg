@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import Optional, Any, Dict
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,10 @@ class HarvestStartedEvent(BaseDomainEvent[WorldObjectId, str]):
     finish_tick: WorldTick
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする値を
+    # 呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,
@@ -39,7 +42,10 @@ class HarvestCancelledEvent(BaseDomainEvent[WorldObjectId, str]):
     reason: str
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする値を
+    # 呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,
@@ -64,7 +70,10 @@ class HarvestCompletedEvent(BaseDomainEvent[WorldObjectId, str]):
     loot_table_id: LootTableId
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする値を
+    # 呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,

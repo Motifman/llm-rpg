@@ -1,6 +1,6 @@
 """会話イベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -23,7 +23,7 @@ class ConversationObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, ConversationStartedEvent):
             return self._format_conversation_started(event, recipient_player_id)
         if isinstance(event, ConversationEndedEvent):
@@ -32,10 +32,10 @@ class ConversationObservationFormatter:
 
     def _format_conversation_started(
         self, event: ConversationStartedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         npc_name = self._context.name_resolver.npc_name(event.npc_id_value)
         prose = f"{npc_name}と会話を始めました。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "conversation_started",
             "npc_name": npc_name,
             "world_object_id": event.npc_id_value,
@@ -53,7 +53,7 @@ class ConversationObservationFormatter:
 
     def _format_conversation_ended(
         self, event: ConversationEndedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         npc_name = self._context.name_resolver.npc_name(event.npc_id_value)
         parts: list[str] = [f"{npc_name}との会話を終えました。"]
         if event.outcome:
@@ -70,7 +70,7 @@ class ConversationObservationFormatter:
         if event.quest_unlocked_ids:
             parts.append(f"新しいクエストが{len(event.quest_unlocked_ids)}件解放されました。")
         prose = " ".join(parts)
-        structured = {
+        structured: dict[str, Any] = {
             "type": "conversation_ended",
             "npc_name": npc_name,
             "world_object_id": event.npc_id_value,

@@ -11,27 +11,36 @@
 - trace: FILLED / FAILED / DROPPED 3 種の event payload が正しい
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any
+
 import pytest
+
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import InlineEpisodicSubjectiveScheduler, ThreadPoolEpisodicSubjectiveScheduler
+from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+    InlineEpisodicSubjectiveScheduler,
+    ThreadPoolEpisodicSubjectiveScheduler,
+)
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-def _capture(recorder: NullTraceRecorder) -> List:
-    captured: List = []
+
+def _capture(recorder: NullTraceRecorder) -> list:
+    captured: list = []
     original = recorder.record
 
     def wrapper(kind, **kw):
@@ -107,8 +116,8 @@ def _provision_scheduler(player_id: int):
 
     返り値: ``(being_id, resolver, world_id)``。
     """
-    from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
     from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
+    from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
     from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
     from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
     repo = InMemoryBeingRepository()
@@ -420,7 +429,7 @@ class TestThreadPoolScheduler:
         with caplog.at_level(logging.WARNING, logger='ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers'):
             scheduler.shutdown(timeout=0.1)
         warns = [r for r in caplog.records if r.levelno == logging.WARNING]
-        msg_blob = ' '.join((r.message for r in warns))
+        msg_blob = ' '.join(r.message for r in warns)
         assert 'not completed' in msg_blob, f'未完了 WARN が出ていない: {warns}'
         assert draft.episode_id in msg_blob, f'未完了の episode_id が WARN ログに含まれていない: {msg_blob}'
 
@@ -489,7 +498,9 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
     def test_prediction_error_adds_one_evidence_record(self) -> None:
         """prediction error ありなら evidence が 1件積まれる。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -505,7 +516,9 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
     def test_prediction_error_evidence(self) -> None:
         """predictionerror なしなら evidence は積まれない。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -541,7 +554,9 @@ class TestInlineSchedulerBeliefAttribution:
     def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids_2(self) -> None:
         """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -557,7 +572,9 @@ class TestInlineSchedulerBeliefAttribution:
     def test_belief_attribution_enabled_prediction_error_none_context_belief_expected_result_confirmation(self) -> None:
         """belief attribution enabled で prediction error None かつ in context belief あり expected result ありなら CONFIRMATION。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -573,7 +590,9 @@ class TestInlineSchedulerBeliefAttribution:
     def test_belief_attribution_enabled_false_default_context_belief_ids_2(self) -> None:
         """belief attribution enabled False 既定なら in context belief ids を添付しない。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -593,7 +612,9 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
     def test_prediction_error_adds_one_evidence_record(self) -> None:
         """prediction error ありなら evidence が 1件積まれる。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -620,7 +641,9 @@ class TestThreadPoolSchedulerBeliefAttribution:
     def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids(self) -> None:
         """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -637,7 +660,9 @@ class TestThreadPoolSchedulerBeliefAttribution:
     def test_belief_attribution_enabled_false_default_context_belief_ids(self) -> None:
         """belief attribution enabled False 既定なら in context belief ids を添付しない。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -656,7 +681,9 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
 
     def test_flag_prediction_error_recall_observation_2(self) -> None:
         """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -670,7 +697,9 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
 
     def test_flag_off_default_2(self) -> None:
         """error_driven_reinterpretation_enabled=False (既定) は導入前と一致。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -706,7 +735,9 @@ class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
 
     def test_flag_prediction_error_recall_observation(self) -> None:
         """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -721,7 +752,9 @@ class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
 
     def test_flag_off_default(self) -> None:
         """flag OFF 既定なら誤差は刻まれない。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -748,8 +781,12 @@ class TestInlineSchedulerRecallHitBoost:
 
     def test_flag_expected_result_count_incremented_2(self) -> None:
         """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1', expected_result='見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -763,8 +800,12 @@ class TestInlineSchedulerRecallHitBoost:
 
     def test_flag_off_default_not_incremented_2(self) -> None:
         """flag OFF 既定なら加算されない。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1', expected_result='見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -778,7 +819,9 @@ class TestInlineSchedulerRecallHitBoost:
 
     def test_default_unwired_recall_success_store_completes_without_exception(self) -> None:
         """recall success store 未配線 既定なら例外を投げず完了する。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1', expected_result='見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -804,8 +847,12 @@ class TestThreadPoolSchedulerRecallHitBoost:
 
     def test_flag_expected_result_count_incremented(self) -> None:
         """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async', expected_result='見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
@@ -820,8 +867,12 @@ class TestThreadPoolSchedulerRecallHitBoost:
 
     def test_flag_off_default_not_incremented(self) -> None:
         """flag OFF 既定なら加算されない。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+        )
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async', expected_result='見つかるはず')
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)

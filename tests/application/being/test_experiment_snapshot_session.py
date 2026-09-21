@@ -4,23 +4,33 @@
 restore_all_from_dir の集計動作を担保する。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+
 import pytest
+
+from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession, EXPECTED_WORLD_SUBSYSTEM_KEYS, _default_world_subsystem_codecs
+from ai_rpg_world.application.being.experiment_snapshot_session import (
+    EXPECTED_WORLD_SUBSYSTEM_KEYS,
+    ExperimentSnapshotSession,
+    _default_world_subsystem_codecs,
+)
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+    InMemoryEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
 
 def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     """wiring 結果風の SimpleNamespace を作る。
@@ -80,7 +90,7 @@ class TestCaptureAll:
         assert len(report.succeeded) == 2
         files = sorted((tmp_path / 'snap').iterdir())
         assert len(files) == 2
-        assert all((f.suffix == '.json' for f in files))
+        assert all(f.suffix == '.json' for f in files)
 
     def test_emits_warning_for_attach_player(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """attach されていない player はスキップして警告。"""
@@ -90,7 +100,7 @@ class TestCaptureAll:
         with caplog.at_level('WARNING'):
             report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert len(report.succeeded) == 1
-        assert any(('player_id=2' in r.message for r in caplog.records))
+        assert any('player_id=2' in r.message for r in caplog.records)
 
     def test_one_player_capture_failure_other_player_does_not_stop(self, tmp_path: Path) -> None:
         """memo_store の add_by_being が 1 being だけで例外を投げるよう細工し、
@@ -205,7 +215,7 @@ class TestScenarioMetadata:
         (bid, src, cur) = report.cross_scenario_transfers[0]
         assert src == 'forest_world'
         assert cur == 'desert_world'
-        assert any(('cross-scenario transfer' in r.message for r in caplog.records))
+        assert any('cross-scenario transfer' in r.message for r in caplog.records)
 
     def test_legacy_snapshot_dir_world_json_restore_world_skip(self, tmp_path: Path) -> None:
         """Phase 9-1: world.json なしの snapshot dir (= Phase 6 までの形式) の
@@ -245,7 +255,10 @@ class TestScenarioMetadata:
     def test_world_snapshot_restore_strict_missing_subsystem_fail_fast(self, tmp_path: Path) -> None:
         """実験再開では world snapshot の subsystem 欠落を fail-fast にする。"""
         from ai_rpg_world.application.being.being_snapshot_file_gateway import WorldStateSnapshotFileGateway
-        from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshot, WorldStateSnapshotCoverageError
+        from ai_rpg_world.application.being.world_state_snapshot import (
+            WorldStateSnapshot,
+            WorldStateSnapshotCoverageError,
+        )
         (wiring, _) = _make_wiring_stub()
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         WorldStateSnapshotFileGateway().write(WorldStateSnapshot(source_scenario='demo', world_tick=10, subsystems={'world_tick': {'schema_version': 1, 'world_tick': 10}}), tmp_path / 'snap')
@@ -266,4 +279,4 @@ class TestScenarioMetadata:
         report = session.restore_all_from_dir(snap_dir, current_scenario='anything')
         assert len(report.restored) == 1
         assert report.cross_scenario_transfers == []
-        assert all((v is None for v in report.metadata_by_being.values()))
+        assert all(v is None for v in report.metadata_by_being.values())

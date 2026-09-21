@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
 
-
 from ai_rpg_world.domain.world.exception.weather_exception import WeatherZoneIdValidationException
 
 
@@ -10,12 +9,12 @@ class WeatherZoneId:
     """天候ゾーンの一意識別子"""
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise WeatherZoneIdValidationException(f"WeatherZone ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "WeatherZoneId":
+    def create(cls, value: int | str) -> "WeatherZoneId":
         """intまたはstrからWeatherZoneIdを作成"""
         if isinstance(value, str):
             try:

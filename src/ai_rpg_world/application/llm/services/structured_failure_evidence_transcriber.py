@@ -19,7 +19,7 @@ cross_tick_failure トラッカーが検知したとき (= 呼び出し側が
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.services.failure_repeat_phrasing import (
@@ -52,10 +52,8 @@ class StructuredFailureEvidenceTranscriber:
         buffer_store: BeliefEvidenceBufferRepository,
         episode_store: EpisodicEpisodeRepository,
         *,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -83,7 +81,7 @@ class StructuredFailureEvidenceTranscriber:
         tool_name: str,
         error_code: str,
         count: int,
-    ) -> Optional[BeliefEvidence]:
+    ) -> BeliefEvidence | None:
         """being の直近 episode に anchor して STRUCTURED_FAILURE evidence を積む。
 
         直近 episode が無ければ evidence を作らず None を返す (warning ログ
@@ -138,7 +136,7 @@ class StructuredFailureEvidenceTranscriber:
         self._emit_trace(being_id, evidence, count=count)
         return evidence
 
-    def _resolve_tick(self) -> Optional[int]:
+    def _resolve_tick(self) -> int | None:
         if self._current_tick_provider is None:
             return None
         try:
@@ -153,7 +151,7 @@ class StructuredFailureEvidenceTranscriber:
     def _emit_trace(
         self, being_id: BeingId, evidence: BeliefEvidence, *, count: int
     ) -> None:
-        recorder: Optional[ITraceRecorder] = None
+        recorder: ITraceRecorder | None = None
         if self._trace_recorder_provider is not None:
             try:
                 recorder = self._trace_recorder_provider()

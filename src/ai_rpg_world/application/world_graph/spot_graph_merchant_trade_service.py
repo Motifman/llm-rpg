@@ -21,8 +21,9 @@ trace から集計するときに、1 回の呼び出しが何 gold 動かした
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -59,7 +60,7 @@ if TYPE_CHECKING:
 class _CommandContextEventPublisher:
     """商人売買の観測をcommit後配送へ収集する。"""
 
-    def __init__(self, context: "CommandContext[Any]") -> None:
+    def __init__(self, context: CommandContext[Any]) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
@@ -216,13 +217,13 @@ class SpotGraphMerchantTradeService:
         item_repository: Any,
         item_spec_repository: Any,
         merchants: Sequence[Any] = (),
-        item_spec_name_resolver: Optional[Any] = None,
-        event_publisher: Optional[Any] = None,
+        item_spec_name_resolver: Any | None = None,
+        event_publisher: Any | None = None,
         # 経済統合 Phase 2: 取引に出しているぶんを差し引いて見るための口。
         # 未注入なら凍結ゼロとして扱う (取引を宣言しない世界の挙動と一致)。
-        trade_freeze_service: Optional[Any] = None,
+        trade_freeze_service: Any | None = None,
         overflow_sink: Any = None,
-        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         _command_bound: bool = False,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
@@ -240,7 +241,7 @@ class SpotGraphMerchantTradeService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort],
     ) -> None:
         """本番売買を一回ごとの確定境界へ接続する。"""
         if factory is None:
@@ -390,8 +391,8 @@ class SpotGraphMerchantTradeService:
 
     def _for_command(
         self,
-        context: "CommandContext[Any]",
-    ) -> "SpotGraphMerchantTradeService":
+        context: CommandContext[Any],
+    ) -> SpotGraphMerchantTradeService:
         repositories = context.repositories
         freeze = self._freeze
         if freeze is not None:
@@ -416,13 +417,13 @@ class SpotGraphMerchantTradeService:
 
     def _require_command_scope_factory(
         self,
-    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+    ) -> CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]:
         factory = self._command_scope_factory
         if factory is None:
             raise RuntimeError("商人売買用CommandScopeFactoryが未配線です。")
         return factory
 
-    def merchants_at(self, spot_id: SpotId) -> Tuple[Any, ...]:
+    def merchants_at(self, spot_id: SpotId) -> tuple[Any, ...]:
         """その場所に居る商人を宣言順で返す。"""
         return tuple(m for m in self._merchants if m.spot_id == spot_id)
 
@@ -438,7 +439,7 @@ class SpotGraphMerchantTradeService:
             raise MerchantNotAtSpotError(merchant_name=merchant.name)
         return merchant
 
-    def _current_spot(self, player_id: PlayerId) -> Optional[SpotId]:
+    def _current_spot(self, player_id: PlayerId) -> SpotId | None:
         graph = self._spot_graph_repository.find_graph()
         try:
             return graph.get_entity_spot(EntityId.create(int(player_id)))
@@ -475,13 +476,13 @@ class SpotGraphMerchantTradeService:
         return sum(1 for _slot, instance in inventory.iter_slots() if instance is None)
 
     @staticmethod
-    def _price_of(price_list: Sequence[Any], item_spec_id: int) -> Optional[int]:
+    def _price_of(price_list: Sequence[Any], item_spec_id: int) -> int | None:
         for entry in price_list:
             if entry.item_spec_id == item_spec_id:
                 return entry.price
         return None
 
-    def _catalog_names(self, price_list: Sequence[Any]) -> Tuple[str, ...]:
+    def _catalog_names(self, price_list: Sequence[Any]) -> tuple[str, ...]:
         return tuple(
             f"{self._item_name(entry.item_spec_id)} {entry.price}G"
             for entry in price_list

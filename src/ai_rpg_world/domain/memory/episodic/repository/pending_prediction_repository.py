@@ -10,7 +10,6 @@ U10a (予測誤差統一設計 部品6): ``BeliefEvidenceBufferRepository`` /
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
@@ -26,7 +25,7 @@ class PendingPredictionRepository(ABC):
     @abstractmethod
     def add_by_being(
         self, being_id: BeingId, pending: PendingPrediction
-    ) -> Optional[PendingPrediction]:
+    ) -> PendingPrediction | None:
         """being_id keyed で pending prediction を 1 件追加する。
 
         既存件数が容量上限 (``PENDING_PREDICTION_DEFAULT_CAP``) に達している

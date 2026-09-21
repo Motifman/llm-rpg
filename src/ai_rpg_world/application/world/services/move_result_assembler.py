@@ -1,19 +1,18 @@
 """MoveResultAssembler: 移動結果 DTO の組み立てを担当するアプリケーションサービス。"""
 
 from datetime import datetime
-from typing import Optional
 
+from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MapNotFoundException,
+    PlayerNotFoundException,
+)
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class MoveResultAssembler:
@@ -77,7 +76,7 @@ class MoveResultAssembler:
         self,
         player_id_int: int,
         message: str,
-        player_status: Optional[PlayerStatusAggregate] = None,
+        player_status: PlayerStatusAggregate | None = None,
     ) -> MoveResultDto:
         """移動失敗時の DTO を組み立てる。player_status が None の場合は最小限の情報で構築。"""
         player_id = PlayerId(player_id_int)

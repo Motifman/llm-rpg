@@ -4,24 +4,23 @@
 構築すると、依存関係が明示的になる。
 """
 
-from typing import Optional
 
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
-from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
-from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
-from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
+from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
+from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
 )
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
+from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
 
 
 def create_movement_application_service(
@@ -35,8 +34,8 @@ def create_movement_application_service(
     movement_config_service: MovementConfigService,
     time_provider: GameTimeProvider,
     unit_of_work: UnitOfWork,
-    transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
-    transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
+    transition_policy_repository: ITransitionPolicyRepository | None = None,
+    transition_condition_evaluator: TransitionConditionEvaluator | None = None,
 ) -> MovementApplicationService:
     """
     SetDestinationService・MovementStepExecutor・MovementApplicationService を構築し、

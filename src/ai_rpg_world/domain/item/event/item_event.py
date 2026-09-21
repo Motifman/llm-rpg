@@ -1,11 +1,15 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+    from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 
 
 @dataclass(frozen=True)
@@ -20,7 +24,7 @@ class ItemUsedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     remaining_quantity: int
-    remaining_durability: Optional[Durability]
+    remaining_durability: Durability | None
 
 
 @dataclass(frozen=True)
@@ -35,7 +39,7 @@ class ItemRepairedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     """アイテム修理イベント"""
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
-    new_durability: Optional[Durability]
+    new_durability: Durability | None
 
 
 @dataclass(frozen=True)

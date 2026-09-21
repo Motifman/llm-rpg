@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
@@ -21,6 +20,7 @@ from ai_rpg_world.domain.world_graph.service.effect_application.registry import 
 from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
     resolve_visibility,
 )
+from ai_rpg_world.domain.world_graph.value_object import interaction_effect
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
     AppliedEffectSummary,
@@ -35,7 +35,6 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     StatusEffectSpec,
     TeleportSpec,
 )
-from ai_rpg_world.domain.world_graph.value_object import interaction_effect
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
@@ -114,7 +113,7 @@ def apply_teleport_entity(effect: InteractionEffect, ctx: EffectApplicationState
     target_spot_id = int(p.get("spot_id", 0))
     if target_spot_id > 0:
 
-        def _declared(key: str) -> Optional[str]:
+        def _declared(key: str) -> str | None:
             value = p.get(key)
             return value if isinstance(value, str) else None
 

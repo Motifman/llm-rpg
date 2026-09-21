@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 ObservationCategory = Literal["self_only", "social", "environment"]
 
@@ -16,7 +16,7 @@ class ObservationOutput:
     """
 
     prose: str
-    structured: Dict[str, Any]
+    structured: dict[str, Any]
     observation_category: ObservationCategory = "self_only"
     schedules_turn: bool = False
     breaks_movement: bool = False
@@ -42,7 +42,7 @@ class ObservationEntry:
 
     occurred_at: datetime
     output: ObservationOutput
-    game_time_label: Optional[str] = None
+    game_time_label: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):

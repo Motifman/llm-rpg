@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import FrozenSet, Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateResultValidationException,
 )
-
 
 PredicateT = TypeVar("PredicateT")
 
@@ -27,11 +26,11 @@ class PredicateResult(Generic[PredicateT]):
     """成立可否に加え、失敗した述語・経路・不足入力を保持する。"""
 
     is_satisfied: bool
-    reason_code: Optional[PredicateReasonCode] = None
-    failure_message: Optional[str] = None
-    failed_predicate: Optional[PredicateT] = None
-    failed_path: Optional[tuple[int, ...]] = None
-    missing_context: FrozenSet[str] = field(default_factory=frozenset)
+    reason_code: PredicateReasonCode | None = None
+    failure_message: str | None = None
+    failed_predicate: PredicateT | None = None
+    failed_path: tuple[int, ...] | None = None
+    missing_context: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if not isinstance(self.is_satisfied, bool):
@@ -107,7 +106,7 @@ class PredicateResult(Generic[PredicateT]):
             )
 
     @classmethod
-    def satisfied(cls) -> "PredicateResult[PredicateT]":
+    def satisfied(cls) -> PredicateResult[PredicateT]:
         """成立結果を返す。"""
         return cls(is_satisfied=True)
 
@@ -117,8 +116,8 @@ class PredicateResult(Generic[PredicateT]):
         *,
         failed_predicate: PredicateT,
         failed_path: tuple[int, ...],
-        failure_message: Optional[str] = None,
-    ) -> "PredicateResult[PredicateT]":
+        failure_message: str | None = None,
+    ) -> PredicateResult[PredicateT]:
         """世界状態と述語が正常に不一致だった結果を返す。"""
         return cls(
             is_satisfied=False,
@@ -135,8 +134,8 @@ class PredicateResult(Generic[PredicateT]):
         failed_predicate: PredicateT,
         failed_path: tuple[int, ...],
         required_context: set[str] | frozenset[str],
-        failure_message: Optional[str] = None,
-    ) -> "PredicateResult[PredicateT]":
+        failure_message: str | None = None,
+    ) -> PredicateResult[PredicateT]:
         """評価に必要な入力が渡っていない結果を返す。"""
         if not isinstance(required_context, (set, frozenset)):
             raise PredicateResultValidationException(
@@ -157,8 +156,8 @@ class PredicateResult(Generic[PredicateT]):
         *,
         failed_predicate: PredicateT,
         failed_path: tuple[int, ...],
-        failure_message: Optional[str] = None,
-    ) -> "PredicateResult[PredicateT]":
+        failure_message: str | None = None,
+    ) -> PredicateResult[PredicateT]:
         """評価器が述語の種類を実装していない結果を返す。"""
         return cls(
             is_satisfied=False,

@@ -1,18 +1,17 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
 import logging
+from collections.abc import Callable
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
         ToolCallLoopGuardService,
     )
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
@@ -24,16 +23,40 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IShortTermMemory,
     ISystemPromptBuilder,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
-from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
+)
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalDebug,
     EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+    PredictionContextLedger,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_RECENT_ACTIONS_LIMIT as _CFG_DEFAULT_RECENT_ACTIONS_LIMIT,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_RECENT_OBSERVATIONS_LIMIT as _CFG_DEFAULT_RECENT_OBSERVATIONS_LIMIT,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    EpisodicRecallConfig,
+    PromptBuilderCoreServices,
+    PromptLimits,
+    PromptSectionProviders,
 )
 from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
     _R4_PER_TEXT_CHAR_CAP,
@@ -64,41 +87,33 @@ from ai_rpg_world.application.llm.services.prompt_sections.semantic_recall impor
     emit_semantic_passive_recall_trace,
     run_semantic_passive_recall,
 )
-from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
-    EpisodicMemoryLinkApplicationService,
-)
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
-    DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
-    DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
-    DEFAULT_RECENT_ACTIONS_LIMIT as _CFG_DEFAULT_RECENT_ACTIONS_LIMIT,
-    DEFAULT_RECENT_OBSERVATIONS_LIMIT as _CFG_DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-    EpisodicRecallConfig,
-    PromptBuilderCoreServices,
-    PromptLimits,
-    PromptSectionProviders,
-)
+
 # build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
 # 詳細は build() 内コメント参照
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
+from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
+    EpisodicReinterpretationJournalRepository,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
@@ -118,17 +133,15 @@ class DefaultPromptBuilder(IPromptBuilder):
         self,
         core: PromptBuilderCoreServices,
         *,
-        sections: Optional[PromptSectionProviders] = None,
-        episodic: Optional[EpisodicRecallConfig] = None,
-        limits: Optional[PromptLimits] = None,
-        ui_context_builder: Optional[ILlmUiContextBuilder] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        sections: PromptSectionProviders | None = None,
+        episodic: EpisodicRecallConfig | None = None,
+        limits: PromptLimits | None = None,
+        ui_context_builder: ILlmUiContextBuilder | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
         trace_recorder: Optional["ITraceRecorder"] = None,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional["ITraceRecorder"]]
-        ] = None,
+        trace_recorder_provider: Callable[[], Optional["ITraceRecorder"]] | None = None,
         tool_call_loop_guard: Optional["ToolCallLoopGuardService"] = None,
-        prediction_context_ledger: Optional[PredictionContextLedger] = None,
+        prediction_context_ledger: PredictionContextLedger | None = None,
     ) -> None:
         """Config dataclass ベースの API (Issue #227 後続 HIGH-1)。
 
@@ -402,7 +415,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _resolve_encounter_tick(self) -> Optional[int]:
+    def _resolve_encounter_tick(self) -> int | None:
         """PR8 (R5): encounter cue 抽出のための現在 tick を返す。
 
         - ``current_tick_provider`` 未注入なら None (= encounter cue は skip)
@@ -426,7 +439,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             return None
         return tick
 
-    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+    def _resolve_trace_recorder(self) -> ITraceRecorder | None:
         """recall trace 用の recorder を runtime 時点で取得する。
 
         ``trace_recorder_provider`` があれば毎回 lookup (= 後付け差し込み
@@ -459,7 +472,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         relevant_memories_text: str,
         inventory_text: str,
         instruction: str,
-        tools: List[Dict[str, Any]],
+        tools: list[dict[str, Any]],
         user_content: str,
         prediction_feedback_text: str = "",
     ) -> None:
@@ -476,7 +489,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
-        tick: Optional[int] = None
+        tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 tick = self._current_tick_provider()
@@ -556,8 +569,8 @@ class DefaultPromptBuilder(IPromptBuilder):
     def build(
         self,
         acting: ActingBeing,
-        action_instruction: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        action_instruction: str | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(acting, ActingBeing):
             raise TypeError("acting must be ActingBeing")
         if action_instruction is not None and not isinstance(action_instruction, str):
@@ -584,7 +597,7 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # 2. drain してスライディングウィンドウに append（溢れは記憶抽出用に返す）
         drained = self._observation_buffer.drain(player_id)
-        overflow: List[ObservationEntry] = []
+        overflow: list[ObservationEntry] = []
         if drained:
             overflow = self._short_term_memory.append_all(player_id, drained)
 
@@ -750,7 +763,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             instruction = loop_warning + "\n\n" + instruction
         user_content = user_context_body + "\n\n" + instruction
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "messages": [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": user_content},
@@ -794,14 +807,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         )
         return result
 
-    def _begin_prediction_context(self, player_id: PlayerId) -> Optional[str]:
+    def _begin_prediction_context(self, player_id: PlayerId) -> str | None:
         return begin_prediction_context(self, player_id)
 
     def _attach_prediction_context(
         self,
         *,
         player_id: PlayerId,
-        prediction_context_id: Optional[str],
+        prediction_context_id: str | None,
         episode_ids: tuple[str, ...],
         belief_ids: tuple[str, ...],
     ) -> None:
@@ -825,15 +838,15 @@ class DefaultPromptBuilder(IPromptBuilder):
         *,
         player_id: PlayerId,
         being_id: BeingId,
-        observations: List[ObservationEntry],
-        action_results: List[Any],
+        observations: list[ObservationEntry],
+        action_results: list[Any],
         ui_context: Any,
         current_state_text: str,
         recent_events_text: str,
         player_info: SystemPromptPlayerInfoDto,
-        current_state_dto: Optional[Any] = None,
-        prediction_context_id: Optional[str] = None,
-    ) -> tuple[str, Optional[int], tuple[str, ...]]:
+        current_state_dto: Any | None = None,
+        prediction_context_id: str | None = None,
+    ) -> tuple[str, int | None, tuple[str, ...]]:
         return run_episodic_passive_recall(
             self,
             player_id=player_id,
@@ -853,10 +866,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         *,
         player_id: PlayerId,
         being_id: BeingId,
-        observations: List[ObservationEntry],
-        action_results: List[Any],
+        observations: list[ObservationEntry],
+        action_results: list[Any],
         ui_context: Any,
-        current_state_dto: Optional[Any] = None,
+        current_state_dto: Any | None = None,
     ) -> tuple[str, tuple[str, ...]]:
         return run_semantic_passive_recall(
             self,
@@ -887,7 +900,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         *,
         player_id: PlayerId,
         being_id: BeingId,
-        current_state_dto: Optional[Any],
+        current_state_dto: Any | None,
     ) -> str:
         return build_pending_predictions_text(
             self,
@@ -939,7 +952,7 @@ class DefaultPromptBuilder(IPromptBuilder):
 
     def _call_text_provider(
         self,
-        provider: Optional[Callable[[PlayerId], str]],
+        provider: Callable[[PlayerId], str] | None,
         player_id: PlayerId,
         provider_name: str,
     ) -> str:

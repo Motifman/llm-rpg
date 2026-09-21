@@ -1,27 +1,35 @@
-import pytest
 from datetime import datetime
+
+import pytest
+
 from ai_rpg_world.domain.sns.aggregate import UserAggregate
 from ai_rpg_world.domain.sns.entity import SnsUser
-from ai_rpg_world.domain.sns.value_object import UserProfile, UserId, FollowRelationShip, BlockRelationShip, SubscribeRelationShip
 from ai_rpg_world.domain.sns.event import (
+    SnsUserBlockedEvent,
     SnsUserCreatedEvent,
     SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
-    SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
     SnsUserProfileUpdatedEvent,
     SnsUserSubscribedEvent,
-    SnsUserUnsubscribedEvent
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserUnsubscribedEvent,
 )
 from ai_rpg_world.domain.sns.exception import (
-    CannotFollowBlockedUserException,
-    CannotUnfollowNotFollowedUserException,
     CannotBlockAlreadyBlockedUserException,
-    CannotUnblockNotBlockedUserException,
+    CannotFollowBlockedUserException,
     CannotSubscribeAlreadySubscribedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
+    CannotUnblockNotBlockedUserException,
+    CannotUnfollowNotFollowedUserException,
     CannotUnsubscribeNotSubscribedUserException,
+)
+from ai_rpg_world.domain.sns.value_object import (
+    BlockRelationShip,
+    FollowRelationShip,
+    SubscribeRelationShip,
+    UserId,
+    UserProfile,
 )
 
 

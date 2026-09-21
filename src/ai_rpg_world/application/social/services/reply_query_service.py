@@ -1,24 +1,27 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import List, Optional, Dict, Tuple, Callable, Any, TYPE_CHECKING
 from functools import wraps
+from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.domain.sns.repository import PostRepository, UserRepository, ReplyRepository
-from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId
-from ai_rpg_world.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
+from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto, PostDto, ReplyDto, ReplyThreadDto
+from ai_rpg_world.application.social.exceptions import (
+    ApplicationException,
+    ApplicationExceptionFactory,
+    SystemErrorException,
+)
+from ai_rpg_world.application.social.exceptions.query.reply_query_exception import (
+    ReplyAccessDeniedException,
+    ReplyNotFoundException,
+    ReplyQueryException,
+)
 from ai_rpg_world.domain.sns.exception import (
     SnsDomainException,
     UserNotFoundException,
 )
-from ai_rpg_world.application.social.contracts.dtos import ReplyDto, ReplyThreadDto, PostDto, ErrorResponseDto
-from ai_rpg_world.application.social.exceptions import ApplicationException
-from ai_rpg_world.application.social.exceptions.query.reply_query_exception import (
-    ReplyQueryException,
-    ReplyNotFoundException,
-    ReplyAccessDeniedException,
-)
-from ai_rpg_world.application.social.exceptions import ApplicationExceptionFactory
-from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.domain.sns.repository import PostRepository, ReplyRepository, UserRepository
+from ai_rpg_world.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
+from ai_rpg_world.domain.sns.value_object import PostId, ReplyId, UserId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
@@ -51,9 +54,9 @@ class ReplyQueryService:
                 reply_id=context.get('reply_id')
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def _get_user_profile_info(self, user_id: UserId) -> dict:
@@ -133,11 +136,11 @@ class ReplyQueryService:
 
     def _filter_and_convert_replies(
         self,
-        replies: List["ReplyAggregate"],
+        replies: list["ReplyAggregate"],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
-        author_user_map: Optional[dict] = None
-    ) -> List[ReplyDto]:
+        author_user_map: dict | None = None
+    ) -> list[ReplyDto]:
         """リプライの権限チェックとDTO変換を行う共通メソッド"""
         result = []
 
@@ -172,7 +175,7 @@ class ReplyQueryService:
 
         return result
 
-    def get_replies_by_post_id(self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> List[ReplyDto]:
+    def get_replies_by_post_id(self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
         """ポストへのリプライ一覧を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_replies_by_post_id_impl(post_id, viewer_user_id, limit, offset),
@@ -183,7 +186,7 @@ class ReplyQueryService:
             }
         )
 
-    def _get_replies_by_post_id_impl(self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> List[ReplyDto]:
+    def _get_replies_by_post_id_impl(self, post_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
         """ポストへのリプライ一覧を取得の実装"""
         # オブジェクトを作成（ドメイン層でバリデーション）
         target_post_id = PostId(post_id)
@@ -281,11 +284,11 @@ class ReplyQueryService:
 
     def _convert_reply_tree_to_flat_list(
         self,
-        reply_tree: Dict[Any, List["ReplyAggregate"]],
+        reply_tree: dict[Any, list["ReplyAggregate"]],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
         current_depth: int = 0
-    ) -> List[ReplyDto]:
+    ) -> list[ReplyDto]:
         """リプライツリーをフラットなDTOリストに変換"""
         result = []
 
@@ -339,7 +342,7 @@ class ReplyQueryService:
 
         return result
 
-    def get_reply_by_id(self, reply_id: int, viewer_user_id: int) -> Optional[ReplyDto]:
+    def get_reply_by_id(self, reply_id: int, viewer_user_id: int) -> ReplyDto | None:
         """個別のリプライを取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_reply_by_id_impl(reply_id, viewer_user_id),
@@ -350,7 +353,7 @@ class ReplyQueryService:
             }
         )
 
-    def _get_reply_by_id_impl(self, reply_id: int, viewer_user_id: int) -> Optional[ReplyDto]:
+    def _get_reply_by_id_impl(self, reply_id: int, viewer_user_id: int) -> ReplyDto | None:
         """個別のリプライを取得の実装"""
         # オブジェクトを作成（ドメイン層でバリデーション）
         target_reply_id = ReplyId(reply_id)
@@ -381,7 +384,7 @@ class ReplyQueryService:
         # DTOに変換して返却
         return self._convert_reply_to_dto(reply, viewer_id, author_profile_info)
 
-    def get_user_replies(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> List[ReplyDto]:
+    def get_user_replies(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
         """ユーザーのリプライ一覧を取得（権限チェック付き）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_user_replies_impl(user_id, viewer_user_id, limit, offset),
@@ -392,7 +395,7 @@ class ReplyQueryService:
             }
         )
 
-    def _get_user_replies_impl(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> List[ReplyDto]:
+    def _get_user_replies_impl(self, user_id: int, viewer_user_id: int, limit: int = 20, offset: int = 0) -> list[ReplyDto]:
         """ユーザーのリプライ一覧を取得の実装"""
         # オブジェクトを作成（ドメイン層でバリデーション）
         target_user_id = UserId(user_id)

@@ -38,13 +38,12 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict
+from typing import Any
 
 import litellm
 
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
 
 # OpenRouter で gemma 系を使う場合の既定値。実際の id は OpenRouter dashboard の
 # Models ページで確認すること。litellm は "openrouter/<provider>/<model>" 形式
@@ -147,12 +146,12 @@ def _provider_extra_body(
     provider: str | None,
     quantization: str | None = None,
     require_params: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """``--provider`` / ``--quantization`` / ``--require-params`` を OpenRouter 仕様の
     ``extra_body.provider`` に組み立てる。"""
     if not provider and not quantization and not require_params:
         return {}
-    provider_block: Dict[str, Any] = {}
+    provider_block: dict[str, Any] = {}
     if provider:
         provider_block["order"] = [provider]
         provider_block["allow_fallbacks"] = False
@@ -170,7 +169,7 @@ def _ping_chat(
     provider: str | None,
     quantization: str | None = None,
     require_params: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """tools 無し / JSON 強制無しの素の chat completion を 1 回だけ叩く。"""
     kwargs = client.completion_base_kwargs()
     kwargs["max_tokens"] = max_tokens
@@ -189,7 +188,7 @@ def _ping_json(
     provider: str | None,
     quantization: str | None = None,
     require_params: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """JSON mode (response_format=json_object) で 1 回叩く。"""
     kwargs = client.completion_base_kwargs()
     kwargs["max_tokens"] = max_tokens
@@ -271,7 +270,7 @@ def _list_models(filter_substr: str | None = None) -> int:
     return 0
 
 
-def _summarize(response: Any, latency_ms: int) -> Dict[str, Any]:
+def _summarize(response: Any, latency_ms: int) -> dict[str, Any]:
     """litellm 応答から人が見て嬉しい最小情報だけ抜く。"""
     if not response or not getattr(response, "choices", None):
         return {"ok": False, "reason": "empty_response", "latency_ms": latency_ms}

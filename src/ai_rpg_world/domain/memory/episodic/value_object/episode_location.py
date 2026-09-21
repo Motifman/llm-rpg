@@ -7,7 +7,6 @@ DDD 再編 (Issue #470 Phase 1 PR2): 元 ``application/llm/contracts/episodic_me
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,7 @@ class EpisodeLocation:
     """構造化された「どこで」（タイル／スポットグラフ双方を許容）。"""
 
     spot_id: int | None = None
-    tile_area_ids: Tuple[int, ...] = ()
+    tile_area_ids: tuple[int, ...] = ()
     sub_location_id: int | None = None
     x: int | None = None
     y: int | None = None

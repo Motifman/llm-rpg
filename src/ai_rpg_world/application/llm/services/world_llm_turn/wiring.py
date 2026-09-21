@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
@@ -23,27 +24,6 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
-from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-    TOOL_NAME_SPEECH,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
-)
-from ai_rpg_world.application.observation.services.observation_appender import (
-    ObservationAppender,
-)
-from ai_rpg_world.application.speech.services.speech_audience_resolver import (
-    SpeechAudienceResolver,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
-    SoundPropagationService,
-)
-
 from ai_rpg_world.application.llm.services.world_llm_turn.phase_a import (
     action_failure_key,
     build_tools_payload,
@@ -78,6 +58,26 @@ from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
     WorldLlmTurnTrigger,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_SPEECH,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+)
+from ai_rpg_world.application.observation.services.observation_appender import (
+    ObservationAppender,
+)
+from ai_rpg_world.application.speech.services.speech_audience_resolver import (
+    SpeechAudienceResolver,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
+    SoundPropagationService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,17 +109,20 @@ class WorldLlmWiring:
     llm_client: Any = field(default_factory=StubLlmClient)
     llm_session_run_id: str = "interactive"
     llm_session_world_id: str = "world"
-    prompt_dataset_sink: Optional[Any] = None
+    prompt_dataset_sink: Any | None = None
     max_self_reschedule_streak: int = 5
-    action_failed_emitter: Optional[ActionFailedObservationEmitter] = None
-    intent_id_generator: Optional[IntentIdGenerator] = None
+    action_failed_emitter: ActionFailedObservationEmitter | None = None
+    intent_id_generator: IntentIdGenerator | None = None
     #: 型付きの判断を引く口 (#1319)。profile が求めなければ None。
     #:
     #: None のときは判断を引かず、既存のルールで決める。**None を「判断が
     #: 偽だった」と同じに扱わない。** 引いていないことと引いた結果は別の事実
     #: で、trace で区別できなければ OFF の run と全件 fallback の run が同じに
     #: 見える。
-    typed_judgment_port: Optional[ITypedJudgmentPort] = None
+    typed_judgment_port: ITypedJudgmentPort | None = None
+    #: tick の終わりに「いま動く必要があるか」を問う門。profile が求めなければ None。
+    #: runtime_manager が typed_judgment_port から組んで差し込む。
+    turn_gate: Any | None = None
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
@@ -187,7 +190,7 @@ class WorldLlmWiring:
         if memo_tools_enabled and memo_store is not None:
             # #1322: profile が型付き判断を求めていれば、文字の重なりでなく
             # 意味で完了を判定する。求めていなければ従来の重なり判定で動く。
-            self.memo_completion_hint_service: Optional[MemoCompletionHintService] = (
+            self.memo_completion_hint_service: MemoCompletionHintService | None = (
                 MemoCompletionHintService(
                     memo_store=memo_store,
                     judgment_port=self.typed_judgment_port,
@@ -208,7 +211,7 @@ class WorldLlmWiring:
         # message に「届いた人数」を含められ、agent が空振りを学習できる。
         spot_graph_repo = getattr(self.runtime, "_spot_graph_repo", None)
         player_status_repo = getattr(self.runtime, "_player_status_repo", None)
-        self.speech_audience_resolver: Optional[SpeechAudienceResolver] = None
+        self.speech_audience_resolver: SpeechAudienceResolver | None = None
         if spot_graph_repo is not None and player_status_repo is not None:
             self.speech_audience_resolver = SpeechAudienceResolver(
                 spot_graph_repository=spot_graph_repo,
@@ -225,9 +228,9 @@ class WorldLlmWiring:
         # ToolCommandMapper.execute と構造を揃え、巨大 if-elif を排除する。
         # 各ハンドラは (player_id, arguments, runtime_context) を受けて
         # LlmCommandResultDto を返す。
-        self._tool_handlers: Dict[
+        self._tool_handlers: dict[
             str,
-            Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto],
+            Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto],
         ] = {
             # PR-θ1/θ2/θ3/θ4/θ5/θ6 (経路統合): TRAVEL_TO / EXPLORE / INTERACT /
             # LISTEN / WAIT / SET_SUB_LOCATION の登録は削除した。
@@ -274,7 +277,7 @@ class WorldLlmWiring:
         # に実装があるが、experiment runtime の _tool_handlers に dispatch が
         # 無く UNSUPPORTED_TOOL に化けていた。executor を遅延構築し、これら
         # の handler を _tool_handlers に追加する。
-        self._spot_graph_executor: Optional[Any] = None
+        self._spot_graph_executor: Any | None = None
         wire_missing_spot_graph_tools(self)
     def attach_action_failed_wiring(
         self,
@@ -363,13 +366,13 @@ class WorldLlmWiring:
         )
 
     @staticmethod
-    def _action_failure_key(entry: Any) -> Optional[tuple[str, str, str]]:
+    def _action_failure_key(entry: Any) -> tuple[str, str, str] | None:
         return action_failure_key(entry)
 
     @staticmethod
     def _parse_assessment_tool_call(
-        tool_call: Optional[dict],
-    ) -> tuple[Optional[dict[str, str]], str]:
+        tool_call: dict | None,
+    ) -> tuple[dict[str, str] | None, str]:
         return parse_assessment_tool_call(tool_call)
 
     def _handle_speech(self, player_id, arguments, runtime_context):

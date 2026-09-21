@@ -1,7 +1,8 @@
 """バッファへの観測追加と game_time_label 付与を行うサービス"""
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
@@ -13,7 +14,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 # PR3 (Encounter Memory) 後付け hook の signature。
 # ``ObservationAppender`` から ``encounter`` を直接 import すると application 層
@@ -43,16 +43,12 @@ class ObservationAppender:
     def __init__(
         self,
         buffer: IObservationContextBuffer,
-        runtime_context_provider: Optional[
-            Callable[[PlayerId], Optional[ToolRuntimeContextDto]]
-        ] = None,
+        runtime_context_provider: Callable[[PlayerId], ToolRuntimeContextDto | None] | None = None,
         *,
-        trace_recorder: Optional[ITraceRecorder] = None,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        observers: Optional[list[ObservationObserver]] = None,
+        trace_recorder: ITraceRecorder | None = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
+        observers: list[ObservationObserver] | None = None,
     ) -> None:
         self._buffer = buffer
         self._runtime_context_provider = runtime_context_provider
@@ -82,7 +78,7 @@ class ObservationAppender:
         player_id: PlayerId,
         output: ObservationOutput,
         occurred_at: datetime,
-        game_time_label: Optional[str] = None,
+        game_time_label: str | None = None,
     ) -> None:
         """
         指定プレイヤーに観測エントリを追加する。
@@ -118,7 +114,7 @@ class ObservationAppender:
                     int(player_id.value),
                 )
 
-    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+    def _resolve_trace_recorder(self) -> ITraceRecorder | None:
         """use 時に最新の trace_recorder を取得する (provider 優先)。"""
         if self._trace_recorder_provider is not None:
             try:
@@ -131,12 +127,12 @@ class ObservationAppender:
         self,
         player_id: PlayerId,
         output: ObservationOutput,
-        game_time_label: Optional[str],
+        game_time_label: str | None,
     ) -> None:
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
-        tick: Optional[int] = None
+        tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 tick = self._current_tick_provider()

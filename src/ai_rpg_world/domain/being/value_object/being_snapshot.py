@@ -40,7 +40,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
 )
 
-
 CURRENT_SNAPSHOT_VERSION: int = 2
 LEGACY_SNAPSHOT_VERSION_V1: int = 1
 

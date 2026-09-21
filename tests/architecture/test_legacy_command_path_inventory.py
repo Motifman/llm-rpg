@@ -7,7 +7,6 @@ import importlib.util
 import re
 from pathlib import Path
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PACKAGE_ROOT = _REPO_ROOT / "src/ai_rpg_world"
 _APPLICATION_ROOT = _PACKAGE_ROOT / "application"

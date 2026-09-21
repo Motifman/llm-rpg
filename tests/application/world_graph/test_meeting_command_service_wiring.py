@@ -11,7 +11,6 @@ from ai_rpg_world.application.world_graph.meeting_command_service import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 _SCENARIO = (
     Path(__file__).resolve().parents[3]
     / "tests"

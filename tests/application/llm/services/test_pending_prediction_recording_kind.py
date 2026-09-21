@@ -5,7 +5,9 @@ U10a の記録経路 (draft → PendingPrediction) が P11 で追加した kind
 (promise / plan) を落とさないことの回帰ガード。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 from ai_rpg_world.application.llm.services._pending_prediction_recording import record_pending_prediction_if_applicable
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
@@ -13,8 +15,12 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PENDING_KIND_PLAN, PendingPredictionDraft
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PENDING_KIND_PLAN,
+    PendingPredictionDraft,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 _BEING = BeingId('being-1')
 
 def _episode_with_draft(kind: str) -> SubjectiveEpisode:

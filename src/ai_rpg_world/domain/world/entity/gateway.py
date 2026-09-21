@@ -1,7 +1,7 @@
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.area import Area
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class Gateway:
@@ -51,5 +51,5 @@ class Gateway:
         """指定された座標が出口範囲内にあるか"""
         return self._is_active and self._area.contains(coordinate)
 
-    def set_active(self, is_active: bool):
+    def set_active(self, is_active: bool) -> None:
         self._is_active = is_active

@@ -1,14 +1,14 @@
 import math
-from typing import List
+
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
-from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
 from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.facing import Facing
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
-from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 class SkillToHitBoxDomainService:
@@ -24,7 +24,7 @@ class SkillToHitBoxDomainService:
         start_tick: WorldTick,
         base_power_multiplier: float,
         attacker_stats: BaseStats | None = None,
-    ) -> List[HitBoxSpawnParam]:
+    ) -> list[HitBoxSpawnParam]:
         """
         スキルのヒットパターンと、使用者の位置・向きから、生成すべき全ヒットボックスのパラメータを計算する。
         """
@@ -84,11 +84,11 @@ class SkillToHitBoxDomainService:
     def _rotate_relative_offset(self, offset: RelativeCoordinate, direction: DirectionEnum) -> RelativeCoordinate:
         return self._rotate_relative_coordinate(offset, direction)
 
-    def _rotate_xy(self, dx: int, dy: int, direction: DirectionEnum) -> tuple[int, int]:
+    def _rotate_xy(self, dx: float, dy: float, direction: DirectionEnum) -> tuple[int, int]:
         """SOUTH を基準としたローカル座標を指定方向へ回転する。"""
         angle = math.radians(
             Facing.from_direction(direction).rotation_from_south_degrees()
         )
         rotated_x = dx * math.cos(angle) - dy * math.sin(angle)
         rotated_y = dx * math.sin(angle) + dy * math.cos(angle)
-        return int(round(rotated_x)), int(round(rotated_y))
+        return round(rotated_x), round(rotated_y)

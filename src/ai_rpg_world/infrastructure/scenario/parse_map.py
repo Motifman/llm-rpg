@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from collections.abc import Mapping, Sequence
+from typing import Any
 
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
@@ -52,17 +53,21 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     spot_positions_by_area,
 )
 from ai_rpg_world.infrastructure.scenario.parse_interactions import parse_interaction_def
-from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
+    ScenarioIdMapper,
+    ScenarioIdMappingError,
+)
+
 
 def parse_spots_and_graph(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     remote_recorded_tick_keys: Mapping[int, frozenset[str]],
     player_attribute_specs: PlayerAttributeSpecs,
-) -> Tuple[SpotGraphAggregate, Dict[SpotId, SpotInterior]]:
+) -> tuple[SpotGraphAggregate, dict[SpotId, SpotInterior]]:
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    interiors: Dict[SpotId, SpotInterior] = {}
+    interiors: dict[SpotId, SpotInterior] = {}
 
     for spot_raw in raw.get("spots", []):
         sid_str = spot_raw["id"]
@@ -108,7 +113,7 @@ def parse_spots_and_graph(
     graph.clear_events()
     return graph, interiors
 
-def parse_spot_position( spot_id: str, raw: Any) -> Optional[SpotPosition]:
+def parse_spot_position( spot_id: str, raw: Any) -> SpotPosition | None:
     if raw is None:
         return None
     path = f"spots[{spot_id}].position"
@@ -123,7 +128,7 @@ def parse_spot_position( spot_id: str, raw: Any) -> Optional[SpotPosition]:
     y = parse_position_number(raw.get("y"), f"{path}.y")
     return SpotPosition(x=x, y=y)
 
-def parse_spot_area_id( spot_id: str, raw: Any) -> Optional[str]:
+def parse_spot_area_id( spot_id: str, raw: Any) -> str | None:
     if raw is None:
         return None
     if not isinstance(raw, str) or not raw.strip():
@@ -133,14 +138,14 @@ def parse_spot_area_id( spot_id: str, raw: Any) -> Optional[str]:
 def parse_areas(
     areas_raw: Any,
     spots_raw: Any,
-) -> Tuple[AreaDef, ...]:
+) -> tuple[AreaDef, ...]:
     if areas_raw is None:
         return ()
     if not isinstance(areas_raw, Sequence) or isinstance(areas_raw, (str, bytes)):
         raise ScenarioLoadError("areas must be a list")
 
     area_spot_positions = spot_positions_by_area(spots_raw)
-    out: List[AreaDef] = []
+    out: list[AreaDef] = []
     seen: set[str] = set()
     for index, raw_area in enumerate(areas_raw):
         if not isinstance(raw_area, Mapping):
@@ -196,7 +201,7 @@ def parse_areas(
         )
     return tuple(out)
 
-def parse_area_position( area_id: str, raw: Any) -> Optional[SpotPosition]:
+def parse_area_position( area_id: str, raw: Any) -> SpotPosition | None:
     if raw is None:
         return None
     path = f"areas[{area_id}].position"
@@ -215,13 +220,13 @@ def parse_distant_cues(
     raw: Any,
     mapper: ScenarioIdMapper,
     area_ids: set[str],
-) -> Tuple[DistantCueDef, ...]:
+) -> tuple[DistantCueDef, ...]:
     if raw is None:
         return ()
     if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
         raise ScenarioLoadError("distant_cues must be a list")
 
-    out: List[DistantCueDef] = []
+    out: list[DistantCueDef] = []
     seen: set[str] = set()
     for index, raw_cue in enumerate(raw):
         if not isinstance(raw_cue, Mapping):
@@ -278,7 +283,7 @@ def parse_distant_cues(
 def parse_distant_cue_appear_event(
     cue_id: str,
     raw: Any,
-) -> Optional[DistantCueAppearEventDef]:
+) -> DistantCueAppearEventDef | None:
     path = f"distant_cues[{cue_id}].appear_event"
     if raw is None:
         return None
@@ -347,7 +352,7 @@ def parse_distant_cue_origin_area_id(
         raise ScenarioLoadError(f"{path}.area_id references unknown area: {area_id}")
     return area_id
 
-def parse_atmosphere( raw: Optional[Dict[str, Any]]) -> Optional[SpotAtmosphere]:
+def parse_atmosphere( raw: dict[str, Any] | None) -> SpotAtmosphere | None:
     if not raw:
         return None
     return SpotAtmosphere(
@@ -358,7 +363,7 @@ def parse_atmosphere( raw: Optional[Dict[str, Any]]) -> Optional[SpotAtmosphere]
     )
 
 def parse_interior(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     remote_recorded_tick_keys: Mapping[int, frozenset[str]],
@@ -400,7 +405,7 @@ def parse_interior(
     )
 
 def parse_sub_location(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     local_object_ids: set[str],
@@ -440,7 +445,7 @@ def parse_sub_location(
     )
 
 def parse_spot_object(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     remote_recorded_tick_keys: Mapping[int, frozenset[str]],
@@ -501,7 +506,7 @@ def parse_spot_object(
         state_display=state_display,
     )
 
-def parse_discoverable_item( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> DiscoverableItem:
+def parse_discoverable_item( raw: dict[str, Any], mapper: ScenarioIdMapper) -> DiscoverableItem:
     item_sid = raw["item_spec"]
     dc = parse_discovery_condition(raw.get("discovery_condition", {}), mapper)
     return DiscoverableItem(
@@ -511,7 +516,7 @@ def parse_discoverable_item( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> D
         description=raw.get("description", ""),
     )
 
-def parse_discovery_condition( raw: Optional[Dict[str, Any]], mapper: ScenarioIdMapper) -> DiscoveryCondition:
+def parse_discovery_condition( raw: dict[str, Any] | None, mapper: ScenarioIdMapper) -> DiscoveryCondition:
     if not raw:
         return DiscoveryCondition(condition_type=DiscoveryConditionTypeEnum.ALWAYS)
     item_sid = raw.get("required_item")
@@ -523,7 +528,7 @@ def parse_discovery_condition( raw: Optional[Dict[str, Any]], mapper: ScenarioId
         flag_name=raw.get("flag_name"),
     )
 
-def parse_passage_condition( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> PassageCondition:
+def parse_passage_condition( raw: dict[str, Any], mapper: ScenarioIdMapper) -> PassageCondition:
     item_sid = raw.get("required_item")
     item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
     return PassageCondition(
@@ -537,7 +542,7 @@ def parse_passage_condition( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> P
         failure_message=raw.get("failure_message", ""),
     )
 
-def parse_connections( conns_raw: List[Dict[str, Any]], graph: SpotGraphAggregate, mapper: ScenarioIdMapper,
+def parse_connections( conns_raw: list[dict[str, Any]], graph: SpotGraphAggregate, mapper: ScenarioIdMapper,
 ) -> None:
     for c in conns_raw:
         cid = mapper.register("connection", c["id"])
@@ -571,7 +576,7 @@ def parse_connections( conns_raw: List[Dict[str, Any]], graph: SpotGraphAggregat
             passage=passage,
         )
 
-        reverse_id: Optional[ConnectionId] = None
+        reverse_id: ConnectionId | None = None
         if is_bidir:
             rev_str = c["id"] + "__reverse"
             rev_int = mapper.register("connection", rev_str)

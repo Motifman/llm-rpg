@@ -11,13 +11,14 @@ OpenAI 互換エンドポイント（SSH 越しの vLLM 等）: ``OPENAI_API_BAS
 """
 
 import concurrent.futures
+import copy
 import json
 import logging
-import copy
 import os
 import re
 import time
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import litellm
 from litellm import AuthenticationError as LitellmAuthenticationError
@@ -25,11 +26,16 @@ from litellm import InternalServerError as LitellmInternalServerError
 from litellm import RateLimitError as LitellmRateLimitError
 from litellm import ServiceUnavailableError as LitellmServiceUnavailableError
 
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
+from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
+    LlmCallMetrics,
+    LlmCallMetricsSink,
 )
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
     IBeliefConsolidationCompletionPort,
+)
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
@@ -42,11 +48,6 @@ from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports impor
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
-    LlmCallMetrics,
-    LlmCallMetricsSink,
-)
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
 DEFAULT_LLM_MODEL = _DEFAULT_MODEL
@@ -170,7 +171,7 @@ def _is_retryable_transient_error(exc: BaseException) -> bool:
     )
 
 
-def _detect_openrouter_base(api_base: Optional[str]) -> bool:
+def _detect_openrouter_base(api_base: str | None) -> bool:
     """``api_base`` が OpenRouter のものか判定する。
 
     OpenRouter 経由のときだけ ``extra_body.usage.include=True`` を付けて cost を
@@ -185,16 +186,16 @@ def _detect_openrouter_base(api_base: Optional[str]) -> bool:
 
 def _build_openrouter_routing(
     *,
-    provider: Optional[str],
-    quantization: Optional[str],
+    provider: str | None,
+    quantization: str | None,
     require_params: bool,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """明示値から OpenRouter provider routing 設定を組む。"""
     provider = (provider or "").strip()
     quantization = (quantization or "").strip()
     if not provider and not quantization and not require_params:
         return None
-    block: Dict[str, Any] = {}
+    block: dict[str, Any] = {}
     if provider:
         # ``order`` は希望順位であり、Cloudflare のように指定先だけへ固定したい
         # 場合に解決されないことがある。``only`` なら 1 社固定の意味が明示的で、
@@ -224,7 +225,7 @@ def _validate_reasoning_effort(
     return normalized
 
 
-def _build_reasoning_block(effort: str) -> Optional[Dict[str, Any]]:
+def _build_reasoning_block(effort: str) -> dict[str, Any] | None:
     """検証済みの ``effort`` から reasoning 無効化ブロックを組む。
 
     - ``"none"`` → 従来どおり OpenRouter と DeepSeek の両方で明示的に無効化
@@ -313,15 +314,15 @@ class LiteLLMClient(
     def __init__(
         self,
         model: str = _DEFAULT_MODEL,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         api_key_env_var: str = _ENV_VAR_API_KEY,
-        api_base: Optional[str] = None,
-        timeout_seconds: Optional[float] = None,
-        openrouter_provider: Optional[str] = None,
-        openrouter_quantization: Optional[str] = None,
+        api_base: str | None = None,
+        timeout_seconds: float | None = None,
+        openrouter_provider: str | None = None,
+        openrouter_quantization: str | None = None,
         openrouter_require_params: bool = False,
         reasoning_effort: str = _DEFAULT_REASONING_EFFORT,
-        wall_cap_seconds: Optional[float] = None,
+        wall_cap_seconds: float | None = None,
         rate_limit_retry_attempts: int = _DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS,
         rate_limit_retry_base_sleep: float = _DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP,
     ) -> None:
@@ -357,7 +358,7 @@ class LiteLLMClient(
             else _DEFAULT_LLM_TIMEOUT_SECONDS
         )
 
-        self._openrouter_routing: Optional[Dict[str, Any]] = _build_openrouter_routing(
+        self._openrouter_routing: dict[str, Any] | None = _build_openrouter_routing(
             provider=openrouter_provider,
             quantization=openrouter_quantization,
             require_params=openrouter_require_params,
@@ -371,7 +372,7 @@ class LiteLLMClient(
             reasoning_effort,
             source_label="reasoning_effort",
         )
-        self._reasoning_block: Optional[Dict[str, Any]] = _build_reasoning_block(
+        self._reasoning_block: dict[str, Any] | None = _build_reasoning_block(
             self._reasoning_effort
         )
 
@@ -474,7 +475,7 @@ class LiteLLMClient(
         意図的に入れない (1 client の retry が他 client と衝突する状況は想定外
         で、ここでは入れると実験再現性が下がるだけ)。
         """
-        last_exc: Optional[BaseException] = None
+        last_exc: BaseException | None = None
         for attempt in range(self._rate_limit_retry_attempts + 1):
             try:
                 return self._call_with_wall_cap(call_fn)
@@ -502,7 +503,7 @@ class LiteLLMClient(
 
     def _build_extra_body(
         self, reasoning_override: Any = _NO_REASONING_OVERRIDE
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """litellm.completion に渡す ``extra_body`` を組み立てる。
 
         - provider routing (OPENROUTER_PROVIDER 等の env が設定されているとき)
@@ -516,7 +517,7 @@ class LiteLLMClient(
 
         どれも要らないときは None を返す (= extra_body を一切渡さない)。
         """
-        block: Dict[str, Any] = {}
+        block: dict[str, Any] = {}
         if self._openrouter_routing is not None:
             block.update(copy.deepcopy(self._openrouter_routing))
         if self._is_openrouter_base:
@@ -546,8 +547,8 @@ class LiteLLMClient(
         )
 
     def completion_base_kwargs(
-        self, *, reasoning_effort: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, *, reasoning_effort: str | None = None
+    ) -> dict[str, Any]:
         """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。
 
         OpenRouter provider routing env が設定されている場合、``extra_body`` を
@@ -565,7 +566,7 @@ class LiteLLMClient(
             if reasoning_effort is None
             else _validate_reasoning_effort(reasoning_effort)
         )
-        base: Dict[str, Any] = {
+        base: dict[str, Any] = {
             "model": self._model,
             "api_key": self._lite_api_key(),
             # PR #444: 長期 hang を必ず打ち切る (default 90s / env override 可)
@@ -593,7 +594,7 @@ class LiteLLMClient(
         return base
 
     @property
-    def openrouter_routing(self) -> Optional[Dict[str, Any]]:
+    def openrouter_routing(self) -> dict[str, Any] | None:
         """現在 inject される OpenRouter routing を返す (実験 trace 等の観測用)。"""
         if self._openrouter_routing is None:
             return None
@@ -601,16 +602,16 @@ class LiteLLMClient(
 
     def invoke(
         self,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         tool_choice: ToolChoice = "required",
         *,
-        metrics_sink: Optional[LlmCallMetricsSink] = None,
-        reasoning_effort: Optional[str] = None,
-        prompt_capture_context: Optional[Any] = None,
+        metrics_sink: LlmCallMetricsSink | None = None,
+        reasoning_effort: str | None = None,
+        prompt_capture_context: Any | None = None,
         call_phase: str = "one_step",
-        session_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        session_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         1 回の LLM 呼び出しを行い、tool_call があれば {"name": str, "arguments": dict} を返す。
         tool_call が無い場合やパースに失敗した場合は None を返す。
@@ -644,7 +645,7 @@ class LiteLLMClient(
         )
         start_monotonic = time.monotonic()
         try:
-            completion_kw: Dict[str, Any] = {
+            completion_kw: dict[str, Any] = {
                 "model": self._model,
                 "messages": messages,
                 "tools": tools,
@@ -797,7 +798,7 @@ class LiteLLMClient(
         return tool_call
 
     @staticmethod
-    def _extract_tool_call_combination(response: Any) -> Optional[tuple[str, ...]]:
+    def _extract_tool_call_combination(response: Any) -> tuple[str, ...] | None:
         """複数 tool_call の名前だけを返却順で返し、通常の1件なら None にする。"""
 
         try:
@@ -899,23 +900,23 @@ class LiteLLMClient(
 
     def _emit_metrics(
         self,
-        sink: Optional[LlmCallMetricsSink],
+        sink: LlmCallMetricsSink | None,
         *,
         wall_latency_ms: int,
         prompt_tokens: int,
         completion_tokens: int,
         success: bool,
-        error_code: Optional[str],
+        error_code: str | None,
         cached_tokens: int = 0,
         reasoning_tokens: int = 0,
         cost_usd: float = 0.0,
         error_detail: str = "",
-        reasoning_effort: Optional[str] = None,
+        reasoning_effort: str | None = None,
         tool_choice: ToolChoice = "",
         phase: str = "one_step",
-        llm_call_id: Optional[str] = None,
+        llm_call_id: str | None = None,
         discarded_tool_calls: int = 0,
-        tool_call_combination: Optional[tuple[str, ...]] = None,
+        tool_call_combination: tuple[str, ...] | None = None,
     ) -> None:
         if sink is None:
             return
@@ -946,12 +947,12 @@ class LiteLLMClient(
 
     def _record_prompt_capture(
         self,
-        prompt_capture_context: Optional[Any],
+        prompt_capture_context: Any | None,
         *,
         request_kwargs: Mapping[str, Any],
         response: Any,
-        error: Optional[BaseException],
-        output: Optional[Mapping[str, Any]],
+        error: BaseException | None,
+        output: Mapping[str, Any] | None,
         metrics: Mapping[str, Any],
     ) -> None:
         if prompt_capture_context is None:
@@ -989,7 +990,7 @@ class LiteLLMClient(
         except (TypeError, ValueError):
             return 0.0
 
-    def complete_episode_subjective_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """
         tools 無しで JSON object を強制する chat completion を行いパース済み dict を返す。
         失敗や不正 JSON ではここでは補完せず LlmApiCallException を送出し、呼び出し元が草案テンプレへフォールバックする。
@@ -1054,15 +1055,15 @@ class LiteLLMClient(
 
     def complete_episodic_reinterpretation_json(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """tools 無しで想起後再解釈 JSON object を返す。"""
         return self.complete_episode_subjective_json(messages)
 
     def complete_semantic_gist_json(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """tools 無しで semantic gist JSON object を返す (Phase 1b)。
 
         ``complete_episode_subjective_json`` と同じ json_object 強制完了を
@@ -1072,8 +1073,8 @@ class LiteLLMClient(
 
     def complete_belief_consolidation_json(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """tools 無しで固着パス (belief journal 統合) の decisions JSON を返す (U3b)。
 
         ``complete_episode_subjective_json`` と同じ json_object 強制完了を
@@ -1083,8 +1084,8 @@ class LiteLLMClient(
 
     def complete_short_term_summary_json(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """tools 無しで L4 mid summary JSON object を返す (Phase 2)。
 
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
@@ -1094,8 +1095,8 @@ class LiteLLMClient(
 
     def complete_short_term_long_summary_json(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """tools 無しで L5 long summary JSON object を返す (Phase 3)。
 
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
@@ -1106,9 +1107,9 @@ class LiteLLMClient(
     def _parse_tool_call(
         self,
         response: Any,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
         """response から先頭の tool_call を取り出し {"name": str, "arguments": dict} で返す。"""
         if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
             return None
@@ -1123,7 +1124,7 @@ class LiteLLMClient(
         args_str = getattr(getattr(first, "function", None), "arguments", None)
         if not name:
             return None
-        arguments: Dict[str, Any] = {}
+        arguments: dict[str, Any] = {}
         if args_str and isinstance(args_str, str):
             try:
                 arguments = json.loads(args_str) if args_str.strip() else {}
@@ -1134,7 +1135,7 @@ class LiteLLMClient(
         return {"name": name, "arguments": arguments}
 
 
-def _extract_llm_call_id(prompt_capture_context: Optional[Any]) -> Optional[str]:
+def _extract_llm_call_id(prompt_capture_context: Any | None) -> str | None:
     """prompt dataset context から trace 結合用の llm_call_id を取り出す。"""
 
     if prompt_capture_context is None:

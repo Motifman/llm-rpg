@@ -3,15 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from collections.abc import Mapping, Sequence
+from typing import Any
 
-from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
-    PlayerAttributeSpecs,
-)
-from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
-from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
-    reject_values_the_world_does_not_have,
-)
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
@@ -22,8 +16,12 @@ from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.models import (
     InitialItemSpec,
@@ -35,14 +33,18 @@ from ai_rpg_world.infrastructure.scenario.models import (
 from ai_rpg_world.infrastructure.scenario.parse_economy import parse_initial_item
 from ai_rpg_world.infrastructure.scenario.parse_helpers import parse_bool
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
 from ai_rpg_world.infrastructure.scenario.validate_features import (
     _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS,
 )
 
+
 def parse_mutually_known_roles(
     raw: Any,
     players: Sequence[PlayerSpawnConfig],
-) -> Tuple[str, ...]:
+) -> tuple[str, ...]:
     """互いを知る role を読み、実在する複数人の集合だけを受理する。
 
     一人しかいない role は印を一つも生成せず、作者が開示したつもりのまま
@@ -88,7 +90,7 @@ def parse_role_personas(
         for player in players
         if isinstance((role := player.initial_state.get("role")), str) and role
     }
-    parsed: Dict[str, str] = {}
+    parsed: dict[str, str] = {}
     for role, persona in raw.items():
         if not isinstance(role, str) or not role.strip():
             raise ScenarioLoadError("role_personas のキーは空でない role 名にしてください")
@@ -108,8 +110,8 @@ def parse_role_personas(
         parsed[normalized_role] = persona.strip()
     return parsed
 
-def parse_monsters_block( raw: Optional[Dict[str, Any]], mapper: ScenarioIdMapper,
-) -> Tuple[Tuple[ScenarioMonsterTemplate, ...], Tuple[ScenarioMonsterPlacement, ...]]:
+def parse_monsters_block( raw: dict[str, Any] | None, mapper: ScenarioIdMapper,
+) -> tuple[tuple[ScenarioMonsterTemplate, ...], tuple[ScenarioMonsterPlacement, ...]]:
     """`monsters.templates` と `monsters.initial_placements` を読み込む (Phase B-2a)。
 
     JSON 形式:
@@ -306,7 +308,7 @@ def parse_monster_placement( raw: Any, index: int,
     )
 
 def parse_monster_spawn_condition( raw: Any, placement_index: int,
-) -> Optional[ScenarioMonsterSpawnCondition]:
+) -> ScenarioMonsterSpawnCondition | None:
     """placement の spawn_condition ブロックを ScenarioMonsterSpawnCondition に変換。
 
     JSON 形式:
@@ -340,7 +342,7 @@ def parse_monster_spawn_condition( raw: Any, placement_index: int,
             f"contains unknown keys: {sorted(unknown_keys)}"
         )
 
-    def _as_str_tuple(value: Any, key: str) -> Tuple[str, ...]:
+    def _as_str_tuple(value: Any, key: str) -> tuple[str, ...]:
         if value is None:
             return ()
         if not isinstance(value, list):
@@ -379,12 +381,12 @@ def parse_monster_spawn_condition( raw: Any, placement_index: int,
     )
 
 def parse_players(
-    players_raw: List[Dict[str, Any]],
+    players_raw: list[dict[str, Any]],
     mapper: ScenarioIdMapper,
     *,
     player_attribute_specs: PlayerAttributeSpecs,
-) -> List[PlayerSpawnConfig]:
-    spawns: List[PlayerSpawnConfig] = []
+) -> list[PlayerSpawnConfig]:
+    spawns: list[PlayerSpawnConfig] = []
     for p in players_raw:
         pid = mapper.register("player", p["id"])
         spot_sid = p["spawn_spot"]
@@ -404,7 +406,7 @@ def parse_players(
                 initial_state, player_attribute_specs, what="initial_state",
             )
         persona_raw = p.get("persona_prompt")
-        persona_prompt: Optional[str] = None
+        persona_prompt: str | None = None
         if persona_raw is not None:
             if not isinstance(persona_raw, str):
                 raise ValueError(
@@ -458,7 +460,7 @@ def parse_player_initial_gold(raw: Any, *, owner_id: str) -> int:
         )
     return raw
 
-def parse_player_objective(raw: Any, *, owner_id: str) -> Optional[str]:
+def parse_player_objective(raw: Any, *, owner_id: str) -> str | None:
     """``players[].objective`` を検証して正規化する (目的層 G6)。
 
     persona_prompt と同じ規約: 前後の whitespace は削るが内側の改行は
@@ -486,7 +488,7 @@ def parse_player_objective(raw: Any, *, owner_id: str) -> Optional[str]:
         return None
     return stripped
 
-def parse_player_goal_locked(raw: Any, *, owner_id: str) -> Optional[bool]:
+def parse_player_goal_locked(raw: Any, *, owner_id: str) -> bool | None:
     """``players[].goal_locked`` を検証する (目的層 G6)。
 
     None (未指定) はシナリオ全体の性質から導出する意味なので、False とは
@@ -504,7 +506,7 @@ def parse_player_goal_locked(raw: Any, *, owner_id: str) -> Optional[bool]:
 
 def parse_player_initial_state(
     raw: Any, *, owner_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """`players[].initial_state` を JSON プリミティブの flat dict に正規化。
 
     `PlayerStatusAggregate.state` の制約 (str / int / float / bool / None) に

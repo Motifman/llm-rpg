@@ -26,7 +26,7 @@ item を同じ形にしないのは、既存の予約機構が inventory 側に�
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     inventory_item_appearances,
@@ -58,7 +58,7 @@ class TradeFreezeService:
         player_inventory_repository: Any,
         item_repository: Any,
         player_status_repository: Any = None,
-    ) -> "TradeFreezeService":
+    ) -> TradeFreezeService:
         """同じ提案storeを保ち、command専用repositoryへ差し替える。"""
         return TradeFreezeService(
             pending_trade_offer_store=self._offers,
@@ -82,17 +82,17 @@ class TradeFreezeService:
         status = self._statuses.find_by_id(player_id)
         if status is None:
             return 0
-        return max(0, status.gold.value - self.committed_gold(player_id))
+        return int(max(0, status.gold.value - self.committed_gold(player_id)))
 
     def committed_gold(self, player_id: PlayerId) -> int:
         """提案に出していて、いまは使えない額。"""
-        return self._offers.committed_gold(player_id)
+        return int(self._offers.committed_gold(player_id))
 
     # ── item ────────────────────────────────────────────────────────────
 
     def frozen_quantity(self, player_id: PlayerId, item_spec_id: int) -> int:
         """その品を、提案に出していていま使えない数。"""
-        return self._offers.committed_item_quantities(player_id).get(item_spec_id, 0)
+        return int(self._offers.committed_item_quantities(player_id).get(item_spec_id, 0))
 
     def freeze_offer(self, offer: PendingTradeOffer) -> None:
         """提案が差し出している品を予約する。
@@ -128,7 +128,7 @@ class TradeFreezeService:
         inventory = self._inventories.find_by_id(offer.offerer_player_id)
         if inventory is None:
             return
-        wanted: Dict[int, int] = {}
+        wanted: dict[int, int] = {}
         for spec_id, quantity in offer.gives.items:
             wanted[spec_id] = wanted.get(spec_id, 0) + quantity
         for item_instance_id in tuple(inventory.reserved_item_ids):

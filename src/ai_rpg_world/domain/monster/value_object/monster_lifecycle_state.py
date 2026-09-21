@@ -6,15 +6,14 @@ MonsterAggregate のライフサイクル関連の状態を保持し、変更時
 """
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
-from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterStatsValidationException,
 )
+from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
+from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 
 
 @dataclass(frozen=True)
@@ -27,8 +26,8 @@ class MonsterLifecycleState:
     hp: MonsterHp
     mp: MonsterMp
     status: MonsterStatusEnum
-    last_death_tick: Optional[WorldTick]
-    spawned_at_tick: Optional[WorldTick]
+    last_death_tick: WorldTick | None
+    spawned_at_tick: WorldTick | None
     hunger: float
     starvation_timer: int
 
@@ -185,7 +184,7 @@ class MonsterLifecycleState:
         hunger_increase_per_tick: float,
         hunger_starvation_threshold: float,
         starvation_ticks: int,
-    ) -> Tuple["MonsterLifecycleState", bool]:
+    ) -> tuple["MonsterLifecycleState", bool]:
         """
         1 tick 分の飢餓を適用し、(新しい状態, 飢餓死すべきか) を返す。
 

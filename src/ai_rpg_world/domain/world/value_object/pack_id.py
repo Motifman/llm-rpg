@@ -19,18 +19,18 @@ class PackId:
     def __post_init__(self) -> None:
         if not self.value or not self.value.strip():
             raise PackIdValidationException(
-                f"PackId value cannot be empty or whitespace: {repr(self.value)}"
+                f"PackId value cannot be empty or whitespace: {self.value!r}"
             )
 
     @classmethod
-    def create(cls, value: Union[str, int]) -> "PackId":
+    def create(cls, value: str | int) -> "PackId":
         """文字列または数値から PackId を生成する。None や空は不可。"""
         if value is None:
             raise PackIdValidationException("PackId value cannot be None")
         s = str(value).strip()
         if not s:
             raise PackIdValidationException(
-                f"PackId value cannot be empty after strip: {repr(value)}"
+                f"PackId value cannot be empty after strip: {value!r}"
             )
         return cls(s)
 

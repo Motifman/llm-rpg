@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 
@@ -19,10 +18,10 @@ class GrowthStage:
 
     after_ticks: int
     stats_multiplier: float
-    flee_bias_multiplier: Optional[float] = None
+    flee_bias_multiplier: float | None = None
     allow_chase: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.after_ticks < 0:
             raise MonsterTemplateValidationException(
                 f"growth_stage.after_ticks cannot be negative: {self.after_ticks}"

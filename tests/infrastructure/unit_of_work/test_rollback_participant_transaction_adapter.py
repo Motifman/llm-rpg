@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.common.command_scope import CommandCompletion, CommandScope
 from ai_rpg_world.application.common.exceptions import (
     DuplicateRollbackParticipantException,
     NestedRollbackParticipantTransactionException,
@@ -14,7 +15,6 @@ from ai_rpg_world.application.common.exceptions import (
     RollbackParticipantRestoreException,
     TransactionCommittedCleanupException,
 )
-from ai_rpg_world.application.common.command_scope import CommandCompletion, CommandScope
 from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
     RollbackParticipantTransactionAdapter,
     RollbackParticipantTransactionFactory,

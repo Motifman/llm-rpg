@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional, Tuple
+from typing import Any
 
+from ai_rpg_world.domain.common.exception import ValidationException
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotGraphDomainException,
 )
-from ai_rpg_world.domain.common.exception import ValidationException
-
 
 # 合成条件のタイプ。leaf 条件と区別するため module-level 定数として明示。
 COMPOSITE_CONDITION_TYPES = frozenset({"NOT", "AND", "OR"})
@@ -52,25 +51,25 @@ class ScenarioEventCondition:
     """
 
     condition_type: str
-    tick: Optional[int] = None
-    tick_start: Optional[int] = None
-    tick_end: Optional[int] = None
-    flag_name: Optional[str] = None
-    spot_id: Optional[int] = None
+    tick: int | None = None
+    tick_start: int | None = None
+    tick_end: int | None = None
+    flag_name: str | None = None
+    spot_id: int | None = None
     # PLAYERS_AT_SPOT 用。省略時は interaction 条件の既存意味と同じ 2 人。
-    required_player_count: Optional[int] = None
+    required_player_count: int | None = None
     # GAME_PHASE_IS 用。GamePhase.value を保持する。
-    game_phase: Optional[str] = None
-    object_id: Optional[int] = None
-    required_state: Optional[dict[str, Any]] = None
-    item_spec_id: Optional[int] = None
+    game_phase: str | None = None
+    object_id: int | None = None
+    required_state: dict[str, Any] | None = None
+    item_spec_id: int | None = None
     # 脱出ゲーム拡張: 周期的イベント
-    tick_modulo: Optional[int] = None
-    tick_phase: Optional[int] = None
+    tick_modulo: int | None = None
+    tick_phase: int | None = None
     # 動的世界系: 天候 / オブジェクト state 経過
-    weather_type: Optional[str] = None  # WEATHER_IS 用 ("RAIN" / "STORM" 等)
-    state_key: Optional[str] = None  # OBJECT_STATE_TICK_AT_LEAST の対象 state キー
-    ticks_offset: Optional[int] = None  # OBJECT_STATE_TICK_AT_LEAST の経過 tick
+    weather_type: str | None = None  # WEATHER_IS 用 ("RAIN" / "STORM" 等)
+    state_key: str | None = None  # OBJECT_STATE_TICK_AT_LEAST の対象 state キー
+    ticks_offset: int | None = None  # OBJECT_STATE_TICK_AT_LEAST の経過 tick
     # OBJECT_STATE_TICK_AT_LEAST で state[state_key] が None / 不在の時の解釈。
     # default False: 「まだ起きていない → 経過判定不能 → predicate False」
     # （安全側、たとえば「採取してから N tick 経った」を判定する用途では妥当）。
@@ -80,14 +79,14 @@ class ScenarioEventCondition:
     # OBJECT_STATE_INT_GREATER_THAN_OTHER 用: 比較の右辺になる別オブジェクト。
     # 「東の祭壇の納品数 > 西の祭壇の納品数」のように、2 つの object.state の
     # 整数値どうしを比べる (左辺は object_id / state_key を流用)。
-    other_object_id: Optional[int] = None
-    other_state_key: Optional[str] = None
+    other_object_id: int | None = None
+    other_state_key: str | None = None
     # Phase D-1: 確率トリガ用。PROBABILITY condition_type のときに使う [0.0, 1.0]。
     # 評価のたびに random.random() < probability で発火判定する。
     # condition_type が PROBABILITY 以外でこの値が設定されていても無視される。
-    probability: Optional[float] = None
+    probability: float | None = None
     # 合成条件用の子条件ツリー
-    children: Tuple["ScenarioEventCondition", ...] = field(default_factory=tuple)
+    children: tuple[ScenarioEventCondition, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         # children は frozen dataclass の hash 不変条件を保つため必ず tuple。

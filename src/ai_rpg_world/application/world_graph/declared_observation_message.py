@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
 
 def declared_observation_uses_bright_copy(
-    lighting: Optional[LightingEnum],
+    lighting: LightingEnum | None,
 ) -> bool:
     """身元を示す宣言文を選んでよい明るさかを答える。
 
@@ -22,10 +22,10 @@ def declared_observation_uses_bright_copy(
 def declared_observation_message_for_lighting(
     spot_id: SpotId,
     *,
-    resolver: Optional[Any],
-    bright: Optional[str],
-    dark: Optional[str],
-) -> Optional[str]:
+    resolver: Any | None,
+    bright: str | None,
+    dark: str | None,
+) -> str | None:
     """実効照明に合う宣言文を選び、照明不明時は暗所文へ倒す。
 
     明所文を暗所で使うと、作者が伏せた行為者名を漏らしうる。したがって

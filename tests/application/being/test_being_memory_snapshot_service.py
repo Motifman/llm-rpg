@@ -4,12 +4,23 @@
 担保する。in-memory store を使った round-trip テストが中心。
 """
 from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadFormatError, BeingMemoryPayloadSchemaError, BeingMemorySnapshotService, CURRENT_PAYLOAD_SCHEMA_VERSION
+
+from ai_rpg_world.application.being.being_memory_snapshot_service import (
+    CURRENT_PAYLOAD_SCHEMA_VERSION,
+    BeingMemoryPayloadFormatError,
+    BeingMemoryPayloadSchemaError,
+    BeingMemorySnapshotService,
+)
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+    InMemoryEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
@@ -20,23 +31,34 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
+    EpisodicReinterpretationEntry,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
+    EpisodicReinterpretationStatus,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     """新しい in-memory store 群を構築し、service と store ハンドルを返す。"""
     from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
-    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
@@ -120,14 +142,19 @@ class TestRestoreRoundTrip:
         dst_stores['memo'].add_by_being(being, '古い memo')
         dst_svc.restore(being, payload_json)
         memos = dst_stores['memo'].list_all_by_being(being)
-        contents = sorted((e.content for e in memos))
+        contents = sorted(e.content for e in memos)
         assert contents == ['完了 memo', '未完了 memo']
 
     def test_belief_evidence_buffer_round_trip(self) -> None:
         """U2 (証拠台帳統一設計): evidence buffer の capture → restore で
         中身が一致することを保証する (snapshot 追従 checklist #27)。"""
-        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import BELIEF_EVIDENCE_SALIENCE_LOW, BeliefEvidence
-        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         evidence = BeliefEvidence(evidence_id='belief-evidence-1', source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR, episode_ids=('ep-1',), cue_signature='tool:explore|spot:3', text='探索は空振りだった', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7)
@@ -215,7 +242,9 @@ class TestRestoreRoundTrip:
         stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)
         呼んでいたのを、1 度読んだ値を変数に束ねて使い回す形に直した。挙動は
         不変 (リファクタのみ) で、呼び出し回数だけが 1 回に減ることを保証する。"""
-        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
 
         class _CountingStagnationPressureStore(InMemoryStagnationPressureStore):
 
@@ -242,8 +271,13 @@ class TestRestoreRoundTrip:
         新規 per-Being store は作らず既存 belief_evidence_buffer の codec を
         拡張しただけなので、EXPECTED_PAYLOAD_KEYS の変更は不要 (U4 の設計判断)。
         """
-        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import BELIEF_EVIDENCE_SALIENCE_LOW, BeliefEvidence
-        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         evidence = BeliefEvidence(evidence_id='belief-evidence-attr-1', source_kind=BeliefEvidenceSourceKind.CONFIRMATION, episode_ids=('ep-1',), cue_signature='tool:explore|spot:3', text='予測が当たった: 何か見つかるはず', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7, in_context_belief_ids=('sem-belief-1', 'sem-belief-2'))
@@ -267,8 +301,13 @@ class TestRestoreRoundTrip:
         """P9 (伝聞): HEARSAY evidence の source_speaker (話者) が capture →
         restore を経て失われないことを保証する。source_kind 拡張と同じく既存
         codec の拡張なので EXPECTED_PAYLOAD_KEYS の変更は不要。"""
-        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import BELIEF_EVIDENCE_SALIENCE_LOW, BeliefEvidence
-        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         evidence = BeliefEvidence(evidence_id='belief-evidence-hearsay-1', source_kind=BeliefEvidenceSourceKind.HEARSAY, episode_ids=('ep-1',), cue_signature='player:spot_graph_player_5', text='エイダは頼りになる', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7, source_speaker='リオ')
@@ -373,13 +412,23 @@ class TestConstructor:
     def test_memo_store_raises_type_error(self) -> None:
         """memo store 型違反。"""
         from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
-        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
         with pytest.raises(TypeError, match='memo_store'):
             BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
 
@@ -387,11 +436,19 @@ class TestConstructor:
         """P-U2: stagnation_pressure_store が StagnationPressureRepository で
         なければ TypeError を投げる。"""
         from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
         with pytest.raises(TypeError, match='stagnation_pressure_store'):
             BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store='bad')

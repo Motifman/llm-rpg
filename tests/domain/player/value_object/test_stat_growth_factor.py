@@ -1,7 +1,9 @@
-import pytest
 import math
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+
+import pytest
+
 from ai_rpg_world.domain.player.exception.player_exceptions import StatGrowthFactorValidationException
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 
 
 class TestStatGrowthFactor:

@@ -44,12 +44,6 @@
                     "required_spot": "lever_room",
                     "failure_message": "左レバーの前にいなければ準備できない。"
                   }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "左レバーに手をかけ、引く構えをとった。"}
-                  }
                 ]
               }
             ]
@@ -69,12 +63,6 @@
                     "condition_type": "AT_SPOT_IS",
                     "required_spot": "lever_room",
                     "failure_message": "右レバーの前にいなければ準備できない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "右レバーに手をかけ、引く構えをとった。"}
                   }
                 ]
               }

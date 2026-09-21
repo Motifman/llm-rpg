@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime

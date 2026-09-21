@@ -1,6 +1,6 @@
 """ワールド・会話・採集・チェスト系ツールの引数解決。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
@@ -11,11 +11,18 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     InventoryToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
+    ToolRuntimeContextDto,
     WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
     require_target_type,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    SPEECH_CHANNEL_SAY,
+    SPEECH_CHANNEL_SHOUT,
+    SPEECH_CHANNEL_VALUES,
+    SPEECH_CHANNEL_WHISPER,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
@@ -32,13 +39,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_SPEECH,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
-    SPEECH_CHANNEL_SAY,
-    SPEECH_CHANNEL_SHOUT,
-    SPEECH_CHANNEL_VALUES,
-    SPEECH_CHANNEL_WHISPER,
-)
-from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
 
@@ -48,9 +48,9 @@ class WorldArgumentResolver:
     def resolve_args(
         self,
         tool_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name == TOOL_NAME_SPEECH:
             return self._resolve_speech(args, runtime_context)
         if tool_name == TOOL_NAME_INSPECT_ITEM:
@@ -81,9 +81,9 @@ class WorldArgumentResolver:
 
     def _resolve_speech(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """単一 speech tool の引数解決 (Issue #264 後続: SAY/WHISPER 統合)。
 
         channel 引数 (whisper/say/shout) を必須にして、各 channel ごとに
@@ -114,7 +114,7 @@ class WorldArgumentResolver:
             else (str(raw_it) if raw_it is not None else "")
         )
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "content": args.get("content", ""),
             "channel": channel_enum,
             "inner_thought": inner,
@@ -144,9 +144,9 @@ class WorldArgumentResolver:
 
     def _resolve_interact_world_object(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("target_label")
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(
@@ -175,9 +175,9 @@ class WorldArgumentResolver:
 
     def _resolve_harvest_start(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("target_label")
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(
@@ -202,9 +202,9 @@ class WorldArgumentResolver:
 
     def _resolve_harvest_cancel(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("target_label")
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(
@@ -229,9 +229,9 @@ class WorldArgumentResolver:
 
     def _resolve_change_attention(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("level_label")
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(
@@ -253,9 +253,9 @@ class WorldArgumentResolver:
 
     def _resolve_conversation_advance(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         target_label = args.get("target_label")
         target = require_target_type(
             target_label,
@@ -291,9 +291,9 @@ class WorldArgumentResolver:
 
     def _resolve_place_object(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("inventory_item_label")
         target = require_target_type(
             label,
@@ -313,9 +313,9 @@ class WorldArgumentResolver:
 
     def _resolve_drop_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("inventory_item_label")
         target = require_target_type(
             label,
@@ -335,9 +335,9 @@ class WorldArgumentResolver:
 
     def _resolve_inspect_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("inventory_item_label")
         target = require_target_type(
             label,
@@ -354,9 +354,9 @@ class WorldArgumentResolver:
 
     def _resolve_inspect_target(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         from ai_rpg_world.application.llm.contracts.dtos import MonsterToolRuntimeTargetDto
 
         label = args.get("target_label")
@@ -386,9 +386,9 @@ class WorldArgumentResolver:
 
     def _resolve_chest_store(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         chest_label = args.get("target_label")
         chest = require_target_type(
             chest_label,
@@ -422,9 +422,9 @@ class WorldArgumentResolver:
 
     def _resolve_chest_take(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         chest_label = args.get("target_label")
         chest = require_target_type(
             chest_label,

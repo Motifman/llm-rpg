@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
@@ -65,7 +65,7 @@ def handle_speech(
     }
     channel_enum = channel_map[channel_str]
 
-    target_player_id_obj: Optional[PlayerId] = None
+    target_player_id_obj: PlayerId | None = None
     if channel_enum == SpeechChannel.WHISPER:
         targets = getattr(runtime_context, "targets", {})
         target_label = str(arguments.get("target_label", ""))
@@ -119,7 +119,7 @@ def resolve_whisper_target(
     wiring,
     target_label: str,
     targets: dict[str, Any],
-) -> Optional[Any]:
+) -> Any | None:
     """本家 resolver の ``resolve_player_target`` を呼び、解決できなければ
 
     None を返す。
@@ -149,7 +149,7 @@ def build_audience_summary(
     wiring,
     player_id: PlayerId,
     channel: Any,
-    target_player_id: Optional[PlayerId],
+    target_player_id: PlayerId | None,
 ) -> str:
     """speech 発火直後の audience 情報を message に追記する suffix を返す。
 

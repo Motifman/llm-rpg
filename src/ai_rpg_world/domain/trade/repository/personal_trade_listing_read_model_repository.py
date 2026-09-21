@@ -1,12 +1,11 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from ai_rpg_world.domain.common.repository import Repository
-from ai_rpg_world.domain.trade.read_model.personal_trade_listing_read_model import PersonalTradeListingReadModel
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.trade.read_model.personal_trade_listing_read_model import PersonalTradeListingReadModel
 from ai_rpg_world.domain.trade.repository.cursor import ListingCursor
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingReadModel, TradeId]):
@@ -17,8 +16,8 @@ class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingRea
         self,
         player_id: PlayerId,
         limit: int = 20,
-        cursor: Optional[ListingCursor] = None
-    ) -> Tuple[List[PersonalTradeListingReadModel], Optional[ListingCursor]]:
+        cursor: ListingCursor | None = None
+    ) -> tuple[list[PersonalTradeListingReadModel], ListingCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:

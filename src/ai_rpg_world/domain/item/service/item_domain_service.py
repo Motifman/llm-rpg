@@ -1,12 +1,16 @@
-from typing import List, Tuple, Dict
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
-from ai_rpg_world.domain.item.value_object.merge_plan import (
-    MergePlan, UpdateOperation, CreateOperation, DeleteOperation,
-    CraftingConsumptionPlan, ConsumedItem
-)
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.exception import InsufficientIngredientsException
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.merge_plan import (
+    ConsumedItem,
+    CraftingConsumptionPlan,
+    CreateOperation,
+    DeleteOperation,
+    MergePlan,
+    UpdateOperation,
+)
 
 
 class ItemStackingDomainService:
@@ -16,8 +20,8 @@ class ItemStackingDomainService:
     @staticmethod
     def calculate_max_stack_quantity(
         base_item: ItemAggregate,
-        additional_items: List[ItemAggregate]
-    ) -> Tuple[int, List[ItemAggregate]]:
+        additional_items: list[ItemAggregate]
+    ) -> tuple[int, list[ItemAggregate]]:
         """スタック可能なアイテムから最大スタック数量を計算
 
         Args:
@@ -39,7 +43,7 @@ class ItemStackingDomainService:
         return total_quantity, stackable_items
 
     @staticmethod
-    def plan_merge(items: List[ItemAggregate]) -> MergePlan:
+    def plan_merge(items: list[ItemAggregate]) -> MergePlan:
         """アイテムマージ計画を作成
 
         Args:
@@ -60,7 +64,7 @@ class ItemStackingDomainService:
         delete_operations = []
 
         # スタック可能なアイテムのみをスペックごとにグループ化
-        spec_groups = {}
+        spec_groups: dict[int, list[ItemAggregate]] = {}
         for item in items:
             # 耐久度付きアイテムはスタック不可なのでマージ対象外
             if item.item_spec.durability_max is not None:
@@ -91,7 +95,7 @@ class ItemStackingDomainService:
     @staticmethod
     def plan_crafting_consumption(
         recipe: RecipeAggregate,
-        available_items: List[ItemAggregate]
+        available_items: list[ItemAggregate]
     ) -> CraftingConsumptionPlan:
         """クラフト材料消費計画を作成
 
@@ -110,7 +114,7 @@ class ItemStackingDomainService:
             InsufficientIngredientsException: 材料が不足している場合
         """
         # スペックIDごとにアイテムをグループ化
-        items_by_spec = {}
+        items_by_spec: dict[ItemSpecId, list[ItemAggregate]] = {}
         for item in available_items:
             spec_id = item.item_spec.item_spec_id
             if spec_id not in items_by_spec:
@@ -179,7 +183,7 @@ class ItemStackingDomainService:
         )
 
     @staticmethod
-    def _plan_merge_same_spec_items(items: List[ItemAggregate]) -> MergePlan:
+    def _plan_merge_same_spec_items(items: list[ItemAggregate]) -> MergePlan:
         """同じスペックのアイテムをマージする計画を作成"""
         if not items:
             return MergePlan(

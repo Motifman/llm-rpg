@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import sqlite3
+from datetime import datetime, timezone
 
 import pytest
 
@@ -23,11 +23,11 @@ from ai_rpg_world.domain.trade.event.trade_event import (
 )
 from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.trade.value_object.trade_requested_gold import (
-    TradeRequestedGold,
-)
 from ai_rpg_world.domain.trade.value_object.trade_listing_projection import (
     TradeListingProjection,
+)
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import (
+    TradeRequestedGold,
 )
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.infrastructure.events.trade_projection_executor import (
@@ -37,13 +37,13 @@ from ai_rpg_world.infrastructure.events.trade_projection_executor import (
 from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import (
     InMemoryTradeReadModelRepository,
 )
+from ai_rpg_world.infrastructure.repository.sqlite_migration import get_applied_version
 from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository import (
     SqliteTradeReadModelRepository,
 )
 from ai_rpg_world.infrastructure.repository.trade_read_model_sqlite import (
     init_trade_read_model_schema,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_migration import get_applied_version
 
 
 def _read_model(trade_id: int) -> TradeReadModel:

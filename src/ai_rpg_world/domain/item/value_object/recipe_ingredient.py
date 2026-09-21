@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
 from ai_rpg_world.domain.item.exception.item_exception import QuantityValidationException
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
 @dataclass(frozen=True)
@@ -12,7 +13,7 @@ class RecipeIngredient:
     item_spec_id: ItemSpecId
     quantity: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.quantity <= 0:
             raise QuantityValidationException(f"Recipe ingredient: quantity must be positive, got {self.quantity}")

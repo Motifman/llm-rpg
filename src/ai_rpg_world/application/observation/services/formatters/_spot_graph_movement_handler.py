@@ -5,15 +5,14 @@ SpotGraph の event のうち「プレイヤー本人の移動/操作」に相�
 social として届ける。
 """
 
-from typing import Any, Optional
-
-from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
-    declaration_hides_actor,
-)
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
     _SpotGraphFormatterBase,
+)
+from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
+    declaration_hides_actor,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
@@ -29,7 +28,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, EntityEnteredSpotEvent):
             return self._format_entity_entered(event, recipient_player_id)
         if isinstance(event, EntityLeftSpotEvent):
@@ -42,7 +41,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
 
     def _format_entity_entered(
         self, event: EntityEnteredSpotEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
@@ -51,9 +50,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         # 観測になり、追跡行動 (= 「あちらから来た = どこへ向かう方向か」) の
         # 手がかりにできる。``from_spot_id`` が None (= scenario 開始時の
         # 初期配置) は従来通り「やってきた」のみ。
-        connection_name: Optional[str] = None
-        from_spot_name: Optional[str] = None
-        from_spot_id_value: Optional[int] = None
+        connection_name: str | None = None
+        from_spot_name: str | None = None
+        from_spot_id_value: int | None = None
         if event.from_spot_id is not None:
             from_spot_name = self._resolve_spot_name(event.from_spot_id)
             from_spot_id_value = event.from_spot_id.value
@@ -86,7 +85,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         )
 
     @staticmethod
-    def _declared_prose(event: Any, actor: str) -> Optional[str]:
+    def _declared_prose(event: Any, actor: str) -> str | None:
         """宣言された観測文があればそれを返す (既定文の**差し替え**)。
 
         接続を辿らない移動 (``TELEPORT_ENTITY``) で、シナリオが「通気口から
@@ -103,7 +102,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
 
     def _format_entity_left(
         self, event: EntityLeftSpotEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
@@ -139,8 +138,8 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         *,
         actor: str,
         spot_name: str,
-        from_spot_name: Optional[str],
-        connection_name: Optional[str],
+        from_spot_name: str | None,
+        connection_name: str | None,
     ) -> str:
         """進入観測の prose を組み立てる (フォールバックを段階化)。"""
         # 接続名と進入元の両方が解決できる場合は最も情報量の多い文を返す
@@ -159,7 +158,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         *,
         actor: str,
         to_spot_name: str,
-        connection_name: Optional[str],
+        connection_name: str | None,
     ) -> str:
         """退出観測の prose を組み立てる (接続名が解決できないケースも考慮)。"""
         # 行き先が「不明なスポット」のときは方向が分からない (= 接続情報の取得
@@ -175,7 +174,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
 
     def _resolve_connection_name(
         self, from_spot_id: Any, to_spot_id: Any,
-    ) -> Optional[str]:
+    ) -> str | None:
         """``from_spot_id`` → ``to_spot_id`` の接続の通り名を返す (見つからなければ None)。
 
         通行可否を問わず最初に見つかった接続を返す: イベント発生時は当該接続が
@@ -198,12 +197,12 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
 
     def _format_explored(
         self, event: SpotExploredEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         prose = f"{actor}が周囲を探索している。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_explored",
             "actor": actor,
         }
@@ -216,13 +215,13 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
 
     def _format_prepared_action(
         self, event: SpotPlayerPreparedActionEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         # アクター本人は自身の prepare 操作結果をツール側で受け取るため除外。
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         prose = event.observation_message
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_player_prepared_action",
             "actor": actor,
             "action_id": event.action_id,

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from ai_rpg_world.presentation.spot_graph_game.dependencies import get_runtime_manager
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
     EventLogResponse,
     InventoryResponse,
     SpotViewResponse,
 )
-from ai_rpg_world.presentation.spot_graph_game.dependencies import get_runtime_manager
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["observations"])
 

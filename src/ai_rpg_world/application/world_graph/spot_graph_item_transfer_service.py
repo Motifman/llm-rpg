@@ -16,13 +16,14 @@ LLM ツール配線は別経路で行う (本サービスは tool 経路にも r
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemNotInSlotException,
 )
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -252,12 +253,10 @@ class SpotGraphItemTransferService:
     def __init__(
         self,
         *,
-        spot_graph_repository: "SpotGraphReadRepositoryPort",
+        spot_graph_repository: SpotGraphReadRepositoryPort,
         spot_interior_repository: ISpotInteriorRepository,
-        player_outcome_registry: Optional[PlayerOutcomeRegistry] = None,
-        item_transfer_command_scope_factory: Optional[
-            "CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort]"
-        ] = None,
+        player_outcome_registry: PlayerOutcomeRegistry | None = None,
+        item_transfer_command_scope_factory: CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort] | None = None,
     ) -> None:
         # spot-graph 世界では「プレイヤーがどこに居るか」は
         # PlayerStatusAggregate ではなく SpotGraphAggregate.get_entity_spot で
@@ -269,14 +268,14 @@ class SpotGraphItemTransferService:
         self._item_transfer_command_scope_factory = item_transfer_command_scope_factory
 
     def set_player_outcome_registry(
-        self, player_outcome_registry: Optional[PlayerOutcomeRegistry]
+        self, player_outcome_registry: PlayerOutcomeRegistry | None
     ) -> None:
         """target の DEAD outcome を確認する registry を後付けで注入する。"""
         self._player_outcome_registry = player_outcome_registry
 
     def _require_command_scope_factory(
         self,
-    ) -> "CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort]":
+    ) -> CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort]:
         factory = self._item_transfer_command_scope_factory
         if factory is None:
             raise RuntimeError("item transfer用CommandScopeFactoryが未配線です。")
@@ -322,7 +321,7 @@ class SpotGraphItemTransferService:
         player_inventory_repository: PlayerInventoryRepository,
         spot_interior_repository: ISpotInteriorRepository,
         item_repository: ItemRepository,
-        spot_graph_repository: "SpotGraphReadRepositoryPort",
+        spot_graph_repository: SpotGraphReadRepositoryPort,
     ) -> tuple[ItemTransferResult, PlayerDroppedItemEvent]:
         """一つのrepository集合だけでdropの状態遷移と観測eventを作る。"""
         inventory = player_inventory_repository.find_by_id(player_id)
@@ -434,7 +433,7 @@ class SpotGraphItemTransferService:
         player_inventory_repository: PlayerInventoryRepository,
         spot_interior_repository: ISpotInteriorRepository,
         item_repository: ItemRepository,
-        spot_graph_repository: "SpotGraphReadRepositoryPort",
+        spot_graph_repository: SpotGraphReadRepositoryPort,
     ) -> tuple[ItemTransferResult, PlayerPickedUpItemEvent]:
         """一つのrepository集合だけでpickupの状態遷移と観測eventを作る。"""
         spot_id = self._resolve_current_spot(
@@ -561,9 +560,9 @@ class SpotGraphItemTransferService:
         slot_id: SlotId,
         *,
         player_inventory_repository: PlayerInventoryRepository,
-        player_status_repository: Optional[PlayerStatusRepository],
+        player_status_repository: PlayerStatusRepository | None,
         item_repository: ItemRepository,
-        spot_graph_repository: "SpotGraphReadRepositoryPort",
+        spot_graph_repository: SpotGraphReadRepositoryPort,
     ) -> tuple[ItemTransferResult, PlayerGaveItemEvent]:
         """1つのrepository集合だけを使って受渡し結果と観測eventを作る。"""
         if from_player_id.value == to_player_id.value:
@@ -681,7 +680,7 @@ class SpotGraphItemTransferService:
         self,
         player_id: PlayerId,
         *,
-        spot_graph_repository: Optional["SpotGraphReadRepositoryPort"] = None,
+        spot_graph_repository: SpotGraphReadRepositoryPort | None = None,
     ) -> SpotId:
         repository = spot_graph_repository or self._spot_graph_repository
         graph = repository.find_graph()

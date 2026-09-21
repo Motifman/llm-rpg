@@ -14,24 +14,24 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 _TOWN = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "market_town_v1.json"
 
 
-def _raw() -> Dict[str, Any]:
+def _raw() -> dict[str, Any]:
     return json.loads(_TOWN.read_text(encoding="utf-8"))
 
 
-def _load(raw: Dict[str, Any], tmp_path: Path):
+def _load(raw: dict[str, Any], tmp_path: Path):
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return ScenarioLoader().load_from_file(path)

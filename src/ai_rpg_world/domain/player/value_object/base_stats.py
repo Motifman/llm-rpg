@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget
 from ai_rpg_world.domain.player.exception import BaseStatsValidationException
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.combat.value_object.status_modifier import StatusModifier
@@ -19,7 +19,7 @@ class BaseStats:
     critical_rate: float
     evasion_rate: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.max_hp < 0:
             raise BaseStatsValidationException(f"max_hp must be greater than 0. max_hp: {self.max_hp}")
         if self.max_mp < 0:
@@ -54,7 +54,7 @@ class BaseStats:
             evasion_rate=min(1.0, self.evasion_rate + growth_factor.evasion_rate_factor),
         )
 
-    def apply_modifiers(self, modifiers: List['StatusModifier']) -> 'BaseStats':
+    def apply_modifiers(self, modifiers: list['StatusModifier']) -> 'BaseStats':
         """ステータス補正を適用した新しいBaseStatsを返す
         
         計算順序: (基本値 + 加算補正の合計) * 乗算補正の積
@@ -79,19 +79,22 @@ class BaseStats:
             elif mod.modifier_type == ModifierType.MULTIPLICATIVE:
                 stats_map[mod.target]["mul"] *= mod.value
 
-        def calc(target: StatTarget, is_float: bool = False):
+        def raw(target: StatTarget) -> float:
             data = stats_map[target]
-            val = (data["base"] + data["add"]) * data["mul"]
-            if is_float:
-                return max(0.0, min(1.0, val))
-            return max(0, int(val))
+            return float((data["base"] + data["add"]) * data["mul"])
+
+        def calc_amount(target: StatTarget) -> int:
+            return max(0, int(raw(target)))
+
+        def calc_rate(target: StatTarget) -> float:
+            return max(0.0, min(1.0, raw(target)))
 
         return BaseStats(
-            max_hp=calc(StatTarget.MAX_HP),
-            max_mp=calc(StatTarget.MAX_MP),
-            attack=calc(StatTarget.ATTACK),
-            defense=calc(StatTarget.DEFENSE),
-            speed=calc(StatTarget.SPEED),
-            critical_rate=calc(StatTarget.CRITICAL_RATE, is_float=True),
-            evasion_rate=calc(StatTarget.EVASION_RATE, is_float=True),
+            max_hp=calc_amount(StatTarget.MAX_HP),
+            max_mp=calc_amount(StatTarget.MAX_MP),
+            attack=calc_amount(StatTarget.ATTACK),
+            defense=calc_amount(StatTarget.DEFENSE),
+            speed=calc_amount(StatTarget.SPEED),
+            critical_rate=calc_rate(StatTarget.CRITICAL_RATE),
+            evasion_rate=calc_rate(StatTarget.EVASION_RATE),
         )

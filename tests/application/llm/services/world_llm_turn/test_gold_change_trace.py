@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pytest
 
@@ -26,15 +26,15 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class _Purse:
     """呼ばれるたびに決めた額を返す、所持金の読み取り役。"""
 
-    def __init__(self, *amounts: Optional[int]) -> None:
+    def __init__(self, *amounts: int | None) -> None:
         self._amounts = list(amounts)
 
-    def __call__(self, player_id: PlayerId) -> Optional[int]:
+    def __call__(self, player_id: PlayerId) -> int | None:
         return self._amounts.pop(0) if self._amounts else None
 
 
-def _handler(trace_payload: Optional[Dict[str, Any]] = None, *, success: bool = True):
-    def _run(player_id: PlayerId, arguments: Dict[str, Any],
+def _handler(trace_payload: dict[str, Any] | None = None, *, success: bool = True):
+    def _run(player_id: PlayerId, arguments: dict[str, Any],
              runtime_context: Any) -> LlmCommandResultDto:
         return LlmCommandResultDto(
             success=success, message="やった", trace_payload=trace_payload,
@@ -42,7 +42,7 @@ def _handler(trace_payload: Optional[Dict[str, Any]] = None, *, success: bool = 
     return _run
 
 
-def _call(handler) -> Optional[Dict[str, Any]]:
+def _call(handler) -> dict[str, Any] | None:
     return handler(PlayerId(1), {}, None).trace_payload
 
 
@@ -203,10 +203,10 @@ class _Ledger:
         return [PlayerId(pid) for pid in sorted(self.amounts)]
 
 
-def _moving_handler(ledger: _Ledger, moves: Dict[int, int], *, declared=()):
+def _moving_handler(ledger: _Ledger, moves: dict[int, int], *, declared=()):
     """実行時に複数人の所持金を動かす handler。"""
 
-    def _run(player_id: PlayerId, arguments: Dict[str, Any],
+    def _run(player_id: PlayerId, arguments: dict[str, Any],
              runtime_context: Any) -> LlmCommandResultDto:
         for pid, delta in moves.items():
             ledger.amounts[pid] += delta

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, FrozenSet, Tuple
+from typing import TYPE_CHECKING
 
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.application.world_graph.movement_command_repository_provider import (
     MovementCommandRepositoryProviderPort,
 )
-
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -29,12 +34,6 @@ from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service impor
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
-)
-from ai_rpg_world.application.player.services.player_perception_policy import (
-    PlayerPerceptionPolicy,
-)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext
@@ -47,7 +46,7 @@ if TYPE_CHECKING:
 class SpotTravelTickAdvanceDto:
     """1 ティック進行後の横断結果（観測・ログ用）。"""
 
-    entered_spot_ids: Tuple[SpotId, ...]
+    entered_spot_ids: tuple[SpotId, ...]
 
 
 class SpotGraphMovementApplicationService:
@@ -61,7 +60,7 @@ class SpotGraphMovementApplicationService:
         departed_position_store: DepartedPositionStore | None = None,
         player_perception_policy: PlayerPerceptionPolicy | None = None,
         command_scope_factory: (
-            "CommandScopeFactoryPort[MovementCommandRepositoryProviderPort]" | None
+            CommandScopeFactoryPort[MovementCommandRepositoryProviderPort] | None
         ) = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
@@ -73,14 +72,14 @@ class SpotGraphMovementApplicationService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[MovementCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[MovementCommandRepositoryProviderPort],
     ) -> None:
         """本番配線後の移動をcommandごとの確定境界へ載せる。"""
         self._command_scope_factory = factory
 
     def _require_command_scope_factory(
         self,
-    ) -> "CommandScopeFactoryPort[MovementCommandRepositoryProviderPort]":
+    ) -> CommandScopeFactoryPort[MovementCommandRepositoryProviderPort]:
         factory = self._command_scope_factory
         if factory is None:
             raise RuntimeError("移動用CommandScopeFactoryが未配線です。")
@@ -152,8 +151,8 @@ class SpotGraphMovementApplicationService:
         self,
         player_id: PlayerId,
         destination_spot_id: SpotId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
     ) -> None:
         """最短経路で移動を開始する。各区間の通行条件を開始時点で検証する。"""
         with self._require_command_scope_factory().create() as context:
@@ -171,8 +170,8 @@ class SpotGraphMovementApplicationService:
         self,
         player_id: PlayerId,
         destination_spot_id: SpotId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
         *,
         spot_graph_repository: ISpotGraphRepository,
         player_status_repository: PlayerStatusRepository,
@@ -230,8 +229,8 @@ class SpotGraphMovementApplicationService:
     def advance_spot_travel_one_tick(
         self,
         player_id: PlayerId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
     ) -> SpotTravelTickAdvanceDto | None:
         """移動中なら 1 ティック進める。グラフの move_entity を順に適用する。"""
         with self._require_command_scope_factory().create() as context:
@@ -248,12 +247,12 @@ class SpotGraphMovementApplicationService:
     def _advance_spot_travel_one_tick(
         self,
         player_id: PlayerId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
         *,
         spot_graph_repository: ISpotGraphRepository,
         player_status_repository: PlayerStatusRepository,
-        context: "CommandContext[MovementCommandRepositoryProviderPort] | None",
+        context: CommandContext[MovementCommandRepositoryProviderPort] | None,
     ) -> SpotTravelTickAdvanceDto | None:
         graph = spot_graph_repository.find_graph()
         existing_events = tuple(graph.get_events())

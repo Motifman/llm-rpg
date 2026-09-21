@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
-
+from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
+    ScenarioConditionEvaluator,
+)
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     remove_items_of_specs_from_inventory,
-)
-from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
-    ScenarioConditionEvaluator,
-)
-from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
-    ScenarioPredicateTraceEmitter,
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import (
     find_object_in_graph,
@@ -28,27 +28,27 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
-from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
-from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
 class _CommandContextEventPublisher:
     """既存publish_all入口をevent commandの収集口へ適合させる。"""
 
-    def __init__(self, context: "CommandContext") -> None:
+    def __init__(self, context: CommandContext) -> None:
         self._context = context
 
     def publish_all(self, events: Iterable[Any]) -> None:
@@ -84,15 +84,13 @@ class SpotGraphScenarioEventStageService:
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
         world_flag_state: MutableWorldFlagState,
-        progress_store: Optional[InMemorySpotGraphScenarioEventProgressStore] = None,
-        effect_service: Optional[WorldGraphEffectService] = None,
-        on_message: Optional[Callable[[ScenarioEventDef, str], None]] = None,
-        condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
-        predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
+        progress_store: InMemorySpotGraphScenarioEventProgressStore | None = None,
+        effect_service: WorldGraphEffectService | None = None,
+        on_message: Callable[[ScenarioEventDef, str], None] | None = None,
+        condition_evaluator: ScenarioConditionEvaluator | None = None,
+        predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         overflow_sink: Any = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
@@ -123,12 +121,12 @@ class SpotGraphScenarioEventStageService:
         self._overflow_sink = overflow_sink
         self._command_scope_factory = command_scope_factory
 
-    def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
+    def set_message_callback(self, callback: Callable[[ScenarioEventDef, str], None] | None) -> None:
         self._on_message = callback
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをevent定義1件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -179,7 +177,7 @@ class SpotGraphScenarioEventStageService:
         *,
         scheduled_event_id: str | None = None,
         scope_factory: (
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
         ),
     ) -> None:
         """event定義1件の効果・進捗・eventを一つのscopeで確定する。"""
@@ -228,7 +226,7 @@ class SpotGraphScenarioEventStageService:
         self,
         event_id: str,
         scope_factory: (
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
         ),
     ) -> None:
         """定義なし・発火済みの予約だけを安全に取り除く。"""
@@ -465,7 +463,7 @@ class SpotGraphScenarioEventStageService:
         *,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
-    ) -> Optional[SpotId]:
+    ) -> SpotId | None:
         graph = spot_graph_repository.find_graph()
         return find_owner_spot_id(object_id, graph, spot_interior_repository)
 

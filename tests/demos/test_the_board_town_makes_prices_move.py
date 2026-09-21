@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 
@@ -38,7 +38,7 @@ _LENA, _KAI, _TOM, _NORA, _MINA = (PlayerId(i) for i in range(1, 6))
 
 #: 職能の設計表。**行 = 人、列 = 仕事、値 = できるか。**
 #: 表を写すので、実装を見ずに書ける。
-_JOB_MATRIX: Dict[str, Dict[str, bool]] = {
+_JOB_MATRIX: dict[str, dict[str, bool]] = {
     "レナ":  {"gather_herb": True,  "bake_bread": False, "reap_wheat": False},
     "カイ":  {"gather_herb": True,  "bake_bread": False, "reap_wheat": False},
     "トム":  {"gather_herb": False, "bake_bread": True,  "reap_wheat": False},
@@ -47,7 +47,7 @@ _JOB_MATRIX: Dict[str, Dict[str, bool]] = {
 }
 
 #: 仕事ごとの (作業場, 対象オブジェクト)。
-_WORK: Dict[str, Tuple[str, str]] = {
+_WORK: dict[str, tuple[str, str]] = {
     "gather_herb": ("herb_slope", "herb_patch"),
     "bake_bread": ("bake_house", "stone_oven"),
     "reap_wheat": ("wheat_field", "wheat_rows"),
@@ -61,7 +61,7 @@ class _Town:
 
     def __init__(self) -> None:
         self.runtime = create_world_runtime(str(_TOWN))
-        self.raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+        self.raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
 
     def spot_of(self, player_id: PlayerId):
         graph = self.runtime._spot_graph_repo.find_graph()
@@ -80,11 +80,12 @@ class _Town:
         self.runtime._spot_graph_repo.save(graph)
 
     def give(self, player_id: PlayerId, item_id: str, count: int = 1) -> None:
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec_id = self.runtime.id_mapper.get_int("item_spec", item_id)
         grant_item_specs_to_inventory(
@@ -128,7 +129,7 @@ class _Town:
             current_tick=WorldTick(self.runtime.current_tick()),
         )
 
-    def count_items(self, player_id: PlayerId) -> Dict[str, int]:
+    def count_items(self, player_id: PlayerId) -> dict[str, int]:
         """所持品を item_spec の文字列 id ごとに数える。"""
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             count_owned_item_instances_by_spec,
@@ -138,7 +139,7 @@ class _Town:
         counts = count_owned_item_instances_by_spec(
             inventory, self.runtime._item_repo
         )
-        by_string: Dict[str, int] = {}
+        by_string: dict[str, int] = {}
         for string_id in ("bread", "herb", "wheat"):
             spec_int = self.runtime.id_mapper.get_int("item_spec", string_id)
             by_string[string_id] = sum(
@@ -146,7 +147,7 @@ class _Town:
             )
         return by_string
 
-    def tool_names_offered_to(self, player_id: PlayerId) -> List[str]:
+    def tool_names_offered_to(self, player_id: PlayerId) -> list[str]:
         """その人の手番で LLM へ実際に払い出されるツール名の一覧。"""
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
             _WorldLlmWiring,
@@ -154,7 +155,7 @@ class _Town:
 
         class _CaptureClient:
             def __init__(self) -> None:
-                self.tools: List[Any] = []
+                self.tools: list[Any] = []
 
             def invoke(self, messages, tools, tool_choice="required", **kwargs):
                 self.tools = tools

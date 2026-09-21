@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -34,8 +34,8 @@ _TOWN = (
 _TICKS = 5
 
 
-def _world(tmp_path: Path, needs: Dict[str, Any] | None) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+def _world(tmp_path: Path, needs: dict[str, Any] | None) -> Any:
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     if needs is None:
         raw.pop("needs", None)
     else:

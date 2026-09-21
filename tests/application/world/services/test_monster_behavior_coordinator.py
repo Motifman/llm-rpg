@@ -1,22 +1,22 @@
-from types import SimpleNamespace
 import unittest.mock as mock
+from types import SimpleNamespace
 
-from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
-    MonsterBehaviorCoordinator,
-)
 from ai_rpg_world.application.world.services.monster_behavior_context_builder import (
     MonsterBehaviorContextBuilder,
+)
+from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
+    MonsterBehaviorCoordinator,
 )
 from ai_rpg_world.application.world.services.monster_target_context_builder import (
     MonsterTargetContextBuilder,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
-from ai_rpg_world.domain.world.entity.world_object_component import (
-    AutonomousBehaviorComponent,
-)
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
     PursuitFailureReason,
+)
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    AutonomousBehaviorComponent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction

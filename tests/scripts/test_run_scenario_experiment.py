@@ -5,19 +5,19 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.application.trace import (
     JsonlTraceRecorder,
     TraceEventKind,
-)
-from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-    ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
-from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
@@ -28,8 +28,8 @@ from scripts.run_scenario_experiment import (  # noqa: E402
     _drive_scenario,
     _emit_html_artifacts,
     _outcome_and_reason,
-    _runtime_config_mapping_from_source,
     _render_map_viewer_html,
+    _runtime_config_mapping_from_source,
     main,
 )
 
@@ -595,8 +595,9 @@ class TestMaxWorldTicksRename:
     def test_uses_progress_jsonl_max_world_ticks_key(self, tmp_path: Path) -> None:
         """progress.jsonl entry の最大値フィールドが ``max_world_ticks``
         (旧 ``max_ticks``) になっている。集計スクリプトの追従漏れを検知する。"""
-        from scripts.run_scenario_experiment import _ExperimentProgressReporter
         import io
+
+        from scripts.run_scenario_experiment import _ExperimentProgressReporter
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
             max_world_ticks=10,
@@ -750,6 +751,56 @@ class TestExperimentProfileManifest:
         assert cfg.openrouter_provider == "Cloudflare"
         assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_turn_parallel_workers == 8
+
+    def test_station_drill_reply_gate_only_turns_on_judgment_and_moves_provider(
+        self,
+    ) -> None:
+        """返答の門の観察腕は thinking から provider と型付き判断の 2 つだけを変える。"""
+        thinking = self._load_profile("station_drill_thinking")
+        reply_gate = self._load_profile("station_drill_reply_gate")
+        expected = dict(thinking)
+        expected["profile"] = "station_drill_reply_gate"
+        expected["description"] = (
+            "他者の発言で起こすかを Jev の返答判断で決める門の観察用。"
+            "station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の"
+            " 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で"
+            " tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯"
+            "により全滅する。"
+        )
+        expected["runtime_config"] = dict(thinking["runtime_config"])
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "StreamLake"
+        expected["runtime_config"]["TYPED_JUDGMENT_PROVIDER"] = "jev"
+
+        assert reply_gate == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(reply_gate)
+        )
+        assert cfg.openrouter_provider == "StreamLake"
+        assert cfg.typed_judgment_provider == "jev"
+        assert cfg.typed_judgment_turn_gate_enabled is False
+        assert cfg.llm_meeting_serial_turns is False
+
+    def test_station_drill_gemma_reply_gate_only_swaps_the_model_stack(self) -> None:
+        """Gemma 腕は reply_gate からモデル・provider・reasoning の 3 つだけを変える。"""
+        base = self._load_profile("station_drill_reply_gate")
+        gemma = self._load_profile("station_drill_gemma_reply_gate")
+        expected = dict(base)
+        expected["profile"] = "station_drill_gemma_reply_gate"
+        expected["description"] = gemma["description"]
+        expected["runtime_config"] = dict(base["runtime_config"])
+        expected["runtime_config"]["LLM_MODEL"] = "openrouter/google/gemma-4-31b-it"
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Venice"
+        expected["runtime_config"]["LLM_REASONING_EFFORT"] = "none"
+
+        assert gemma == expected
+        assert "Venice" in gemma["description"] and "none" in gemma["description"]
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(gemma)
+        )
+        assert cfg.llm_model == "openrouter/google/gemma-4-31b-it"
+        assert cfg.openrouter_provider == "Venice"
+        assert cfg.llm_reasoning_effort == "none"
+        assert cfg.typed_judgment_provider == "jev"
 
     def test_station_drill_deepseek_auto_only_changes_provider_and_tool_choice(
         self,
@@ -1047,10 +1098,11 @@ class TestExperimentProfileManifest:
 
     def test_prompt_dataset_runtime_config_keeps_llm_api_key_none(self) -> None:
         """prompt dataset の run metadata には API key placeholder も保存しない。"""
+        import scripts.run_scenario_experiment as runner
+
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )
-        import scripts.run_scenario_experiment as runner
 
         cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key="sk-secret")
 

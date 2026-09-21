@@ -15,15 +15,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Dict, Iterable, Optional, Protocol, runtime_checkable
+from collections.abc import Iterable, Mapping
+from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 def compute_habituation_penalty(
     *,
-    last_recalled_tick: Optional[int],
+    last_recalled_tick: int | None,
     current_tick: int,
     decay_window: int,
 ) -> int:
@@ -58,7 +58,7 @@ class IEpisodicRecallHabituationStore(Protocol):
 
     def get_last_recalled_tick(
         self, being_id: BeingId, episode_id: str
-    ) -> Optional[int]:
+    ) -> int | None:
         """指定 episode の直近 recall tick を返す。未記録なら ``None``。"""
         ...
 
@@ -96,11 +96,11 @@ class InMemoryEpisodicRecallHabituationStore(IEpisodicRecallHabituationStore):
     """
 
     def __init__(self) -> None:
-        self._by_being: Dict[BeingId, Dict[str, int]] = {}
+        self._by_being: dict[BeingId, dict[str, int]] = {}
 
     def get_last_recalled_tick(
         self, being_id: BeingId, episode_id: str
-    ) -> Optional[int]:
+    ) -> int | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         inner = self._by_being.get(being_id)

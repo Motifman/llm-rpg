@@ -1,8 +1,9 @@
 """ObservationFormatterContext のテスト。"""
 
-import pytest
 from dataclasses import FrozenInstanceError
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,

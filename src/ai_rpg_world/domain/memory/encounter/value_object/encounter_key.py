@@ -14,12 +14,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar, FrozenSet
+from typing import ClassVar
 
 from ai_rpg_world.domain.memory.encounter.exception.encounter_exception import (
     EncounterKeyValidationException,
 )
-
 
 # canonical separator。kind と identifier 自身がこれを含むことは禁止する。
 _SEPARATOR = ":"
@@ -43,7 +42,7 @@ class EncounterKey:
 
     #: 既知の kind 一覧。未知 kind を拒否するのではなく、後方互換を保ちつつ
     #: 「想定されている kind」を明示するための参考値。
-    KNOWN_KINDS: ClassVar[FrozenSet[str]] = frozenset(
+    KNOWN_KINDS: ClassVar[frozenset[str]] = frozenset(
         {"player", "spot", "event", "object", "weather", "emotion"}
     )
 
@@ -78,19 +77,19 @@ class EncounterKey:
     # ────────────────────────────────────────────────────────
 
     @classmethod
-    def player(cls, identifier: str) -> "EncounterKey":
+    def player(cls, identifier: str) -> EncounterKey:
         return cls(kind="player", identifier=identifier)
 
     @classmethod
-    def spot(cls, identifier: str) -> "EncounterKey":
+    def spot(cls, identifier: str) -> EncounterKey:
         return cls(kind="spot", identifier=identifier)
 
     @classmethod
-    def event(cls, identifier: str) -> "EncounterKey":
+    def event(cls, identifier: str) -> EncounterKey:
         return cls(kind="event", identifier=identifier)
 
     @classmethod
-    def from_canonical(cls, canonical: str) -> "EncounterKey":
+    def from_canonical(cls, canonical: str) -> EncounterKey:
         """``"kind:identifier"`` 文字列を parse する。
 
         Raises:

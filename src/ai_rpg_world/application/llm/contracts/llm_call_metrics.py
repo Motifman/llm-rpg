@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
 from ai_rpg_world.application.llm.ports.llm_client_port import ToolChoice
 
@@ -71,17 +71,17 @@ class LlmCallMetrics:
     completion_tokens: int
     tps: float
     success: bool
-    error_code: Optional[str] = None
+    error_code: str | None = None
     cached_tokens: int = 0
     reasoning_tokens: int = 0
     cost_usd: float = 0.0
     error_detail: str = ""
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
     tool_choice: ToolChoice = ""
     phase: str = "one_step"
-    llm_call_id: Optional[str] = None
+    llm_call_id: str | None = None
     discarded_tool_calls: int = 0
-    tool_call_combination: Optional[tuple[str, ...]] = None
+    tool_call_combination: tuple[str, ...] | None = None
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:

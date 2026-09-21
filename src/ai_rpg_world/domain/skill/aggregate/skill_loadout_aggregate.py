@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from math import floor
-from typing import Dict
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
@@ -32,7 +31,7 @@ class AwakenState:
     active_until_tick: int = 0
     cooldown_reduction_rate: float = 0.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.active_until_tick < 0:
             raise SkillAwakenStateException(
                 f"active_until_tick cannot be negative: {self.active_until_tick}"
@@ -53,7 +52,7 @@ class SkillLoadoutAggregate(AggregateRoot):
         normal_deck: SkillDeck,
         awakened_deck: SkillDeck,
         awaken_state: AwakenState = AwakenState(),
-        skill_cooldowns_until: Dict[int, int] | None = None,
+        skill_cooldowns_until: dict[int, int] | None = None,
         cast_lock_until_tick: int = 0,
     ):
         super().__init__()

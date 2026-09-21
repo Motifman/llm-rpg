@@ -12,7 +12,7 @@ build_world_system_prompt / get_tool_definitions) に委譲する。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     SystemPromptPlayerInfoDto,
@@ -47,12 +47,12 @@ class WorldRuntimeQueryAdapter:
     time_label / tick_budget_remaining / spot_graph_snapshot を含む DTO を返す。
     """
 
-    def __init__(self, runtime: "WorldRuntime") -> None:
+    def __init__(self, runtime: WorldRuntime) -> None:
         self._runtime = runtime
 
     def get_player_current_state(
         self, query: GetPlayerCurrentStateQuery
-    ) -> Optional[PlayerCurrentStateDto]:
+    ) -> PlayerCurrentStateDto | None:
         pid = PlayerId(query.player_id)
         snap = self._runtime._state_builder.build_snapshot(int(pid))
         if snap is None:
@@ -69,10 +69,10 @@ class WorldProfileRepositoryAdapter:
     重要で、role/race/element は default で十分。
     """
 
-    def __init__(self, runtime: "WorldRuntime") -> None:
+    def __init__(self, runtime: WorldRuntime) -> None:
         self._runtime = runtime
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerProfileAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None:
         name_str = self._runtime.get_player_name(player_id)
         if not name_str:
             return None
@@ -97,7 +97,7 @@ class WorldSystemPromptBuilder(ISystemPromptBuilder):
     (旧挙動: 単体プレイ用 shared prompt)。
     """
 
-    def __init__(self, runtime: "WorldRuntime") -> None:
+    def __init__(self, runtime: WorldRuntime) -> None:
         self._runtime = runtime
 
     def build(self, player_info: SystemPromptPlayerInfoDto) -> str:
@@ -121,7 +121,7 @@ class WorldAvailableToolsProvider(IAvailableToolsProvider):
     """
 
     def get_available_tools(
-        self, context: Optional[PlayerCurrentStateDto]
-    ) -> List[Dict[str, Any]]:
+        self, context: PlayerCurrentStateDto | None
+    ) -> list[dict[str, Any]]:
         del context
         return []

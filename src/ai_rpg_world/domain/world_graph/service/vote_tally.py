@@ -24,8 +24,8 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -43,24 +43,24 @@ class VoteResult:
     """
 
     #: 追放される player。同点や棄権最多なら None。
-    ejected_player_id: Optional[PlayerId]
+    ejected_player_id: PlayerId | None
     #: 指名された player ごとの得票数 (棄権は含まない)。
-    counts: Dict[PlayerId, int]
+    counts: dict[PlayerId, int]
     #: 棄権の数。
     skip_count: int
     #: 誰が誰に入れたか。投票行動そのものが次の会議の材料になる。
-    ballots: Dict[PlayerId, Optional[PlayerId]]
+    ballots: dict[PlayerId, PlayerId | None]
 
 
 def resolve_vote(
-    ballots: Mapping[PlayerId, Optional[PlayerId]]
+    ballots: Mapping[PlayerId, PlayerId | None]
 ) -> VoteResult:
     """投じられた票から追放先を決める。
 
     Args:
         ballots: 投票者 -> 投票先。投票先 ``None`` は棄権。
     """
-    counts: Counter = Counter()
+    counts: Counter[PlayerId] = Counter()
     skip_count = 0
     for target in ballots.values():
         if target is None:
@@ -68,7 +68,7 @@ def resolve_vote(
             continue
         counts[target] += 1
 
-    ejected: Optional[PlayerId] = None
+    ejected: PlayerId | None = None
     if counts:
         top = max(counts.values())
         leaders = [pid for pid, n in counts.items() if n == top]

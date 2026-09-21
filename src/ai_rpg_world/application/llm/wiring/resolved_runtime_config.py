@@ -46,13 +46,13 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
 )
-
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_ATTRIBUTION_ENABLED",
@@ -133,6 +133,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_ENDPOINT",
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
+    "TYPED_JUDGMENT_TURN_GATE_ENABLED",
+    "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
@@ -182,6 +184,11 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
         typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
+        typed_judgment_turn_gate_enabled: tick の終わりに pending の全員へ「いま
+            動く必要があるか」を問う門を挟む。**既定は off**。provider を jev に
+            しても門は入らない (#222)。観察するときだけ明示的に true にする
+        typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
+            回さない。取りこぼしを避けるため小さく置く
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -206,12 +213,12 @@ class ResolvedLlmRuntimeConfig:
 
     # LLM client
     llm_client_kind: str
-    llm_model: Optional[str]
-    llm_api_key: Optional[str]
-    llm_api_base: Optional[str]
+    llm_model: str | None
+    llm_api_key: str | None
+    llm_api_base: str | None
     llm_request_timeout_seconds: float
     llm_reasoning_effort: str
-    llm_wall_time_cap_seconds: Optional[float]
+    llm_wall_time_cap_seconds: float | None
     llm_rate_limit_retry_attempts: int
     llm_rate_limit_retry_base_sleep: float
     llm_turn_parallel_workers: int
@@ -222,8 +229,8 @@ class ResolvedLlmRuntimeConfig:
     llm_session_id_enabled: bool
 
     # OpenRouter routing
-    openrouter_provider: Optional[str]
-    openrouter_quantization: Optional[str]
+    openrouter_provider: str | None
+    openrouter_quantization: str | None
     openrouter_require_params: bool
 
     # 型付き判断 (#1319)
@@ -234,6 +241,8 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_api_key_env: str
     typed_judgment_action_name_min_confidence: float
     typed_judgment_memo_min_probability: float
+    typed_judgment_turn_gate_enabled: bool
+    typed_judgment_turn_gate_skip_below: float
 
     # Episodic memory
     episodic_enabled: bool
@@ -329,7 +338,7 @@ class ResolvedLlmRuntimeConfig:
     tool_mode: str = "default"
     memo_tools_enabled: bool = True
     escape_llm_ssot_enabled: bool = False
-    scenario_random_seed: Optional[int] = None
+    scenario_random_seed: int | None = None
     prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
     distant_view_trace_enabled: bool = False
@@ -345,7 +354,7 @@ class ResolvedLlmRuntimeConfig:
     # os.environ を直読みしており profile/manifest の外で決まっていた
     # (PR #736 の単一窓口化で取り残されていた env)。config に載せ替えて
     # 解決経路を from_mapping の 1 本に固定し、run_start / manifest に残す。
-    subjective_episode_db_path: Optional[str] = None
+    subjective_episode_db_path: str | None = None
 
     # ──────────────────────────────────────────────────────────────
     # Invariants
@@ -449,8 +458,8 @@ class ResolvedLlmRuntimeConfig:
     @classmethod
     def from_mapping(
         cls,
-        values: Optional[Mapping[str, str]] = None,
-    ) -> "ResolvedLlmRuntimeConfig":
+        values: Mapping[str, str] | None = None,
+    ) -> ResolvedLlmRuntimeConfig:
         """設定値から全フィールドを resolve する (PR 2/6 の核心)。
 
         - ``values`` 省略時は空設定として扱う。環境変数は読まない
@@ -467,11 +476,11 @@ class ResolvedLlmRuntimeConfig:
             resolve_section_order_from_env,
         )
         from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_episodic_explore_related_enabled,
-            resolve_episodic_recall_enabled,
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
+            resolve_episodic_explore_related_enabled,
+            resolve_episodic_recall_enabled,
             resolve_error_driven_reinterpretation_enabled,
             resolve_error_gated_encoding_enabled,
             resolve_goal_reflect_enabled,
@@ -588,6 +597,17 @@ class ResolvedLlmRuntimeConfig:
             source,
             "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
             default=_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY,
+        )
+        try:
+            typed_judgment_turn_gate_enabled = _parse_truthy(
+                source.get("TYPED_JUDGMENT_TURN_GATE_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"TYPED_JUDGMENT_TURN_GATE_ENABLED: {exc}") from exc
+        typed_judgment_turn_gate_skip_below = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
+            default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW,
         )
 
         # OpenRouter routing
@@ -753,6 +773,8 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_action_name_min_confidence
             ),
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
+            typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
+            typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -807,7 +829,7 @@ class ResolvedLlmRuntimeConfig:
         )
 
     @classmethod
-    def for_tests(cls, **overrides: Any) -> "ResolvedLlmRuntimeConfig":
+    def for_tests(cls, **overrides: Any) -> ResolvedLlmRuntimeConfig:
         """test 用の safe default factory (PR #446 architect 提案)。
 
         全フィールドを「最も無害な default」で埋め、上書きしたい項目だけ
@@ -859,6 +881,10 @@ class ResolvedLlmRuntimeConfig:
             ),
             typed_judgment_memo_min_probability=(
                 _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
+            ),
+            typed_judgment_turn_gate_enabled=False,
+            typed_judgment_turn_gate_skip_below=(
+                _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
@@ -972,6 +998,11 @@ _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 #: 低くすると、意図していない操作へ寄せて別の失敗に化ける。
 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 
+#: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の門 (#217) で
+#: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
+_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
+
+
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})
 
@@ -992,7 +1023,7 @@ def _validate_runtime_config_keys(source: Mapping[str, str]) -> None:
         )
 
 
-def _strip_or_none(value: Optional[str]) -> Optional[str]:
+def _strip_or_none(value: str | None) -> str | None:
     """空文字 / None / 空白のみ → None、それ以外は strip した値。"""
     if value is None:
         return None
@@ -1000,7 +1031,7 @@ def _strip_or_none(value: Optional[str]) -> Optional[str]:
     return s or None
 
 
-def _parse_truthy(value: Optional[str], *, default: bool) -> bool:
+def _parse_truthy(value: str | None, *, default: bool) -> bool:
     """bool 解釈。``_parse_bool_env`` と同じロジック (PR #434 ポリシー)。
 
     未設定 / 空文字 → ``default``
@@ -1147,7 +1178,7 @@ def _resolve_reasoning_effort(source: Mapping[str, str]) -> str:
 def _resolve_optional_int(
     source: Mapping[str, str],
     env_name: str,
-) -> Optional[int]:
+) -> int | None:
     raw = (source.get(env_name) or "").strip()
     if not raw:
         return None
@@ -1209,7 +1240,7 @@ def _resolve_non_negative_float(
 
 def _resolve_optional_positive_float(
     source: Mapping[str, str], key: str
-) -> Optional[float]:
+) -> float | None:
     raw = (source.get(key) or "").strip()
     if not raw:
         return None

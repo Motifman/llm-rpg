@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
     STAGNATION_PRESSURE_BAND_NONE,
 )
-
 
 # --- 構造化エントリ（UiContextBuilder がラベル付与に使用） ---
 
@@ -18,10 +18,10 @@ class SpotGraphInteractionEntry:
     display_label: str
     # prompt 表示専用の前提条件ヒント。tool 解決に使う action_name とは分ける。
     # 例: ("夜不可", "嵐不可") → [fish_deep(夜不可・嵐不可)]
-    condition_hints: Tuple[str, ...] = ()
+    condition_hints: tuple[str, ...] = ()
     # prompt 表示専用の「この瞬間に満たしていない理由」。候補自体は残すが、
     # 選べる行動の角括弧からは分けて「いまできない」行に表示する。
-    blocking_hints: Tuple[str, ...] = ()
+    blocking_hints: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class SpotGraphConnectionEntry:
     connection_name: str
     destination_spot_name: str
     is_passable: bool
-    passage_condition_text: Optional[str] = None
+    passage_condition_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,11 +45,11 @@ class SpotGraphObjectEntry:
     object_id: int
     name: str
     description: str
-    interactions: Tuple[SpotGraphInteractionEntry, ...]
+    interactions: tuple[SpotGraphInteractionEntry, ...]
     # Phase 4-E: スポット内オブジェクトの可観測な state 値 (扉が開いている、
     # 燭台が点いている など)。プロンプト現在状態に「燭台: lit=True」のように
     # 載せるための入力。スポットに居る全員から見える前提なので絞り込みは無し。
-    state: Dict[str, Any] = field(default_factory=dict)
+    state: dict[str, Any] = field(default_factory=dict)
     # 行為者の伏せた条件により、宣言済みの操作が表示からすべて落ちたか。
     # 操作名や件数は持たせない。物体そのものを resolver 候補に残しつつ、
     # 偽装版などの存在をプロンプトへ漏らさないための内部判定だけに使う。
@@ -61,7 +61,7 @@ class SpotGraphObjectEntry:
     has_role_hidden_interactions: bool = False
     # 落ちた理由のうち、**変えられない属性**によるぶんの注記。公開された
     # 属性だけが入る。空なら従来どおりの注記に落ちる。
-    unreachable_attribute_notes: Tuple[str, ...] = ()
+    unreachable_attribute_notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -85,10 +85,10 @@ class SpotGraphWeatherEntry:
 class SpotGraphAtmosphereEntry:
     """雰囲気情報の構造化データ。"""
     lighting: str
-    sound_ambient: Optional[str]
+    sound_ambient: str | None
     temperature: str
-    smell: Optional[str]
-    perception_note: Optional[str] = None  # 照明知覚の補足テキスト
+    smell: str | None
+    perception_note: str | None = None  # 照明知覚の補足テキスト
 
 
 @dataclass(frozen=True)
@@ -142,8 +142,8 @@ class SpotGraphMerchantEntry:
 
     merchant_id: int
     name: str
-    sells: Tuple[SpotGraphMerchantPriceEntry, ...] = ()
-    buys: Tuple[SpotGraphMerchantPriceEntry, ...] = ()
+    sells: tuple[SpotGraphMerchantPriceEntry, ...] = ()
+    buys: tuple[SpotGraphMerchantPriceEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,7 +185,7 @@ class SpotGraphInventoryItemEntry:
     category: str = ""
     # item_specs[].interactions から解決した、所持者が知ってよい操作。
     # 物体行と同じ DTO を使い、表示・伏せる判断・待ち理由を二重化しない。
-    interactions: Tuple[SpotGraphInteractionEntry, ...] = ()
+    interactions: tuple[SpotGraphInteractionEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -238,7 +238,7 @@ class SpotGraphNearbyEntityEntry:
     # 行動不能の相手についてのみ埋める。起きて動いている相手の持ち物まで常時
     # 見えると窃盗が作業になって質感が薄れるので、奪う前に倒す必要が生まれる
     # 形にする (ユーザ確定)。
-    carried_item_names: Tuple[str, ...] = ()
+    carried_item_names: tuple[str, ...] = ()
     # **この相手に対して提示する**対人 action の構造化表示。
     #
     # snapshot 単位の 1 本のタプルだと全員の行に同じ一覧が出てしまい、
@@ -248,7 +248,7 @@ class SpotGraphNearbyEntityEntry:
     # 絞り込みに使ってよいのは **その行に既に見えている事実だけ**
     # (is_down / is_dead)。見えていない事実 (役割など) で絞ると、
     # ラベルの有無そのものが情報漏れになる。
-    action_entries: Tuple[SpotGraphInteractionEntry, ...] = ()
+    action_entries: tuple[SpotGraphInteractionEntry, ...] = ()
     # 幽霊が倒れた場所に居るときだけ出す、自分自身の身体を表す行。
     # 行為主体とは別の存在であり、tool の対象には登録しない。
     is_own_fallen_body: bool = False
@@ -291,7 +291,7 @@ class SpotGraphAgentStatusEntry:
     # 現在 busy 状態にあるか (= multi-tick action の途中)。
     busy: bool = False
     # busy の理由 (人間可読、例: "山頂への移動中")。None なら busy=False のときだけ。
-    busy_reason: Optional[str] = None
+    busy_reason: str | None = None
     # 残り何 tick で busy が終わるか。is_traveling 経由でわかる値。
     remaining_ticks: int = 0
     # busy 中でも「軽い行動」(speech, memo, examine 等) は可能。
@@ -315,17 +315,17 @@ class SpotGraphMarketRowEntry:
     """
 
     item_name: str
-    buy_price_gold: Optional[int] = None
+    buy_price_gold: int | None = None
     listing_count: int = 0
     buyable_quantity: int = 0
     #: この品を売るときに受け取る単価。None なら売れない (買い注文が無い)。
-    sell_price_gold: Optional[int] = None
+    sell_price_gold: int | None = None
     bid_count: int = 0
     sellable_quantity: int = 0
     #: 直近にこの品が実際に成立した単価。None なら一度も成立していない。
     #: 最良の売り値・買い値は「誰かが望んでいる値」でしかないので、値を付ける
     #: ときの確かな手がかりはこちらになる。
-    last_trade_price_gold: Optional[int] = None
+    last_trade_price_gold: int | None = None
 
 
 @dataclass(frozen=True)
@@ -364,22 +364,22 @@ class SpotGraphPlayerSnapshotDto:
     current_spot_id: int
     current_spot_name: str
     current_spot_description: str
-    travel_status_line: Optional[str]
+    travel_status_line: str | None
     # 現在状態を読む本人が、物理的な身体から離れた主体か。
     # 存在状態の説明と身体状態の非表示を同じ事実から導出する。
     viewer_is_departed: bool = False
     # 常時遠景。現在状態の一部として毎ターン再生成され、observation/episode には
     # 流さない。本文には area_id ではなく visible_name/name 由来の prose だけを載せる。
-    distant_view_lines: Tuple[str, ...] = ()
+    distant_view_lines: tuple[str, ...] = ()
 
-    connections: Tuple[SpotGraphConnectionEntry, ...] = ()
-    objects: Tuple[SpotGraphObjectEntry, ...] = ()
-    sub_locations: Tuple[SpotGraphSubLocationEntry, ...] = ()
-    atmosphere: Optional[SpotGraphAtmosphereEntry] = None
-    weather: Optional[SpotGraphWeatherEntry] = None
+    connections: tuple[SpotGraphConnectionEntry, ...] = ()
+    objects: tuple[SpotGraphObjectEntry, ...] = ()
+    sub_locations: tuple[SpotGraphSubLocationEntry, ...] = ()
+    atmosphere: SpotGraphAtmosphereEntry | None = None
+    weather: SpotGraphWeatherEntry | None = None
     # 現在時刻 (昼夜フェーズ) — シナリオが day_night を宣言していなければ None
-    time_of_day: Optional[SpotGraphTimeOfDayEntry] = None
-    nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
+    time_of_day: SpotGraphTimeOfDayEntry | None = None
+    nearby_entities: tuple[SpotGraphNearbyEntityEntry, ...] = ()
     #: 同席者行の見出しで「give_item で渡せる」と案内してよいか。
     #:
     #: 案内文はプロンプト本文なので、ツール定義を組む側の判断が届かない。
@@ -391,7 +391,7 @@ class SpotGraphPlayerSnapshotDto:
     #: engine のキー (``duty=weather``) をプロンプトに出さないため (#892)。
     #: 呼び名の出所はシナリオの宣言で、ここで新しく作らない。
     state_display_names: Mapping[str, Any] = field(default_factory=dict)
-    monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
+    monsters_at_spot: tuple[SpotGraphMonsterEntry, ...] = ()
     # 経済統合 Phase 1: この世界が商人を宣言しているか。
     #
     # 宣言していない世界では商人節も所持金行も出さない。**空の一覧と
@@ -399,12 +399,12 @@ class SpotGraphPlayerSnapshotDto:
     # 商人の居ない spot でも不在を明示する。
     economy_declared: bool = False
     # 現在地に居る NPC 商人。economy_declared が False のときは常に空。
-    merchants_at_spot: Tuple[SpotGraphMerchantEntry, ...] = ()
+    merchants_at_spot: tuple[SpotGraphMerchantEntry, ...] = ()
     # 行動者本人の所持金。economy_declared が False のときは表示しない。
     own_gold: int = 0
     # 経済統合 Phase 2: 自分宛てに来ている取引の申し出。宣言の無い世界では
     # 常に空で、節ごと出さない。
-    incoming_trade_offers: Tuple[SpotGraphTradeOfferEntry, ...] = ()
+    incoming_trade_offers: tuple[SpotGraphTradeOfferEntry, ...] = ()
     # 経済統合 Phase 3: 市場の掲示板。宣言の無い世界では常に False / 空で、
     # 節ごと出さない (既存シナリオの prompt を動かさない)。
     market_declared: bool = False
@@ -422,16 +422,16 @@ class SpotGraphPlayerSnapshotDto:
     # 無料で最新の板が見える世界では、値を読む巧拙が消える。自分の注文だけは
     # 残す — 外すと預けた品がどこからも見えなくなり、値を変える・取り下げる
     # 手がかりが消える (静かな失敗)。
-    market_own_orders: Tuple[SpotGraphMarketOwnOrderEntry, ...] = ()
-    inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
+    market_own_orders: tuple[SpotGraphMarketOwnOrderEntry, ...] = ()
+    inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
     # シナリオ初期配置)。pickup tool が G1, G2 ... ラベルで指せるよう
     # 構造化して保持する。
-    ground_items: Tuple[SpotGraphGroundItemEntry, ...] = ()
-    ground_item_lines: List[str] = field(default_factory=list)
+    ground_items: tuple[SpotGraphGroundItemEntry, ...] = ()
+    ground_item_lines: list[str] = field(default_factory=list)
 
     # エージェントの欲求状態テキスト
-    need_lines: Tuple[str, ...] = ()
+    need_lines: tuple[str, ...] = ()
 
     # 欲求そのもの (値オブジェクト)。**表示文とは別に持つ。**
     #
@@ -439,7 +439,7 @@ class SpotGraphPlayerSnapshotDto:
     # 「高い or 危険 を含むか」を見ていた。判定に要る値 (need_type と閾値) は
     # AgentNeed が持っているので、それを渡す。表示の言い回しを変えても検索語が
     # 変わらないようにするため (系統2)。
-    need_states: Tuple[Any, ...] = ()
+    need_states: tuple[Any, ...] = ()
 
     # 行動者本人の HP 行 (値 + 前 turn からの増減)。空文字は「HP 行を出さない」。
     # need_lines と同じ「身体の状態」section の先頭に描画する。従来は HP が
@@ -450,7 +450,7 @@ class SpotGraphPlayerSnapshotDto:
     # PR #2 状態異常: 適用中の StatusEffect を読みやすい文字列行に変換したもの。
     # 「出血 (残り 9 tick)」のような表記で LLM に渡し、bandage を探す行動連鎖を
     # 取れるようにする。effects が空のときは () を返す。
-    active_effect_lines: Tuple[str, ...] = ()
+    active_effect_lines: tuple[str, ...] = ()
 
     # 現在の行動状態 (travel 等の multi-tick action 中か)。busy=False が default。
     agent_status: SpotGraphAgentStatusEntry = field(
@@ -474,16 +474,16 @@ class SpotGraphPlayerSnapshotDto:
     # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
     # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。
     # 第三者観測には流れない (formatter は他プレイヤー snapshot を作らない設計)。
-    player_state: Dict[str, Any] = field(default_factory=dict)
+    player_state: dict[str, Any] = field(default_factory=dict)
     # 手番を記録する効果が書いた key。表示から外す。`tick` は世界の中に無い
     # 語 (#892) で、生値が出ると読み手はその数字で何も判断できない。
     hidden_player_state_keys: frozenset = field(default_factory=frozenset)
 
     # 後方互換用の文字列行（formatter のフォールバック用）
-    connection_lines: List[str] = field(default_factory=list)
-    sub_location_lines: List[str] = field(default_factory=list)
-    object_lines: List[str] = field(default_factory=list)
+    connection_lines: list[str] = field(default_factory=list)
+    sub_location_lines: list[str] = field(default_factory=list)
+    object_lines: list[str] = field(default_factory=list)
     # 物体名を知らない扱いにするためプロンプト本文へは出さない。LLM が記憶や
     # 目的文から名前を指定したときだけ、「不存在」ではなく暗さを理由として
     # 返すための内部照合に使う。
-    dark_hidden_object_names: Tuple[str, ...] = ()
+    dark_hidden_object_names: tuple[str, ...] = ()

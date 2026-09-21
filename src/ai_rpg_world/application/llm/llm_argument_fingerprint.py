@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, FrozenSet, Optional
-
+from typing import Any
 
 # Issue #264 第16回実験で「loop_guard が wait spam を検知できない」原因を分析した結果、
 # tool 引数に LLM の主観 narrative (inner_thought / reason 等) が含まれ、毎ターン
@@ -15,7 +14,7 @@ from typing import Any, Dict, FrozenSet, Optional
 #
 # このセットに含まれる field は LLM が「自分の心情・推論を記述する」フィールドで、
 # 外界に対する効果 (どの object に / どの場所へ / どんな action を) には寄与しない。
-NARRATIVE_ARG_FIELDS: FrozenSet[str] = frozenset({
+NARRATIVE_ARG_FIELDS: frozenset[str] = frozenset({
     "inner_thought",      # 全 world-action tool 共通の subjective narrative
     "reason",             # spot_graph_wait など
     "intention",          # world-action tool の主観入力 (目的)
@@ -25,7 +24,7 @@ NARRATIVE_ARG_FIELDS: FrozenSet[str] = frozenset({
 
 
 def build_argument_fingerprint(
-    arguments: Optional[Dict[str, Any]],
+    arguments: dict[str, Any] | None,
     *,
     strip_narrative: bool = True,
 ) -> str:
@@ -41,7 +40,7 @@ def build_argument_fingerprint(
     キーはソートして JSON 化するため、引数順序は無視される。
     """
     if arguments is None:
-        args: Dict[str, Any] = {}
+        args: dict[str, Any] = {}
     else:
         args = arguments
     if not isinstance(args, dict):

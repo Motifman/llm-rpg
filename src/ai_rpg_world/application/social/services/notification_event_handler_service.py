@@ -1,25 +1,27 @@
 import logging
-from typing import List, TYPE_CHECKING, Callable, Any, Optional, FrozenSet
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
+
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.event import (
-    SnsUserSubscribedEvent,
-    SnsUserFollowedEvent,
+    SnsContentLikedEvent,
     SnsPostCreatedEvent,
     SnsReplyCreatedEvent,
-    SnsContentLikedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
 )
-from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.sns.repository.sns_user_repository import SnsUserRepository
-    from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
     from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+    from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import SnsUserRepository
 
 
 class NotificationEventHandlerService:
@@ -133,7 +135,7 @@ class NotificationEventHandlerService:
         self._logger.info(f"Processing post created event: author={event.author_user_id}, post_id={event.post_id}")
 
         def operation():
-            notifications_to_save: List[Notification] = []
+            notifications_to_save: list[Notification] = []
             author_id = event.author_user_id
             author_name = event.author_display_name
             post_content_text = event.content.content
@@ -181,7 +183,7 @@ class NotificationEventHandlerService:
         self._logger.info(f"Processing reply created event: author={event.author_user_id}, reply_id={event.reply_id}")
 
         def operation():
-            notifications_to_save: List[Notification] = []
+            notifications_to_save: list[Notification] = []
             replier_id = event.author_user_id
             replier_name = event.author_display_name
             reply_text = event.content.content
@@ -285,12 +287,12 @@ class NotificationEventHandlerService:
         self,
         mentioner_user_id: UserId,
         mentioner_user_name: str,
-        mentioned_user_ids: FrozenSet[UserId],
+        mentioned_user_ids: frozenset[UserId],
         content_type: str,
         content_id: int,
-        content_text: Optional[str],
-    ) -> List[Notification]:
-        notifications: List[Notification] = []
+        content_text: str | None,
+    ) -> list[Notification]:
+        notifications: list[Notification] = []
         for mentioned_uid in mentioned_user_ids:
             notification_id = self._notification_repository.generate_notification_id()
             content = NotificationContent.create_mention_notification(

@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 class ItemAddedToInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
     """インベントリにアイテムが追加されたイベント"""
     item_instance_id: ItemInstanceId
-    item_spec_id_value: Optional[int] = None
+    item_spec_id_value: int | None = None
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ class ItemUnequippedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"])
     """アイテムが装備解除されたイベント"""
     item_instance_id: ItemInstanceId
     from_equipment_slot: EquipmentSlotType
-    to_slot_id: Optional[SlotId] = None  # Noneの場合はドロップ
+    to_slot_id: SlotId | None = None  # Noneの場合はドロップ
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,7 @@ class InventoryCompactionRequestedEvent(BaseDomainEvent[PlayerId, "PlayerInvento
 @dataclass(frozen=True)
 class InventoryCompactionCompletedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
     """インベントリ整理完了イベント"""
-    compacted_slots: Dict[SlotId, Optional[ItemInstanceId]]  # slot_id -> item_instance_id
+    compacted_slots: dict[SlotId, ItemInstanceId | None]  # slot_id -> item_instance_id
 
 
 @dataclass(frozen=True)

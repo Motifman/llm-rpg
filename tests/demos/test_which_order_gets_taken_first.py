@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict
+from typing import Any
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
@@ -73,7 +72,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any], player_id: PlayerId = _LENA):
+    def call(self, tool: str, args: dict[str, Any], player_id: PlayerId = _LENA):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )

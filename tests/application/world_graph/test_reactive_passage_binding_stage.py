@@ -10,6 +10,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service import (
     ReactivePassageBindingStageService,
@@ -43,7 +44,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
-from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _node(i: int, name: str = "") -> SpotNode:

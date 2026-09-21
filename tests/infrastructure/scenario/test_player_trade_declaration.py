@@ -8,18 +8,18 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict
+from typing import Any
 
 import pytest
-
-from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
-    ScenarioLoader,
-)
 from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
+from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    ScenarioLoader,
+    ScenarioLoadError,
+)
 
-def _scenario_with(block: Any) -> Dict[str, Any]:
+
+def _scenario_with(block: Any) -> dict[str, Any]:
     scenario = copy.deepcopy(_minimal_scenario())
     scenario["player_trade"] = block
     return scenario

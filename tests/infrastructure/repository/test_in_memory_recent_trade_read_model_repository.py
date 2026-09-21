@@ -1,13 +1,15 @@
 """
 InMemoryRecentTradeReadModelRepositoryのテスト
 """
-import pytest
 from datetime import datetime, timedelta
-from typing import List
 
-from ai_rpg_world.infrastructure.repository.in_memory_recent_trade_read_model_repository import InMemoryRecentTradeReadModelRepository
-from ai_rpg_world.domain.trade.read_model.recent_trade_read_model import RecentTradeReadModel, RecentTradeData
+import pytest
+
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.trade.read_model.recent_trade_read_model import RecentTradeData, RecentTradeReadModel
+from ai_rpg_world.infrastructure.repository.in_memory_recent_trade_read_model_repository import (
+    InMemoryRecentTradeReadModelRepository,
+)
 
 
 class TestInMemoryRecentTradeReadModelRepository:
@@ -63,7 +65,7 @@ class TestInMemoryRecentTradeReadModelRepository:
             assert isinstance(read_model, RecentTradeReadModel)
             assert isinstance(read_model.item_spec_id, ItemSpecId)
             assert isinstance(read_model.item_name, str)
-            assert isinstance(read_model.recent_trades, List)
+            assert isinstance(read_model.recent_trades, list)
             assert isinstance(read_model.last_updated, datetime)
 
     def test_save_new_read_model(self):

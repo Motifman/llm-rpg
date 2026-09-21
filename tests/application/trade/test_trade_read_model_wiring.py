@@ -10,6 +10,10 @@ from ai_rpg_world.application.trade.trade_read_model_wiring import (
     create_trade_read_model_repository_for_app,
     create_trade_read_model_repository_for_app_from_path,
 )
+from ai_rpg_world.infrastructure.events.trade_projection_executor import (
+    InMemoryTradeProjectionExecutor,
+    SqliteTradeProjectionExecutor,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import (
     InMemoryTradeReadModelRepository,
 )
@@ -24,10 +28,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_detail_read_model_repos
 )
 from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository import (
     SqliteTradeReadModelRepository,
-)
-from ai_rpg_world.infrastructure.events.trade_projection_executor import (
-    InMemoryTradeProjectionExecutor,
-    SqliteTradeProjectionExecutor,
 )
 
 

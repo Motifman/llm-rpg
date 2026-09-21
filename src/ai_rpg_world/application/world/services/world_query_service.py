@@ -1,38 +1,38 @@
 """ワールドクエリサービス（読み取り専用の位置情報等）"""
 
 import logging
-from typing import Optional, Callable, Any, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional
 
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
+from ai_rpg_world.application.observation.services.player_audience_query_service import (
+    PlayerAudienceQueryService,
+)
+from ai_rpg_world.application.world.contracts.dtos import (
+    PlayerCurrentStateDto,
+    PlayerLocationDto,
+    PlayerMovementOptionsDto,
+    SpotInfoDto,
+    VisibleContextDto,
+)
 from ai_rpg_world.application.world.contracts.queries import (
+    GetAvailableMovesQuery,
+    GetPlayerCurrentStateQuery,
     GetPlayerLocationQuery,
     GetSpotContextForPlayerQuery,
     GetVisibleContextQuery,
-    GetAvailableMovesQuery,
-    GetPlayerCurrentStateQuery,
 )
-from ai_rpg_world.application.world.contracts.dtos import (
-    PlayerLocationDto,
-    SpotInfoDto,
-    VisibleContextDto,
-    PlayerMovementOptionsDto,
-    PlayerCurrentStateDto,
+from ai_rpg_world.application.world.exceptions.base_exception import (
+    WorldApplicationException,
+    WorldSystemErrorException,
 )
-from ai_rpg_world.application.world.services.transition_condition_evaluator import (
-    TransitionConditionEvaluator,
-)
-from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
-from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MapNotFoundException,
     MovementCommandException,
     PlayerNotFoundException,
-    MapNotFoundException,
+)
+from ai_rpg_world.application.world.services.available_moves_query_service import (
+    AvailableMovesQueryService,
 )
 from ai_rpg_world.application.world.services.player_current_state_builder import (
     PlayerCurrentStateBuilder,
@@ -43,18 +43,26 @@ from ai_rpg_world.application.world.services.player_location_query_service impor
 from ai_rpg_world.application.world.services.spot_context_query_service import (
     SpotContextQueryService,
 )
-from ai_rpg_world.application.world.services.available_moves_query_service import (
-    AvailableMovesQueryService,
+from ai_rpg_world.application.world.services.transition_condition_evaluator import (
+    TransitionConditionEvaluator,
 )
 from ai_rpg_world.application.world.services.visible_context_query_service import (
     VisibleContextQueryService,
 )
-from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
-from ai_rpg_world.application.observation.services.player_audience_query_service import (
-    PlayerAudienceQueryService,
-)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+    from ai_rpg_world.application.conversation.services.conversation_command_service import (
+        ConversationCommandService,
+    )
     from ai_rpg_world.application.social.services.sns_mode_session_service import (
         SnsModeSessionService,
     )
@@ -62,22 +70,21 @@ if TYPE_CHECKING:
         SnsPageQueryService,
         SnsPageSessionService,
     )
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
     from ai_rpg_world.application.trade.trade_virtual_pages import (
         TradePageQueryService,
         TradePageSessionService,
     )
-    from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-    from ai_rpg_world.application.conversation.services.conversation_command_service import (
-        ConversationCommandService,
-    )
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.monster.repository.monster_repository import (
         MonsterRepository,
     )
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.player.repository.player_inventory_repository import (
         PlayerInventoryRepository,
     )
-    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import (
@@ -86,9 +93,6 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.world.service.world_time_config_service import (
         WorldTimeConfigService,
-    )
-    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
-        PersonalTradeQueryService,
     )
 
 
@@ -99,12 +103,12 @@ class WorldQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: Optional[PhysicalMapRepository],
+        physical_map_repository: PhysicalMapRepository | None,
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
         monster_repository: Optional["MonsterRepository"] = None,
-        transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
-        transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
+        transition_policy_repository: ITransitionPolicyRepository | None = None,
+        transition_condition_evaluator: TransitionConditionEvaluator | None = None,
         player_inventory_repository: Optional["PlayerInventoryRepository"] = None,
         item_repository: Optional["ItemRepository"] = None,
         conversation_command_service: Optional["ConversationCommandService"] = None,
@@ -116,18 +120,18 @@ class WorldQueryService:
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
-        player_current_state_builder: Optional[PlayerCurrentStateBuilder] = None,
-        player_location_query_service: Optional[PlayerLocationQueryService] = None,
-        player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
-        spot_context_query_service: Optional[SpotContextQueryService] = None,
-        available_moves_query_service: Optional[AvailableMovesQueryService] = None,
-        visible_context_query_service: Optional[VisibleContextQueryService] = None,
+        player_current_state_builder: PlayerCurrentStateBuilder | None = None,
+        player_location_query_service: PlayerLocationQueryService | None = None,
+        player_audience_query: IPlayerAudienceQueryPort | None = None,
+        spot_context_query_service: SpotContextQueryService | None = None,
+        available_moves_query_service: AvailableMovesQueryService | None = None,
+        visible_context_query_service: VisibleContextQueryService | None = None,
         sns_mode_session: Optional["SnsModeSessionService"] = None,
         sns_page_session: Optional["SnsPageSessionService"] = None,
         sns_page_query_service: Optional["SnsPageQueryService"] = None,
         trade_page_session: Optional["TradePageSessionService"] = None,
         trade_page_query_service: Optional["TradePageQueryService"] = None,
-        spot_graph_snapshot_provider: Optional[Callable[[int], Any]] = None,
+        spot_graph_snapshot_provider: Callable[[int], Any] | None = None,
     ):
         self._player_location_query_service = (
             player_location_query_service
@@ -183,7 +187,7 @@ class WorldQueryService:
         # 「snapshot を作る方法」は WorldQueryService の責務ではないため、コールバックで
         # 外から差し込む。tile-map ベース経路では None で通常動作。
         # 後から late-binding する場合は attach_spot_graph_snapshot_provider を使う。
-        self._spot_graph_snapshot_provider: Optional[Callable[[int], Any]] = (
+        self._spot_graph_snapshot_provider: Callable[[int], Any] | None = (
             spot_graph_snapshot_provider
         )
         self._spot_repository = spot_repository
@@ -256,24 +260,24 @@ class WorldQueryService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 
-    def get_player_location(self, query: GetPlayerLocationQuery) -> Optional[PlayerLocationDto]:
+    def get_player_location(self, query: GetPlayerLocationQuery) -> PlayerLocationDto | None:
         """プレイヤーの現在位置を取得。未配置の場合は None、プレイヤー／スポット不在時は例外。"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_player_location_impl(query),
             context={"action": "get_player_location", "player_id": query.player_id},
         )
 
-    def _get_player_location_impl(self, query: GetPlayerLocationQuery) -> Optional[PlayerLocationDto]:
+    def _get_player_location_impl(self, query: GetPlayerLocationQuery) -> PlayerLocationDto | None:
         """プレイヤーの現在位置を取得する実装。未配置時は None を返す。"""
         return self._player_location_query_service.get_player_location(query)
 
     def get_spot_context_for_player(
         self, query: GetSpotContextForPlayerQuery
-    ) -> Optional[SpotInfoDto]:
+    ) -> SpotInfoDto | None:
         """プレイヤーの現在スポット情報＋接続先一覧を取得。未配置時は None。"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_spot_context_for_player_impl(query),
@@ -282,13 +286,13 @@ class WorldQueryService:
 
     def _get_spot_context_for_player_impl(
         self, query: GetSpotContextForPlayerQuery
-    ) -> Optional[SpotInfoDto]:
+    ) -> SpotInfoDto | None:
         """スポット文脈取得の実装。SpotContextQueryService に委譲。"""
         return self._spot_context_query_service.get_spot_context(query)
 
     def get_visible_context(
         self, query: GetVisibleContextQuery
-    ) -> Optional[VisibleContextDto]:
+    ) -> VisibleContextDto | None:
         """プレイヤー視点の視界内オブジェクトを取得。未配置時は None。"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_visible_context_impl(query),
@@ -297,13 +301,13 @@ class WorldQueryService:
 
     def _get_visible_context_impl(
         self, query: GetVisibleContextQuery
-    ) -> Optional[VisibleContextDto]:
+    ) -> VisibleContextDto | None:
         """視界取得の実装。VisibleContextQueryService に委譲。"""
         return self._visible_context_query_service.get_visible_context(query)
 
     def get_available_moves(
         self, query: GetAvailableMovesQuery
-    ) -> Optional[PlayerMovementOptionsDto]:
+    ) -> PlayerMovementOptionsDto | None:
         """プレイヤーの利用可能な移動先一覧を取得（遷移条件評価込み）。未配置時は None。"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_available_moves_impl(query),
@@ -312,13 +316,13 @@ class WorldQueryService:
 
     def _get_available_moves_impl(
         self, query: GetAvailableMovesQuery
-    ) -> Optional[PlayerMovementOptionsDto]:
+    ) -> PlayerMovementOptionsDto | None:
         """利用可能移動先取得の実装。AvailableMovesQueryService に委譲。"""
         return self._available_moves_query_service.get_available_moves(query)
 
     def get_player_current_state(
         self, query: GetPlayerCurrentStateQuery
-    ) -> Optional[PlayerCurrentStateDto]:
+    ) -> PlayerCurrentStateDto | None:
         """プレイヤーの現在状態を一括取得（位置・スポット・天気・地形・視界・移動先・注意レベル）。未配置時は None。"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_player_current_state_impl(query),
@@ -327,7 +331,7 @@ class WorldQueryService:
 
     def _get_player_current_state_impl(
         self, query: GetPlayerCurrentStateQuery
-    ) -> Optional[PlayerCurrentStateDto]:
+    ) -> PlayerCurrentStateDto | None:
         player_id = PlayerId(query.player_id)
         player_status = self._player_status_repository.find_by_id(player_id)
         if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:

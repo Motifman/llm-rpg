@@ -4,44 +4,46 @@ MovementApplicationService から移動ステップ実行の責務を分離す�
 ゲートウェイ遷移条件評価とスタミナコスト計算を含む。
 """
 
-from typing import Optional, Protocol, Tuple
+from typing import Optional, Protocol
 
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
-from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
-from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
-from ai_rpg_world.domain.world.exception.map_exception import (
-    ObjectNotFoundException,
-    TileNotFoundException,
-    InvalidMovementException,
-    ActorBusyException as DomainActorBusyException,
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    ActorBusyException,
+    MapNotFoundException,
+    MovementInvalidException,
+    PathBlockedException,
+    PlayerNotFoundException,
+    PlayerStaminaExhaustedException,
 )
 from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
     TransitionContext,
 )
-from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-    MovementInvalidException,
-    PlayerStaminaExhaustedException,
-    PathBlockedException,
-    ActorBusyException,
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ActorBusyException as DomainActorBusyException,
 )
+from ai_rpg_world.domain.world.exception.map_exception import (
+    InvalidMovementException,
+    ObjectNotFoundException,
+    TileNotFoundException,
+)
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
+from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
+from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class _SyncEventDispatcherProtocol(Protocol):
@@ -60,8 +62,8 @@ class MovementStepExecutor:
         movement_config_service: MovementConfigService,
         time_provider: GameTimeProvider,
         unit_of_work: UnitOfWork,
-        transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
-        transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
+        transition_policy_repository: ITransitionPolicyRepository | None = None,
+        transition_condition_evaluator: TransitionConditionEvaluator | None = None,
         sync_event_dispatcher: Optional["_SyncEventDispatcherProtocol"] = None,
     ):
         self._player_status_repository = player_status_repository
@@ -82,9 +84,9 @@ class MovementStepExecutor:
     def execute_movement_step(
         self,
         player_id_int: int,
-        direction: Optional[DirectionEnum] = None,
-        target_coordinate: Optional[Coordinate] = None,
-        player_status: Optional[PlayerStatusAggregate] = None,
+        direction: DirectionEnum | None = None,
+        target_coordinate: Coordinate | None = None,
+        player_status: PlayerStatusAggregate | None = None,
     ) -> MoveResultDto:
         """
         移動の 1 ステップを実行する。
@@ -233,7 +235,7 @@ class MovementStepExecutor:
         current_spot_id: SpotId,
         player_id_int: int,
         player_status: PlayerStatusAggregate,
-    ) -> Optional[Tuple[bool, Optional[str]]]:
+    ) -> tuple[bool, str | None] | None:
         """
         移動先がゲートウェイに含まれる場合、遷移条件を評価する。
         該当ゲートウェイがなければ None、条件がなければ (True, None)、

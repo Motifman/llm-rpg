@@ -1,8 +1,9 @@
 import pytest
-from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.quest.exception.quest_exception import QuestScopeValidationException
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestScopeType
+
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestScopeType
+from ai_rpg_world.domain.quest.exception.quest_exception import QuestScopeValidationException
+from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 
 
 class TestQuestScope:

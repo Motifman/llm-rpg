@@ -8,18 +8,18 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict
+from typing import Any
 
 import pytest
-
-from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
-    ScenarioLoader,
-)
 from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
+from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    ScenarioLoader,
+    ScenarioLoadError,
+)
 
-def _scenario_with_initial_gold(value: Any, *, omit: bool = False) -> Dict[str, Any]:
+
+def _scenario_with_initial_gold(value: Any, *, omit: bool = False) -> dict[str, Any]:
     """最小シナリオの唯一のプレイヤーへ initial_gold を差し込んだ raw dict を返す。"""
     scenario = copy.deepcopy(_minimal_scenario())
     if not omit:

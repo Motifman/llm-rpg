@@ -41,9 +41,6 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
-    AttackOutcome,
-)
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -55,8 +52,10 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
     SpotAtmosphere,
 )
+from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
+    AttackOutcome,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-
 
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)

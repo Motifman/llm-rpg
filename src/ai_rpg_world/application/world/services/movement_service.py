@@ -1,27 +1,8 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Callable, Any, Literal
+from typing import Any, Literal
 
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
-from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
-from ai_rpg_world.domain.world.service.arrival_policy import ArrivalPolicy, ArrivalCheckResult
-from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
-from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
-from ai_rpg_world.application.world.services.set_destination_service import (
-    SetDestinationService,
-)
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.commands import (
     CancelMovementCommand,
@@ -30,15 +11,39 @@ from ai_rpg_world.application.world.contracts.commands import (
     TickMovementCommand,
 )
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
-from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    MovementCommandException,
-    PlayerNotFoundException,
-    MovementInvalidException,
-    PlayerStaminaExhaustedException,
-    PathBlockedException,
-    ActorBusyException
+from ai_rpg_world.application.world.exceptions.base_exception import (
+    WorldApplicationException,
+    WorldSystemErrorException,
 )
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    ActorBusyException,
+    MovementCommandException,
+    MovementInvalidException,
+    PathBlockedException,
+    PlayerNotFoundException,
+    PlayerStaminaExhaustedException,
+)
+from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
+from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
+from ai_rpg_world.application.world.services.set_destination_service import (
+    SetDestinationService,
+)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.service.arrival_policy import ArrivalCheckResult, ArrivalPolicy
+from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
 
 @dataclass(frozen=True)
 class MovementReplanResult:
@@ -94,9 +99,9 @@ class MovementApplicationService:
             # ドメイン例外をアプリケーション例外に変換
             raise MovementCommandException(str(e), player_id=context.get('player_id'))
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                          original_exception=e)
 
     def move_tile(self, command: MoveTileCommand) -> MoveResultDto:
@@ -119,8 +124,8 @@ class MovementApplicationService:
         player_id: int,
         destination_type: Literal["spot", "location", "object"],
         target_spot_id: int,
-        target_location_area_id: Optional[int] = None,
-        target_world_object_id: Optional[int] = None,
+        target_location_area_id: int | None = None,
+        target_world_object_id: int | None = None,
     ) -> MoveResultDto:
         """
         指定した目的地（スポット・ロケーション・オブジェクト）へ移動する。
@@ -137,8 +142,8 @@ class MovementApplicationService:
                 player_id,
             )
         target_spot_id_int = int(target_spot_id)
-        area_opt: Optional[int] = None
-        object_id_opt: Optional[int] = None
+        area_opt: int | None = None
+        object_id_opt: int | None = None
         if destination_type == "location":
             if target_location_area_id is None:
                 raise MovementInvalidException(
@@ -385,9 +390,9 @@ class MovementApplicationService:
     def _execute_movement_step(
         self,
         player_id_int: int,
-        direction: Optional[DirectionEnum] = None,
-        target_coordinate: Optional[Coordinate] = None,
-        player_status: Optional[PlayerStatusAggregate] = None,
+        direction: DirectionEnum | None = None,
+        target_coordinate: Coordinate | None = None,
+        player_status: PlayerStatusAggregate | None = None,
     ) -> MoveResultDto:
         """移動の1ステップを実行する。MovementStepExecutor に委譲。"""
         return self._movement_step_executor.execute_movement_step(

@@ -6,28 +6,28 @@ ItemEffect は値オブジェクトとしてデータのみを保持し、ドメ
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.exceptions.consumable_effect_exception import (
+    ConsumeEffectMissingException,
     ItemSpecNotFoundForConsumableEffectException,
     PlayerNotFoundForConsumableEffectException,
-    ConsumeEffectMissingException,
 )
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.item.value_object.item_effect import (
+    CompositeItemEffect,
     DamageHpEffect,
-    HealEffect,
-    RecoverMpEffect,
-    GoldEffect,
     ExpEffect,
+    GoldEffect,
+    HealEffect,
+    ItemEffect,
+    RecoverMpEffect,
     ReviveEffect,
     SatisfyNeedEffect,
-    CompositeItemEffect,
-    ItemEffect,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -40,7 +40,7 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
         self,
         item_spec_repository: ItemSpecRepository,
         player_status_repository: PlayerStatusRepository,
-        event_publisher: Optional[Any] = None,
+        event_publisher: Any | None = None,
     ):
         self._item_spec_repository = item_spec_repository
         self._player_status_repository = player_status_repository

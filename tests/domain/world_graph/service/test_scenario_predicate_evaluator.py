@@ -3,14 +3,25 @@
 import pytest
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    PredicateContextValidationException,
+    ScenarioPredicateValidationException,
+)
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
+)
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
     ItemSpecCountsPredicateContext,
     OwnedItemSpecsPredicateContext,
     StateValuesPredicateContext,
     TickPredicateContext,
-    WorldFlagPredicateContext,
     WeatherTypePredicateContext,
+    WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateReasonCode,
@@ -26,17 +37,6 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     TickAtLeastPredicate,
     WeatherTypeIsPredicate,
 )
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
-    ScenarioPredicateEvaluator,
-)
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    PredicateContextValidationException,
-    ScenarioPredicateValidationException,
-)
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
 class TestScenarioPredicateEvaluatorFlagSet:

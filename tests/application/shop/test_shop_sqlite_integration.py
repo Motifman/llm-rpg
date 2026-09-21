@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import sqlite3
+from datetime import datetime
 
 from ai_rpg_world.application.shop.handlers.shop_event_handler import ShopEventHandler
 from ai_rpg_world.application.shop.services.shop_query_service import ShopQueryService

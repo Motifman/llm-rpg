@@ -1,24 +1,27 @@
 import logging
-from typing import Callable, Any, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.application.social.contracts.commands import (
+    MarkAllNotificationsAsReadCommand,
     MarkNotificationAsReadCommand,
-    MarkAllNotificationsAsReadCommand
 )
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
-from ai_rpg_world.application.social.exceptions import ApplicationException
-from ai_rpg_world.application.social.exceptions import ApplicationExceptionFactory
-from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.application.social.exceptions import (
+    ApplicationException,
+    ApplicationExceptionFactory,
+    SystemErrorException,
+)
 from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
     NotificationOwnershipException,
 )
 from ai_rpg_world.domain.sns.exception import SnsDomainException
+from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
     from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+    from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
 
 
 class NotificationCommandService:
@@ -47,9 +50,9 @@ class NotificationCommandService:
                 **{k: v for k, v in context.items() if k in ['notification_id']}
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def mark_notification_as_read(self, command: MarkNotificationAsReadCommand) -> CommandResultDto:

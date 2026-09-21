@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import replace
 
 from ai_rpg_world.application.common.exceptions import (
     ApplicationException,

@@ -7,35 +7,40 @@ PhysicalMapAggregate に情報を注入してイベントを発行し、
 """
 
 import logging
-from typing import Callable, Any
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
-from ai_rpg_world.domain.world.exception.map_exception import (
-    ObjectNotFoundException,
-    ItemNotInChestException as DomainItemNotInChestException,
-)
-
 from ai_rpg_world.application.world.contracts.commands import (
     StoreItemInChestCommand,
     TakeItemFromChestCommand,
 )
-from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
+from ai_rpg_world.application.world.exceptions.base_exception import (
+    WorldApplicationException,
+    WorldSystemErrorException,
+)
 from ai_rpg_world.application.world.exceptions.command.chest_command_exception import (
     ChestCommandException,
     ChestNotFoundException,
+    ItemNotInChestCommandException,
     ItemNotInPlayerInventoryException,
     PlayerInventoryNotFoundException,
-    ItemNotInChestCommandException,
 )
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ItemNotInChestException as DomainItemNotInChestException,
+)
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ObjectNotFoundException,
+)
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class ChestCommandService:
@@ -73,7 +78,7 @@ class ChestCommandService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

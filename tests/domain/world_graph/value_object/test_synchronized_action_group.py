@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    SynchronizedActionGroupValidationException,
-)
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    SynchronizedActionGroupValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,

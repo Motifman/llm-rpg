@@ -4,30 +4,31 @@
 発行すべきイベントのリストを返し、aggregate が add_event する責務を持つ。
 """
 
-from typing import Dict, List, Optional, Tuple
 
-from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
-from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.common.value_object import WorldTick
+from typing import Any
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
+from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.entity.location_area import LocationArea
+from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.event.map_events import (
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
+    GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
-    GatewayTriggeredEvent,
     ObjectTriggeredEvent,
 )
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class MapTriggerEngine:
@@ -39,20 +40,20 @@ class MapTriggerEngine:
     @staticmethod
     def compute_area_trigger_events(
         object_id: WorldObjectId,
-        old_coordinate: Optional[Coordinate],
+        old_coordinate: Coordinate | None,
         new_coordinate: Coordinate,
-        area_triggers: Dict[AreaTriggerId, AreaTrigger],
-        location_areas: Dict[LocationAreaId, LocationArea],
-        gateways: Dict[GatewayId, Gateway],
-        objects: Dict[WorldObjectId, WorldObject],
+        area_triggers: dict[AreaTriggerId, AreaTrigger],
+        location_areas: dict[LocationAreaId, LocationArea],
+        gateways: dict[GatewayId, Gateway],
+        objects: dict[WorldObjectId, WorldObject],
         spot_id: SpotId,
-        current_tick: Optional[WorldTick] = None,
-    ) -> List[BaseDomainEvent]:
+        current_tick: WorldTick | None = None,
+    ) -> list[BaseDomainEvent[Any, Any]]:
         """
         進入・退出・滞在に応じて発行すべきイベントを算出する。
         AreaTrigger, LocationArea, Gateway の判定を行う。
         """
-        events: List[BaseDomainEvent] = []
+        events: list[BaseDomainEvent[Any, Any]] = []
 
         # 1. AreaTrigger の判定
         for trigger in area_triggers.values():
@@ -159,14 +160,14 @@ class MapTriggerEngine:
     def compute_object_trigger_events(
         actor_id: WorldObjectId,
         new_coordinate: Coordinate,
-        objects: Dict[WorldObjectId, WorldObject],
-        object_positions: Dict[Coordinate, List[WorldObjectId]],
+        objects: dict[WorldObjectId, WorldObject],
+        object_positions: dict[Coordinate, list[WorldObjectId]],
         spot_id: SpotId,
-    ) -> List[BaseDomainEvent]:
+    ) -> list[BaseDomainEvent[Any, Any]]:
         """
         指定座標にあるオブジェクトの get_trigger_on_step に応じたイベントを算出する。
         """
-        events: List[BaseDomainEvent] = []
+        events: list[BaseDomainEvent[Any, Any]] = []
 
         if new_coordinate not in object_positions:
             return events
@@ -195,10 +196,10 @@ class MapTriggerEngine:
     @staticmethod
     def compute_trigger_activation_at_coordinate(
         coordinate: Coordinate,
-        object_id: Optional[WorldObjectId],
-        area_triggers: Dict[AreaTriggerId, AreaTrigger],
+        object_id: WorldObjectId | None,
+        area_triggers: dict[AreaTriggerId, AreaTrigger],
         spot_id: SpotId,
-    ) -> Tuple[Optional[MapTrigger], List[BaseDomainEvent]]:
+    ) -> tuple[MapTrigger | None, list[BaseDomainEvent[Any, Any]]]:
         """
         指定座標を含む最初のアクティブなエリアトリガーを検出し、
         object_id が指定されていれば AreaTriggeredEvent を返す。
@@ -206,7 +207,7 @@ class MapTriggerEngine:
         """
         for trigger in area_triggers.values():
             if trigger.contains(coordinate):
-                events: List[BaseDomainEvent] = []
+                events: list[BaseDomainEvent[Any, Any]] = []
                 if object_id is not None:
                     events.append(
                         AreaTriggeredEvent.create(

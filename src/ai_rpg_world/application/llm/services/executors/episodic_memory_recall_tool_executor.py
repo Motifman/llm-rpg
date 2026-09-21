@@ -25,10 +25,12 @@ LLM 側に「思い出そう」と意志して過去を呼び戻す経路が無�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     build_situation_episodic_cues,
@@ -36,7 +38,6 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_EPISODES,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
@@ -45,7 +46,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-
 
 DEFAULT_MAX_RESULTS = 5
 MAX_RESULTS_CAP = 16
@@ -69,7 +69,7 @@ EMPTY_RESULT_MESSAGE = "思い出そうとしたが何も浮かばなかった�
 #   - subjective_time の "今日のうち" / "昨日" の閾値とも整合 (= 4h 以上前は
 #     ラベル切り替わり、24h 以上前で calendar 日跨ぎ確実)
 # 厳密な前日 0:00-24:00 range が必要になったら別 enum 値を追加する。
-_TIME_RANGE_DELTAS: Dict[str, Optional[timedelta]] = {
+_TIME_RANGE_DELTAS: dict[str, timedelta | None] = {
     "recent": timedelta(hours=4),
     "today": timedelta(hours=24),
     "yesterday": timedelta(hours=48),
@@ -89,9 +89,9 @@ class EpisodicMemoryRecallToolExecutor:
 
     episode_store: EpisodicEpisodeRepository
     # WorldNounMatcher (任意。注入されていない場合は cue 抽出を skip)
-    noun_matcher: Optional[Any] = None
+    noun_matcher: Any | None = None
     # wall-clock の datetime を返す関数。未指定なら datetime.now(utc)
-    time_provider: Optional[Callable[[], datetime]] = None
+    time_provider: Callable[[], datetime] | None = None
 
     def __post_init__(self) -> None:
         if self.time_provider is not None and not callable(self.time_provider):
@@ -99,7 +99,7 @@ class EpisodicMemoryRecallToolExecutor:
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[ActingBeing, dict[str, Any]], LlmCommandResultDto]]:
         return {TOOL_NAME_MEMORY_RECALL_EPISODES: self._run_recall_episodes}
 
     # ──────────────────────────────────────────────────────────────
@@ -109,13 +109,13 @@ class EpisodicMemoryRecallToolExecutor:
     def _run_recall_episodes(
         self,
         acting: ActingBeing,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> LlmCommandResultDto:
         about_raw = arguments.get("about", "")
         about = str(about_raw).strip() if isinstance(about_raw, str) else ""
 
         time_range_raw = arguments.get("time_range")
-        time_range: Optional[str] = None
+        time_range: str | None = None
         if isinstance(time_range_raw, str):
             normalized = time_range_raw.strip().lower()
             if normalized in _TIME_RANGE_DELTAS:
@@ -165,9 +165,9 @@ class EpisodicMemoryRecallToolExecutor:
 
     def _time_range_to_min_occurred_at(
         self,
-        time_range: Optional[str],
+        time_range: str | None,
         now: datetime,
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """time_range 文字列 → ``min_occurred_at`` (= now - delta)。
 
         list_recent_by_being / list_by_cue_by_being の ``min_occurred_at``
@@ -182,7 +182,7 @@ class EpisodicMemoryRecallToolExecutor:
             return None
         return now - delta
 
-    def _extract_cues_from_about(self, about: str) -> List[EpisodicCue]:
+    def _extract_cues_from_about(self, about: str) -> list[EpisodicCue]:
         """``about`` に noun_matcher を当てて cue を立てる。
 
         noun_matcher 未注入 or about が空文字なら空 list で返す。
@@ -205,9 +205,9 @@ class EpisodicMemoryRecallToolExecutor:
         self,
         *,
         being_id: BeingId,
-        cues: List[EpisodicCue],
-        min_occurred_at: Optional[datetime],
-    ) -> List[SubjectiveEpisode]:
+        cues: list[EpisodicCue],
+        min_occurred_at: datetime | None,
+    ) -> list[SubjectiveEpisode]:
         """cue があれば各 cue で list_by_cue + 重複除去、無ければ list_recent。
 
         list_by_cue / list_recent の ``min_occurred_at`` パラメタは
@@ -216,7 +216,7 @@ class EpisodicMemoryRecallToolExecutor:
         「time_range 内 = より新しい」とは方向が逆。よって store の
         ``min_occurred_at`` には渡さず、取得後に Python 側で filter する。
         """
-        candidates: Dict[str, SubjectiveEpisode] = {}
+        candidates: dict[str, SubjectiveEpisode] = {}
         if cues:
             for cue in cues:
                 rows = self.episode_store.list_by_cue_by_being(

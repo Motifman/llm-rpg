@@ -1,12 +1,17 @@
-from typing import Set, Optional
 from datetime import datetime
+from typing import Any
+
 from ai_rpg_world.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
-from ai_rpg_world.domain.sns.value_object import Like, PostContent, Mention, PostId, ReplyId, UserId
 from ai_rpg_world.domain.sns.event import SnsPostCreatedEvent
-from ai_rpg_world.domain.sns.exception import InvalidContentTypeException, InvalidParentReferenceException, OwnershipException
+from ai_rpg_world.domain.sns.exception import (
+    InvalidContentTypeException,
+    InvalidParentReferenceException,
+    OwnershipException,
+)
+from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
-class PostAggregate(BaseSnsContentAggregate):
+class PostAggregate(BaseSnsContentAggregate[PostId]):
     """ポスト集約"""
 
     def __init__(
@@ -14,13 +19,13 @@ class PostAggregate(BaseSnsContentAggregate):
         post_id: PostId,
         author_user_id: UserId,
         post_content: PostContent,
-        likes: Set[Like],
-        mentions: Set[Mention],
-        reply_ids: Set[ReplyId],  # リプライIDの一覧
+        likes: set[Like],
+        mentions: set[Mention],
+        reply_ids: set[ReplyId],  # リプライIDの一覧
         deleted: bool = False,
-        parent_post_id: Optional[PostId] = None,
-        parent_reply_id: Optional[ReplyId] = None,
-        created_at: Optional[datetime] = None,
+        parent_post_id: PostId | None = None,
+        parent_reply_id: ReplyId | None = None,
+        created_at: datetime | None = None,
     ):
         # ポストは親を持つことができない
         if parent_post_id is not None or parent_reply_id is not None:
@@ -35,13 +40,13 @@ class PostAggregate(BaseSnsContentAggregate):
         post_id: PostId,
         author_user_id: UserId,
         post_content: PostContent,
-        likes: Set[Like],
-        mentions: Set[Mention],
-        reply_ids: Set[ReplyId],  # リプライIDの一覧
+        likes: set[Like],
+        mentions: set[Mention],
+        reply_ids: set[ReplyId],  # リプライIDの一覧
         deleted: bool = False,
-        created_at: Optional[datetime] = None
+        created_at: datetime | None = None
     ) -> "PostAggregate":
-        return super().create_from_db(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
+        return cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
 
     @classmethod
     def create(
@@ -56,8 +61,8 @@ class PostAggregate(BaseSnsContentAggregate):
     ) -> "PostAggregate":
         """投稿を作成"""
         mentions = cls._create_mentions_from_content_static(post_id, post_content)
-        likes = set()
-        reply_ids = set()  # 新しいポストなのでリプライは空
+        likes: set[Like] = set()
+        reply_ids: set[ReplyId] = set()  # 新しいポストなのでリプライは空
         post = cls(post_id, author_user_id, post_content, likes, mentions, reply_ids)
 
         # ポスト固有のバリデーション
@@ -84,7 +89,7 @@ class PostAggregate(BaseSnsContentAggregate):
         return post
 
     @staticmethod
-    def _create_mentions_from_content_static(post_id: PostId, post_content: PostContent) -> Set[Mention]:
+    def _create_mentions_from_content_static(post_id: PostId, post_content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出（静的メソッド）"""
         import re
         mention_pattern = r'@(\S+)'
@@ -105,24 +110,24 @@ class PostAggregate(BaseSnsContentAggregate):
         """コンテンツタイプを取得"""
         return "post"
 
-    def get_parent_info(self) -> tuple[Optional[PostId], Optional[ReplyId]]:
+    def get_parent_info(self) -> tuple[PostId | None, ReplyId | None]:
         """親情報を取得"""
         return None, None
 
-    def like_post(self, user_id: UserId, liker_display_name: str = ""):
+    def like_post(self, user_id: UserId, liker_display_name: str = "") -> None:
         """ポストにいいね"""
         self.like(user_id, "post", liker_display_name=liker_display_name)
 
-    def delete_post(self, user_id: UserId):
+    def delete_post(self, user_id: UserId) -> None:
         """ポストを削除"""
         self.delete(user_id, "post")
 
-    def mentioned_users(self) -> Set[str]:
+    def mentioned_users(self) -> set[str]:
         """メンションされたユーザー一覧を取得"""
         return self.get_mentioned_users()
 
     @property
-    def reply_ids(self) -> Set[ReplyId]:
+    def reply_ids(self) -> set[ReplyId]:
         """リプライIDの一覧を取得"""
         return self._reply_ids.copy()
 
@@ -151,7 +156,7 @@ class PostAggregate(BaseSnsContentAggregate):
         """ソート用の作成日時を取得"""
         return self.created_at
 
-    def get_display_info(self, viewer_user_id: UserId) -> dict:
+    def get_display_info(self, viewer_user_id: UserId) -> dict[str, Any]:
         """表示用の情報をまとめて取得"""
         return {
             "post_id": self.post_id.value,

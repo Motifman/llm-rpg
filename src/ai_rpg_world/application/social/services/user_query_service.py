@@ -1,24 +1,25 @@
-from typing import List, Optional, Tuple, Callable, Any, TYPE_CHECKING
 import logging
+from collections.abc import Callable
 from functools import wraps
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.application.social.contracts.commands import GetUserProfilesCommand
+from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto, UserProfileDto
+from ai_rpg_world.application.social.exceptions import (
+    ApplicationException,
+    ApplicationExceptionFactory,
+    SystemErrorException,
+    UserQueryException,
+)
 from ai_rpg_world.domain.sns.enum import UserRelationshipType
-from ai_rpg_world.domain.sns.repository import UserRepository
-from ai_rpg_world.domain.sns.value_object import UserId
 from ai_rpg_world.domain.sns.exception import (
     SnsDomainException,
     UserNotFoundException,
 )
-from ai_rpg_world.application.social.contracts.commands import GetUserProfilesCommand
-from ai_rpg_world.application.social.exceptions import ApplicationException
-from ai_rpg_world.application.social.contracts.dtos import UserProfileDto, ErrorResponseDto
-from ai_rpg_world.application.social.exceptions import (
-    UserQueryException,
-    SystemErrorException,
-    ApplicationExceptionFactory,
-)
+from ai_rpg_world.domain.sns.repository import UserRepository
+from ai_rpg_world.domain.sns.value_object import UserId
 
 
 class UserQueryService:
@@ -42,9 +43,9 @@ class UserQueryService:
                 target_user_id=context.get('target_user_id')
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
 
@@ -123,7 +124,7 @@ class UserQueryService:
             follower_count=other_user_follower_count,
         )
 
-    def _get_users_profile_info(self, other_user_ids: List[UserId], viewer_user_id: int) -> List[UserProfileDto]:
+    def _get_users_profile_info(self, other_user_ids: list[UserId], viewer_user_id: int) -> list[UserProfileDto]:
         """複数のユーザーのプロフィール情報を取得（汎用）"""
         other_user_aggregates = self._user_repository.find_by_ids(other_user_ids)
         viewer_user_aggregate = self._user_repository.find_by_id(UserId(viewer_user_id))
@@ -150,7 +151,7 @@ class UserQueryService:
             follower_count=follower_count,
         ) for user_profile_info, rs_from_me, rs_to_me, followee_count, follower_count in zip(user_profile_infos, relationship_status_from_me, relationship_status_to_me, followee_counts, follower_counts)]
 
-    def get_user_profiles(self, command: GetUserProfilesCommand) -> List[UserProfileDto]:
+    def get_user_profiles(self, command: GetUserProfilesCommand) -> list[UserProfileDto]:
         """ユーザー関係性のプロフィール情報を取得（汎用）
 
         Args:
@@ -167,7 +168,7 @@ class UserQueryService:
             }
         )
 
-    def _get_user_profiles_impl(self, command: GetUserProfilesCommand) -> List[UserProfileDto]:
+    def _get_user_profiles_impl(self, command: GetUserProfilesCommand) -> list[UserProfileDto]:
         """ユーザー関係性のプロフィール情報を取得の実装"""
         # リレーション取得関数を関係性タイプに基づいて選択
         relationship_getter = self._get_relationship_getter(command.relationship_type)
@@ -188,7 +189,7 @@ class UserQueryService:
         }
         return relationship_getter_map[relationship_type]
         
-    def show_followees_profile(self, viewer_user_id: int) -> List[UserProfileDto]:
+    def show_followees_profile(self, viewer_user_id: int) -> list[UserProfileDto]:
         """ユーザーのフォローしているユーザーのプロフィールを表示"""
         # TODO: レポジトリにN+1回のクエリが発行される可能性あり
         command = GetUserProfilesCommand(
@@ -197,7 +198,7 @@ class UserQueryService:
         )
         return self.get_user_profiles(command)
 
-    def show_followers_profile(self, viewer_user_id: int) -> List[UserProfileDto]:
+    def show_followers_profile(self, viewer_user_id: int) -> list[UserProfileDto]:
         """ユーザーのフォロワーのプロフィールを表示"""
         # TODO: レポジトリにN+1回のクエリが発行される可能性あり
         command = GetUserProfilesCommand(
@@ -206,7 +207,7 @@ class UserQueryService:
         )
         return self.get_user_profiles(command)
 
-    def show_blocked_users_profile(self, viewer_user_id: int) -> List[UserProfileDto]:
+    def show_blocked_users_profile(self, viewer_user_id: int) -> list[UserProfileDto]:
         """ユーザーのブロックしているユーザーのプロフィールを表示"""
         # TODO: レポジトリにN+1回のクエリが発行される可能性あり
         command = GetUserProfilesCommand(
@@ -215,7 +216,7 @@ class UserQueryService:
         )
         return self.get_user_profiles(command)
 
-    def show_blockers_profile(self, viewer_user_id: int) -> List[UserProfileDto]:
+    def show_blockers_profile(self, viewer_user_id: int) -> list[UserProfileDto]:
         """ユーザーをブロックしているユーザーのプロフィールを表示"""
         command = GetUserProfilesCommand(
             viewer_user_id=viewer_user_id,
@@ -223,7 +224,7 @@ class UserQueryService:
         )
         return self.get_user_profiles(command)
 
-    def show_subscriptions_users_profile(self, viewer_user_id: int) -> List[UserProfileDto]:
+    def show_subscriptions_users_profile(self, viewer_user_id: int) -> list[UserProfileDto]:
         """ユーザーの購読しているユーザーのプロフィールを表示"""
         command = GetUserProfilesCommand(
             viewer_user_id=viewer_user_id,
@@ -231,7 +232,7 @@ class UserQueryService:
         )
         return self.get_user_profiles(command)
 
-    def show_subscribers_users_profile(self, viewer_user_id: int) -> List[UserProfileDto]:
+    def show_subscribers_users_profile(self, viewer_user_id: int) -> list[UserProfileDto]:
         """ユーザーを購読しているユーザーのプロフィールを表示"""
         command = GetUserProfilesCommand(
             viewer_user_id=viewer_user_id,

@@ -1,14 +1,16 @@
-from typing import List, Optional, TYPE_CHECKING
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from typing import TYPE_CHECKING
+
+from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService, HitBoxSpawnParam
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -37,8 +39,8 @@ class SkillExecutionDomainService:
         current_tick: int,
         attacker_stats: BaseStats,
         auto_aim: bool = False,
-        target_direction_override: Optional[DirectionEnum] = None,
-    ) -> List[HitBoxSpawnParam]:
+        target_direction_override: DirectionEnum | None = None,
+    ) -> list[HitBoxSpawnParam]:
         """
         スキルを実行し、消費リソースの反映とヒットボックス生成パラメータのリストを返す。
         attacker_stats はアプリ層で compute_effective_stats により算出して渡す。
@@ -95,7 +97,7 @@ class SkillExecutionDomainService:
         skill_spec: SkillSpec,
         current_tick: WorldTick,
         attacker_stats: BaseStats,
-    ) -> List[HitBoxSpawnParam]:
+    ) -> list[HitBoxSpawnParam]:
         """
         モンスターがスキルを実行し、ヒットボックス生成パラメータのリストを返す。
         attacker_stats はアプリ層で compute_effective_stats により算出して渡す。

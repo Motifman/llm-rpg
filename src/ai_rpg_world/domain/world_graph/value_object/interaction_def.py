@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
-from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
@@ -13,6 +11,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionEffectValidationException,
 )
@@ -84,18 +83,18 @@ class InteractionDef:
 
     action_name: str
     display_label: str
-    preconditions: Tuple[InteractionCondition, ...]
-    effects: Tuple[InteractionEffect, ...]
-    on_failure_observation: Optional[str] = None
-    witness_observation_message: Optional[str] = None
-    witness_observation_message_in_dark: Optional[str] = None
+    preconditions: tuple[InteractionCondition, ...]
+    effects: tuple[InteractionEffect, ...]
+    on_failure_observation: str | None = None
+    witness_observation_message: str | None = None
+    witness_observation_message_in_dark: str | None = None
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
     notify_target: bool = False
-    target_observation_message: Optional[str] = None
+    target_observation_message: str | None = None
     cooldown_ticks: int = 0
-    cooldown_group: Optional[str] = None
+    cooldown_group: str | None = None
     cooldown_scope: InteractionCooldownScope = InteractionCooldownScope.ACTOR
-    allowed_actor_planes: Tuple[InteractionActorPlane, ...] = (
+    allowed_actor_planes: tuple[InteractionActorPlane, ...] = (
         InteractionActorPlane.LIVING,
     )
     hide_when_flag_preconditions_fail: bool = False

@@ -3,27 +3,28 @@ RelationshipDomainServiceのテスト
 """
 
 import pytest
-from ai_rpg_world.domain.sns.service.relationship_domain_service import RelationshipDomainService
+
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
-from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
-from ai_rpg_world.domain.sns.value_object.follow import FollowRelationShip
-from ai_rpg_world.domain.sns.value_object.block import BlockRelationShip
-from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
 from ai_rpg_world.domain.sns.exception import (
     CannotFollowBlockedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
     SelfSubscribeException,
 )
+from ai_rpg_world.domain.sns.service.relationship_domain_service import RelationshipDomainService
+from ai_rpg_world.domain.sns.value_object.block import BlockRelationShip
+from ai_rpg_world.domain.sns.value_object.follow import FollowRelationShip
+from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
 
 
 def create_test_user_aggregate(
     user_id: int,
-    follows: list = None,
-    blocks: list = None,
-    subscribes: list = None
+    follows: list | None = None,
+    blocks: list | None = None,
+    subscribes: list | None = None
 ) -> UserAggregate:
     """テスト用のUserAggregateを作成するヘルパー関数"""
     profile = UserProfile(f"user{user_id}", f"User {user_id}", f"Test user {user_id}")

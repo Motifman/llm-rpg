@@ -24,23 +24,23 @@ Issue #526 で議論した「自伝的時系列」「能動想起」の不在を
 
 from __future__ import annotations
 
-# 循環 import 回避の warm-up (= DefaultActionResultStore を先に import
-# しておくと、後続の observation contracts 経由の chain が解ける)。
-# 詳細は CLAUDE.md "Parallel Branch Note" 参照。
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
-    DefaultActionResultStore,
-)
-
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
+    DefaultActionResultStore,
+)
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
+
+# 循環 import 回避の warm-up (= DefaultActionResultStore を先に import
+# しておくと、後続の observation contracts 経由の chain が解ける)。
+# 詳細は CLAUDE.md "Parallel Branch Note" 参照。
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
     EpisodeAction,
 )
@@ -61,7 +61,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

@@ -7,7 +7,6 @@ DDD 再編 (Issue #470 Phase 1 PR2): 元 ``application/llm/contracts/episodic_me
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -18,7 +17,7 @@ class EpisodeSource:
     MVP では追跡可能性のため event_ids は最低 1 件必須。
     """
 
-    event_ids: Tuple[str, ...]
+    event_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if not isinstance(self.event_ids, tuple):

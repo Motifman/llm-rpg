@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -35,7 +35,7 @@ _GAREN, _DONA, _SERA, _YUNO = (PlayerId(i) for i in range(1, 5))
 _NAME_TO_ID = {"ガレン": _GAREN, "ドナ": _DONA, "セラ": _SERA, "ユノ": _YUNO}
 
 #: 組の設計表。行 = 人、列 = できる採取。
-_TEAM_MATRIX: Dict[str, Dict[str, bool]] = {
+_TEAM_MATRIX: dict[str, dict[str, bool]] = {
     "ガレン": {"reap_wheat": True, "gather_herb": False},
     "ドナ":   {"reap_wheat": True, "gather_herb": False},
     "セラ":   {"reap_wheat": False, "gather_herb": True},
@@ -73,7 +73,7 @@ class _Race:
         )
 
         self.runtime = create_world_runtime(str(_RACE))
-        self.raw: Dict[str, Any] = json.loads(_RACE.read_text(encoding="utf-8"))
+        self.raw: dict[str, Any] = json.loads(_RACE.read_text(encoding="utf-8"))
 
     def place(self, player_id: PlayerId, string_id: str) -> None:
         graph = self.runtime._spot_graph_repo.find_graph()
@@ -86,11 +86,12 @@ class _Race:
         self.runtime._spot_graph_repo.save(graph)
 
     def give(self, player_id: PlayerId, item_id: str, count: int = 1) -> None:
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec_id = self.runtime.id_mapper.get_int("item_spec", item_id)
         grant_item_specs_to_inventory(
@@ -138,7 +139,7 @@ class _Race:
     def flags(self) -> frozenset:
         return self.runtime._world_flag_state.as_frozen_set()
 
-    def fill_offering(self, altar: str, team_players: List[PlayerId]) -> None:
+    def fill_offering(self, altar: str, team_players: list[PlayerId]) -> None:
         """供物 (敵の産物 4 つと 45G) を祭壇に納め切る。
 
         **敵から手に入れる過程は省略して**、テストでは材料を直接持たせる
@@ -670,7 +671,7 @@ class TestTheToolsOfTradeAreOffered:
 
         class _CaptureClient:
             def __init__(self) -> None:
-                self.tools: List[Any] = []
+                self.tools: list[Any] = []
 
             def invoke(self, messages, tools, tool_choice="required", **kwargs):
                 self.tools = tools

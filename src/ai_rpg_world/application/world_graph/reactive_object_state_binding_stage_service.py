@@ -11,7 +11,8 @@ state が変わらないときは interior を save しない（副作用最小�
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, Mapping, Tuple, TYPE_CHECKING
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -21,11 +22,11 @@ from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter impor
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_with_owner
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    SpotObjectStateChangedEvent,
-)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotObjectStateChangedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
@@ -60,7 +61,7 @@ class ReactiveObjectStateBindingStageService:
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         command_scope_factory: (
-            "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None"
+            CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None
         ) = None,
     ) -> None:
         self._bindings = tuple(bindings)
@@ -99,7 +100,7 @@ class ReactiveObjectStateBindingStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをbinding 1件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -190,7 +191,7 @@ class ReactiveObjectStateBindingStageService:
         self,
         graph: SpotGraphAggregate,
         existing_events: tuple[Any, ...],
-        context: "CommandContext[ReactiveCommandRepositoryProviderPort]",
+        context: CommandContext[ReactiveCommandRepositoryProviderPort],
     ) -> None:
         """このbindingが追加したeventだけを確定後配送へ移す。"""
         all_events = tuple(graph.get_events())
@@ -204,7 +205,7 @@ class ReactiveObjectStateBindingStageService:
         context.collect_all(new_events)
 
     @property
-    def managed_state_keys_per_object(self) -> Mapping[int, Tuple[str, ...]]:
+    def managed_state_keys_per_object(self) -> Mapping[int, tuple[str, ...]]:
         """各 object_id → 管理する state キーのマップ（テスト/監査用）。"""
         return {
             b.target_object_id.value: b.managed_state_keys for b in self._bindings

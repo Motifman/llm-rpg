@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 
 
@@ -11,7 +11,7 @@ class OfferItemCommand:
     slot_id: int
     requested_gold: int
     is_direct: bool = False
-    target_player_id: Optional[int] = None
+    target_player_id: int | None = None
 
 
 @dataclass(frozen=True)

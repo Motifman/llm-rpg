@@ -2,7 +2,7 @@
 関係性コマンド関連の例外定義
 """
 
-from typing import Optional
+
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import UserCommandException
 
 

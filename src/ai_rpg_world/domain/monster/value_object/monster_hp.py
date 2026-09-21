@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterStatsValidationException
 
 
@@ -8,7 +9,7 @@ class MonsterHp:
     value: int
     max_hp: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.max_hp < 0:
             raise MonsterStatsValidationException(f"max_hp must be non-negative: {self.max_hp}")
         if self.value > self.max_hp:

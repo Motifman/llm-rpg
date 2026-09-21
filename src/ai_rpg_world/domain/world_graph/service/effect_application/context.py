@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import List, Mapping, Optional, Set
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -35,36 +36,36 @@ class EffectApplicationState:
 
     interior: SpotInterior
     acting_object: SpotObject | None
-    flags: Set[str]
-    grant: List[ItemSpecId] = field(default_factory=list)
-    remove: List[ItemSpecId] = field(default_factory=list)
-    target_grant: List[ItemSpecId] = field(default_factory=list)
-    target_remove: List[ItemSpecId] = field(default_factory=list)
-    messages: List[str] = field(default_factory=list)
-    damage_specs: List[DamageSpec] = field(default_factory=list)
-    target_damage_specs: List[DamageSpec] = field(default_factory=list)
-    status_effect_specs: List[StatusEffectSpec] = field(default_factory=list)
-    teleport_specs: List[TeleportSpec] = field(default_factory=list)
-    atmosphere_update_specs: List[AtmosphereUpdateSpec] = field(default_factory=list)
-    create_connection_specs: List[CreateConnectionSpec] = field(default_factory=list)
-    destroy_connection_specs: List[DestroyConnectionSpec] = field(default_factory=list)
-    satisfy_need_specs: List[SatisfyNeedSpec] = field(default_factory=list)
-    deposit_gold_specs: List[DepositGoldSpec] = field(default_factory=list)
-    passage_specs: List[PassageStateUpdateSpec] = field(default_factory=list)
-    meeting_calls: List[str] = field(default_factory=list)
-    room_occupancy_display_specs: List[RoomOccupancyDisplaySpec] = field(
+    flags: set[str]
+    grant: list[ItemSpecId] = field(default_factory=list)
+    remove: list[ItemSpecId] = field(default_factory=list)
+    target_grant: list[ItemSpecId] = field(default_factory=list)
+    target_remove: list[ItemSpecId] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)
+    damage_specs: list[DamageSpec] = field(default_factory=list)
+    target_damage_specs: list[DamageSpec] = field(default_factory=list)
+    status_effect_specs: list[StatusEffectSpec] = field(default_factory=list)
+    teleport_specs: list[TeleportSpec] = field(default_factory=list)
+    atmosphere_update_specs: list[AtmosphereUpdateSpec] = field(default_factory=list)
+    create_connection_specs: list[CreateConnectionSpec] = field(default_factory=list)
+    destroy_connection_specs: list[DestroyConnectionSpec] = field(default_factory=list)
+    satisfy_need_specs: list[SatisfyNeedSpec] = field(default_factory=list)
+    deposit_gold_specs: list[DepositGoldSpec] = field(default_factory=list)
+    passage_specs: list[PassageStateUpdateSpec] = field(default_factory=list)
+    meeting_calls: list[str] = field(default_factory=list)
+    room_occupancy_display_specs: list[RoomOccupancyDisplaySpec] = field(
         default_factory=list
     )
-    summaries: List[AppliedEffectSummary] = field(default_factory=list)
-    current_tick: Optional[WorldTick] = None
-    acting_item_aggregate: Optional[ItemAggregate] = None
-    target_item_aggregate: Optional[ItemAggregate] = None
-    acting_player_status: Optional[PlayerStatusAggregate] = None
-    target_player_status: Optional[PlayerStatusAggregate] = None
-    interaction_parameters: Optional[dict] = None
-    acting_player_display_name: Optional[str] = None
-    owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None
-    loot_table_repository: Optional[LootTableRepository] = None
+    summaries: list[AppliedEffectSummary] = field(default_factory=list)
+    current_tick: WorldTick | None = None
+    acting_item_aggregate: ItemAggregate | None = None
+    target_item_aggregate: ItemAggregate | None = None
+    acting_player_status: PlayerStatusAggregate | None = None
+    target_player_status: PlayerStatusAggregate | None = None
+    interaction_parameters: dict[str, Any] | None = None
+    acting_player_display_name: str | None = None
+    owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None
+    loot_table_repository: LootTableRepository | None = None
 
     def replace_object(self, updated: SpotObject) -> None:
         """interior を差し替え、acting_object と同じ id なら同期する。"""

@@ -622,12 +622,12 @@ class TestSubLocationResolverStripsQuotes:
         """LLM が prompt 表示通り ``sub_location_label='"祭壇前"'`` と渡して
         きても解決できる。他 4 resolver (object/player/attack/tend) と同じく
         ``_normalize_label_candidates`` 経由で quote が剥がれる。"""
-        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-            resolve_sub_location_target,
-        )
         from ai_rpg_world.application.llm.contracts.dtos import (
             ToolRuntimeContextDto,
             ToolRuntimeTargetDto,
+        )
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            resolve_sub_location_target,
         )
         ctx = ToolRuntimeContextDto(
             current_spot_id=1,
@@ -648,12 +648,12 @@ class TestSubLocationResolverStripsQuotes:
 
     def test_quote_resolve(self) -> None:
         """後方互換: quote なし入力もこれまで通り動く。"""
-        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-            resolve_sub_location_target,
-        )
         from ai_rpg_world.application.llm.contracts.dtos import (
             ToolRuntimeContextDto,
             ToolRuntimeTargetDto,
+        )
+        from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+            resolve_sub_location_target,
         )
         ctx = ToolRuntimeContextDto(
             current_spot_id=1,

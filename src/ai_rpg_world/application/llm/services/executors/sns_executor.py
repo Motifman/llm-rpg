@@ -1,7 +1,8 @@
 """SNS ツール（create_post, create_reply, like_post, like_reply, follow, block 等）の実行。"""
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -54,10 +55,10 @@ from ai_rpg_world.application.social.contracts.commands import (
     UnsubscribeUserCommand,
     UpdateUserProfileCommand,
 )
+from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.services.active_game_app_session_service import (
     ActiveGameAppConflictError,
 )
-from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
     SnsSearchMode,
@@ -67,7 +68,7 @@ from ai_rpg_world.application.social.sns_virtual_pages.snapshot_json import sns_
 from ai_rpg_world.domain.sns.enum import PostVisibility
 
 
-def _parse_sns_virtual_page_kind(raw: Any) -> Optional[SnsVirtualPageKind]:
+def _parse_sns_virtual_page_kind(raw: Any) -> SnsVirtualPageKind | None:
     if raw is None:
         return None
     s = str(raw).strip().lower()
@@ -86,7 +87,7 @@ def _parse_sns_home_tab(raw: Any) -> SnsHomeTab:
     return SnsHomeTab.FOLLOWING
 
 
-def _parse_sns_search_mode(raw: Any) -> Optional[SnsSearchMode]:
+def _parse_sns_search_mode(raw: Any) -> SnsSearchMode | None:
     if raw is None:
         return None
     t = str(raw).strip().lower()
@@ -95,7 +96,7 @@ def _parse_sns_search_mode(raw: Any) -> Optional[SnsSearchMode]:
     return SnsSearchMode.KEYWORD
 
 
-def _non_empty_str(raw: Any) -> Optional[str]:
+def _non_empty_str(raw: Any) -> str | None:
     if raw is None:
         return None
     value = str(raw).strip()
@@ -116,15 +117,15 @@ class SnsToolExecutor:
 
     def __init__(
         self,
-        post_service: Optional[Any] = None,
-        reply_service: Optional[Any] = None,
-        user_command_service: Optional[Any] = None,
-        notification_command_service: Optional[Any] = None,
-        sns_mode_session: Optional[Any] = None,
-        sns_page_session: Optional[Any] = None,
-        sns_page_query_service: Optional[Any] = None,
-        reply_query_service: Optional[Any] = None,
-        notification_query_service: Optional[Any] = None,
+        post_service: Any | None = None,
+        reply_service: Any | None = None,
+        user_command_service: Any | None = None,
+        notification_command_service: Any | None = None,
+        sns_mode_session: Any | None = None,
+        sns_page_session: Any | None = None,
+        sns_page_query_service: Any | None = None,
+        reply_query_service: Any | None = None,
+        notification_query_service: Any | None = None,
     ) -> None:
         self._post_service = post_service
         self._reply_service = reply_service
@@ -138,9 +139,9 @@ class SnsToolExecutor:
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。"""
-        handlers: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {}
+        handlers: dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]] = {}
         handlers[TOOL_NAME_SNS_ENTER] = self._execute_sns_enter
         handlers[TOOL_NAME_SNS_LOGOUT] = self._execute_sns_logout
         if self._post_service is not None:
@@ -174,7 +175,7 @@ class SnsToolExecutor:
         return handlers
 
     def _execute_sns_enter(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("SNS モード状態が利用できません。")
@@ -210,7 +211,7 @@ class SnsToolExecutor:
         )
 
     def _execute_sns_logout(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("SNS モード状態が利用できません。")
@@ -223,7 +224,7 @@ class SnsToolExecutor:
         )
 
     def _execute_delete_post(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._post_service is None:
             return unknown_tool("ポスト削除ツールはまだ利用できません。")
@@ -239,7 +240,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_delete_reply(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._reply_service is None:
             return unknown_tool("リプライ削除ツールはまだ利用できません。")
@@ -255,14 +256,14 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_update_profile(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("プロフィール更新ツールはまだ利用できません。")
         raw_name = args.get("new_display_name")
         raw_bio = args.get("new_bio")
-        new_display_name: Optional[str]
-        new_bio: Optional[str]
+        new_display_name: str | None
+        new_bio: str | None
         if raw_name is None:
             new_display_name = None
         else:
@@ -286,7 +287,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_mark_notification_read(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._notification_command_service is None:
             return unknown_tool("通知既読ツールはまだ利用できません。")
@@ -305,7 +306,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_mark_all_notifications_read(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._notification_command_service is None:
             return unknown_tool("通知一括既読ツールはまだ利用できません。")
@@ -336,7 +337,7 @@ class SnsToolExecutor:
         return PostVisibility.PUBLIC, True  # 不明な値指定時はヒントを出す
 
     def _execute_create_post(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._post_service is None:
             return unknown_tool("投稿作成ツールはまだ利用できません。")
@@ -360,7 +361,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_create_reply(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._reply_service is None:
             return unknown_tool("リプライ作成ツールはまだ利用できません。")
@@ -391,7 +392,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_like_post(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._post_service is None:
             return unknown_tool("ポストいいねツールはまだ利用できません。")
@@ -407,7 +408,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_like_reply(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._reply_service is None:
             return unknown_tool("リプライいいねツールはまだ利用できません。")
@@ -423,7 +424,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_follow(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("フォローツールはまだ利用できません。")
@@ -442,7 +443,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_unfollow(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("フォロー解除ツールはまだ利用できません。")
@@ -461,7 +462,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_subscribe(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("サブスクライブツールはまだ利用できません。")
@@ -480,7 +481,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_unsubscribe(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("サブスクライブ解除ツールはまだ利用できません。")
@@ -499,7 +500,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_block(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("ブロックツールはまだ利用できません。")
@@ -518,7 +519,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_unblock(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("ブロック解除ツールはまだ利用できません。")
@@ -537,8 +538,8 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _resolve_post_id_from_args(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        self, player_id: int, args: dict[str, Any]
+    ) -> tuple[int | None, LlmCommandResultDto | None]:
         post_ref = _non_empty_str(args.get("post_ref"))
         if post_ref is not None:
             if self._sns_page_session is None:
@@ -561,8 +562,8 @@ class SnsToolExecutor:
         return int(post_id), None
 
     def _resolve_reply_id_from_args(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        self, player_id: int, args: dict[str, Any]
+    ) -> tuple[int | None, LlmCommandResultDto | None]:
         reply_ref = _non_empty_str(args.get("reply_ref"))
         if reply_ref is not None:
             if self._sns_page_session is None:
@@ -585,8 +586,8 @@ class SnsToolExecutor:
         return int(reply_id), None
 
     def _resolve_notification_id_from_args(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        self, player_id: int, args: dict[str, Any]
+    ) -> tuple[int | None, LlmCommandResultDto | None]:
         notification_ref = _non_empty_str(args.get("notification_ref"))
         if notification_ref is not None:
             if self._sns_page_session is None:
@@ -611,8 +612,8 @@ class SnsToolExecutor:
         return int(notification_id), None
 
     def _resolve_target_user_id_from_args(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        self, player_id: int, args: dict[str, Any]
+    ) -> tuple[int | None, LlmCommandResultDto | None]:
         target_user_ref = _non_empty_str(args.get("target_user_ref"))
         if target_user_ref is not None:
             if self._sns_page_session is None:
@@ -642,8 +643,8 @@ class SnsToolExecutor:
         return None, invalid_arg_result("target_user_ref")
 
     def _resolve_reply_parent_args(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> tuple[Optional[int], Optional[int], Optional[LlmCommandResultDto]]:
+        self, player_id: int, args: dict[str, Any]
+    ) -> tuple[int | None, int | None, LlmCommandResultDto | None]:
         parent_post_ref = _non_empty_str(args.get("parent_post_ref"))
         if parent_post_ref is not None:
             post_id, error = self._resolve_post_id_from_args(
@@ -668,7 +669,7 @@ class SnsToolExecutor:
 
     def _find_notification_by_id(
         self, user_id: int, notification_id: int
-    ) -> Optional[NotificationDto]:
+    ) -> NotificationDto | None:
         if self._notification_query_service is None:
             return None
         offset = 0
@@ -694,7 +695,7 @@ class SnsToolExecutor:
         return sns_snapshot_to_json(snap)
 
     def _execute_view_current_page(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_page_query_service is None:
             return unknown_tool("仮想 SNS 画面が利用できません。")
@@ -705,12 +706,12 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_page_refresh(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         return self._execute_view_current_page(player_id, args)
 
     def _execute_open_page(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_page_session is None or self._sns_page_query_service is None:
             return unknown_tool("仮想 SNS 画面が利用できません。")
@@ -782,7 +783,7 @@ class SnsToolExecutor:
         )
 
     def _execute_open_ref(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_page_session is None or self._sns_page_query_service is None:
             return unknown_tool("仮想 SNS 画面が利用できません。")
@@ -873,7 +874,7 @@ class SnsToolExecutor:
         )
 
     def _execute_page_next(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_page_session is None:
             return unknown_tool("仮想 SNS 画面が利用できません。")
@@ -886,7 +887,7 @@ class SnsToolExecutor:
             return exception_result(e)
 
     def _execute_switch_tab(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_page_session is None:
             return unknown_tool("仮想 SNS 画面が利用できません。")

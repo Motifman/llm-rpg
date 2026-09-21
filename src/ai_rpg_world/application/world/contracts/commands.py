@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional, Literal
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from typing import Literal
+
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
 @dataclass(frozen=True)
@@ -21,8 +22,8 @@ class SetDestinationCommand:
     player_id: int
     destination_type: Literal["spot", "location", "object"]
     target_spot_id: int
-    target_location_area_id: Optional[int] = None  # destination_type == "location" のとき必須
-    target_world_object_id: Optional[int] = None  # destination_type == "object" のとき必須
+    target_location_area_id: int | None = None  # destination_type == "location" のとき必須
+    target_world_object_id: int | None = None  # destination_type == "object" のとき必須
 
     def __post_init__(self):
         if self.player_id <= 0:

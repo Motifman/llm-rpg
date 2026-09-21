@@ -3,7 +3,7 @@
 同スポットの他プレイヤーに「{actor}が{item_name}を使用した」を伝える。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -23,7 +23,7 @@ class ItemUseObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if not isinstance(event, ConsumableUsedEvent):
             return None
 
@@ -45,7 +45,7 @@ class ItemUseObservationFormatter:
         item_name = self._context.name_resolver.item_spec_name(item_spec_id.value)
 
         prose = f"{actor_name}が{item_name}を使用した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "item_used",
             "actor_id": actor_id.value,
             "actor_name": actor_name,

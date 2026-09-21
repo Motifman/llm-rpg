@@ -256,7 +256,8 @@ class TestRequiredQuantityScenarioLoader:
         import pytest
 
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoader, ScenarioLoadError,
+            ScenarioLoader,
+            ScenarioLoadError,
         )
 
         scenario = {

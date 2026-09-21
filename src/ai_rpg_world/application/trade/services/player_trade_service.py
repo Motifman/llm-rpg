@@ -20,8 +20,9 @@ target は集め直しても受けられない。「あと N 個足りない」�
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, cast
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 class _CommandContextEventPublisher:
     """取引観測をcommandの確定後配送へ収集する。"""
 
-    def __init__(self, context: "CommandContext[Any]") -> None:
+    def __init__(self, context: CommandContext[Any]) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
@@ -202,12 +203,12 @@ class PlayerTradeService:
         player_status_repository: Any,
         item_repository: Any,
         item_spec_repository: Any,
-        item_spec_name_resolver: Optional[Any] = None,
-        entity_name_resolver: Optional[Any] = None,
-        event_publisher: Optional[Any] = None,
+        item_spec_name_resolver: Any | None = None,
+        entity_name_resolver: Any | None = None,
+        event_publisher: Any | None = None,
         expires_in_ticks: int = 10,
         overflow_sink: Any = None,
-        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         _command_bound: bool = False,
     ) -> None:
         self._offers = pending_trade_offer_store
@@ -227,7 +228,7 @@ class PlayerTradeService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort],
     ) -> None:
         """本番取引を提案・承諾・辞退ごとの確定境界へ接続する。"""
         if factory is None:
@@ -241,9 +242,9 @@ class PlayerTradeService:
         offerer: PlayerId,
         *,
         target: PlayerId,
-        gives_items: Sequence[Dict[str, Any]],
+        gives_items: Sequence[dict[str, Any]],
         gives_gold: int,
-        asks_item_labels: Sequence[Dict[str, Any]],
+        asks_item_labels: Sequence[dict[str, Any]],
         asks_gold: int,
         current_tick: int,
     ) -> PendingTradeOffer:
@@ -297,7 +298,7 @@ class PlayerTradeService:
     # ── 返事 ────────────────────────────────────────────────────────────
 
     def accept(
-        self, target: PlayerId, *, offerer: Optional[PlayerId] = None,
+        self, target: PlayerId, *, offerer: PlayerId | None = None,
     ) -> TradeSettlement:
         """持ちかけられた取引を受け、その場で交換する。"""
         if not self._command_bound:
@@ -331,7 +332,7 @@ class PlayerTradeService:
         )
 
     def decline(
-        self, target: PlayerId, *, offerer: Optional[PlayerId] = None,
+        self, target: PlayerId, *, offerer: PlayerId | None = None,
     ) -> PendingTradeOffer:
         """持ちかけられた取引を断る。相手の凍結はここで解ける。"""
         if not self._command_bound:
@@ -344,7 +345,7 @@ class PlayerTradeService:
         self._publish(offer, kind="declined", actor=target)
         return offer
 
-    def _for_command(self, context: "CommandContext[Any]") -> "PlayerTradeService":
+    def _for_command(self, context: CommandContext[Any]) -> PlayerTradeService:
         repositories = context.repositories
         return PlayerTradeService(
             pending_trade_offer_store=self._offers,
@@ -368,7 +369,7 @@ class PlayerTradeService:
 
     def _require_command_scope_factory(
         self,
-    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+    ) -> CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]:
         factory = self._command_scope_factory
         if factory is None:
             raise RuntimeError("取引用CommandScopeFactoryが未配線です。")
@@ -377,7 +378,7 @@ class PlayerTradeService:
     # ── 内部 ────────────────────────────────────────────────────────────
 
     def _offer_for(
-        self, target: PlayerId, offerer: Optional[PlayerId],
+        self, target: PlayerId, offerer: PlayerId | None,
     ) -> PendingTradeOffer:
         candidates = self._offers.list_for_target(target)
         if not candidates:
@@ -385,7 +386,7 @@ class PlayerTradeService:
         if offerer is not None:
             for offer in candidates:
                 if offer.offerer_player_id == offerer:
-                    return offer
+                    return cast("PendingTradeOffer", offer)
             raise NoOfferForYouError()
         if len(candidates) > 1:
             raise AmbiguousOfferError(
@@ -393,7 +394,7 @@ class PlayerTradeService:
                     self._name_of(offer.offerer_player_id) for offer in candidates
                 ]
             )
-        return candidates[0]
+        return cast("PendingTradeOffer", candidates[0])
 
     def _publish(
         self, offer: PendingTradeOffer, *, kind: str, actor: PlayerId,
@@ -559,7 +560,7 @@ class PlayerTradeService:
             overflow_sink=self._overflow_sink,
         )
 
-    def _owned_counts(self, player_id: PlayerId) -> Dict[int, int]:
+    def _owned_counts(self, player_id: PlayerId) -> dict[int, int]:
         inventory = self._inventories.find_by_id(player_id)
         if inventory is None:
             return {}
@@ -575,7 +576,7 @@ class PlayerTradeService:
         spec = self._item_specs.find_by_name(str(label))
         if spec is None:
             raise TradeUnknownItemError(item_label=str(label))
-        return spec.item_spec_id.value
+        return int(spec.item_spec_id.value)
 
     def _item_display_name(self, item_spec_id: int) -> str:
         if self._item_name is None:
@@ -594,7 +595,7 @@ class PlayerTradeService:
             return "相手"
 
 
-def _spec_ids_of(side: TradeSide) -> Tuple[ItemSpecId, ...]:
+def _spec_ids_of(side: TradeSide) -> tuple[ItemSpecId, ...]:
     """片側の品を、1 個 1 要素の並びにする。"""
     return tuple(
         ItemSpecId.create(spec_id)

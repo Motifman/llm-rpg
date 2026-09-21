@@ -22,20 +22,15 @@ from __future__ import annotations
 import logging
 import threading
 from collections import deque
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
-from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
+from typing import Any
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
-from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
-    L4MidSummary,
-)
-from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
-    L5LongSummary,
-)
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
     ShortTermMemoryLongSummaryService,
@@ -57,8 +52,13 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder, NullTraceRecorder
+from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
+    L4MidSummary,
+)
+from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
+    L5LongSummary,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 _logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ _DEFAULT_NULL_RECORDER = NullTraceRecorder()
 
 
 def _ensure_trace_recorder_provider(
-    provider: Optional[Callable[[], Any]],
+    provider: Callable[[], Any] | None,
 ) -> Callable[[], ITraceRecorder]:
     """provider を ``Callable[[], ITraceRecorder]`` に正規化する。
 
@@ -126,17 +126,17 @@ class SummarizingShortTermMemory(IShortTermMemory):
     def __init__(
         self,
         *,
-        summary_service: Optional[ShortTermMemorySummaryService] = None,
-        long_summary_service: Optional[ShortTermMemoryLongSummaryService] = None,
-        persona_resolver: Optional[PersonaResolverFn] = None,
+        summary_service: ShortTermMemorySummaryService | None = None,
+        long_summary_service: ShortTermMemoryLongSummaryService | None = None,
+        persona_resolver: PersonaResolverFn | None = None,
         l4_keep_generations: int = DEFAULT_L4_KEEP_GENERATIONS,
-        scheduler: Optional[IShortTermMemoryScheduler] = None,
+        scheduler: IShortTermMemoryScheduler | None = None,
         # PR #435: L4 / L5 が install された瞬間に trace event を 1 件吐く。
         # 失敗時は既に DROPPED / GENERATION_FAILED が吐かれているが、成功時の
         # 生成内容を後追いする経路が無かった。両方とも optional で、None なら
         # 完全 no-op (= 既存挙動の後方互換 / テスト fixture が簡素)。
-        trace_recorder_provider: Optional[Callable[[], Any]] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], Any] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
         event_store: UnifiedRecentEventStore | None = None,
         turn_cap: int = 20,
         compact_turn_count: int = 10,
@@ -183,12 +183,12 @@ class SummarizingShortTermMemory(IShortTermMemory):
             raise ValueError("turn window requires 0 < compact_turn_count < turn_cap")
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
         # ので mid_lock で保護する。
-        self._mid: Dict[int, Deque[L4MidSummary]] = {}
+        self._mid: dict[int, deque[L4MidSummary]] = {}
         self._mid_lock = threading.Lock()
         # Phase 3: L5 long summary (1 player 1 件)。worker thread からも書く
         # ので long_lock で保護する。世代数のカウンタも保持。
-        self._long: Dict[int, L5LongSummary] = {}
-        self._long_gen_index: Dict[int, int] = {}
+        self._long: dict[int, L5LongSummary] = {}
+        self._long_gen_index: dict[int, int] = {}
         self._long_lock = threading.Lock()
 
     # ──────────────────────────────────────────────────────────
@@ -206,8 +206,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._event_store.append_observation(player_id, entry)
 
     def append_all(
-        self, player_id: PlayerId, entries: List[ObservationEntry]
-    ) -> List[ObservationEntry]:
+        self, player_id: PlayerId, entries: list[ObservationEntry]
+    ) -> list[ObservationEntry]:
         """observations を順に append する。
 
         ``DefaultSlidingWindowMemory`` と違って evict は無い (代わりに L4 に
@@ -219,7 +219,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
 
     def get_recent(
         self, player_id: PlayerId, limit: int
-    ) -> List[ObservationEntry]:
+    ) -> list[ObservationEntry]:
         pid = int(player_id.value)
         if limit <= 0:
             return []
@@ -285,7 +285,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """PR5 (R1): 現在 short-term window に乗っている最古 entry の ``occurred_at``。
 
         L1 raw queue の最古 entry を返す。L4 mid summary は raw を畳んだ
@@ -404,7 +404,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         pid: int,
         consumed: list[UnifiedRecentEventEntry],
         compacted_turn_count: int,
-        previous_l4: Optional[L4MidSummary],
+        previous_l4: L4MidSummary | None,
         force_fallback: bool,
     ) -> None:
         """L4 生成本体。Inline なら main thread、ThreadPool なら worker thread。"""
@@ -457,7 +457,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._install_l4(summary)
 
     def set_trace_recorder_provider(
-        self, provider: Optional[Callable[[], Any]]
+        self, provider: Callable[[], Any] | None
     ) -> None:
         """trace_recorder_provider を後から差し替える (PR #439 / PR #449 正規化)。
 
@@ -472,7 +472,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._trace_recorder_provider = _ensure_trace_recorder_provider(provider)
 
     def set_current_tick_provider(
-        self, provider: Optional[Callable[[], Optional[int]]]
+        self, provider: Callable[[], int | None] | None
     ) -> None:
         """current_tick_provider を後から差し替える (PR #439)。
 
@@ -533,7 +533,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 "trace recorder.record raised for SHORT_TERM_LONG_SUMMARY_GENERATED; skipping"
             )
 
-    def _safe_current_tick(self) -> Optional[int]:
+    def _safe_current_tick(self) -> int | None:
         """current_tick_provider を best-effort で評価。例外は None に縮退。"""
         if self._current_tick_provider is None:
             return None
@@ -556,7 +556,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         evict は lock 内で検出して取り出し、L5 task の submit は lock 外で行う
         (scheduler 内部の lock とのデッドロック回避)。
         """
-        evicted_l4: Optional[L4MidSummary] = None
+        evicted_l4: L4MidSummary | None = None
         pid = summary.player_id
         with self._mid_lock:
             if pid not in self._mid:
@@ -617,7 +617,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         *,
         pid: int,
         evicted_l4: L4MidSummary,
-        previous_l5: Optional[L5LongSummary],
+        previous_l5: L5LongSummary | None,
     ) -> None:
         """L5 生成本体。Inline なら main thread、ThreadPool なら worker thread。"""
         parsed: _ParsedLongSummary
@@ -694,7 +694,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
             )
             return (f"Player {pid}", "")
 
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """非同期 scheduler の場合 in-flight L4 生成を完了待ちで終了する。
 
         Inline scheduler の場合は no-op。
@@ -712,7 +712,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         with self._mid_lock:
             return list(self._mid.get(player_id, ()))
 
-    def _long_summary(self, player_id: int) -> Optional[L5LongSummary]:
+    def _long_summary(self, player_id: int) -> L5LongSummary | None:
         with self._long_lock:
             return self._long.get(player_id)
 

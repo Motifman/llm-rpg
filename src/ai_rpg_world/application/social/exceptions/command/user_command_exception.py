@@ -2,14 +2,14 @@
 ユーザーコマンド関連の例外定義
 """
 
-from typing import Optional
+
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 
 
 class UserCommandException(ApplicationException):
     """ユーザーコマンド関連の例外"""
 
-    def __init__(self, message: str, error_code: str = None, user_id: Optional[int] = None, target_user_id: Optional[int] = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, user_id: int | None = None, target_user_id: int | None = None, **context):
         # 既存の動作を維持しつつ、新しい基底クラスに適合
         all_context = context.copy()
         if user_id is not None:

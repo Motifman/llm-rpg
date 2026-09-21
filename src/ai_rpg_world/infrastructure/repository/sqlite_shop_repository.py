@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
@@ -30,27 +29,27 @@ class SqliteShopRepository(ShopRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteShopRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteShopRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteShopRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteShopRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
 
-    def find_by_id(self, entity_id: ShopId) -> Optional[ShopAggregate]:
+    def find_by_id(self, entity_id: ShopId) -> ShopAggregate | None:
         row = self._conn.execute("SELECT * FROM game_shops WHERE shop_id = ?", (int(entity_id),)).fetchone()
         if row is None:
             return None
         return copy.deepcopy(self._build_shop_from_row(row))
 
-    def find_by_ids(self, entity_ids: List[ShopId]) -> List[ShopAggregate]:
+    def find_by_ids(self, entity_ids: list[ShopId]) -> list[ShopAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[ShopAggregate]:
+    def find_all(self) -> list[ShopAggregate]:
         rows = self._conn.execute("SELECT * FROM game_shops ORDER BY shop_id ASC").fetchall()
         return [copy.deepcopy(self._build_shop_from_row(row)) for row in rows]
 
@@ -102,7 +101,7 @@ class SqliteShopRepository(ShopRepository):
     def generate_listing_id(self) -> ShopListingId:
         return ShopListingId(allocate_sequence_value(self._conn, "shop_listing_id", initial_value=0))
 
-    def find_by_spot_and_location(self, spot_id: SpotId, location_area_id: LocationAreaId) -> Optional[ShopAggregate]:
+    def find_by_spot_and_location(self, spot_id: SpotId, location_area_id: LocationAreaId) -> ShopAggregate | None:
         row = self._conn.execute(
             "SELECT * FROM game_shops WHERE spot_id = ? AND location_area_id = ?",
             (int(spot_id), int(location_area_id)),

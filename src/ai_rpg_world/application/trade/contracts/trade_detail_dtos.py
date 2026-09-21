@@ -1,15 +1,14 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class TradeStatisticsDto:
     """取引統計DTO"""
-    min_price: Optional[int]
-    max_price: Optional[int]
-    avg_price: Optional[float]
-    median_price: Optional[int]
+    min_price: int | None
+    max_price: int | None
+    avg_price: float | None
+    median_price: int | None
     total_trades: int
     success_rate: float
     last_updated: datetime
@@ -26,11 +25,11 @@ class TradeDetailDto:
     item_type: str
     item_rarity: str
     item_description: str
-    item_equipment_type: Optional[str]
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    item_equipment_type: str | None
+    durability_current: int | None
+    durability_max: int | None
     requested_gold: int
     seller_name: str
-    buyer_name: Optional[str]
+    buyer_name: str | None
     status: str
     statistics: TradeStatisticsDto

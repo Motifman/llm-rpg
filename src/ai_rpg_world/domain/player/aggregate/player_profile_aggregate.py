@@ -1,10 +1,9 @@
-from typing import Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.player.enum.player_enum import ControlType, Element, Race, Role
+from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import ControlType, Role, Race, Element
-from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 
 
 class PlayerProfileAggregate(AggregateRoot):
@@ -156,10 +155,10 @@ class PlayerProfileAggregate(AggregateRoot):
 
     def update_profile(
         self,
-        name: Optional[PlayerName] = None,
-        role: Optional[Role] = None,
-        race: Optional[Race] = None,
-        element: Optional[Element] = None
+        name: PlayerName | None = None,
+        role: Role | None = None,
+        race: Race | None = None,
+        element: Element | None = None
     ) -> None:
         """プロフィールを一括更新する"""
         old_name = self._name if name is not None and self._name != name else None

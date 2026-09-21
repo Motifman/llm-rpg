@@ -18,7 +18,7 @@ t33 に出した注文が t80 まで生きていて、値の付け直しまで�
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -44,22 +44,21 @@ class MarketOrderExpiryStage:
         self,
         *,
         market_service: Any,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._market = market_service
         self._command_scope_factory = command_scope_factory
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort],
     ) -> None:
         """本番stageを注文一件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
-        tick_value = int(getattr(current_tick, "value", current_tick))
+        raw_tick: Any = getattr(current_tick, "value", current_tick)
+        tick_value = int(raw_tick)
         scope_factory = self._command_scope_factory
         if scope_factory is None:
             raise RuntimeError(
@@ -88,10 +87,10 @@ class MarketOrderExpiryStage:
         order: Any,
         tick_value: int,
         scope_factory: (
-            "CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]
         ),
     ) -> None:
-        result: Optional["MarketOrderExpiryResult"] = None
+        result: MarketOrderExpiryResult | None = None
         try:
             with scope_factory.create() as scope:
                 repositories = scope.repositories
@@ -109,7 +108,7 @@ class MarketOrderExpiryStage:
             raise
         self._notify(result)
 
-    def _notify(self, result: Optional["MarketOrderExpiryResult"]) -> None:
+    def _notify(self, result: MarketOrderExpiryResult | None) -> None:
         if result is None:
             return
         try:

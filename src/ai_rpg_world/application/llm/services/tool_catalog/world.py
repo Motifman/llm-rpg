@@ -1,6 +1,5 @@
 """ワールド系ツールの定義（interact, harvest, inspect, attention, conversation, place, drop, chest）。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -239,45 +238,45 @@ CHEST_TAKE_DEFINITION = ToolDefinitionDto(
 )
 
 
-def _get_interaction_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_interaction_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [(INTERACT_WORLD_OBJECT_DEFINITION, InteractAvailabilityResolver())]
 
 
-def _get_harvest_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_harvest_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (HARVEST_START_DEFINITION, HarvestStartAvailabilityResolver()),
         (HARVEST_CANCEL_DEFINITION, HarvestCancelAvailabilityResolver()),
     ]
 
 
-def _get_inspect_item_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_inspect_item_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [(INSPECT_ITEM_DEFINITION, InspectItemAvailabilityResolver())]
 
 
-def _get_inspect_target_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_inspect_target_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [(INSPECT_TARGET_DEFINITION, InspectTargetAvailabilityResolver())]
 
 
-def _get_attention_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_attention_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [(CHANGE_ATTENTION_DEFINITION, ChangeAttentionAvailabilityResolver())]
 
 
-def _get_conversation_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_conversation_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [(CONVERSATION_ADVANCE_DEFINITION, ConversationAdvanceAvailabilityResolver())]
 
 
-def _get_place_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_place_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (PLACE_OBJECT_DEFINITION, PlaceObjectAvailabilityResolver()),
         (DESTROY_PLACEABLE_DEFINITION, DestroyPlaceableAvailabilityResolver()),
     ]
 
 
-def _get_drop_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_drop_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [(DROP_ITEM_DEFINITION, DropItemAvailabilityResolver())]
 
 
-def _get_chest_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def _get_chest_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (CHEST_STORE_DEFINITION, ChestStoreAvailabilityResolver()),
         (CHEST_TAKE_DEFINITION, ChestTakeAvailabilityResolver()),
@@ -295,9 +294,9 @@ def get_world_specs(
     place_enabled: bool = False,
     drop_enabled: bool = False,
     chest_enabled: bool = False,
-) -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+) -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """ワールド系ツールの (definition, resolver) 一覧を返す。有効なカテゴリのみ含む。"""
-    specs: List[Tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
+    specs: list[tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
     if interaction_enabled:
         specs.extend(_get_interaction_specs())
     if harvest_enabled:

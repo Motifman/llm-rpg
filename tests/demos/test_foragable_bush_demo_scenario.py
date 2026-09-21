@@ -77,7 +77,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "tests"

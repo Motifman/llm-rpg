@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator
-from typing import Optional
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
@@ -15,8 +15,6 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +30,15 @@ class PlayerLifeQuery:
     def __init__(
         self,
         *,
-        player_status_repository: Optional[PlayerStatusRepository],
-        player_outcome_registry: Optional[PlayerOutcomeRegistry],
+        player_status_repository: PlayerStatusRepository | None,
+        player_outcome_registry: PlayerOutcomeRegistry | None,
         departed_agents_enabled: bool = False,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._player_outcome_registry = player_outcome_registry
         self._departed_agents_enabled = bool(departed_agents_enabled)
         self._scoped_player_status_repository: ContextVar[
-            Optional[PlayerStatusRepository]
+            PlayerStatusRepository | None
         ] = ContextVar(
             f"player_life_query_status_repository_{id(self)}",
             default=None,
@@ -67,7 +65,7 @@ class PlayerLifeQuery:
         finally:
             self._scoped_player_status_repository.reset(token)
 
-    def _status_repository(self) -> Optional[PlayerStatusRepository]:
+    def _status_repository(self) -> PlayerStatusRepository | None:
         scoped_repository = self._scoped_player_status_repository.get()
         if scoped_repository is not None:
             return scoped_repository

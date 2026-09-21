@@ -1,49 +1,51 @@
 """会話コマンドサービス（ルールベース会話の開始・進行・終了）"""
 import logging
-from typing import Callable, Any, Optional, Dict, Tuple
-
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationStartedEvent,
-    ConversationEndedEvent,
-)
-from ai_rpg_world.domain.conversation.repository.dialogue_tree_repository import (
-    DialogueTreeRepository,
-)
-from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
-from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
-from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
-from ai_rpg_world.domain.player.repository.player_inventory_repository import (
-    PlayerInventoryRepository,
-)
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.conversation.contracts.commands import (
-    StartConversationCommand,
     AdvanceConversationCommand,
     GetCurrentNodeQuery,
+    StartConversationCommand,
 )
 from ai_rpg_world.application.conversation.contracts.dtos import (
+    AdvanceConversationResultDto,
     ConversationNodeDto,
     ConversationSessionDto,
     StartConversationResultDto,
-    AdvanceConversationResultDto,
 )
 from ai_rpg_world.application.conversation.exceptions import (
     ConversationApplicationException,
     ConversationCommandException,
     ConversationSystemErrorException,
-    DialogueTreeNotFoundException,
     DialogueNodeNotFoundException,
+    DialogueTreeNotFoundException,
     NoActiveSessionException,
 )
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+    ConversationStartedEvent,
+)
+from ai_rpg_world.domain.conversation.repository.dialogue_tree_repository import (
+    DialogueTreeRepository,
+)
+from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
+from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
+from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_Result = TypeVar("_Result")
 
 
 def _node_to_dto(node: DialogueNode) -> ConversationNodeDto:
@@ -65,11 +67,11 @@ class ConversationCommandService:
     def __init__(
         self,
         dialogue_tree_repository: DialogueTreeRepository,
-        event_publisher: EventPublisher,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        player_inventory_repository: Optional[PlayerInventoryRepository] = None,
-        item_spec_repository: Optional[ItemSpecRepository] = None,
-        item_repository: Optional[ItemRepository] = None,
+        event_publisher: EventPublisher[Any],
+        player_status_repository: PlayerStatusRepository | None = None,
+        player_inventory_repository: PlayerInventoryRepository | None = None,
+        item_spec_repository: ItemSpecRepository | None = None,
+        item_repository: ItemRepository | None = None,
     ):
         self._dialogue_tree_repository = dialogue_tree_repository
         self._event_publisher = event_publisher
@@ -78,12 +80,12 @@ class ConversationCommandService:
         self._item_spec_repository = item_spec_repository
         self._item_repository = item_repository
         # (player_id_value, npc_id_value) -> {"tree_id": DialogueTreeId, "current_node_id": DialogueNodeId}
-        self._sessions: Dict[Tuple[int, int], Dict[str, Any]] = {}
+        self._sessions: dict[tuple[int, int], dict[str, Any]] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self, operation: Callable[[], Any], context: dict
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except ConversationApplicationException:
@@ -98,7 +100,7 @@ class ConversationCommandService:
                 extra=context,
             )
             raise ConversationSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 
@@ -148,7 +150,7 @@ class ConversationCommandService:
             session=session_dto,
         )
 
-    def get_current_node(self, query: GetCurrentNodeQuery) -> Optional[ConversationSessionDto]:
+    def get_current_node(self, query: GetCurrentNodeQuery) -> ConversationSessionDto | None:
         """現在の会話ノードを返す。セッションがなければ None。"""
         key = (query.player_id, query.npc_id_value)
         session = self._sessions.get(key)
@@ -187,7 +189,7 @@ class ConversationCommandService:
         node = self._dialogue_tree_repository.get_node(tree_id, current_node_id)
         if node is None:
             raise DialogueNodeNotFoundException(tree_id.value, current_node_id.value)
-        next_node_id_value: Optional[int] = None
+        next_node_id_value: int | None = None
         if command.choice_index is not None:
             if command.choice_index < 0 or command.choice_index >= len(node.choices):
                 raise ConversationCommandException(

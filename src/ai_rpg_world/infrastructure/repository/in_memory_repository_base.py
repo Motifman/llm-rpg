@@ -3,8 +3,11 @@ InMemoryRepositoryBase - インメモリリポジトリの基底クラス
 Unit of Workとの統合ロジックを提供します。
 """
 import copy
-from typing import Optional, Callable, Any, TypeVar, Generic
+from collections.abc import Callable
+from typing import Any, TypeVar
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+
 from .in_memory_data_store import InMemoryDataStore
 
 T = TypeVar('T')
@@ -12,7 +15,7 @@ T = TypeVar('T')
 class InMemoryRepositoryBase:
     """インメモリリポジトリの共通基底クラス"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         """初期化
         
         Args:
@@ -90,7 +93,7 @@ class InMemoryRepositoryBase:
             if hasattr(self._unit_of_work, 'register_pending_aggregate'):
                 self._unit_of_work.register_pending_aggregate(self._repo_key(), entity_id, aggregate)
 
-    def _get_pending_aggregate(self, entity_id: Any) -> Optional[Any]:
+    def _get_pending_aggregate(self, entity_id: Any) -> Any | None:
         """同一トランザクション内で保留中の集約があれば返す"""
         if not self._unit_of_work or not self._is_in_transaction():
             return None

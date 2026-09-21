@@ -3,35 +3,36 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.afterglow_store import (
     IAfterglowStore,
     make_afterglow_handle,
     resolve_episode_id_prefix_from_handle,
 )
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
+)
 from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
     IEpisodicRecallSlotStore,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_EXPLORE_RELATED
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
+    MemoryLinkRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
     other_episode_id,
 )
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    MemoryLinkRepository,
-)
-from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
-    EpisodicMemoryLinkApplicationService,
-)
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_EXPLORE_RELATED
 
 
 @dataclass
@@ -41,18 +42,18 @@ class EpisodicMemoryExploreToolExecutor:
     episode_store: EpisodicEpisodeRepository
     link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
-    afterglow_store: Optional[IAfterglowStore] = None
-    slot_store: Optional[IEpisodicRecallSlotStore] = None
+    afterglow_store: IAfterglowStore | None = None
+    slot_store: IEpisodicRecallSlotStore | None = None
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[ActingBeing, dict[str, Any]], LlmCommandResultDto]]:
         return {TOOL_NAME_MEMORY_EXPLORE_RELATED: self._run_explore_related}
 
     def _run_explore_related(
         self,
         acting: ActingBeing,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> LlmCommandResultDto:
         handle_raw = arguments.get("handle")
         try:
@@ -139,7 +140,7 @@ class EpisodicMemoryExploreToolExecutor:
         being_id: BeingId,
         handle: str,
         handle_prefix: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """prompt handle を episode_id に戻す。
 
         まず afterglow を見る。``memory_recall_by_handle`` は本文を読んだ後に

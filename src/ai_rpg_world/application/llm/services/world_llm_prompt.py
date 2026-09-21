@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
-from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
-from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
     PersonaPromptFragmentBuilder,
 )
+from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
+from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioMetadata
 
 
@@ -82,10 +81,10 @@ def limited_action_and_time_pressure_text(*, has_goal: bool = True) -> str:
 
 
 def build_persona_block_from_character(
-    character: Optional[CharacterPromptInput],
+    character: CharacterPromptInput | None,
     *,
     fallback_display_name: str,
-    policy: Optional[PersonaPromptPolicy] = None,
+    policy: PersonaPromptPolicy | None = None,
 ) -> str:
     """キャラクター入力からペルソナブロックを生成する。"""
     if character is None:

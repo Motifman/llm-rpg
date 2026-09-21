@@ -1,7 +1,6 @@
 """スポーン定義（スポット単位のスポーンテーブル）のリポジトリインターフェース。"""
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.monster.value_object.spot_spawn_table import SpotSpawnTable
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -14,7 +13,7 @@ class SpawnTableRepository(ABC):
     """
 
     @abstractmethod
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[SpotSpawnTable]:
+    def find_by_spot_id(self, spot_id: SpotId) -> SpotSpawnTable | None:
         """指定スポットのスポーンテーブルを取得する。存在しない場合は None。"""
         pass
 

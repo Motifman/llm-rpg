@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -34,7 +34,7 @@ _TOWN = (
 _LENA = PlayerId(1)
 
 #: 引数なしで成功まで届くツール。ここは「成功した呼び出しも 1 件」を見る。
-_NO_ARG_CALLS: Dict[str, Dict[str, Any]] = {
+_NO_ARG_CALLS: dict[str, dict[str, Any]] = {
     "wait": {"reason": "様子を見る", "inner_thought": "待とう"},
     "explore": {"inner_thought": "見て回る"},
     "listen": {"inner_thought": "耳を澄ます"},
@@ -57,14 +57,14 @@ def town(tmp_path: pathlib.Path) -> Any:
     return manager._sessions[summary.session_id]
 
 
-def _call(state: Any, tool: str, args: Dict[str, Any]) -> Any:
+def _call(state: Any, tool: str, args: dict[str, Any]) -> Any:
     state.llm_wiring.llm_client = StubLlmClient(
         tool_call_to_return={"name": tool, "arguments": args},
     )
     return state.llm_wiring.run_turn(_LENA)
 
 
-def _records(state: Any) -> List[Any]:
+def _records(state: Any) -> list[Any]:
     return list(state.runtime._action_result_store.get_recent(_LENA, 50))
 
 
@@ -76,14 +76,14 @@ class _ToolCapture:
     """いま出ているツール定義を受け取るだけの stub。"""
 
     def __init__(self) -> None:
-        self.tools: List[Any] = []
+        self.tools: list[Any] = []
 
     def invoke(self, messages, tools, tool_choice="required", **kwargs):
         self.tools = tools
         return {"name": "wait", "arguments": {"inner_thought": "x"}}
 
 
-def _exposed_tool_names(state: Any) -> List[str]:
+def _exposed_tool_names(state: Any) -> list[str]:
     capture = _ToolCapture()
     state.llm_wiring.llm_client = capture
     state.llm_wiring.run_turn(_LENA)

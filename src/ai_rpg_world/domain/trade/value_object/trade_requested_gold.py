@@ -11,7 +11,7 @@ class TradeRequestedGold:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.value <= 0:
             raise TradeRequestedGoldValidationException(f"取引要求金額は1以上の値である必要があります。value: {self.value}")

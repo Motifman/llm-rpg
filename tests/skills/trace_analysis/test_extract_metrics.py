@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-
 _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / ".claude" / "skills" / "trace-analysis" / "extract_metrics.py"

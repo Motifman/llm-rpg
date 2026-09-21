@@ -1,6 +1,5 @@
 """戦闘・スキル系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -113,7 +112,7 @@ SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_combat_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_combat_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """戦闘・スキル系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (COMBAT_USE_SKILL_DEFINITION, CombatUseSkillAvailabilityResolver()),

@@ -1,19 +1,20 @@
-import pytest
 from unittest.mock import MagicMock
-from typing import Set
+
+import pytest
+
 from ai_rpg_world.domain.sns.aggregate import PostAggregate
-from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId, Like, Mention
 from ai_rpg_world.domain.sns.enum import PostVisibility
 from ai_rpg_world.domain.sns.exception import (
+    ContentLengthValidationException,
+    HashtagCountValidationException,
     InvalidContentTypeException,
     InvalidParentReferenceException,
     OwnershipException,
-    ContentLengthValidationException,
-    HashtagCountValidationException,
-    VisibilityValidationException,
     PostIdValidationException,
-    UserIdValidationException
+    UserIdValidationException,
+    VisibilityValidationException,
 )
+from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, UserId
 
 
 class TestPostAggregate:

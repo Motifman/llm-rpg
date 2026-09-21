@@ -1,14 +1,15 @@
+from typing import Any
+
 """
 採集アプリケーション層の基底例外定義
 """
 
-from typing import Optional, Any, Dict
 
 
 class HarvestApplicationException(Exception):
     """採集アプリケーション層の基底例外"""
 
-    def __init__(self, message: str, error_code: Optional[str] = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, **context: Any) -> None:
         """
         Args:
             message: エラーメッセージ
@@ -28,7 +29,7 @@ class HarvestApplicationException(Exception):
 class HarvestSystemErrorException(HarvestApplicationException):
     """採集システムエラーの場合の例外"""
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         context = {}
         if original_exception:
             context['original_exception'] = original_exception

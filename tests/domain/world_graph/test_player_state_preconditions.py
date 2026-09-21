@@ -372,7 +372,8 @@ class TestScenarioLoaderValidation:
     def test_invalid_need_type_rejected_at_load(self) -> None:
         """未知の need_type 文字列は ScenarioLoadError で拒否 (silent runtime 失敗を回避)。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError, ScenarioLoader,
+            ScenarioLoader,
+            ScenarioLoadError,
         )
 
         with pytest.raises(ScenarioLoadError, match="need_type"):
@@ -385,7 +386,8 @@ class TestScenarioLoaderValidation:
     def test_hp_ratio_out_of_range_rejected_at_load(self) -> None:
         """hp_ratio が 0.0..1.0 の範囲外なら ScenarioLoadError で拒否。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError, ScenarioLoader,
+            ScenarioLoader,
+            ScenarioLoadError,
         )
 
         for bad in (-0.1, 1.5, 2.0):
@@ -398,7 +400,8 @@ class TestScenarioLoaderValidation:
     def test_hp_ratio_non_numeric_rejected(self) -> None:
         """hp_ratio が数値でなければ拒否。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError, ScenarioLoader,
+            ScenarioLoader,
+            ScenarioLoadError,
         )
 
         with pytest.raises(ScenarioLoadError, match="hp_ratio"):

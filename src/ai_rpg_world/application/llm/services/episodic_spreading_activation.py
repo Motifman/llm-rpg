@@ -10,12 +10,12 @@ from collections import deque
 from datetime import datetime
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
+    MemoryLinkRepository,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
     other_episode_id,
-)
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    MemoryLinkRepository,
 )
 
 

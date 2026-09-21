@@ -7,8 +7,7 @@ from typing import cast
 from ai_rpg_world.application.common.aggregate_event_sink import (
     CommandContextAggregateEventSink,
 )
-from ai_rpg_world.application.common.command_scope import CommandContext
-from ai_rpg_world.application.common.command_scope import TransactionPort
+from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -21,6 +20,9 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
+from ai_rpg_world.infrastructure.repository.scope_bound_repository import (
+    ScopeBoundRepository,
+)
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import (
     SqliteItemWriteRepository,
 )
@@ -35,9 +37,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repositor
 )
 from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import (
     SqliteTradeAggregateRepository,
-)
-from ai_rpg_world.infrastructure.repository.scope_bound_repository import (
-    ScopeBoundRepository,
 )
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionAdapter,
@@ -54,7 +53,7 @@ class SqliteTradeCommandRepositoryProvider:
     def __init__(
         self,
         unit_of_work: SqliteUnitOfWork,
-        context: CommandContext["SqliteTradeCommandRepositoryProvider"],
+        context: CommandContext[SqliteTradeCommandRepositoryProvider],
     ) -> None:
         self._unit_of_work = unit_of_work
         self._context = context

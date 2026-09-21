@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -35,7 +35,7 @@ _HERB = "薬草"
 def town(tmp_path: Path) -> Any:
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     raw["players"].append({
         "id": "tom", "name": "トム", "spawn_spot": spawn,
@@ -88,11 +88,12 @@ class TestTheBoardSeesFrozenGold:
 
         トムが薬草を 6G で出品し、レナ (残り 5G) が買おうとすると断られる。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
         grant_item_specs_to_inventory(
@@ -131,6 +132,8 @@ class TestTheBoardSeesFrozenGold:
         market × player_trade の相互作用の回帰網として、両側をこの
         ファイルで見張る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.trade.services.market_service import (
             MarketItemNotOwnedError,
         )
@@ -138,7 +141,6 @@ class TestTheBoardSeesFrozenGold:
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
         grant_item_specs_to_inventory(

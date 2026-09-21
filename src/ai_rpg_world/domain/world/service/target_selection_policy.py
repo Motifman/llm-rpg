@@ -4,10 +4,10 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService
+from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -22,8 +22,8 @@ class TargetSelectionPolicy(ABC):
     def select_target(
         self,
         actor: "WorldObject",
-        candidates: List["WorldObject"],
-        context: Optional[TargetSelectionContext] = None,
+        candidates: list["WorldObject"],
+        context: TargetSelectionContext | None = None,
     ) -> Optional["WorldObject"]:
         """
         候補の中から1体のターゲットを選択する。
@@ -48,8 +48,8 @@ class NearestTargetPolicy(TargetSelectionPolicy):
     def select_target(
         self,
         actor: "WorldObject",
-        candidates: List["WorldObject"],
-        context: Optional[TargetSelectionContext] = None,
+        candidates: list["WorldObject"],
+        context: TargetSelectionContext | None = None,
     ) -> Optional["WorldObject"]:
         if not candidates:
             return None
@@ -68,8 +68,8 @@ class HighestThreatTargetPolicy(TargetSelectionPolicy):
     def select_target(
         self,
         actor: "WorldObject",
-        candidates: List["WorldObject"],
-        context: Optional[TargetSelectionContext] = None,
+        candidates: list["WorldObject"],
+        context: TargetSelectionContext | None = None,
     ) -> Optional["WorldObject"]:
         if not candidates:
             return None
@@ -93,8 +93,8 @@ class LowestHpTargetPolicy(TargetSelectionPolicy):
     def select_target(
         self,
         actor: "WorldObject",
-        candidates: List["WorldObject"],
-        context: Optional[TargetSelectionContext] = None,
+        candidates: list["WorldObject"],
+        context: TargetSelectionContext | None = None,
     ) -> Optional["WorldObject"]:
         if not candidates:
             return None
@@ -121,8 +121,8 @@ class PackLeaderTargetPolicy(TargetSelectionPolicy):
     def select_target(
         self,
         actor: "WorldObject",
-        candidates: List["WorldObject"],
-        context: Optional[TargetSelectionContext] = None,
+        candidates: list["WorldObject"],
+        context: TargetSelectionContext | None = None,
     ) -> Optional["WorldObject"]:
         if not candidates:
             return None
@@ -150,8 +150,8 @@ class PreyPriorityTargetPolicy(TargetSelectionPolicy):
     def select_target(
         self,
         actor: "WorldObject",
-        candidates: List["WorldObject"],
-        context: Optional[TargetSelectionContext] = None,
+        candidates: list["WorldObject"],
+        context: TargetSelectionContext | None = None,
     ) -> Optional["WorldObject"]:
         if not candidates:
             return None

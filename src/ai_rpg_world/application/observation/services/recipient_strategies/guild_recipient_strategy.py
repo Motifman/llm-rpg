@@ -1,6 +1,7 @@
 """ギルド系イベントの観測配信先解決戦略"""
 
-from typing import Any, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -19,6 +20,7 @@ from ai_rpg_world.domain.guild.event.guild_event import (
     GuildRoleChangedEvent,
 )
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -31,7 +33,7 @@ class GuildRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        guild_repository: Optional[GuildRepository] = None,
+        guild_repository: GuildRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
@@ -40,7 +42,7 @@ class GuildRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if isinstance(event, GuildCreatedEvent):
             return [event.creator_player_id] + self._player_audience_query.players_at_spot(
                 event.spot_id
@@ -79,7 +81,7 @@ class GuildRecipientStrategy(IRecipientResolutionStrategy):
 
         return []
 
-    def _all_member_ids(self, guild_id) -> List[PlayerId]:
+    def _all_member_ids(self, guild_id: GuildId) -> list[PlayerId]:
         if self._guild_repository is None:
             return []
         guild = self._guild_repository.find_by_id(guild_id)

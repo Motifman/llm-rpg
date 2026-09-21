@@ -1,33 +1,41 @@
-from typing import List, Optional
+
+from typing import Any
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.entity import SnsUser
-from ai_rpg_world.domain.sns.value_object import UserId, UserProfile, FollowRelationShip, BlockRelationShip, SubscribeRelationShip
 from ai_rpg_world.domain.sns.event import (
-    SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
     SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
-    SnsUserProfileUpdatedEvent,
     SnsUserCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserProfileUpdatedEvent,
     SnsUserSubscribedEvent,
-    SnsUserUnsubscribedEvent
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserUnsubscribedEvent,
 )
 from ai_rpg_world.domain.sns.exception import (
-    CannotFollowBlockedUserException,
-    CannotUnfollowNotFollowedUserException,
     CannotBlockAlreadyBlockedUserException,
-    CannotUnblockNotBlockedUserException,
+    CannotFollowBlockedUserException,
     CannotSubscribeAlreadySubscribedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
+    CannotUnblockNotBlockedUserException,
+    CannotUnfollowNotFollowedUserException,
     CannotUnsubscribeNotSubscribedUserException,
-    SelfFollowException,
-    SelfUnfollowException,
-    SelfBlockException,
-    SelfUnblockException,
-    SelfSubscribeException,
-    SelfUnsubscribeException,
     ProfileUpdateValidationException,
+    SelfBlockException,
+    SelfFollowException,
+    SelfSubscribeException,
+    SelfUnblockException,
+    SelfUnfollowException,
+    SelfUnsubscribeException,
+)
+from ai_rpg_world.domain.sns.value_object import (
+    BlockRelationShip,
+    FollowRelationShip,
+    SubscribeRelationShip,
+    UserId,
+    UserProfile,
 )
 
 
@@ -36,9 +44,9 @@ class UserAggregate(AggregateRoot):
         self,
         user_id: UserId,
         sns_user: SnsUser,
-        follow_relationships: List[FollowRelationShip],
-        block_relationships: List[BlockRelationShip],
-        subscribe_relationships: List[SubscribeRelationShip],
+        follow_relationships: list[FollowRelationShip],
+        block_relationships: list[BlockRelationShip],
+        subscribe_relationships: list[SubscribeRelationShip],
     ):
         super().__init__()
         self._user_id = user_id
@@ -73,15 +81,15 @@ class UserAggregate(AggregateRoot):
         return self._sns_user
     
     @property
-    def follow_relationships(self) -> List[FollowRelationShip]:
+    def follow_relationships(self) -> list[FollowRelationShip]:
         return self._follow_relationships
     
     @property
-    def block_relationships(self) -> List[BlockRelationShip]:
+    def block_relationships(self) -> list[BlockRelationShip]:
         return self._block_relationships
     
     @property
-    def subscribe_relationships(self) -> List[SubscribeRelationShip]:
+    def subscribe_relationships(self) -> list[SubscribeRelationShip]:
         return self._subscribe_relationships
 
     @property
@@ -89,7 +97,7 @@ class UserAggregate(AggregateRoot):
         """ユーザープロファイル（利便性のために追加）"""
         return self._sns_user.user_profile
         
-    def follow(self, followee_user_id: UserId):
+    def follow(self, followee_user_id: UserId) -> None:
         """ユーザーをフォロー"""
         # 自分自身をフォローしようとしていないかチェック
         if self._user_id == followee_user_id:
@@ -107,7 +115,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def unfollow(self, followee_user_id: UserId):
+    def unfollow(self, followee_user_id: UserId) -> None:
         """ユーザーのフォローを解除"""
         # 自分自身をアンフォローしようとしていないかチェック
         if self._user_id == followee_user_id:
@@ -124,7 +132,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def block(self, blocked_user_id: UserId):
+    def block(self, blocked_user_id: UserId) -> None:
         """ユーザーをブロック"""
         # 自分自身をブロックしようとしていないかチェック
         if self._user_id == blocked_user_id:
@@ -150,7 +158,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def unblock(self, blocked_user_id: UserId):
+    def unblock(self, blocked_user_id: UserId) -> None:
         """ユーザーのブロックを解除"""
         # 自分自身をアンブロックしようとしていないかチェック
         if self._user_id == blocked_user_id:
@@ -167,7 +175,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def subscribe(self, subscribed_user_id: UserId):
+    def subscribe(self, subscribed_user_id: UserId) -> None:
         """ユーザーを購読"""
         # 自分自身を購読しようとしていないかチェック
         if self._user_id == subscribed_user_id:
@@ -189,7 +197,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def unsubscribe(self, subscribed_user_id: UserId):
+    def unsubscribe(self, subscribed_user_id: UserId) -> None:
         """ユーザーの購読を解除"""
         # 自分自身をアンサブスクライブしようとしていないかチェック
         if self._user_id == subscribed_user_id:
@@ -218,7 +226,7 @@ class UserAggregate(AggregateRoot):
         """指定したユーザーを購読しているか"""
         return any(subscribe.subscribed_user_id == user_id for subscribe in self._subscribe_relationships)
 
-    def relationship_between(self, user_id: UserId) -> dict:
+    def relationship_between(self, user_id: UserId) -> dict[str, Any]:
         """指定したユーザーとの関係性を取得"""
         return {
             "is_following": self.is_following(user_id),
@@ -226,7 +234,7 @@ class UserAggregate(AggregateRoot):
             "is_subscribed": self.is_subscribed(user_id),
         }
 
-    def get_user_profile_info(self) -> dict:
+    def get_user_profile_info(self) -> dict[str, Any]:
         """ユーザー基本情報を取得"""
         return {
             "user_id": int(self._user_id),
@@ -235,7 +243,7 @@ class UserAggregate(AggregateRoot):
             "bio": self._sns_user.user_profile.bio,
         }
 
-    def update_user_profile(self, new_bio: Optional[str], new_display_name: Optional[str]):
+    def update_user_profile(self, new_bio: str | None, new_display_name: str | None) -> None:
         """ユーザーのプロフィールを更新"""
         # 少なくとも1つのフィールドが指定されているかチェック
         if new_bio is None and new_display_name is None:

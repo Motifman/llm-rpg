@@ -4,7 +4,8 @@ Movement ツール（to_destination, pursuit_start, pursuit_cancel）の実行�
 ToolCommandMapper のサブマッパーとして、移動・追跡関連のツール実行のみを担当する。
 """
 
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -22,7 +23,6 @@ from ai_rpg_world.application.world.contracts.commands import (
     MoveTileCommand,
     StartPursuitCommand,
 )
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.application.world.contracts.dtos import (
     MoveResultDto,
     PursuitCommandResultDto,
@@ -30,6 +30,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
 class MovementToolExecutor:
@@ -43,7 +44,7 @@ class MovementToolExecutor:
     def __init__(
         self,
         movement_service: MovementApplicationService,
-        pursuit_service: Optional[Any] = None,
+        pursuit_service: Any | None = None,
     ) -> None:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
@@ -103,9 +104,9 @@ class MovementToolExecutor:
             was_no_op=result.no_op,
         )
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。"""
-        result: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {
+        result: dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]] = {
             TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
             TOOL_NAME_MOVE_ONE_STEP: self._execute_move_one_step,
             TOOL_NAME_CANCEL_MOVEMENT: self._execute_cancel_movement,
@@ -118,7 +119,7 @@ class MovementToolExecutor:
     def _execute_move_to_destination(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         try:
             destination_type = args.get("destination_type")
@@ -126,14 +127,14 @@ class MovementToolExecutor:
             target_location_area_id = args.get("target_location_area_id")
             target_world_object_id = args.get("target_world_object_id")
             target_spot_id_int = int(target_spot_id) if isinstance(target_spot_id, (int, float)) else 0
-            target_location_area_id_opt: Optional[int] = None
+            target_location_area_id_opt: int | None = None
             if destination_type == "location" and target_location_area_id is not None:
                 target_location_area_id_opt = (
                     int(target_location_area_id)
                     if isinstance(target_location_area_id, (int, float))
                     else None
                 )
-            target_world_object_id_opt: Optional[int] = None
+            target_world_object_id_opt: int | None = None
             if destination_type == "object" and target_world_object_id is not None:
                 target_world_object_id_opt = (
                     int(target_world_object_id)
@@ -162,7 +163,7 @@ class MovementToolExecutor:
     def _execute_move_one_step(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         direction = args.get("direction")
         if not isinstance(direction, DirectionEnum):
@@ -191,7 +192,7 @@ class MovementToolExecutor:
     def _execute_cancel_movement(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         del args
         try:
@@ -213,7 +214,7 @@ class MovementToolExecutor:
     def _execute_pursuit_start(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         if self._pursuit_service is None:
             return unknown_tool("追跡開始ツールはまだ利用できません。")
@@ -238,7 +239,7 @@ class MovementToolExecutor:
     def _execute_pursuit_cancel(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         del args
         if self._pursuit_service is None:

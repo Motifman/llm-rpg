@@ -40,7 +40,7 @@ feature flag (``BELIEF_EVIDENCE_ENABLED``, default OFF) は「配線 (wire) と
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
@@ -51,17 +51,22 @@ from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import 
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
-    SubjectiveEpisode,
-)
-from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
-    BeliefEvidenceBufferRepository,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PENDING_KIND_PLAN,
     PENDING_VERDICT_BROKEN,
     PENDING_VERDICT_FULFILLED,
     PendingPrediction,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
+    SubjectiveEpisode,
+)
+from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+    GOAL_STATUS_ABANDONED,
+    GOAL_STATUS_ACHIEVED,
+    GoalEntry,
+)
+from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
+    BeliefEvidenceBufferRepository,
 )
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
     BELIEF_EVIDENCE_SALIENCE_HIGH,
@@ -70,11 +75,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
 )
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
     BeliefEvidenceSourceKind,
-)
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-    GOAL_STATUS_ABANDONED,
-    GOAL_STATUS_ACHIEVED,
-    GoalEntry,
 )
 
 _logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ _HEARSAY_UNATTRIBUTED_CUE = "hearsay:unattributed"
 
 def compute_chunk_attribution(
     action_results: Sequence[object],
-) -> Tuple[Tuple[str, ...], bool]:
+) -> tuple[tuple[str, ...], bool]:
     """chunk を構成する action 群から attribution 用の 2 値を計算する (U4)。
 
     - in_context_belief_ids: 各 action の ``in_context_belief_ids`` の和集合
@@ -140,14 +140,10 @@ class BeliefEvidenceTranscriber:
         self,
         buffer_store: BeliefEvidenceBufferRepository,
         *,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        belief_axis_provider: Optional[
-            Callable[[BeingId, str], Optional[Tuple[Tuple[str, ...], str]]]
-        ] = None,
-        noun_matcher: Optional[object] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
+        belief_axis_provider: Callable[[BeingId, str], tuple[tuple[str, ...], str] | None] | None = None,
+        noun_matcher: object | None = None,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -177,7 +173,7 @@ class BeliefEvidenceTranscriber:
         # 構築が先行する配線では後から attach_noun_matcher で注入する。
         self._noun_matcher = noun_matcher
 
-    def attach_noun_matcher(self, noun_matcher: Optional[object]) -> None:
+    def attach_noun_matcher(self, noun_matcher: object | None) -> None:
         """伝聞 cue 生成用の noun matcher を後から注入する (P9 配線用)。"""
         self._noun_matcher = noun_matcher
 
@@ -186,9 +182,9 @@ class BeliefEvidenceTranscriber:
         being_id: BeingId,
         episode: SubjectiveEpisode,
         *,
-        in_context_belief_ids: Tuple[str, ...] = (),
+        in_context_belief_ids: tuple[str, ...] = (),
         had_expected_result: bool = False,
-    ) -> Optional[BeliefEvidence]:
+    ) -> BeliefEvidence | None:
         """``episode.prediction_error`` の有無で PREDICTION_ERROR / CONFIRMATION
         のいずれかの evidence を積む (U4)。
 
@@ -269,9 +265,9 @@ class BeliefEvidenceTranscriber:
     def _filter_relevant_beliefs(
         self,
         being_id: BeingId,
-        in_context_belief_ids: Tuple[str, ...],
+        in_context_belief_ids: tuple[str, ...],
         episode_cue: str,
-    ) -> Tuple[str, ...]:
+    ) -> tuple[str, ...]:
         """P3: in-context belief を「今ターンの行動 cue と軸一致するもの」に絞る。
 
         ``belief_axis_provider`` 未注入なら絞り込まず全件返す (後方互換)。
@@ -301,7 +297,7 @@ class BeliefEvidenceTranscriber:
         pending: PendingPrediction,
         *,
         verdict: str,
-    ) -> Optional[BeliefEvidence]:
+    ) -> BeliefEvidence | None:
         """再浮上していた約束の清算を ``PENDING_RESOLUTION`` evidence に転記する (U10b)。
 
         - ``verdict == "fulfilled"``: 「約束が果たされた」= 相手への信頼の支持。
@@ -372,7 +368,7 @@ class BeliefEvidenceTranscriber:
         *,
         outcome: str,
         occurred_at,
-    ) -> Optional[BeliefEvidence]:
+    ) -> BeliefEvidence | None:
         """本人が閉じた目的 (achieved / abandoned) を belief evidence に転記する (P8)。
 
         目的を「選好的な予測」とみなし、その清算を U10b の約束清算と同型に
@@ -469,7 +465,7 @@ class BeliefEvidenceTranscriber:
             recorded.append(evidence)
         return recorded
 
-    def _resolve_tick(self) -> Optional[int]:
+    def _resolve_tick(self) -> int | None:
         if self._current_tick_provider is None:
             return None
         try:
@@ -482,7 +478,7 @@ class BeliefEvidenceTranscriber:
             return None
 
     def _emit_trace(self, being_id: BeingId, evidence: BeliefEvidence) -> None:
-        recorder: Optional[ITraceRecorder] = None
+        recorder: ITraceRecorder | None = None
         if self._trace_recorder_provider is not None:
             try:
                 recorder = self._trace_recorder_provider()

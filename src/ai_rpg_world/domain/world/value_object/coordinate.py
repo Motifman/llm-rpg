@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
 
 if TYPE_CHECKING:
@@ -14,7 +15,7 @@ class Coordinate:
     y: int
     z: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # x, y 座標は0以上であることを期待（仕様に応じて変更可能）
         # z は階層を表すため、地下を考慮して負の値も許容する設計とする
         if self.x < 0 or self.y < 0:

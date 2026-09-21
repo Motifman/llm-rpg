@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
@@ -27,18 +26,18 @@ class SqliteGuildRepository(GuildRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteGuildRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteGuildRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteGuildRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteGuildRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
 
-    def find_by_id(self, entity_id: GuildId) -> Optional[GuildAggregate]:
+    def find_by_id(self, entity_id: GuildId) -> GuildAggregate | None:
         cur = self._conn.execute(
             """
             SELECT guild_id, spot_id, location_area_id, name, description
@@ -52,10 +51,10 @@ class SqliteGuildRepository(GuildRepository):
             return None
         return self._build_guild_from_row(row)
 
-    def find_by_ids(self, entity_ids: List[GuildId]) -> List[GuildAggregate]:
+    def find_by_ids(self, entity_ids: list[GuildId]) -> list[GuildAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[GuildAggregate]:
+    def find_all(self) -> list[GuildAggregate]:
         cur = self._conn.execute(
             """
             SELECT guild_id, spot_id, location_area_id, name, description
@@ -128,7 +127,7 @@ class SqliteGuildRepository(GuildRepository):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[GuildAggregate]:
+    ) -> GuildAggregate | None:
         cur = self._conn.execute(
             """
             SELECT guild_id, spot_id, location_area_id, name, description
@@ -142,7 +141,7 @@ class SqliteGuildRepository(GuildRepository):
             return None
         return self._build_guild_from_row(row)
 
-    def find_guilds_by_player_id(self, player_id: PlayerId) -> List[GuildAggregate]:
+    def find_guilds_by_player_id(self, player_id: PlayerId) -> list[GuildAggregate]:
         cur = self._conn.execute(
             """
             SELECT guild.guild_id, guild.spot_id, guild.location_area_id, guild.name, guild.description

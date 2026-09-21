@@ -9,7 +9,6 @@ Issue #188 Phase 1a で TODO → memo にリネーム。LLM が context に固�
 - 旧: todo_add / todo_list / todo_complete は alias として残す (後方互換)
 """
 
-from typing import List, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -32,7 +31,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
-
 
 MEMO_ADD_DESCRIPTION = (
     "ターンを跨いで覚えておきたい情報 (目標 / 戦略 / 観察 / 約束など) を memo として記録します。"
@@ -283,7 +281,7 @@ MEMORY_RECALL_BY_HANDLE_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_memo_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_memo_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo 系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (MEMO_ADD_DEFINITION, TodoAddAvailabilityResolver()),
@@ -301,10 +299,10 @@ def get_memory_specs(
     todo_enabled: bool = False,
     episodic_explore_related_enabled: bool = False,
     semantic_search_enabled: bool = False,
-    memo_enabled: Optional[bool] = None,
+    memo_enabled: bool | None = None,
     episodic_recall_enabled: bool = False,
     recall_by_handle_enabled: bool = False,
-) -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+) -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo および任意で memory_explore_related / memory_search_semantic /
     memory_recall_episodes を返す。
 
@@ -320,7 +318,7 @@ def get_memory_specs(
     """
     if memo_enabled is None:
         memo_enabled = todo_enabled
-    specs: List[Tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
+    specs: list[tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
     if memo_enabled:
         specs.extend(get_memo_specs())
     if episodic_explore_related_enabled:

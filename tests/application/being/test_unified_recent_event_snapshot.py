@@ -26,7 +26,6 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 _PLAYER = PlayerId(1)
 _NOW = datetime(2026, 8, 8, tzinfo=timezone.utc)
 

@@ -1,26 +1,26 @@
 """ショップ集約"""
-from typing import Optional, Dict, Set
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.shop.entity.shop_listing import ShopListing
+from ai_rpg_world.domain.shop.event.shop_event import (
+    ShopClosedEvent,
+    ShopCreatedEvent,
+    ShopItemListedEvent,
+    ShopItemPurchasedEvent,
+    ShopItemUnlistedEvent,
+)
+from ai_rpg_world.domain.shop.exception.shop_exception import (
+    ListingNotFoundException,
+    NotShopOwnerException,
+)
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 from ai_rpg_world.domain.shop.value_object.shop_listing_price import ShopListingPrice
-from ai_rpg_world.domain.shop.entity.shop_listing import ShopListing
-from ai_rpg_world.domain.shop.event.shop_event import (
-    ShopCreatedEvent,
-    ShopItemListedEvent,
-    ShopItemUnlistedEvent,
-    ShopItemPurchasedEvent,
-    ShopClosedEvent,
-)
 from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
-from ai_rpg_world.domain.shop.exception.shop_exception import (
-    NotShopOwnerException,
-    ListingNotFoundException,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class ShopAggregate(AggregateRoot):
@@ -35,10 +35,10 @@ class ShopAggregate(AggregateRoot):
         shop_id: ShopId,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-        owner_ids: Set[PlayerId],
+        owner_ids: set[PlayerId],
         name: str,
         description: str,
-        listings: Optional[Dict[ShopListingId, ShopListing]] = None,
+        listings: dict[ShopListingId, ShopListing] | None = None,
     ):
         super().__init__()
         self._shop_id = shop_id
@@ -96,7 +96,7 @@ class ShopAggregate(AggregateRoot):
         return self._location_area_id
 
     @property
-    def owner_ids(self) -> Set[PlayerId]:
+    def owner_ids(self) -> set[PlayerId]:
         return self._owner_ids.copy()
 
     @property
@@ -108,7 +108,7 @@ class ShopAggregate(AggregateRoot):
         return self._description
 
     @property
-    def listings(self) -> Dict[ShopListingId, ShopListing]:
+    def listings(self) -> dict[ShopListingId, ShopListing]:
         return self._listings.copy()
 
     def is_owner(self, player_id: PlayerId) -> bool:
@@ -185,7 +185,7 @@ class ShopAggregate(AggregateRoot):
             )
         del self._listings[listing_id]
 
-    def get_listing(self, listing_id: ShopListingId) -> Optional[ShopListing]:
+    def get_listing(self, listing_id: ShopListingId) -> ShopListing | None:
         """指定リストを取得"""
         return self._listings.get(listing_id)
 

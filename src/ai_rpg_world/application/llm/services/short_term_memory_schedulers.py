@@ -26,11 +26,10 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Callable, Optional
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
-
 
 _logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class IShortTermMemoryScheduler(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """完了待ち + 終了。Inline は no-op、ThreadPool は executor を閉じる。"""
         raise NotImplementedError
 
@@ -69,8 +68,8 @@ class InlineShortTermMemoryScheduler(IShortTermMemoryScheduler):
     def __init__(
         self,
         *,
-        trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
     ) -> None:
         if trace_recorder_provider is not None and not callable(trace_recorder_provider):
             raise TypeError("trace_recorder_provider must be callable or None")
@@ -103,7 +102,7 @@ class InlineShortTermMemoryScheduler(IShortTermMemoryScheduler):
             )
         return True
 
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         del timeout
 
 
@@ -126,8 +125,8 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
         *,
         max_workers: int = 1,
         max_queue_size: int = 100,
-        trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
     ) -> None:
         if not isinstance(max_workers, int) or max_workers < 1:
             raise ValueError("max_workers must be a positive int")
@@ -189,7 +188,7 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
         future.add_done_callback(lambda f: self._on_done(f))
         return True
 
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """in-flight 完了を待って executor を閉じる。
 
         現実装の制約: Python 3.10 の ``ThreadPoolExecutor.shutdown`` は
@@ -244,7 +243,7 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
             return
         if recorder is None:
             return
-        tick: Optional[int] = None
+        tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 tick = self._current_tick_provider()
@@ -267,8 +266,8 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
 
 
 def _emit_generation_failed(
-    trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
-    current_tick_provider: Optional[Callable[[], Optional[int]]],
+    trace_recorder_provider: Callable[[], ITraceRecorder | None] | None,
+    current_tick_provider: Callable[[], int | None] | None,
     *,
     player_id: int,
     exc: BaseException,
@@ -296,7 +295,7 @@ def _emit_generation_failed(
         return
     if recorder is None:
         return
-    tick: Optional[int] = None
+    tick: int | None = None
     if current_tick_provider is not None:
         try:
             tick = current_tick_provider()

@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.sns.value_object import UserId
 
@@ -50,8 +51,8 @@ class SnsUserUnblockedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
 class SnsUserProfileUpdatedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """プロフィール更新イベント"""
     user_id: UserId
-    new_bio: Optional[str]
-    new_display_name: Optional[str]
+    new_bio: str | None
+    new_display_name: str | None
 
 
 @dataclass(frozen=True)

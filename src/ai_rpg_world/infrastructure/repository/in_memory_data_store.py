@@ -2,49 +2,23 @@
 InMemoryDataStore - すべてのインメモリリポジトリで共有されるデータストレージ
 """
 from copy import deepcopy
-from threading import Lock
-from typing import Dict, Any, List, Optional, Set
 from datetime import datetime, timedelta
+from threading import Lock
+from typing import Any
 
-# 必要なドメインオブジェクトのインポート
-from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
-from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
-from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
-from ai_rpg_world.domain.sns.value_object.follow import FollowRelationShip
-from ai_rpg_world.domain.sns.value_object.block import BlockRelationShip
-from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
-from ai_rpg_world.domain.sns.value_object.user_id import UserId as SnsUserId
-from ai_rpg_world.domain.sns.value_object.post_id import PostId
-from ai_rpg_world.domain.sns.value_object.post_content import PostContent
-from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
-from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
-from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
-from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
-from ai_rpg_world.domain.sns.entity.notification import Notification as SnsNotification
-from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
-    LocationEstablishmentAggregate,
-)
-from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
-from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.spot_spawn_table import SpotSpawnTable
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
-from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
-from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import (
@@ -55,6 +29,33 @@ from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import (
     SkillDeckProgressId,
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+
+# 必要なドメインオブジェクトのインポート
+from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.entity.notification import Notification as SnsNotification
+from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
+from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
+from ai_rpg_world.domain.sns.value_object.block import BlockRelationShip
+from ai_rpg_world.domain.sns.value_object.follow import FollowRelationShip
+from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
+from ai_rpg_world.domain.sns.value_object.post_content import PostContent
+from ai_rpg_world.domain.sns.value_object.post_id import PostId
+from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
+from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
+from ai_rpg_world.domain.sns.value_object.user_id import UserId as SnsUserId
+from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
+from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
+    LocationEstablishmentAggregate,
+)
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 
 
@@ -68,71 +69,71 @@ class InMemoryDataStore:
         self._uow_transactions_poisoned = False
 
         # SNS Domain
-        self.sns_users: Dict[SnsUserId, UserAggregate] = {}
-        self.sns_username_to_user_id: Dict[str, SnsUserId] = {}
+        self.sns_users: dict[SnsUserId, UserAggregate] = {}
+        self.sns_username_to_user_id: dict[str, SnsUserId] = {}
         self.sns_next_user_id = 1
         
-        self.posts: Dict[PostId, PostAggregate] = {}
+        self.posts: dict[PostId, PostAggregate] = {}
         self.next_post_id = 1
         
-        self.replies: Dict[ReplyId, ReplyAggregate] = {}
+        self.replies: dict[ReplyId, ReplyAggregate] = {}
         self.next_reply_id = 1
         
-        self.sns_notifications: Dict[NotificationId, SnsNotification] = {}
+        self.sns_notifications: dict[NotificationId, SnsNotification] = {}
         self.next_sns_notification_id = 1
         
         # Player Domain
-        self.player_profiles: Dict[PlayerId, Any] = {}
-        self.player_inventories: Dict[PlayerId, Any] = {}
-        self.player_statuses: Dict[PlayerId, Any] = {}
+        self.player_profiles: dict[PlayerId, Any] = {}
+        self.player_inventories: dict[PlayerId, Any] = {}
+        self.player_statuses: dict[PlayerId, Any] = {}
         self.next_player_id = 1
         
         # Trade Domain
-        self.trades: Dict[Any, Any] = {}
+        self.trades: dict[Any, Any] = {}
         self.next_trade_id = 1
 
         # Shop Domain
-        self.shops: Dict[ShopId, ShopAggregate] = {}
+        self.shops: dict[ShopId, ShopAggregate] = {}
         self.next_shop_id = 1
         self.next_shop_listing_id = 1
 
         # Quest Domain
-        self.quests: Dict[QuestId, QuestAggregate] = {}
+        self.quests: dict[QuestId, QuestAggregate] = {}
         self.next_quest_id = 1
 
         # Guild Domain
-        self.guilds: Dict[GuildId, GuildAggregate] = {}
-        self.guild_banks: Dict[GuildId, GuildBankAggregate] = {}
+        self.guilds: dict[GuildId, GuildAggregate] = {}
+        self.guild_banks: dict[GuildId, GuildBankAggregate] = {}
         self.next_guild_id = 1
 
         # Skill Domain
-        self.skill_loadouts: Dict[SkillLoadoutId, SkillLoadoutAggregate] = {}
-        self.skill_deck_progresses: Dict[
+        self.skill_loadouts: dict[SkillLoadoutId, SkillLoadoutAggregate] = {}
+        self.skill_deck_progresses: dict[
             SkillDeckProgressId, SkillDeckProgressAggregate
         ] = {}
 
         # Item Domain
-        self.items: Dict[ItemInstanceId, ItemAggregate] = {}
+        self.items: dict[ItemInstanceId, ItemAggregate] = {}
         self.next_item_instance_id = 1
         
         # World Domain
-        self.physical_maps: Dict[SpotId, PhysicalMapAggregate] = {}
-        self.weather_zones: Dict[WeatherZoneId, WeatherZone] = {}
-        self.monsters: Dict[MonsterId, MonsterAggregate] = {}
-        self.world_object_to_monster_id: Dict[WorldObjectId, MonsterId] = {}
-        self.world_object_id_to_spot_id: Dict[WorldObjectId, SpotId] = {}
+        self.physical_maps: dict[SpotId, PhysicalMapAggregate] = {}
+        self.weather_zones: dict[WeatherZoneId, WeatherZone] = {}
+        self.monsters: dict[MonsterId, MonsterAggregate] = {}
+        self.world_object_to_monster_id: dict[WorldObjectId, MonsterId] = {}
+        self.world_object_id_to_spot_id: dict[WorldObjectId, SpotId] = {}
         self.next_monster_id = 1
         self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
-        self.spawn_tables: Dict[SpotId, SpotSpawnTable] = {}
-        self.hit_boxes: Dict[HitBoxId, HitBoxAggregate] = {}
+        self.spawn_tables: dict[SpotId, SpotSpawnTable] = {}
+        self.hit_boxes: dict[HitBoxId, HitBoxAggregate] = {}
         self.next_hit_box_id = 1
-        self.spots: Dict[SpotId, Spot] = {}
-        self.location_establishments: Dict[LocationSlotId, LocationEstablishmentAggregate] = {}
+        self.spots: dict[SpotId, Spot] = {}
+        self.location_establishments: dict[LocationSlotId, LocationEstablishmentAggregate] = {}
 
         # World Graph Domain
         # drop/pickup がinventoryと同じsnapshot transactionへ参加できるよう、
         # SpotInteriorも共有storeの業務状態として保持する。
-        self.spot_interiors: Dict[SpotId, SpotInterior] = {}
+        self.spot_interiors: dict[SpotId, SpotInterior] = {}
 
         # サンプルデータの投入
         self._setup_sample_data()
@@ -340,7 +341,7 @@ class InMemoryDataStore:
         self.location_establishments.clear()
         self.spot_interiors.clear()
 
-    def take_snapshot(self) -> Dict[str, Any]:
+    def take_snapshot(self) -> dict[str, Any]:
         """transaction管理用の私有属性を除く全業務状態を複製する。"""
         return {
             name: deepcopy(value)
@@ -348,7 +349,7 @@ class InMemoryDataStore:
             if not name.startswith("_uow_")
         }
 
-    def restore_snapshot(self, snapshot: Dict[str, Any]) -> None:
+    def restore_snapshot(self, snapshot: dict[str, Any]) -> None:
         """全業務状態の完全snapshotだけを復元する。"""
         expected = {
             name for name in vars(self) if not name.startswith("_uow_")

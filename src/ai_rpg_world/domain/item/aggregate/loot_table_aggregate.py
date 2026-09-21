@@ -1,15 +1,15 @@
-from dataclasses import dataclass
-from typing import List, Optional, Union
 import random
-from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from dataclasses import dataclass
+from typing import Union
 
+from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.exception.item_exception import (
     LootTableValidationException,
     LootWeightValidationException,
-    QuantityValidationException
+    QuantityValidationException,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class LootEntry:
     min_quantity: int = 1
     max_quantity: int = 1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.weight < 0:
             raise LootWeightValidationException(f"Weight cannot be negative: {self.weight}")
         if self.min_quantity <= 0:
@@ -45,8 +45,8 @@ class LootTableAggregate(AggregateRoot):
     """
     def __init__(
         self,
-        loot_table_id: Union[LootTableId, int],
-        entries: List[LootEntry],
+        loot_table_id: LootTableId | int,
+        entries: list[LootEntry],
         name: str = ""
     ):
         super().__init__()
@@ -60,14 +60,14 @@ class LootTableAggregate(AggregateRoot):
     @classmethod
     def create(
         cls,
-        loot_table_id: Union[LootTableId, int, str],
-        entries: List[LootEntry],
+        loot_table_id: LootTableId | int | str,
+        entries: list[LootEntry],
         name: str = ""
     ) -> "LootTableAggregate":
         lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
         return cls(lid, entries, name)
 
-    def _validate_entries(self, entries: List[LootEntry]):
+    def _validate_entries(self, entries: list[LootEntry]) -> None:
         if not entries:
             raise LootTableValidationException("Loot table entries cannot be empty")
         
@@ -80,14 +80,14 @@ class LootTableAggregate(AggregateRoot):
         return self._loot_table_id
 
     @property
-    def entries(self) -> List[LootEntry]:
+    def entries(self) -> list[LootEntry]:
         return list(self._entries)
 
     @property
     def name(self) -> str:
         return self._name
 
-    def roll(self) -> Optional[LootResult]:
+    def roll(self) -> LootResult | None:
         """アイテムを抽選する。何も出ない場合はNoneを返す。"""
         if not self._entries or self._total_weight <= 0:
             return None

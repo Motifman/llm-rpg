@@ -1,13 +1,14 @@
 """ゲートウェイ遷移条件の評価器。"""
 
 from dataclasses import dataclass
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.transition_condition import (
-    TransitionCondition,
+    BlockIfWeather,
     RequireRelation,
     RequireToll,
-    BlockIfWeather,
+    TransitionCondition,
 )
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
@@ -42,14 +43,14 @@ class ITransitionRelationChecker:
 class TransitionConditionEvaluator:
     """遷移条件リストをコンテキストに対して評価し、許可/不許可とメッセージを返す。"""
 
-    def __init__(self, relation_checker: Optional[ITransitionRelationChecker] = None):
+    def __init__(self, relation_checker: ITransitionRelationChecker | None = None):
         self._relation_checker = relation_checker
 
     def evaluate(
         self,
-        conditions: List[TransitionCondition],
+        conditions: list[TransitionCondition],
         context: TransitionContext,
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         全条件を評価する。すべて満たせば (True, None)、いずれか不満なら (False, 理由メッセージ)。
         """
@@ -68,7 +69,7 @@ class TransitionConditionEvaluator:
                 return False, msg
         return True, None
 
-    def _eval_require_relation(self, cond: RequireRelation, context: TransitionContext) -> tuple[bool, Optional[str]]:
+    def _eval_require_relation(self, cond: RequireRelation, context: TransitionContext) -> tuple[bool, str | None]:
         if self._relation_checker is None:
             return False, "関係の確認ができません（設定されていません）"
         if self._relation_checker.has_relation(
@@ -80,14 +81,14 @@ class TransitionConditionEvaluator:
             return True, None
         return False, "この出口は関係者のみ利用できます"
 
-    def _eval_require_toll(self, cond: RequireToll, context: TransitionContext) -> tuple[bool, Optional[str]]:
+    def _eval_require_toll(self, cond: RequireToll, context: TransitionContext) -> tuple[bool, str | None]:
         if cond.amount_gold <= 0:
             return True, None
         if not context.player_status.gold.can_subtract(cond.amount_gold):
             return False, f"通行料が不足しています（必要: {cond.amount_gold} G、所持: {context.player_status.gold.value} G）"
         return True, None
 
-    def _eval_block_if_weather(self, cond: BlockIfWeather, context: TransitionContext) -> tuple[bool, Optional[str]]:
+    def _eval_block_if_weather(self, cond: BlockIfWeather, context: TransitionContext) -> tuple[bool, str | None]:
         if context.current_weather.weather_type in cond.blocked_weather_types:
             return False, "悪天候のため通行止めです"
         return True, None

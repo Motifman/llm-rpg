@@ -2,7 +2,7 @@
 設置・破壊コマンド関連の例外定義
 """
 
-from typing import Optional
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 
@@ -13,9 +13,9 @@ class PlaceCommandException(WorldApplicationException):
         self,
         message: str,
         error_code: str,
-        player_id: Optional[int] = None,
-        spot_id: Optional[int] = None,
-        slot_id: Optional[int] = None,
+        player_id: int | None = None,
+        spot_id: int | None = None,
+        slot_id: int | None = None,
         **context,
     ):
         all_context = context.copy()

@@ -1,12 +1,11 @@
-from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime
 
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 @dataclass
@@ -27,15 +26,15 @@ class GlobalMarketListingReadModel:
     item_quantity: int
     item_type: ItemType
     item_rarity: Rarity
-    item_equipment_type: Optional[EquipmentType]
+    item_equipment_type: EquipmentType | None
 
     # 取引情報
     status: TradeStatus
     created_at: datetime
 
     # 耐久度情報（オプション）
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    durability_current: int | None
+    durability_max: int | None
 
     # 価格情報
     requested_gold: int
@@ -50,11 +49,11 @@ class GlobalMarketListingReadModel:
         item_quantity: int,
         item_type: ItemType,
         item_rarity: Rarity,
-        item_equipment_type: Optional[EquipmentType],
+        item_equipment_type: EquipmentType | None,
         status: TradeStatus,
         created_at: datetime,
-        durability_current: Optional[int],
-        durability_max: Optional[int],
+        durability_current: int | None,
+        durability_max: int | None,
         requested_gold: int
     ) -> "GlobalMarketListingReadModel":
         """取引情報からReadModelを作成"""
@@ -80,9 +79,9 @@ class GlobalMarketListingReadModel:
         return self.durability_max is not None
 
     @property
-    def durability_percentage(self) -> Optional[float]:
+    def durability_percentage(self) -> float | None:
         """耐久度の割合（0.0-1.0）"""
-        if not self.has_durability or self.durability_max == 0:
+        if self.durability_max is None or self.durability_max == 0:
             return None
         return self.durability_current / self.durability_max if self.durability_current else 0.0
 

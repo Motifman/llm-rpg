@@ -1,12 +1,16 @@
-from typing import Optional
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
-from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
-from ai_rpg_world.application.trade.exceptions.recent_trade_query_application_exception import RecentTradeQueryApplicationException
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
+from ai_rpg_world.application.trade.exceptions.recent_trade_query_application_exception import (
+    RecentTradeQueryApplicationException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
+
+_Result = TypeVar("_Result")
 
 
 class RecentTradeQueryService:
@@ -16,7 +20,9 @@ class RecentTradeQueryService:
         self._recent_trade_read_model_repository = recent_trade_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -28,9 +34,9 @@ class RecentTradeQueryService:
             raise RecentTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def get_recent_trades(self, item_name: str) -> RecentTradeDto:
@@ -51,7 +57,7 @@ class RecentTradeQueryService:
 
         return self._convert_to_dto(read_model)
 
-    def _convert_to_dto(self, read_model) -> RecentTradeDto:
+    def _convert_to_dto(self, read_model: Any) -> RecentTradeDto:
         """RecentTradeReadModelをRecentTradeDtoに変換"""
         trades = [
             RecentTradeSummaryDto(

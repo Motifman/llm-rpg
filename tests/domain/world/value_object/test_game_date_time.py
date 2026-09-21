@@ -1,6 +1,7 @@
 """GameDateTime と game_date_time_from_tick のテスト（正常・境界・例外）"""
 
 import pytest
+
 from ai_rpg_world.domain.world.value_object.game_date_time import (
     GameDateTime,
     game_date_time_from_tick,

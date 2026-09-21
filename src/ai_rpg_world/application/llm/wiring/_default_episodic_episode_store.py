@@ -8,18 +8,16 @@ ResolvedLlmRuntimeConfig の 1 本に固定するため / PR #736 の取り残�
 
 from __future__ import annotations
 
-from typing import Optional
-
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 
 
 def resolve_default_episodic_episode_store(
     override: EpisodicEpisodeRepository | None,
     *,
-    db_path: Optional[str] = None,
+    db_path: str | None = None,
 ) -> EpisodicEpisodeRepository:
     """呼び出し元が store を渡したらそれを使い、未指定なら db_path で SQLite か in-memory を選ぶ。
 

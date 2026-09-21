@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+
 from ai_rpg_world.domain.item.exception.item_exception import ItemInstanceIdValidationException
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 class TestItemInstanceId:

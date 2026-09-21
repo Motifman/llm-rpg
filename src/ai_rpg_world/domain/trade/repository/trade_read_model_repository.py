@@ -1,12 +1,12 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Tuple
+
 from ai_rpg_world.domain.common.repository import Repository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
 
 
     @abstractmethod
-    def find_recent_trades(self, limit: int = 10, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def find_recent_trades(self, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """最新の取引を取得（カーソルベースページング）
 
         Args:
@@ -38,7 +38,7 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
-    def find_trades_for_player(self, player_id: PlayerId, limit: int = 10, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def find_trades_for_player(self, player_id: PlayerId, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:
@@ -56,8 +56,8 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         self,
         seller_id: PlayerId,
         limit: int = 10,
-        cursor: Optional[TradeCursor] = None,
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        cursor: TradeCursor | None = None,
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """出品者の ACTIVE 取引のみを取得（カーソルベースページング）
 
         `my_trades.selling` 専用。`seller_id` が一致しステータスが ACTIVE のみを対象とし、
@@ -75,7 +75,7 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
-    def find_active_trades(self, limit: int = 50, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def find_active_trades(self, limit: int = 50, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """アクティブな取引を取得（カーソルベースページング）
 
         Args:
@@ -88,7 +88,7 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
-    def search_trades(self, filter: TradeSearchFilter, limit: int = 20, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def search_trades(self, filter: TradeSearchFilter, limit: int = 20, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """フィルタ条件で取引を検索（カーソルベースページング）
 
         Args:

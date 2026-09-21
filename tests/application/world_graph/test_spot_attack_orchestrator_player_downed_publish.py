@@ -18,7 +18,7 @@ aggregate.add_event されるが、orchestrator はその events を回収 + pub
 """
 
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -45,7 +45,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
     SpotAtmosphere,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-
 
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)
@@ -88,7 +87,7 @@ def _make_player(
     *,
     is_down_before: bool = False,
     is_down_after: bool = False,
-    events_when_down: List[Any] = None,
+    events_when_down: list[Any] | None = None,
 ):
     """既存テストの _make_player を拡張: aggregate に積まれる events を
     spy できるよう ``get_events()`` / ``clear_events()`` を実装する。"""
@@ -112,7 +111,7 @@ def _make_player(
 
 @dataclass
 class _SpyPublisher:
-    events_published: List[Any] = field(default_factory=list)
+    events_published: list[Any] = field(default_factory=list)
 
     def publish_all(self, events) -> None:
         self.events_published.extend(events)

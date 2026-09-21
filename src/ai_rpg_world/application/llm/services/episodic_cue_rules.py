@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 _logger = logging.getLogger(__name__)
 
@@ -24,16 +24,17 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 if TYPE_CHECKING:
     # Issue #283 後続: 観測 prose の自由文 cue 抽出に使う。Protocol なので
     # 型チェック時のみ参照。runtime には依存しない (caller が None でも安全)。
-    from ai_rpg_world.application.llm.services.world_noun_matcher import (
-        IWorldNounMatcher,
-    )
     # PR8 (R5): encounter memory を recall cue 源にする。Protocol 型なので
     # 型チェック時のみ参照、runtime には依存しない。
     from ai_rpg_world.application.encounter.contracts.interfaces import (
         IEncounterMemory,
+    )
+    from ai_rpg_world.application.llm.services.world_noun_matcher import (
+        IWorldNounMatcher,
     )
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
@@ -120,11 +121,11 @@ def build_situation_episodic_cues(
     observation_structured: Mapping[str, Any] | None = None,
     latest_action: ActionResultEntry | None = None,
     observation_prose: str | None = None,
-    noun_matcher: "IWorldNounMatcher | None" = None,
+    noun_matcher: IWorldNounMatcher | None = None,
     additional_freetexts: Sequence[str] | None = None,
     semantic_topic_words: Sequence[str] | None = None,
     include_topic_cues: bool = False,
-    encounter_memory: "IEncounterMemory | None" = None,
+    encounter_memory: IEncounterMemory | None = None,
     encounter_player_id: PlayerId | None = None,
     encounter_current_tick: int | None = None,
     encounter_recent_window_ticks: int = 5,
@@ -207,7 +208,7 @@ def _collect_situation_episodic_cues(
     runtime_context: ToolRuntimeContextDto | None,
     observation_structured: Mapping[str, Any] | None,
     observation_prose: str | None = None,
-    noun_matcher: "IWorldNounMatcher | None" = None,
+    noun_matcher: IWorldNounMatcher | None = None,
     additional_freetexts: Sequence[str] | None = None,
 ) -> list[EpisodicCue]:
     """runtime / 観測 structured / 観測 prose / 追加 freetexts から局面 cue を
@@ -255,7 +256,7 @@ def _collect_situation_episodic_cues(
 
 def _cues_from_observation_prose(
     prose: str,
-    noun_matcher: "IWorldNounMatcher",
+    noun_matcher: IWorldNounMatcher,
 ) -> list[EpisodicCue]:
     """観測 prose に含まれる固有名詞から cue を立てる (Issue #283 後続)。
 
@@ -509,7 +510,7 @@ def _normalize_topic_word(raw: object | None) -> str | None:
 
 def _cues_from_recent_encounters(
     *,
-    encounter_memory: "IEncounterMemory",
+    encounter_memory: IEncounterMemory,
     player_id: PlayerId,
     current_tick: int,
     recent_window_ticks: int,

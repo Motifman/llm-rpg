@@ -1,6 +1,5 @@
 """SNS 系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -15,9 +14,14 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_CREATE_POST,
+    TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_DELETE_POST,
     TOOL_NAME_SNS_DELETE_REPLY,
     TOOL_NAME_SNS_ENTER,
+    TOOL_NAME_SNS_FOLLOW,
+    TOOL_NAME_SNS_LIKE_POST,
+    TOOL_NAME_SNS_LIKE_REPLY,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
@@ -25,18 +29,13 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_OPEN_REF,
     TOOL_NAME_SNS_PAGE_NEXT,
     TOOL_NAME_SNS_PAGE_REFRESH,
-    TOOL_NAME_SNS_SWITCH_TAB,
-    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
-    TOOL_NAME_SNS_CREATE_POST,
-    TOOL_NAME_SNS_CREATE_REPLY,
-    TOOL_NAME_SNS_FOLLOW,
-    TOOL_NAME_SNS_LIKE_POST,
-    TOOL_NAME_SNS_LIKE_REPLY,
     TOOL_NAME_SNS_SUBSCRIBE,
+    TOOL_NAME_SNS_SWITCH_TAB,
     TOOL_NAME_SNS_UNBLOCK,
     TOOL_NAME_SNS_UNFOLLOW,
     TOOL_NAME_SNS_UNSUBSCRIBE,
     TOOL_NAME_SNS_UPDATE_PROFILE,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
 )
 
 SNS_ENTER_PARAMETERS = {
@@ -425,7 +424,7 @@ SNS_SWITCH_TAB_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_sns_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """SNS 系ツールの (definition, resolver) 一覧を返す。"""
     enter_resolver = SnsEnterToolAvailabilityResolver()
     sns_resolver = SnsToolAvailabilityResolver()
@@ -459,7 +458,7 @@ def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     ]
 
 
-def get_sns_virtual_page_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_sns_virtual_page_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """仮想 SNS 画面ナビゲーション用ツール（SnsPageQueryService 配線時のみ登録）。"""
     nav = SnsVirtualPageNavigationAvailabilityResolver()
     paging = SnsVirtualPagePagingAvailabilityResolver()

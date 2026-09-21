@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -22,8 +23,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
-
 
 _SCENARIO = Path("data/scenarios/market_town_v1.json")
 _OFFERER = PlayerId(1)

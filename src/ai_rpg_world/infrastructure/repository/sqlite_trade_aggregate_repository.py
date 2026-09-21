@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
@@ -82,7 +82,7 @@ class SqliteTradeAggregateRepository(TradeRepository):
         self._finalize_write()
         return tid
 
-    def find_by_id(self, trade_id: TradeId) -> Optional[TradeAggregate]:
+    def find_by_id(self, trade_id: TradeId) -> TradeAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM trade_aggregates WHERE trade_id = ?",
             (int(trade_id),),
@@ -92,7 +92,7 @@ class SqliteTradeAggregateRepository(TradeRepository):
             return None
         return copy.deepcopy(row_to_trade_aggregate(row))
 
-    def find_by_ids(self, trade_ids: List[TradeId]) -> List[TradeAggregate]:
+    def find_by_ids(self, trade_ids: list[TradeId]) -> list[TradeAggregate]:
         return [t for tid in trade_ids for t in [self.find_by_id(tid)] if t is not None]
 
     def save(self, trade: TradeAggregate) -> TradeAggregate:
@@ -135,7 +135,7 @@ class SqliteTradeAggregateRepository(TradeRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[TradeAggregate]:
+    def find_all(self) -> list[TradeAggregate]:
         cur = self._conn.execute("SELECT * FROM trade_aggregates")
         return [copy.deepcopy(row_to_trade_aggregate(r)) for r in cur.fetchall()]
 

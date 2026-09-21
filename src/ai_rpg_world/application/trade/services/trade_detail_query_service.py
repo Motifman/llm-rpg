@@ -1,16 +1,20 @@
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
-from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository import TradeDetailReadModelRepository
-from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repository import ItemTradeStatisticsReadModelRepository
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.trade.contracts.trade_detail_dtos import (
-    TradeDetailDto,
-    TradeStatisticsDto
-)
-from ai_rpg_world.application.trade.exceptions.trade_detail_query_application_exception import TradeDetailQueryApplicationException
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.trade.contracts.trade_detail_dtos import TradeDetailDto, TradeStatisticsDto
+from ai_rpg_world.application.trade.exceptions.trade_detail_query_application_exception import (
+    TradeDetailQueryApplicationException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repository import (
+    ItemTradeStatisticsReadModelRepository,
+)
+from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository import TradeDetailReadModelRepository
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+
+_Result = TypeVar("_Result")
 
 
 class TradeDetailQueryService:
@@ -25,7 +29,9 @@ class TradeDetailQueryService:
         self._statistics_repository = item_trade_statistics_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -37,9 +43,9 @@ class TradeDetailQueryService:
             raise TradeDetailQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def get_trade_detail(self, trade_id: int) -> TradeDetailDto:
@@ -100,7 +106,7 @@ class TradeDetailQueryService:
             statistics=statistics_dto
         )
 
-    def _convert_to_statistics_dto(self, read_model) -> TradeStatisticsDto:
+    def _convert_to_statistics_dto(self, read_model: Any) -> TradeStatisticsDto:
         """ItemTradeStatisticsReadModelをTradeStatisticsDtoに変換"""
         return TradeStatisticsDto(
             min_price=read_model.min_price,

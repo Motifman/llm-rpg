@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from typing import FrozenSet
-
-
 ScenarioEventProgressSnapshot = tuple[frozenset[str], dict[str, int]]
 
 
@@ -19,7 +16,7 @@ class InMemorySpotGraphScenarioEventProgressStore:
     def mark_fired(self, event_id: str) -> None:
         self._fired_event_ids.add(event_id)
 
-    def as_frozen_set(self) -> FrozenSet[str]:
+    def as_frozen_set(self) -> frozenset[str]:
         return frozenset(self._fired_event_ids)
 
     def schedule(self, event_id: str, fire_at_tick: int) -> None:

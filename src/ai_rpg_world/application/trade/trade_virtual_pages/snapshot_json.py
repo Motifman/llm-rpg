@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.trade.trade_virtual_pages.kinds import TradeVirtualPageKind
 from ai_rpg_world.application.trade.trade_virtual_pages.trade_page_session_state import (
@@ -11,7 +11,7 @@ from ai_rpg_world.application.trade.trade_virtual_pages.trade_page_session_state
 )
 
 
-def trade_page_base_snapshot_dict(state: TradePageSessionState) -> Dict[str, Any]:
+def trade_page_base_snapshot_dict(state: TradePageSessionState) -> dict[str, Any]:
     """page_kind / active_tab / filters / paging / snapshot_generation の辞書表現。"""
     active_tab: Any
     if state.page_kind == TradeVirtualPageKind.MY_TRADES:
@@ -41,8 +41,8 @@ def trade_page_state_to_json(state: TradePageSessionState) -> str:
 
 def trade_page_full_snapshot_json(
     state: TradePageSessionState,
-    rows: List[Dict[str, Any]],
-    next_cursor: Optional[str],
+    rows: list[dict[str, Any]],
+    next_cursor: str | None,
 ) -> str:
     """クエリ由来の行一覧と next_cursor を同梱したスナップショット JSON。"""
     payload = trade_page_base_snapshot_dict(state)

@@ -4,18 +4,29 @@
 # BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+
 being_id = _MIG_BeingId('being_w1_p7')
 'EpisodicPassiveRecallRetrievalService の和集合・round-robin・軸デバッグの検証。'
 from datetime import datetime, timedelta, timezone
+
+from ai_rpg_world.application.llm.passive_recall_cue_families import (
+    PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
+    PASSIVE_RECALL_PLACE_FAMILY_LABEL,
+)
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    PASSIVE_RECALL_AXIS_TEMPORAL,
+    EpisodicPassiveRecallRetrievalService,
+    _merged_ordered_episodes_for_cue_bucket,
+    passive_recall_cue_axis_label,
+)
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.application.llm.passive_recall_cue_families import PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY, PASSIVE_RECALL_PLACE_FAMILY_LABEL
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import PASSIVE_RECALL_AXIS_TEMPORAL, EpisodicPassiveRecallRetrievalService, passive_recall_cue_axis_label, _merged_ordered_episodes_for_cue_bucket
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+
 
 def _episode(*, episode_id: str, player_id: int=7, occurred_at: datetime, cues: tuple[EpisodicCue, ...]) -> SubjectiveEpisode:
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=occurred_at, game_time_label=None, source=EpisodeSource(event_ids=('evt-a',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='t'), who=('p',), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=cues, recall_text='r')
@@ -34,7 +45,7 @@ class TestEpisodicPassiveRecallRetrievalTemporalOnly:
         result = svc.retrieve(being_id=being_id, situation_cues=(), limit_per_axis=10, max_candidates=10)
         ids = [c.episode.episode_id for c in result.candidates]
         assert ids == ['new', 'old']
-        assert all((PASSIVE_RECALL_AXIS_TEMPORAL in c.source_axes for c in result.candidates))
+        assert all(PASSIVE_RECALL_AXIS_TEMPORAL in c.source_axes for c in result.candidates)
         assert result.debug.raw_row_count_by_axis == ((PASSIVE_RECALL_AXIS_TEMPORAL, 2),)
         assert result.debug.final_episode_count_by_source_axis == ((PASSIVE_RECALL_AXIS_TEMPORAL, 2),)
 
@@ -256,7 +267,9 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
     def _setup(self):
         """同一 cue (place_spot:1) に hit する episode を 2 件作り、
         どちらが先に拾われるかを慣化で操作できる構成にする。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
         store = InMemorySubjectiveEpisodeStore()
         c_place = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_obj = EpisodicCue(axis='object', value='o1', source=EpisodicCueSource.TOOL)
@@ -315,7 +328,9 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
     def _setup(self):
         """同一 cue (place_spot:1) に hit する episode を 2 件作り、
         どちらが上位に来るかを boost で操作できる構成にする。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
         store = InMemorySubjectiveEpisodeStore()
         c_place = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_obj = EpisodicCue(axis='object', value='o1', source=EpisodicCueSource.TOOL)
@@ -375,7 +390,9 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
 
     def test_being_id_unresolved(self) -> None:
         """Resolver / default_world_id 未注入で being_id が解決できない場合。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
         store = InMemorySubjectiveEpisodeStore()
         c_place = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
         success = InMemoryEpisodicRecallSuccessStore()
@@ -424,7 +441,10 @@ class TestEpisodicPassiveRecallRetrievalSlot:
     """
 
     def _setup(self):
-        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore, RecallSlotPolicy
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+            RecallSlotPolicy,
+        )
         store = InMemorySubjectiveEpisodeStore()
         c_place = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
         base = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -492,7 +512,10 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
 
     def _setup(self):
         from ai_rpg_world.application.llm.services.afterglow_store import AfterglowSource, InMemoryAfterglowStore
-        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore, RecallSlotPolicy
+        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+            InMemoryEpisodicRecallSlotStore,
+            RecallSlotPolicy,
+        )
         store = InMemorySubjectiveEpisodeStore()
         c_place = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
         c_obj = EpisodicCue(axis='object', value='o1', source=EpisodicCueSource.TOOL)

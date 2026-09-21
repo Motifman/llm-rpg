@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
@@ -11,8 +11,8 @@ from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
 
 
 def actor_plane_for(
-    player_id: Optional[PlayerId], perception_policy: Optional[Any]
-) -> Optional[InteractionActorPlane]:
+    player_id: PlayerId | None, perception_policy: Any | None
+) -> InteractionActorPlane | None:
     """行為者の存在層を返し、識別不能なら ``None`` にする。"""
     if perception_policy is None:
         return InteractionActorPlane.LIVING
@@ -25,7 +25,7 @@ def actor_plane_for(
     )
 
 
-def actor_plane_refusal_message(plane: Optional[InteractionActorPlane]) -> str:
+def actor_plane_refusal_message(plane: InteractionActorPlane | None) -> str:
     """存在層が合わない理由と、失われていない能力の範囲を返す。"""
     if plane is InteractionActorPlane.DEPARTED:
         return (

@@ -21,13 +21,13 @@ strip して計算するので、本整形の有無に依存しない。
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     ACTION_ARGUMENT_CLASSIFICATIONS,
     ActionArgumentDisplayKind,
 )
-
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
@@ -39,27 +39,26 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
-    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
-    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
-    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
-    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
-    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
-    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
-    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
-    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
-    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
-    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
-    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_VOTE,
@@ -96,9 +95,9 @@ ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
 
 def project_action_arguments_for_history(
-    args: Optional[Mapping[str, Any]],
+    args: Mapping[str, Any] | None,
     *,
-    canonical_identifiers: Optional[Mapping[str, str]] = None,
+    canonical_identifiers: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, str], tuple[str, ...]]:
     """raw tool 引数を、履歴に保存する識別引数と自由文引数名へ射影する。
 
@@ -385,11 +384,6 @@ def _format_wait(args: Mapping[str, Any]) -> str:
     return "その場で待機した"
 
 
-def _format_prepare_action(args: Mapping[str, Any]) -> str:
-    action_name = _text(args, "action_name")
-    return f"{action_name} を準備した" if action_name else "協力行動を準備した"
-
-
 def _format_vote(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_player_label")
     return f"{_quote(target)}へ投票した" if target else "投票した"
@@ -424,7 +418,6 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_INTERACT: _format_interact,
     TOOL_NAME_SPOT_GRAPH_LISTEN: _format_listen,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: _format_pickup_item,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: _format_prepare_action,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY: _format_report_body,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: _format_set_sub_location,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: _format_tend_to_player,
@@ -448,7 +441,7 @@ INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
 
 
 def format_action_summary_for_display(
-    tool_name: str, args: Optional[Mapping[str, Any]] = None
+    tool_name: str, args: Mapping[str, Any] | None = None
 ) -> str:
     """tool 名 + args から「直近の出来事」用の行動要約文を作る。"""
     formatter = ACTION_SUMMARY_FORMATTERS.get(tool_name)
@@ -458,7 +451,7 @@ def format_action_summary_for_display(
 
 
 def _format_action_summary_fallback(
-    tool_name: str, args: Optional[Mapping[str, Any]] = None
+    tool_name: str, args: Mapping[str, Any] | None = None
 ) -> str:
     """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:

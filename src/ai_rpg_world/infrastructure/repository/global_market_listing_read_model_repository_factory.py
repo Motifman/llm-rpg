@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping, Optional, Union
+from typing import Union
 
 from ai_rpg_world.domain.trade.repository.global_market_listing_read_model_repository import (
     GlobalMarketListingReadModelRepository,
@@ -23,7 +24,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_global_market_listing_read_mo
 
 
 def create_global_market_listing_read_model_repository_from_path(
-    db_path: Optional[Union[str, Path]],
+    db_path: str | Path | None,
 ) -> GlobalMarketListingReadModelRepository:
     if db_path is None:
         return InMemoryGlobalMarketListingReadModelRepository()
@@ -37,7 +38,7 @@ def create_global_market_listing_read_model_repository_from_path(
 
 def create_global_market_listing_read_model_repository_from_env(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
 ) -> GlobalMarketListingReadModelRepository:
     resolved = get_game_db_path_from_env(environ=environ if environ is not None else os.environ)
     if resolved is None:

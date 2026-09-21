@@ -12,12 +12,10 @@ Issue #227 後続: wiring factory 間で完全重複していた 4 ブロック�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import Any
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
     EpisodicPromotionFrontier,
 )
@@ -32,12 +30,14 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
     build_episodic_memory_link_bundle,
     default_link_and_semantic_stores_for_episode_store,
 )
-
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
+)
 
 _DEFAULT_LLM_VIEW_DISTANCE = 5
 
 
-def resolve_effective_view_distance(llm_view_distance: Optional[int]) -> int:
+def resolve_effective_view_distance(llm_view_distance: int | None) -> int:
     """tile-map view distance の解決。
 
     引数 → default の順で解決し、未指定なら固定既定値を返す。
@@ -66,14 +66,14 @@ class EpisodicMemoryStack:
 
 
 def build_episodic_memory_stack(
-    episodic_episode_store: Optional[EpisodicEpisodeRepository],
+    episodic_episode_store: EpisodicEpisodeRepository | None,
     *,
-    semantic_gist_service: Optional[Any] = None,
-    semantic_persona_resolver: Optional[Any] = None,
-    belief_evidence_buffer_store: Optional[Any] = None,
+    semantic_gist_service: Any | None = None,
+    semantic_persona_resolver: Any | None = None,
+    belief_evidence_buffer_store: Any | None = None,
     episodic_promotion_force_full_scan: bool = False,
     episodic_promotion_expansion_hops: int = 4,
-    subjective_episode_db_path: Optional[str] = None,
+    subjective_episode_db_path: str | None = None,
 ) -> EpisodicMemoryStack:
     """共有 episode store と link / semantic / promotion を組み立てる。
 
@@ -129,7 +129,7 @@ def build_episodic_memory_stack(
 def build_game_time_label_provider(
     game_time_provider: Any,
     world_time_config_service: Any,
-) -> Optional[Callable[[], Optional[str]]]:
+) -> Callable[[], str | None] | None:
     """action_result の時刻ラベル用 provider を組み立てる。
 
     Issue #188 改善: action_result に観測と同じ時刻ラベルを乗せる。
@@ -149,7 +149,7 @@ def build_game_time_label_provider(
         game_date_time_from_tick,
     )
 
-    def _build_game_time_label() -> Optional[str]:
+    def _build_game_time_label() -> str | None:
         try:
             tick = game_time_provider.get_current_tick().value
             game_dt = game_date_time_from_tick(

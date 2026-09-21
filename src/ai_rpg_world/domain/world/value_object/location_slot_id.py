@@ -2,8 +2,8 @@
 from dataclasses import dataclass
 from typing import Union
 
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,8 @@ class LocationSlotId:
     @classmethod
     def create(
         cls,
-        spot_id: Union[SpotId, int],
-        location_area_id: Union[LocationAreaId, int],
+        spot_id: SpotId | int,
+        location_area_id: LocationAreaId | int,
     ) -> "LocationSlotId":
         """SpotId / LocationAreaId または int から作成"""
         sid = spot_id if isinstance(spot_id, SpotId) else SpotId.create(spot_id)

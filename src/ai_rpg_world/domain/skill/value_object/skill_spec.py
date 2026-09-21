@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race
@@ -18,16 +17,16 @@ class SkillSpec:
     cooldown_ticks: int
     power_multiplier: float
     hit_pattern: SkillHitPattern
-    mp_cost: Optional[int] = None
-    stamina_cost: Optional[int] = None
-    hp_cost: Optional[int] = None
-    slayer_races: Tuple[Race, ...] = ()
-    hit_effects: Tuple[HitEffect, ...] = ()
-    required_skill_ids: Tuple[SkillId, ...] = ()
+    mp_cost: int | None = None
+    stamina_cost: int | None = None
+    hp_cost: int | None = None
+    slayer_races: tuple[Race, ...] = ()
+    hit_effects: tuple[HitEffect, ...] = ()
+    required_skill_ids: tuple[SkillId, ...] = ()
     is_awakened_deck_only: bool = False
     targeting_range: int = 1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.name or not self.name.strip():
             raise SkillSpecValidationException("Skill name cannot be empty")
         if self.deck_cost < 0:
@@ -54,7 +53,7 @@ class SkillSpec:
         self._validate_optional_cost("hp_cost", self.hp_cost)
 
     @staticmethod
-    def _validate_optional_cost(name: str, value: Optional[int]) -> None:
+    def _validate_optional_cost(name: str, value: int | None) -> None:
         if value is None:
             return
         if value < 0:

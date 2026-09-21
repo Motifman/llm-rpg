@@ -1,13 +1,13 @@
 """LocationSlotId のテスト"""
 import pytest
 
+from ai_rpg_world.domain.world.exception.map_exception import (
+    LocationAreaIdValidationException,
+    SpotIdValidationException,
+)
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.exception.map_exception import (
-    SpotIdValidationException,
-    LocationAreaIdValidationException,
-)
 
 
 class TestLocationSlotId:

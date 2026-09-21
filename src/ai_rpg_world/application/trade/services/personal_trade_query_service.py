@@ -1,19 +1,20 @@
-from typing import Optional
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
-from ai_rpg_world.domain.trade.repository.personal_trade_listing_read_model_repository import (
-    PersonalTradeListingReadModelRepository
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.trade.contracts.personal_trade_dtos import (
-    PersonalTradeListingDto,
-    PersonalTradeListDto
-)
-from ai_rpg_world.application.trade.exceptions.personal_trade_query_application_exception import PersonalTradeQueryApplicationException
-from ai_rpg_world.application.trade.util.cursor_codec import CursorCodec
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.trade.contracts.personal_trade_dtos import PersonalTradeListDto, PersonalTradeListingDto
+from ai_rpg_world.application.trade.exceptions.personal_trade_query_application_exception import (
+    PersonalTradeQueryApplicationException,
+)
+from ai_rpg_world.application.trade.util.cursor_codec import CursorCodec
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.trade.repository.personal_trade_listing_read_model_repository import (
+    PersonalTradeListingReadModelRepository,
+)
+
+_Result = TypeVar("_Result")
 
 
 class PersonalTradeQueryService:
@@ -23,7 +24,9 @@ class PersonalTradeQueryService:
         self._repository = personal_trade_listing_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -35,12 +38,12 @@ class PersonalTradeQueryService:
             raise PersonalTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def get_personal_trades(self, player_id: int, limit: int = 20, cursor: Optional[str] = None) -> PersonalTradeListDto:
+    def get_personal_trades(self, player_id: int, limit: int = 20, cursor: str | None = None) -> PersonalTradeListDto:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:
@@ -69,7 +72,7 @@ class PersonalTradeQueryService:
             }
         )
 
-    def _get_personal_trades_impl(self, player_id: int, limit: int, cursor: Optional[str]) -> PersonalTradeListDto:
+    def _get_personal_trades_impl(self, player_id: int, limit: int, cursor: str | None) -> PersonalTradeListDto:
         """個人取引取得の実装"""
         # ドメインオブジェクトに変換
         domain_player_id = PlayerId(player_id)
@@ -91,7 +94,7 @@ class PersonalTradeQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def _convert_to_listing_dto(self, read_model) -> PersonalTradeListingDto:
+    def _convert_to_listing_dto(self, read_model: Any) -> PersonalTradeListingDto:
         """PersonalTradeListingReadModelをPersonalTradeListingDtoに変換"""
         return PersonalTradeListingDto(
             trade_id=int(read_model.trade_id),

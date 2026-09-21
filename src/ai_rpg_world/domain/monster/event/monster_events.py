@@ -1,16 +1,15 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.enum.monster_enum import DeathCauseEnum
-
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, DeathCauseEnum
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -23,7 +22,7 @@ class MonsterCreatedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 
 @dataclass(frozen=True)
 class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict
+    coordinate: dict[str, int]
     spot_id: SpotId
 
 
@@ -31,7 +30,7 @@ class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 class MonsterDamagedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     damage: int
     current_hp: int
-    attacker_id: Optional[WorldObjectId] = None
+    attacker_id: WorldObjectId | None = None
 
 
 @dataclass(frozen=True)
@@ -39,23 +38,23 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     respawn_tick: int
     exp: int
     gold: int
-    template_id: Optional[int] = None
-    loot_table_id: Optional[LootTableId] = None
-    killer_player_id: Optional[PlayerId] = None
-    killer_world_object_id: Optional[WorldObjectId] = None
-    cause: Optional[DeathCauseEnum] = None
-    spot_id: Optional[SpotId] = None
+    template_id: int | None = None
+    loot_table_id: LootTableId | None = None
+    killer_player_id: PlayerId | None = None
+    killer_world_object_id: WorldObjectId | None = None
+    cause: DeathCauseEnum | None = None
+    spot_id: SpotId | None = None
 
 
 @dataclass(frozen=True)
 class MonsterRespawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict
+    coordinate: dict[str, int]
     spot_id: SpotId
 
 
 @dataclass(frozen=True)
 class MonsterEvadedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict
+    coordinate: dict[str, int]
     current_hp: int
 
 
@@ -75,7 +74,7 @@ class MonsterMpRecoveredEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 class MonsterDecidedToMoveEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     """モンスターが移動を決定したことを表すイベント。ハンドラが physical_map.move_object を実行する。"""
     actor_id: WorldObjectId
-    coordinate: dict  # {"x": int, "y": int, "z": int}
+    coordinate: dict[str, int]  # {"x": int, "y": int, "z": int}
     spot_id: SpotId
     current_tick: WorldTick
 
@@ -85,7 +84,7 @@ class MonsterDecidedToUseSkillEvent(BaseDomainEvent[MonsterId, "MonsterAggregate
     """モンスターがスキル使用を決定したことを表すイベント。ハンドラがスキル実行を呼ぶ。"""
     actor_id: WorldObjectId
     skill_slot_index: int
-    target_id: Optional[WorldObjectId]
+    target_id: WorldObjectId | None
     spot_id: SpotId
     current_tick: WorldTick
 
@@ -107,7 +106,10 @@ class MonsterFedEvent(BaseDomainEvent[WorldObjectId, str]):
     target_coordinate: Coordinate
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする 3 つの
+    # 値を呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,

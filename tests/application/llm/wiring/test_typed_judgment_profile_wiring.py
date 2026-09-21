@@ -24,11 +24,11 @@ import pytest
 from ai_rpg_world.application.llm.services.typed_judgment_stub import (
     DeterministicTypedJudgmentPort,
 )
-from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-    ResolvedLlmRuntimeConfig,
-)
 from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
     create_typed_judgment_port_from_config,
+)
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.infrastructure.llm.jev_typed_judgment_adapter import (
     JevTypedJudgmentAdapter,
@@ -190,3 +190,29 @@ class TestTheFactoryBuildsWhatTheProfileAskedFor:
             )
 
         assert "EMPTY" in str(caught.value)
+
+
+class TestTheReplyGateSettingsComeFromTheProfile:
+    """門の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
+
+    def test_the_gate_is_off_by_default(self) -> None:
+        """何も書かなければ門は無効。provider を jev にしても入らない。閾値の既定は 0.15。"""
+        config = _config(TYPED_JUDGMENT_PROVIDER="jev")
+        assert config.typed_judgment_turn_gate_enabled is False
+        assert config.typed_judgment_turn_gate_skip_below == 0.15
+
+    def test_a_profile_can_turn_the_gate_on(self) -> None:
+        """TYPED_JUDGMENT_TURN_GATE_ENABLED=1 と書いたときだけ門が入る。"""
+        config = _config(TYPED_JUDGMENT_TURN_GATE_ENABLED="1")
+        assert config.typed_judgment_turn_gate_enabled is True
+
+    def test_a_profile_can_move_the_threshold(self) -> None:
+        """閾値は profile の値が解決済み設定に載る。"""
+        config = _config(TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW="0.2")
+        assert config.typed_judgment_turn_gate_skip_below == 0.2
+
+    def test_a_threshold_outside_the_unit_interval_is_rejected(self) -> None:
+        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
+        with pytest.raises(ValueError):
+            _config(TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW="1.5")
+

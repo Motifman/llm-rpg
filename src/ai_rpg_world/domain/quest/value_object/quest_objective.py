@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
 
@@ -15,9 +14,9 @@ class QuestObjective:
     target_id: int
     required_count: int
     current_count: int = 0
-    target_id_secondary: Optional[int] = None
+    target_id_secondary: int | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.required_count <= 0:
             raise ValueError("required_count must be positive")
         if self.current_count < 0 or self.current_count > self.required_count:

@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.runtime_config_helpers import runtime_config
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-from tests.runtime_config_helpers import runtime_config
-
 
 _SOURCE = Path("data/scenarios/survival_island_v2_short.json")
 

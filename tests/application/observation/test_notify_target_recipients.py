@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 import pytest
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
@@ -27,8 +25,8 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
     SpotGraphRecipientStrategy,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerInteractedWithPlayerEvent,
 )
@@ -120,7 +118,7 @@ def _event(
     )
 
 
-def _recipients(strategy, event) -> List[int]:
+def _recipients(strategy, event) -> list[int]:
     return sorted(int(pid) for pid in strategy.resolve(event))
 
 

@@ -12,10 +12,9 @@ Issue #470 Phase 1 cleanup A3: 旧 ``contracts/interfaces.py`` から本ファ�
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-
-ToolChoice = str | Dict[str, Any]
+ToolChoice = str | dict[str, Any]
 
 
 class ILLMClient(ABC):
@@ -24,16 +23,16 @@ class ILLMClient(ABC):
     @abstractmethod
     def invoke(
         self,
-        messages: List[Dict[str, str]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
         tool_choice: ToolChoice = "required",
         *,
-        metrics_sink: Optional[Any] = None,
-        reasoning_effort: Optional[str] = None,
-        prompt_capture_context: Optional[Any] = None,
+        metrics_sink: Any | None = None,
+        reasoning_effort: str | None = None,
+        prompt_capture_context: Any | None = None,
         call_phase: str = "one_step",
-        session_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        session_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         LLM を呼び出し、選択された tool_call を返す。
         返り値例: {"name": "move_to_destination", "arguments": "{...}"}

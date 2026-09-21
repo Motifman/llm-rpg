@@ -1,15 +1,14 @@
 import logging
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.aggro_store import AggroStore
+from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
+from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
-from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
@@ -25,8 +24,8 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
         physical_map_repository: PhysicalMapRepository,
         monster_repository: MonsterRepository,
         unit_of_work: UnitOfWork,
-        aggro_store: Optional[AggroStore] = None,
-        game_time_provider: Optional[GameTimeProvider] = None,
+        aggro_store: AggroStore | None = None,
+        game_time_provider: GameTimeProvider | None = None,
     ):
         self._hit_box_repository = hit_box_repository
         self._physical_map_repository = physical_map_repository

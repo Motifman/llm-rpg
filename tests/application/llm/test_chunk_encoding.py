@@ -26,8 +26,8 @@ from ai_rpg_world.application.llm.services.sliding_window_memory import (
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationOutput,
     ObservationEntry,
+    ObservationOutput,
 )
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,

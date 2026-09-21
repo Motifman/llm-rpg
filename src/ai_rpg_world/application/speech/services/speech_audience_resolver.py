@@ -20,23 +20,22 @@ agent が「届かなかった」事実を学習できるようにする。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Set
 
-from ai_rpg_world.application.world_graph.speech_channel_mapping import (
-    speech_channel_to_sound_volume,
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
 )
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
+from ai_rpg_world.application.world_graph.speech_channel_mapping import (
+    speech_channel_to_sound_volume,
 )
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.sound_clarity import SoundClarityEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     EntityNotInGraphException,
@@ -46,8 +45,10 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
 )
 from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
+    SoundSpotOutcome,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.sound_recipient import SoundRecipient
 
 
 @dataclass(frozen=True)
@@ -71,8 +72,8 @@ class SpeechAudienceResolver:
         spot_graph_repository: ISpotGraphRepository,
         player_status_repository: PlayerStatusRepository,
         sound_propagation_service: SoundPropagationService,
-        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
-        departed_position_store: Optional[DepartedPositionStore] = None,
+        player_perception_policy: PlayerPerceptionPolicy | None = None,
+        departed_position_store: DepartedPositionStore | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
@@ -99,8 +100,8 @@ class SpeechAudienceResolver:
         *,
         speaker_player_id: int,
         channel: SpeechChannel,
-        target_player_id: Optional[int] = None,
-    ) -> List[PlayerId]:
+        target_player_id: int | None = None,
+    ) -> list[PlayerId]:
         """speaker からの speech が届く player_id 一覧を返す (speaker 自身は含めない)。
 
         後方互換のため clarity を捨てた薄い wrapper。新規コードは
@@ -120,8 +121,8 @@ class SpeechAudienceResolver:
         *,
         speaker_player_id: int,
         channel: SpeechChannel,
-        target_player_id: Optional[int] = None,
-    ) -> List[SpeechAudienceMember]:
+        target_player_id: int | None = None,
+    ) -> list[SpeechAudienceMember]:
         """発話が届く listener と各自の clarity を返す (speaker 自身は含めない)。
 
         - WHISPER: target_player_id が同一スポットにいれば 1 名 (CLEAR)
@@ -137,7 +138,7 @@ class SpeechAudienceResolver:
         if speaker_spot is None:
             return []
 
-        player_id_values: Set[int] = {
+        player_id_values: set[int] = {
             s.player_id.value for s in self._player_status_repository.find_all()
         }
 
@@ -166,8 +167,8 @@ class SpeechAudienceResolver:
 
         # SAY / SHOUT
         volume = speech_channel_to_sound_volume(channel)
-        result: List[SpeechAudienceMember] = []
-        seen: Set[int] = set()
+        result: list[SpeechAudienceMember] = []
+        seen: set[int] = set()
         physical_recipients = {
             recipient.entity_id.value: recipient
             for recipient in self._sound_propagation.resolve_recipients(
@@ -197,6 +198,7 @@ class SpeechAudienceResolver:
                 self._departed_position_store is not None
                 and self._departed_position_store.find(speaker_player) is not None
             )
+            outcome: SoundRecipient | SoundSpotOutcome | None
             if not speaker_is_departed and not recipient_is_departed:
                 outcome = physical_recipients.get(int(recipient_player_id))
             else:

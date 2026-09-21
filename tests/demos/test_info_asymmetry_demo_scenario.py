@@ -9,11 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
 from unittest.mock import MagicMock
 
 import pytest
-
 from tests.support.command_scope_fakes import (
     install_passthrough_spot_interaction_constructor,
 )
@@ -61,7 +59,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
     InMemorySpotInteriorRepository,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -123,7 +120,7 @@ def info_asymmetry() -> _Harness:
     )
 
 
-def _ids(loaded) -> Tuple[int, int]:
+def _ids(loaded) -> tuple[int, int]:
     pa_id = next(s.player_id for s in loaded.player_spawns if s.string_id == "player_a")
     keypad_oid = loaded.id_mapper.get_int("object", "vault_keypad")
     return pa_id, keypad_oid
@@ -141,8 +138,8 @@ def _move_player(repo, eid: EntityId, target_spot: SpotId) -> None:
     repo.save(graph)
 
 
-def _published_failed_events(publisher) -> List[SpotObjectInteractionFailedEvent]:
-    failed: List[SpotObjectInteractionFailedEvent] = []
+def _published_failed_events(publisher) -> list[SpotObjectInteractionFailedEvent]:
+    failed: list[SpotObjectInteractionFailedEvent] = []
     for call in publisher.publish_all.call_args_list:
         events = call.args[0]
         for ev in events:

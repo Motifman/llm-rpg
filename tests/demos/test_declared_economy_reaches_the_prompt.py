@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -47,17 +47,17 @@ def _prompt_of(runtime, player_id: PlayerId) -> str:
     return client.messages[-1]["content"]
 
 
-def _drill_raw() -> Dict[str, Any]:
+def _drill_raw() -> dict[str, Any]:
     return json.loads(_DRILL.read_text(encoding="utf-8"))
 
 
-def _write(tmp_path: Path, raw: Dict[str, Any], name: str) -> Path:
+def _write(tmp_path: Path, raw: dict[str, Any], name: str) -> Path:
     path = tmp_path / name
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return path
 
 
-def _world_with_a_merchant_beside(raw: Dict[str, Any], player_index: int = 0) -> Dict[str, Any]:
+def _world_with_a_merchant_beside(raw: dict[str, Any], player_index: int = 0) -> dict[str, Any]:
     """先頭プレイヤーと同じ spot に商人を置き、所持金を宣言した世界を返す。"""
     player = raw["players"][player_index]
     item_spec = raw["item_specs"][0]["id"]

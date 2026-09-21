@@ -31,7 +31,7 @@ class SoundIntensityEnum(Enum):
         """
         return _LEVEL[self]
 
-    def attenuate(self, hops: int = 1) -> "SoundIntensityEnum":
+    def attenuate(self, hops: int = 1) -> SoundIntensityEnum:
         """指定 hop 数だけ減衰させた強度を返す。
 
         - SILENT は何 hop 減衰しても SILENT

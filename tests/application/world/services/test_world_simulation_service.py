@@ -1,125 +1,77 @@
-import pytest
 import unittest.mock as mock
 from types import SimpleNamespace
-from ai_rpg_world.application.world.services.world_simulation_service import WorldSimulationApplicationService
+
+import pytest
+
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.harvest.services.harvest_command_service import HarvestCommandService
+from ai_rpg_world.application.world.contracts.dtos import VisibleObjectDto
 from ai_rpg_world.application.world.services.caching_pathfinding_service import CachingPathfindingService
 from ai_rpg_world.application.world.services.pursuit_continuation_service import (
     PursuitContinuationAction,
     PursuitContinuationDecision,
     PursuitContinuationService,
 )
-from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
-from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import InMemoryWeatherZoneRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
-from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
-from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
-from ai_rpg_world.domain.world.service.world_time_config_service import DefaultWorldTimeConfigService
-from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
-from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
-from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
-from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
-from ai_rpg_world.domain.world.value_object.weather_zone_name import WeatherZoneName
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum, BehaviorActionType
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
-from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
-from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
-from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import InMemoryMonsterAggregateRepository
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
-from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
-from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
-from ai_rpg_world.domain.player.enum.player_enum import Race, Element
-from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
-from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
-from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
-from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
-from ai_rpg_world.application.harvest.services.harvest_command_service import HarvestCommandService
-from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
-from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
-from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import InMemoryLootTableRepository
-from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
-from ai_rpg_world.domain.world.service.harvest_domain_service import HarvestDomainService
-from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
-from ai_rpg_world.domain.world.event.map_events import ResourceHarvestedEvent
-from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
-from ai_rpg_world.domain.world.value_object.behavior_context import (
-    SkillSelectionContext,
-    TargetSelectionContext,
-    GrowthContext,
-)
-from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
-from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.application.world.services.world_simulation_service import WorldSimulationApplicationService
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
-from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.event.combat_events import (
+    HitBoxDeactivatedEvent,
+    HitBoxHitRecordedEvent,
+    HitBoxMovedEvent,
+    HitBoxObstacleCollidedEvent,
+)
+from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
+from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
 from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
     ObstacleCollisionPolicy,
     TargetCollisionPolicy,
 )
-from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
-from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxMovedEvent,
-    HitBoxHitRecordedEvent,
-    HitBoxObstacleCollidedEvent,
-    HitBoxDeactivatedEvent,
+from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    ActiveTimeType,
+    BehaviorStateEnum,
+    MonsterFactionEnum,
+    MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
-    TargetSpottedEvent,
     ActorStateChangedEvent,
+    TargetSpottedEvent,
 )
-from ai_rpg_world.domain.world.enum.world_enum import Disposition
-from ai_rpg_world.application.world.contracts.dtos import VisibleObjectDto
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
+    MonsterSkillExecutionDomainService,
+)
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.enum.player_enum import Element, Race
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
     PursuitFailureReason,
 )
@@ -131,8 +83,66 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
-from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+    HarvestableComponent,
+)
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType, DirectionEnum, Disposition, ObjectTypeEnum
+from ai_rpg_world.domain.world.event.map_events import ResourceHarvestedEvent
+from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+from ai_rpg_world.domain.world.service.harvest_domain_service import HarvestDomainService
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
+from ai_rpg_world.domain.world.service.world_time_config_service import DefaultWorldTimeConfigService
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
+from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    GrowthContext,
+    SkillSelectionContext,
+    TargetSelectionContext,
+)
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
+from ai_rpg_world.domain.world.value_object.weather_zone_name import WeatherZoneName
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
+from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
+from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
+from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import InMemoryLootTableRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
+    InMemoryMonsterAggregateRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
+    InMemoryPlayerInventoryRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import InMemoryWeatherZoneRepository
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
 
 class _InMemorySkillLoadoutRepo:
@@ -252,13 +262,19 @@ class TestWorldSimulationApplicationService:
             SkillToHitBoxDomainService(),
         )
         monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
+        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
+            MonsterDecidedToInteractHandler,
+        )
+        from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
+        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
+            MonsterDecidedToUseSkillHandler,
+        )
+        from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
+        from ai_rpg_world.application.world.services.monster_action_resolver import (
+            create_monster_action_resolver_factory,
+        )
         from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
         from ai_rpg_world.domain.world.service.skill_selection_policy import FirstInRangeSkillPolicy
-        from ai_rpg_world.application.world.services.monster_action_resolver import create_monster_action_resolver_factory
-        from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
-        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import MonsterDecidedToUseSkillHandler
-        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import MonsterDecidedToInteractHandler
-        from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
         from ai_rpg_world.infrastructure.events.monster_event_handler_registry import MonsterEventHandlerRegistry
 
         hit_box_factory = HitBoxFactory()
@@ -1700,6 +1716,7 @@ class TestWorldSimulationApplicationService:
         
         # 3. ティック実行
         import unittest.mock as mock
+
         from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
         
         with mock.patch.object(WeatherSimulationService, 'simulate_next_weather', return_value=weather_state):
@@ -1756,6 +1773,7 @@ class TestWorldSimulationApplicationService:
         
         # 実行 (天候が変わらないようにモック)
         import unittest.mock as mock
+
         from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
         with mock.patch.object(WeatherSimulationService, 'simulate_next_weather', return_value=weather_state):
             service.tick()
@@ -1831,6 +1849,7 @@ class TestWorldSimulationApplicationService:
         time_provider.advance_tick(4) # 10 -> 14
         
         import unittest.mock as mock
+
         from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
         new_state = WeatherState(WeatherTypeEnum.CLOUDY, 1.0)
         
@@ -1872,6 +1891,7 @@ class TestWorldSimulationApplicationService:
         
         # 実行 (天候が変わらないようにモック)
         import unittest.mock as mock
+
         from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
         with mock.patch.object(WeatherSimulationService, 'simulate_next_weather', return_value=weather_state):
             service.tick()
@@ -1912,6 +1932,7 @@ class TestWorldSimulationApplicationService:
         
         # 実行 (天候が変わらないようにモック)
         import unittest.mock as mock
+
         from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
         with mock.patch.object(WeatherSimulationService, 'simulate_next_weather', return_value=weather_state):
             service.tick()

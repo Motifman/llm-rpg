@@ -33,9 +33,10 @@ timeout / HTTP / スキーマ不一致は ``TypedJudgmentUnavailableException``�
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping, Optional, Sequence, Union
+from typing import Any, Union
 
 from ai_rpg_world.application.llm.exceptions import LlmApplicationException
 
@@ -60,8 +61,8 @@ class NoulQuestion:
     """
 
     instructions: str
-    true_means: Optional[str] = None
-    false_means: Optional[str] = None
+    true_means: str | None = None
+    false_means: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,7 @@ class ChoiceQuestion:
     """
 
     instructions: str
-    options: Mapping[str, Optional[str]]
+    options: Mapping[str, str | None]
 
 
 @dataclass(frozen=True)
@@ -108,7 +109,7 @@ class JudgmentResult:
 
     value: Any
     probabilities: Mapping[str, float]
-    confidence: Optional[float]
+    confidence: float | None
     source: JudgmentSource
     latency_ms: float
 
@@ -124,7 +125,7 @@ class TypedJudgmentUnavailableException(LlmApplicationException):
         self,
         message: str,
         error_code: str = "TYPED_JUDGMENT_UNAVAILABLE",
-        cause: Optional[Exception] = None,
+        cause: Exception | None = None,
         **context: Any,
     ) -> None:
         super().__init__(message, cause=cause, error_code=error_code, **context)
@@ -137,7 +138,7 @@ class ITypedJudgmentPort(ABC):
     @abstractmethod
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         """``questions`` のすべてを同じ ``state`` に対して 1 回で問う。

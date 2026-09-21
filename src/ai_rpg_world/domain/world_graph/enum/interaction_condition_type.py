@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class InteractionConditionTypeEnum(Enum):
     ALWAYS = "ALWAYS"
     HAS_ITEM = "HAS_ITEM"

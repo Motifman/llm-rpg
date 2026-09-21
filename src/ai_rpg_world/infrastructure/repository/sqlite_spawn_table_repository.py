@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional
 
 from ai_rpg_world.domain.monster.repository.spawn_table_repository import (
     SpawnTableRepository,
@@ -15,8 +14,8 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_monster_spawn_state_codec import (
-    build_spawn_table,
     build_spawn_slot,
+    build_spawn_table,
 )
 
 
@@ -30,10 +29,10 @@ class SqliteSpawnTableRepository(SpawnTableRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(cls, connection: sqlite3.Connection) -> "SqliteSpawnTableRepository":
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteSpawnTableRepository:
         return cls(connection)
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[SpotSpawnTable]:
+    def find_by_spot_id(self, spot_id: SpotId) -> SpotSpawnTable | None:
         cur = self._conn.execute(
             "SELECT spot_id FROM game_spawn_tables WHERE spot_id = ?",
             (int(spot_id),),
@@ -94,13 +93,13 @@ class SqliteSpawnTableWriter(SpawnTableWriter):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteSpawnTableWriter":
+    ) -> SqliteSpawnTableWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteSpawnTableWriter":
+    ) -> SqliteSpawnTableWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

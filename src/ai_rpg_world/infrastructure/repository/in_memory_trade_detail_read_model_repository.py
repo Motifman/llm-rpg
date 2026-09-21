@@ -1,23 +1,22 @@
 """
 InMemoryTradeDetailReadModelRepository - TradeDetailReadModelを使用するインメモリ実装
 """
-from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 
-from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository import TradeDetailReadModelRepository
-from ai_rpg_world.domain.trade.read_model.trade_detail_read_model import TradeDetailReadModel
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.read_model.trade_detail_read_model import TradeDetailReadModel
+from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository import TradeDetailReadModelRepository
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
     """TradeDetailReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
-        self._details: Dict[TradeId, TradeDetailReadModel] = {}
+    def __init__(self) -> None:
+        self._details: dict[TradeId, TradeDetailReadModel] = {}
 
         # サンプル取引データを作成
         self._setup_sample_data()
@@ -151,10 +150,10 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
 
     def _create_sample_detail(self, trade_id: int, item_spec_id: int, item_instance_id: int,
                              item_name: str, item_quantity: int, item_type: ItemType,
-                             item_rarity: Rarity, item_equipment_type: Optional[EquipmentType],
-                             item_description: str, durability_current: Optional[int],
-                             durability_max: Optional[int], requested_gold: int,
-                             seller_name: str, buyer_name: Optional[str], status: TradeStatus) -> TradeDetailReadModel:
+                             item_rarity: Rarity, item_equipment_type: EquipmentType | None,
+                             item_description: str, durability_current: int | None,
+                             durability_max: int | None, requested_gold: int,
+                             seller_name: str, buyer_name: str | None, status: TradeStatus) -> TradeDetailReadModel:
         """サンプル取引詳細を作成するヘルパーメソッド"""
         return TradeDetailReadModel.create_from_trade_data(
             trade_id=TradeId(trade_id),
@@ -175,11 +174,11 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
         )
 
     # Repository基本メソッドの実装
-    def find_by_id(self, entity_id: TradeId) -> Optional[TradeDetailReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> TradeDetailReadModel | None:
         """IDで取引詳細を検索"""
         return self._details.get(entity_id)
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[TradeDetailReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[TradeDetailReadModel]:
         """IDのリストで取引詳細を検索"""
         result = []
         for detail_id in entity_ids:
@@ -200,12 +199,12 @@ class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             return True
         return False
 
-    def find_all(self) -> List[TradeDetailReadModel]:
+    def find_all(self) -> list[TradeDetailReadModel]:
         """全ての取引詳細を取得"""
         return list(self._details.values())
 
     # TradeDetailReadModelRepository特有メソッドの実装
-    def find_detail(self, trade_id: TradeId) -> Optional[TradeDetailReadModel]:
+    def find_detail(self, trade_id: TradeId) -> TradeDetailReadModel | None:
         """取引IDで詳細情報を取得
 
         Args:

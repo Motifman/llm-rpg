@@ -1,5 +1,8 @@
-from typing import Callable, List, Set
+from collections.abc import Callable
 
+from ai_rpg_world.application.world.services.monster_lifecycle_survival_coordinator import (
+    MonsterLifecycleSurvivalCoordinator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.service.world_time_config_service import (
@@ -8,10 +11,6 @@ from ai_rpg_world.domain.world.service.world_time_config_service import (
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay, time_of_day_from_tick
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-from ai_rpg_world.application.world.services.monster_lifecycle_survival_coordinator import (
-    MonsterLifecycleSurvivalCoordinator,
-)
 
 
 class WorldSimulationMonsterLifecycleStageService:
@@ -23,9 +22,9 @@ class WorldSimulationMonsterLifecycleStageService:
         has_spawn_slot_support: Callable[[], bool],
         has_hunger_migration_support: Callable[[], bool],
         process_spawn_and_respawn_by_slots: Callable[
-            [Set[SpotId], WorldTick, TimeOfDay], None
+            [set[SpotId], WorldTick, TimeOfDay], None
         ],
-        process_respawn_legacy: Callable[[Set[SpotId], WorldTick, TimeOfDay], None],
+        process_respawn_legacy: Callable[[set[SpotId], WorldTick, TimeOfDay], None],
         survival_coordinator: MonsterLifecycleSurvivalCoordinator | None = None,
     ) -> None:
         self._world_time_config_service = world_time_config_service
@@ -37,11 +36,11 @@ class WorldSimulationMonsterLifecycleStageService:
 
     def run(
         self,
-        maps: List[PhysicalMapAggregate],
-        active_spot_ids: Set[SpotId],
+        maps: list[PhysicalMapAggregate],
+        active_spot_ids: set[SpotId],
         current_tick: WorldTick,
-    ) -> Set[WorldObjectId]:
-        blocked_actor_ids: Set[WorldObjectId] = set()
+    ) -> set[WorldObjectId]:
+        blocked_actor_ids: set[WorldObjectId] = set()
         ticks_per_day = self._world_time_config_service.get_ticks_per_day()
         time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
 

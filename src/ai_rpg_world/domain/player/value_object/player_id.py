@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.player.exception.player_exceptions import PlayerIdValidationException
 
 
@@ -11,13 +12,15 @@ class PlayerId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.value <= 0:
-            raise PlayerIdValidationException(self.value)
+            raise PlayerIdValidationException(
+                f"PlayerId must be positive: {self.value}"
+            )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "PlayerId":
+    def create(cls, value: int | str) -> "PlayerId":
         """intまたはstrからPlayerIdを作成"""
         if isinstance(value, str):
             try:

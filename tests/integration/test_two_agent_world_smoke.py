@@ -18,16 +18,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Mapping
+from typing import Any
 
-# observation_appender を先に import するのは pre-existing な循環 import を
-# 回避するため (他のテストファイルでも同じ workaround)。F401 ではなく実際に
-# 下で利用している。
-from ai_rpg_world.application.observation.services.observation_appender import (
-    ObservationAppender,
-)
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
 )
@@ -44,6 +39,13 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
+)
+
+# observation_appender を先に import するのは pre-existing な循環 import を
+# 回避するため (他のテストファイルでも同じ workaround)。F401 ではなく実際に
+# 下で利用している。
+from ai_rpg_world.application.observation.services.observation_appender import (
+    ObservationAppender,
 )
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
@@ -70,7 +72,7 @@ class _AllLlm(ILLMPlayerResolver):
 
 @dataclass
 class _RecordingTrigger(ILlmTurnTrigger):
-    scheduled: List[int]
+    scheduled: list[int]
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         self.scheduled.append(player_id.value)

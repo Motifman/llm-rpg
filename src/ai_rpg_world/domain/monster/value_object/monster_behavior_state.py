@@ -7,16 +7,16 @@ initial_position, patrol_index, search_timer, failure_count）をカプセル化
 """
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterStatsValidationException,
 )
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
@@ -34,9 +34,9 @@ class MonsterBehaviorState:
     """
 
     state: BehaviorStateEnum
-    target_id: Optional[WorldObjectId]
-    last_known_position: Optional[Coordinate]
-    initial_position: Optional[Coordinate]
+    target_id: WorldObjectId | None
+    last_known_position: Coordinate | None
+    initial_position: Coordinate | None
     patrol_index: int
     search_timer: int
     failure_count: int
@@ -46,10 +46,10 @@ class MonsterBehaviorState:
     # 確認した spot のスナップショット。target は移動している可能性があり、
     # この値は「target を見失ったとき向かう手がかり」として PR (b) の探索
     # フェーズで使う。multi-spot 追跡で target を確認するたびに更新する。
-    last_observed_target_spot_id: Optional[SpotId] = None
+    last_observed_target_spot_id: SpotId | None = None
     # `flee_until_tick`: FLEE 状態が自動解除される tick。state==FLEE のときの
     # み意味を持つ。`current_tick > flee_until_tick` で IDLE に戻す判断材料。
-    flee_until_tick: Optional[WorldTick] = None
+    flee_until_tick: WorldTick | None = None
     # `chase_attacker_ref`: CHASE 中の追跡対象（player or monster）のスナップ
     # ショット。`state==CHASE` のときのみ意味を持ち、`last_attacker_ref` (集約
     # フィールド) と独立に保持される。CHASE 中に第三者から殴られても
@@ -58,7 +58,7 @@ class MonsterBehaviorState:
     # `chase_started_at_tick`: CHASE 状態に入った tick。`state==CHASE` の
     # ときのみ意味を持つ。`current_tick - chase_started_at_tick > template
     # .chase_max_ticks` で諦めて IDLE に戻る判断材料。Phase 4b PR (c)。
-    chase_started_at_tick: Optional[WorldTick] = None
+    chase_started_at_tick: WorldTick | None = None
 
     def __post_init__(self) -> None:
         if self.patrol_index < 0:
@@ -77,7 +77,7 @@ class MonsterBehaviorState:
     @classmethod
     def create_idle(
         cls,
-        initial_position: Optional[Coordinate] = None,
+        initial_position: Coordinate | None = None,
     ) -> "MonsterBehaviorState":
         """IDLE 状態の初期値を作成する（スポーン/リスポーン時）。"""
         return cls(
@@ -94,19 +94,19 @@ class MonsterBehaviorState:
     def from_parts(
         cls,
         state: BehaviorStateEnum,
-        target_id: Optional[WorldObjectId],
-        last_known_position: Optional[Coordinate],
-        initial_position: Optional[Coordinate],
+        target_id: WorldObjectId | None,
+        last_known_position: Coordinate | None,
+        initial_position: Coordinate | None,
         patrol_index: int = 0,
         search_timer: int = 0,
         failure_count: int = 0,
         # Phase 4a / 4b で追加された spot graph 用フィールド。default は None
         # で後方互換 (既存呼び出し側はこれらを渡さなくて済む)。永続化層が
         # これらの値を読み戻す経路を実装した時点で渡されるようにする。
-        last_observed_target_spot_id: Optional[SpotId] = None,
-        flee_until_tick: Optional[WorldTick] = None,
+        last_observed_target_spot_id: SpotId | None = None,
+        flee_until_tick: WorldTick | None = None,
         chase_attacker_ref: Optional["AttackerRef"] = None,
-        chase_started_at_tick: Optional[WorldTick] = None,
+        chase_started_at_tick: WorldTick | None = None,
     ) -> "MonsterBehaviorState":
         """個別フィールドから値を組み立てて構築する（永続化層・テスト用）。
 

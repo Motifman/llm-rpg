@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.player.exception import MpValidationException
 
 
@@ -12,7 +13,7 @@ class Mp:
     value: int
     max_mp: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.max_mp < 0:
             raise MpValidationException(f"max_mpは0以上の値である必要があります。max_mp: {self.max_mp}")

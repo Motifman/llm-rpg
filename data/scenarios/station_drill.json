@@ -1521,14 +1521,6 @@
                     "flag_name": "fuel_restored",
                     "failure_message": "燃料系は既に復旧している。"
                   }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "解氷弁のレバーに手をかけた。"
-                    }
-                  }
                 ]
               }
             ]
@@ -3514,14 +3506,6 @@
                     "condition_type": "FLAG_NOT_SET",
                     "flag_name": "fuel_restored",
                     "failure_message": "燃料系は既に復旧している。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "送油弁のレバーに手をかけた。"
-                    }
                   }
                 ]
               }

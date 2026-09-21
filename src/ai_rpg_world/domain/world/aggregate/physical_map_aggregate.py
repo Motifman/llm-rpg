@@ -1,100 +1,101 @@
 import math
-from typing import List, Dict, Optional, Any, Tuple, Iterable, FrozenSet
+from collections.abc import Iterable
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
+from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.entity.location_area import LocationArea
+from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
-from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
     AutonomousBehaviorComponent,
-    InteractableComponent,
-    HarvestableComponent,
     ChestComponent,
     DoorComponent,
+    HarvestableComponent,
+    InteractableComponent,
 )
-from ai_rpg_world.domain.world.value_object.pack_id import PackId
-from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.enum.world_enum import (
-    MovementCapabilityEnum,
     DirectionEnum,
     EnvironmentTypeEnum,
     InteractionTypeEnum,
+    MovementCapabilityEnum,
     SpotTraitEnum,
 )
-from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
-from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
-from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
-from ai_rpg_world.domain.world.service.chest_interaction_policy import ChestInteractionPolicy
-from ai_rpg_world.domain.world.service.harvest_session_domain_service import HarvestSessionDomainService
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
+from ai_rpg_world.domain.world.event.harvest_events import (
+    HarvestCancelledEvent,
+    HarvestCompletedEvent,
+    HarvestStartedEvent,
+)
 from ai_rpg_world.domain.world.event.map_events import (
-    PhysicalMapCreatedEvent,
-    WorldObjectStateChangedEvent,
-    WorldObjectBlockingChangedEvent,
-    WorldObjectMovedEvent,
-    WorldObjectAddedEvent,
-    TileTerrainChangedEvent,
-    TileTriggeredEvent,
-    ObjectTriggeredEvent,
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
-    WorldObjectInteractedEvent,
-    LocationEnteredEvent,
-    LocationExitedEvent,
     GatewayTriggeredEvent,
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    LocationExitedEvent,
+    ObjectTriggeredEvent,
+    PhysicalMapCreatedEvent,
     SpotWeatherChangedEvent,
-)
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestStartedEvent,
-    HarvestCancelledEvent,
-    HarvestCompletedEvent
-)
-from ai_rpg_world.domain.world.exception.map_exception import (
-    TileNotFoundException,
-    ObjectNotFoundException,
-    DuplicateObjectException,
-    InvalidPlacementException,
-    InvalidMovementException,
-    DuplicateAreaTriggerException,
-    AreaTriggerNotFoundException,
-    NotAnActorException,
-    InteractionOutOfRangeException,
-    NotFacingTargetException,
-    NotInteractableException,
-    SameCoordinateDirectionException,
-    DuplicateLocationAreaException,
-    LocationAreaNotFoundException,
-    DuplicateGatewayException,
-    GatewayNotFoundException,
-    ActorBusyException,
-    ChestClosedException,
-    NotAChestException,
-    ItemNotInChestException,
-    NotADoorException,
-    LockedDoorException,
-    InvalidAreaTraitException,
+    TileTerrainChangedEvent,
+    TileTriggeredEvent,
+    WorldObjectAddedEvent,
+    WorldObjectBlockingChangedEvent,
+    WorldObjectInteractedEvent,
+    WorldObjectMovedEvent,
+    WorldObjectStateChangedEvent,
 )
 from ai_rpg_world.domain.world.exception.harvest_exception import (
-    ResourceExhaustedException,
     HarvestInProgressException,
-    HarvestNotStartedException
+    HarvestNotStartedException,
+    ResourceExhaustedException,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ActorBusyException,
+    AreaTriggerNotFoundException,
+    ChestClosedException,
+    DuplicateAreaTriggerException,
+    DuplicateGatewayException,
+    DuplicateLocationAreaException,
+    DuplicateObjectException,
+    GatewayNotFoundException,
+    InteractionOutOfRangeException,
+    InvalidAreaTraitException,
+    InvalidMovementException,
+    InvalidPlacementException,
+    ItemNotInChestException,
+    LocationAreaNotFoundException,
+    LockedDoorException,
+    NotAChestException,
+    NotADoorException,
+    NotAnActorException,
+    NotFacingTargetException,
+    NotInteractableException,
+    ObjectNotFoundException,
+    SameCoordinateDirectionException,
+    TileNotFoundException,
+)
+from ai_rpg_world.domain.world.service.chest_interaction_policy import ChestInteractionPolicy
+from ai_rpg_world.domain.world.service.harvest_session_domain_service import HarvestSessionDomainService
+from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
+from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
+from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
+from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class PhysicalMapAggregate(AggregateRoot):
@@ -103,31 +104,31 @@ class PhysicalMapAggregate(AggregateRoot):
     def __init__(
         self,
         spot_id: SpotId,
-        tiles: Dict[Coordinate, Tile],
-        objects: List[WorldObject] = None,
-        area_triggers: List[AreaTrigger] = None,
-        location_areas: List[LocationArea] = None,
-        gateways: List[Gateway] = None,
+        tiles: dict[Coordinate, Tile],
+        objects: list[WorldObject] | None = None,
+        area_triggers: list[AreaTrigger] | None = None,
+        location_areas: list[LocationArea] | None = None,
+        gateways: list[Gateway] | None = None,
         environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
-        area_traits: Optional[Iterable[SpotTraitEnum]] = None,
+        area_traits: Iterable[SpotTraitEnum] | None = None,
     ):
         super().__init__()
         self._spot_id = spot_id
         self._tiles = tiles
-        self._objects: Dict[WorldObjectId, WorldObject] = {}
-        self._object_positions: Dict[Coordinate, List[WorldObjectId]] = {}
-        self._area_triggers: Dict[AreaTriggerId, AreaTrigger] = {t.trigger_id: t for t in (area_triggers or [])}
-        self._location_areas: Dict[LocationAreaId, LocationArea] = {l.location_id: l for l in (location_areas or [])}
-        self._gateways: Dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
+        self._objects: dict[WorldObjectId, WorldObject] = {}
+        self._object_positions: dict[Coordinate, list[WorldObjectId]] = {}
+        self._area_triggers: dict[AreaTriggerId, AreaTrigger] = {t.trigger_id: t for t in (area_triggers or [])}
+        self._location_areas: dict[LocationAreaId, LocationArea] = {l.location_id: l for l in (location_areas or [])}
+        self._gateways: dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
         self._environment_type = environment_type
         self._weather_state = WeatherState.clear()
-        self._area_traits: FrozenSet[SpotTraitEnum] = self._normalize_area_traits(area_traits)
+        self._area_traits: frozenset[SpotTraitEnum] = self._normalize_area_traits(area_traits)
 
         if objects:
             for obj in objects:
                 self._add_object_to_internal_storage(obj)
 
-    def _normalize_area_traits(self, area_traits: Optional[Iterable[SpotTraitEnum]]) -> FrozenSet[SpotTraitEnum]:
+    def _normalize_area_traits(self, area_traits: Iterable[SpotTraitEnum] | None) -> frozenset[SpotTraitEnum]:
         """area_traits を FrozenSet[SpotTraitEnum] に正規化し、要素の妥当性を検証する。"""
         if area_traits is None:
             return frozenset()
@@ -143,13 +144,13 @@ class PhysicalMapAggregate(AggregateRoot):
     def create(
         cls,
         spot_id: SpotId,
-        tiles: List[Tile],
-        objects: List[WorldObject] = None,
-        area_triggers: List[AreaTrigger] = None,
-        location_areas: List[LocationArea] = None,
-        gateways: List[Gateway] = None,
+        tiles: list[Tile],
+        objects: list[WorldObject] | None = None,
+        area_triggers: list[AreaTrigger] | None = None,
+        location_areas: list[LocationArea] | None = None,
+        gateways: list[Gateway] | None = None,
         environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
-        area_traits: Optional[Iterable[SpotTraitEnum]] = None,
+        area_traits: Iterable[SpotTraitEnum] | None = None,
     ) -> "PhysicalMapAggregate":
         tile_dict = {tile.coordinate: tile for tile in tiles}
         aggregate = cls(
@@ -163,7 +164,7 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
         return aggregate
 
-    def _add_object_to_internal_storage(self, obj: WorldObject):
+    def _add_object_to_internal_storage(self, obj: WorldObject) -> None:
         """内部ストレージにオブジェクトを追加し、バリデーションを行う"""
         if obj.object_id in self._objects:
             raise DuplicateObjectException(f"Object ID {obj.object_id} already exists")
@@ -188,7 +189,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise NotAnActorException(f"Object {object_id} is not an actor")
         return obj
 
-    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: Optional[MovementCapability] = None, exclude_object_id: Optional[WorldObjectId] = None):
+    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: MovementCapability | None = None, exclude_object_id: WorldObjectId | None = None) -> None:
         """指定された座標にオブジェクトを配置可能かチェックする"""
         # 1. タイルが存在するか
         if coordinate not in self._tiles:
@@ -226,7 +227,7 @@ class PhysicalMapAggregate(AggregateRoot):
     def weather_state(self) -> WeatherState:
         return self._weather_state
 
-    def set_weather(self, weather_state: WeatherState):
+    def set_weather(self, weather_state: WeatherState) -> None:
         """天候状態を設定する。屋内や地下の場合は常に晴れとして扱う。屋外で実際に変化した場合のみ SpotWeatherChangedEvent を発行する。"""
         if self._environment_type == EnvironmentTypeEnum.OUTDOOR:
             old_state = self._weather_state
@@ -245,11 +246,11 @@ class PhysicalMapAggregate(AggregateRoot):
             self._weather_state = WeatherState.clear()
 
     @property
-    def area_traits(self) -> FrozenSet[SpotTraitEnum]:
+    def area_traits(self) -> frozenset[SpotTraitEnum]:
         """このマップが持つ環境・雰囲気の特性（複数可）。"""
         return self._area_traits
 
-    def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> bool:
+    def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: WorldObjectId | None = None) -> bool:
         """指定された座標が特定のアクター能力で通行可能か判定する"""
         try:
             tile = self.get_tile(coordinate)
@@ -272,7 +273,7 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
-    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> float:
+    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: WorldObjectId | None = None) -> float:
         """指定された座標の移動コストを計算する。通行不可の場合は無限大を返す。"""
         if not self.is_passable(coordinate, capability, exclude_object_id=exclude_object_id):
             return float('inf')
@@ -292,11 +293,11 @@ class PhysicalMapAggregate(AggregateRoot):
         return self._spot_id
 
     @property
-    def actors(self) -> List[WorldObject]:
+    def actors(self) -> list[WorldObject]:
         """マップ上の全アクターを取得する"""
         return [obj for obj in self._objects.values() if obj.is_actor]
 
-    def get_actors_in_pack(self, pack_id: PackId) -> List[WorldObject]:
+    def get_actors_in_pack(self, pack_id: PackId) -> list[WorldObject]:
         """指定した pack_id に属する自律行動アクターのみを返す。"""
         result = []
         for obj in self._objects.values():
@@ -319,7 +320,7 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
-    def get_objects_at(self, coordinate: Coordinate) -> List[WorldObject]:
+    def get_objects_at(self, coordinate: Coordinate) -> list[WorldObject]:
         """指定座標にあるオブジェクトのリストを返す（当たり判定なしのオブジェクト含む）"""
         if coordinate not in self._object_positions:
             return []
@@ -334,7 +335,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise ObjectNotFoundException(f"Object {object_id} not found in spot {self._spot_id}")
         return self._objects[object_id]
 
-    def set_object_blocking(self, object_id: WorldObjectId, is_blocking: bool):
+    def set_object_blocking(self, object_id: WorldObjectId, is_blocking: bool) -> None:
         obj = self.get_object(object_id)
         if obj.is_blocking == is_blocking:
             return
@@ -359,7 +360,7 @@ class PhysicalMapAggregate(AggregateRoot):
             is_blocking=is_blocking
         ))
 
-    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: Optional[MovementCapability] = None):
+    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: MovementCapability | None = None) -> None:
         obj = self.get_object(object_id)
         
         # 1. ビジー状態のチェック
@@ -378,7 +379,7 @@ class PhysicalMapAggregate(AggregateRoot):
         try:
             self._validate_placement(new_coordinate, obj.is_blocking, actual_capability, exclude_object_id=object_id)
         except (InvalidPlacementException, DuplicateObjectException) as e:
-            raise InvalidMovementException(f"Cannot move object to {new_coordinate}: {str(e)}")
+            raise InvalidMovementException(f"Cannot move object to {new_coordinate}: {e!s}")
             
         # 2. 移動にかかるティック数を計算（コストに基づく）
         # 移動先タイルのコストを取得
@@ -429,7 +430,7 @@ class PhysicalMapAggregate(AggregateRoot):
         ):
             self.add_event(ev)
 
-    def change_tile_terrain(self, coordinate: Coordinate, new_terrain_type: TerrainType):
+    def change_tile_terrain(self, coordinate: Coordinate, new_terrain_type: TerrainType) -> None:
         """タイルの地形を変更する"""
         tile = self.get_tile(coordinate)
         # 地形が変わることでオブジェクトが不正な位置になる場合はエラーにする
@@ -446,32 +447,32 @@ class PhysicalMapAggregate(AggregateRoot):
             new_terrain_type=new_terrain_type.type
         ))
 
-    def _override_tile_walkability(self, coordinate: Coordinate, is_walkable: bool):
+    def _override_tile_walkability(self, coordinate: Coordinate, is_walkable: bool) -> None:
         """指定された座標のタイルの通行可能性を上書きする"""
         tile = self.get_tile(coordinate)
         tile.override_walkable(is_walkable)
 
-    def _reset_tile_walkability(self, coordinate: Coordinate):
+    def _reset_tile_walkability(self, coordinate: Coordinate) -> None:
         """指定された座標のタイルの通行可能性の上書きを解除する"""
         tile = self.get_tile(coordinate)
         tile.reset_walkable()
     
-    def get_all_objects(self) -> List[WorldObject]:
+    def get_all_objects(self) -> list[WorldObject]:
         return list(self._objects.values())
 
-    def get_all_tiles(self) -> List[Tile]:
+    def get_all_tiles(self) -> list[Tile]:
         return list(self._tiles.values())
 
-    def get_all_area_triggers(self) -> List[AreaTrigger]:
+    def get_all_area_triggers(self) -> list[AreaTrigger]:
         return list(self._area_triggers.values())
 
-    def get_all_location_areas(self) -> List[LocationArea]:
+    def get_all_location_areas(self) -> list[LocationArea]:
         return list(self._location_areas.values())
 
-    def get_all_gateways(self) -> List[Gateway]:
+    def get_all_gateways(self) -> list[Gateway]:
         return list(self._gateways.values())
 
-    def add_object(self, obj: WorldObject):
+    def add_object(self, obj: WorldObject) -> None:
         """マップに新しくオブジェクトを追加する"""
         self._add_object_to_internal_storage(obj)
         
@@ -491,14 +492,14 @@ class PhysicalMapAggregate(AggregateRoot):
         ):
             self.add_event(ev)
 
-    def get_objects_in_range(self, center: Coordinate, distance: int) -> List[WorldObject]:
+    def get_objects_in_range(self, center: Coordinate, distance: int) -> list[WorldObject]:
         """指定された座標から一定範囲内のオブジェクトを取得する（マンハッタン距離）"""
         # 天候による視界減衰
         reduction = WeatherEffectService.calculate_vision_reduction(
             self._weather_state,
             self._environment_type
         )
-        effective_distance = max(0, distance - reduction)
+        effective_distance: float = max(0, distance - reduction)
         
         # 天候による絶対的な最大視界制限
         max_dist = WeatherEffectService.get_max_vision_distance(
@@ -530,8 +531,8 @@ class PhysicalMapAggregate(AggregateRoot):
         return MapGeometryService.is_visible(from_coord, to_coord, self)
 
     def get_objects_in_range_bulk(
-        self, centers_with_range: List[Tuple[Coordinate, int]]
-    ) -> List[List[WorldObject]]:
+        self, centers_with_range: list[tuple[Coordinate, int]]
+    ) -> list[list[WorldObject]]:
         """
         複数の (中心座標, 距離) について、それぞれの範囲内オブジェクトを一括で取得する。
         マップのオブジェクト走査は1回で行い、各クエリへの結果を返す。
@@ -549,13 +550,13 @@ class PhysicalMapAggregate(AggregateRoot):
             self._environment_type,
         )
 
-        effective_distances: List[float] = []
+        effective_distances: list[float] = []
         for center, distance in centers_with_range:
-            effective = max(0, distance - reduction)
+            effective: float = max(0, distance - reduction)
             effective = min(effective, max_dist)
             effective_distances.append(effective)
 
-        results: List[List[WorldObject]] = [[] for _ in centers_with_range]
+        results: list[list[WorldObject]] = [[] for _ in centers_with_range]
         for obj in self._objects.values():
             for i, (center, _) in enumerate(centers_with_range):
                 if center.distance_to(obj.coordinate) <= effective_distances[i]:
@@ -563,8 +564,8 @@ class PhysicalMapAggregate(AggregateRoot):
         return results
 
     def is_visible_batch(
-        self, pairs: List[Tuple[Coordinate, Coordinate]]
-    ) -> List[bool]:
+        self, pairs: list[tuple[Coordinate, Coordinate]]
+    ) -> list[bool]:
         """
         複数の (from_coord, to_coord) について、互いに視認可能かを一括で判定する。
         同一ペアは1回だけ計算し、結果は入力順で返す。
@@ -572,8 +573,8 @@ class PhysicalMapAggregate(AggregateRoot):
         if not pairs:
             return []
 
-        seen: Dict[Tuple[Coordinate, Coordinate], bool] = {}
-        out: List[bool] = []
+        seen: dict[tuple[Coordinate, Coordinate], bool] = {}
+        out: list[bool] = []
         for from_coord, to_coord in pairs:
             key = (from_coord, to_coord)
             if key not in seen:
@@ -598,7 +599,7 @@ class PhysicalMapAggregate(AggregateRoot):
 
         return False
 
-    def remove_object(self, object_id: WorldObjectId):
+    def remove_object(self, object_id: WorldObjectId) -> None:
         """オブジェクトをマップから削除する"""
         obj = self.get_object(object_id)
         coord = obj.coordinate
@@ -612,7 +613,7 @@ class PhysicalMapAggregate(AggregateRoot):
             
         del self._objects[object_id]
 
-    def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum, current_tick: WorldTick):
+    def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum, current_tick: WorldTick) -> None:
         """アクターを指定された方向に1マス移動させる"""
         actor = self.get_actor(object_id)
         
@@ -625,37 +626,37 @@ class PhysicalMapAggregate(AggregateRoot):
         # 移動実行（能力を考慮）
         self.move_object(object_id, new_coord, current_tick, actor.capability)
 
-    def add_area_trigger(self, trigger: AreaTrigger):
+    def add_area_trigger(self, trigger: AreaTrigger) -> None:
         """エリアトリガーを追加する"""
         if trigger.trigger_id in self._area_triggers:
             raise DuplicateAreaTriggerException(f"AreaTrigger with ID {trigger.trigger_id} already exists")
         self._area_triggers[trigger.trigger_id] = trigger
 
-    def remove_area_trigger(self, trigger_id: AreaTriggerId):
+    def remove_area_trigger(self, trigger_id: AreaTriggerId) -> None:
         """エリアトリガーを削除する"""
         if trigger_id not in self._area_triggers:
             raise AreaTriggerNotFoundException(f"AreaTrigger with ID {trigger_id} not found")
         del self._area_triggers[trigger_id]
 
-    def add_location_area(self, location_area: LocationArea):
+    def add_location_area(self, location_area: LocationArea) -> None:
         """ロケーションエリアを追加する"""
         if location_area.location_id in self._location_areas:
             raise DuplicateLocationAreaException(f"LocationArea with ID {location_area.location_id} already exists")
         self._location_areas[location_area.location_id] = location_area
 
-    def remove_location_area(self, location_id: LocationAreaId):
+    def remove_location_area(self, location_id: LocationAreaId) -> None:
         """ロケーションエリアを削除する"""
         if location_id not in self._location_areas:
             raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
         del self._location_areas[location_id]
 
-    def add_gateway(self, gateway: Gateway):
+    def add_gateway(self, gateway: Gateway) -> None:
         """ゲートウェイを追加する"""
         if gateway.gateway_id in self._gateways:
             raise DuplicateGatewayException(f"Gateway with ID {gateway.gateway_id} already exists")
         self._gateways[gateway.gateway_id] = gateway
 
-    def remove_gateway(self, gateway_id: GatewayId):
+    def remove_gateway(self, gateway_id: GatewayId) -> None:
         """ゲートウェイを削除する"""
         if gateway_id not in self._gateways:
             raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
@@ -666,7 +667,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
         return self._location_areas[location_id]
 
-    def get_location_areas_at(self, coordinate: Coordinate) -> List[LocationArea]:
+    def get_location_areas_at(self, coordinate: Coordinate) -> list[LocationArea]:
         """指定された座標が含まれる全てのロケーションエリアを取得"""
         return [loc for loc in self._location_areas.values() if loc.contains(coordinate)]
 
@@ -675,7 +676,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
         return self._gateways[gateway_id]
 
-    def perform_action(self, object_id: WorldObjectId, duration: int, current_tick: WorldTick):
+    def perform_action(self, object_id: WorldObjectId, duration: int, current_tick: WorldTick) -> None:
         """オブジェクトに時間のかかるアクションを実行させる"""
         obj = self.get_object(object_id)
         
@@ -687,7 +688,7 @@ class PhysicalMapAggregate(AggregateRoot):
             
         obj.set_busy(current_tick.add_duration(duration))
 
-    def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+    def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick) -> None:
         """アクターがターゲットのオブジェクトに対してインタラクションを行う"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
@@ -695,7 +696,14 @@ class PhysicalMapAggregate(AggregateRoot):
         MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
 
         # 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
-        target.component.apply_interaction_from(
+        component = target.component
+        if component is None:
+            # 上の検証が interaction_type を必須にしているので到達しない。
+            # 型検査はその含意をここまで運べない。
+            raise NotInteractableException(
+                f"Target {target_id} is not interactable"
+            )
+        component.apply_interaction_from(
             actor_id, target_id, self, current_tick
         )
 
@@ -726,8 +734,9 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
-        chest = chest_obj.component
+        chest = ChestInteractionPolicy.validate_can_access_chest(
+            actor, chest_obj, current_tick
+        )
 
         chest.add_item(item_instance_id)
         self.add_event(ItemStoredInChestEvent.create(
@@ -752,8 +761,9 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
-        chest = chest_obj.component
+        chest = ChestInteractionPolicy.validate_can_access_chest(
+            actor, chest_obj, current_tick
+        )
 
         if not chest.remove_item(item_instance_id):
             raise ItemNotInChestException(
@@ -770,14 +780,14 @@ class PhysicalMapAggregate(AggregateRoot):
             player_id_value=player_id_value,
         ))
 
-    def start_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+    def start_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick) -> None:
         """資源の採取を開始する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
         event = HarvestSessionDomainService.start_harvest(actor, target, current_tick)
         self.add_event(event)
 
-    def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+    def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick) -> None:
         """資源の採取を完了させる"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
@@ -785,14 +795,14 @@ class PhysicalMapAggregate(AggregateRoot):
         if event:
             self.add_event(event)
 
-    def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled"):
+    def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled") -> None:
         """資源の採取を中断する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
         event = HarvestSessionDomainService.cancel_harvest(actor, target, reason)
         self.add_event(event)
 
-    def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
+    def check_and_activate_trigger(self, coordinate: Coordinate, object_id: WorldObjectId | None = None) -> MapTrigger | None:
         """
         指定された座標のトリガーをチェックし、存在すればイベントを発行してトリガーを返す。
         エリアトリガーシステムに統合されたため、指定座標を含む最初のアクティブなトリガーを返す。

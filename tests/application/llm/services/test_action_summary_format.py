@@ -24,7 +24,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
 )
 
-
 _FULL_ARGS = {
     "target_label": "OBJ1",
     "action_name": "inspect",

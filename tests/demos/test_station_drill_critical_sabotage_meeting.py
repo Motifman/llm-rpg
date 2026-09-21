@@ -25,7 +25,6 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
@@ -73,6 +72,18 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
+def _interact(runtime, executor, player_id: PlayerId, object_str_id: str, action_name: str):
+    """本番と同じ入口。弁は interact から「自分の側を受け持つ」登録になる。"""
+    return executor._interact(
+        player_id.value,
+        {
+            "object_id": runtime.id_mapper.get_int("object", object_str_id),
+            "action_name": action_name,
+            "inner_thought": "弁を受け持つ",
+        },
+    )
+
+
 def _executor(runtime) -> SpotGraphToolExecutor:
     services = SpotGraphWorldServices(
         interaction=runtime._interaction_service,
@@ -103,8 +114,8 @@ def _restore_with_valves(runtime) -> None:
     _move(runtime, _MORI, "fuel_bay")
     _move(runtime, _SENA, "machine_room")
     executor = _executor(runtime)
-    executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
-    executor._prepare_action(_SENA.value, {"action_name": "open_oil_feed_valve"})
+    _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
+    _interact(runtime, executor, _SENA, "oil_feed_valve", "open_oil_feed_valve")
     runtime.advance_tick()
     runtime.advance_tick()
 

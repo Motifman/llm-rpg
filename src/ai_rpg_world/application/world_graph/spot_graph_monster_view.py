@@ -18,7 +18,8 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphMonsterEntry,
@@ -26,7 +27,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-
 
 HEALTH_HEALTHY = "healthy"
 HEALTH_WOUNDED = "wounded"
@@ -58,7 +58,7 @@ class IMonsterAggregateLookup(Protocol):
     依存を狭めるためテストでは MagicMock の duck typing で十分。
     """
 
-    def find_by_id(self, monster_id: MonsterId) -> Optional[MonsterAggregate]:
+    def find_by_id(self, monster_id: MonsterId) -> MonsterAggregate | None:
         ...
 
 
@@ -101,7 +101,7 @@ def _behavior_label(state_value: str) -> str:
 
 def build_monster_view_provider(
     monster_lookup: IMonsterAggregateLookup,
-) -> Callable[[MonsterId], Optional[SpotGraphMonsterEntry]]:
+) -> Callable[[MonsterId], SpotGraphMonsterEntry | None]:
     """`SpotGraphCurrentStateBuilder` に渡せる resolver を作って返す。
 
     aggregate からモンスターを引き、view DTO に整形する関数を closure で返す。
@@ -109,7 +109,7 @@ def build_monster_view_provider(
     builder 側で snapshot から除外させる。
     """
 
-    def _resolve(monster_id: MonsterId) -> Optional[SpotGraphMonsterEntry]:
+    def _resolve(monster_id: MonsterId) -> SpotGraphMonsterEntry | None:
         agg = monster_lookup.find_by_id(monster_id)
         if agg is None:
             return None

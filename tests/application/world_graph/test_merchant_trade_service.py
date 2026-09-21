@@ -13,10 +13,9 @@ from __future__ import annotations
 import json
 import pathlib
 import tempfile
-from typing import Any, Dict
+from typing import Any
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
@@ -46,7 +45,7 @@ def _world(
     second_merchant: bool = False,
 ) -> Any:
     """商人 1 人 (必要なら 2 人) と所持金を宣言した world runtime を組む。"""
-    raw: Dict[str, Any] = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_DRILL.read_text(encoding="utf-8"))
     spawn_spot = raw["players"][0]["spawn_spot"]
     traded = raw["item_specs"][0]["id"]
     raw["merchants"] = [

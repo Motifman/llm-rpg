@@ -5,39 +5,41 @@ MonsterSkillExecutionDomainService のテスト
 """
 import pytest
 
-from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
-from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
-from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
+    MonsterSkillExecutionDomainService,
+)
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
-from ai_rpg_world.domain.player.enum.player_enum import Race, Element
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.player.enum.player_enum import Element, Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
+from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillNotFoundInSlotException
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillNotFoundInSlotException
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _sample_template(template_id: int = 1) -> MonsterTemplate:
@@ -54,7 +56,7 @@ def _sample_template(template_id: int = 1) -> MonsterTemplate:
     )
 
 
-def _sample_skill(skill_id: int = 1, mp_cost: int = 10) -> SkillSpec:
+def _sample_skill(skill_id: int = 1, mp_cost: int | None = 10) -> SkillSpec:
     return SkillSpec(
         skill_id=SkillId(skill_id),
         name=f"skill-{skill_id}",
@@ -121,6 +123,28 @@ class TestMonsterSkillExecutionDomainService:
         assert monster.mp.value == 90
         assert loadout.can_use_skill(0, 10) is False
         assert params[0].initial_coordinate == Coordinate(5, 5, 0)
+
+    def test_execute_skill_without_mp_cost_keeps_mp_unchanged(self, domain_service, base_setup):
+        """mp_cost が None のスキルは、MP を減らさずに実行できる。
+
+        SkillSpec.mp_cost の既定は None。プレイヤー経路は None を 0 として扱うが、
+        モンスター経路は素通しで use_mp へ渡しており、MP 消費の計算まで None が
+        届いていた。
+        """
+        monster, loadout, pmap, _, _ = base_setup
+        loadout.equip_skill(DeckTier.NORMAL, 1, _sample_skill(2, mp_cost=None))
+        mp_before = monster.mp.value
+
+        params = domain_service.execute(
+            monster=monster,
+            loadout=loadout,
+            physical_map=pmap,
+            slot_index=1,
+            current_tick=WorldTick(10),
+        )
+
+        assert len(params) == 1
+        assert monster.mp.value == mp_before
 
     def test_execute_skill_not_in_slot_raises_skill_not_found_in_slot(self, domain_service, base_setup):
         """指定スロットにスキルがない場合 SkillNotFoundInSlotException"""

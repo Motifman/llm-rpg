@@ -1,23 +1,10 @@
 """観測用イベントハンドラを EventPublisher に登録する Registry"""
 
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    ConnectionStateChangedEvent,
-    EntityEnteredSpotEvent,
-    EntityLeftSpotEvent,
-    SpotExploredEvent,
-    SpotObjectInteractedEvent,
-    SpotObjectStateChangedEvent,
-    SpotPlayerStateChangedInSpotEvent,
-    SpotPublicEffectObservedEvent,
-    ConnectionCreatedEvent,
-    ConnectionDestroyedEvent,
-)
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxHitRecordedEvent,
 )
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
     ConversationStartedEvent,
@@ -31,6 +18,7 @@ from ai_rpg_world.domain.guild.event.guild_event import (
     GuildMemberLeftEvent,
     GuildRoleChangedEvent,
 )
+from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     MonsterDamagedEvent,
@@ -41,35 +29,21 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterRespawnedEvent,
     MonsterSpawnedEvent,
 )
-from ai_rpg_world.domain.world.event.map_events import (
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ItemTakenFromChestEvent,
-    ItemStoredInChestEvent,
-    ResourceHarvestedEvent,
-    SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
-)
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-    HarvestStartedEvent,
-)
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerLocationChangedEvent,
-    PlayerDownedEvent,
-    PlayerRevivedEvent,
-    PlayerLevelUpEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
-)
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
+)
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerGoldPaidEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+    PlayerRevivedEvent,
 )
 from ai_rpg_world.domain.pursuit.event.pursuit_events import (
     PursuitCancelledEvent,
@@ -92,19 +66,6 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemPurchasedEvent,
     ShopItemUnlistedEvent,
 )
-from ai_rpg_world.domain.trade.event.trade_event import (
-    TradeAcceptedEvent,
-    TradeCancelledEvent,
-    TradeDeclinedEvent,
-    TradeOfferedEvent,
-)
-from ai_rpg_world.domain.sns.event import (
-    SnsContentLikedEvent,
-    SnsPostCreatedEvent,
-    SnsReplyCreatedEvent,
-    SnsUserFollowedEvent,
-    SnsUserSubscribedEvent,
-)
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -116,6 +77,45 @@ from ai_rpg_world.domain.skill.event.skill_events import (
     SkillLoadoutCapacityChangedEvent,
     SkillUnequippedEvent,
     SkillUsedEvent,
+)
+from ai_rpg_world.domain.sns.event import (
+    SnsContentLikedEvent,
+    SnsPostCreatedEvent,
+    SnsReplyCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
+)
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+    TradeOfferedEvent,
+)
+from ai_rpg_world.domain.world.event.harvest_events import (
+    HarvestCancelledEvent,
+    HarvestCompletedEvent,
+    HarvestStartedEvent,
+)
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemStoredInChestEvent,
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    LocationExitedEvent,
+    ResourceHarvestedEvent,
+    SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
+)
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionCreatedEvent,
+    ConnectionDestroyedEvent,
+    ConnectionStateChangedEvent,
+    EntityEnteredSpotEvent,
+    EntityLeftSpotEvent,
+    SpotExploredEvent,
+    SpotObjectInteractedEvent,
+    SpotObjectStateChangedEvent,
+    SpotPlayerStateChangedInSpotEvent,
+    SpotPublicEffectObservedEvent,
 )
 
 # 観測対象イベント型一覧（仕様に基づく）

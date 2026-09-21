@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
@@ -31,7 +30,7 @@ class PursuitUpdatedEvent(BaseDomainEvent[WorldObjectId, str]):
     actor_id: WorldObjectId
     target_id: WorldObjectId
     last_known: PursuitLastKnownState
-    target_snapshot: Optional[PursuitTargetSnapshot] = None
+    target_snapshot: PursuitTargetSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -42,7 +41,7 @@ class PursuitFailedEvent(BaseDomainEvent[WorldObjectId, str]):
     target_id: WorldObjectId
     failure_reason: PursuitFailureReason
     last_known: PursuitLastKnownState
-    target_snapshot: Optional[PursuitTargetSnapshot] = None
+    target_snapshot: PursuitTargetSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -52,4 +51,4 @@ class PursuitCancelledEvent(BaseDomainEvent[WorldObjectId, str]):
     actor_id: WorldObjectId
     target_id: WorldObjectId
     last_known: PursuitLastKnownState
-    target_snapshot: Optional[PursuitTargetSnapshot] = None
+    target_snapshot: PursuitTargetSnapshot | None = None

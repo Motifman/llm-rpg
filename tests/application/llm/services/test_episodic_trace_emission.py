@@ -7,33 +7,39 @@
 - recorder 例外は本来の処理を止めない
 """
 from __future__ import annotations
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timezone
-from typing import Any, List
+
 import pytest
+
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolRuntimeContextDto
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
+from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
-from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallRetrievalService
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
-from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
-from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-def _capture_trace(recorder: NullTraceRecorder) -> List:
+
+def _capture_trace(recorder: NullTraceRecorder) -> list:
     """NullTraceRecorder の record を wrap して capture list を返す。"""
-    captured: List = []
+    captured: list = []
     original = recorder.record
 
     def wrapper(kind, **kw):
@@ -50,8 +56,8 @@ class TestChunkCoordinatorTraceEmission:
     """chunk 書き込み時に EPISODIC_CHUNK_WRITTEN が記録される。"""
 
     def _build_coord(self, *, recorder=None, tick: int=5, chunk_subjective_fields_service=None):
-        from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
+        from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         buffer = DefaultObservationContextBuffer()
@@ -165,9 +171,12 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
     prediction_error 確定時に PREDICTION_OUTCOME が emit される。"""
 
     def _build_service_with_prediction_error(self, prediction_error):
-        from typing import Any
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
 
         class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
 
@@ -239,7 +248,9 @@ class TestPromptBuilderRecallTraceEmission:
         builder._trace_recorder_provider = None
         builder._current_tick_provider = lambda : 42
         ep = _make_episode(episode_id='recall-ep-1', recall_text='長いリコール本文...' * 10)
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+        )
         cand = EpisodicPassiveRecallCandidate(episode=ep, source_axes=('place_spot', 'temporal'))
         cue = EpisodicCue(axis='place_spot', value='3', source=EpisodicCueSource.RUNTIME_CONTEXT)
         builder._emit_episodic_recall_trace(player_id=PlayerId(7), situation_cues=(cue,), candidates=[cand])
@@ -287,8 +298,11 @@ class TestPromptBuilderRecallTraceEmission:
         """``retrieval_debug`` を渡すと axis 別 raw 件数 / union 件数 /
         最終 source_axes 別件数 / candidate ごとの source_axes が payload に
         乗る (#526 後続: cue 設計の post-hoc 解析のため)。"""
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+            EpisodicPassiveRecallRetrievalDebug,
+        )
         from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate, EpisodicPassiveRecallRetrievalDebug
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         builder = object.__new__(DefaultPromptBuilder)
@@ -319,8 +333,11 @@ class TestPromptBuilderRecallTraceEmission:
         だったため、ペナルティ計算結果が trace から見えない状態だった。本
         テストは regression を固定する。
         """
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+            EpisodicPassiveRecallRetrievalDebug,
+        )
         from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate, EpisodicPassiveRecallRetrievalDebug
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         builder = object.__new__(DefaultPromptBuilder)
@@ -348,8 +365,11 @@ class TestPromptBuilderRecallTraceEmission:
         ペナルティ未適用の候補は ``habituation_penalty=0`` で埋める (= 既存
         dict キーが無いケースを default 0 として扱う)。
         """
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+            EpisodicPassiveRecallRetrievalDebug,
+        )
         from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate, EpisodicPassiveRecallRetrievalDebug
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         builder = object.__new__(DefaultPromptBuilder)
@@ -370,8 +390,10 @@ class TestPromptBuilderRecallTraceEmission:
         """PR-E 後方互換: ``retrieval_debug`` 無し (= 旧経路) でも各 candidate
         に ``habituation_penalty=0`` が一律で乗る。集計側が常に同じ shape を
         前提にできるようにする。"""
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+        )
         from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         builder = object.__new__(DefaultPromptBuilder)
@@ -472,9 +494,11 @@ class TestWorldRuntimeEpisodicTraceE2E:
     def test_smoke_run_chunk_written_recall_event_emit(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """smoke run で chunk written と recall イベントが 両方 emit。"""
         from pathlib import Path
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
         from tests.runtime_config_helpers import episodic_config
+
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         scenario_path = Path(__file__).resolve().parents[4] / 'data' / 'scenarios' / 'forbidden_library_demo.json'
         runtime = create_world_runtime(scenario_path, config=episodic_config())
         recorder = NullTraceRecorder()

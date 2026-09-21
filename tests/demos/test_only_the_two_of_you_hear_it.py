@@ -30,10 +30,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -55,7 +54,7 @@ _HERB = "薬草"
 @pytest.fixture()
 def town(tmp_path: Path) -> Any:
     """板のある市場町。3 人が広場に居る。"""
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
         raw["players"].append({
@@ -84,7 +83,7 @@ def _give(runtime: Any, player_id: PlayerId, label: str, count: int = 1) -> None
     )
 
 
-def _drain(runtime: Any, player_id: PlayerId) -> List[Any]:
+def _drain(runtime: Any, player_id: PlayerId) -> list[Any]:
     """その人に届いた観測の中身を取り出す。
 
     バッファは (発生時刻 + 観測) の entry を返すので、観測そのものを見る。
@@ -97,7 +96,7 @@ def _drain_all(runtime: Any) -> None:
         _drain(runtime, PlayerId(pid))
 
 
-def _market_observations(runtime: Any, player_id: PlayerId) -> List[Any]:
+def _market_observations(runtime: Any, player_id: PlayerId) -> list[Any]:
     return [
         o
         for o in _drain(runtime, player_id)

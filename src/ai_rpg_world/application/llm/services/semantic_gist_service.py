@@ -17,15 +17,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple
 
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-
 
 _logger = logging.getLogger(__name__)
 
@@ -68,7 +66,7 @@ class SemanticGistResult:
 
     gist_text: str
     importance_score: int
-    tags: Tuple[str, ...]
+    tags: tuple[str, ...]
 
 
 class SemanticGistService:
@@ -84,8 +82,8 @@ class SemanticGistService:
         *,
         player_name: str,
         persona_block: str,
-        cluster_episodes: List[SubjectiveEpisode],
-        existing_related_semantic: List[SemanticMemoryEntry] | None = None,
+        cluster_episodes: list[SubjectiveEpisode],
+        existing_related_semantic: list[SemanticMemoryEntry] | None = None,
     ) -> SemanticGistResult:
         """cluster_episodes から SemanticGistResult を生成する。
 
@@ -108,8 +106,8 @@ class SemanticGistService:
         *,
         player_name: str,
         persona_block: str,
-        cluster_episodes: List[SubjectiveEpisode],
-        existing_related_semantic: List[SemanticMemoryEntry],
+        cluster_episodes: list[SubjectiveEpisode],
+        existing_related_semantic: list[SemanticMemoryEntry],
     ) -> list[dict]:
         user_lines: list[str] = []
         user_lines.append(f"あなた = {player_name}")

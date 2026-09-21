@@ -4,17 +4,16 @@
 集約からは呼び出さず、アプリケーション層が集約の base_stats / active_effects を取得して
 本関数に渡し、得た BaseStats を利用する。
 """
-from typing import List
 
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 
 
 def compute_effective_stats(
     base_stats: BaseStats,
-    active_effects: List[StatusEffect],
+    active_effects: list[StatusEffect],
     current_tick: WorldTick,
 ) -> BaseStats:
     """

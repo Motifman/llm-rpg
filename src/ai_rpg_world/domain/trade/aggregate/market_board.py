@@ -28,7 +28,7 @@ snapshot の捕獲中に変わる・観測の発火順と食い違う、とい�
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.exception.trade_exception import (
@@ -82,19 +82,19 @@ class MarketBoardRow:
 
     item_spec_id: int
     #: この品を買うときに払う単価。None なら買えない (出品が無い)。
-    buy_price_gold: Optional[int] = None
+    buy_price_gold: int | None = None
     #: 買える出品の件数。競争の激しさを読む材料。
     listing_count: int = 0
     #: 買える総数。
     buyable_quantity: int = 0
     #: この品を売るときに受け取る単価。None なら売れない (買い注文が無い)。
-    sell_price_gold: Optional[int] = None
+    sell_price_gold: int | None = None
     #: 買い注文の件数。
     bid_count: int = 0
     #: 売れる総数。
     sellable_quantity: int = 0
     #: 直近にこの品が成立した単価。None なら一度も約定していない。
-    last_trade_price_gold: Optional[int] = None
+    last_trade_price_gold: int | None = None
 
 
 @dataclass(frozen=True)
@@ -106,28 +106,28 @@ class MarketBoardView:
     られない**ので、自分のぶんだけは個別に出す。
     """
 
-    rows: Tuple[MarketBoardRow, ...] = ()
-    own_orders: Tuple[MarketOrder, ...] = ()
+    rows: tuple[MarketBoardRow, ...] = ()
+    own_orders: tuple[MarketOrder, ...] = ()
 
 
 @dataclass(frozen=True)
 class MarketBoard:
     """板に並んでいる注文と、品目ごとの直近の約定。"""
 
-    orders: Tuple[MarketOrder, ...] = ()
+    orders: tuple[MarketOrder, ...] = ()
     #: 品目ごとに直近の約定 1 件。**約定を作れるのは ``taken`` だけ**で、
     #: そこが同時に新しい板を返すので、記録し忘れた板を作る道が無い。
     #: service 側で記録する形にすると、約定の経路 (`buy_best` / `sell_best` /
     #: `take_order`) が増えたときに片方だけ忘れる。
-    last_trades: Tuple[MarketTrade, ...] = ()
+    last_trades: tuple[MarketTrade, ...] = ()
 
     @classmethod
-    def empty(cls) -> "MarketBoard":
+    def empty(cls) -> MarketBoard:
         return cls(orders=())
 
     # ── 参照 ────────────────────────────────────────────────────────────
 
-    def last_trade_price_of(self, item_spec_id: int) -> Optional[int]:
+    def last_trade_price_of(self, item_spec_id: int) -> int | None:
         """その品が直近に成立した単価。一度も約定していなければ None。
 
         0 を返さない。0 は「0G で成立した」と読める値で、**一度も成立して
@@ -138,7 +138,7 @@ class MarketBoard:
                 return trade.unit_price_gold
         return None
 
-    def find(self, order_id: MarketOrderId) -> Optional[MarketOrder]:
+    def find(self, order_id: MarketOrderId) -> MarketOrder | None:
         for order in self.orders:
             if order.order_id == order_id:
                 return order
@@ -146,7 +146,7 @@ class MarketBoard:
 
     def orders_visible_to(
         self, viewer: MarketParticipant
-    ) -> Tuple[MarketOrder, ...]:
+    ) -> tuple[MarketOrder, ...]:
         """その人から見える注文を返す。
 
         引き取り待ちの行は他人からは買えないので見せない。ただし**持ち主には
@@ -175,7 +175,7 @@ class MarketBoard:
         ので、集約の値からは自分の注文を外す (買えない値を相場として読ませない)。
         引き取り待ちの行は他人には出さず、持ち主の ``own_orders`` にだけ出す。
         """
-        rows: Dict[int, Dict[str, Any]] = {}
+        rows: dict[int, dict[str, Any]] = {}
         for order in self.orders:
             if order.is_awaiting_collection or order.owner == viewer:
                 # 前者は誰にも買えない。後者は自分では受けられないので、
@@ -224,7 +224,7 @@ class MarketBoard:
             own_orders=own,
         )
 
-    def expired_orders(self, current_tick: int) -> Tuple[MarketOrder, ...]:
+    def expired_orders(self, current_tick: int) -> tuple[MarketOrder, ...]:
         """その手番で期限を過ぎている注文を返す (板は変えない)。
 
         状態遷移と観測の発火は呼び出し側 (tick stage) の仕事にする。板が観測を
@@ -239,7 +239,7 @@ class MarketBoard:
 
     # ── 更新 (どれも新しい板を返す) ────────────────────────────────────
 
-    def with_order(self, order: MarketOrder) -> "MarketBoard":
+    def with_order(self, order: MarketOrder) -> MarketBoard:
         """注文を 1 件置いた板を返す。"""
         if self.find(order.order_id) is not None:
             raise MarketBoardStateException(
@@ -249,7 +249,7 @@ class MarketBoard:
 
     def cancelled(
         self, order_id: MarketOrderId, *, by: MarketParticipant
-    ) -> "MarketBoard":
+    ) -> MarketBoard:
         """その人の注文を取り下げた板を返す。"""
         order = self._require_order(order_id)
         if order.owner != by:
@@ -258,12 +258,12 @@ class MarketBoard:
             )
         return self._without(order_id)
 
-    def awaiting_collection(self, order_id: MarketOrderId) -> "MarketBoard":
+    def awaiting_collection(self, order_id: MarketOrderId) -> MarketBoard:
         """その注文を引き取り待ちにした板を返す。"""
         order = self._require_order(order_id)
         return self._replace_order(order.awaiting_collection())
 
-    def with_repriced(self, order: MarketOrder) -> "MarketBoard":
+    def with_repriced(self, order: MarketOrder) -> MarketBoard:
         """値を変えた注文で差し替えた板を返す。"""
         self._require_order(order.order_id)
         return self._replace_order(order)
@@ -275,7 +275,7 @@ class MarketBoard:
         by: MarketParticipant,
         quantity: int,
         at_tick: int,
-    ) -> Tuple["MarketBoard", MarketTrade]:
+    ) -> tuple[MarketBoard, MarketTrade]:
         """板の注文を受けた結果の板と、約定 1 件を返す。"""
         order = self._require_order(order_id)
         if order.owner == by:
@@ -314,12 +314,12 @@ class MarketBoard:
             )
         return order
 
-    def _without(self, order_id: MarketOrderId) -> "MarketBoard":
+    def _without(self, order_id: MarketOrderId) -> MarketBoard:
         return replace(
             self, orders=tuple(o for o in self.orders if o.order_id != order_id)
         )
 
-    def _replace_order(self, order: MarketOrder) -> "MarketBoard":
+    def _replace_order(self, order: MarketOrder) -> MarketBoard:
         return replace(
             self,
             orders=tuple(
@@ -327,7 +327,7 @@ class MarketBoard:
             ),
         )
 
-    def _with_last(self, trade: MarketTrade) -> Tuple[MarketTrade, ...]:
+    def _with_last(self, trade: MarketTrade) -> tuple[MarketTrade, ...]:
         """その品目の直近の約定を差し替えた並びを返す。
 
         品目ごとに 1 件だけ持つ。全件を持つと板が run のあいだ単調に太り、

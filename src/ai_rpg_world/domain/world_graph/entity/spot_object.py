@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Dict, FrozenSet, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
-from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotObjectValidationException,
 )
@@ -21,10 +21,9 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
 )
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
-
 # 備蓄プールの内部 bookkeeping state key。lazy 再生用の生値なので、第三者
 # プロンプトには常に出さない (visible_state で汎用除外する)。
-_STOCK_POOL_STATE_KEYS: FrozenSet[str] = frozenset(
+_STOCK_POOL_STATE_KEYS: frozenset[str] = frozenset(
     {"stock", "stock_capacity", "stock_tick", "stock_refill_interval"}
 )
 
@@ -50,29 +49,29 @@ class SpotObject:
     name: str
     description: str
     object_type: SpotObjectTypeEnum
-    state: Dict[str, Any]
-    interactions: Tuple[InteractionDef, ...]
-    description_variants: Tuple[ObjectDescriptionVariant, ...] = ()
+    state: dict[str, Any]
+    interactions: tuple[InteractionDef, ...]
+    description_variants: tuple[ObjectDescriptionVariant, ...] = ()
     is_visible: bool = True
     # 蓄光表示や自発光などにより、照明が無くても位置と操作が分かる物体。
     # ``is_visible`` が false の物体を明るさだけで公開してはいけないため、
     # 通常の可視性とは独立した追加条件として扱う。
     is_visible_in_dark: bool = False
-    trap: Optional[TrapDef] = None
-    puzzle: Optional[PuzzleState] = None
-    detail_read_by: FrozenSet[int] = frozenset()
+    trap: TrapDef | None = None
+    puzzle: PuzzleState | None = None
+    detail_read_by: frozenset[int] = frozenset()
     # `available=false` のとき prompt 用 state に出す作者指定の復帰ヒント。
     # state の実値は bool のまま保ち、表示だけを scenario 側で調整できるようにする。
-    unavailable_hint: Optional[str] = None
+    unavailable_hint: str | None = None
     # Phase 4-E: 第三者プロンプトに載せたくない state キー (例: trap_armed,
     # secret_solution)。`SpotGraphCurrentStateBuilder` が
     # `SpotGraphObjectEntry.state` を組み立てるときに除外する。
     # effect の visibility (HIDDEN) とは独立で、こちらは「state 値そのもの
     # を周囲のプレイヤーに常に見せない」という静的な視認性属性。
-    hidden_state_keys: FrozenSet[str] = frozenset()
+    hidden_state_keys: frozenset[str] = frozenset()
     # state の生値を prompt 用の作者文言へ変換する完全一致 / 整数下限ルール。
     # どちらにも該当しない state は従来どおり生値を出し、宣言漏れを検出する。
-    state_display: Tuple[StateDisplayRule, ...] = ()
+    state_display: tuple[StateDisplayRule, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -83,10 +82,10 @@ class SpotObject:
                     "Spot object unavailable_hint must be a non-empty string"
                 )
 
-    def with_state(self, new_state: Dict[str, Any]) -> SpotObject:
+    def with_state(self, new_state: dict[str, Any]) -> SpotObject:
         return replace(self, state=dict(new_state))
 
-    def with_additional_hidden_state_keys(self, keys: FrozenSet[str]) -> SpotObject:
+    def with_additional_hidden_state_keys(self, keys: frozenset[str]) -> SpotObject:
         """`hidden_state_keys` に新たな key を追加した (和集合) コピーを返す。
 
         PR-J: 「書いた内容は examine した本人だけが読める」看板のように、
@@ -104,9 +103,9 @@ class SpotObject:
         *,
         current_tick: int | None = None,
         effective_lighting: LightingEnum | None = None,
-        world_flags: FrozenSet[str] = frozenset(),
+        world_flags: frozenset[str] = frozenset(),
         minutes_per_tick: int | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """`hidden_state_keys` を除いた、第三者プロンプトに載せて良い state。
 
         プロンプトの「スポット内オブジェクトの状態」セクションを組み立てる
@@ -133,7 +132,7 @@ class SpotObject:
                     "for requires_light rules"
                 )
 
-        visible: Dict[str, Any] = {}
+        visible: dict[str, Any] = {}
         tags: list[str] = []
         for key, value in self.state.items():
             rules = rules_by_key.get(key, ())
@@ -151,14 +150,24 @@ class SpotObject:
                 # だけ許し、その key を hidden にする。entity 側でも生値を
                 # 決して返さず、構築直後の直接利用でも tick 漏洩を防ぐ。
                 if type(value) is int:
+                    # この関数の先頭で、within_ticks 規則があれば current_tick を
+                    # 必須にしている。ここに来た時点で None ではないが、型検査は
+                    # その絞り込みをここまで運べない。
+                    if current_tick is None:
+                        raise SpotObjectValidationException(
+                            "SpotObject.visible_state requires current_tick "
+                            "for within_ticks state display"
+                        )
+                    recorded_tick = value
                     matched_rule = min(
                         (
                             rule
                             for rule in recent_rules
-                            if value <= current_tick
-                            and current_tick - value <= rule.within_ticks
+                            if rule.within_ticks is not None
+                            and recorded_tick <= current_tick
+                            and current_tick - recorded_tick <= rule.within_ticks
                         ),
-                        key=lambda rule: rule.within_ticks,
+                        key=lambda rule: rule.within_ticks or 0,
                         default=None,
                     )
                     if matched_rule is not None and self._rule_is_visible_in_light(
@@ -171,8 +180,8 @@ class SpotObject:
                                     "SpotObject.visible_state requires minutes_per_tick "
                                     "for {remaining_minutes} state display"
                                 )
-                            elapsed = current_tick - value
-                            remaining = max(0, matched_rule.within_ticks - elapsed)
+                            elapsed = current_tick - recorded_tick
+                            remaining = max(0, (matched_rule.within_ticks or 0) - elapsed)
                             text = text.replace(
                                 "{remaining_minutes}",
                                 str(remaining * minutes_per_tick),
@@ -199,7 +208,7 @@ class SpotObject:
                             if rule.at_least is not None
                             and value >= rule.at_least
                         ),
-                        key=lambda rule: rule.at_least,
+                        key=lambda rule: rule.at_least or 0,
                         default=None,
                     )
                 if matched_rule is not None:
@@ -240,7 +249,7 @@ class SpotObject:
     def with_visible(self, visible: bool) -> SpotObject:
         return replace(self, is_visible=visible)
 
-    def with_puzzle(self, puzzle: Optional[PuzzleState]) -> SpotObject:
+    def with_puzzle(self, puzzle: PuzzleState | None) -> SpotObject:
         return replace(self, puzzle=puzzle)
 
     def with_detail_read(self, entity_id: int) -> SpotObject:
@@ -249,7 +258,7 @@ class SpotObject:
 
     def resolved_description(
         self,
-        world_flags: FrozenSet[str],
+        world_flags: frozenset[str],
         *,
         viewer_entity_id: int | None = None,
     ) -> str:

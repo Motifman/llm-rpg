@@ -24,8 +24,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Any, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Union
 
 import pytest
 
@@ -56,11 +57,11 @@ class _RecordingPort(ITypedJudgmentPort):
         *,
         chosen: str = "reap_wheat",
         probability: float = 0.97,
-        confidence: Optional[float] = 0.96,
+        confidence: float | None = 0.96,
         raises: bool = False,
     ) -> None:
-        self.states: List[Any] = []
-        self.questions: List[Mapping[str, Question]] = []
+        self.states: list[Any] = []
+        self.questions: list[Mapping[str, Question]] = []
         self._chosen = chosen
         self._probability = probability
         self._confidence = confidence
@@ -68,7 +69,7 @@ class _RecordingPort(ITypedJudgmentPort):
 
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         self.states.append(state)
@@ -117,7 +118,7 @@ def _rescued(
     *,
     min_confidence: float = 0.7,
     inner_thought: str = "小麦を集めたい",
-) -> Tuple[Any, _RecordingPort]:
+) -> tuple[Any, _RecordingPort]:
     rescue = ActionNameRescue(port=port, min_confidence=min_confidence)
     resolution = rescue.rescue(
         pick_action_name(written, target),
@@ -280,7 +281,7 @@ class TestSemanticResolverCompatibility:
 
     @pytest.mark.parametrize("confidence", [None, 0.7])
     def test_probability_at_threshold_is_accepted(
-        self, confidence: Optional[float]
+        self, confidence: float | None
     ) -> None:
         """確率が閾値ちょうどなら、確信度が省略または閾値以上の回答を採用する。"""
         resolution, _ = _rescued(

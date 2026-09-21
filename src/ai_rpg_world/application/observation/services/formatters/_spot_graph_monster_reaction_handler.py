@@ -10,7 +10,7 @@
 - MonsterAlertedByPackInSpotEvent        (pack 警戒共有)
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -33,7 +33,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, MonsterStartedFleeingInSpotEvent):
             return self._format_monster_started_fleeing(event, recipient_player_id)
         if isinstance(event, MonsterStartedChasingInSpotEvent):
@@ -62,7 +62,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterStartedFleeingInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスターが FLEE 状態に遷移した瞬間 (Phase 4a)。
 
         同 spot 全員に「相手が慌てて逃げ出した」を届ける。後続の
@@ -73,7 +73,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.monster_id
         )
         prose = f"{monster_name}が怯えて逃げ出した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_started_fleeing",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -89,7 +89,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterStartedChasingInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスターが CHASE 状態に遷移した瞬間 (Phase 4a)。
 
         観測者が **target 本人** ならより緊張感のある prose に切り替える。
@@ -115,7 +115,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         else:
             # target id 両方 None は不整合だが防御
             prose = f"{monster_name}が何かを追い始めた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_started_chasing",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -139,7 +139,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAbandonedChaseInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスターが CHASE を諦めて IDLE に戻った瞬間 (Phase 4a/4b)。
 
         Issue #185: 観測者は「モンスターが追跡をやめた」事実は見えるが、
@@ -155,7 +155,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.monster_id
         )
         prose = f"{monster_name}は追跡を諦めて立ち去った。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_abandoned_chase",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -172,7 +172,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterFeltTemperatureDiscomfortInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """温度不快ダメージ観測 (Phase 4-O B)。
 
         kind に応じて寒さ / 暑さの prose を切り替える。第三者視点で
@@ -187,7 +187,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             prose = f"{monster_name}は暑さで弱っている。"
         else:
             prose = f"{monster_name}は環境に苦しんでいる。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_felt_temperature_discomfort",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -210,7 +210,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterRespondedToPackHelpInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """pack 援護応答 prose (Phase 4-O C)。
 
         target が観測者本人かで切り替え。第三者には「{responder} が
@@ -233,7 +233,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             )
         else:
             prose = f"{responder_name}が{victim_name}の救援に駆け付けた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_responded_to_pack_help",
             "responder_name": responder_name,
             "responder_id": event.responder_monster_id.value,
@@ -259,7 +259,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterFollowedPackFleeInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """pack 群れ逃走 prose (Phase 4-O C #2)。
 
         leader 名と follower 名を含む「リーダーに続いて逃げ出した」prose。
@@ -273,7 +273,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.leader_monster_id
         )
         prose = f"{follower_name}も{leader_name}に続いて逃げ出した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_followed_pack_flee",
             "follower_name": follower_name,
             "follower_id": event.follower_monster_id.value,
@@ -291,7 +291,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAlertedByPackInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """pack 警戒共有 prose (Phase 4-O C #3)。
 
         target が観測者本人かで切り替え:
@@ -318,7 +318,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
                 f"{responder_name}が{scout_name}の警戒を察して"
                 "追跡を始めた。"
             )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_alerted_by_pack",
             "responder_name": responder_name,
             "responder_id": event.responder_monster_id.value,

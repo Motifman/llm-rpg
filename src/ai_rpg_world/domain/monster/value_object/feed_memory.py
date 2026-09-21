@@ -7,7 +7,6 @@ MonsterAggregate が持つ餌場記憶（object_id + coordinate）を LRU で保
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterStatsValidationException,
@@ -15,7 +14,6 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
 
 # 餌場記憶の最大件数（LRU で古いものを追い出す）
 MAX_FEED_MEMORIES = 3
@@ -29,7 +27,7 @@ class FeedMemory:
     適用時は距離が近い順に使う（呼び出し側の責務）。
     """
 
-    _entries: Tuple[FeedMemoryEntry, ...] = ()
+    _entries: tuple[FeedMemoryEntry, ...] = ()
 
     def __post_init__(self) -> None:
         if len(self._entries) > MAX_FEED_MEMORIES:
@@ -43,7 +41,7 @@ class FeedMemory:
         return cls(_entries=())
 
     @property
-    def entries(self) -> Tuple[FeedMemoryEntry, ...]:
+    def entries(self) -> tuple[FeedMemoryEntry, ...]:
         """餌場の記憶リスト（古い順、最大 MAX_FEED_MEMORIES 件）。変更不可のコピー。"""
         return self._entries
 

@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.overflow_sinks import (
     OverflowShouldNotHappenError,
@@ -28,7 +29,6 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 _TOWN = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
@@ -39,7 +39,7 @@ _HERB = "薬草"
 @pytest.fixture()
 def town(tmp_path: Path) -> Any:
     """市場町に 2 人。薬草を摘める。"""
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["players"].append({
         "id": "tom", "name": "トム",
         "spawn_spot": raw["players"][0]["spawn_spot"],
@@ -103,11 +103,11 @@ def _grant_through_the_world(runtime: Any, player_id: PlayerId, label: str) -> N
     )
 
 
-def _drain(runtime: Any, player_id: PlayerId) -> List[Any]:
+def _drain(runtime: Any, player_id: PlayerId) -> list[Any]:
     return [entry.output for entry in runtime._obs_buffer.drain(player_id)]
 
 
-def _overflow_observations(runtime: Any, player_id: PlayerId) -> List[Any]:
+def _overflow_observations(runtime: Any, player_id: PlayerId) -> list[Any]:
     return [
         o
         for o in _drain(runtime, player_id)

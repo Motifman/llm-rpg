@@ -1,6 +1,6 @@
 """ギルド・ショップ・取引系ツールの引数解決。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     GuildToolRuntimeTargetDto,
@@ -36,9 +36,9 @@ class GuildShopTradeArgumentResolver:
     def resolve_args(
         self,
         tool_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name == TOOL_NAME_GUILD_CREATE:
             return self._resolve_guild_create(args, runtime_context)
         if tool_name == TOOL_NAME_GUILD_ADD_MEMBER:
@@ -72,9 +72,9 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_guild_create(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         spot_id = runtime_context.current_spot_id
         area_ids = runtime_context.current_area_ids
         if spot_id is None:
@@ -103,9 +103,9 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_guild_add_member(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         base = self._resolve_guild_label(args, runtime_context)
         label = args.get("target_player_label")
         if not isinstance(label, str) or not label:
@@ -129,9 +129,9 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_guild_change_role(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         base = self._resolve_guild_label(args, runtime_context)
         label = args.get("target_member_label")
         if not isinstance(label, str) or not label:
@@ -162,10 +162,10 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_guild_label(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
         include_amount: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("guild_label")
         target = require_target_type(
             label,
@@ -178,7 +178,7 @@ class GuildShopTradeArgumentResolver:
                 f"ギルドとして解決できません: {label}",
                 "INVALID_TARGET_KIND",
             )
-        result: Dict[str, Any] = {"guild_id": target.guild_id}
+        result: dict[str, Any] = {"guild_id": target.guild_id}
         if include_amount:
             amount = args.get("amount")
             if amount is not None:
@@ -187,9 +187,9 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_shop_purchase(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         shop_label = args.get("shop_label")
         listing_label = args.get("listing_label")
         listing_id_raw = args.get("listing_id")
@@ -236,9 +236,9 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_shop_list_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         shop_label = args.get("shop_label")
         shop_target = require_target_type(
             shop_label,
@@ -278,9 +278,9 @@ class GuildShopTradeArgumentResolver:
 
     def _resolve_shop_unlist_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         shop_label = args.get("shop_label")
         listing_label = args.get("listing_label")
         listing_id_raw = args.get("listing_id")
@@ -320,7 +320,7 @@ class GuildShopTradeArgumentResolver:
                 "INVALID_TARGET_LABEL",
             )
 
-    def _resolve_trade_ref_mutation(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_trade_ref_mutation(self, args: dict[str, Any]) -> dict[str, Any]:
         """取引ミューテーションは page-local `trade_ref` のみ受理する。"""
         ref = args.get("trade_ref")
         if ref is not None and str(ref).strip():

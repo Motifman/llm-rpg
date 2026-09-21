@@ -14,6 +14,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.demos._world_runtime_helpers import (
+    create_world_runtime_session as _create_session_full,
+)
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
@@ -25,7 +28,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
@@ -35,15 +37,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_LIST,
 )
 
-from tests.demos._world_runtime_helpers import (
-    create_world_runtime_session as _create_session_full,
-)
-
 
 def _create_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """互換: 既存テストの呼び出し形に合わせた wrapper (stub=None で session を作成)。"""
     return _create_session_full(monkeypatch, tmp_path, stub=None)
-    return mgr._sessions[summary.session_id]
 
 
 class TestWorldRuntimeDispatchTable:
@@ -61,10 +58,10 @@ class TestWorldRuntimeDispatchTable:
             is state.runtime._tend_to_player_command_scope_factory
         )
 
-    def test_prepare_action_uses_the_runtime_command_scope_factory(
+    def test_synchronized_preparation_uses_the_runtime_command_scope_factory(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """本番executorはruntimeが所有する準備用factoryをそのまま使う。"""
+        """本番executorはruntimeが所有する準備用factoryをそのまま使う (interact から呼ぶ)。"""
         state = _create_session(monkeypatch, tmp_path)
 
         assert (
@@ -137,8 +134,8 @@ class TestWorldRuntimeDispatchTable:
     def test_dispatch_table_registers_344_wired_tools(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """#344 で配線した spot_graph_use_item / attack / give / pickup / drop /
-        prepare_action が dispatch table に登録されていることを直接検証する。
+        """#344 で配線した spot_graph_use_item / attack / give / pickup / drop
+        が dispatch table に登録されていることを直接検証する。
 
         OFF run 第24回実験 (#343) で 196 件の UNSUPPORTED_TOOL の元になった
         regression を、#154 の listen 配線漏れと同型のテストで防ぐ。
@@ -151,7 +148,6 @@ class TestWorldRuntimeDispatchTable:
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
         }
         missing = required_344 - set(handlers.keys())
         assert not missing, (

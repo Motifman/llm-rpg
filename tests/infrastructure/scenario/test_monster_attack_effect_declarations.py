@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-
 _SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 _EXPECTED = {
     "island_wolf": {

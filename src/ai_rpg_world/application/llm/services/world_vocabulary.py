@@ -24,14 +24,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 
 #: 明るさ。``LightingEnum`` の全件を載せる (網羅テストが縛る)。
-LIGHTING_DISPLAY: Dict[str, str] = {
+LIGHTING_DISPLAY: dict[str, str] = {
     LightingEnum.BRIGHT.value: "明るい",
     LightingEnum.DIM.value: "薄暗い",
     LightingEnum.DARK.value: "暗い",
@@ -39,7 +40,7 @@ LIGHTING_DISPLAY: Dict[str, str] = {
 }
 
 #: 気温。``TemperatureEnum`` の全件を載せる。
-TEMPERATURE_DISPLAY: Dict[str, str] = {
+TEMPERATURE_DISPLAY: dict[str, str] = {
     TemperatureEnum.FREEZING.value: "凍える寒さ",
     TemperatureEnum.COLD.value: "寒い",
     TemperatureEnum.NORMAL.value: "過ごしやすい",
@@ -48,7 +49,7 @@ TEMPERATURE_DISPLAY: Dict[str, str] = {
 }
 
 #: 天候。``WeatherType`` の全件を載せる。
-WEATHER_DISPLAY: Dict[str, str] = {
+WEATHER_DISPLAY: dict[str, str] = {
     WeatherTypeEnum.CLEAR.value: "晴れ",
     WeatherTypeEnum.CLOUDY.value: "曇り",
     WeatherTypeEnum.RAIN.value: "雨",

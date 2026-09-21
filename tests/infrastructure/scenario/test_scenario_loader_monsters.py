@@ -9,16 +9,16 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.infrastructure.scenario.parse_actors import parse_monsters_block
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
     ScenarioMonsterPlacement,
     ScenarioMonsterTemplate,
 )
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
-from ai_rpg_world.domain.player.enum.player_enum import Race
 
 
 def _minimal_template(template_id: str = "wild_dog") -> dict:

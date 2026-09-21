@@ -12,12 +12,12 @@ class QuestId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise QuestIdValidationException(f"Quest ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "QuestId":
+    def create(cls, value: int | str) -> "QuestId":
         """intまたはstrからQuestIdを作成"""
         if isinstance(value, str):
             try:

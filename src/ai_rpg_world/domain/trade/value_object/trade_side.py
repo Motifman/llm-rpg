@@ -6,14 +6,13 @@
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.trade.exception.trade_exception import (
     TradeOfferValidationException,
 )
 
 #: (item_spec_id, quantity) の並び。
-TradeSideItems = Tuple[Tuple[int, int], ...]
+TradeSideItems = tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -26,7 +25,7 @@ class TradeSide:
     def __post_init__(self) -> None:
         if not isinstance(self.items, tuple):
             raise TradeOfferValidationException("items は tuple で指定してください")
-        seen: set = set()
+        seen: set[int] = set()
         for entry in self.items:
             if not isinstance(entry, tuple) or len(entry) != 2:
                 raise TradeOfferValidationException(

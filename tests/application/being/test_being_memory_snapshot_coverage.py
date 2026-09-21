@@ -6,7 +6,12 @@ PR-G で Recall Slot / Afterglow / Habituation を snapshot に追加すると�
 「restore() の payload 検証から漏らした」を起動時に検出できることを保証する。
 """
 import pytest
-from ai_rpg_world.application.being.being_memory_snapshot_service import SnapshotCoverageError, _validate_snapshot_payload_coverage
+
+from ai_rpg_world.application.being.being_memory_snapshot_service import (
+    SnapshotCoverageError,
+    _validate_snapshot_payload_coverage,
+)
+
 
 class TestValidateSnapshotPayloadCoverage:
     """``_validate_snapshot_payload_coverage`` が emit/expected の差を検出する挙動。"""
@@ -42,18 +47,27 @@ def _make_service():
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
     from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-    from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
-    from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-    from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
+    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+        InMemoryEpisodicRecallBufferStore,
+        InMemoryEpisodicReinterpretationJournalStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
-    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
+    from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+    from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
     return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
 
 class TestBeingMemorySnapshotServiceCoverage:
@@ -88,7 +102,11 @@ class TestBeingMemorySnapshotServiceCoverage:
         渡すと restore() が BeingMemoryPayloadFormatError を投げる
         (= 既存の検証経路に乗っていることを確認)。"""
         import json
-        from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService, BeingMemoryPayloadFormatError
+
+        from ai_rpg_world.application.being.being_memory_snapshot_service import (
+            BeingMemoryPayloadFormatError,
+            BeingMemorySnapshotService,
+        )
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
@@ -105,6 +123,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         ドメイン例外ではなく BeingMemoryPayloadFormatError に wrap されて
         伝播することを保証する (= _decode_list の except 契約を守る)。"""
         import json
+
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadFormatError
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         service = _make_service()
@@ -123,15 +142,21 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
 
     def test_capture_all_reraises_snapshot_coverage_error(self, tmp_path, monkeypatch):
         from types import SimpleNamespace
+
+        from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
         from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
         from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+            InMemoryEpisodicReinterpretationJournalStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
         from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-        from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS

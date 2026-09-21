@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
-from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
-    reject_values_the_world_does_not_have,
-)
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -25,9 +22,13 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     parse_required_quantity,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
+
 
 def parse_interaction_condition(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     player_attribute_specs: PlayerAttributeSpecs,
@@ -146,7 +147,7 @@ _LIGHTING_CONDITIONS = ("SPOT_LIGHTING_IS", "SPOT_LIGHTING_IS_NOT")
 
 _AT_SPOT_CONDITIONS = ("AT_SPOT_IS", "AT_SPOT_IS_NOT")
 
-def parse_required_lighting( raw: Dict[str, Any]) -> Optional[str]:
+def parse_required_lighting( raw: dict[str, Any]) -> str | None:
     """``required_lighting`` を検証して返す。
 
     値は ``LightingEnum`` のメンバ名に限る。タイポを実行時まで持ち越すと
@@ -176,7 +177,7 @@ def parse_required_lighting( raw: Dict[str, Any]) -> Optional[str]:
 
 _WEATHER_CONDITIONS = ("WEATHER_IS", "WEATHER_IS_NOT")
 
-def parse_required_weather_type( raw: Dict[str, Any]) -> Optional[str]:
+def parse_required_weather_type( raw: dict[str, Any]) -> str | None:
     """``required_weather_type`` を検証して返す。
 
     値は ``WeatherTypeEnum`` のメンバ名に限る。``required_lighting`` は既に
@@ -205,8 +206,8 @@ def parse_required_weather_type( raw: Dict[str, Any]) -> Optional[str]:
         )
     return value
 
-def parse_required_spot_id( raw: Dict[str, Any], mapper: ScenarioIdMapper
-) -> Optional[SpotId]:
+def parse_required_spot_id( raw: dict[str, Any], mapper: ScenarioIdMapper
+) -> SpotId | None:
     """``required_spot`` (シナリオ上の文字列 ID) を SpotId に解決する。"""
     condition_type = raw.get("condition_type")
     value = raw.get("required_spot")

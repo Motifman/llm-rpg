@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 import pytest
 
@@ -11,18 +11,18 @@ from ai_rpg_world.application.common.command_scope import (
     CommandContext,
     CommandScope,
 )
-from ai_rpg_world.application.common.transactional_outbox import StagedOutboxBatch
 from ai_rpg_world.application.common.exceptions import (
-    CommandPostCommitException,
     CommandEventDispatchLimitException,
+    CommandPostCommitException,
     CommandScopeStateException,
     TransactionCommittedCleanupException,
 )
+from ai_rpg_world.application.common.transactional_outbox import StagedOutboxBatch
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent, DomainEvent
 
 
 class _RecordingTransaction:
-    def __init__(self, timeline: Optional[list[str]] = None) -> None:
+    def __init__(self, timeline: list[str] | None = None) -> None:
         self._active = False
         self.calls: list[str] = []
         self._timeline = timeline
@@ -53,7 +53,7 @@ class _RecordingTransaction:
 class _RecordingDispatcher:
     def __init__(
         self,
-        callback: Optional[Callable[[DomainEvent, CommandContext], None]] = None,
+        callback: Callable[[DomainEvent, CommandContext], None] | None = None,
     ) -> None:
         self.events: list[DomainEvent] = []
         self._callback = callback
@@ -67,8 +67,8 @@ class _RecordingDispatcher:
 class _RecordingHandoff:
     def __init__(
         self,
-        error: Optional[Exception] = None,
-        timeline: Optional[list[str]] = None,
+        error: Exception | None = None,
+        timeline: list[str] | None = None,
     ) -> None:
         self.batches: list[tuple[DomainEvent, ...]] = []
         self._error = error
@@ -98,9 +98,9 @@ class _RecordingOutbox:
     def __init__(
         self,
         *,
-        timeline: Optional[list[str]] = None,
-        stage_error: Optional[Exception] = None,
-        mark_error: Optional[Exception] = None,
+        timeline: list[str] | None = None,
+        stage_error: Exception | None = None,
+        mark_error: Exception | None = None,
     ) -> None:
         self.calls: list[tuple[str, object]] = []
         self.batch = StagedOutboxBatch(event_ids=("1",))

@@ -1,12 +1,9 @@
 """LLM の UI 向けラベル引数を canonical args に解決する。"""
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import IToolArgumentResolver
-from ai_rpg_world.application.llm.services._resolver_helpers import (
-    ToolArgumentResolutionException,
-)
 from ai_rpg_world.application.llm.services._argument_resolvers import (
     CombatSkillArgumentResolver,
     GuildShopTradeArgumentResolver,
@@ -14,6 +11,9 @@ from ai_rpg_world.application.llm.services._argument_resolvers import (
     QuestArgumentResolver,
     SpotGraphArgumentResolver,
     WorldArgumentResolver,
+)
+from ai_rpg_world.application.llm.services._resolver_helpers import (
+    ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.services.quest_objective_target_resolver import (
     QuestObjectiveTargetResolver,
@@ -61,9 +61,9 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
     def resolve(
         self,
         tool_name: str,
-        arguments: Optional[Dict[str, Any]],
+        arguments: dict[str, Any] | None,
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if not isinstance(tool_name, str):
             raise TypeError("tool_name must be str")
         if arguments is not None and not isinstance(arguments, dict):

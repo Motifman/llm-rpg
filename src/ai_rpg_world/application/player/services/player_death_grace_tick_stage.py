@@ -14,7 +14,7 @@ RESCUED 等で resolved されていた player も同様に grace_timer から�
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.player.services.departed_position_store import (
@@ -67,9 +67,7 @@ class PlayerDeathGraceTickStage:
         grace_ticks: int,
         fallen_body_registry: FallenBodyRegistry | None = None,
         departed_position_store: DepartedPositionStore | None = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort] | None = None,
     ) -> None:
         if not isinstance(outcome_registry, PlayerOutcomeRegistry):
             raise TypeError("outcome_registry must be PlayerOutcomeRegistry")
@@ -109,8 +107,7 @@ class PlayerDeathGraceTickStage:
     def set_command_scope_factory(
         self,
         factory: (
-            "CommandScopeFactoryPort["
-            "PlayerStatusTickCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]
         ),
     ) -> None:
         """本番stageを期限超過player一人単位の確定境界へ接続する。"""
@@ -146,7 +143,7 @@ class PlayerDeathGraceTickStage:
         player_id: PlayerId,
         tick_value: int,
         scope_factory: (
-            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]
         ),
     ) -> None:
         """playerのDEAD・pending削除・退場位置を一緒に確定する。"""
@@ -172,7 +169,7 @@ class PlayerDeathGraceTickStage:
                 if not status.is_down:
                     # PlayerRevivedEventの個別handler失敗でtimer/bodyだけ残った場合も、
                     # 生存状態を正本として古い猶予状態を修復する。
-                    self._fallen_body_registry.remove(player_id)
+                    self._fallen_bodies.remove(player_id)
                     self._grace_timer.cancel(player_id)
                     return
                 old_outcome = self._outcome_registry.get_outcome(player_id)
@@ -182,11 +179,11 @@ class PlayerDeathGraceTickStage:
                     notify_callbacks=False,
                 )
                 if changed:
-                    body = self._fallen_body_registry.find(player_id)
+                    body = self._fallen_bodies.find(player_id)
                     if body is None:
                         missing_body = True
                     else:
-                        self._departed_position_store.place(
+                        self._departed_positions.place(
                             player_id,
                             body.spot_id,
                         )
@@ -249,6 +246,24 @@ class PlayerDeathGraceTickStage:
                 "Player %s already resolved as %s, cleared grace pending only",
                 player_id, self._outcome_registry.get_outcome(player_id),
             )
+
+    @property
+    def _fallen_bodies(self) -> FallenBodyRegistry:
+        registry = self._fallen_body_registry
+        if registry is None:
+            raise RuntimeError(
+                "death grace CommandScope requires fallen body store"
+            )
+        return registry
+
+    @property
+    def _departed_positions(self) -> DepartedPositionStore:
+        store = self._departed_position_store
+        if store is None:
+            raise RuntimeError(
+                "death grace CommandScope requires departed position store"
+            )
+        return store
 
     def _require_scope_dependencies(self) -> None:
         """scope経路に必要な退場状態の配線漏れを開始前に止める。"""

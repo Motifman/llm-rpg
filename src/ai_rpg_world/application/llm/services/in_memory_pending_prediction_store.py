@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
-from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
@@ -42,14 +41,14 @@ class InMemoryPendingPredictionStore(PendingPredictionRepository):
 
     def add_by_being(
         self, being_id: BeingId, pending: PendingPrediction
-    ) -> Optional[PendingPrediction]:
+    ) -> PendingPrediction | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(pending, PendingPrediction):
             raise TypeError("pending must be PendingPrediction")
         with self._lock:
             bucket = self._predictions[being_id]
-            evicted: Optional[PendingPrediction] = None
+            evicted: PendingPrediction | None = None
             if len(bucket) >= self._capacity:
                 # 最も古い (= created_tick 最小、同値なら追加順が先の) 1 件を
                 # evict。list は追加順を保っているので、created_tick で安定

@@ -1,11 +1,13 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, InteractionTypeEnum
-from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
+from typing import TYPE_CHECKING, Any, Optional
+
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
     from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 
@@ -18,9 +20,9 @@ class WorldObject:
         coordinate: Coordinate,
         object_type: ObjectTypeEnum,
         is_blocking: bool = True,
-        is_blocking_sight: bool = None,
-        component: Optional[WorldObjectComponent] = None,
-        busy_until: Optional[WorldTick] = None
+        is_blocking_sight: bool | None = None,
+        component: WorldObjectComponent | None = None,
+        busy_until: WorldTick | None = None
     ):
         self._object_id = object_id
         self._coordinate = coordinate
@@ -52,7 +54,7 @@ class WorldObject:
         return self._is_blocking_sight
 
     @property
-    def component(self) -> Optional[WorldObjectComponent]:
+    def component(self) -> WorldObjectComponent | None:
         return self._component
 
     @property
@@ -70,7 +72,7 @@ class WorldObject:
         """移動能力を返す"""
         return self._component.capability if self._component else None
 
-    def turn(self, direction: "DirectionEnum"):
+    def turn(self, direction: "DirectionEnum") -> None:
         """向きを変える"""
         if self._component:
             self._component.turn(direction)
@@ -81,12 +83,12 @@ class WorldObject:
         return getattr(self._component, "direction", None) if self._component else None
 
     @property
-    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+    def interaction_type(self) -> InteractionTypeEnum | None:
         """インタラクションタイプを返す"""
         return self._component.interaction_type if self._component else None
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         """インタラクションデータを返す"""
         return self._component.interaction_data if self._component else {}
 
@@ -96,7 +98,7 @@ class WorldObject:
         return self._component.interaction_duration if self._component else 1
 
     @property
-    def busy_until(self) -> Optional[WorldTick]:
+    def busy_until(self) -> WorldTick | None:
         """アクションが終了するティックを返す"""
         return self._busy_until
 
@@ -106,27 +108,27 @@ class WorldObject:
             return False
         return self._busy_until > current_tick
 
-    def set_busy(self, until_tick: WorldTick):
+    def set_busy(self, until_tick: WorldTick) -> None:
         """ビジー状態を設定する"""
         self._busy_until = until_tick
 
-    def clear_busy(self):
+    def clear_busy(self) -> None:
         """ビジー状態を解除する"""
         self._busy_until = None
 
-    def set_blocking(self, is_blocking: bool):
+    def set_blocking(self, is_blocking: bool) -> None:
         """ブロッキング状態を更新する（例：ドアが開いた）"""
         self._is_blocking = is_blocking
 
-    def set_blocking_sight(self, is_blocking_sight: bool):
+    def set_blocking_sight(self, is_blocking_sight: bool) -> None:
         """視覚遮蔽状態を更新する"""
         self._is_blocking_sight = is_blocking_sight
     
-    def move_to(self, new_coordinate: Coordinate):
+    def move_to(self, new_coordinate: Coordinate) -> None:
         """オブジェクトを移動させる（例：動く像）"""
         self._coordinate = new_coordinate
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "object_id": str(self._object_id),
             "coordinate": {"x": self._coordinate.x, "y": self._coordinate.y, "z": self._coordinate.z},

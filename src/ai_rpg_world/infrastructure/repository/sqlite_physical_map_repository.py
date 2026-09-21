@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, List, Optional
 import json
 import sqlite3
+from typing import Any
 
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -21,7 +21,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
     component_to_record_storage,
     trigger_to_record_storage,
 )
-
 
 _WORLD_OBJECT_SEQUENCE_START = 99_999
 
@@ -50,7 +49,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqlitePhysicalMapRepository":
+    ) -> SqlitePhysicalMapRepository:
         return cls(connection, _commits_after_write=True, event_sink=event_sink)
 
     @classmethod
@@ -59,7 +58,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqlitePhysicalMapRepository":
+    ) -> SqlitePhysicalMapRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -120,7 +119,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         self._finalize_write()
         return world_object_id
 
-    def find_by_id(self, entity_id: SpotId) -> Optional[PhysicalMapAggregate]:
+    def find_by_id(self, entity_id: SpotId) -> PhysicalMapAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_physical_maps WHERE spot_id = ?",
             (int(entity_id),),
@@ -130,10 +129,10 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             return None
         return copy.deepcopy(self._build_physical_map_from_row(row))
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[PhysicalMapAggregate]:
+    def find_by_spot_id(self, spot_id: SpotId) -> PhysicalMapAggregate | None:
         return self.find_by_id(spot_id)
 
-    def find_by_ids(self, entity_ids: List[SpotId]) -> List[PhysicalMapAggregate]:
+    def find_by_ids(self, entity_ids: list[SpotId]) -> list[PhysicalMapAggregate]:
         return [x for spot_id in entity_ids for x in [self.find_by_id(spot_id)] if x is not None]
 
     def save(self, physical_map: PhysicalMapAggregate) -> PhysicalMapAggregate:
@@ -485,7 +484,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[PhysicalMapAggregate]:
+    def find_all(self) -> list[PhysicalMapAggregate]:
         cur = self._conn.execute("SELECT spot_id FROM game_physical_maps ORDER BY spot_id ASC")
         return [
             aggregate
@@ -494,7 +493,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             if aggregate is not None
         ]
 
-    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
+    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> SpotId | None:
         cur = self._conn.execute(
             "SELECT spot_id FROM game_world_object_locations WHERE world_object_id = ?",
             (int(object_id),),
@@ -504,7 +503,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             return None
         return SpotId(int(row["spot_id"]))
 
-    def find_connected_spot_ids(self, spot_id: SpotId) -> List[SpotId]:
+    def find_connected_spot_ids(self, spot_id: SpotId) -> list[SpotId]:
         cur = self._conn.execute(
             """
             SELECT to_spot_id

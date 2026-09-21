@@ -1,6 +1,6 @@
 """スキルイベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -33,7 +33,7 @@ class SkillObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, SkillEquippedEvent):
             return self._format_skill_equipped(event, recipient_player_id)
         if isinstance(event, SkillUnequippedEvent):
@@ -65,26 +65,26 @@ class SkillObservationFormatter:
 
     def _format_skill_equipped(
         self, event: SkillEquippedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         name = self._skill_name(event.skill_id)
         prose = f"{name}を装備しました。"
-        structured = {"type": "skill_equipped", "skill_name": name, "deck_tier": event.deck_tier.value}
+        structured: dict[str, Any] = {"type": "skill_equipped", "skill_name": name, "deck_tier": event.deck_tier.value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_unequipped(
         self, event: SkillUnequippedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         name = self._skill_name(event.removed_skill_id)
         prose = f"{name}を外しました。"
-        structured = {"type": "skill_unequipped", "skill_name": name, "deck_tier": event.deck_tier.value}
+        structured: dict[str, Any] = {"type": "skill_unequipped", "skill_name": name, "deck_tier": event.deck_tier.value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_used(
         self, event: SkillUsedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         name = self._skill_name(event.skill_id)
         prose = f"{name}を使用しました。"
-        structured = {"type": "skill_used", "skill_name": name, "deck_tier": event.deck_tier.value}
+        structured: dict[str, Any] = {"type": "skill_used", "skill_name": name, "deck_tier": event.deck_tier.value}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -94,14 +94,14 @@ class SkillObservationFormatter:
 
     def _format_skill_cooldown_started(
         self, event: SkillCooldownStartedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         return None
 
     def _format_awakened_mode_activated(
         self, event: AwakenedModeActivatedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "覚醒モードが発動しました。"
-        structured = {"type": "awakened_mode_activated", "expires_at_tick": event.expires_at_tick}
+        structured: dict[str, Any] = {"type": "awakened_mode_activated", "expires_at_tick": event.expires_at_tick}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -111,30 +111,30 @@ class SkillObservationFormatter:
 
     def _format_awakened_mode_expired(
         self, event: AwakenedModeExpiredEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "覚醒モードが終了しました。"
-        structured = {"type": "awakened_mode_expired"}
+        structured: dict[str, Any] = {"type": "awakened_mode_expired"}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_loadout_capacity_changed(
         self, event: SkillLoadoutCapacityChangedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = f"スキルデッキの容量が更新されました（通常:{event.normal_capacity}、覚醒:{event.awakened_capacity}）。"
-        structured = {"type": "skill_loadout_capacity_changed", "normal": event.normal_capacity, "awakened": event.awakened_capacity}
+        structured: dict[str, Any] = {"type": "skill_loadout_capacity_changed", "normal": event.normal_capacity, "awakened": event.awakened_capacity}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_deck_exp_gained(
         self, event: SkillDeckExpGainedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = f"スキルデッキに経験値を獲得しました（+{event.gained_exp}）。"
-        structured = {"type": "skill_deck_exp_gained", "gained_exp": event.gained_exp, "total_exp": event.total_exp}
+        structured: dict[str, Any] = {"type": "skill_deck_exp_gained", "gained_exp": event.gained_exp, "total_exp": event.total_exp}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_deck_leveled_up(
         self, event: SkillDeckLeveledUpEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = f"スキルデッキがレベルアップしました（{event.old_level}→{event.new_level}）。"
-        structured = {"type": "skill_deck_leveled_up", "old_level": event.old_level, "new_level": event.new_level}
+        structured: dict[str, Any] = {"type": "skill_deck_leveled_up", "old_level": event.old_level, "new_level": event.new_level}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -144,21 +144,21 @@ class SkillObservationFormatter:
 
     def _format_skill_proposal_generated(
         self, event: SkillProposalGeneratedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         return None
 
     def _format_skill_evolution_accepted(
         self, event: SkillEvolutionAcceptedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         skill_name = self._skill_name(event.offered_skill_id)
         prose = f"スキル進化を受諾しました（{skill_name}）。"
-        structured = {"type": "skill_evolution_accepted", "skill_name": skill_name}
+        structured: dict[str, Any] = {"type": "skill_evolution_accepted", "skill_name": skill_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_skill_evolution_rejected(
         self, event: SkillEvolutionRejectedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         skill_name = self._skill_name(event.offered_skill_id)
         prose = f"スキル進化を拒否しました（{skill_name}）。"
-        structured = {"type": "skill_evolution_rejected", "skill_name": skill_name}
+        structured: dict[str, Any] = {"type": "skill_evolution_rejected", "skill_name": skill_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")

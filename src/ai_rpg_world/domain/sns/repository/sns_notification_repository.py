@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 from datetime import datetime
+
 from ai_rpg_world.domain.common.repository import Repository
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.sns.entity.notification import Notification
+from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 
 class SnsNotificationRepository(Repository[Notification, NotificationId], ABC):
@@ -16,22 +16,22 @@ class SnsNotificationRepository(Repository[Notification, NotificationId], ABC):
         pass
 
     @abstractmethod
-    def save(self, notification: Notification) -> None:
+    def save(self, notification: Notification) -> Notification:
         """通知を保存"""
         pass
 
     @abstractmethod
-    def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
+    def find_by_id(self, notification_id: NotificationId) -> Notification | None:
         """通知IDで通知を取得"""
         pass
 
     @abstractmethod
-    def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> List[Notification]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> list[Notification]:
         """ユーザーIDで通知を取得（新しい順）"""
         pass
 
     @abstractmethod
-    def find_unread_by_user_id(self, user_id: UserId) -> List[Notification]:
+    def find_unread_by_user_id(self, user_id: UserId) -> list[Notification]:
         """ユーザーIDで未読通知を取得"""
         pass
 

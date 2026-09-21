@@ -44,8 +44,9 @@ False では touch しない」、on_false_state_updates にしかないキー�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ReactiveObjectStateBindingValidationException,
@@ -71,14 +72,14 @@ class ReactiveObjectStateBinding:
 
     target_object_id: SpotObjectId
     predicate: ScenarioEventCondition
-    on_true_state_updates: Tuple[Tuple[str, Any], ...]
-    on_false_state_updates: Tuple[Tuple[str, Any], ...]
+    on_true_state_updates: tuple[tuple[str, Any], ...]
+    on_false_state_updates: tuple[tuple[str, Any], ...]
     # 著者が宣言した観測テキスト。flip 方向ごとに別文を出せる。None なら
     # その方向への state 変化は observation を発火させない (silent)。
     # 例: 採取資源の cooldown reset (false→true) には
     # `narrative_on_true="ベリーの茂みに新しい実が生っているのが見える"` を渡す。
-    narrative_on_true: Optional[str] = None
-    narrative_on_false: Optional[str] = None
+    narrative_on_true: str | None = None
+    narrative_on_false: str | None = None
 
     def __post_init__(self) -> None:
         if not self.on_true_state_updates and not self.on_false_state_updates:
@@ -103,7 +104,7 @@ class ReactiveObjectStateBinding:
         # 詳細は module docstring 参照。
 
     @property
-    def managed_state_keys(self) -> Tuple[str, ...]:
+    def managed_state_keys(self) -> tuple[str, ...]:
         """この binding が管理する state キー（true/false 両側の和集合）。
 
         Phase 2-B 以降、true/false で異なるキーセットを許容するため

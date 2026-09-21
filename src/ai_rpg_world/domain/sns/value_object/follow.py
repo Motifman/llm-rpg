@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
+
 from ai_rpg_world.domain.sns.exception import (
     SelfReferenceValidationException,
 )
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 
 @dataclass(frozen=True)
@@ -20,11 +21,11 @@ class FollowRelationShip:
         return (self.follower_user_id == other.follower_user_id and
                 self.followee_user_id == other.followee_user_id)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、フォロワーとフォロー対象のみで計算）"""
         return hash((int(self.follower_user_id), int(self.followee_user_id)))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """フォロー関係性のバリデーション"""
         if self.follower_user_id == self.followee_user_id:
             raise SelfReferenceValidationException(int(self.follower_user_id), "follower_user_id", "followee_user_id")

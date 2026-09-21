@@ -1,26 +1,28 @@
 import math
-from typing import Optional, List, Callable
+from collections.abc import Callable
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService, HostilityService
+from ai_rpg_world.domain.world.service.target_selection_policy import (
+    HighestThreatTargetPolicy,
+    PackLeaderTargetPolicy,
+    PreyPriorityTargetPolicy,
+    TargetSelectionPolicy,
+)
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    GrowthContext,
+    SkillSelectionContext,
+    TargetSelectionContext,
+)
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.facing import Facing
-from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-from ai_rpg_world.domain.world.value_object.behavior_context import (
-    TargetSelectionContext,
-    SkillSelectionContext,
-    GrowthContext,
-)
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
-from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
-from ai_rpg_world.domain.world.service.target_selection_policy import (
-    TargetSelectionPolicy,
-    PreyPriorityTargetPolicy,
-    PackLeaderTargetPolicy,
-    HighestThreatTargetPolicy,
-)
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _default_target_policy_factory(
@@ -41,10 +43,10 @@ class BehaviorService:
 
     def __init__(
         self,
-        hostility_service: Optional[HostilityService] = None,
-        allegiance_service: Optional[AllegianceService] = None,
-        target_policy: Optional[TargetSelectionPolicy] = None,
-        target_policy_factory: Optional[Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy]] = None,
+        hostility_service: HostilityService | None = None,
+        allegiance_service: AllegianceService | None = None,
+        target_policy: TargetSelectionPolicy | None = None,
+        target_policy_factory: Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy] | None = None,
     ):
         self._hostility_service = hostility_service or ConfigurableHostilityService()
         self._allegiance_service = allegiance_service
@@ -57,13 +59,13 @@ class BehaviorService:
         self,
         actor_id: WorldObjectId,
         map_aggregate: PhysicalMapAggregate,
-        target_context: Optional[TargetSelectionContext] = None,
-        skill_context: Optional[SkillSelectionContext] = None,
-        pack_rally_coordinate: Optional[Coordinate] = None,
-        growth_context: Optional[GrowthContext] = None,
-        current_tick: Optional[WorldTick] = None,
-        visible_feed: Optional[List] = None,
-        selected_feed_target=None,
+        target_context: TargetSelectionContext | None = None,
+        skill_context: SkillSelectionContext | None = None,
+        pack_rally_coordinate: Coordinate | None = None,
+        growth_context: GrowthContext | None = None,
+        current_tick: WorldTick | None = None,
+        visible_feed: list[WorldObject] | None = None,
+        selected_feed_target: WorldObject | None = None,
     ) -> BehaviorObservation:
         """
         アクターの観測（視界内脅威・敵対・選択ターゲット等）を組み立てて返す。
@@ -111,10 +113,10 @@ class BehaviorService:
 
     def _collect_visible_threats(
         self,
-        actor,
+        actor: WorldObject,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
-    ) -> List:
+    ) -> list[WorldObject]:
         """視界内にいる脅威(THREAT)オブジェクトのリストを返す（FOV を考慮）。味方は除外する。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
@@ -137,10 +139,10 @@ class BehaviorService:
 
     def _collect_visible_hostiles(
         self,
-        actor,
+        actor: WorldObject,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
-    ) -> List:
+    ) -> list[WorldObject]:
         """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。味方は除外する。THREAT は含めない（攻撃対象にしない）。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
@@ -163,7 +165,7 @@ class BehaviorService:
 
     def _is_within_fov(
         self,
-        actor,
+        actor: WorldObject,
         target_coord: Coordinate,
         component: AutonomousBehaviorComponent,
     ) -> bool:

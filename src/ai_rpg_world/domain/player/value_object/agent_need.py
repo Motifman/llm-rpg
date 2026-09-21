@@ -8,7 +8,6 @@ tick経過で自然増加し、対応する行動（食事、睡眠等）で回�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 from enum import Enum
 
 
@@ -25,7 +24,7 @@ class NeedType(Enum):
 #:
 #: なお呼び名そのものの所有者 (コード / シナリオ) は別の論点で #1054 の判断待ち。
 #: ここでは 2 分岐を表へ集約するだけで、所有者は変えていない。
-_NEED_LABELS: "dict[NeedType, str]" = {
+_NEED_LABELS: dict[NeedType, str] = {
     NeedType.HUNGER: "空腹",
     NeedType.FATIGUE: "疲労",
 }
@@ -85,7 +84,7 @@ class AgentNeed:
         """欲求が十分に満たされている（20%以下）か。"""
         return self.percentage <= 0.2
 
-    def describe(self, delta: Optional[int] = None) -> str:
+    def describe(self, delta: int | None = None) -> str:
         """欲求の状態を自然言語で返す。
 
         PR-T: ``delta`` が渡され非 0 のとき、末尾に「前回 +N」または「前回 -N」

@@ -11,18 +11,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import threading
+from pathlib import Path
 
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -94,6 +93,7 @@ class TestPhaseAParallelExecution:
     ) -> None:
         """run phase a を 4 並列で呼ぶと LLM 呼び出しが実際に重なって走る。"""
         from concurrent.futures import ThreadPoolExecutor
+
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         class _BarrierStubLlmClient:

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 _logger = logging.getLogger(__name__)
 
@@ -13,12 +14,15 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
-from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    collect_owned_item_spec_ids_from_inventory,
-    count_owned_item_instances_by_spec,
-    grant_item_specs_to_inventory,
-    plan_item_removals_from_inventory,
-    remove_items_of_specs_from_inventory,
+from ai_rpg_world.application.world_graph.declared_observation_message import (
+    declared_observation_message_for_lighting,
+)
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    is_hidden_from_state,
+)
+from ai_rpg_world.application.world_graph.interaction_actor_plane import (
+    actor_plane_for,
+    actor_plane_refusal_message,
 )
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
@@ -26,8 +30,12 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     object_action_key,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
-from ai_rpg_world.application.world_graph.declared_observation_message import (
-    declared_observation_message_for_lighting,
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    collect_owned_item_spec_ids_from_inventory,
+    count_owned_item_instances_by_spec,
+    grant_item_specs_to_inventory,
+    plan_item_removals_from_inventory,
+    remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import (
     find_object_with_owner,
@@ -37,39 +45,30 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
-from ai_rpg_world.application.world_graph.interaction_actor_plane import (
-    actor_plane_for,
-    actor_plane_refusal_message,
-)
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
-from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
-    PassageChangeCauseEnum,
-)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
-from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
-from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
-from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
-    ItemInteractionRegistry,
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
 )
-from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
-    AppliedEffectKind,
-    AppliedEffectSummary,
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
 )
-from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -83,20 +82,20 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+    ItemInteractionRegistry,
+)
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectKind,
+    AppliedEffectSummary,
+)
+from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
-    InteractionEffectTypeEnum,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-
-
-from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
-    is_hidden_from_state,
-)
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext
@@ -106,29 +105,33 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
         InteractionCommandRepositoryProviderPort,
     )
+    from ai_rpg_world.domain.item.value_object.item_template_id import ItemSpecId
+    from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+        PlayerInventoryAggregate,
+    )
 
 
 @dataclass(frozen=True)
 class SpotInteractionResultDto:
-    messages: Tuple[str, ...]
+    messages: tuple[str, ...]
     action_display_label: str
     # Phase 4-E: 行為者本人にツール結果として返す直接効果サマリ。
     # 観測ストリームには流さない（同じ事象を二重に受け取らないため）。
-    direct_effects: Tuple[AppliedEffectSummary, ...] = ()
+    direct_effects: tuple[AppliedEffectSummary, ...] = ()
     # trace 転記用の object.state の増分。**プロンプトの隠蔽 (hidden_state_keys /
     # HIDDEN visibility) とは独立** — エージェントには見せず、分析者には値を
     # 残す。無いと、祭壇のカウンタのような測定対象を message 文字列からの
     # 逆算で再生することになる (見落としの型)。
-    object_state_changes: Tuple[Dict[str, Any], ...] = ()
+    object_state_changes: tuple[dict[str, Any], ...] = ()
 
 
-def _object_state_changes_for_trace(result: Any) -> Tuple[Dict[str, Any], ...]:
+def _object_state_changes_for_trace(result: Any) -> tuple[dict[str, Any], ...]:
     """効果サマリから object.state の増分を trace 転記用に抜き出す。
 
     visibility は見ない (HIDDEN でも転記する)。exclude_keys で state_delta
     から落とされた値 (看板の本文など) は summary の時点で無いので漏れない。
     """
-    changes: List[Dict[str, Any]] = []
+    changes: list[dict[str, Any]] = []
     all_summaries = (
         *(getattr(result, "direct_effects", ()) or ()),
         *(getattr(result, "public_observable_effects", ()) or ()),
@@ -150,7 +153,7 @@ def _object_state_changes_for_trace(result: Any) -> Tuple[Dict[str, Any], ...]:
 class _CommandContextEventPublisher:
     """既存publish_all入口をCommandContextのイベント収集へ適合させる。"""
 
-    def __init__(self, context: "CommandContext") -> None:
+    def __init__(self, context: CommandContext) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
@@ -196,8 +199,8 @@ class SpotInteractionApplicationService:
         # provider が None なら該当 condition は「不在として fail」する
         # (silent skip を避ける)。シナリオが時間帯 / 天候条件を使うなら
         # 必ず注入が必要。
-        time_of_day_phase_provider: Optional[Any] = None,
-        weather_type_provider: Optional[Any] = None,
+        time_of_day_phase_provider: Any | None = None,
+        weather_type_provider: Any | None = None,
         # #356 後続: 失敗観測の dedup window (tick 単位)。同 (actor, object,
         # action, reason) の失敗が連続したとき、この期間内の 2 回目以降は
         # 観測を emit しない (= LLM の retry loop で同じ失敗観測が 100 回
@@ -206,22 +209,20 @@ class SpotInteractionApplicationService:
         # PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT) が object.state に残す
         # 書き手名を解決する resolver。`Callable[[PlayerId], str]` を渡す。
         # None (未注入) の場合はフォールバック名 (`"プレイヤー({id})"`) を使う。
-        player_display_name_resolver: Optional[Callable[[PlayerId], str]] = None,
+        player_display_name_resolver: Callable[[PlayerId], str] | None = None,
         # PR 3: SPOT_LIGHTING_IS の判定に使う実効照明 resolver。未注入なら
         # 照明条件は成立しない (silent pass させない)。
-        effective_lighting_resolver: Optional[Any] = None,
-        departed_position_store: Optional[DepartedPositionStore] = None,
-        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
-        item_interaction_registry: Optional[ItemInteractionRegistry] = None,
-        room_occupancy_message_provider: Optional[Callable[[], str]] = None,
-        interaction_command_scope_factory: Optional[
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
-        ] = None,
+        effective_lighting_resolver: Any | None = None,
+        departed_position_store: DepartedPositionStore | None = None,
+        player_perception_policy: PlayerPerceptionPolicy | None = None,
+        item_interaction_registry: ItemInteractionRegistry | None = None,
+        room_occupancy_message_provider: Callable[[], str] | None = None,
+        interaction_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         overflow_sink: Any = None,
         # DEPOSIT_GOLD_TO_OBJECT 用: いま使える gold (同席取引に出して凍結中の
         # ぶんを差し引いた残り) を返す provider。未注入なら所持金を生で見る。
         # 板・商人と同じ「gold を使う経路は available_gold を先に通す」規約。
-        available_gold_provider: Optional[Callable[[PlayerId], int]] = None,
+        available_gold_provider: Callable[[PlayerId], int] | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -238,8 +239,8 @@ class SpotInteractionApplicationService:
         # 失敗観測 dedup: (entity_id_int, object_id_int, action_name, reason)
         # → last_emit_tick。tick 不明の呼び出しは dedup を skip する。
         self._failure_observation_dedup_window = failure_observation_dedup_window
-        self._failure_observation_last_tick: Dict[
-            Tuple[int, int, str, str], int
+        self._failure_observation_last_tick: dict[
+            tuple[int, int, str, str], int
         ] = {}
         self._player_display_name_resolver = player_display_name_resolver
         self._effective_lighting_resolver = effective_lighting_resolver
@@ -250,12 +251,12 @@ class SpotInteractionApplicationService:
         )
         self._room_occupancy_message_provider = room_occupancy_message_provider
         self._interaction_command_scope_factory = interaction_command_scope_factory
-        self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
+        self._meeting_caller: Callable[[PlayerId, str], Any] | None = None
         # 物体操作の待ち時間。対人行為と同じ store を共有するので、snapshot も
         # 同じ経路に乗る。別 store を作ると、長走実験の再開で物体側だけ待ち時間が
         # 消える (design_decisions #27 と同じ形の静かな失敗)。
-        self._cooldown_store: Optional[InteractionCooldownStore] = None
-        self._minutes_per_tick: Optional[int] = None
+        self._cooldown_store: InteractionCooldownStore | None = None
+        self._minutes_per_tick: int | None = None
         self._overflow_sink = overflow_sink
 
     def _actor_spot(
@@ -279,8 +280,8 @@ class SpotInteractionApplicationService:
         return graph.get_entity_spot(EntityId.create(int(player_id)))
 
     def _declared_observation_for(
-        self, spot_id: SpotId, *, bright: Optional[str], dark: Optional[str]
-    ) -> Optional[str]:
+        self, spot_id: SpotId, *, bright: str | None, dark: str | None
+    ) -> str | None:
         """その spot の実効照明に合う宣言文を選ぶ。宣言が無ければ None。
 
         **暗所の文だけを宣言した世界**もありうるので、片方しか無い場合は
@@ -366,9 +367,9 @@ class SpotInteractionApplicationService:
 
     def set_cooldown_store(
         self,
-        store: Optional[InteractionCooldownStore],
+        store: InteractionCooldownStore | None,
         *,
-        minutes_per_tick: Optional[int] = None,
+        minutes_per_tick: int | None = None,
     ) -> None:
         """待ち時間の記録先を後付けで注入する (二段構築用)。"""
         self._cooldown_store = store
@@ -384,7 +385,7 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         object_id: SpotObjectId,
         idef: Any,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> int:
         """その人がその操作を使えるようになるまでの残り手番。使えるなら 0。"""
         cooldown = self._cooldown_ticks_of(idef)
@@ -403,7 +404,7 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         object_id: SpotObjectId,
         idef: Any,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> str:
         """行に添える待ち時間の断り。待っていなければ空文字。
 
@@ -422,7 +423,7 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         item_spec_id: ItemSpecId,
         idef: InteractionDef,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> int:
         """道具の action_name または共有 group の残り待ち時間を返す。"""
         cooldown = self._cooldown_ticks_of(idef)
@@ -441,7 +442,7 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         item_spec_id: ItemSpecId,
         idef: InteractionDef,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> str:
         """道具操作の待ち時間を、物体操作と同じ文面で返す。"""
         remaining = self.remaining_item_cooldown_ticks(
@@ -468,7 +469,7 @@ class SpotInteractionApplicationService:
         object_id: SpotObjectId,
         action_name: str,
         interior: Any,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> Any:
         """待ちが明けていなければ断る。明けていれば操作定義を返す。
 
@@ -493,7 +494,7 @@ class SpotInteractionApplicationService:
         object_id: SpotObjectId,
         action_name: str,
         action_def: Any,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> None:
         """待ち時間の起点を控える。
 
@@ -512,12 +513,12 @@ class SpotInteractionApplicationService:
             scope=action_def.cooldown_scope,
         )
 
-    def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
+    def set_effective_lighting_resolver(self, resolver: Any | None) -> None:
         """PR 3: 実効照明 resolver を後付け bind する (二段構築用)。"""
         self._effective_lighting_resolver = resolver
 
     def set_player_display_name_resolver(
-        self, resolver: Optional[Callable[[PlayerId], str]]
+        self, resolver: Callable[[PlayerId], str] | None
     ) -> None:
         """player_display_name_resolver を後付けで注入する (二段構築用)。
 
@@ -526,7 +527,7 @@ class SpotInteractionApplicationService:
         """
         self._player_display_name_resolver = resolver
 
-    def set_time_of_day_phase_provider(self, provider: Optional[Any]) -> None:
+    def set_time_of_day_phase_provider(self, provider: Any | None) -> None:
         """PR4: 時間帯 provider を後付け bind する (runtime 順序依存解消用)。
 
         provider は `Callable[[], Optional[str]]` 想定。現在の phase 名
@@ -534,7 +535,7 @@ class SpotInteractionApplicationService:
         """
         self._time_of_day_phase_provider = provider
 
-    def set_weather_type_provider(self, provider: Optional[Any]) -> None:
+    def set_weather_type_provider(self, provider: Any | None) -> None:
         """PR4: 天候 provider を後付け bind する。
 
         provider は `Callable[[], Optional[str]]` 想定。現在の weather_type 名
@@ -544,7 +545,7 @@ class SpotInteractionApplicationService:
 
     def set_meeting_caller(
         self,
-        caller: Optional[Callable[[PlayerId, str], Any]],
+        caller: Callable[[PlayerId, str], Any] | None,
     ) -> None:
         """CALL_MEETING effect を実際の招集につなぐ callback を差す。
 
@@ -579,16 +580,14 @@ class SpotInteractionApplicationService:
 
     def set_command_scope_factory(
         self,
-        factory: Optional[
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
-        ],
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None,
     ) -> None:
         """通常の物体・道具interactionを確定するCommandScopeを後付けする。"""
         self._interaction_command_scope_factory = factory
 
     def _require_command_scope_factory(
         self,
-    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+    ) -> CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]:
         factory = self._interaction_command_scope_factory
         if factory is None:
             raise RuntimeError("interaction用CommandScopeFactoryが未配線です。")
@@ -618,7 +617,7 @@ class SpotInteractionApplicationService:
 
     def _item_interaction_def(
         self, item_spec_id: ItemSpecId, action_name: str
-    ) -> Optional[InteractionDef]:
+    ) -> InteractionDef | None:
         return next(
             (
                 interaction
@@ -636,8 +635,8 @@ class SpotInteractionApplicationService:
         item_spec_id: ItemSpecId,
         action_name: str,
         *,
-        interaction_parameters: Optional[Dict[str, Any]] = None,
-        current_tick: Optional[WorldTick] = None,
+        interaction_parameters: dict[str, Any] | None = None,
+        current_tick: WorldTick | None = None,
     ) -> SpotInteractionResultDto:
         """所持道具の通常操作を一つの確定境界で実行する。
 
@@ -705,8 +704,8 @@ class SpotInteractionApplicationService:
         item_spec_id: ItemSpecId,
         action_def: InteractionDef,
         *,
-        interaction_parameters: Optional[Dict[str, Any]] = None,
-        current_tick: Optional[WorldTick] = None,
+        interaction_parameters: dict[str, Any] | None = None,
+        current_tick: WorldTick | None = None,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
         player_inventory_repository: PlayerInventoryRepository,
@@ -877,7 +876,7 @@ class SpotInteractionApplicationService:
                 actor_entity_id=entity_id,
             )
         pending_arrivals: list[
-            tuple[EntityId, SpotId, Optional[str], Optional[str]]
+            tuple[EntityId, SpotId, str | None, str | None]
         ] = []
         for teleport in result.teleport_specs:
             target_spot = SpotId.create(teleport.target_spot_id)
@@ -1062,7 +1061,7 @@ class SpotInteractionApplicationService:
         action_name: str,
         *,
         failure_reason: str,
-        current_tick: Optional[WorldTick],
+        current_tick: WorldTick | None,
     ) -> None:
         """前提条件失敗の観測をrollback後の確定状態から発行する。"""
         graph = self._spot_graph_repository.find_graph()
@@ -1088,10 +1087,10 @@ class SpotInteractionApplicationService:
         object_id: SpotObjectId,
         action_name: str,
         *,
-        interaction_parameters: Optional[Dict[str, Any]] = None,
-        current_tick: Optional[WorldTick] = None,
-        acting_item_instance_id: Optional["ItemInstanceId"] = None,
-        target_item_instance_id: Optional["ItemInstanceId"] = None,
+        interaction_parameters: dict[str, Any] | None = None,
+        current_tick: WorldTick | None = None,
+        acting_item_instance_id: ItemInstanceId | None = None,
+        target_item_instance_id: ItemInstanceId | None = None,
     ) -> SpotInteractionResultDto:
         """通常物体interactionを一つの確定境界で実行する。
 
@@ -1174,10 +1173,10 @@ class SpotInteractionApplicationService:
         object_id: SpotObjectId,
         action_name: str,
         *,
-        interaction_parameters: Optional[Dict[str, Any]] = None,
-        current_tick: Optional[WorldTick] = None,
-        acting_item_instance_id: Optional["ItemInstanceId"] = None,
-        target_item_instance_id: Optional["ItemInstanceId"] = None,
+        interaction_parameters: dict[str, Any] | None = None,
+        current_tick: WorldTick | None = None,
+        acting_item_instance_id: ItemInstanceId | None = None,
+        target_item_instance_id: ItemInstanceId | None = None,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
         player_inventory_repository: PlayerInventoryRepository,
@@ -1264,13 +1263,13 @@ class SpotInteractionApplicationService:
         # PR4: 時間帯 / 天候 condition 用 provider 呼び出し。
         # 例外は silent fallback で None にする (provider 不在扱いで条件が
         # 拒否される。シナリオ作家が provider を忘れた場合に surface する)。
-        current_time_of_day_phase: Optional[str] = None
+        current_time_of_day_phase: str | None = None
         if self._time_of_day_phase_provider is not None:
             try:
                 current_time_of_day_phase = self._time_of_day_phase_provider()
             except Exception:
                 current_time_of_day_phase = None
-        current_weather_type: Optional[str] = None
+        current_weather_type: str | None = None
         if self._weather_type_provider is not None:
             try:
                 current_weather_type = self._weather_type_provider()
@@ -1289,7 +1288,7 @@ class SpotInteractionApplicationService:
         # 看板は書き手が分かることが価値の中心だが、resolver 未配線を例外で
         # 落とすとシナリオ側で看板を使わない限り無関係な interaction まで
         # 巻き込んで壊れるため、フォールバック名の劣化として扱う。
-        acting_player_display_name: Optional[str] = None
+        acting_player_display_name: str | None = None
         if self._player_display_name_resolver is not None:
             try:
                 acting_player_display_name = self._player_display_name_resolver(player_id)
@@ -1413,7 +1412,7 @@ class SpotInteractionApplicationService:
         # publish_all に乗せるため)。複数宣言された場合は順に適用し、最後の
         # 宛先が最終位置になる。
         pending_arrival_messages: list[
-            tuple[EntityId, SpotId, Optional[str], Optional[str]]
+            tuple[EntityId, SpotId, str | None, str | None]
         ] = []
         for teleport in result.teleport_specs:
             target_spot = SpotId.create(teleport.target_spot_id)
@@ -1827,18 +1826,18 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         action_name: str,
         *,
-        current_tick: Optional[WorldTick] = None,
+        current_tick: WorldTick | None = None,
     ) -> SpotObjectId:
         """現在地の対象物と通常操作の前提条件を、効果を適用せず検査する。
 
-        ``prepare_action`` は操作の効果をまだ起こさない一方、対象物の前にいて
+        二人で合わせる操作の準備は効果をまだ起こさない一方、対象物の前にいて
         その操作を実行できる者だけを準備として数える必要がある。判定は通常の
         ``execute_interaction`` と同じ
         ``SpotInteractionService.evaluate_preconditions_result`` を呼び、協力操作
         専用の写しを作らない。
 
         同名操作を持つ対象物が現在地に複数ある場合も黙って一つを選ばない。
-        ``prepare_action`` には対象ラベル引数が無いため、曖昧な宣言は拒否する。
+        準備は操作名だけで対象を引くため、曖昧な宣言は拒否する。
         """
         graph = self._spot_graph_repository.find_graph()
         spot_id = self._actor_spot(player_id, graph)
@@ -1923,7 +1922,7 @@ class SpotInteractionApplicationService:
     def _build_public_observable_events(
         self,
         *,
-        public_summaries: Tuple[AppliedEffectSummary, ...],
+        public_summaries: tuple[AppliedEffectSummary, ...],
         graph_id: Any,
         spot_id: SpotId,
         actor_entity_id: EntityId,
@@ -1986,7 +1985,7 @@ class SpotInteractionApplicationService:
     def _build_generic_public_observable_events(
         self,
         *,
-        public_summaries: Tuple[AppliedEffectSummary, ...],
+        public_summaries: tuple[AppliedEffectSummary, ...],
         graph_id: Any,
         actor_spot_id: SpotId,
         actor_entity_id: EntityId,
@@ -2057,7 +2056,7 @@ class SpotInteractionApplicationService:
         graph: SpotGraphAggregate,
         *,
         failure_reason: str = "",
-        current_tick: Optional[WorldTick] = None,
+        current_tick: WorldTick | None = None,
     ) -> None:
         """失敗観測 event を publish する (他者の失敗から学ぶ用)。
 
@@ -2147,7 +2146,7 @@ class SpotInteractionApplicationService:
         self._event_publisher.publish_all([failed_event])
 
 
-def _state_from_delta_before(delta: Tuple[Any, ...]) -> Dict[str, Any]:
+def _state_from_delta_before(delta: tuple[Any, ...]) -> dict[str, Any]:
     """state_delta の before 値から old_state 互換 dict を再構築する。
 
     LOSSY: before が None だったキー (新規追加 / 元から None) は dict に
@@ -2159,7 +2158,7 @@ def _state_from_delta_before(delta: Tuple[Any, ...]) -> Dict[str, Any]:
     return {d.key: d.before for d in delta if d.before is not None}
 
 
-def _state_from_delta_after(delta: Tuple[Any, ...]) -> Dict[str, Any]:
+def _state_from_delta_after(delta: tuple[Any, ...]) -> dict[str, Any]:
     """state_delta の after 値から new_state 互換 dict を再構築する。
 
     LOSSY: after が None (= 削除) のキーは dict に含めない。詳細は

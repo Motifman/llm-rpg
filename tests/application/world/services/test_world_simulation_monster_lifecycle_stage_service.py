@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 import unittest.mock as mock
+from types import SimpleNamespace
 
 from ai_rpg_world.application.world.services.world_simulation_monster_lifecycle_stage_service import (
     WorldSimulationMonsterLifecycleStageService,

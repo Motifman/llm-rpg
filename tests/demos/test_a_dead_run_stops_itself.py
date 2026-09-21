@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -47,7 +47,7 @@ class _Recorder:
         return None
 
 
-def _runtime(threshold: Optional[int] = None) -> Any:
+def _runtime(threshold: int | None = None) -> Any:
     """閾値だけを差し替えた runtime を、実物の組み立て経路で作る。"""
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,

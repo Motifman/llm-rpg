@@ -1,13 +1,13 @@
 """EffectiveStatsDomainService（compute_effective_stats）のユニットテスト"""
 import pytest
 
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.service.effective_stats_domain_service import (
     compute_effective_stats,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 
 
 def _base_stats(attack: int = 20, defense: int = 10, speed: int = 5) -> BaseStats:

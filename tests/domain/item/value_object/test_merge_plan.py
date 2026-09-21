@@ -1,19 +1,20 @@
 import pytest
-from ai_rpg_world.domain.item.value_object.merge_plan import (
-    MergePlan,
-    UpdateOperation,
-    CreateOperation,
-    DeleteOperation,
-    ConsumedItem,
-    CraftingConsumptionPlan
-)
+
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
+from ai_rpg_world.domain.item.exception import QuantityValidationException
+from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
-from ai_rpg_world.domain.item.value_object.durability import Durability
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from ai_rpg_world.domain.item.exception import QuantityValidationException
+from ai_rpg_world.domain.item.value_object.merge_plan import (
+    ConsumedItem,
+    CraftingConsumptionPlan,
+    CreateOperation,
+    DeleteOperation,
+    MergePlan,
+    UpdateOperation,
+)
 
 
 class TestUpdateOperation:

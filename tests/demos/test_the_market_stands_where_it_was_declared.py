@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -22,8 +22,8 @@ from ai_rpg_world.domain.trade.value_object.market_participant import MarketPart
 _TOWN = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 
 
-def _build(tmp_path: Path, market: Dict[str, Any] | None) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+def _build(tmp_path: Path, market: dict[str, Any] | None) -> Any:
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     if market is not None:
         raw["market"] = market
     path = tmp_path / "market_town_v1.json"

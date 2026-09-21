@@ -1,19 +1,19 @@
 """
 InMemoryRecentTradeReadModelRepository - RecentTradeReadModelを使用するインメモリ実装
 """
-from typing import List, Optional, Dict
-from datetime import datetime, timedelta
 import random
-from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
-from ai_rpg_world.domain.trade.read_model.recent_trade_read_model import RecentTradeReadModel, RecentTradeData
+from datetime import datetime, timedelta
+
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.trade.read_model.recent_trade_read_model import RecentTradeData, RecentTradeReadModel
+from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
 
 
 class InMemoryRecentTradeReadModelRepository(RecentTradeReadModelRepository):
     """RecentTradeReadModelを使用するインメモリリポジトリ"""
 
     def __init__(self):
-        self._read_models: Dict[ItemSpecId, RecentTradeReadModel] = {}
+        self._read_models: dict[ItemSpecId, RecentTradeReadModel] = {}
 
         # サンプルデータを設定
         self._setup_sample_data()
@@ -217,11 +217,11 @@ class InMemoryRecentTradeReadModelRepository(RecentTradeReadModelRepository):
         )
 
     # Repository基本メソッドの実装
-    def find_by_id(self, entity_id: ItemSpecId) -> Optional[RecentTradeReadModel]:
+    def find_by_id(self, entity_id: ItemSpecId) -> RecentTradeReadModel | None:
         """IDでReadModelを検索"""
         return self._read_models.get(entity_id)
 
-    def find_by_ids(self, entity_ids: List[ItemSpecId]) -> List[RecentTradeReadModel]:
+    def find_by_ids(self, entity_ids: list[ItemSpecId]) -> list[RecentTradeReadModel]:
         """IDのリストでReadModelを検索"""
         result = []
         for item_spec_id in entity_ids:
@@ -242,13 +242,13 @@ class InMemoryRecentTradeReadModelRepository(RecentTradeReadModelRepository):
             return True
         return False
 
-    def find_all(self) -> List[RecentTradeReadModel]:
+    def find_all(self) -> list[RecentTradeReadModel]:
         """全てのReadModelを取得"""
         return list(self._read_models.values())
 
 
     # RecentTradeReadModelRepository特有メソッドの実装
-    def find_by_item_name(self, item_name: str) -> Optional[RecentTradeReadModel]:
+    def find_by_item_name(self, item_name: str) -> RecentTradeReadModel | None:
         """アイテム名で最近の取引履歴を取得"""
         for read_model in self._read_models.values():
             if read_model.item_name == item_name:
@@ -264,10 +264,10 @@ class InMemoryRecentTradeReadModelRepository(RecentTradeReadModelRepository):
         """ReadModelの総数を取得"""
         return len(self._read_models)
 
-    def get_items_with_trades(self) -> List[str]:
+    def get_items_with_trades(self) -> list[str]:
         """取引履歴があるアイテム名を取得"""
         return [rm.item_name for rm in self._read_models.values() if rm.has_recent_trades]
 
-    def get_items_without_trades(self) -> List[str]:
+    def get_items_without_trades(self) -> list[str]:
         """取引履歴がないアイテム名を取得"""
         return [rm.item_name for rm in self._read_models.values() if not rm.has_recent_trades]

@@ -8,18 +8,22 @@ chunk 主観補完の完了点で「思い出したから当たった」を的�
 呼ばれる共通ロジックなので、ここでは関数単体として直接テストする。
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+
 from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import record_recall_hits_if_applicable
 from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 _NOW = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
 _BEING = BeingId('being_w1_p1')
 
@@ -35,9 +39,9 @@ class _StubAction:
     """``compute_chunk_attribution`` / ``prediction_context_ids_from_actions``
 
     が getattr で読む最小限の action stub。"""
-    expected_result: Optional[str] = None
-    prediction_context_id: Optional[str] = None
-    in_context_belief_ids: Tuple[str, ...] = ()
+    expected_result: str | None = None
+    prediction_context_id: str | None = None
+    in_context_belief_ids: tuple[str, ...] = ()
 
 def _seed_recall_buffer(buffer: InMemoryEpisodicRecallBufferStore, *, prediction_context_id: str, episode_id: str, recall_id: str='r-1') -> None:
     buffer.append_by_being(_BEING, EpisodicRecallObservation(recall_id=recall_id, player_id=1, episode_id=episode_id, recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))

@@ -8,15 +8,15 @@ record_attacked_by、apply_behavior_transition、apply_territory_return_if_neede
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Literal
+from typing import Literal
 
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
-    StateTransitionResult,
     SpotTargetParams,
+    StateTransitionResult,
 )
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @dataclass(frozen=True)
@@ -26,9 +26,9 @@ class AttackedTransitionResult:
     no_transition: bool = False
     """True の場合、呼び出し元は何も変更しない（PATROL_ONLY または AMBUSH 範囲外）。"""
 
-    new_state: Optional[BehaviorStateEnum] = None
-    new_target_id: Optional[WorldObjectId] = None
-    new_last_known_position: Optional[Coordinate] = None
+    new_state: BehaviorStateEnum | None = None
+    new_target_id: WorldObjectId | None = None
+    new_last_known_position: Coordinate | None = None
     clear_pursuit: bool = False
     sync_pursuit: bool = False
 
@@ -38,11 +38,11 @@ class EventSpec:
     """発行すべきイベントの仕様。集約が実際のイベントを生成する。"""
 
     kind: Literal["target_spotted", "target_lost", "actor_state_changed"]
-    target_id: Optional[WorldObjectId] = None
-    coordinate: Optional[Coordinate] = None
-    last_known_coordinate: Optional[Coordinate] = None
-    old_state: Optional[BehaviorStateEnum] = None
-    new_state: Optional[BehaviorStateEnum] = None
+    target_id: WorldObjectId | None = None
+    coordinate: Coordinate | None = None
+    last_known_coordinate: Coordinate | None = None
+    old_state: BehaviorStateEnum | None = None
+    new_state: BehaviorStateEnum | None = None
 
 
 @dataclass
@@ -50,12 +50,12 @@ class TransitionApplicationOutput:
     """apply_behavior_transition の適用結果。"""
 
     final_state: BehaviorStateEnum
-    final_target_id: Optional[WorldObjectId] = None
-    final_last_known_position: Optional[Coordinate] = None
+    final_target_id: WorldObjectId | None = None
+    final_last_known_position: Coordinate | None = None
     clear_pursuit: bool = False
-    sync_pursuit: Optional[tuple[WorldObjectId, Coordinate]] = None
-    preserve_pursuit_last_known: Optional[tuple[WorldObjectId, Coordinate]] = None
-    events: List[EventSpec] = field(default_factory=list)
+    sync_pursuit: tuple[WorldObjectId, Coordinate] | None = None
+    preserve_pursuit_last_known: tuple[WorldObjectId, Coordinate] | None = None
+    events: list[EventSpec] = field(default_factory=list)
 
 
 class MonsterBehaviorStateMachine:
@@ -73,8 +73,8 @@ class MonsterBehaviorStateMachine:
         effective_flee_threshold: float,
         allow_chase: bool,
         current_behavior_state: BehaviorStateEnum,
-        behavior_initial_position: Optional[Coordinate],
-        ambush_chase_range: Optional[int],
+        behavior_initial_position: Coordinate | None,
+        ambush_chase_range: int | None,
     ) -> AttackedTransitionResult:
         """
         被弾時の遷移を計算する。
@@ -133,8 +133,8 @@ class MonsterBehaviorStateMachine:
         self,
         result: StateTransitionResult,
         current_state: BehaviorStateEnum,
-        current_target_id: Optional[WorldObjectId],
-        current_last_known_position: Optional[Coordinate],
+        current_target_id: WorldObjectId | None,
+        current_last_known_position: Coordinate | None,
         hp_percentage: float,
         effective_flee_threshold: float,
         allow_chase: bool,
@@ -148,7 +148,7 @@ class MonsterBehaviorStateMachine:
         if result.apply_enrage:
             old_state = current_state
             current_state = BehaviorStateEnum.ENRAGE
-            events: List[EventSpec] = [
+            events: list[EventSpec] = [
                 EventSpec(
                     kind="actor_state_changed",
                     old_state=old_state,
@@ -328,8 +328,8 @@ class MonsterBehaviorStateMachine:
     def should_return_to_territory(
         self,
         actor_coordinate: Coordinate,
-        behavior_initial_position: Optional[Coordinate],
-        territory_radius: Optional[int],
+        behavior_initial_position: Coordinate | None,
+        territory_radius: int | None,
         current_state: BehaviorStateEnum,
     ) -> bool:
         """

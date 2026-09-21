@@ -197,14 +197,14 @@ class TestShortTermMemoryLlmServicesWired:
         PR #444 前は呼び出し側 wiring が未実装で、ここが None のまま動いていた
         (= L4 / L5 が全件 template fallback)。
         """
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
+        from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+            ShortTermMemoryLongSummaryService,
         )
         from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
             ShortTermMemorySummaryService,
         )
-        from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-            ShortTermMemoryLongSummaryService,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
 
         runtime = _build_runtime(
@@ -242,10 +242,10 @@ class TestLiteLLMClientTimeout:
 
     def test_litellm_timeout_value(self) -> None:
         """litellm で timeout が有限値。"""
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         from ai_rpg_world.application.llm.wiring._llm_client_factory import (
             create_llm_client_from_config,
         )
+        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
         client = create_llm_client_from_config(
             ResolvedLlmRuntimeConfig.for_tests(
@@ -262,10 +262,10 @@ class TestLiteLLMClientTimeout:
 
     def test_config_timeout(self) -> None:
         """configtimeout が反映される。"""
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         from ai_rpg_world.application.llm.wiring._llm_client_factory import (
             create_llm_client_from_config,
         )
+        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
         client = create_llm_client_from_config(
             ResolvedLlmRuntimeConfig.for_tests(
@@ -343,11 +343,11 @@ class TestConfigInjection:
 
     def test_cfg_empty_config_default(self) -> None:
         """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
+        )
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 

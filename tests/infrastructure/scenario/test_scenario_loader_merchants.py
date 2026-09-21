@@ -9,25 +9,25 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
-
-from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
-    ScenarioLoader,
-)
 from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
+from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    ScenarioLoader,
+    ScenarioLoadError,
+)
 
-def _scenario_with_merchants(merchants: Any) -> Dict[str, Any]:
+
+def _scenario_with_merchants(merchants: Any) -> dict[str, Any]:
     """最小シナリオへ merchants を差し込んだ raw dict を返す。"""
     scenario = copy.deepcopy(_minimal_scenario())
     scenario["merchants"] = merchants
     return scenario
 
 
-def _scenario_with_two_item_specs() -> Dict[str, Any]:
+def _scenario_with_two_item_specs() -> dict[str, Any]:
     """item_spec が 2 つある最小シナリオ (売値と買値を別 item で書くため)。"""
     scenario = copy.deepcopy(_minimal_scenario())
     scenario["item_specs"].append(
@@ -36,9 +36,9 @@ def _scenario_with_two_item_specs() -> Dict[str, Any]:
     return scenario
 
 
-def _merchant(**overrides: Any) -> Dict[str, Any]:
+def _merchant(**overrides: Any) -> dict[str, Any]:
     """検証を通る商人宣言 1 件。テスト側は壊したいキーだけ上書きする。"""
-    merchant: Dict[str, Any] = {
+    merchant: dict[str, Any] = {
         "id": "gustav",
         "name": "商人グスタフ",
         "spot": "room_a",

@@ -28,7 +28,7 @@ class DistantCueStateSubsystemCodec(WorldSubsystemCodec):
 
     def capture(self, runtime: Any) -> dict[str, Any]:
         states = getattr(runtime, "_distant_cue_states", None) or {}
-        entries = []
+        entries: list[dict[str, Any]] = []
         for cue_id, raw_state in states.items():
             state = dict(raw_state)
             last_changed_tick = state.get("last_changed_tick")

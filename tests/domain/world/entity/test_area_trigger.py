@@ -1,9 +1,10 @@
 import pytest
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.area import RectArea
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
 from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger
+from ai_rpg_world.domain.world.value_object.area import RectArea
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
 class TestAreaTrigger:

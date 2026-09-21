@@ -2,7 +2,9 @@
 クエストコマンド関連の例外定義
 """
 
-from typing import Optional
+
+from typing import Any
+
 from ai_rpg_world.application.quest.exceptions.base_exception import QuestApplicationException
 
 
@@ -12,11 +14,11 @@ class QuestCommandException(QuestApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        user_id: Optional[int] = None,
-        quest_id: Optional[int] = None,
-        **context,
-    ):
+        error_code: str | None = None,
+        user_id: int | None = None,
+        quest_id: int | None = None,
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if user_id is not None:
             all_context["user_id"] = user_id
@@ -31,8 +33,8 @@ class QuestCreationException(QuestCommandException):
     def __init__(
         self,
         message: str,
-        user_id: Optional[int] = None,
-        error_code: Optional[str] = None,
+        user_id: int | None = None,
+        error_code: str | None = None,
     ):
         super().__init__(
             message,

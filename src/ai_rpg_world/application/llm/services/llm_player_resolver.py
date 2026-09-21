@@ -1,6 +1,6 @@
 """LLM プレイヤー判定の実装（ID 集合ベース / プロフィールベース）"""
 
-from typing import AbstractSet, Set
+from collections.abc import Set as AbstractSet
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
 from ai_rpg_world.domain.player.enum.player_enum import ControlType
@@ -21,7 +21,7 @@ class SetBasedLlmPlayerResolver(ILLMPlayerResolver):
         for pid in llm_player_ids:
             if not isinstance(pid, int) or pid <= 0:
                 raise ValueError("llm_player_ids must contain positive integers only")
-        self._ids: Set[int] = set(llm_player_ids)
+        self._ids: set[int] = set(llm_player_ids)
 
     def is_llm_controlled(self, player_id: PlayerId) -> bool:
         if not isinstance(player_id, PlayerId):

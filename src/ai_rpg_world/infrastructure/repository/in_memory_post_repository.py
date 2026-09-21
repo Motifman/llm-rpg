@@ -1,28 +1,29 @@
 """
 InMemoryPostRepository - PostAggregateを使用するインメモリ実装
 """
-from typing import List, Optional, Dict, Set
 from datetime import datetime, timedelta
-from ai_rpg_world.domain.sns.repository.post_repository import PostRepository
+
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+from ai_rpg_world.domain.sns.repository.post_repository import PostRepository
 from ai_rpg_world.domain.sns.value_object.post_id import PostId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from .in_memory_repository_base import InMemoryRepositoryBase
+
 from .in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from .in_memory_repository_base import InMemoryRepositoryBase
 
 
 class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
     """PostAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _posts(self) -> Dict[PostId, PostAggregate]:
+    def _posts(self) -> dict[PostId, PostAggregate]:
         return self._data_store.posts
 
-    def find_by_id(self, post_id: int) -> Optional[PostAggregate]:
+    def find_by_id(self, post_id: int) -> PostAggregate | None:
         """ポストIDでポストを検索"""
         try:
             post_id_obj = PostId(post_id) if not isinstance(post_id, PostId) else post_id
@@ -33,7 +34,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         except (ValueError, TypeError):
             return None
 
-    def find_by_ids(self, post_ids: List[PostId]) -> List[PostAggregate]:
+    def find_by_ids(self, post_ids: list[PostId]) -> list[PostAggregate]:
         """複数のポストIDでポストを検索"""
         result = []
         for post_id in post_ids:
@@ -71,18 +72,18 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         """ポストの総数を取得"""
         return len(self._posts)
 
-    def find_all(self) -> List[PostAggregate]:
+    def find_all(self) -> list[PostAggregate]:
         """全てのポストを取得"""
         return list(self._posts.values())
 
-    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         """特定のユーザーのポスト一覧を取得（タイムライン用）"""
         user_posts = [post for post in self._posts.values() if post.author_user_id == user_id]
         # 作成日時の降順でソート
         user_posts.sort(key=lambda p: p.created_at, reverse=True)
         return user_posts[offset:offset + limit]
 
-    def find_by_user_ids(self, user_ids: List[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at") -> List[PostAggregate]:
+    def find_by_user_ids(self, user_ids: list[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at") -> list[PostAggregate]:
         """複数のユーザーのポストを取得（フォロー中ユーザーの投稿取得用、ソート付き）"""
         result = []
         # 全ての投稿から対象ユーザーのものを抽出（効率は悪いがインメモリなので許容）
@@ -102,14 +103,14 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         # offsetとlimitを適用
         return result[offset:offset + limit]
 
-    def find_recent_posts(self, limit: int = 20) -> List[PostAggregate]:
+    def find_recent_posts(self, limit: int = 20) -> list[PostAggregate]:
         """最新のポストを取得（トレンド表示用）"""
         all_posts = list(self._posts.values())
         # 作成日時の降順でソート
         all_posts.sort(key=lambda p: p.created_at, reverse=True)
         return all_posts[:limit]
 
-    def find_posts_mentioning_user(self, user_name: str, limit: int = 20) -> List[PostAggregate]:
+    def find_posts_mentioning_user(self, user_name: str, limit: int = 20) -> list[PostAggregate]:
         """指定ユーザーをメンションしたポストを取得"""
         mentioned_posts = []
         for post in self._posts.values():
@@ -120,7 +121,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         mentioned_posts.sort(key=lambda p: p.created_at, reverse=True)
         return mentioned_posts[:limit]
 
-    def find_liked_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_liked_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         """指定ユーザーがいいねしたポスト一覧を取得"""
         liked_posts = []
         for post in self._posts.values():
@@ -133,11 +134,11 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         # offsetとlimitを適用
         return liked_posts[offset:offset + limit]
 
-    def find_posts_liked_by_user(self, user_id: UserId, limit: int = 20) -> List[PostAggregate]:
+    def find_posts_liked_by_user(self, user_id: UserId, limit: int = 20) -> list[PostAggregate]:
         """指定ユーザーからいいねされたポスト一覧を取得"""
         return self.find_liked_posts_by_user(user_id, limit)  # 同じ実装でOK
 
-    def search_posts_by_content(self, query: str, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def search_posts_by_content(self, query: str, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         """コンテンツでポストを検索"""
         result = []
         query_lower = query.lower()
@@ -151,7 +152,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         # offsetとlimitを適用
         return result[offset:offset + limit]
 
-    def find_posts_by_hashtag(self, hashtag: str, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_posts_by_hashtag(self, hashtag: str, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         """指定ハッシュタグのポストを取得"""
         result = []
         hashtag_lower = hashtag.lower()
@@ -173,7 +174,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
             return len(post.likes)
         return 0
 
-    def get_user_post_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_post_stats(self, user_id: UserId) -> dict[str, int]:
         """ユーザーの投稿統計（総投稿数、総いいね数など）を取得"""
         user_posts = [post for post in self._posts.values() if post.author_user_id == user_id]
         total_posts = len(user_posts)
@@ -184,7 +185,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
             "total_likes": total_likes
         }
 
-    def find_trending_posts(self, timeframe_hours: int = 24, limit: int = 10, offset: int = 0) -> List[PostAggregate]:
+    def find_trending_posts(self, timeframe_hours: int = 24, limit: int = 10, offset: int = 0) -> list[PostAggregate]:
         """トレンドのポストを取得（いいね数やリプライ数でソート）"""
         cutoff_time = datetime.now() - timedelta(hours=timeframe_hours)
         recent_posts = [post for post in self._posts.values() if post.created_at >= cutoff_time]
@@ -195,7 +196,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         # offsetとlimitを適用
         return recent_posts[offset:offset + limit]
 
-    def bulk_delete_posts(self, post_ids: List[PostId], user_id: UserId) -> int:
+    def bulk_delete_posts(self, post_ids: list[PostId], user_id: UserId) -> int:
         """複数のポストを一括削除（自分のポストのみ）"""
         def operation():
             deleted_count = 0
@@ -212,7 +213,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         """古い削除済みポストをクリーンアップ"""
         return 0
 
-    def find_private_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_private_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         """特定のユーザーのプライベートポストを取得（作成日時降順）"""
         # ユーザーの全てのポストを取得
         user_posts = [post for post in self._posts.values() if post.author_user_id == user_id]
@@ -231,7 +232,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         self._posts.clear()
         self._data_store.next_post_id = 1
 
-    def find_posts_in_timeframe(self, timeframe_hours: int = 24, limit: int = 1000) -> List[PostAggregate]:
+    def find_posts_in_timeframe(self, timeframe_hours: int = 24, limit: int = 1000) -> list[PostAggregate]:
         """指定時間内の全ポストを取得（トレンド計算用）"""
         cutoff_time = datetime.now() - timedelta(hours=timeframe_hours)
         recent_posts = [post for post in self._posts.values() if post.created_at >= cutoff_time]

@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
@@ -44,9 +44,9 @@ class SpotEffectiveLightingResolver:
         *,
         spot_graph_repository,
         entity_has_light_source: EntityHasLightSource,
-        time_of_day_provider: Optional[Callable[[], object]] = None,
-        weather_provider: Optional[Callable[[], object]] = None,
-        perception: Optional[SpotPerceptionService] = None,
+        time_of_day_provider: Callable[[], object] | None = None,
+        weather_provider: Callable[[], object] | None = None,
+        perception: SpotPerceptionService | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._entity_has_light_source = entity_has_light_source
@@ -54,7 +54,7 @@ class SpotEffectiveLightingResolver:
         self._weather_provider = weather_provider
         self._perception = perception or SpotPerceptionService()
 
-    def resolve(self, spot_id: SpotId) -> Optional[LightingEnum]:
+    def resolve(self, spot_id: SpotId) -> LightingEnum | None:
         """``spot_id`` の実効照明を返す。spot が見つからなければ None。
 
         **例外は握りつぶさない。** 想定外の失敗を None に倒すと、前提条件は

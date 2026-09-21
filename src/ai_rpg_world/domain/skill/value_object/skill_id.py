@@ -8,12 +8,12 @@ from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillIdValidati
 class SkillId:
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise SkillIdValidationException(f"Skill ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "SkillId":
+    def create(cls, value: int | str) -> "SkillId":
         if isinstance(value, str):
             try:
                 parsed = int(value)

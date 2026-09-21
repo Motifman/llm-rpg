@@ -1,8 +1,8 @@
 """CommandScopeの有効期間だけrepository呼出しを許可するproxy。"""
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Generic, TypeVar
-
+from typing import Any, Generic, TypeVar
 
 RepositoryT = TypeVar("RepositoryT")
 

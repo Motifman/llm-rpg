@@ -13,7 +13,6 @@ from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
     GameEndConditionTypeEnum,
 )
 
-
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )

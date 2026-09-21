@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
-from dataclasses import dataclass, field
 import logging
 import math
+from contextlib import suppress
+from dataclasses import dataclass, field
 from threading import Lock
-from typing import Optional, Protocol
+from typing import Protocol
 
 from ai_rpg_world.application.common.outbox_worker import OutboxRunResult
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +31,8 @@ class OutboxDeliveryLoop:
     worker: OutboxWorkerPort
     interval_seconds: float = 1.0
     batch_limit: int = 100
-    _task: Optional[asyncio.Task[None]] = field(default=None, init=False, repr=False)
-    _stop_event: Optional[asyncio.Event] = field(
+    _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
+    _stop_event: asyncio.Event | None = field(
         default=None,
         init=False,
         repr=False,

@@ -1,29 +1,30 @@
-from typing import List, Optional, Dict
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from .in_memory_repository_base import InMemoryRepositoryBase
-from .in_memory_data_store import InMemoryDataStore
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+from .in_memory_data_store import InMemoryDataStore
+from .in_memory_repository_base import InMemoryRepositoryBase
 
 
 class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
     """スポットリポジトリのインメモリ実装"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _spot_dict(self) -> Dict[SpotId, Spot]:
+    def _spot_dict(self) -> dict[SpotId, Spot]:
         return self._data_store.spots
 
-    def find_by_id(self, spot_id: SpotId) -> Optional[Spot]:
+    def find_by_id(self, spot_id: SpotId) -> Spot | None:
         pending = self._get_pending_aggregate(spot_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._spot_dict.get(spot_id))
 
-    def find_by_ids(self, spot_ids: List[SpotId]) -> List[Spot]:
+    def find_by_ids(self, spot_ids: list[SpotId]) -> list[Spot]:
         return [s for sid in spot_ids for s in [self.find_by_id(sid)] if s is not None]
 
     def save(self, spot: Spot) -> Spot:
@@ -44,10 +45,10 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
 
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[Spot]:
+    def find_all(self) -> list[Spot]:
         return [self._clone(s) for s in self._spot_dict.values()]
 
-    def find_by_name(self, name: str) -> Optional[Spot]:
+    def find_by_name(self, name: str) -> Spot | None:
         """名前でスポットを検索。find_all をループして name でマッチする最初のものを返す。"""
         if not name or not isinstance(name, str):
             return None

@@ -4,45 +4,47 @@
 create_from_domain_exception には DomainException のサブクラスのみ渡すこと。
 """
 
-from typing import Optional, Dict, Type, Any, Tuple
-from ai_rpg_world.domain.common.exception import DomainException
+
+from typing import ClassVar
+
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
-from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
-    UserQueryException,
-    ProfileNotFoundException,
-    UserNotFoundException,
-    InvalidUserIdException,
-    ProfileQueryException,
-    RelationshipQueryException,
+from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
+    NotificationCommandException,
+)
+from ai_rpg_world.application.social.exceptions.command.post_command_exception import (
+    PostCommandException,
+)
+from ai_rpg_world.application.social.exceptions.command.relationship_command_exception import (
+    UserBlockException,
+    UserFollowException,
+    UserSubscribeException,
 )
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
     UserCreationException,
     UserProfileUpdateException,
 )
-from ai_rpg_world.application.social.exceptions.command.post_command_exception import (
-    PostCommandException,
-)
-from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
-    NotificationCommandException,
-)
-from ai_rpg_world.application.social.exceptions.command.relationship_command_exception import (
-    UserFollowException,
-    UserBlockException,
-    UserSubscribeException,
+from ai_rpg_world.application.social.exceptions.query.notification_query_exception import (
+    InvalidNotificationIdException,
+    NotificationAccessDeniedException,
+    NotificationNotFoundException,
+    NotificationQueryException,
 )
 from ai_rpg_world.application.social.exceptions.query.post_query_exception import (
-    PostQueryException,
-    PostNotFoundException,
-    PostAccessDeniedException,
     InvalidPostIdException,
+    PostAccessDeniedException,
+    PostNotFoundException,
+    PostQueryException,
 )
-from ai_rpg_world.application.social.exceptions.query.notification_query_exception import (
-    NotificationQueryException,
-    NotificationNotFoundException,
-    NotificationAccessDeniedException,
-    InvalidNotificationIdException,
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
+    InvalidUserIdException,
+    ProfileNotFoundException,
+    ProfileQueryException,
+    RelationshipQueryException,
+    UserNotFoundException,
+    UserQueryException,
 )
+from ai_rpg_world.domain.common.exception import DomainException
 
 
 class ApplicationExceptionFactory:
@@ -50,7 +52,7 @@ class ApplicationExceptionFactory:
 
     # ドメイン例外からアプリケーション例外へのマッピング
     # 既存のマッピングを維持しつつ、統一されたインターフェースを提供
-    EXCEPTION_MAPPING: Dict[str, Type[ApplicationException]] = {
+    EXCEPTION_MAPPING: ClassVar[dict[str, type[ApplicationException]]] = {
         # ユーザー関連例外
         "UserNotFoundException": UserQueryException,
         "UserIdValidationException": UserQueryException,
@@ -101,9 +103,9 @@ class ApplicationExceptionFactory:
     def create_from_domain_exception(
         cls,
         domain_exception: Exception,
-        user_id: Optional[int] = None,
-        target_user_id: Optional[int] = None,
-        post_id: Optional[int] = None,
+        user_id: int | None = None,
+        target_user_id: int | None = None,
+        post_id: int | None = None,
         **additional_context
     ) -> ApplicationException:
         """

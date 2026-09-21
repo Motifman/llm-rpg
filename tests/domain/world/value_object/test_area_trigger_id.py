@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+
 from ai_rpg_world.domain.world.exception.map_exception import AreaTriggerIdValidationException
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 
 
 class TestAreaTriggerId:

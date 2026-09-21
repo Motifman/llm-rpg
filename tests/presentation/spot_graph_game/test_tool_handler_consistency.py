@@ -9,8 +9,8 @@ handler 未登録」という silent failure が 2 段階で発生した。本�
 import pytest
 
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    validate_tool_handler_consistency,
     ToolHandlerConsistencyError,
+    validate_tool_handler_consistency,
 )
 
 

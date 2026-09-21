@@ -7,13 +7,14 @@ today's behavior before further runtime convergence work.
 
 from __future__ import annotations
 
-from dataclasses import replace
 import copy
 import json
 import re
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import pytest
 
@@ -22,21 +23,21 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
+    InMemoryStagnationReasoningLatch,
+)
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+    PromptDatasetCaptureSink,
 )
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
-)
-from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
-    PromptDatasetCaptureSink,
-)
-from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
-    InMemoryStagnationReasoningLatch,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
@@ -49,29 +50,27 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
-from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
+from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _WorldLlmWiring,
     _LlmPhaseAResult,
+    _WorldLlmWiring,
 )
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -651,32 +650,18 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
     assert runtime._episodic_stack is None
 
 
-def test_prepare_action_is_hidden_when_scenario_has_no_synchronized_action_groups(
+def test_synchronized_action_groups_expose_no_tool_of_their_own(
     clean_runtime_env: None,
 ) -> None:
-    """同期アクショングループを宣言しないシナリオでは prepare_action を LLM に露出しない。"""
-    runtime = _create_runtime(
-        scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json"
-    )
-
-    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
-
-    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-def test_prepare_action_is_exposed_when_scenario_has_synchronized_action_groups(
-    clean_runtime_env: None,
-) -> None:
-    """同期アクショングループを宣言するシナリオでは prepare_action を LLM に露出する。"""
+    """同期アクショングループを宣言しても専用ツールは出ず、interact が入口になる。"""
     runtime = _create_runtime(
         scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json"
     )
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
-    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION in tool_names
+    assert "prepare_action" not in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
 
 
 def _tool_by_name(runtime, name: str):
@@ -1872,7 +1857,7 @@ def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
 def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
     clean_runtime_env: None,
 ) -> None:
-    """シナリオ由来の prepare_action 除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
+    """シナリオ由来のツール除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
@@ -1883,7 +1868,6 @@ def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
 
     tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
-    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
     assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
     assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
@@ -2889,7 +2873,7 @@ class _CapturingRecorder:
 _CONTRACT_PROBE_TOOL = "contract_probe"
 
 
-def _run_probe_phase_b(runtime: "_ContractRuntime", *, success: bool = True):
+def _run_probe_phase_b(runtime: _ContractRuntime, *, success: bool = True):
     """contract_probe を 1 つ登録して run_phase_b を 1 回回すヘルパ。"""
     wiring = _wiring_for_contract_runtime(runtime)
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.item.exception import MaxStackSizeValidationException
 
 
@@ -7,6 +8,6 @@ class MaxStackSize:
     """スタックサイズの最大値を表す値オブジェクト"""
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise MaxStackSizeValidationException(value=self.value)

@@ -1,49 +1,50 @@
 """ConsumableEffectHandler の網羅的テスト"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.world.exceptions.consumable_effect_exception import (
+    ConsumeEffectMissingException,
     ItemSpecNotFoundForConsumableEffectException,
     PlayerNotFoundForConsumableEffectException,
-    ConsumeEffectMissingException,
 )
 from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
     ConsumableEffectHandler,
 )
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_effect import (
+    CompositeItemEffect,
     DamageHpEffect,
-    HealEffect,
-    RecoverMpEffect,
-    GoldEffect,
     ExpEffect,
+    GoldEffect,
+    HealEffect,
+    ItemEffect,
+    RecoverMpEffect,
     ReviveEffect,
     SatisfyNeedEffect,
-    CompositeItemEffect,
-    ItemEffect,
 )
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class _FakeItemEffect(ItemEffect):

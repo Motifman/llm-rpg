@@ -33,7 +33,6 @@ engine が勝手に会議の概念を持ち込むことはない。
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, FrozenSet, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
@@ -69,7 +68,7 @@ class PromptSection(str, Enum):
 
 
 #: 自由時間の並び。従来どおり。
-FREE_ROAM_SECTIONS: Tuple[PromptSection, ...] = (
+FREE_ROAM_SECTIONS: tuple[PromptSection, ...] = (
     PromptSection.CONNECTIONS,
     PromptSection.OBJECTS,
     PromptSection.SUB_LOCATIONS,
@@ -126,7 +125,7 @@ FREE_ROAM_SECTIONS: Tuple[PromptSection, ...] = (
 #: - MERCHANTS: 会議中は売買できないので、選べない対象として落とす
 #:   (オブジェクトと同じ扱い)。商人が議論の話題になる余地はあるが、
 #:   それは記憶と発話の側の話で、いまここで買える一覧を出す理由にはならない
-MEETING_SECTIONS: Tuple[PromptSection, ...] = (
+MEETING_SECTIONS: tuple[PromptSection, ...] = (
     PromptSection.ENTITIES_PLAIN,
     # 所持金は残す。所持品を残した理屈 (会議での主張の材料になる) が
     # そのまま当てはまる (「その金はどこで手に入れた」)。
@@ -141,7 +140,7 @@ MEETING_SECTIONS: Tuple[PromptSection, ...] = (
 #:
 #: 空にしておく。載せる場合は「なぜどの並びにも要らないか」を書く。
 #: 黙って両方の表から外すと、消えたことに誰も気づけない。
-INTENTIONALLY_UNUSED: FrozenSet[PromptSection] = frozenset()
+INTENTIONALLY_UNUSED: frozenset[PromptSection] = frozenset()
 
 
 #: フェーズ → その並び。
@@ -149,13 +148,13 @@ INTENTIONALLY_UNUSED: FrozenSet[PromptSection] = frozenset()
 #: **真偽値で引かない。** ``in_meeting`` のような bool にすると、フェーズが
 #: 3 つ目になったときに**黙って自由時間へ縮退する**。GamePhase を直接キーに
 #: して、網羅テストで全 enum が載っていることを縛る (codex の指摘)。
-SECTIONS_BY_PHASE: Dict[GamePhase, Tuple[PromptSection, ...]] = {
+SECTIONS_BY_PHASE: dict[GamePhase, tuple[PromptSection, ...]] = {
     GamePhase.FREE_ROAM: FREE_ROAM_SECTIONS,
     GamePhase.MEETING: MEETING_SECTIONS,
 }
 
 
-def sections_for(phase: GamePhase) -> Tuple[PromptSection, ...]:
+def sections_for(phase: GamePhase) -> tuple[PromptSection, ...]:
     """そのフェーズで出す節を、出す順に返す。
 
     知らないフェーズは例外にする。**自由時間へ縮退させると、新しい

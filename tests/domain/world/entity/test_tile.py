@@ -2,6 +2,7 @@ from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 
+
 def test_tile_creation():
     coord = Coordinate(1, 2)
     terrain = TerrainType.road()

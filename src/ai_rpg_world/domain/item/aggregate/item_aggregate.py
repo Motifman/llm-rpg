@@ -1,22 +1,24 @@
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
-from ai_rpg_world.domain.item.value_object.durability import Durability
-from ai_rpg_world.domain.item.value_object.spoilage import (
-    STATE_KEY_ACQUIRED_AT_TICK,
-    STATE_KEY_SPOILED,
-    SpoilageAdvanceKind,
-    SpoilageAdvanceResult,
-)
 from ai_rpg_world.domain.item.event.item_event import (
     ItemBrokenEvent,
     ItemCraftedEvent,
     ItemRepairedEvent,
     ItemSpoiledEvent,
     ItemUsedEvent,
+)
+from ai_rpg_world.domain.item.value_object.durability import Durability
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+from ai_rpg_world.domain.item.value_object.spoilage import (
+    STATE_KEY_ACQUIRED_AT_TICK,
+    STATE_KEY_SPOILED,
+    SpoilageAdvanceKind,
+    SpoilageAdvanceResult,
 )
 
 
@@ -39,9 +41,9 @@ class ItemAggregate(AggregateRoot):
         cls,
         item_instance_id: ItemInstanceId,
         item_spec: ItemSpec,
-        durability: Optional[Durability] = None,
+        durability: Durability | None = None,
         quantity: int = 1,
-        state: Optional[Mapping[str, Any]] = None,
+        state: Mapping[str, Any] | None = None,
     ) -> "ItemAggregate":
         """新しいアイテム集約を作成"""
         # ビジネスルール: durability_maxがない場合にdurabilityを指定することはできない
@@ -111,7 +113,7 @@ class ItemAggregate(AggregateRoot):
         return self._item_instance.item_spec
 
     @property
-    def durability(self) -> Optional[Durability]:
+    def durability(self) -> Durability | None:
         """耐久度"""
         return self._item_instance.durability
 
@@ -249,7 +251,7 @@ class ItemAggregate(AggregateRoot):
             )
             self.add_event(event)
 
-    def get_item_info(self) -> dict:
+    def get_item_info(self) -> dict[str, Any]:
         """アイテム情報を取得（DTO変換用）
 
         Returns:

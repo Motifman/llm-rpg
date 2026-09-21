@@ -11,7 +11,7 @@ snapshot に載せるのはそのため。ここが保存・復元されない�
 from __future__ import annotations
 
 import threading
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.trade.aggregate.market_board import MarketBoard, MarketTrade
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
@@ -22,14 +22,14 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 class InMemoryMarketBoardStore:
     """掲示板 1 つと、その置き場所を保持する。"""
 
-    def __init__(self, *, board_spot_id: Optional[SpotId] = None) -> None:
+    def __init__(self, *, board_spot_id: SpotId | None = None) -> None:
         self._board = MarketBoard.empty()
         self._board_spot_id = board_spot_id
         self._next_id = 1
         self._lock = threading.RLock()
 
     @property
-    def board_spot_id(self) -> Optional[SpotId]:
+    def board_spot_id(self) -> SpotId | None:
         """板の置いてある場所。宣言の無い世界では None (板が無い)。"""
         return self._board_spot_id
 

@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
-from typing import Dict, List, Set, Optional, TYPE_CHECKING
 from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
@@ -50,10 +50,10 @@ class PlayerLocationDto:
     x: int
     y: int
     z: int
-    area_ids: List[int] = field(default_factory=list)
-    area_names: List[str] = field(default_factory=list)
-    area_id: Optional[int] = None
-    area_name: Optional[str] = None
+    area_ids: list[int] = field(default_factory=list)
+    area_names: list[str] = field(default_factory=list)
+    area_id: int | None = None
+    area_name: str | None = None
 
 
 @dataclass
@@ -62,14 +62,14 @@ class SpotInfoDto:
     spot_id: int
     name: str
     description: str
-    area_id: Optional[int]
-    area_name: Optional[str]
+    area_id: int | None
+    area_name: str | None
     current_player_count: int
-    current_player_ids: Set[int]
-    connected_spot_ids: Set[int]
-    connected_spot_names: Set[str]
-    area_ids: List[int] = field(default_factory=list)
-    area_names: List[str] = field(default_factory=list)
+    current_player_ids: set[int]
+    connected_spot_ids: set[int]
+    connected_spot_names: set[str]
+    area_ids: list[int] = field(default_factory=list)
+    area_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -81,20 +81,20 @@ class VisibleObjectDto:
     y: int
     z: int
     distance: int
-    display_name: Optional[str] = None
-    object_kind: Optional[str] = None
-    direction_from_player: Optional[str] = None
+    display_name: str | None = None
+    object_kind: str | None = None
+    direction_from_player: str | None = None
     is_interactable: bool = False
-    player_id_value: Optional[int] = None
+    player_id_value: int | None = None
     is_self: bool = False
-    interaction_type: Optional[str] = None
-    available_interactions: List[str] = field(default_factory=list)
+    interaction_type: str | None = None
+    available_interactions: list[str] = field(default_factory=list)
     can_interact: bool = False
     can_harvest: bool = False
     can_store_in_chest: bool = False
     can_take_from_chest: bool = False
     is_notable: bool = False
-    notable_reason: Optional[str] = None
+    notable_reason: str | None = None
 
 
 @dataclass
@@ -104,8 +104,8 @@ class VisibleTileMapDto:
     center_x: int
     center_y: int
     view_distance: int
-    rows: List[str]
-    legend: Dict[str, str]
+    rows: list[str]
+    legend: dict[str, str]
 
 
 @dataclass
@@ -119,7 +119,7 @@ class VisibleContextDto:
     center_y: int
     center_z: int
     view_distance: int
-    visible_objects: List["VisibleObjectDto"]
+    visible_objects: list["VisibleObjectDto"]
 
 
 @dataclass
@@ -137,7 +137,7 @@ class MoveResultDto:
     moved_at: datetime
     busy_until_tick: int
     message: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -146,8 +146,8 @@ class PursuitCommandResultDto:
 
     success: bool
     message: str
-    target_world_object_id: Optional[int] = None
-    target_display_name: Optional[str] = None
+    target_world_object_id: int | None = None
+    target_display_name: str | None = None
     no_op: bool = False
 
 
@@ -159,7 +159,7 @@ class AvailableMoveDto:
     road_id: int
     road_description: str
     conditions_met: bool
-    failed_conditions: List[str]
+    failed_conditions: list[str]
 
 
 @dataclass
@@ -176,7 +176,7 @@ class PlayerMovementOptionsDto:
     player_name: str
     current_spot_id: int
     current_spot_name: str
-    available_moves: List[AvailableMoveDto]
+    available_moves: list[AvailableMoveDto]
     total_available_moves: int
 
 
@@ -207,7 +207,7 @@ class ConversationChoiceDto:
     """会話の選択肢または次へ操作の DTO"""
 
     display_text: str
-    choice_index: Optional[int] = None
+    choice_index: int | None = None
     is_next: bool = False
 
 
@@ -218,9 +218,9 @@ class ActiveConversationDto:
     npc_world_object_id: int
     npc_display_name: str
     node_text: str
-    choices: List[ConversationChoiceDto]
+    choices: list[ConversationChoiceDto]
     is_terminal: bool
-    dialogue_tree_id_value: Optional[int] = None
+    dialogue_tree_id_value: int | None = None
 
 
 @dataclass
@@ -263,8 +263,8 @@ class SkillEquipSlotDto:
     deck_tier: DeckTier
     slot_index: int
     display_name: str
-    equipped_skill_id: Optional[int] = None
-    equipped_skill_name: Optional[str] = None
+    equipped_skill_id: int | None = None
+    equipped_skill_name: str | None = None
 
 
 @dataclass
@@ -277,7 +277,7 @@ class PendingSkillProposalDto:
     display_name: str
     proposal_type: SkillProposalType
     deck_tier: DeckTier
-    target_slot_index: Optional[int] = None
+    target_slot_index: int | None = None
     reason: str = ""
 
 
@@ -324,8 +324,8 @@ class GuildMembershipSummaryDto:
     guild_id: int
     guild_name: str
     role: str
-    description: Optional[str] = None
-    members: Optional[List["GuildMemberSummaryDto"]] = None
+    description: str | None = None
+    members: list["GuildMemberSummaryDto"] | None = None
 
 
 @dataclass
@@ -344,8 +344,8 @@ class NearbyShopSummaryDto:
     shop_id: int
     shop_name: str
     listing_count: int
-    listings: List[ShopListingSummaryDto] = field(default_factory=list)
-    description: Optional[str] = None
+    listings: list[ShopListingSummaryDto] = field(default_factory=list)
+    description: str | None = None
 
 
 @dataclass
@@ -363,61 +363,61 @@ class PlayerWorldStateDto:
 
     player_id: int
     player_name: str
-    current_spot_id: Optional[int]
-    current_spot_name: Optional[str]
-    current_spot_description: Optional[str]
-    x: Optional[int]
-    y: Optional[int]
-    z: Optional[int]
+    current_spot_id: int | None
+    current_spot_name: str | None
+    current_spot_description: str | None
+    x: int | None
+    y: int | None
+    z: int | None
     current_player_count: int
-    current_player_ids: Set[int]
-    connected_spot_ids: Set[int]
-    connected_spot_names: Set[str]
+    current_player_ids: set[int]
+    connected_spot_ids: set[int]
+    connected_spot_names: set[str]
     weather_type: str
     weather_intensity: float
-    current_terrain_type: Optional[str]
-    visible_objects: List[VisibleObjectDto]
+    current_terrain_type: str | None
+    visible_objects: list[VisibleObjectDto]
     view_distance: int
-    available_moves: Optional[List[AvailableMoveDto]]
-    total_available_moves: Optional[int]
+    available_moves: list[AvailableMoveDto] | None
+    total_available_moves: int | None
     attention_level: AttentionLevel
-    area_ids: List[int] = field(default_factory=list)
-    area_names: List[str] = field(default_factory=list)
-    area_id: Optional[int] = None
-    area_name: Optional[str] = None
-    available_location_areas: Optional[List[AvailableLocationAreaDto]] = None
-    current_location_description: Optional[str] = None
+    area_ids: list[int] = field(default_factory=list)
+    area_names: list[str] = field(default_factory=list)
+    area_id: int | None = None
+    area_name: str | None = None
+    available_location_areas: list[AvailableLocationAreaDto] | None = None
+    current_location_description: str | None = None
     is_busy: bool = False
-    busy_until_tick: Optional[int] = None
+    busy_until_tick: int | None = None
     has_active_path: bool = False
     visible_tile_map: Optional["VisibleTileMapDto"] = None
-    current_game_time_label: Optional[str] = None
+    current_game_time_label: str | None = None
 
 
 @dataclass(frozen=True)
 class PlayerRuntimeContextDto:
     """プレイヤーの LLM/runtime 向け補助コンテキスト。"""
 
-    inventory_items: List[InventoryItemDto] = field(default_factory=list)
-    chest_items: List[ChestItemDto] = field(default_factory=list)
-    active_conversation: Optional[ActiveConversationDto] = None
-    active_harvest: Optional[ActiveHarvestDto] = None
-    usable_skills: List[UsableSkillDto] = field(default_factory=list)
-    equipable_skill_candidates: List[EquipableSkillCandidateDto] = field(default_factory=list)
-    skill_equip_slots: List[SkillEquipSlotDto] = field(default_factory=list)
-    pending_skill_proposals: List[PendingSkillProposalDto] = field(default_factory=list)
-    awakened_action: Optional[AwakenedActionDto] = None
-    attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
+    inventory_items: list[InventoryItemDto] = field(default_factory=list)
+    chest_items: list[ChestItemDto] = field(default_factory=list)
+    active_conversation: ActiveConversationDto | None = None
+    active_harvest: ActiveHarvestDto | None = None
+    usable_skills: list[UsableSkillDto] = field(default_factory=list)
+    equipable_skill_candidates: list[EquipableSkillCandidateDto] = field(default_factory=list)
+    skill_equip_slots: list[SkillEquipSlotDto] = field(default_factory=list)
+    pending_skill_proposals: list[PendingSkillProposalDto] = field(default_factory=list)
+    awakened_action: AwakenedActionDto | None = None
+    attention_level_options: list[AttentionLevelOptionDto] = field(default_factory=list)
     can_destroy_placeable: bool = False
-    actionable_objects: List[VisibleObjectDto] = field(default_factory=list)
-    notable_objects: List[VisibleObjectDto] = field(default_factory=list)
-    active_quest_ids: List[int] = field(default_factory=list)
-    guild_ids: List[int] = field(default_factory=list)
-    nearby_shop_ids: List[int] = field(default_factory=list)
-    active_quests: List["ActiveQuestSummaryDto"] = field(default_factory=list)
-    guild_memberships: List["GuildMembershipSummaryDto"] = field(default_factory=list)
-    nearby_shops: List["NearbyShopSummaryDto"] = field(default_factory=list)
-    available_trades: List["AvailableTradeSummaryDto"] = field(default_factory=list)
+    actionable_objects: list[VisibleObjectDto] = field(default_factory=list)
+    notable_objects: list[VisibleObjectDto] = field(default_factory=list)
+    active_quest_ids: list[int] = field(default_factory=list)
+    guild_ids: list[int] = field(default_factory=list)
+    nearby_shop_ids: list[int] = field(default_factory=list)
+    active_quests: list["ActiveQuestSummaryDto"] = field(default_factory=list)
+    guild_memberships: list["GuildMembershipSummaryDto"] = field(default_factory=list)
+    nearby_shops: list["NearbyShopSummaryDto"] = field(default_factory=list)
+    available_trades: list["AvailableTradeSummaryDto"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -427,15 +427,15 @@ class PlayerAppSessionStateDto:
     active_game_app: str = "none"
     is_sns_mode_active: bool = False
     is_trade_mode_active: bool = False
-    sns_virtual_page_kind: Optional[str] = None
-    sns_home_tab: Optional[str] = None
+    sns_virtual_page_kind: str | None = None
+    sns_home_tab: str | None = None
     sns_page_snapshot_generation: int = 0
-    sns_current_page_snapshot_json: Optional[str] = None
-    sns_profile_is_self: Optional[bool] = None
-    trade_virtual_page_kind: Optional[str] = None
-    trade_my_trades_tab: Optional[str] = None
+    sns_current_page_snapshot_json: str | None = None
+    sns_profile_is_self: bool | None = None
+    trade_virtual_page_kind: str | None = None
+    trade_my_trades_tab: str | None = None
     trade_page_snapshot_generation: int = 0
-    trade_current_page_snapshot_json: Optional[str] = None
+    trade_current_page_snapshot_json: str | None = None
 
     def __post_init__(self) -> None:
         active_game_app, is_sns_mode_active, is_trade_mode_active = (
@@ -460,74 +460,74 @@ class PlayerCurrentStateDto:
     player_id: int
     player_name: str
     # 現在地
-    current_spot_id: Optional[int]
-    current_spot_name: Optional[str]
-    current_spot_description: Optional[str]
-    x: Optional[int]
-    y: Optional[int]
-    z: Optional[int]
+    current_spot_id: int | None
+    current_spot_name: str | None
+    current_spot_description: str | None
+    x: int | None
+    y: int | None
+    z: int | None
     # スポット周辺（同スポット他プレイヤー・接続先）
     current_player_count: int
-    current_player_ids: Set[int]
-    connected_spot_ids: Set[int]
-    connected_spot_names: Set[str]
+    current_player_ids: set[int]
+    connected_spot_ids: set[int]
+    connected_spot_names: set[str]
     # 天気（現在スポット）
     weather_type: str
     weather_intensity: float
     # 現在タイルの地形
-    current_terrain_type: Optional[str]
+    current_terrain_type: str | None
     # 視界内オブジェクト
-    visible_objects: List[VisibleObjectDto]
+    visible_objects: list[VisibleObjectDto]
     view_distance: int
     # 利用可能な移動先（オプション）
-    available_moves: Optional[List[AvailableMoveDto]]
-    total_available_moves: Optional[int]
+    available_moves: list[AvailableMoveDto] | None
+    total_available_moves: int | None
     # 注意レベル
     attention_level: AttentionLevel
     # プレイヤー座標が属する全ロケーション（重なり対応。一次データ）
-    area_ids: List[int] = field(default_factory=list)
-    area_names: List[str] = field(default_factory=list)
+    area_ids: list[int] = field(default_factory=list)
+    area_names: list[str] = field(default_factory=list)
     # 後方互換: area_ids[0], area_names[0] の導出値。area_ids が空でないとき使用。
-    area_id: Optional[int] = None
-    area_name: Optional[str] = None
+    area_id: int | None = None
+    area_name: str | None = None
     # 同一スポット内のロケーションエリア（オプション）
-    available_location_areas: Optional[List[AvailableLocationAreaDto]] = None
+    available_location_areas: list[AvailableLocationAreaDto] | None = None
     # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
-    current_location_description: Optional[str] = None
+    current_location_description: str | None = None
     is_busy: bool = False
-    busy_until_tick: Optional[int] = None
+    busy_until_tick: int | None = None
     has_active_path: bool = False
     # sibling-list UI context
-    inventory_items: List[InventoryItemDto] = field(default_factory=list)
-    chest_items: List[ChestItemDto] = field(default_factory=list)
-    active_conversation: Optional[ActiveConversationDto] = None
-    active_harvest: Optional[ActiveHarvestDto] = None
-    usable_skills: List[UsableSkillDto] = field(default_factory=list)
-    equipable_skill_candidates: List[EquipableSkillCandidateDto] = field(default_factory=list)
-    skill_equip_slots: List[SkillEquipSlotDto] = field(default_factory=list)
-    pending_skill_proposals: List[PendingSkillProposalDto] = field(default_factory=list)
-    awakened_action: Optional[AwakenedActionDto] = None
-    attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
+    inventory_items: list[InventoryItemDto] = field(default_factory=list)
+    chest_items: list[ChestItemDto] = field(default_factory=list)
+    active_conversation: ActiveConversationDto | None = None
+    active_harvest: ActiveHarvestDto | None = None
+    usable_skills: list[UsableSkillDto] = field(default_factory=list)
+    equipable_skill_candidates: list[EquipableSkillCandidateDto] = field(default_factory=list)
+    skill_equip_slots: list[SkillEquipSlotDto] = field(default_factory=list)
+    pending_skill_proposals: list[PendingSkillProposalDto] = field(default_factory=list)
+    awakened_action: AwakenedActionDto | None = None
+    attention_level_options: list[AttentionLevelOptionDto] = field(default_factory=list)
     can_destroy_placeable: bool = False
-    actionable_objects: List[VisibleObjectDto] = field(default_factory=list)
-    notable_objects: List[VisibleObjectDto] = field(default_factory=list)
+    actionable_objects: list[VisibleObjectDto] = field(default_factory=list)
+    notable_objects: list[VisibleObjectDto] = field(default_factory=list)
     # LLM 関係性メモリ検索用（scope_keys 生成）
-    active_quest_ids: List[int] = field(default_factory=list)
-    guild_ids: List[int] = field(default_factory=list)
-    nearby_shop_ids: List[int] = field(default_factory=list)
+    active_quest_ids: list[int] = field(default_factory=list)
+    guild_ids: list[int] = field(default_factory=list)
+    nearby_shop_ids: list[int] = field(default_factory=list)
     # Rich current context（サマリ DTO、LLM が読める形）
-    active_quests: List["ActiveQuestSummaryDto"] = field(default_factory=list)
-    guild_memberships: List["GuildMembershipSummaryDto"] = field(default_factory=list)
-    nearby_shops: List["NearbyShopSummaryDto"] = field(default_factory=list)
-    available_trades: List["AvailableTradeSummaryDto"] = field(default_factory=list)
+    active_quests: list["ActiveQuestSummaryDto"] = field(default_factory=list)
+    guild_memberships: list["GuildMembershipSummaryDto"] = field(default_factory=list)
+    nearby_shops: list["NearbyShopSummaryDto"] = field(default_factory=list)
+    available_trades: list["AvailableTradeSummaryDto"] = field(default_factory=list)
     # 視界タイルマップ（オプション、LLM 用）
     visible_tile_map: Optional["VisibleTileMapDto"] = None
     # ゲーム内現在時刻（game_time_provider と world_time_config が設定されているときのみ）
-    current_game_time_label: Optional[str] = None
+    current_game_time_label: str | None = None
     # シナリオに TICK_LIMIT 系の lose_condition があるときの「残り tick 数」。
     # WIN 条件を漏らさないメタ情報として、LLM に「時間切れまでの猶予」だけ伝える。
     # シナリオに時間制限が無い場合は None。
-    tick_budget_remaining: Optional[int] = None
+    tick_budget_remaining: int | None = None
     # 会議中だけ入る 1 行。自由時間と、会議機構を宣言していない
     # シナリオでは None (= 行ごと出ない)。
     #: いまのフェーズ。プロンプトの節をどの並びで出すかがこれで決まる。
@@ -535,9 +535,9 @@ class PlayerCurrentStateDto:
     #: **未設定を会議中と誤らない**よう Optional にして、読む側が自由時間へ
     #: 倒す。載せるのは runtime の責務。
     game_phase: Optional["GamePhase"] = None
-    meeting_status_line: Optional[str] = None
+    meeting_status_line: str | None = None
     # 作業 (FLAGS_SET_AT_LEAST) の進み具合。宣言の無いシナリオでは None。
-    task_progress_line: Optional[str] = None
+    task_progress_line: str | None = None
     # ゲーム内 SNS アプリを開いている（認証ではない UI メタファ）。ツール一覧の SNS/Trade 露出に利用。
     # active_game_app が真実。後方互換のため __post_init__ で整える。
     is_sns_mode_active: bool = False
@@ -545,17 +545,17 @@ class PlayerCurrentStateDto:
     active_game_app: str = "none"
     is_trade_mode_active: bool = False
     # 仮想 SNS 画面（SnsPageSessionService が配線され、かつ SNS モード ON のときのみ有効）
-    sns_virtual_page_kind: Optional[str] = None
-    sns_home_tab: Optional[str] = None
+    sns_virtual_page_kind: str | None = None
+    sns_home_tab: str | None = None
     sns_page_snapshot_generation: int = 0
-    sns_current_page_snapshot_json: Optional[str] = None
+    sns_current_page_snapshot_json: str | None = None
     # profile 画面で閲覧中のユーザーが自分自身か（ツール出し分け用）
-    sns_profile_is_self: Optional[bool] = None
+    sns_profile_is_self: bool | None = None
     # 仮想取引所画面（TradePageSessionService が配線され、かつ取引所モード ON のときのみ有効）
-    trade_virtual_page_kind: Optional[str] = None
-    trade_my_trades_tab: Optional[str] = None
+    trade_virtual_page_kind: str | None = None
+    trade_my_trades_tab: str | None = None
     trade_page_snapshot_generation: int = 0
-    trade_current_page_snapshot_json: Optional[str] = None
+    trade_current_page_snapshot_json: str | None = None
     spot_graph_snapshot: Optional["SpotGraphPlayerSnapshotDto"] = None
 
     def __post_init__(self) -> None:

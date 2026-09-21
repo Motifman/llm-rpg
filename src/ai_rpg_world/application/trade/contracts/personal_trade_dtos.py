@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass(frozen=True)
@@ -12,9 +11,9 @@ class PersonalTradeListingDto:
     item_quantity: int
     item_type: str
     item_rarity: str
-    item_equipment_type: Optional[str]
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    item_equipment_type: str | None
+    durability_current: int | None
+    durability_max: int | None
     requested_gold: int
     seller_name: str
     created_at: str
@@ -23,5 +22,5 @@ class PersonalTradeListingDto:
 @dataclass(frozen=True)
 class PersonalTradeListDto:
     """個別取引出品一覧DTO"""
-    listings: List[PersonalTradeListingDto]
-    next_cursor: Optional[str]
+    listings: list[PersonalTradeListingDto]
+    next_cursor: str | None

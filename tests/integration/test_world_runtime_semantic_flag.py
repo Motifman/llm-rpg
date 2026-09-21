@@ -10,23 +10,21 @@ LLM は呼ばない (gist OFF = 決定論 / passive recall は store を読む�
 
 from __future__ import annotations
 
-# 循環 import 回避の warm-up。
-from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
-    DefaultActionResultStore,
-)
-
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+# 循環 import 回避の warm-up。
+from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
+    DefaultActionResultStore,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config, runtime_config
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -177,10 +175,11 @@ class TestWorldRuntimeReinterpretationSnapshotSurface:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """reinterpretation ON の runtime から stub が journal を expose する。"""
+        from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
+
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
-        from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
         cfg = episodic_config(episodic_reinterpretation_enabled=True)
         runtime = create_world_runtime(_SCENARIO_PATH, config=cfg)
@@ -198,10 +197,11 @@ class TestWorldRuntimeReinterpretationSnapshotSurface:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """reinterpretation OFF では stub の journal は None (従来どおり)。"""
+        from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
+
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
-        from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
         cfg = episodic_config()
         runtime = create_world_runtime(_SCENARIO_PATH, config=cfg)

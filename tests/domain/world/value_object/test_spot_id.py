@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
 from ai_rpg_world.domain.world.exception.map_exception import SpotIdValidationException
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class TestSpotId:

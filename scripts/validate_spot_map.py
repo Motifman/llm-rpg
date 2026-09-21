@@ -7,7 +7,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -22,7 +21,7 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (  # noqa: E
 )
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", type=Path, help="検査対象の scenario JSON")
     parser.add_argument("--strict", action="store_true", help="構造警告の一部を error に昇格する")

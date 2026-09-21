@@ -5,16 +5,16 @@ import pytest
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+    ConversationStartedEvent,
+)
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerLevelUpEvent,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationStartedEvent,
-    ConversationEndedEvent,
-)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.map_events import LocationEnteredEvent
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId

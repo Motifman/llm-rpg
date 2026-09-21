@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import json
 import re
+from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
-    SpotGraphToolExecutor,
-)
 from ai_rpg_world.application.llm.services.executors.interact_helpers import (
     list_object_interactions,
+)
+from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+    SpotGraphToolExecutor,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
@@ -22,19 +22,18 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
-    GameEndConditionEvaluator,
-)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
+    GameEndConditionEvaluator,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -75,6 +74,18 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
+def _interact(runtime, executor, player_id: PlayerId, object_str_id: str, action_name: str):
+    """本番と同じ入口。弁は interact から「自分の側を受け持つ」登録になる。"""
+    return executor._interact(
+        player_id.value,
+        {
+            "object_id": runtime.id_mapper.get_int("object", object_str_id),
+            "action_name": action_name,
+            "inner_thought": "弁を受け持つ",
+        },
+    )
+
+
 def _executor(runtime) -> SpotGraphToolExecutor:
     services = SpotGraphWorldServices(
         interaction=runtime._interaction_service,
@@ -110,8 +121,8 @@ def _restore_fuel(runtime) -> None:
     _move(runtime, _MORI, "fuel_bay")
     _move(runtime, _SENA, "machine_room")
     executor = _executor(runtime)
-    executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
-    executor._prepare_action(_SENA.value, {"action_name": "open_oil_feed_valve"})
+    _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
+    _interact(runtime, executor, _SENA, "oil_feed_valve", "open_oil_feed_valve")
     runtime.advance_tick()
 
 
@@ -362,8 +373,8 @@ def test_restoration_is_announced_once_to_people_who_did_not_open_a_valve(
     _move(runtime, _MORI, "fuel_bay")
     _move(runtime, _SENA, "machine_room")
     executor = _executor(runtime)
-    executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
-    executor._prepare_action(_SENA.value, {"action_name": "open_oil_feed_valve"})
+    _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
+    _interact(runtime, executor, _SENA, "oil_feed_valve", "open_oil_feed_valve")
 
     runtime.advance_tick()
     runtime.advance_tick()

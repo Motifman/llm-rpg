@@ -1,38 +1,13 @@
 import logging
-from typing import Callable, Any, List, Tuple, Optional
+from collections.abc import Callable
 from datetime import datetime
-
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
-from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
-from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
-from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
-from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
-from ai_rpg_world.domain.player.repository.player_inventory_repository import (
-    PlayerInventoryRepository,
-)
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
-from ai_rpg_world.domain.world.repository.physical_map_repository import (
-    PhysicalMapRepository,
-)
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.quest.contracts.commands import (
-    IssueQuestCommand,
     AcceptQuestCommand,
     ApproveQuestCommand,
     CancelQuestCommand,
+    IssueQuestCommand,
 )
 from ai_rpg_world.application.quest.contracts.dtos import QuestCommandResultDto
 from ai_rpg_world.application.quest.exceptions.base_exception import (
@@ -40,11 +15,38 @@ from ai_rpg_world.application.quest.exceptions.base_exception import (
     QuestSystemErrorException,
 )
 from ai_rpg_world.application.quest.exceptions.command.quest_command_exception import (
+    QuestAccessDeniedException,
     QuestCommandException,
     QuestCreationException,
     QuestNotFoundForCommandException,
-    QuestAccessDeniedException,
 )
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
+from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
+from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
+from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
+from ai_rpg_world.domain.world.repository.physical_map_repository import (
+    PhysicalMapRepository,
+)
+
+_Result = TypeVar("_Result")
 
 
 def _parse_objective_type(s: str) -> QuestObjectiveType:
@@ -60,12 +62,12 @@ def _find_slots_for_reward_item(
     item_repository: ItemRepository,
     item_spec_id: ItemSpecId,
     quantity_needed: int,
-) -> List[Tuple[SlotId, ItemInstanceId]]:
+) -> list[tuple[SlotId, ItemInstanceId]]:
     """
     発行者インベントリから指定 item_spec_id のアイテムが quantity_needed 以上あるスロットを
     見つけ、予約用に (SlotId, ItemInstanceId) のリストを返す。スロットは先頭から使用する。
     """
-    candidates: List[Tuple[SlotId, ItemInstanceId, int]] = []
+    candidates: list[tuple[SlotId, ItemInstanceId, int]] = []
     for i in range(inventory.max_slots):
         slot_id = SlotId(i)
         instance_id = inventory.get_item_instance_id_by_slot(slot_id)
@@ -81,7 +83,7 @@ def _find_slots_for_reward_item(
         candidates.append((slot_id, instance_id, item_aggregate.quantity))
     # スロット番号順で確定性を保つ
     candidates.sort(key=lambda x: x[0].value)
-    result: List[Tuple[SlotId, ItemInstanceId]] = []
+    result: list[tuple[SlotId, ItemInstanceId]] = []
     total = 0
     for slot_id, instance_id, qty in candidates:
         if total >= quantity_needed:
@@ -100,11 +102,11 @@ class QuestCommandService:
         self,
         quest_repository: QuestRepository,
         unit_of_work: UnitOfWork,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        player_inventory_repository: Optional[PlayerInventoryRepository] = None,
-        item_repository: Optional[ItemRepository] = None,
-        guild_repository: Optional[GuildRepository] = None,
-        physical_map_repository: Optional[PhysicalMapRepository] = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        player_inventory_repository: PlayerInventoryRepository | None = None,
+        item_repository: ItemRepository | None = None,
+        guild_repository: GuildRepository | None = None,
+        physical_map_repository: PhysicalMapRepository | None = None,
     ):
         self._quest_repository = quest_repository
         self._unit_of_work = unit_of_work
@@ -116,8 +118,8 @@ class QuestCommandService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self, operation: Callable[[], Any], context: dict
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except QuestApplicationException:
@@ -136,7 +138,7 @@ class QuestCommandService:
                 extra=context,
             )
             raise QuestSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 
@@ -224,9 +226,9 @@ class QuestCommandService:
                 scope = QuestScope.guild_scope(command.guild_id)
             else:
                 scope = QuestScope.public_scope()
-            issuer_player_id: Optional[PlayerId] = None
+            issuer_player_id: PlayerId | None = None
             reserved_gold = 0
-            reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = ()
+            reserved_item_instance_ids: tuple[ItemInstanceId, ...] = ()
 
             if command.issuer_player_id is not None:
                 issuer_player_id = PlayerId(command.issuer_player_id)
@@ -264,7 +266,7 @@ class QuestCommandService:
                             f"報酬に必要なゴールドが不足しています。必要: {command.reward_gold}, 所持: {issuer_status.gold.value}",
                             user_id=command.issuer_player_id,
                         )
-                reserved_ids: List[ItemInstanceId] = []
+                reserved_ids: list[ItemInstanceId] = []
                 if command.reward_items:
                     for item_spec_id, qty in item_rewards:
                         slots_to_reserve = _find_slots_for_reward_item(

@@ -1,4 +1,4 @@
-from typing import Optional
+
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -19,7 +19,7 @@ class SkillTargetingDomainService:
         physical_map: PhysicalMapAggregate,
         actor_id: WorldObjectId,
         vision_range: int = DEFAULT_AUTO_AIM_RANGE
-    ) -> Optional[DirectionEnum]:
+    ) -> DirectionEnum | None:
         """
         指定されたアクターから付近の敵を探し、最適な向きを計算する。
         """

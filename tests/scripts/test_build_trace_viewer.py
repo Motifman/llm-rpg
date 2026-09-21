@@ -17,6 +17,7 @@ from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts._viewer_vendor import VendorAsset  # noqa: E402
 from scripts.build_trace_viewer import (  # noqa: E402
     _format_event_body,
     build_memo_state_timeline,
@@ -29,7 +30,6 @@ from scripts.build_trace_viewer import (  # noqa: E402
     load_scenario_topology,
     render_viewer_html,
 )
-from scripts._viewer_vendor import VendorAsset  # noqa: E402
 
 
 def _fake_asset() -> VendorAsset:
@@ -861,7 +861,7 @@ class TestMainCli:
 
     def test_run_dir_viewer_html(self, tmp_path: Path) -> None:
         """trace.jsonl + scenario.json から viewer.html を出力。"""
-        from scripts import build_trace_viewer  # noqa: WPS433
+        from scripts import build_trace_viewer
 
         # 入力作成
         with JsonlTraceRecorder(tmp_path / "trace.jsonl") as rec:
@@ -902,7 +902,7 @@ class TestMainCli:
 
     def test_trace_jsonl_error(self, tmp_path: Path) -> None:
         """trace.jsonl 未配置なら argparse のエラーで終わる (SystemExit)。"""
-        from scripts import build_trace_viewer  # noqa: WPS433
+        from scripts import build_trace_viewer
 
         try:
             build_trace_viewer.main([str(tmp_path)])

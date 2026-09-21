@@ -29,7 +29,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Mapping, Optional, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from ai_rpg_world.application.intent.intent_id_generator import (
     IntentIdGenerator,
@@ -60,7 +61,7 @@ class IntentResolutionService:
         intent_queue: IntentQueue,
         intent_id_generator: IntentIdGenerator,
         tick_provider: Callable[[], WorldTick],
-        failure_observer: Optional[ResolutionObserver] = None,
+        failure_observer: ResolutionObserver | None = None,
     ) -> None:
         if not isinstance(handler_map, Mapping):
             raise TypeError("handler_map must be Mapping")

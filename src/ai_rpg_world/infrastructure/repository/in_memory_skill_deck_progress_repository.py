@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import (
     SkillDeckProgressAggregate,
@@ -27,29 +25,29 @@ class InMemorySkillDeckProgressRepository(
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ) -> None:
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _progresses(self) -> Dict[SkillDeckProgressId, SkillDeckProgressAggregate]:
+    def _progresses(self) -> dict[SkillDeckProgressId, SkillDeckProgressAggregate]:
         return self._data_store.skill_deck_progresses
 
     def find_by_id(
         self, entity_id: SkillDeckProgressId
-    ) -> Optional[SkillDeckProgressAggregate]:
+    ) -> SkillDeckProgressAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._progresses.get(entity_id))
 
     def find_by_ids(
-        self, entity_ids: List[SkillDeckProgressId]
-    ) -> List[SkillDeckProgressAggregate]:
+        self, entity_ids: list[SkillDeckProgressId]
+    ) -> list[SkillDeckProgressAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[SkillDeckProgressAggregate]:
+    def find_all(self) -> list[SkillDeckProgressAggregate]:
         return [self._clone(progress) for progress in self._progresses.values()]
 
     def save(self, entity: SkillDeckProgressAggregate) -> SkillDeckProgressAggregate:

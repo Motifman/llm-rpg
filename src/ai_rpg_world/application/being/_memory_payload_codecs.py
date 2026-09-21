@@ -37,11 +37,11 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         RecallSlotEntry,
     )
-    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
-        BeliefEvidence,
-    )
     from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
         PendingPrediction,
+    )
+    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+        BeliefEvidence,
     )
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -74,6 +74,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
+from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
@@ -81,8 +82,6 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context impor
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
-
 
 # ---- datetime helpers ---------------------------------------------------------
 
@@ -608,7 +607,7 @@ def dict_to_episode_hit_count_pair(data: dict[str, Any]) -> tuple[str, int]:
 # ---- belief_evidence (U2: 証拠台帳統一設計) ------------------------------------
 
 
-def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
+def belief_evidence_to_dict(evidence: BeliefEvidence) -> dict[str, Any]:
     return {
         "evidence_id": evidence.evidence_id,
         "source_kind": evidence.source_kind.value,
@@ -625,7 +624,7 @@ def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
     }
 
 
-def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
+def dict_to_belief_evidence(data: dict[str, Any]) -> BeliefEvidence:
     """dict → BeliefEvidence。
 
     未知の source_kind は ``BeliefEvidenceSourceKind(...)`` が ValueError を
@@ -677,7 +676,7 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
 # ── U10a: PendingPrediction (予測誤差統一設計 部品6) の codec ──
 
 
-def pending_prediction_to_dict(pending: "PendingPrediction") -> dict[str, Any]:
+def pending_prediction_to_dict(pending: PendingPrediction) -> dict[str, Any]:
     return {
         "pending_id": pending.pending_id,
         "text": pending.text,
@@ -692,7 +691,7 @@ def pending_prediction_to_dict(pending: "PendingPrediction") -> dict[str, Any]:
     }
 
 
-def dict_to_pending_prediction(data: dict[str, Any]) -> "PendingPrediction":
+def dict_to_pending_prediction(data: dict[str, Any]) -> PendingPrediction:
     """dict → PendingPrediction。
 
     ``dict_to_belief_evidence`` と同じ理由で、VO の **ドメイン例外**

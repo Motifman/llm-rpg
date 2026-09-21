@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Protocol
+
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 
@@ -32,7 +33,7 @@ class PathfindingStrategy(ABC):
         max_iterations: int = 1000,
         allow_partial_path: bool = False,
         exclude_object_id: Optional["WorldObjectId"] = None
-    ) -> List[Coordinate]:
+    ) -> list[Coordinate]:
         """
         開始地点から目標地点までの経路を計算する。
         

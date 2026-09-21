@@ -16,10 +16,9 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, List, Tuple
+from typing import Any
 
 import pytest
-
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -35,13 +34,13 @@ class _Sink:
     """溢れを受け取ったことだけを覚えておく行き先。"""
 
     def __init__(self) -> None:
-        self.calls: List[Tuple[PlayerId, Tuple[ItemSpecId, ...]]] = []
+        self.calls: list[tuple[PlayerId, tuple[ItemSpecId, ...]]] = []
 
-    def __call__(self, player_id: PlayerId, spec_ids: Tuple[ItemSpecId, ...]) -> None:
+    def __call__(self, player_id: PlayerId, spec_ids: tuple[ItemSpecId, ...]) -> None:
         self.calls.append((player_id, tuple(spec_ids)))
 
     @property
-    def overflowed(self) -> Tuple[ItemSpecId, ...]:
+    def overflowed(self) -> tuple[ItemSpecId, ...]:
         return tuple(spec for _pid, specs in self.calls for spec in specs)
 
 

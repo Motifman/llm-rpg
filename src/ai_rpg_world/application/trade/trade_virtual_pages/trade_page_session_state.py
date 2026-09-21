@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
     MyTradesTab,
@@ -14,7 +13,7 @@ _DEFAULT_PAGE_LIMIT = 20
 _MAX_PAGE_LIMIT = 100
 
 
-def clamp_trade_page_limit(limit: Optional[int]) -> int:
+def clamp_trade_page_limit(limit: int | None) -> int:
     """limit 省略時は 20、最大 100 に収める。"""
     if limit is None:
         return _DEFAULT_PAGE_LIMIT
@@ -30,14 +29,14 @@ class TradePageSessionState:
     limit: int = _DEFAULT_PAGE_LIMIT
     offset: int = 0
     item_name: str = ""
-    min_price: Optional[int] = None
-    max_price: Optional[int] = None
-    item_types: List[str] = field(default_factory=list)
-    rarities: List[str] = field(default_factory=list)
-    equipment_types: List[str] = field(default_factory=list)
+    min_price: int | None = None
+    max_price: int | None = None
+    item_types: list[str] = field(default_factory=list)
+    rarities: list[str] = field(default_factory=list)
+    equipment_types: list[str] = field(default_factory=list)
     snapshot_generation: int = 0
     ref_seq: int = 0
-    ref_to_trade_id: Dict[str, int] = field(default_factory=dict)
+    ref_to_trade_id: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def default_market(cls) -> TradePageSessionState:

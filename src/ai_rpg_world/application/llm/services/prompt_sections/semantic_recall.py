@@ -1,10 +1,13 @@
 """semantic memory の受動想起 section 組み立て。"""
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
+from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
+    _gather_additional_freetexts_for_recall,
+)
 from ai_rpg_world.application.llm.services.recall_need_cues import recall_cues_for_needs
 from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
     format_semantic_recall_section,
@@ -13,10 +16,6 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
-    _gather_additional_freetexts_for_recall,
-)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
@@ -83,10 +82,10 @@ def run_semantic_passive_recall(
     *,
     player_id: PlayerId,
     being_id: BeingId,
-    observations: List[ObservationEntry],
-    action_results: List[Any],
+    observations: list[ObservationEntry],
+    action_results: list[Any],
     ui_context: Any,
-    current_state_dto: Optional[Any] = None,
+    current_state_dto: Any | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     """Phase 1c: semantic memory の状況連想 top-K を §「【関連する学び】」用に整形する。
 
@@ -102,7 +101,7 @@ def run_semantic_passive_recall(
         return "", ()
 
     observation_structured = None
-    observation_prose: Optional[str] = None
+    observation_prose: str | None = None
     if observations:
         observation_structured = observations[0].output.structured
         observation_prose = observations[0].output.prose
@@ -169,7 +168,7 @@ def emit_semantic_passive_recall_trace(
     recorder = builder._resolve_trace_recorder()
     if recorder is None:
         return
-    tick: Optional[int] = None
+    tick: int | None = None
     if builder._current_tick_provider is not None:
         try:
             tick = builder._current_tick_provider()

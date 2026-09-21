@@ -1,33 +1,34 @@
-from typing import List, Optional, Dict
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from .in_memory_repository_base import InMemoryRepositoryBase
+
 from .in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from .in_memory_repository_base import InMemoryRepositoryBase
 
 
 class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositoryBase):
     """プレイヤープロフィールリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
-    def _profiles(self) -> Dict[PlayerId, PlayerProfileAggregate]:
+    def _profiles(self) -> dict[PlayerId, PlayerProfileAggregate]:
         return self._data_store.player_profiles
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerProfileAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
             return self._clone(pending)
         return self._profiles.get(player_id)
     
-    def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerProfileAggregate]:
+    def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerProfileAggregate]:
         return [self._profiles[pid] for pid in player_ids if pid in self._profiles]
     
-    def find_by_name(self, name: PlayerName) -> Optional[PlayerProfileAggregate]:
+    def find_by_name(self, name: PlayerName) -> PlayerProfileAggregate | None:
         for profile in self._profiles.values():
             if profile.name == name:
                 return profile
@@ -55,7 +56,7 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
             
         return self._execute_operation(operation)
     
-    def find_all(self) -> List[PlayerProfileAggregate]:
+    def find_all(self) -> list[PlayerProfileAggregate]:
         return list(self._profiles.values())
 
     def generate_id(self) -> PlayerId:

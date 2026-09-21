@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Callable, Optional
 
 _logger = logging.getLogger(__name__)
 
@@ -26,15 +26,12 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
-from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
-from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
     _actor_from_observation_structured,
+)
+from ai_rpg_world.application.llm.services.episode_identity import (
+    EPISODE_ID_VERSION_SUFFIX,
+    build_episode_id,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     compute_template_interpreted,
@@ -52,11 +49,13 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
     IWorldNounMatcher,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-
-from ai_rpg_world.application.llm.services.episode_identity import (
-    EPISODE_ID_VERSION_SUFFIX,
-    build_episode_id,
-)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -149,7 +148,7 @@ def _secret_target_player_suppression(
 
 
 def _co_present_from_runtime_context(
-    runtime_context: Optional[ToolRuntimeContextDto],
+    runtime_context: ToolRuntimeContextDto | None,
     *,
     suppressed_player_ids: frozenset[int] = frozenset(),
     suppress_all_player_names: bool = False,
@@ -185,11 +184,11 @@ def _co_present_from_runtime_context(
 
 
 def _without_player_targets(
-    runtime_context: Optional[ToolRuntimeContextDto],
+    runtime_context: ToolRuntimeContextDto | None,
     *,
     suppressed_player_ids: frozenset[int] = frozenset(),
     suppress_all_player_targets: bool = False,
-) -> Optional[ToolRuntimeContextDto]:
+) -> ToolRuntimeContextDto | None:
     """runtime_context から秘匿 actor の人物 target だけを除いた派生 context を作る。"""
     if runtime_context is None:
         return None
@@ -314,8 +313,8 @@ def _canonical_args_fingerprint_text(action_results: tuple[ActionResultEntry, ..
 def _build_chunk_cues(
     inp: ChunkEncodingInput,
     *,
-    noun_matcher: Optional[IWorldNounMatcher] = None,
-    runtime_context: Optional[ToolRuntimeContextDto] = None,
+    noun_matcher: IWorldNounMatcher | None = None,
+    runtime_context: ToolRuntimeContextDto | None = None,
     suppressed_player_ids: frozenset[int] = frozenset(),
     suppress_all_player_targets: bool = False,
 ) -> tuple[EpisodicCue, ...]:
@@ -406,10 +405,8 @@ class ChunkEpisodeDraftBuilder:
     def __init__(
         self,
         *,
-        noun_matcher: Optional[IWorldNounMatcher] = None,
-        runtime_context_provider: Optional[
-            Callable[[PlayerId], Optional[ToolRuntimeContextDto]]
-        ] = None,
+        noun_matcher: IWorldNounMatcher | None = None,
+        runtime_context_provider: Callable[[PlayerId], ToolRuntimeContextDto | None] | None = None,
     ) -> None:
         """
         Args:
@@ -524,7 +521,7 @@ class ChunkEpisodeDraftBuilder:
 
     def _resolve_runtime_context(
         self, player_id: PlayerId
-    ) -> Optional[ToolRuntimeContextDto]:
+    ) -> ToolRuntimeContextDto | None:
         """provider が注入されていれば chunk write 時の runtime_context を
         取得する。例外 / None 返却ともに graceful に握りつぶす (#526 後続 C2)。
         """

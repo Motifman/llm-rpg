@@ -1,11 +1,10 @@
 from abc import abstractmethod
-from typing import List, Optional, Tuple
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
+from ai_rpg_world.domain.trade.repository.cursor import ListingCursor
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from ai_rpg_world.domain.trade.repository.cursor import ListingCursor
 
 
 class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadModel, TradeId]):
@@ -16,8 +15,8 @@ class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadM
         self,
         filter_condition: TradeSearchFilter,
         limit: int = 50,
-        cursor: Optional[ListingCursor] = None
-    ) -> Tuple[List[GlobalMarketListingReadModel], Optional[ListingCursor]]:
+        cursor: ListingCursor | None = None
+    ) -> tuple[list[GlobalMarketListingReadModel], ListingCursor | None]:
         """フィルタ条件で出品を取得（カーソルベースページング）
 
         Args:

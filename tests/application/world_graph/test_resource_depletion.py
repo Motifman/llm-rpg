@@ -35,7 +35,6 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-
 SPOT_ID = SpotId.create(1)
 OBJECT_ID = SpotObjectId.create(1)
 

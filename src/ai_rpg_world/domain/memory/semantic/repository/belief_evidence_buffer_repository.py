@@ -15,7 +15,7 @@ buffer から取り除くための drain 操作。U2 時点では「証拠が観
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Iterable
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (

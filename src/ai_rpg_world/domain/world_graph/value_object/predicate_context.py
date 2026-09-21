@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, FrozenSet, Mapping, Optional
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -21,7 +22,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 class WorldFlagPredicateContext:
     """世界フラグ判定に必要な集合。Noneは未配線、空集合は正当な世界状態。"""
 
-    world_flags: Optional[FrozenSet[str]]
+    world_flags: frozenset[str] | None
 
     def __post_init__(self) -> None:
         if self.world_flags is not None and (
@@ -40,7 +41,7 @@ class WorldFlagPredicateContext:
 class TickPredicateContext:
     """tick判定に必要な現在値。Noneは評価入力の未配線を表す。"""
 
-    current_tick: Optional[WorldTick]
+    current_tick: WorldTick | None
 
     def __post_init__(self) -> None:
         if self.current_tick is not None and not isinstance(
@@ -55,7 +56,7 @@ class TickPredicateContext:
 class EntityPlacementPredicateContext:
     """通常entityの配置snapshot。Noneは未配線、空mappingは正当な世界状態。"""
 
-    entity_locations: Optional[Mapping[EntityId, SpotId]]
+    entity_locations: Mapping[EntityId, SpotId] | None
 
     def __post_init__(self) -> None:
         locations = self.entity_locations
@@ -75,7 +76,7 @@ class EntityPlacementPredicateContext:
 class OwnedItemSpecsPredicateContext:
     """解決済み所持品種の集合。Noneは未配線、空集合は正当な未所持。"""
 
-    owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]]
+    owned_item_spec_ids: frozenset[ItemSpecId] | None
 
     def __post_init__(self) -> None:
         item_spec_ids = self.owned_item_spec_ids
@@ -92,7 +93,7 @@ class OwnedItemSpecsPredicateContext:
 class ItemSpecCountsPredicateContext:
     """解決済み品目別個数。Noneは未配線、空mappingは正当な未所持。"""
 
-    item_spec_counts: Optional[Mapping[ItemSpecId, int]]
+    item_spec_counts: Mapping[ItemSpecId, int] | None
 
     def __post_init__(self) -> None:
         counts = self.item_spec_counts
@@ -115,7 +116,7 @@ class ItemSpecCountsPredicateContext:
 class StateValuesPredicateContext:
     """評価対象stateのsnapshot。Noneは未配線、空mappingは正当な状態。"""
 
-    state_values: Optional[Mapping[str, Any]]
+    state_values: Mapping[str, Any] | None
 
     def __post_init__(self) -> None:
         values = self.state_values
@@ -138,7 +139,7 @@ class StateValuesPredicateContext:
 class WeatherTypePredicateContext:
     """天候判定の現在値。Noneは評価入力の未配線を表す。"""
 
-    current_weather_type: Optional[WeatherTypeEnum]
+    current_weather_type: WeatherTypeEnum | None
 
     def __post_init__(self) -> None:
         if self.current_weather_type is not None and not isinstance(

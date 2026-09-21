@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -18,16 +17,15 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 
-
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
     actor_player_id=None,
 )
-from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
-    InMemorySpotGraphScenarioEventProgressStore,
-)
 from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
     InMemorySpotExplorationProgressStore,
+)
+from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
+    InMemorySpotGraphScenarioEventProgressStore,
 )
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import (
     WorldFlagRegistry,

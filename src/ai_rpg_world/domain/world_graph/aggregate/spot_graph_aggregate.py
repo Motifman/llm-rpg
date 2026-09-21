@@ -1,29 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
 from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
     SoundIntensityEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
-    SpotPresenceListenedEvent,
-    SpotSoundHeardEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterLeftSpotEvent,
+    SpotPresenceListenedEvent,
+    SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
@@ -37,21 +40,18 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotPresenceInvariantException,
     UnknownConnectionException,
 )
-from ai_rpg_world.domain.world_graph.value_object.monster_spot_presence import (
-    MonsterSpotPresence,
-)
 from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import SpotGraphNavigationService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.monster_spot_presence import (
+    MonsterSpotPresence,
+)
 from ai_rpg_world.domain.world_graph.value_object.passage import (
     Passage,
     sound_permeability_to_hops,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_presence import SpotPresence
 
 
@@ -60,7 +60,7 @@ class SpotGraphConnectionRecord:
     """永続化・スナップショット向けの接続レコード。"""
 
     connection: SpotConnection
-    reverse_connection_id: Optional[ConnectionId] = None
+    reverse_connection_id: ConnectionId | None = None
 
     @property
     def is_bidirectional(self) -> bool:
@@ -73,27 +73,27 @@ class SpotGraphAggregate(AggregateRoot):
     def __init__(
         self,
         graph_id: SpotGraphId,
-        spots: Optional[Dict[SpotId, SpotNode]] = None,
-        connections_by_id: Optional[Dict[ConnectionId, SpotConnection]] = None,
-        outgoing: Optional[Dict[SpotId, List[ConnectionId]]] = None,
-        presences: Optional[Dict[SpotId, SpotPresence]] = None,
-        entity_spot: Optional[Dict[EntityId, SpotId]] = None,
-        reverse_connections: Optional[Dict[ConnectionId, ConnectionId]] = None,
-        monster_presences: Optional[Dict[SpotId, MonsterSpotPresence]] = None,
-        monster_spot: Optional[Dict[MonsterId, SpotId]] = None,
+        spots: dict[SpotId, SpotNode] | None = None,
+        connections_by_id: dict[ConnectionId, SpotConnection] | None = None,
+        outgoing: dict[SpotId, list[ConnectionId]] | None = None,
+        presences: dict[SpotId, SpotPresence] | None = None,
+        entity_spot: dict[EntityId, SpotId] | None = None,
+        reverse_connections: dict[ConnectionId, ConnectionId] | None = None,
+        monster_presences: dict[SpotId, MonsterSpotPresence] | None = None,
+        monster_spot: dict[MonsterId, SpotId] | None = None,
     ) -> None:
         super().__init__()
         self._graph_id = graph_id
-        self._spots: Dict[SpotId, SpotNode] = dict(spots or {})
-        self._connections_by_id: Dict[ConnectionId, SpotConnection] = dict(connections_by_id or {})
-        self._outgoing: Dict[SpotId, List[ConnectionId]] = {
+        self._spots: dict[SpotId, SpotNode] = dict(spots or {})
+        self._connections_by_id: dict[ConnectionId, SpotConnection] = dict(connections_by_id or {})
+        self._outgoing: dict[SpotId, list[ConnectionId]] = {
             k: list(v) for k, v in (outgoing or {}).items()
         }
-        self._presences: Dict[SpotId, SpotPresence] = dict(presences or {})
-        self._entity_spot: Dict[EntityId, SpotId] = dict(entity_spot or {})
-        self._reverse_connections: Dict[ConnectionId, ConnectionId] = dict(reverse_connections or {})
-        self._monster_presences: Dict[SpotId, MonsterSpotPresence] = dict(monster_presences or {})
-        self._monster_spot: Dict[MonsterId, SpotId] = dict(monster_spot or {})
+        self._presences: dict[SpotId, SpotPresence] = dict(presences or {})
+        self._entity_spot: dict[EntityId, SpotId] = dict(entity_spot or {})
+        self._reverse_connections: dict[ConnectionId, ConnectionId] = dict(reverse_connections or {})
+        self._monster_presences: dict[SpotId, MonsterSpotPresence] = dict(monster_presences or {})
+        self._monster_spot: dict[MonsterId, SpotId] = dict(monster_spot or {})
         self._navigation = SpotGraphNavigationService()
         self._validate_monster_presence_consistency()
 
@@ -139,9 +139,9 @@ class SpotGraphAggregate(AggregateRoot):
             raise SpotNotInGraphException(f"Spot not in graph: {spot_id}")
         return self._spots[spot_id]
 
-    def neighbor_spot_ids_for_routing(self, spot_id: SpotId) -> List[SpotId]:
+    def neighbor_spot_ids_for_routing(self, spot_id: SpotId) -> list[SpotId]:
         """通行可能な出方向エッジの先スポット（経路探索用）"""
-        out: List[SpotId] = []
+        out: list[SpotId] = []
         for cid in self._outgoing.get(spot_id, []):
             c = self._connections_by_id[cid]
             if c.passage.traversable:
@@ -150,7 +150,7 @@ class SpotGraphAggregate(AggregateRoot):
 
     def find_first_passable_connection_between(
         self, from_spot_id: SpotId, to_spot_id: SpotId
-    ) -> Optional[SpotConnection]:
+    ) -> SpotConnection | None:
         """from から出る有向エッジのうち、先が to かつ通行可能な最初の接続。無ければ None。"""
         for cid in self._outgoing.get(from_spot_id, []):
             c = self._connections_by_id[cid]
@@ -158,7 +158,7 @@ class SpotGraphAggregate(AggregateRoot):
                 return c
         return None
 
-    def iter_outgoing_connections_from(self, spot_id: SpotId) -> List[SpotConnection]:
+    def iter_outgoing_connections_from(self, spot_id: SpotId) -> list[SpotConnection]:
         """出方向の全接続（通行可否に依らない。音の伝播経路用）。"""
         return [self._connections_by_id[cid] for cid in self._outgoing.get(spot_id, [])]
 
@@ -173,10 +173,10 @@ class SpotGraphAggregate(AggregateRoot):
         self,
         spot_id: SpotId,
         *,
-        lighting: Optional[LightingEnum] = None,
-        temperature: Optional[TemperatureEnum] = None,
-        hazard_level: Optional[int] = None,
-        hazard_description: Optional[str] = None,
+        lighting: LightingEnum | None = None,
+        temperature: TemperatureEnum | None = None,
+        hazard_level: int | None = None,
+        hazard_description: str | None = None,
     ) -> None:
         """spot の環境 (明るさ・気温・危険度) を部分的に書き換える。
 
@@ -199,7 +199,7 @@ class SpotGraphAggregate(AggregateRoot):
 
         node = self._spots[spot_id]
         current = node.atmosphere or SpotAtmosphere(lighting=LightingEnum.BRIGHT)
-        overrides = {
+        overrides: dict[str, Any] = {
             key: value
             for key, value in (
                 ("lighting", lighting),
@@ -216,7 +216,7 @@ class SpotGraphAggregate(AggregateRoot):
     def add_connection(
         self,
         conn: SpotConnection,
-        reverse_connection_id: Optional[ConnectionId] = None,
+        reverse_connection_id: ConnectionId | None = None,
     ) -> None:
         if conn.connection_id in self._connections_by_id:
             raise DuplicateConnectionIdException(f"Connection ID already used: {conn.connection_id}")
@@ -259,7 +259,7 @@ class SpotGraphAggregate(AggregateRoot):
     def add_connection_dynamic(
         self,
         conn: SpotConnection,
-        reverse_connection_id: Optional[ConnectionId] = None,
+        reverse_connection_id: ConnectionId | None = None,
     ) -> None:
         """ゲーム中の動的接続追加。ConnectionCreatedEvent を発行する。"""
         if conn.connection_id in self._connections_by_id:
@@ -335,8 +335,8 @@ class SpotGraphAggregate(AggregateRoot):
         entity_id: EntityId,
         to_spot_id: SpotId,
         *,
-        departure_observation_message: Optional[str] = None,
-        arrival_observation_message: Optional[str] = None,
+        departure_observation_message: str | None = None,
+        arrival_observation_message: str | None = None,
     ) -> None:
         """接続を辿らずに別スポットへ移す。Left → Entered の順でイベントを発行。
 
@@ -411,8 +411,8 @@ class SpotGraphAggregate(AggregateRoot):
         self,
         entity_id: EntityId,
         connection_id: ConnectionId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
     ) -> None:
         """接続に沿って移動。Left → Entered の順でイベントを発行。"""
         if entity_id not in self._entity_spot:
@@ -473,7 +473,7 @@ class SpotGraphAggregate(AggregateRoot):
         self,
         entity_id: EntityId,
         *,
-        moving_entity_ids: FrozenSet[EntityId],
+        moving_entity_ids: frozenset[EntityId],
     ) -> None:
         """「耳を澄ます」ツール (Phase 5 PR-2 / PR-3) の event 発火。
 
@@ -501,7 +501,7 @@ class SpotGraphAggregate(AggregateRoot):
         self._emit_sound_heard(entity_id, current_spot, current_spot)
 
         # 隣接 spot ごとに最小 hops を集計 (複数 connection があれば最良経路)
-        min_hops_by_adjacent: Dict[SpotId, int] = {}
+        min_hops_by_adjacent: dict[SpotId, int] = {}
         for conn in self.iter_outgoing_connections_from(current_spot):
             adj_spot = conn.to_spot_id
             if adj_spot == current_spot:
@@ -525,7 +525,7 @@ class SpotGraphAggregate(AggregateRoot):
                 and self._entity_spot.get(moving_entity_id) == adj_spot
             )
             if hops == 1:
-                moving_occupants: Optional[int] = moving_count
+                moving_occupants: int | None = moving_count
             elif hops == 2:
                 moving_occupants = None if moving_count > 0 else 0
             else:
@@ -583,7 +583,7 @@ class SpotGraphAggregate(AggregateRoot):
         new_passage: Passage,
         *,
         cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
-        actor_entity_id: Optional[EntityId] = None,
+        actor_entity_id: EntityId | None = None,
         emit_state_change_event: bool = True,
     ) -> bool:
         """接続の Passage を新しい値に置換する。
@@ -621,10 +621,10 @@ class SpotGraphAggregate(AggregateRoot):
         connection_id: ConnectionId,
         new_state: str,
         *,
-        traversable_override: Optional[bool] = None,
-        sound_permeability_override: Optional[float] = None,
+        traversable_override: bool | None = None,
+        sound_permeability_override: float | None = None,
         cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
-        actor_entity_id: Optional[EntityId] = None,
+        actor_entity_id: EntityId | None = None,
         emit_state_change_event: bool = True,
     ) -> bool:
         """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。"""
@@ -674,17 +674,17 @@ class SpotGraphAggregate(AggregateRoot):
     def presence_at(self, spot_id: SpotId) -> SpotPresence:
         return self._presences.get(spot_id, SpotPresence.empty(spot_id))
 
-    def iter_spot_nodes(self) -> Tuple[SpotNode, ...]:
+    def iter_spot_nodes(self) -> tuple[SpotNode, ...]:
         """永続化・スナップショット用に登録済みスポットノードを列挙する。"""
         return tuple(self._spots.values())
 
-    def all_connections(self) -> Tuple[SpotConnection, ...]:
+    def all_connections(self) -> tuple[SpotConnection, ...]:
         """永続化用に接続（双方向は二重エッジのまま）を列挙する。"""
         return tuple(self._connections_by_id.values())
 
-    def iter_connection_records(self) -> Tuple[SpotGraphConnectionRecord, ...]:
+    def iter_connection_records(self) -> tuple[SpotGraphConnectionRecord, ...]:
         """双方向ペアを明示した接続レコードを返す。"""
-        records: List[SpotGraphConnectionRecord] = []
+        records: list[SpotGraphConnectionRecord] = []
         handled: set[ConnectionId] = set()
         for conn in sorted(
             self._connections_by_id.values(),
@@ -722,7 +722,7 @@ class SpotGraphAggregate(AggregateRoot):
             handled.add(backward.connection_id)
         return tuple(records)
 
-    def entity_spot_mapping(self) -> Dict[EntityId, SpotId]:
+    def entity_spot_mapping(self) -> dict[EntityId, SpotId]:
         """エンティティの所在スポット（永続化用）。"""
         return dict(self._entity_spot)
 
@@ -793,8 +793,8 @@ class SpotGraphAggregate(AggregateRoot):
     def can_traverse_connection(
         self,
         connection_id: ConnectionId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
     ) -> bool:
         """指定接続が `Passage.traversable=True` かつ `passage_conditions` を
         全て満たすかを返す。public 側から `_navigation.can_pass` を直接触らずに
@@ -811,8 +811,8 @@ class SpotGraphAggregate(AggregateRoot):
         self,
         monster_id: MonsterId,
         connection_id: ConnectionId,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
     ) -> None:
         """モンスター個体を接続経由で隣接スポットへ移動する。
 
@@ -890,11 +890,11 @@ class SpotGraphAggregate(AggregateRoot):
     def monster_presence_at(self, spot_id: SpotId) -> MonsterSpotPresence:
         return self._monster_presences.get(spot_id, MonsterSpotPresence.empty(spot_id))
 
-    def monster_spot_mapping(self) -> Dict[MonsterId, SpotId]:
+    def monster_spot_mapping(self) -> dict[MonsterId, SpotId]:
         """モンスターの所在スポット（永続化用）。"""
         return dict(self._monster_spot)
 
-    def monster_presences_mapping(self) -> Dict[SpotId, MonsterSpotPresence]:
+    def monster_presences_mapping(self) -> dict[SpotId, MonsterSpotPresence]:
         """スポット → モンスター在席集合（永続化用の防御的コピー）。
 
         コンストラクタ引数 `monster_presences` と対称になる入出力。Sqlite

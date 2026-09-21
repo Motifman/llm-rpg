@@ -10,7 +10,7 @@ anyio.to_thread.run_sync で各ハンドラをスレッドプールで実行す�
   - default wiring は InProcessAsyncEventExecutor を使用。本 adapter は opt-in で同期専用。
 """
 import asyncio
-from typing import Sequence
+from collections.abc import Sequence
 
 import anyio
 from anyio import to_thread

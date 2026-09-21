@@ -28,7 +28,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Optional, Tuple
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
@@ -53,9 +54,9 @@ def _note_for(requirement: UnreachableRequirement) -> str:
 
 def unreachable_attribute_notes(
     interactions: Iterable[Any],
-    actor_state: Optional[Mapping[str, Any]],
-    specs: Optional[PlayerAttributeSpecs],
-) -> Tuple[str, ...]:
+    actor_state: Mapping[str, Any] | None,
+    specs: PlayerAttributeSpecs | None,
+) -> tuple[str, ...]:
     """その物体について、**永久に届かない**ことだけを注記にして返す。
 
     伏せた条件が要求している属性のうち、``PlayerAttributeSpecs`` が

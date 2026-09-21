@@ -1,37 +1,34 @@
-import pytest
 from dataclasses import replace
 from unittest.mock import patch
 
+import pytest
+
+from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES
-from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
-from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
-from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 from ai_rpg_world.domain.monster.enum.monster_enum import (
+    BehaviorStateEnum,
     DeathCauseEnum,
+    EcologyTypeEnum,
     MonsterFactionEnum,
     MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
+    ActorStateChangedEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
+    MonsterDecidedToInteractEvent,
+    MonsterDecidedToMoveEvent,
+    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
     MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
     MonsterSpawnedEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
-    MonsterDecidedToInteractEvent,
-    ActorStateChangedEvent,
-    TargetSpottedEvent,
     TargetLostEvent,
-)
-from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
-    SpotTargetParams,
-    StateTransitionResult,
+    TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
@@ -42,20 +39,26 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterPursuitException,
     MonsterRespawnIntervalNotMetException,
 )
+from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
+    SpotTargetParams,
+    StateTransitionResult,
+)
+from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES
+from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
-from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.pack_id import PackId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
+from ai_rpg_world.domain.pursuit.event.pursuit_events import PursuitFailedEvent
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,
 )
@@ -63,13 +66,12 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
-    PursuitFailureReason,
-)
-from ai_rpg_world.domain.pursuit.event.pursuit_events import PursuitFailedEvent
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestMonsterAggregate:
@@ -1386,8 +1388,8 @@ class TestMonsterAggregate:
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.2, WorldTick(100)))
 
@@ -1401,8 +1403,8 @@ class TestMonsterAggregate:
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
 
@@ -1418,8 +1420,8 @@ class TestMonsterAggregate:
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_DOWN, 0.5, WorldTick(100)))
 

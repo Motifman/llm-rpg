@@ -1,4 +1,4 @@
-from typing import List
+
 from ai_rpg_world.domain.common.notifier import Notifier
 
 
@@ -9,7 +9,7 @@ class ConsoleNotifier(Notifier):
         """単一の受信者に通知を送信"""
         print(f"[NOTIFICATION] Player {recipient_id}: {message}")
 
-    def send_notification_to_all(self, recipient_ids: List[int], message: str):
+    def send_notification_to_all(self, recipient_ids: list[int], message: str):
         """複数の受信者に通知を送信"""
         for recipient_id in recipient_ids:
             self.send_notification(recipient_id, message)

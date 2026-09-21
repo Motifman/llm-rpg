@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.being.world_subsystems.market_board_codec import (
@@ -34,7 +33,7 @@ _BREAD = "焼きたてのパン"
 
 
 def _build(tmp_path: Path) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["players"].append({
         "id": "tom", "name": "トム",
         "spawn_spot": raw["players"][0]["spawn_spot"],

@@ -24,7 +24,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 PID = PlayerId(7)
 
 

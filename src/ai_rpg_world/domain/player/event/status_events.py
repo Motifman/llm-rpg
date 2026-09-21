@@ -1,12 +1,15 @@
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 
 
 @dataclass(frozen=True)
@@ -18,7 +21,7 @@ class PlayerDownedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
     formatter がイベント同士を後から突き合わせず、受信者ごとに prose だけを
     省くための事実を運ぶ。構造化データは省かない。
     """
-    killer_player_id: Optional[PlayerId] = None
+    killer_player_id: PlayerId | None = None
     declared_witness_prose_replaces_bystander_prose: bool = False
 
 
@@ -40,7 +43,7 @@ class PlayerRevivedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
     """
     hp_recovered: int
     total_hp: int
-    caregiver_player_id: Optional[PlayerId] = None
+    caregiver_player_id: PlayerId | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +106,7 @@ class PlayerGoldPaidEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
 @dataclass(frozen=True)
 class PlayerLocationChangedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
     """プレイヤー位置変更イベント"""
-    old_spot_id: Optional[SpotId]
-    old_coordinate: Optional[Coordinate]
+    old_spot_id: SpotId | None
+    old_coordinate: Coordinate | None
     new_spot_id: SpotId
     new_coordinate: Coordinate

@@ -17,7 +17,8 @@ timeout / HTTP エラー / スキーマ不一致は例外にする。既定値�
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -40,7 +41,7 @@ def _adapter(
     handler: Callable[[httpx.Request], httpx.Response],
     *,
     retry_attempts: int = 0,
-    sleeps: Optional[list] = None,
+    sleeps: list | None = None,
 ) -> JevTypedJudgmentAdapter:
     return JevTypedJudgmentAdapter(
         api_key="sk-or-v1-test",

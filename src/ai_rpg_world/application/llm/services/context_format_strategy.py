@@ -1,10 +1,9 @@
 """コンテキストフォーマット戦略 (world_runtime format に統一)。"""
 
 import logging
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
-
 
 # 順序ポリシー識別子。実験で A/B 比較できるよう constructor で切替可能。
 # 詳細根拠は docs/memory_system/short_term_memory_design.md §5。
@@ -144,7 +143,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 
 
 def resolve_section_order_from_env(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> str:
     """``PROMPT_SECTION_ORDER`` 設定値から section 順序を解決する。
 
@@ -174,7 +173,7 @@ def resolve_section_order_from_env(
 
 
 def build_section_format_strategy_from_env(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> SectionBasedContextFormatStrategy:
     """``PROMPT_SECTION_ORDER`` env var を見て strategy を構築するファクトリ。
 

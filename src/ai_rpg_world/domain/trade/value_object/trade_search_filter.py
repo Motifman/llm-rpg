@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Optional, List
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 from ai_rpg_world.domain.trade.exception.trade_exception import TradeSearchFilterValidationException
 
@@ -10,19 +10,19 @@ class TradeSearchFilter:
     """取引検索フィルタ（ドメインValue Object）"""
 
     # アイテム検索条件
-    item_name: Optional[str] = None
-    item_types: Optional[List[ItemType]] = None
-    rarities: Optional[List[Rarity]] = None
-    equipment_types: Optional[List[EquipmentType]] = None
+    item_name: str | None = None
+    item_types: list[ItemType] | None = None
+    rarities: list[Rarity] | None = None
+    equipment_types: list[EquipmentType] | None = None
 
     # 価格範囲フィルタ
-    min_price: Optional[int] = None
-    max_price: Optional[int] = None
+    min_price: int | None = None
+    max_price: int | None = None
 
     # 取引ステータスフィルタ
-    statuses: Optional[List[TradeStatus]] = None
+    statuses: list[TradeStatus] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """ドメインバリデーション"""
         if self.min_price is not None and self.min_price < 0:
             raise TradeSearchFilterValidationException("Minimum price cannot be negative")
@@ -43,26 +43,26 @@ class TradeSearchFilter:
         return cls(item_name=name)
 
     @classmethod
-    def by_price_range(cls, min_price: Optional[int] = None,
-                      max_price: Optional[int] = None) -> 'TradeSearchFilter':
+    def by_price_range(cls, min_price: int | None = None,
+                      max_price: int | None = None) -> 'TradeSearchFilter':
         """価格範囲フィルタを作成"""
         return cls(min_price=min_price, max_price=max_price)
 
     @classmethod
-    def by_item_types(cls, item_types: List[ItemType]) -> 'TradeSearchFilter':
+    def by_item_types(cls, item_types: list[ItemType]) -> 'TradeSearchFilter':
         """アイテムタイプフィルタを作成"""
         return cls(item_types=item_types)
 
     @classmethod
     def from_primitives(
         cls,
-        item_name: Optional[str] = None,
-        item_types: Optional[List[str]] = None,
-        rarities: Optional[List[str]] = None,
-        equipment_types: Optional[List[str]] = None,
-        min_price: Optional[int] = None,
-        max_price: Optional[int] = None,
-        statuses: Optional[List[str]] = None
+        item_name: str | None = None,
+        item_types: list[str] | None = None,
+        rarities: list[str] | None = None,
+        equipment_types: list[str] | None = None,
+        min_price: int | None = None,
+        max_price: int | None = None,
+        statuses: list[str] | None = None
     ) -> 'TradeSearchFilter':
         """プリミティブ型からValue Objectを作成（ファクトリーメソッド）"""
         # enum変換

@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import List
 
 import pytest
 
@@ -23,7 +22,6 @@ from ai_rpg_world.application.trace import (
     NullTraceRecorder,
     TraceEventKind,
 )
-
 
 # ──────────────────────────────────────────────────────────────────
 # Inline
@@ -110,8 +108,8 @@ class TestInlineShortTermMemoryScheduler:
 # ──────────────────────────────────────────────────────────────────
 
 
-def _capture_trace(recorder: NullTraceRecorder) -> List:
-    captured: List = []
+def _capture_trace(recorder: NullTraceRecorder) -> list:
+    captured: list = []
     original = recorder.record
 
     def wrapper(kind, **kw):

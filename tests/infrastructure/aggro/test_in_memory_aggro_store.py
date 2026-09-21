@@ -1,8 +1,9 @@
 import pytest
-from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
+
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
+from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
 
 
 class TestInMemoryAggroStore:

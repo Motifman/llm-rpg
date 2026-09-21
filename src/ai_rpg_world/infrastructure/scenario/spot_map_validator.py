@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from math import ceil, hypot, isfinite
-from typing import Any, Iterable, Literal, Mapping, Optional
-
+from typing import Any, Literal
 
 Severity = Literal["error", "warning", "info"]
 
@@ -19,7 +19,7 @@ class MapValidationIssue:
     severity: Severity
     message: str
     spots: tuple[str, ...] = ()
-    connection: Optional[str] = None
+    connection: str | None = None
     details: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -49,11 +49,11 @@ class KeySpotRequirement:
 class MapValidationConfig:
     """マップ品質検査の設定。"""
 
-    start_spot_id: Optional[str] = None
+    start_spot_id: str | None = None
     key_spots: tuple[KeySpotRequirement, ...] = ()
     strict: bool = False
-    max_direct_connection_distance: Optional[float] = None
-    distance_to_tick_ratio: Optional[float] = 1.0
+    max_direct_connection_distance: float | None = None
+    distance_to_tick_ratio: float | None = 1.0
 
 
 @dataclass(frozen=True)
@@ -195,7 +195,7 @@ class _IssueCollector:
         message: str,
         *,
         spots: tuple[str, ...] = (),
-        connection: Optional[str] = None,
+        connection: str | None = None,
         details: Mapping[str, Any] | None = None,
     ) -> None:
         issue = MapValidationIssue(
@@ -315,7 +315,7 @@ def _resolve_start_spot(
     spots: list[str],
     config: MapValidationConfig,
     collector: _IssueCollector,
-) -> Optional[str]:
+) -> str | None:
     candidate = config.start_spot_id
     if candidate is None:
         for player in _list_value(raw, "players"):
@@ -350,11 +350,11 @@ def _connected_components(
 
 
 def _reachable_from(
-    start: Optional[str],
+    start: str | None,
     adjacency: Mapping[str, list[tuple[str, str]]],
     *,
-    removed_edge_id: Optional[str] = None,
-    removed_spot_id: Optional[str] = None,
+    removed_edge_id: str | None = None,
+    removed_spot_id: str | None = None,
 ) -> set[str]:
     if start is None or start == removed_spot_id:
         return set()
@@ -408,7 +408,7 @@ def _check_key_spots(
     config: MapValidationConfig,
     collector: _IssueCollector,
     spot_set: set[str],
-    start_spot_id: Optional[str],
+    start_spot_id: str | None,
     spots: list[str],
     edges: list[_Edge],
     adjacency: Mapping[str, list[tuple[str, str]]],

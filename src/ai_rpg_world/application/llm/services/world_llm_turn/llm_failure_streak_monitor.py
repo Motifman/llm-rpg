@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-from typing import Dict, List, Optional, Tuple
 
 #: 既定の停止閾値。`var/runs/` の 68 run では健全な run の最長連続失敗が 4、
 #: 壊れた run (速度崩壊 35 / 認証ミス 45 / クレジット切れ 64) の最短が 35 だった。
@@ -36,12 +35,12 @@ class LlmFailureStreakMonitor:
         self._threshold = int(threshold)
         self._lock = threading.Lock()
         self._streak = 0
-        self._streak_error_codes: List[str] = []
+        self._streak_error_codes: list[str] = []
         self._streak_ticks: set = set()
         #: 止めた瞬間の連続を凍結して持つ。並列 Phase A では停止を決めたあとに
         #: 遅れて成功が着地し、生のカウンタは 0 に戻る。**止まるのに「0 件連続で
         #: 失敗した ()」が report と trace に載る**形だった。
-        self._tripped_reason: Optional[str] = None
+        self._tripped_reason: str | None = None
 
     @property
     def threshold(self) -> int:
@@ -57,7 +56,7 @@ class LlmFailureStreakMonitor:
         *,
         success: bool,
         error_code: str = "",
-        tick: Optional[int] = None,
+        tick: int | None = None,
     ) -> None:
         """呼び出し 1 件の結末を記録する。
 
@@ -109,8 +108,8 @@ class LlmFailureStreakMonitor:
         return f"LLM 呼び出しが {self._streak} 件連続で失敗した ({breakdown})"
 
 
-def _count_codes(codes: List[str]) -> List[Tuple[str, int]]:
-    counts: Dict[str, int] = {}
+def _count_codes(codes: list[str]) -> list[tuple[str, int]]:
+    counts: dict[str, int] = {}
     for code in codes:
         counts[code] = counts.get(code, 0) + 1
     return sorted(counts.items())

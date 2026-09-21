@@ -64,6 +64,7 @@ habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOA
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
@@ -117,33 +118,32 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_jo
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
 )
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
 )
+from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
+    StagnationPressureRepository,
+)
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
-from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
-    StagnationPressureRepository,
-)
-
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
 SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
 
 
 def _decode_list(
-    raw_list: list,
-    decoder,
+    raw_list: list[Any],
+    decoder: Callable[[Any], Any],
     key: str,
-):
+) -> list[Any]:
     """list の各 dict 要素を ``decoder`` で VO に変換。エラーは format error に wrap。
 
     payload 形式エラー (= dict key 欠落、enum 未知値、型不一致) は

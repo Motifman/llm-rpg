@@ -14,7 +14,6 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
 
-
 SUBSYSTEM_KEY = "scenario_predicate_rng"
 SCHEMA_VERSION = 1
 

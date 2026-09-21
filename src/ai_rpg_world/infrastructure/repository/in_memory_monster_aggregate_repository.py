@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -15,29 +14,29 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _monsters(self) -> Dict[MonsterId, MonsterAggregate]:
+    def _monsters(self) -> dict[MonsterId, MonsterAggregate]:
         return self._data_store.monsters
 
     @property
-    def _world_object_to_monster_id(self) -> Dict[WorldObjectId, MonsterId]:
+    def _world_object_to_monster_id(self) -> dict[WorldObjectId, MonsterId]:
         return self._data_store.world_object_to_monster_id
 
-    def find_by_id(self, entity_id: MonsterId) -> Optional[MonsterAggregate]:
+    def find_by_id(self, entity_id: MonsterId) -> MonsterAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._monsters.get(entity_id))
 
-    def find_by_ids(self, entity_ids: List[MonsterId]) -> List[MonsterAggregate]:
+    def find_by_ids(self, entity_ids: list[MonsterId]) -> list[MonsterAggregate]:
         return [x for eid in entity_ids for x in [self.find_by_id(eid)] if x is not None]
 
-    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> Optional[MonsterAggregate]:
+    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> MonsterAggregate | None:
         monster_id = self._world_object_to_monster_id.get(world_object_id)
         if monster_id:
             return self.find_by_id(monster_id)
@@ -63,7 +62,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
 
         return self._execute_operation(operation)
 
-    def find_by_spot_id(self, spot_id: SpotId) -> List[MonsterAggregate]:
+    def find_by_spot_id(self, spot_id: SpotId) -> list[MonsterAggregate]:
         """指定スポットに紐づくモンスター一覧（ALIVE/DEAD 問わず）。"""
         result = []
         for mid, m in self._monsters.items():
@@ -71,7 +70,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
                 result.append(self._clone(m))
         return result
 
-    def find_by_pack_id(self, pack_id) -> List[MonsterAggregate]:
+    def find_by_pack_id(self, pack_id) -> list[MonsterAggregate]:
         """指定 pack_id に属するモンスター一覧（ALIVE/DEAD 問わず）。
 
         Phase 4-O C: pack 援護で同 pack の member を引く用途。
@@ -112,5 +111,5 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
 
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[MonsterAggregate]:
+    def find_all(self) -> list[MonsterAggregate]:
         return [self._clone(monster) for monster in self._monsters.values()]

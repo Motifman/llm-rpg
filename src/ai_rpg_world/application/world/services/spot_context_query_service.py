@@ -1,28 +1,27 @@
 """スポット文脈取得クエリサービス"""
 
-from typing import Optional
 
-from ai_rpg_world.application.world.contracts.queries import GetSpotContextForPlayerQuery
-from ai_rpg_world.application.world.contracts.dtos import SpotInfoDto
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-)
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
+from ai_rpg_world.application.world.contracts.dtos import SpotInfoDto
+from ai_rpg_world.application.world.contracts.queries import GetSpotContextForPlayerQuery
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MapNotFoundException,
+    PlayerNotFoundException,
 )
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.repository.connected_spots_provider import (
+    IConnectedSpotsProvider,
+)
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
 from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.repository.connected_spots_provider import (
-    IConnectedSpotsProvider,
-)
 
 
 class SpotContextQueryService:
@@ -37,7 +36,7 @@ class SpotContextQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: Optional[PhysicalMapRepository],
+        physical_map_repository: PhysicalMapRepository | None,
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
         player_audience_query: IPlayerAudienceQueryPort,
@@ -53,7 +52,7 @@ class SpotContextQueryService:
 
     def get_spot_context(
         self, query: GetSpotContextForPlayerQuery
-    ) -> Optional[SpotInfoDto]:
+    ) -> SpotInfoDto | None:
         """
         プレイヤーの現在スポット情報＋接続先一覧を取得する。
 

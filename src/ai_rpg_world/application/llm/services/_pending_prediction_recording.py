@@ -12,7 +12,7 @@ store に積む共通ロジック。
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 from uuid import uuid4
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
@@ -32,12 +32,12 @@ _logger = logging.getLogger(__name__)
 
 def record_pending_prediction_if_applicable(
     *,
-    pending_prediction_store: Optional[PendingPredictionRepository],
+    pending_prediction_store: PendingPredictionRepository | None,
     pending_prediction_enabled: bool,
-    being_id: Optional[BeingId],
+    being_id: BeingId | None,
     episode: SubjectiveEpisode,
-    current_tick_provider: Optional[Callable[[], Optional[int]]],
-    trace_recorder: Optional[ITraceRecorder] = None,
+    current_tick_provider: Callable[[], int | None] | None,
+    trace_recorder: ITraceRecorder | None = None,
 ) -> None:
     """抽出された ``episode.pending_prediction_draft`` を ``PendingPrediction``
 
@@ -126,7 +126,7 @@ def record_pending_prediction_if_applicable(
 
 
 def _emit_evicted_trace(
-    trace_recorder: Optional[ITraceRecorder],
+    trace_recorder: ITraceRecorder | None,
     *,
     being_id: BeingId,
     evicted: PendingPrediction,

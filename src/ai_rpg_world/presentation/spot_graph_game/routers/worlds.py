@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from ai_rpg_world.presentation.spot_graph_game.dependencies import get_runtime_manager
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
     WorldDetailResponse,
     WorldListResponse,
     WorldSummaryResponse,
 )
-from ai_rpg_world.presentation.spot_graph_game.dependencies import get_runtime_manager
 
 router = APIRouter(prefix="/worlds", tags=["worlds"])
 

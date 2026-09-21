@@ -14,7 +14,7 @@
 ディスパッチャ。event 種別の追加は対応 handler の `format()` 分岐に追加する。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -61,7 +61,7 @@ class SpotGraphObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         for handler in self._handlers:
             result = handler.format(event, recipient_player_id)
             if result is not None:

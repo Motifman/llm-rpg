@@ -1,12 +1,12 @@
 """ダイアログツリーのインメモリリポジトリ（読み取り専用）"""
-from typing import Optional, Dict, Any
+from typing import Any
 
 from ai_rpg_world.domain.conversation.repository.dialogue_tree_repository import (
     DialogueTreeRepository,
 )
-from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
-from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
 from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
+from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
+from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
 
 
 class InMemoryDialogueTreeRepository(DialogueTreeRepository):
@@ -14,13 +14,13 @@ class InMemoryDialogueTreeRepository(DialogueTreeRepository):
 
     def __init__(self) -> None:
         # tree_id_value -> {"entry_node_id": int, "nodes": {node_id: DialogueNode}}
-        self._trees: Dict[int, Dict[str, Any]] = {}
+        self._trees: dict[int, dict[str, Any]] = {}
 
     def register_tree(
         self,
         tree_id: int,
         entry_node_id: int,
-        nodes: Dict[int, DialogueNode],
+        nodes: dict[int, DialogueNode],
     ) -> None:
         """ツリーを登録する（テスト・初期化用）"""
         self.replace_tree(tree_id=tree_id, entry_node_id=entry_node_id, nodes=nodes)
@@ -29,7 +29,7 @@ class InMemoryDialogueTreeRepository(DialogueTreeRepository):
         self,
         tree_id: int,
         entry_node_id: int,
-        nodes: Dict[int, DialogueNode],
+        nodes: dict[int, DialogueNode],
     ) -> None:
         """SQLite writer と同じ責務名でツリーを差し替える。"""
         self._trees[tree_id] = {
@@ -37,7 +37,7 @@ class InMemoryDialogueTreeRepository(DialogueTreeRepository):
             "nodes": dict(nodes),
         }
 
-    def get_entry_node_id(self, tree_id: DialogueTreeId) -> Optional[DialogueNodeId]:
+    def get_entry_node_id(self, tree_id: DialogueTreeId) -> DialogueNodeId | None:
         data = self._trees.get(tree_id.value)
         if not data:
             return None
@@ -46,7 +46,7 @@ class InMemoryDialogueTreeRepository(DialogueTreeRepository):
 
     def get_node(
         self, tree_id: DialogueTreeId, node_id: DialogueNodeId
-    ) -> Optional[DialogueNode]:
+    ) -> DialogueNode | None:
         data = self._trees.get(tree_id.value)
         if not data:
             return None

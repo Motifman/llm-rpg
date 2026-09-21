@@ -4,17 +4,16 @@
 PhysicalMapAggregate からの責務分離により、採取の流れを集約する。
 """
 
-from typing import Optional
 
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world.service.harvest_session_policy import HarvestSessionPolicy
 from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestStartedEvent,
-    HarvestCompletedEvent,
     HarvestCancelledEvent,
+    HarvestCompletedEvent,
+    HarvestStartedEvent,
 )
+from ai_rpg_world.domain.world.service.harvest_session_policy import HarvestSessionPolicy
 
 
 class HarvestSessionDomainService:
@@ -32,8 +31,10 @@ class HarvestSessionDomainService:
         """
         採取を開始する。検証・コンポーネント呼び出し・アクターのビジー設定・イベント作成を行う。
         """
-        HarvestSessionPolicy.validate_can_start_harvest(actor, target, current_tick)
-        finish_tick = target.component.start_harvest(actor.object_id, current_tick)
+        component = HarvestSessionPolicy.validate_can_start_harvest(
+            actor, target, current_tick
+        )
+        finish_tick = component.start_harvest(actor.object_id, current_tick)
         actor.set_busy(finish_tick)
         return HarvestStartedEvent.create(
             aggregate_id=target.object_id,
@@ -48,16 +49,16 @@ class HarvestSessionDomainService:
         actor: WorldObject,
         target: WorldObject,
         current_tick: WorldTick,
-    ) -> Optional[HarvestCompletedEvent]:
+    ) -> HarvestCompletedEvent | None:
         """
         採取を完了する。検証・コンポーネント呼び出し・アクターのビジー解除・イベント作成を行う。
         まだ完了していない場合は None を返す（イベントは発行しない）。
         """
-        HarvestSessionPolicy.validate_is_harvestable(target)
-        success = target.component.finish_harvest(actor.object_id, current_tick)
+        component = HarvestSessionPolicy.validate_is_harvestable(target)
+        success = component.finish_harvest(actor.object_id, current_tick)
         if success:
             actor.clear_busy()
-            loot_table_id = target.component.loot_table_id
+            loot_table_id = component.loot_table_id
             return HarvestCompletedEvent.create(
                 aggregate_id=target.object_id,
                 aggregate_type="WorldObject",
@@ -76,8 +77,8 @@ class HarvestSessionDomainService:
         """
         採取を中断する。検証・コンポーネント呼び出し・アクターのビジー解除・イベント作成を行う。
         """
-        HarvestSessionPolicy.validate_is_harvestable(target)
-        target.component.cancel_harvest(actor.object_id)
+        component = HarvestSessionPolicy.validate_is_harvestable(target)
+        component.cancel_harvest(actor.object_id)
         actor.clear_busy()
         return HarvestCancelledEvent.create(
             aggregate_id=target.object_id,

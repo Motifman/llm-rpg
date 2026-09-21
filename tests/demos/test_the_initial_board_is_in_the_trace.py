@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -42,14 +42,14 @@ class _Recorder:
     """記録された trace をそのまま覚えておくだけの recorder。"""
 
     def __init__(self) -> None:
-        self.records: List[Dict[str, Any]] = []
+        self.records: list[dict[str, Any]] = []
 
     def record(self, kind, **payload) -> None:
         self.records.append({"kind": str(getattr(kind, "value", kind)), **payload})
 
 
 def _build(tmp_path: Path, *, with_orders: bool = True) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["market"] = {
         "board_spot": "market_square",
         "initial_orders": _INITIAL_ORDERS if with_orders else [],
@@ -59,7 +59,7 @@ def _build(tmp_path: Path, *, with_orders: bool = True) -> Any:
     return create_world_runtime(str(path))
 
 
-def _snapshot_rows(recorder: _Recorder) -> List[Dict[str, Any]]:
+def _snapshot_rows(recorder: _Recorder) -> list[dict[str, Any]]:
     return [
         r for r in recorder.records
         if r["kind"] == "market_activity" and r.get("market_event") == "board_snapshot"
@@ -148,12 +148,13 @@ class TestTheBoardCanBeRebuiltFromTheTraceAlone:
         **これが欠けていたもの。** 実 run では、初期注文への約定が
         「`listed` の無い注文への `settled`」になり、復元器が黙って読み飛ばした。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         runtime = _build(tmp_path)
         recorder = _Recorder()
@@ -181,7 +182,7 @@ class TestTheBoardCanBeRebuiltFromTheTraceAlone:
         )
 
 
-def _known_order_ids(records: List[Dict[str, Any]]) -> set:
+def _known_order_ids(records: list[dict[str, Any]]) -> set:
     """trace に現れた注文 ID (スナップショットと出品の両方から)。"""
     return {
         r["order_id"]
@@ -192,9 +193,9 @@ def _known_order_ids(records: List[Dict[str, Any]]) -> set:
     }
 
 
-def _rebuild_board(records: List[Dict[str, Any]]) -> List[tuple]:
+def _rebuild_board(records: list[dict[str, Any]]) -> list[tuple]:
     """trace だけで板を復元する (分析側がやる作業の最小版)。"""
-    orders: Dict[int, tuple] = {}
+    orders: dict[int, tuple] = {}
     for r in records:
         if r["kind"] != "market_activity":
             continue

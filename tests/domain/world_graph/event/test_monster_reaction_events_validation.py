@@ -21,7 +21,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
-
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)
 MONSTER_1 = MonsterId.create(101)

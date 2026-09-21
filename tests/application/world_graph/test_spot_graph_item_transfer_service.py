@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 import pytest
+from tests.domain.player.aggregate.test_player_status_aggregate import (
+    create_test_status_aggregate,
+)
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
@@ -26,10 +29,10 @@ from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemNotInSlotException,
 )
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -42,10 +45,13 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
     InMemoryItemTransferCommandRepositoryProviderFactory,
 )
@@ -61,16 +67,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
-from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
-    CommandEventDispatcher,
-)
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionFactory,
 )
-from tests.domain.player.aggregate.test_player_status_aggregate import (
-    create_test_status_aggregate,
-)
-
 
 PLAYER_ID = PlayerId(1)
 OTHER_PLAYER_ID = PlayerId(2)

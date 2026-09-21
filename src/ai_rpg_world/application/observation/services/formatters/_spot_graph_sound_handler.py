@@ -5,7 +5,7 @@ ambient_description / source_spot_id (隣接 spot からの漏れ音) を
 組み合わせて prose を生成する。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -27,7 +27,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, SpotSoundHeardEvent):
             return self._format_spot_sound_heard(event, recipient_player_id)
         if isinstance(event, SpotPresenceListenedEvent):
@@ -38,7 +38,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
         self,
         event: SpotPresenceListenedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """隣接地点の人の気配を、音の通りやすさに応じた粗さで伝える。"""
         if event.entity_id.value != recipient_id.value:
             return None
@@ -75,7 +75,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
         self,
         event: SpotSoundHeardEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """環境音観測 prose (Phase 5)。
 
         intensity (FAINT/MODERATE/LOUD) と ambient_description を組み合わせ。
@@ -91,7 +91,8 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
         # 減衰計算のバグで起きうる: 例えば FAINT を 1 hop 減衰すると SILENT
         # になるが event を発火してしまった等)。SILENT は「聞こえない」が
         # 意味なので prose 生成自体を止める。
-        if event.intensity == "SILENT":
+        # 型では SILENT を含まないが、誤発火への防御として残す (上のコメント)。
+        if event.intensity == "SILENT":  # type: ignore[comparison-overlap]
             return None
 
         intensity_prose = _INTENSITY_PROSE.get(event.intensity, "音")
@@ -111,7 +112,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
             else:
                 prose = f"{intensity_prose}が聞こえる。"
 
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_sound_heard",
             "intensity": event.intensity,
             "ambient_description": event.ambient_description,

@@ -1,7 +1,7 @@
-from typing import Optional
+
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 
 
 class Tile:
@@ -10,7 +10,7 @@ class Tile:
         self,
         coordinate: Coordinate,
         terrain_type: TerrainType,
-        is_walkable_override: bool = None
+        is_walkable_override: bool | None = None
     ):
         self._coordinate = coordinate
         self._terrain_type = terrain_type
@@ -35,14 +35,14 @@ class Tile:
     def movement_cost(self) -> MovementCost:
         return self._terrain_type.base_cost
 
-    def override_walkable(self, is_walkable: bool):
+    def override_walkable(self, is_walkable: bool) -> None:
         """通行可能性を上書きする"""
         self._is_walkable_override = is_walkable
 
-    def reset_walkable(self):
+    def reset_walkable(self) -> None:
         """通行可能性の上書きを解除する"""
         self._is_walkable_override = None
 
-    def change_terrain(self, new_terrain_type: TerrainType):
+    def change_terrain(self, new_terrain_type: TerrainType) -> None:
         """地形を変更する"""
         self._terrain_type = new_terrain_type

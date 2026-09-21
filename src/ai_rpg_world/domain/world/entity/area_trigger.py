@@ -1,8 +1,8 @@
-from typing import Optional
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.area import Area
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
+from ai_rpg_world.domain.world.value_object.area import Area
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
 class AreaTrigger:
@@ -45,5 +45,5 @@ class AreaTrigger:
     def contains(self, coordinate: Coordinate) -> bool:
         return self._is_active and self._area.contains(coordinate)
 
-    def set_active(self, is_active: bool):
+    def set_active(self, is_active: bool) -> None:
         self._is_active = is_active

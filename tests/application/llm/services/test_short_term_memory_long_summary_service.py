@@ -8,12 +8,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
+)
+from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+    SELF_IMAGE_MAX_CHARS,
+    WORLD_VIEW_MAX_CHARS,
+    ShortTermMemoryLongSummaryService,
+    build_template_fallback_long_summary,
 )
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
@@ -21,14 +28,6 @@ from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
 from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-    SELF_IMAGE_MAX_CHARS,
-    WORLD_VIEW_MAX_CHARS,
-    ShortTermMemoryLongSummaryService,
-    build_template_fallback_long_summary,
-)
-
 
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -69,15 +68,15 @@ def _make_l5(
 
 @dataclass
 class _StubPort(IShortTermMemoryLongSummaryCompletionPort):
-    response: Dict[str, Any]
-    captured: List[List[Dict[str, Any]]] = None  # type: ignore[assignment]
+    response: dict[str, Any]
+    captured: list[list[dict[str, Any]]] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         self.captured = []
 
     def complete_short_term_long_summary_json(
-        self, messages: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, messages: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         self.captured.append(messages)
         return self.response
 
@@ -87,8 +86,8 @@ class _RaisingPort(IShortTermMemoryLongSummaryCompletionPort):
     exc: Exception
 
     def complete_short_term_long_summary_json(
-        self, messages: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, messages: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         raise self.exc
 
 

@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
+from tests.runtime_config_helpers import runtime_config
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
@@ -22,8 +23,6 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from tests.runtime_config_helpers import runtime_config
-
 
 _SCENARIO = Path("data/scenarios/relay_puzzle_demo.json")
 _BODY_SPOT = SpotId(1)

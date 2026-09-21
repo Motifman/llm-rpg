@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, Tuple
+from typing import Any
 
 from ai_rpg_world.infrastructure.repository.game_db_schema import init_game_db_schema
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
@@ -29,7 +29,7 @@ def attach_trade_command_sqlite_repositories(
     connection: sqlite3.Connection,
     *,
     event_sink: Any = None,
-) -> Tuple[
+) -> tuple[
     SqliteTradeAggregateRepository,
     SqlitePlayerInventoryWriteRepository,
     SqlitePlayerStatusWriteRepository,

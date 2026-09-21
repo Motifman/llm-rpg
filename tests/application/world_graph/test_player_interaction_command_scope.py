@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.common.event_delivery import (
     DeliveryChannel,
@@ -25,8 +26,6 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
-
 
 _RELAY = (
     Path(__file__).resolve().parents[3]

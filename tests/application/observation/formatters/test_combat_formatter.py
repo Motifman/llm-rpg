@@ -1,19 +1,19 @@
 """CombatObservationFormatter の単体テスト。"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.name_resolver import (
-    ObservationNameResolver,
-)
 from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
     CombatObservationFormatter,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.observation.services.formatters.name_resolver import (
+    ObservationNameResolver,
+)
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -22,13 +22,14 @@ from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxObstacleCollidedEvent,
 )
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationStartedEvent,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _make_context() -> ObservationFormatterContext:

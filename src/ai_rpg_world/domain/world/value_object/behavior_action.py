@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -9,9 +9,9 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 class BehaviorAction:
     """AIが決定した具体的なアクション"""
     action_type: BehaviorActionType
-    coordinate: Optional[Coordinate] = None
-    skill_slot_index: Optional[int] = None
-    target_id: Optional[WorldObjectId] = None
+    coordinate: Coordinate | None = None
+    skill_slot_index: int | None = None
+    target_id: WorldObjectId | None = None
 
     @classmethod
     def move(cls, coordinate: Coordinate) -> "BehaviorAction":

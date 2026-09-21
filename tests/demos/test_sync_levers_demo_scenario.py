@@ -11,26 +11,25 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
-from ai_rpg_world.application.world_graph.synchronized_action_registry import (
-    SynchronizedActionRegistry,
-)
-from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
-    SynchronizedActionResolverStageService,
-)
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
+from ai_rpg_world.application.world_graph.synchronized_action_registry import (
+    SynchronizedActionRegistry,
+)
+from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
+    SynchronizedActionResolverStageService,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
 )
@@ -40,15 +39,15 @@ from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
+from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
+from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
-from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-from tests.support.command_scope_fakes import passthrough_command_scope_factory
-
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

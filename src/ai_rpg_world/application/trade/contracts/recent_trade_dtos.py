@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
 
 
 @dataclass(frozen=True)
@@ -16,4 +15,4 @@ class RecentTradeSummaryDto:
 class RecentTradeDto:
     """最近の取引履歴DTO"""
     item_name: str
-    trades: List[RecentTradeSummaryDto]
+    trades: list[RecentTradeSummaryDto]

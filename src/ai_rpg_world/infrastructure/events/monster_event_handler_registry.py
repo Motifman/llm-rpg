@@ -2,21 +2,21 @@
 
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
+    MonsterDecidedToInteractHandler,
+)
 from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import (
     MonsterDecidedToMoveHandler,
 )
 from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
     MonsterDecidedToUseSkillHandler,
 )
-from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
-    MonsterDecidedToInteractHandler,
-)
 from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.monster.event.monster_events import (
+    MonsterDecidedToInteractEvent,
     MonsterDecidedToMoveEvent,
     MonsterDecidedToUseSkillEvent,
-    MonsterDecidedToInteractEvent,
     MonsterFedEvent,
 )
 

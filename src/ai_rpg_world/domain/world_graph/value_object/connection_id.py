@@ -15,7 +15,7 @@ class ConnectionId:
             raise ConnectionIdValidationException(f"Connection ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ConnectionId":
+    def create(cls, value: int | str) -> "ConnectionId":
         if isinstance(value, str):
             try:
                 int_value = int(value)

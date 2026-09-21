@@ -26,8 +26,9 @@ prompt に「【さっき思い出した記憶の見出し】」section が並�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
@@ -46,7 +47,6 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
     EpisodicEpisodeRepository,
 )
 
-
 FORGOTTEN_MESSAGE = (
     "もう忘れました。その見出しはぼんやり覚えていた範囲から既に消えています。"
 )
@@ -64,7 +64,7 @@ class EpisodicMemoryRecallByHandleToolExecutor:
     afterglow_store: IAfterglowStore
     slot_store: IEpisodicRecallSlotStore
     slot_capacity: int
-    current_tick_provider: Optional[Callable[[], Optional[int]]] = None
+    current_tick_provider: Callable[[], int | None] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.slot_capacity, int) or self.slot_capacity <= 0:
@@ -72,13 +72,13 @@ class EpisodicMemoryRecallByHandleToolExecutor:
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[ActingBeing, dict[str, Any]], LlmCommandResultDto]]:
         return {TOOL_NAME_MEMORY_RECALL_BY_HANDLE: self._run}
 
     def _run(
         self,
         acting: ActingBeing,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> LlmCommandResultDto:
         # 引数バリデーション。失敗時は INVALID_ARGUMENT で明示。
         handle_raw = arguments.get("handle")

@@ -94,7 +94,7 @@ class PlayerPositionSubsystemCodec(WorldSubsystemCodec):
             try:
                 new_spot_id = SpotId(int(spot_id_raw))
             except (TypeError, ValueError):
-                new_spot_id = SpotId(str(spot_id_raw))
+                new_spot_id = SpotId.create(str(spot_id_raw))
 
             # graph に対象 spot がないと scenario mismatch (= scenario fail-fast
             # で先に弾かれているはずだが、保険として明示)。

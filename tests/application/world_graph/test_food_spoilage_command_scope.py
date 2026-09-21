@@ -42,7 +42,6 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
     InMemoryUnitOfWorkTransactionFactory,
 )
 
-
 SPEC_ID = ItemSpecId.create(101)
 
 

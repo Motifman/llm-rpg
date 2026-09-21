@@ -4,7 +4,6 @@
 """
 
 from threading import Lock
-from typing import Dict, Optional, Tuple
 
 from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
@@ -20,8 +19,8 @@ class InMemoryAggroStore(AggroStore):
 
     def __init__(self) -> None:
         # (spot_id, victim_id) -> Dict[attacker_id, Tuple[amount, last_seen_tick]]
-        self._store: Dict[
-            Tuple[SpotId, WorldObjectId], Dict[WorldObjectId, Tuple[int, int]]
+        self._store: dict[
+            tuple[SpotId, WorldObjectId], dict[WorldObjectId, tuple[int, int]]
         ] = {}
         self._lock = Lock()
 
@@ -48,9 +47,9 @@ class InMemoryAggroStore(AggroStore):
         spot_id: SpotId,
         attacker_id: WorldObjectId,
         current_tick: int = 0,
-        memory_policy: Optional[AggroMemoryPolicy] = None,
-    ) -> Dict[WorldObjectId, int]:
-        result: Dict[WorldObjectId, int] = {}
+        memory_policy: AggroMemoryPolicy | None = None,
+    ) -> dict[WorldObjectId, int]:
+        result: dict[WorldObjectId, int] = {}
         with self._lock:
             for (sid, victim_id), by_attacker in self._store.items():
                 if sid != spot_id:

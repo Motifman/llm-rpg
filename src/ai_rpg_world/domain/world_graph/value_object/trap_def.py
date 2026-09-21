@@ -7,7 +7,6 @@ SpotNode（進入トラップ）や SpotObject（操作トラップ）に付与�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.world_graph.enum.trap_trigger_type import TrapTriggerTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
@@ -18,10 +17,10 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import Inte
 class TrapDef:
     trap_id: str
     trigger_type: TrapTriggerTypeEnum
-    effects: Tuple[InteractionEffect, ...]
+    effects: tuple[InteractionEffect, ...]
     is_hidden: bool = True
     is_repeating: bool = False
-    disarm_conditions: Tuple[InteractionCondition, ...] = ()
+    disarm_conditions: tuple[InteractionCondition, ...] = ()
     detection_difficulty: int = 0  # EXPLORE で発見可能（search_count >= この値）
 
     def __post_init__(self) -> None:

@@ -1,22 +1,23 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.enum.world_enum import (
-    TerrainTypeEnum,
-    TriggerTypeEnum,
-    ObjectTypeEnum,
-    InteractionTypeEnum,
-)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.world.enum.world_enum import (
+    InteractionTypeEnum,
+    ObjectTypeEnum,
+    TerrainTypeEnum,
+    TriggerTypeEnum,
+)
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class WorldObjectStateChangedEvent(BaseDomainEvent[WorldObjectId, str]):
     """オブジェクトの状態が変化したイベント"""
     object_id: WorldObjectId
     key: str
-    new_value: any
+    new_value: Any
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ class WorldObjectMovedEvent(BaseDomainEvent[WorldObjectId, str]):
     object_id: WorldObjectId
     from_coordinate: Coordinate
     to_coordinate: Coordinate
-    arrival_tick: Optional[WorldTick] = None
+    arrival_tick: WorldTick | None = None
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ class TileTriggeredEvent(BaseDomainEvent[SpotId, str]):
     spot_id: SpotId
     coordinate: Coordinate
     trigger_type: TriggerTypeEnum
-    object_id: Optional[WorldObjectId] = None
+    object_id: WorldObjectId | None = None
 
 
 @dataclass(frozen=True)
@@ -114,7 +115,7 @@ class WorldObjectInteractedEvent(BaseDomainEvent[WorldObjectId, str]):
     actor_id: WorldObjectId
     target_id: WorldObjectId
     interaction_type: InteractionTypeEnum
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -125,7 +126,7 @@ class LocationEnteredEvent(BaseDomainEvent[LocationAreaId, str]):
     object_id: WorldObjectId
     name: str
     description: str
-    player_id_value: Optional[int] = None
+    player_id_value: int | None = None
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,7 @@ class GatewayTriggeredEvent(BaseDomainEvent[GatewayId, str]):
     object_id: WorldObjectId
     target_spot_id: SpotId
     landing_coordinate: Coordinate
-    player_id_value: Optional[int] = None
+    player_id_value: int | None = None
 
 
 @dataclass(frozen=True)
@@ -153,17 +154,20 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
     object_id: WorldObjectId
     actor_id: WorldObjectId
     loot_table_id: LootTableId
-    obtained_items: List[dict]  # {"item_spec_id": str, "quantity": int}
+    obtained_items: list[dict[str, Any]]  # {"item_spec_id": str, "quantity": int}
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする値を
+    # 呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,
         object_id: WorldObjectId,
         actor_id: WorldObjectId,
         loot_table_id: LootTableId,
-        obtained_items: List[dict]
+        obtained_items: list[dict[str, Any]]
     ) -> "ResourceHarvestedEvent":
         return super().create(
             aggregate_id=aggregate_id,

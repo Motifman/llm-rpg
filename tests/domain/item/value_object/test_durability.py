@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.item.value_object.durability import Durability
+
 from ai_rpg_world.domain.item.exception import DurabilityValidationException
+from ai_rpg_world.domain.item.value_object.durability import Durability
 
 
 class TestDurability:

@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Optional
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world_graph.scenario_predicate_evaluation import (
     ScenarioPredicateEvaluation,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
-
 
 _logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ class ScenarioPredicateTraceEmitter:
 
     def __init__(
         self,
-        trace_recorder_provider: Callable[[], Optional[ITraceRecorder]],
+        trace_recorder_provider: Callable[[], ITraceRecorder | None],
     ) -> None:
         if not callable(trace_recorder_provider):
             raise TypeError("trace_recorder_provider must be callable")
@@ -35,8 +33,8 @@ class ScenarioPredicateTraceEmitter:
         current_tick: WorldTick,
         purpose: str,
         owner_id: str | int,
-        owner_index: Optional[int] = None,
-        player_id: Optional[int] = None,
+        owner_index: int | None = None,
+        player_id: int | None = None,
     ) -> None:
         """一度だけ得た評価結果を記録し、trace障害は世界進行へ波及させない。"""
         try:

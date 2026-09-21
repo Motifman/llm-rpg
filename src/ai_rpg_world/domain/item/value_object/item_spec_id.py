@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.item.exception.item_exception import ItemInstanceIdValidationException
 
 
@@ -11,13 +12,13 @@ class ItemSpecId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.value <= 0:
             raise ItemInstanceIdValidationException(f"ItemSpecId must be positive, got {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ItemSpecId":
+    def create(cls, value: int | str) -> "ItemSpecId":
         """intまたはstrからItemSpecIdを作成"""
         if isinstance(value, str):
             try:

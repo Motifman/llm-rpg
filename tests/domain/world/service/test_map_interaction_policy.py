@@ -1,26 +1,27 @@
 """MapInteractionPolicy の単体テスト。正常ケース・例外ケース・境界ケースを網羅する。"""
 
 import pytest
-from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
-    InteractableComponent,
     ChestComponent,
+    InteractableComponent,
     PlaceableComponent,
     StaticPlaceableInnerComponent,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
     ActorBusyException,
     InteractionOutOfRangeException,
     NotFacingTargetException,
     NotInteractableException,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @pytest.fixture

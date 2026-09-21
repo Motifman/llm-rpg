@@ -2,7 +2,8 @@
 Unit of Work Factory Implementation - Unit of Workファクトリの具体実装
 """
 import os
-from typing import Mapping, Optional, TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
@@ -21,7 +22,7 @@ ENV_USE_SQLITE_UNIT_OF_WORK = "USE_SQLITE_UNIT_OF_WORK"
 
 def create_unit_of_work_factory_from_env(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
     event_publisher: Optional["InMemoryEventPublisherWithUow"] = None,
 ) -> UnitOfWorkFactory:
     """環境に応じて `SqliteUnitOfWorkFactory` または `InMemoryUnitOfWorkFactory` を返す。
@@ -55,7 +56,7 @@ class InMemoryUnitOfWorkFactory(UnitOfWorkFactory):
             event_publisher: 関連付けるイベントパブリッシャー（任意）
         """
         self._event_publisher = event_publisher
-        self._factory_function: Optional[callable] = None
+        self._factory_function: callable | None = None
 
     def create(self) -> UnitOfWork:
         """Unit of Workインスタンスを作成

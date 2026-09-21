@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -40,7 +40,7 @@ _BREAD_SPEC = "bread"
 
 
 def _town(tmp_path: pathlib.Path, initial_orders: list, **market: Any) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["market"] = {
         "board_spot": "market_square",
         "order_expires_in_ticks": 24,
@@ -52,7 +52,7 @@ def _town(tmp_path: pathlib.Path, initial_orders: list, **market: Any) -> Any:
     return create_world_runtime(str(path))
 
 
-def _bid(**overrides: Any) -> Dict[str, Any]:
+def _bid(**overrides: Any) -> dict[str, Any]:
     order = {
         "merchant": "gustav", "side": "buy", "item_spec": _BREAD_SPEC,
         "quantity": 5, "unit_price": 12,
@@ -141,12 +141,13 @@ class TestTheStandingBidMakesACrossingPossible:
         v3.4 で実際に起きたすれ違い (買い t25 に流れる / 売り t31 に出る) が、
         この宣言で起きなくなることを見る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         runtime = _town(tmp_path, [_bid(expires_in_ticks=999, unit_price=12)])
         lena = PlayerId(1)

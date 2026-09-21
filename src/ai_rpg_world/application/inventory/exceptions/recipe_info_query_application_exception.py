@@ -2,9 +2,11 @@
 RecipeInfoQueryService専用のアプリケーション例外
 """
 
-from typing import Optional
-from ai_rpg_world.domain.common.exception import DomainException
+
+from typing import Any
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.domain.common.exception import DomainException
 
 
 class RecipeInfoQueryApplicationException(ApplicationException):
@@ -53,7 +55,7 @@ class RecipeInfoQueryApplicationException(ApplicationException):
         )
 
     @classmethod
-    def invalid_request(cls, message: str, **context) -> "RecipeInfoQueryApplicationException":
+    def invalid_request(cls, message: str, **context: Any) -> "RecipeInfoQueryApplicationException":
         """無効なリクエストの場合の例外
 
         Args:

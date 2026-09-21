@@ -6,31 +6,30 @@ import json
 import logging
 from collections.abc import Callable, Collection
 from dataclasses import replace as dataclass_replace
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     is_reschedulable_error_code,
     should_reschedule_for_next_tick,
 )
-from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-    ACTION_NAME_JUDGMENT_KEY,
+from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (
+    QUESTION_NAME as ACTION_NAME_RESCUE_QUESTION,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (
     ActionNameRescue,
-    QUESTION_NAME as ACTION_NAME_RESCUE_QUESTION,
-)
-from ai_rpg_world.application.trace.events import TraceEventKind
-from ai_rpg_world.application.llm.services.action_summary_format import (
-    ACTION_HISTORY_PROJECTION_KEY,
-    project_action_arguments_for_history,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+    ACTION_NAME_JUDGMENT_KEY,
     CANONICAL_IDENTIFIERS_KEY,
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
+)
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_HISTORY_PROJECTION_KEY,
+    project_action_arguments_for_history,
 )
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
@@ -39,10 +38,27 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
     list_destination_labels,
     list_object_labels,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
+    filter_definitions_for_escape_llm,
+    validate_tool_handler_consistency,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace import (
+    build_gold_reader,
+    build_roster_reader,
+    wrap_with_gold_change,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
+    build_unsupported_tool_message,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
@@ -50,16 +66,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
-    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
-    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
@@ -72,6 +82,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
 )
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
@@ -81,19 +92,6 @@ from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import
 )
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
-)
-
-from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
-    filter_definitions_for_escape_llm,
-    validate_tool_handler_consistency,
-)
-from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
-    build_unsupported_tool_message,
-)
-from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace import (
-    build_gold_reader,
-    build_roster_reader,
-    wrap_with_gold_change,
 )
 
 logger = logging.getLogger(__name__)
@@ -239,7 +237,6 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
         TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
         TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-        TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
         TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
         # PR-θ1 (経路統合): travel_to を旧 _handle_travel_to から新経路
         # SpotGraphToolExecutor._travel_to に統合。以前は 2 経路に分裂して
@@ -477,7 +474,7 @@ def validate_tool_handler_consistency_for_wiring(wiring) -> None:
 
 def build_interact_invalid_label_failure(
     runtime_context: Any,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     exc: Exception,
 ) -> LlmCommandResultDto:
     """PR-θ3 (経路統合): interact の resolver 例外を旧 _handle_interact
@@ -561,7 +558,7 @@ def build_interact_invalid_label_failure(
 
 def build_travel_to_invalid_label_failure(
     runtime_context: Any,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     exc: Exception,
 ) -> LlmCommandResultDto:
     """PR-θ1 (経路統合): travel_to の resolver 例外を旧 _handle_travel_to
@@ -670,7 +667,7 @@ def _wrap_every_handler_with_gold_change(wiring, runtime) -> None:
 
 def adapt_executor_handler(
     raw_handler: Callable[..., LlmCommandResultDto],
-) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
+) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
     """executor signature (int, args[, runtime_context]) →  signature
     (PlayerId, args, ctx)。
 
@@ -683,14 +680,14 @@ def adapt_executor_handler(
     """
     def _handler(
         player_id: PlayerId,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         return raw_handler(int(player_id.value), arguments, runtime_context)
     return _handler
 
 def adapt_executor_handler_with_resolver(
-    raw_handler: Callable[[int, Dict[str, Any]], LlmCommandResultDto],
+    raw_handler: Callable[[int, dict[str, Any]], LlmCommandResultDto],
     tool_name: str,
     argument_resolver: Any,
     *,
@@ -698,15 +695,13 @@ def adapt_executor_handler_with_resolver(
     # 「有効な destination_label 一覧を含む」 message を組み立てるための
     # optional builder。渡されない場合は従来通り generic message を使う。
     # 他 tool (interact / attack 等) 統合時も同じ pattern を再利用できる。
-    invalid_label_failure_builder: Optional[
-        Callable[[Any, Dict[str, Any], Exception], LlmCommandResultDto]
-    ] = None,
+    invalid_label_failure_builder: Callable[[Any, dict[str, Any], Exception], LlmCommandResultDto] | None = None,
     # #1321: 行動名の選び直しを trace に残すための口。recorder は session 作成
     # 後に差し込まれる経路があるので、callable provider 経由で使用時に引く
     # (loop guard と同じ流儀)。
-    trace_recorder_provider: Optional[Callable[[], Any]] = None,
-    current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
+    trace_recorder_provider: Callable[[], Any] | None = None,
+    current_tick_provider: Callable[[], int | None] | None = None,
+) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
     """resolver を噛ませた adapter (#356 fix)。
 
     LLM が送ってくる ``item_label`` (I1/I2) を、executor が読む
@@ -722,7 +717,7 @@ def adapt_executor_handler_with_resolver(
 
     def _handler(
         player_id: PlayerId,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         try:
@@ -801,7 +796,7 @@ def adapt_executor_handler_with_resolver(
 
     return _handler
 
-def _current_tick_or_none(wiring) -> Optional[int]:
+def _current_tick_or_none(wiring) -> int | None:
     """trace に載せる現在 tick。取れなければ None (記録自体は落とさない)。"""
     runtime = getattr(wiring, "runtime", None)
     getter = getattr(runtime, "current_tick", None)
@@ -814,11 +809,11 @@ def _current_tick_or_none(wiring) -> Optional[int]:
 
 
 def _record_action_name_judgment(
-    judgment: Dict[str, Any],
+    judgment: dict[str, Any],
     *,
     player_id: PlayerId,
-    trace_recorder_provider: Optional[Callable[[], Any]],
-    current_tick_provider: Optional[Callable[[], Optional[int]]],
+    trace_recorder_provider: Callable[[], Any] | None,
+    current_tick_provider: Callable[[], int | None] | None,
 ) -> None:
     """発火した判断を 1 件 trace に残す。採否に関わらず残す。
 
@@ -842,7 +837,7 @@ def _record_action_name_judgment(
 
 
 def _with_interpretation_note(
-    result: LlmCommandResultDto, judgment: Dict[str, Any]
+    result: LlmCommandResultDto, judgment: dict[str, Any]
 ) -> LlmCommandResultDto:
     """「書いた名前をどう解釈したか」を結果文の先頭に足す。
 
@@ -859,7 +854,7 @@ def _with_interpretation_note(
 
 def maybe_interrupt_busy(
     wiring, player_id: PlayerId, tool_name: str
-) -> tuple[bool, Optional[PlayerSpotNavigationState]]:
+) -> tuple[bool, PlayerSpotNavigationState | None]:
     """重い tool が来たら travel をキャンセルして agent を現在地に着地させる。
 
     Review HIGH 1 対応: 中断前の nav_state を snapshot として返す。

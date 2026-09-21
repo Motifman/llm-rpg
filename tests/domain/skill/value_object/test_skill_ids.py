@@ -1,4 +1,5 @@
 import pytest
+
 from ai_rpg_world.domain.skill.exception.skill_exceptions import (
     SkillDeckProgressIdValidationException,
     SkillLoadoutIdValidationException,

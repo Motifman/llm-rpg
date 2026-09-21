@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 _EXPECTED_SCHEDULES = {
     "survival_island_v2.json": ((192, 288, 336), 384),

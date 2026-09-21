@@ -1,60 +1,62 @@
 """
 UserCommandServiceのテスト
 """
-import pytest
 import logging
 from unittest.mock import Mock, patch
-from ai_rpg_world.application.social.services.user_command_service import UserCommandService
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+
+import pytest
+
 from ai_rpg_world.application.social.contracts.commands import (
-    CreateUserCommand,
-    UpdateUserProfileCommand,
-    FollowUserCommand,
-    UnfollowUserCommand,
     BlockUserCommand,
-    UnblockUserCommand,
+    CreateUserCommand,
+    FollowUserCommand,
     SubscribeUserCommand,
-    UnsubscribeUserCommand
+    UnblockUserCommand,
+    UnfollowUserCommand,
+    UnsubscribeUserCommand,
+    UpdateUserProfileCommand,
 )
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
+from ai_rpg_world.application.social.exceptions import SystemErrorException
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
     UserCreationException,
-    UserProfileUpdateException,
     UserNotFoundForCommandException,
+    UserProfileUpdateException,
 )
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
-from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.application.social.services.user_command_service import UserCommandService
+from ai_rpg_world.domain.sns.event.sns_user_event import (
+    SnsUserBlockedEvent,
+    SnsUserCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserProfileUpdatedEvent,
+    SnsUserSubscribedEvent,
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserUnsubscribedEvent,
+)
 from ai_rpg_world.domain.sns.exception import (
-    UserNotFoundException,
-    CannotFollowBlockedUserException,
-    CannotUnfollowNotFollowedUserException,
     CannotBlockAlreadyBlockedUserException,
-    CannotUnblockNotBlockedUserException,
+    CannotFollowBlockedUserException,
     CannotSubscribeAlreadySubscribedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
+    CannotUnblockNotBlockedUserException,
+    CannotUnfollowNotFollowedUserException,
     CannotUnsubscribeNotSubscribedUserException,
-    SelfFollowException,
-    SelfUnfollowException,
-    SelfBlockException,
-    SelfUnblockException,
-    SelfSubscribeException,
-    SelfUnsubscribeException,
     ProfileUpdateValidationException,
+    SelfBlockException,
+    SelfFollowException,
+    SelfSubscribeException,
+    SelfUnblockException,
+    SelfUnfollowException,
+    SelfUnsubscribeException,
+    UserNotFoundException,
 )
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.event.sns_user_event import (
-    SnsUserCreatedEvent,
-    SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
-    SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
-    SnsUserProfileUpdatedEvent,
-    SnsUserSubscribedEvent,
-    SnsUserUnsubscribedEvent,
-)
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestUserCommandService:
@@ -298,7 +300,7 @@ class TestUserCommandService:
 
     # unfollow_user テスト
     def test_unfollow_user_success(self):
-        """unfollow_user - 正常系テスト"""
+        """既存のフォロー関係を解除すると success=True を返し、リポジトリ上でも解除される。"""
         # Given: 既存のフォロー関係があることを確認
         follower_user_id = 1  # 勇者
         followee_user_id = 2  # 魔法使い（勇者は魔法使いをフォローしている）
@@ -450,7 +452,7 @@ class TestUserCommandService:
 
     # unblock_user テスト
     def test_unblock_user_success(self):
-        """unblock_user - 正常系テスト"""
+        """既存のブロック関係を解除すると success=True を返し、リポジトリ上でも解除される。"""
         # Given: 魔法使い（ID: 2）は盗賊（ID: 4）をブロックしている
         blocker_user_id = 2  # 魔法使い
         blocked_user_id = 4  # 盗賊
@@ -526,7 +528,7 @@ class TestUserCommandService:
 
     # subscribe_user テスト
     def test_subscribe_user_success(self):
-        """subscribe_user - 正常系テスト"""
+        """フォロー済みの相手を購読すると success=True を返し、リポジトリ上でも購読状態になる。"""
         # Given: まず盗賊が戦士をフォローする
         follow_command = FollowUserCommand(
             follower_user_id=4,  # 盗賊
@@ -642,7 +644,7 @@ class TestUserCommandService:
 
     # unsubscribe_user テスト
     def test_unsubscribe_user_success(self):
-        """unsubscribe_user - 正常系テスト"""
+        """既存の購読関係を解除すると success=True を返し、リポジトリ上でも解除される。"""
         # Given: 勇者（ID: 1）は魔法使い（ID: 2）を購読している
         subscriber_user_id = 1  # 勇者
         subscribed_user_id = 2  # 魔法使い
@@ -720,7 +722,6 @@ class TestUserCommandService:
     def test_error_response_dto_creation(self):
         """エラーレスポンスDTOが正しく作成されることのテスト"""
         # Given
-        from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto
 
         # When
         error_response = ErrorResponseDto(
@@ -850,32 +851,6 @@ class TestUserCommandService:
         assert followed_events[0].aggregate_id == follower_user_id  # int型
         assert followed_events[0].follower_user_id == UserId(follower_user_id)
         assert followed_events[0].followee_user_id == UserId(followee_user_id)
-
-    def test_unfollow_user_success(self):
-        """unfollow_user - 正常系テスト"""
-        # Given
-        follower_user_id = 3  # 戦士
-        followee_user_id = 4  # 盗賊
-
-        # まずフォロー関係を作成
-        follow_command = FollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
-        self.service.follow_user(follow_command)
-
-        # When - フォロー解除を実行
-        unfollow_command = UnfollowUserCommand(
-            follower_user_id=follower_user_id,
-            followee_user_id=followee_user_id
-        )
-        result = self.service.unfollow_user(unfollow_command)
-
-        # Then
-        assert result.success is True
-        assert result.message == "ユーザーのフォローを解除しました"
-        assert result.data["follower_user_id"] == follower_user_id
-        assert result.data["followee_user_id"] == followee_user_id
 
     def test_event_publishing_on_unfollow(self):
         """アンフォロー時にイベントが発行されることのテスト"""
@@ -1038,86 +1013,3 @@ class TestUserCommandService:
         assert unsubscribed_events[0].subscriber_user_id == UserId(subscriber_user_id)
         assert unsubscribed_events[0].subscribed_user_id == UserId(subscribed_user_id)
 
-    def test_unblock_user_success(self):
-        """unblock_user - 正常系テスト"""
-        # Given
-        blocker_user_id = 3  # 戦士
-        blocked_user_id = 4  # 盗賊
-
-        # まずブロック関係を作成
-        block_command = BlockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
-        self.service.block_user(block_command)
-
-        # When - ブロック解除を実行
-        unblock_command = UnblockUserCommand(
-            blocker_user_id=blocker_user_id,
-            blocked_user_id=blocked_user_id
-        )
-        result = self.service.unblock_user(unblock_command)
-
-        # Then
-        assert result.success is True
-        assert result.message == "ユーザーのブロックを解除しました"
-        assert result.data["blocker_user_id"] == blocker_user_id
-        assert result.data["blocked_user_id"] == blocked_user_id
-
-    def test_subscribe_user_success(self):
-        """subscribe_user - 正常系テスト"""
-        # Given
-        subscriber_user_id = 3  # 戦士
-        subscribed_user_id = 4  # 盗賊
-
-        # まずフォロー関係を作成（購読にはフォロー関係が必要）
-        follow_command = FollowUserCommand(
-            follower_user_id=subscriber_user_id,
-            followee_user_id=subscribed_user_id
-        )
-        self.service.follow_user(follow_command)
-
-        # When - 購読を実行
-        subscribe_command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
-        result = self.service.subscribe_user(subscribe_command)
-
-        # Then
-        assert result.success is True
-        assert result.message == "ユーザーを購読しました"
-        assert result.data["subscriber_user_id"] == subscriber_user_id
-        assert result.data["subscribed_user_id"] == subscribed_user_id
-
-    def test_unsubscribe_user_success(self):
-        """unsubscribe_user - 正常系テスト"""
-        # Given
-        subscriber_user_id = 3  # 戦士
-        subscribed_user_id = 4  # 盗賊
-
-        # まずフォローと購読関係を作成
-        follow_command = FollowUserCommand(
-            follower_user_id=subscriber_user_id,
-            followee_user_id=subscribed_user_id
-        )
-        self.service.follow_user(follow_command)
-
-        subscribe_command = SubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
-        self.service.subscribe_user(subscribe_command)
-
-        # When - 購読解除を実行
-        unsubscribe_command = UnsubscribeUserCommand(
-            subscriber_user_id=subscriber_user_id,
-            subscribed_user_id=subscribed_user_id
-        )
-        result = self.service.unsubscribe_user(unsubscribe_command)
-
-        # Then
-        assert result.success is True
-        assert result.message == "ユーザーの購読を解除しました"
-        assert result.data["subscriber_user_id"] == subscriber_user_id
-        assert result.data["subscribed_user_id"] == subscribed_user_id

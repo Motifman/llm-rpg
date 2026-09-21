@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.social.contracts.dtos import (
     NotificationDto,
@@ -55,7 +55,7 @@ def _preview_content(content: str, max_len: int = _CONTENT_PREVIEW_MAX) -> str:
     return s[: max_len - 1] + "…"
 
 
-def _slice_page(raw: List[Any], limit: int) -> Tuple[List[Any], bool]:
+def _slice_page(raw: list[Any], limit: int) -> tuple[list[Any], bool]:
     """limit+1 件取得想定で has_more を付与。"""
     if len(raw) > limit:
         return raw[:limit], True
@@ -67,10 +67,10 @@ class SnsPageQueryService:
 
     def __init__(
         self,
-        post_query: "PostQueryService",
-        reply_query: "ReplyQueryService",
-        notification_query: "NotificationQueryService",
-        user_query: "UserQueryService",
+        post_query: PostQueryService,
+        reply_query: ReplyQueryService,
+        notification_query: NotificationQueryService,
+        user_query: UserQueryService,
         page_session: SnsPageSessionService,
     ) -> None:
         self._post_query = post_query
@@ -113,7 +113,7 @@ class SnsPageQueryService:
         include_author_ref: bool = True,
     ) -> SnsPostLineSnapshotDto:
         post_ref = self._page_session.issue_post_ref(player_id, post.post_id)
-        author_ref: Optional[str] = None
+        author_ref: str | None = None
         if include_author_ref and not post.is_deleted:
             author_ref = self._page_session.issue_user_ref(player_id, post.author_user_id)
         return SnsPostLineSnapshotDto(
@@ -136,7 +136,7 @@ class SnsPageQueryService:
         gen: int,
     ) -> SnsVirtualPageSnapshotDto:
         lim = st.limit + 1
-        trending: List[str] = []
+        trending: list[str] = []
         if st.home_tab == SnsHomeTab.FOLLOWING:
             raw = self._post_query.get_home_timeline(
                 viewer_user_id, limit=lim, offset=st.offset
@@ -187,10 +187,10 @@ class SnsPageQueryService:
 
         thread = self._reply_query.get_reply_thread(root_id, viewer_user_id)
         root_line = self._post_line(player_id, thread.post)
-        reply_lines: List[SnsReplyLineSnapshotDto] = []
+        reply_lines: list[SnsReplyLineSnapshotDto] = []
         for r in thread.replies:
             rr = self._page_session.issue_reply_ref(player_id, r.reply_id)
-            author_ref: Optional[str] = None
+            author_ref: str | None = None
             if not r.is_deleted:
                 author_ref = self._page_session.issue_user_ref(player_id, r.author_user_id)
             reply_lines.append(
@@ -224,7 +224,7 @@ class SnsPageQueryService:
         lim = st.limit + 1
         q = (st.search_query or "").strip()
         mode = st.search_mode
-        raw: List[PostDto] = []
+        raw: list[PostDto] = []
         if not q:
             raw = []
         elif mode == SnsSearchMode.HASHTAG:
@@ -258,7 +258,7 @@ class SnsPageQueryService:
         viewer_user_id: int,
     ) -> SnsProfileHeaderSnapshotDto:
         is_self = profile.user_id == viewer_user_id
-        subject_ref: Optional[str] = None
+        subject_ref: str | None = None
         if not is_self:
             subject_ref = self._page_session.issue_user_ref(player_id, profile.user_id)
         return SnsProfileHeaderSnapshotDto(
@@ -316,13 +316,13 @@ class SnsPageQueryService:
         n: NotificationDto,
     ) -> SnsNotificationLineSnapshotDto:
         nref = self._page_session.issue_notification_ref(player_id, n.notification_id)
-        actor_ref: Optional[str] = None
+        actor_ref: str | None = None
         if n.actor_user_id:
             actor_ref = self._page_session.issue_user_ref(player_id, n.actor_user_id)
-        post_ref: Optional[str] = None
+        post_ref: str | None = None
         if n.related_post_id is not None:
             post_ref = self._page_session.issue_post_ref(player_id, n.related_post_id)
-        reply_ref: Optional[str] = None
+        reply_ref: str | None = None
         if n.related_reply_id is not None:
             reply_ref = self._page_session.issue_reply_ref(player_id, n.related_reply_id)
         return SnsNotificationLineSnapshotDto(

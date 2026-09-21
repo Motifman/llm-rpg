@@ -39,8 +39,8 @@ class QuestObjectiveTargetResolver:
     def resolve_target_id(
         self,
         objective_type: str,
-        target_name: Optional[str],
-        target_id: Optional[int],
+        target_name: str | None,
+        target_id: int | None,
     ) -> int:
         """目標タイプと target_name または target_id から target_id を返す。"""
         ot_stripped = (objective_type or "").strip()
@@ -59,7 +59,7 @@ class QuestObjectiveTargetResolver:
                 "INVALID_OBJECTIVE_TYPE",
             )
 
-        tid_val: Optional[int] = None
+        tid_val: int | None = None
         has_target_name = isinstance(target_name, str) and bool(target_name.strip())
 
         if has_target_name:

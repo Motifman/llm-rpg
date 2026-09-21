@@ -8,8 +8,13 @@ snapshot から再開すると、**旧 id の episode と新 id の episode が�
 実資産は 2026-08-14 時点で 58 ファイル・1,777 件 (var/runs 配下)。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
-from ai_rpg_world.application.llm.services.afterglow_store import make_afterglow_handle, resolve_episode_id_prefix_from_handle
+
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    make_afterglow_handle,
+    resolve_episode_id_prefix_from_handle,
+)
 from ai_rpg_world.application.llm.services.episode_identity import EPISODE_ID_VERSION_SUFFIX, is_current_version
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -17,6 +22,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_action import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 _NOW = datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc)
 _OLD_ID = 'c4d308e7-1492-5f29-b251-9c7214e77fe5'
 _NEW_ID = f'89b0cfdb-0adb-52ae-908f-b3c1deada88b{EPISODE_ID_VERSION_SUFFIX}'

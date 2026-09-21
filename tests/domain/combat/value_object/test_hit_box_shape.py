@@ -1,7 +1,9 @@
 import pytest
+
+from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
+
 
 class TestHitBoxShape:
     def test_single_cell(self):

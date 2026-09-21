@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -34,7 +34,7 @@ _HERB = "薬草"
 _OFFER_COST = 10
 
 
-def _altar(object_id: str, name: str) -> Dict[str, Any]:
+def _altar(object_id: str, name: str) -> dict[str, Any]:
     return {
         "id": object_id,
         "name": name,
@@ -67,8 +67,8 @@ def _altar(object_id: str, name: str) -> Dict[str, Any]:
     }
 
 
-def _base_raw() -> Dict[str, Any]:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+def _base_raw() -> dict[str, Any]:
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     raw["players"][0]["initial_gold"] = 30
     raw["players"].append({
@@ -85,7 +85,7 @@ def _base_raw() -> Dict[str, Any]:
     return raw
 
 
-def _runtime(tmp_path: Path, raw: Dict[str, Any]) -> Any:
+def _runtime(tmp_path: Path, raw: dict[str, Any]) -> Any:
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
     path = tmp_path / "altar_town.json"
@@ -487,7 +487,7 @@ class TestTheLoaderRefusesUnsafeOfferings:
 class TestOneAltarCanBeJudgedAgainstTheOther:
     """2 つの祭壇の数を比べる述語が、判定イベントとして動く。"""
 
-    def _raw_with_judgment(self) -> Dict[str, Any]:
+    def _raw_with_judgment(self) -> dict[str, Any]:
         raw = _base_raw()
         raw["scenario_events"] = [
             {

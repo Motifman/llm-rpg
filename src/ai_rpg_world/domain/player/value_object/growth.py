@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from .exp_table import ExpTable
+
 from ai_rpg_world.domain.player.exception import GrowthValidationException
+
+from .exp_table import ExpTable
 
 
 @dataclass(frozen=True)
@@ -10,7 +12,7 @@ class Growth:
     total_exp: int
     exp_table: ExpTable
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.level <= 0:
             raise GrowthValidationException(f"level must be greater than 0. level: {self.level}")
         if self.total_exp < 0:

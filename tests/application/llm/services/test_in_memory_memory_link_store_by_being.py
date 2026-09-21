@@ -20,7 +20,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     MemoryLinkType,
 )
 
-
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 

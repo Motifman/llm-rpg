@@ -1,63 +1,63 @@
 """MovementStepExecutor の単体テスト。正常系・例外系を網羅する。"""
 
-import pytest
-from typing import List, Dict, Optional
 
+import pytest
+
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    ActorBusyException,
+    MapNotFoundException,
+    MovementInvalidException,
+    PathBlockedException,
+    PlayerNotFoundException,
+    PlayerStaminaExhaustedException,
+)
 from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
 )
-from ai_rpg_world.domain.world.value_object.transition_condition import RequireToll, block_if_weather
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-    MovementInvalidException,
-    PlayerStaminaExhaustedException,
-    PathBlockedException,
-    ActorBusyException,
-)
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
-    InMemoryPlayerStatusRepository,
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.transition_condition import RequireToll, block_if_weather
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
     InMemoryPlayerProfileRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_transition_policy_repository import (
     InMemoryTransitionPolicyRepository,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestMovementStepExecutor:
@@ -135,8 +135,8 @@ class TestMovementStepExecutor:
         from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
             PlayerProfileAggregate,
         )
-        from ai_rpg_world.domain.player.value_object.player_name import PlayerName
         from ai_rpg_world.domain.player.enum.player_enum import Role
+        from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 
         return PlayerProfileAggregate.create(
             player_id=PlayerId(player_id),
@@ -160,9 +160,9 @@ class TestMovementStepExecutor:
         spot_id: int,
         width: int = 10,
         height: int = 10,
-        objects: Optional[List[WorldObject]] = None,
-        gateways: Optional[List] = None,
-        terrain_type: Optional[TerrainType] = None,
+        objects: list[WorldObject] | None = None,
+        gateways: list | None = None,
+        terrain_type: TerrainType | None = None,
     ) -> PhysicalMapAggregate:
         tiles = {}
         for x in range(width):
@@ -176,7 +176,7 @@ class TestMovementStepExecutor:
             gateways=gateways or [],
         )
 
-    def _register_spots(self, spot_repo, spots_data: List[Dict]):
+    def _register_spots(self, spot_repo, spots_data: list[dict]):
         for s in spots_data:
             spot_repo.save(Spot(SpotId(s["id"]), s["name"], s.get("desc", "")))
 
@@ -276,17 +276,17 @@ class TestMovementStepExecutor:
 
     def test_execute_movement_step_gateway_message_when_crossing_map(self, setup_executor):
         """ゲートウェイを跨ぐ移動では「マップを移動しました」メッセージが返る。"""
-        from ai_rpg_world.domain.world.entity.gateway import Gateway
-        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-        from ai_rpg_world.domain.world.value_object.area import RectArea
         from ai_rpg_world.application.world.handlers.gateway_handler import (
             GatewayTriggeredEventHandler,
         )
+        from ai_rpg_world.domain.world.entity.gateway import Gateway
+        from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
+        from ai_rpg_world.domain.world.value_object.area import RectArea
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
         from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
         from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
             InMemoryMonsterAggregateRepository,
         )
-        from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 
         data_store = InMemoryDataStore()
         data_store.clear_all()
@@ -508,8 +508,8 @@ class TestMovementStepExecutor:
     ):
         """ゲートウェイが通行料でブロックされているとき失敗 DTO を返す。"""
         from ai_rpg_world.domain.world.entity.gateway import Gateway
-        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
         from ai_rpg_world.domain.world.value_object.area import RectArea
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 
         exec_, status_repo, profile_repo, phys_repo, spot_repo, uow, _ = setup_executor
         policy_repo = InMemoryTransitionPolicyRepository()

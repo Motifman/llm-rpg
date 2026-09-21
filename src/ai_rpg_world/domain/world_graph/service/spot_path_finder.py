@@ -18,7 +18,7 @@ multi-spot CHASE で「target が居る spot に向かう次の 1 hop」を求�
 from __future__ import annotations
 
 from collections import deque
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -26,7 +26,6 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
-
 
 # 接続を通行可能かどうかを判定する callable。BFS の隣接展開で使う。
 ConnectionPassableFilter = Callable[[SpotConnection], bool]
@@ -38,8 +37,8 @@ def find_next_hop(
     target_spot: SpotId,
     is_passable: ConnectionPassableFilter,
     *,
-    max_distance: Optional[int] = None,
-) -> Optional[ConnectionId]:
+    max_distance: int | None = None,
+) -> ConnectionId | None:
     """`from_spot` から `target_spot` に向かう最短経路の最初の接続 ID を返す。
 
     - 同 spot (from == target) → None
@@ -57,7 +56,7 @@ def find_next_hop(
         return None
 
     # `predecessor[spot] = (came_from_spot, connection_used_to_arrive)`
-    predecessor: Dict[SpotId, tuple[SpotId, ConnectionId]] = {}
+    predecessor: dict[SpotId, tuple[SpotId, ConnectionId]] = {}
     queue: deque[tuple[SpotId, int]] = deque([(from_spot, 0)])
     visited = {from_spot}
 
@@ -91,8 +90,8 @@ def find_hop_distance(
     target_spot: SpotId,
     is_passable: ConnectionPassableFilter,
     *,
-    max_distance: Optional[int] = None,
-) -> Optional[int]:
+    max_distance: int | None = None,
+) -> int | None:
     """`from_spot` から `target_spot` までの最短 hop 数を返す。
 
     Phase 4-O C: pack 援護で「仲間までの距離」を測る用途。
@@ -132,13 +131,13 @@ def find_hop_distance(
 
 
 def _backtrack_first_hop(
-    predecessor: Dict[SpotId, tuple[SpotId, ConnectionId]],
+    predecessor: dict[SpotId, tuple[SpotId, ConnectionId]],
     from_spot: SpotId,
     target_spot: SpotId,
 ) -> ConnectionId:
     """target からたどって最初の hop の接続 ID を返す。"""
     cursor = target_spot
-    last_connection: Optional[ConnectionId] = None
+    last_connection: ConnectionId | None = None
     while cursor != from_spot:
         came_from, conn_id = predecessor[cursor]
         last_connection = conn_id

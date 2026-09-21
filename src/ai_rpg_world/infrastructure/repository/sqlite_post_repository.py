@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 from ai_rpg_world.domain.sns.repository.post_repository import PostRepository
@@ -36,7 +36,7 @@ class SqlitePostRepository(PostRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqlitePostRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqlitePostRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
@@ -45,7 +45,7 @@ class SqlitePostRepository(PostRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqlitePostRepository":
+    ) -> SqlitePostRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -69,7 +69,7 @@ class SqlitePostRepository(PostRepository):
             return
         sink.add_events_from_aggregate(aggregate)
 
-    def _hashtags(self, post_id: PostId) -> List[str]:
+    def _hashtags(self, post_id: PostId) -> list[str]:
         cur = self._conn.execute(
             """
             SELECT hashtag
@@ -81,7 +81,7 @@ class SqlitePostRepository(PostRepository):
         )
         return [str(row[0]) for row in cur.fetchall()]
 
-    def _likes(self, post_id: PostId) -> List[tuple[int, str]]:
+    def _likes(self, post_id: PostId) -> list[tuple[int, str]]:
         cur = self._conn.execute(
             """
             SELECT user_id, created_at
@@ -93,7 +93,7 @@ class SqlitePostRepository(PostRepository):
         )
         return [(int(row[0]), str(row[1])) for row in cur.fetchall()]
 
-    def _mentions(self, post_id: PostId) -> List[str]:
+    def _mentions(self, post_id: PostId) -> list[str]:
         cur = self._conn.execute(
             """
             SELECT user_name
@@ -105,7 +105,7 @@ class SqlitePostRepository(PostRepository):
         )
         return [str(row[0]) for row in cur.fetchall()]
 
-    def _reply_ids(self, post_id: PostId) -> List[int]:
+    def _reply_ids(self, post_id: PostId) -> list[int]:
         cur = self._conn.execute(
             """
             SELECT reply_id
@@ -117,7 +117,7 @@ class SqlitePostRepository(PostRepository):
         )
         return [int(row[0]) for row in cur.fetchall()]
 
-    def _hydrate_post(self, row: sqlite3.Row | None) -> Optional[PostAggregate]:
+    def _hydrate_post(self, row: sqlite3.Row | None) -> PostAggregate | None:
         if row is None:
             return None
         post_id = PostId(int(row["post_id"]))
@@ -140,17 +140,17 @@ class SqlitePostRepository(PostRepository):
         cur = self._conn.execute("SELECT COALESCE(MAX(post_id), 0) FROM game_sns_posts")
         return int(cur.fetchone()[0])
 
-    def find_by_id(self, entity_id: PostId) -> Optional[PostAggregate]:
+    def find_by_id(self, entity_id: PostId) -> PostAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_posts WHERE post_id = ?",
             (int(entity_id),),
         )
         return self._hydrate_post(cur.fetchone())
 
-    def find_by_ids(self, entity_ids: List[PostId]) -> List[PostAggregate]:
+    def find_by_ids(self, entity_ids: list[PostId]) -> list[PostAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[PostAggregate]:
+    def find_all(self) -> list[PostAggregate]:
         cur = self._conn.execute("SELECT * FROM game_sns_posts ORDER BY post_id ASC")
         return [x for row in cur.fetchall() for x in [self._hydrate_post(row)] if x is not None]
 
@@ -247,11 +247,11 @@ class SqlitePostRepository(PostRepository):
         self._finalize_write()
         return post_id
 
-    def _load_query(self, sql: str, params: tuple[Any, ...]) -> List[PostAggregate]:
+    def _load_query(self, sql: str, params: tuple[Any, ...]) -> list[PostAggregate]:
         cur = self._conn.execute(sql, params)
         return [x for row in cur.fetchall() for x in [self._hydrate_post(row)] if x is not None]
 
-    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -264,12 +264,12 @@ class SqlitePostRepository(PostRepository):
         )
 
     def find_by_user_ids(
-        self, user_ids: List[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at"
-    ) -> List[PostAggregate]:
+        self, user_ids: list[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at"
+    ) -> list[PostAggregate]:
         if not user_ids:
             return []
         placeholders = ",".join("?" for _ in user_ids)
-        order_by = "created_at DESC, post_id DESC" if sort_by == "created_at" else "created_at DESC, post_id DESC"
+        order_by = "created_at DESC, post_id DESC"
         return self._load_query(
             f"""
             SELECT *
@@ -281,7 +281,7 @@ class SqlitePostRepository(PostRepository):
             tuple(int(user_id) for user_id in user_ids) + (limit, offset),
         )
 
-    def find_recent_posts(self, limit: int = 20) -> List[PostAggregate]:
+    def find_recent_posts(self, limit: int = 20) -> list[PostAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -292,7 +292,7 @@ class SqlitePostRepository(PostRepository):
             (limit,),
         )
 
-    def find_posts_mentioning_user(self, user_name: str, limit: int = 20) -> List[PostAggregate]:
+    def find_posts_mentioning_user(self, user_name: str, limit: int = 20) -> list[PostAggregate]:
         return self._load_query(
             """
             SELECT p.*
@@ -305,7 +305,7 @@ class SqlitePostRepository(PostRepository):
             (user_name, limit),
         )
 
-    def find_liked_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_liked_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         return self._load_query(
             """
             SELECT p.*
@@ -318,10 +318,10 @@ class SqlitePostRepository(PostRepository):
             (int(user_id), limit, offset),
         )
 
-    def find_posts_liked_by_user(self, user_id: UserId, limit: int = 20) -> List[PostAggregate]:
+    def find_posts_liked_by_user(self, user_id: UserId, limit: int = 20) -> list[PostAggregate]:
         return self.find_liked_posts_by_user(user_id, limit=limit, offset=0)
 
-    def search_posts_by_content(self, query: str, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def search_posts_by_content(self, query: str, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         keyword = f"%{query.lower()}%"
         return self._load_query(
             """
@@ -334,7 +334,7 @@ class SqlitePostRepository(PostRepository):
             (keyword, limit, offset),
         )
 
-    def find_posts_by_hashtag(self, hashtag: str, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_posts_by_hashtag(self, hashtag: str, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         return self._load_query(
             """
             SELECT p.*
@@ -354,7 +354,7 @@ class SqlitePostRepository(PostRepository):
         )
         return int(cur.fetchone()[0])
 
-    def get_user_post_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_post_stats(self, user_id: UserId) -> dict[str, int]:
         cur = self._conn.execute(
             "SELECT COUNT(*) FROM game_sns_posts WHERE author_user_id = ?",
             (int(user_id),),
@@ -371,7 +371,7 @@ class SqlitePostRepository(PostRepository):
         )
         return {"total_posts": total_posts, "total_likes": int(cur.fetchone()[0])}
 
-    def find_trending_posts(self, timeframe_hours: int = 24, limit: int = 10, offset: int = 0) -> List[PostAggregate]:
+    def find_trending_posts(self, timeframe_hours: int = 24, limit: int = 10, offset: int = 0) -> list[PostAggregate]:
         cutoff = (datetime.now() - timedelta(hours=timeframe_hours)).isoformat()
         return self._load_query(
             """
@@ -386,7 +386,7 @@ class SqlitePostRepository(PostRepository):
             (cutoff, limit, offset),
         )
 
-    def bulk_delete_posts(self, post_ids: List[PostId], user_id: UserId) -> int:
+    def bulk_delete_posts(self, post_ids: list[PostId], user_id: UserId) -> int:
         self._assert_shared_transaction_active()
         began_local_transaction = False
         if self._commits_after_write and not self._conn.in_transaction:
@@ -442,7 +442,7 @@ class SqlitePostRepository(PostRepository):
             raise
         return len(post_ids)
 
-    def find_private_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[PostAggregate]:
+    def find_private_posts_by_user(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[PostAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -454,7 +454,7 @@ class SqlitePostRepository(PostRepository):
             (int(user_id), limit, offset),
         )
 
-    def find_posts_in_timeframe(self, timeframe_hours: int = 24, limit: int = 1000) -> List[PostAggregate]:
+    def find_posts_in_timeframe(self, timeframe_hours: int = 24, limit: int = 1000) -> list[PostAggregate]:
         cutoff = (datetime.now() - timedelta(hours=timeframe_hours)).isoformat()
         return self._load_query(
             """

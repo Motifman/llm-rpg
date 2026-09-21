@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -58,13 +58,13 @@ class GroundOverflowSink:
     def __init__(
         self,
         *,
-        fixed_spot_provider: Optional[Any] = None,
+        fixed_spot_provider: Any | None = None,
         event_kind: str = "overflow",
         spot_graph_repository: Any,
         spot_interior_repository: Any,
         item_repository: Any,
         item_spec_repository: Any,
-        event_publisher: Optional[Any] = None,
+        event_publisher: Any | None = None,
     ) -> None:
         self._fixed_spot = fixed_spot_provider
         self._event_kind = event_kind
@@ -91,7 +91,7 @@ class GroundOverflowSink:
         item_repository: Any,
         item_spec_repository: Any,
         event_publisher: Any,
-    ) -> "GroundOverflowSink":
+    ) -> GroundOverflowSink:
         """同じ行き先規則をcommand内の資源とイベント収集先へ束縛する。
 
         長寿命のsinkをそのまま使うと、地面への保存と観測だけが

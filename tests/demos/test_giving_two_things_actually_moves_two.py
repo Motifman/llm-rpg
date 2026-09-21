@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -48,10 +48,11 @@ def town() -> Any:
 
 
 def _hand(runtime: Any, player_id: int, count: int) -> None:
+    from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
     from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
         grant_item_specs_to_inventory,
     )
-    from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
     spec = runtime._item_spec_repo.find_by_name(_BREAD).item_spec_id.value
     grant_item_specs_to_inventory(
@@ -74,7 +75,7 @@ def _give(runtime: Any, *, quantity: Any = None) -> Any:
     その出力の形をそのまま組み立てる (resolver 自身の検査は別クラス)。
     """
     spec = runtime._item_spec_repo.find_by_name(_BREAD).item_spec_id.value
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "index": 0,
         "item_spec_id": spec,
         "is_spoiled": False,

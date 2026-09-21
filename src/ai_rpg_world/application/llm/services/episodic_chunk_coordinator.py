@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.scheduler import (
@@ -30,15 +31,19 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
 )
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
-    SubjectiveEpisode,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IShortTermMemory,
+)
+from ai_rpg_world.application.llm.services._pending_prediction_recording import (
+    record_pending_prediction_if_applicable,
+)
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
+    resolve_pending_predictions_if_applicable,
+)
+from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
+    record_recall_hits_if_applicable,
+    stamp_recall_prediction_outcome_if_applicable,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
@@ -49,15 +54,14 @@ from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields impo
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
-from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
-    record_recall_hits_if_applicable,
-    stamp_recall_prediction_outcome_if_applicable,
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.observation.contracts.interfaces import (
+    IObservationContextBuffer,
 )
-from ai_rpg_world.application.llm.services._pending_prediction_recording import (
-    record_pending_prediction_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
-    resolve_pending_predictions_if_applicable,
+from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
     EpisodicRecallBufferRepository,
@@ -65,12 +69,9 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repos
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
 )
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-from ai_rpg_world.application.observation.contracts.interfaces import (
-    IObservationContextBuffer,
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
+    SubjectiveEpisode,
 )
-from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -118,22 +119,18 @@ class EpisodicChunkCoordinator:
         # 伝聞が全滅しないようにする)。
         player_name_provider: Callable[[PlayerId], str] | None = None,
         episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
-        trace_recorder: Optional[ITraceRecorder] = None,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        subjective_completion_scheduler: Optional[
-            "IEpisodicSubjectiveCompletionScheduler"
-        ] = None,
-        belief_evidence_transcriber: Optional["BeliefEvidenceTranscriber"] = None,
+        trace_recorder: ITraceRecorder | None = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
+        subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
+        belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
         belief_attribution_enabled: bool = False,
-        recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+        recall_buffer_store: EpisodicRecallBufferRepository | None = None,
         error_driven_reinterpretation_enabled: bool = False,
         error_gated_boundary_enabled: bool = False,
-        recall_success_store: Optional["IEpisodicRecallSuccessStore"] = None,
+        recall_success_store: IEpisodicRecallSuccessStore | None = None,
         recall_hit_boost_enabled: bool = False,
-        pending_prediction_store: Optional[PendingPredictionRepository] = None,
+        pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
@@ -275,7 +272,7 @@ class EpisodicChunkCoordinator:
         self._player_name_provider = player_name_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
-        self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
+        self._chunk_actions: dict[int, list[ActionResultEntry]] = {}
         # 長走時の保険: decide_chunk_boundary が「もう少し溜めよう」を返し続
         # けた場合、bucket が際限なく肥える silent failure を防ぐためのハード
         # キャップ。境界判定の閾値を上回る規模になったら強制的に chunk を
@@ -294,7 +291,7 @@ class EpisodicChunkCoordinator:
     def _record_belief_evidence_if_applicable(
         self,
         episode: SubjectiveEpisode,
-        chunk_actions: "tuple[ActionResultEntry, ...]" = (),
+        chunk_actions: tuple[ActionResultEntry, ...] = (),
     ) -> None:
         """U2 (証拠台帳統一設計): 同期 LLM 補完直後に prediction_error を
         evidence 化する。transcriber 未注入 (flag OFF) なら何もしない。
@@ -400,7 +397,7 @@ class EpisodicChunkCoordinator:
             return ()
         return tuple(p for p in live if p.tick_from <= current_tick)
 
-    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+    def _resolve_trace_recorder(self) -> ITraceRecorder | None:
         if self._trace_recorder_provider is not None:
             try:
                 return self._trace_recorder_provider()
@@ -426,7 +423,7 @@ class EpisodicChunkCoordinator:
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
-        tick: Optional[int] = None
+        tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 tick = self._current_tick_provider()
@@ -469,7 +466,7 @@ class EpisodicChunkCoordinator:
         *,
         player_id: PlayerId,
         episode: SubjectiveEpisode,
-        chunk_actions: "tuple[ActionResultEntry, ...]",
+        chunk_actions: tuple[ActionResultEntry, ...],
     ) -> None:
         """``PREDICTION_OUTCOME`` を trace に記録する (失敗は握りつぶす)。
 
@@ -498,7 +495,7 @@ class EpisodicChunkCoordinator:
         recorder = self._resolve_trace_recorder()
         if recorder is None:
             return
-        tick: Optional[int] = None
+        tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 tick = self._current_tick_provider()
@@ -569,7 +566,7 @@ class EpisodicChunkCoordinator:
         window_obs = self._short_term_memory.get_recent(
             player_id, self._recent_observations_limit
         )
-        obs_slice: List[ObservationEntry] = []
+        obs_slice: list[ObservationEntry] = []
         for o in window_obs:
             if t0 <= _as_utc(o.occurred_at) <= t1:
                 obs_slice.append(o)

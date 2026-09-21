@@ -6,35 +6,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
-from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
-    neighbor_priming_scores,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-    IEpisodicRecallHabituationStore,
-    compute_habituation_penalty,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-    IEpisodicRecallSuccessStore,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-    IEpisodicRecallSlotStore,
-    RecallSlotDecision,
-    RecallSlotPolicy,
-    apply_slot_policy,
-)
-from ai_rpg_world.application.llm.services.afterglow_store import (
-    AfterglowEntry,
-    AfterglowSource,
-    IAfterglowStore,
-    apply_afterglow_policy,
-)
 from ai_rpg_world.application.llm.passive_recall_cue_families import (
     PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
     PASSIVE_RECALL_PLACE_FAMILY_LABEL,
@@ -42,6 +14,33 @@ from ai_rpg_world.application.llm.passive_recall_cue_families import (
     passive_recall_object_value_granularity_weight,
     passive_recall_place_axis_granularity_weight,
 )
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    AfterglowEntry,
+    AfterglowSource,
+    IAfterglowStore,
+    apply_afterglow_policy,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+    IEpisodicRecallHabituationStore,
+    compute_habituation_penalty,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    IEpisodicRecallSlotStore,
+    RecallSlotDecision,
+    RecallSlotPolicy,
+    apply_slot_policy,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+    IEpisodicRecallSuccessStore,
+)
+from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
+    neighbor_priming_scores,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 PASSIVE_RECALL_AXIS_TEMPORAL = "temporal"
 PASSIVE_RECALL_AXIS_SPREADING = "spreading"
@@ -90,7 +89,7 @@ def _merged_ordered_episodes_for_cue_bucket(
     cues: Sequence[EpisodicCue],
     limit_per_axis: int,
     being_id: BeingId,
-    min_occurred_at: Optional[datetime] = None,
+    min_occurred_at: datetime | None = None,
 ) -> tuple[
     str,
     list[SubjectiveEpisode],
@@ -203,12 +202,12 @@ class EpisodicPassiveRecallRetrievalDebug:
     slot off (= 従来挙動) のときは ``None``。
     retained / inserted / evicted_ids を見ると prefix cache 親和性と慣化の
     動きが post-hoc で追える。"""
-    recall_slot_decision: Optional[RecallSlotDecision] = None
+    recall_slot_decision: RecallSlotDecision | None = None
     """#526 段階 3 PR-C: 想起の階層構造の下層 (= afterglow = ぼんやり覚えてる)
     の今 tick の状態。slot から押し出された記憶 + slot 閾値で入れなかった
     弱い候補のうち heading 付きのものが並ぶ。afterglow off (= store 未注入)
     のときは None。"""
-    afterglow_index: Optional[tuple[AfterglowEntry, ...]] = None
+    afterglow_index: tuple[AfterglowEntry, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -232,15 +231,15 @@ class EpisodicPassiveRecallRetrievalService:
         *,
         link_store: MemoryLinkRepository | None = None,
         spreading_max_hops: int = 2,
-        habituation_store: Optional[IEpisodicRecallHabituationStore] = None,
+        habituation_store: IEpisodicRecallHabituationStore | None = None,
         habituation_decay_window_ticks: int = 5,
         habituation_strength: int = 2,
-        recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
+        recall_success_store: IEpisodicRecallSuccessStore | None = None,
         hit_boost_strength: int = 0,
         hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
-        slot_store: Optional[IEpisodicRecallSlotStore] = None,
-        slot_policy: Optional[RecallSlotPolicy] = None,
-        afterglow_store: Optional[IAfterglowStore] = None,
+        slot_store: IEpisodicRecallSlotStore | None = None,
+        slot_policy: RecallSlotPolicy | None = None,
+        afterglow_store: IAfterglowStore | None = None,
         afterglow_capacity: int = 10,
         afterglow_max_residence: int = 10,
     ) -> None:
@@ -314,7 +313,7 @@ class EpisodicPassiveRecallRetrievalService:
         max_candidates: int,
         now: datetime | None = None,
         min_occurred_at: datetime | None = None,
-        current_tick: Optional[int] = None,
+        current_tick: int | None = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
         """過去 episode を situation cues に基づいて recall する。
 
@@ -533,7 +532,7 @@ class EpisodicPassiveRecallRetrievalService:
         # 新規挿入数を絞った new_slot 順に並べ替える。slot off (= store /
         # policy 未注入 or being_id 未解決) のときは round-robin 結果を
         # そのまま使い既存挙動を保つ。
-        slot_decision: Optional[RecallSlotDecision] = None
+        slot_decision: RecallSlotDecision | None = None
         if (
             self._slot_store is not None
             and self._slot_policy is not None
@@ -577,7 +576,7 @@ class EpisodicPassiveRecallRetrievalService:
         #      いない (= score 閾値で落ちた弱い hit)
         # いずれも episode.heading が乗っていないと意味がない (= 見出しを
         # 並べるため) ので skip。
-        afterglow_index_result: Optional[tuple[AfterglowEntry, ...]] = None
+        afterglow_index_result: tuple[AfterglowEntry, ...] | None = None
         if (
             self._afterglow_store is not None
             and current_tick is not None
@@ -587,7 +586,7 @@ class EpisodicPassiveRecallRetrievalService:
             evicted_set = set(slot_decision.evicted_ids)
             incoming: list[AfterglowEntry] = []
 
-            def _heading_or_none(eid: str) -> Optional[str]:
+            def _heading_or_none(eid: str) -> str | None:
                 ep = episode_by_id.get(eid)
                 if ep is None:
                     ep = self._store.get_by_being(being_id, eid)

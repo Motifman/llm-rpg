@@ -1,10 +1,19 @@
 """プレイヤー間発言のアプリケーションサービス（囁き・発言・シャウト）"""
 
 import logging
-from typing import Callable, Any, Optional
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.events.domain_event_collector import (
     DomainEventCollector,
+)
+from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.application.speech.exceptions import (
+    PlayerLocationNotSetException,
+    PlayerNotFoundException,
+    SpeechApplicationException,
+    SpeechCommandException,
+    SpeechSystemErrorException,
 )
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.common.exception import DomainException
@@ -17,14 +26,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
-from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
-from ai_rpg_world.application.speech.exceptions import (
-    SpeechApplicationException,
-    SpeechCommandException,
-    SpeechSystemErrorException,
-    PlayerNotFoundException,
-    PlayerLocationNotSetException,
-)
+_Result = TypeVar("_Result")
 
 
 class PlayerSpeechApplicationService:
@@ -36,9 +38,9 @@ class PlayerSpeechApplicationService:
     def __init__(
         self,
         player_status_repository: PlayerStatusRepository,
-        event_publisher: EventPublisher,
-        departed_speaker_checker: Optional[Callable[[PlayerId], bool]] = None,
-        departed_spot_provider: Optional[Callable[[PlayerId], Optional[SpotId]]] = None,
+        event_publisher: EventPublisher[Any],
+        departed_speaker_checker: Callable[[PlayerId], bool] | None = None,
+        departed_spot_provider: Callable[[PlayerId], SpotId | None] | None = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._event_publisher = event_publisher
@@ -47,10 +49,8 @@ class PlayerSpeechApplicationService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self,
-        operation: Callable[[], Any],
-        context: dict,
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except SpeechApplicationException:
@@ -67,7 +67,7 @@ class PlayerSpeechApplicationService:
                 extra=context,
             )
             raise SpeechSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 
@@ -95,7 +95,7 @@ class PlayerSpeechApplicationService:
         if status.current_spot_id is None or status.current_coordinate is None:
             raise PlayerLocationNotSetException(command.speaker_player_id)
 
-        target_player_id: Optional[PlayerId] = None
+        target_player_id: PlayerId | None = None
         if command.channel == SpeechChannel.WHISPER:
             if command.target_player_id is None:
                 raise SpeechCommandException("囁きの場合は宛先プレイヤーを指定してください")

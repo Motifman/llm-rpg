@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    UnifiedRecentEventEntry,
+)
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmUiContextDto,
@@ -13,14 +18,10 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
-from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    UnifiedRecentEventEntry,
-)
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -42,8 +43,8 @@ class IShortTermMemory(ABC):
 
     @abstractmethod
     def append_all(
-        self, player_id: PlayerId, entries: List[ObservationEntry]
-    ) -> List[ObservationEntry]:
+        self, player_id: PlayerId, entries: list[ObservationEntry]
+    ) -> list[ObservationEntry]:
         """
         指定プレイヤーに観測を複数件追加する。
         戻り値は今回の追加によりウィンドウから溢れた（捨てられた）観測のリスト。
@@ -51,7 +52,7 @@ class IShortTermMemory(ABC):
         pass
 
     @abstractmethod
-    def get_recent(self, player_id: PlayerId, limit: int) -> List[ObservationEntry]:
+    def get_recent(self, player_id: PlayerId, limit: int) -> list[ObservationEntry]:
         """指定プレイヤーの直近 limit 件の観測を新しい順で返す。"""
         pass
 
@@ -82,7 +83,7 @@ class IShortTermMemory(ABC):
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """PR5 (R1): 現在 short-term window に乗っている最古 entry の occurred_at。
 
         episodic recall の時間下限フィルタとして使う。
@@ -110,24 +111,24 @@ class IActionResultStore(ABC):
         result_summary: str,
         *,
         success: bool = True,
-        error_code: Optional[str] = None,
-        tool_name: Optional[str] = None,
-        identifier_arguments: Optional[Mapping[str, str]] = None,
-        free_text_argument_names: Tuple[str, ...] = (),
-        argument_fingerprint: Optional[str] = None,
+        error_code: str | None = None,
+        tool_name: str | None = None,
+        identifier_arguments: Mapping[str, str] | None = None,
+        free_text_argument_names: tuple[str, ...] = (),
+        argument_fingerprint: str | None = None,
         should_reschedule: bool = False,
-        inner_thought: Optional[str] = None,
-        expected_result: Optional[str] = None,
-        intention: Optional[str] = None,
-        emotion_hint: Optional[str] = None,
-        prediction_context_id: Optional[str] = None,
-        in_context_belief_ids: Tuple[str, ...] = (),
+        inner_thought: str | None = None,
+        expected_result: str | None = None,
+        intention: str | None = None,
+        emotion_hint: str | None = None,
+        prediction_context_id: str | None = None,
+        in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
         """行動結果を 1 件追加する。"""
         pass
 
     @abstractmethod
-    def get_recent(self, player_id: PlayerId, limit: int) -> List[ActionResultEntry]:
+    def get_recent(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
         """指定プレイヤーの直近 limit 件の行動結果を新しい順で返す。"""
         pass
 
@@ -155,7 +156,7 @@ class ILlmUiContextBuilder(ABC):
     def build(
         self,
         base_current_state_text: str,
-        state: Optional[PlayerCurrentStateDto],
+        state: PlayerCurrentStateDto | None,
     ) -> LlmUiContextDto:
         """LLM 用 UI コンテキストを構築する。"""
         pass
@@ -167,15 +168,15 @@ class IRecentEventsFormatter(ABC):
     @abstractmethod
     def format(
         self,
-        observations: List[ObservationEntry],
-        action_results: List[ActionResultEntry],
+        observations: list[ObservationEntry],
+        action_results: list[ActionResultEntry],
     ) -> str:
         """観測と行動結果を統合して文字列化する。"""
         pass
 
     @abstractmethod
     def format_unified_entries(
-        self, entries: List[UnifiedRecentEventEntry]
+        self, entries: list[UnifiedRecentEventEntry]
     ) -> str:
         """記録時に統一済みの時系列を文字列化する。"""
         pass
@@ -245,8 +246,8 @@ class IPromptBuilder(ABC):
     def build(
         self,
         acting: ActingBeing,
-        action_instruction: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        action_instruction: str | None = None,
+    ) -> dict[str, Any]:
         """messages/tools/tool_choice 等を含むリクエスト辞書を返す。"""
         pass
 
@@ -255,7 +256,7 @@ class IAvailabilityResolver(ABC):
     """ツール利用可否を現在状態から判定する。"""
 
     @abstractmethod
-    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
         """現在状態でツールを出してよいなら True。"""
         pass
 
@@ -275,7 +276,7 @@ class IGameToolRegistry(ABC):
     @abstractmethod
     def get_definitions_with_resolvers(
         self,
-    ) -> List[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+    ) -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
         """登録済みのツール定義と resolver を返す。"""
         pass
 
@@ -286,8 +287,8 @@ class IAvailableToolsProvider(ABC):
     @abstractmethod
     def get_available_tools(
         self,
-        context: Optional[PlayerCurrentStateDto],
-    ) -> List[Dict[str, Any]]:
+        context: PlayerCurrentStateDto | None,
+    ) -> list[dict[str, Any]]:
         """利用可能ツールを OpenAI tool schema 形式で返す。"""
         pass
 
@@ -299,9 +300,9 @@ class IToolArgumentResolver(ABC):
     def resolve(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """tool_name ごとの引数補完・正規化を行う。"""
         pass
 

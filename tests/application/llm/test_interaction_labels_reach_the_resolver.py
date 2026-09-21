@@ -25,8 +25,6 @@ action_name を選び直す判断はこの target を入力にするので、意
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
@@ -70,7 +68,7 @@ def _current_state(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def _build(snap: SpotGraphPlayerSnapshotDto) -> Tuple[str, dict]:
+def _build(snap: SpotGraphPlayerSnapshotDto) -> tuple[str, dict]:
     """1 回の build から、表示本文と解決用 target を両方受け取る。
 
     表示と解決が同じ 1 回の走査から作られることを見たいので、別々に組まない。

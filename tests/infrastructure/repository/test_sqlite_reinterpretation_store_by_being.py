@@ -28,7 +28,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_sto
     _entry_to_payload,
 )
 
-
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 

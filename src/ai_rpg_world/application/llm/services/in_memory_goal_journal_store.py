@@ -7,20 +7,19 @@ belief journal の in-memory store と同型。Being ごとに GoalEntry の lis
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Optional
+from dataclasses import replace
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
 )
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-    GOAL_STATUS_ACHIEVED,
     GOAL_STATUS_ABANDONED,
+    GOAL_STATUS_ACHIEVED,
     GOAL_STATUS_ACTIVE,
     GOAL_STATUS_SUPERSEDED,
     GoalEntry,
 )
-from dataclasses import replace
 
 _SETTLE_STATUSES = frozenset({GOAL_STATUS_ACHIEVED, GOAL_STATUS_ABANDONED})
 
@@ -43,7 +42,7 @@ class InMemoryGoalJournalStore(GoalJournalRepository):
             raise TypeError("being_id must be BeingId")
         return list(self._entries.get(being_id, ()))
 
-    def get_active_by_being(self, being_id: BeingId) -> Optional[GoalEntry]:
+    def get_active_by_being(self, being_id: BeingId) -> GoalEntry | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         active = [
@@ -71,7 +70,7 @@ class InMemoryGoalJournalStore(GoalJournalRepository):
 
     def settle_by_being(
         self, being_id: BeingId, *, goal_id: str, outcome_status: str
-    ) -> Optional[GoalEntry]:
+    ) -> GoalEntry | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if outcome_status not in _SETTLE_STATUSES:

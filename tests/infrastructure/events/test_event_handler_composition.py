@@ -1,7 +1,8 @@
 """EventHandlerComposition のテスト（正常・例外・プロファイル別登録）"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent

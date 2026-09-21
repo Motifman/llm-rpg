@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
@@ -11,7 +10,7 @@ class PlayerProfileRepository(Repository[PlayerProfileAggregate, PlayerId]):
     """プレイヤープロフィールリポジトリインターフェース"""
 
     @abstractmethod
-    def find_by_name(self, name: PlayerName) -> Optional[PlayerProfileAggregate]:
+    def find_by_name(self, name: PlayerName) -> PlayerProfileAggregate | None:
         """名前でプレイヤープロフィールを検索"""
         pass
 

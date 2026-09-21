@@ -1,9 +1,9 @@
-from typing import List, Optional
 from dataclasses import dataclass
+
+from ai_rpg_world.domain.item.exception import QuantityValidationException
+from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
-from ai_rpg_world.domain.item.value_object.durability import Durability
-from ai_rpg_world.domain.item.exception import QuantityValidationException
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class UpdateOperation:
     item_instance_id: ItemInstanceId
     new_quantity: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.new_quantity <= 0:
             raise QuantityValidationException(f"Update operation: new_quantity must be positive, got {self.new_quantity}")
@@ -23,9 +23,9 @@ class CreateOperation:
     """作成操作"""
     item_spec: ItemSpec
     quantity: int
-    durability: Optional[Durability] = None
+    durability: Durability | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.quantity <= 0:
             raise QuantityValidationException(f"Create operation: quantity must be positive, got {self.quantity}")
@@ -43,9 +43,9 @@ class MergePlan:
 
     アイテムマージのための操作計画を表す値オブジェクト。
     """
-    update_operations: List[UpdateOperation]
-    create_operations: List[CreateOperation]
-    delete_operations: List[DeleteOperation]
+    update_operations: list[UpdateOperation]
+    create_operations: list[CreateOperation]
+    delete_operations: list[DeleteOperation]
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ class ConsumedItem:
     consumed_quantity: int
     remaining_quantity: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーション"""
         if self.consumed_quantity <= 0:
             raise QuantityValidationException(f"Consumed item: consumed_quantity must be positive, got {self.consumed_quantity}")
@@ -72,9 +72,9 @@ class CraftingConsumptionPlan:
 
     レシピの材料消費を実行するための計画。
     """
-    consumed_items: List[ConsumedItem]
-    update_operations: List[UpdateOperation]
-    delete_operations: List[DeleteOperation]
+    consumed_items: list[ConsumedItem]
+    update_operations: list[UpdateOperation]
+    delete_operations: list[DeleteOperation]
 
     @property
     def total_consumed_quantity(self) -> int:

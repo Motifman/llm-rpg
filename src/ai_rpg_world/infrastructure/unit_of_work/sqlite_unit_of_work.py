@@ -10,10 +10,9 @@ ReadModel 等は `Sqlite*Repository.for_shared_unit_of_work(connection)` で共�
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
-
 import sqlite3
+from pathlib import Path
+from typing import Any, Union
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -33,22 +32,22 @@ class SqliteUnitOfWork(UnitOfWork):
 
     def __init__(
         self,
-        database: Union[str, Path, None] = None,
+        database: str | Path | None = None,
         *,
-        connection: Optional[sqlite3.Connection] = None,
+        connection: sqlite3.Connection | None = None,
         sync_event_dispatcher: Any = None,
     ) -> None:
         if (database is None) == (connection is None):
             raise ValueError("database と connection のどちらか一方だけを指定してください")
-        self._database: Optional[str] = str(database) if database is not None else None
-        self._supplied: Optional[sqlite3.Connection] = connection
+        self._database: str | None = str(database) if database is not None else None
+        self._supplied: sqlite3.Connection | None = connection
         self._owns_connection = connection is None
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: sqlite3.Connection | None = None
         self._in_transaction = False
-        self._pending_events: List[BaseDomainEvent[Any, Any]] = []
+        self._pending_events: list[BaseDomainEvent[Any, Any]] = []
         self._processed_sync_count = 0
         self._committed = False
-        self._committed_events: List[BaseDomainEvent[Any, Any]] = []
+        self._committed_events: list[BaseDomainEvent[Any, Any]] = []
         self._sync_event_dispatcher = sync_event_dispatcher
         self._poisoned = False
 
@@ -57,7 +56,7 @@ class SqliteUnitOfWork(UnitOfWork):
         return self._sync_event_dispatcher
 
     @property
-    def database_path(self) -> Optional[Path]:
+    def database_path(self) -> Path | None:
         """接続を所有する場合の正規化済みDBパスを返す。"""
         if self._database is None or self._database == ":memory:":
             return None
@@ -149,8 +148,8 @@ class SqliteUnitOfWork(UnitOfWork):
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
         assert self._conn is not None
-        rollback_error: Optional[BaseException] = None
-        cleanup_error: Optional[BaseException] = None
+        rollback_error: BaseException | None = None
+        cleanup_error: BaseException | None = None
         try:
             self._conn.rollback()
         except BaseException as error:
@@ -173,7 +172,7 @@ class SqliteUnitOfWork(UnitOfWork):
         if cleanup_error is not None:
             raise cleanup_error
 
-    def add_events(self, events: List[BaseDomainEvent[Any, Any]]) -> None:
+    def add_events(self, events: list[BaseDomainEvent[Any, Any]]) -> None:
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
         self._pending_events.extend(events)
@@ -196,14 +195,14 @@ class SqliteUnitOfWork(UnitOfWork):
 
     def get_pending_events_since(
         self, processed_count: int
-    ) -> Tuple[List[BaseDomainEvent[Any, Any]], int]:
+    ) -> tuple[list[BaseDomainEvent[Any, Any]], int]:
         events = self._pending_events[processed_count:]
         return (events, len(self._pending_events))
 
     def advance_sync_processed_count(self, new_count: int) -> None:
         self._processed_sync_count = new_count
 
-    def get_committed_events(self) -> List[BaseDomainEvent[Any, Any]]:
+    def get_committed_events(self) -> list[BaseDomainEvent[Any, Any]]:
         return self._committed_events.copy()
 
     def clear_committed_events(self) -> None:
@@ -233,7 +232,7 @@ class SqliteUnitOfWorkFactory(UnitOfWorkFactory):
     ファイルパス向け。`:memory:` を使う場合は `SqliteUnitOfWork(database=\":memory:\")` を直接生成する。
     """
 
-    def __init__(self, database: Union[str, Path]) -> None:
+    def __init__(self, database: str | Path) -> None:
         raw = str(database)
         if raw == ":memory:":
             self._database = raw

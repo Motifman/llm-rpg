@@ -1,22 +1,22 @@
 """
 InMemoryTradeReadModelRepository - TradeReadModelを使用するインメモリ実装
 """
-from copy import deepcopy
-from typing import List, Optional, Dict, Tuple
-from datetime import datetime, timedelta
 import random
-from ai_rpg_world.domain.trade.repository.trade_read_model_repository import TradeReadModelRepository, TradeCursor
-from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from copy import deepcopy
+from datetime import datetime, timedelta
+
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
+from ai_rpg_world.domain.trade.repository.trade_read_model_repository import TradeCursor, TradeReadModelRepository
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
 
 
-def _sort_read_models_newest_first_tie_break_trade_id(trades: List[TradeReadModel]) -> None:
+def _sort_read_models_newest_first_tie_break_trade_id(trades: list[TradeReadModel]) -> None:
     """`SqliteTradeReadModelRepository` の `ORDER BY created_at DESC, trade_id ASC` と同じ順序。
 
     カーソル句（より古い行へ進む）と整合するため、同一 `created_at` では `trade_id` 昇順で固定する。
@@ -27,19 +27,19 @@ def _sort_read_models_newest_first_tie_break_trade_id(trades: List[TradeReadMode
 class InMemoryTradeReadModelRepository(TradeReadModelRepository):
     """TradeReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
-        self._trades: Dict[TradeId, TradeReadModel] = {}
+    def __init__(self) -> None:
+        self._trades: dict[TradeId, TradeReadModel] = {}
 
         # サンプル取引データを作成
         self._setup_sample_data()
 
-    def take_transaction_snapshot(self) -> Dict[TradeId, TradeReadModel]:
+    def take_transaction_snapshot(self) -> dict[TradeId, TradeReadModel]:
         """投影処理を原子的に戻すため、現在のread modelを複製する。"""
         return deepcopy(self._trades)
 
     def restore_transaction_snapshot(
         self,
-        snapshot: Dict[TradeId, TradeReadModel],
+        snapshot: dict[TradeId, TradeReadModel],
     ) -> None:
         """失敗した投影処理の前に取得した状態へread modelを戻す。"""
         self._trades = deepcopy(snapshot)
@@ -383,11 +383,11 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         self._trades[TradeId(15)] = guardian_cancelled
 
     def _create_sample_trade(self, trade_id: int, seller_id: int, seller_name: str,
-                           buyer_id: Optional[int], buyer_name: Optional[str],
+                           buyer_id: int | None, buyer_name: str | None,
                            item_instance_id: int, item_name: str, item_quantity: int,
                            item_type: ItemType, item_rarity: Rarity,
-                           item_description: str, item_equipment_type: Optional[EquipmentType],
-                           durability_current: Optional[int], durability_max: Optional[int],
+                           item_description: str, item_equipment_type: EquipmentType | None,
+                           durability_current: int | None, durability_max: int | None,
                            requested_gold: int, status: TradeStatus, created_at: datetime) -> TradeReadModel:
         """サンプル取引を作成するヘルパーメソッド"""
         return TradeReadModel.create_from_trade_and_item(
@@ -411,11 +411,11 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         )
 
     # Repository基本メソッドの実装
-    def find_by_id(self, entity_id: TradeId) -> Optional[TradeReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> TradeReadModel | None:
         """IDで取引を検索"""
         return self._trades.get(entity_id)
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[TradeReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[TradeReadModel]:
         """IDのリストで取引を検索"""
         result = []
         for trade_id in entity_ids:
@@ -436,12 +436,12 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             return True
         return False
 
-    def find_all(self) -> List[TradeReadModel]:
+    def find_all(self) -> list[TradeReadModel]:
         """全ての取引を取得"""
         return list(self._trades.values())
 
     # TradeReadModelRepository特有メソッドの実装
-    def find_recent_trades(self, limit: int = 10, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def find_recent_trades(self, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """最新の取引を取得（カーソルベースページング）"""
         all_trades = list(self._trades.values())
 
@@ -470,7 +470,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         return result_trades, next_cursor
 
-    def find_trades_for_player(self, player_id: PlayerId, limit: int = 10, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def find_trades_for_player(self, player_id: PlayerId, limit: int = 10, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）"""
         # プレイヤーが関与している取引（出品者または購入者）を検索
         player_trades = [
@@ -507,8 +507,8 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         self,
         seller_id: PlayerId,
         limit: int = 10,
-        cursor: Optional[TradeCursor] = None,
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        cursor: TradeCursor | None = None,
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """出品者の ACTIVE 取引のみを取得（カーソルベースページング）"""
         selling_trades = [
             trade
@@ -543,7 +543,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         return result_trades, next_cursor
 
-    def find_active_trades(self, limit: int = 50, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def find_active_trades(self, limit: int = 50, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """アクティブな取引を取得（カーソルベースページング）"""
         active_trades = [trade for trade in self._trades.values() if trade.is_active]
 
@@ -572,7 +572,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         return result_trades, next_cursor
 
-    def search_trades(self, filter: TradeSearchFilter, limit: int = 20, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+    def search_trades(self, filter: TradeSearchFilter, limit: int = 20, cursor: TradeCursor | None = None) -> tuple[list[TradeReadModel], TradeCursor | None]:
         """フィルタ条件で取引を検索（カーソルベースページング）"""
         all_trades = list(self._trades.values())
 

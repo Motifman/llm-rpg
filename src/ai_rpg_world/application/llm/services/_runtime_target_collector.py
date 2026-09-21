@@ -4,7 +4,6 @@ RuntimeTargetCollector: ToolRuntimeTargetDto を収集し、
 最終的な targets 辞書を構築する責務を担う。
 """
 
-from typing import Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
 
@@ -13,7 +12,7 @@ class RuntimeTargetCollector:
     """ToolRuntimeTargetDto を収集し、targets 辞書を構築する。"""
 
     def __init__(self) -> None:
-        self._targets: Dict[str, ToolRuntimeTargetDto] = {}
+        self._targets: dict[str, ToolRuntimeTargetDto] = {}
 
     def add(self, label: str, target: ToolRuntimeTargetDto) -> None:
         """単一のターゲットを追加する。重複ラベルの場合は ValueError。"""
@@ -25,7 +24,7 @@ class RuntimeTargetCollector:
             raise ValueError(f"Duplicate label: {label}")
         self._targets[label] = target
 
-    def add_all(self, targets: Dict[str, ToolRuntimeTargetDto]) -> None:
+    def add_all(self, targets: dict[str, ToolRuntimeTargetDto]) -> None:
         """複数のターゲットを一括で追加する。重複ラベルがある場合は上書きする。"""
         if not isinstance(targets, dict):
             raise TypeError("targets must be dict")
@@ -40,7 +39,7 @@ class RuntimeTargetCollector:
         """指定ラベルのターゲットを返す。存在しない場合は None。"""
         return self._targets.get(label)
 
-    def get_targets(self) -> Dict[str, ToolRuntimeTargetDto]:
+    def get_targets(self) -> dict[str, ToolRuntimeTargetDto]:
         """収集した targets のコピーを返す。"""
         return dict(self._targets)
 

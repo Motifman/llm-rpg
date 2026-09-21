@@ -50,9 +50,9 @@ from __future__ import annotations
 
 import unicodedata
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Protocol, Tuple, runtime_checkable
-
+from typing import Protocol, runtime_checkable
 
 # ──────────────────────────────────────────────────────────────────
 # 公開 DTO + Protocol
@@ -101,7 +101,7 @@ class IWorldNounMatcher(Protocol):
     C 拡張への差し替えはこの Protocol を満たすクラスで行う。
     """
 
-    def find_in_text(self, text: str) -> Tuple[NounMatch, ...]:
+    def find_in_text(self, text: str) -> tuple[NounMatch, ...]:
         """``text`` 内で見つかった固有名詞 match を全て返す。
 
         - 順序: text 内のマッチ開始位置の昇順
@@ -170,8 +170,8 @@ class _Pattern:
 @dataclass
 class _Node:
     children: dict = field(default_factory=dict)
-    failure: Optional["_Node"] = None
-    outputs: List[_Pattern] = field(default_factory=list)
+    failure: _Node | None = None
+    outputs: list[_Pattern] = field(default_factory=list)
 
 
 class AhoCorasickWorldNounMatcher:
@@ -234,7 +234,7 @@ class AhoCorasickWorldNounMatcher:
                 child.outputs = list(child.outputs) + list(child.failure.outputs)
                 queue.append(child)
 
-    def find_in_text(self, text: str) -> Tuple[NounMatch, ...]:
+    def find_in_text(self, text: str) -> tuple[NounMatch, ...]:
         if not text or self._is_empty:
             return ()
         normalized = _normalize_for_matching(text)
@@ -245,7 +245,7 @@ class AhoCorasickWorldNounMatcher:
         # index をそのまま start/end として返す。matched_text は元 text の
         # 対応スライスを返す試みをするが、長さが変わる場合は normalized
         # 側のスライスをそのまま使う (情報損失あり、注意コメント参照)。
-        matches: List[NounMatch] = []
+        matches: list[NounMatch] = []
         node = self._root
         for i, ch in enumerate(normalized):
             # failure を辿って goto がある node に移る
@@ -289,7 +289,7 @@ class NullWorldNounMatcher:
     structured フィールドだけを見る既存挙動に縮退する。
     """
 
-    def find_in_text(self, text: str) -> Tuple[NounMatch, ...]:  # noqa: ARG002
+    def find_in_text(self, text: str) -> tuple[NounMatch, ...]:  # noqa: ARG002
         return ()
 
 
@@ -322,15 +322,15 @@ class WorldNounMatcherBuilder:
     """
 
     def __init__(self) -> None:
-        self._patterns: List[_Pattern] = []
+        self._patterns: list[_Pattern] = []
 
     def add_spot(
         self,
         name: str,
         spot_id: int,
         *,
-        aliases: Tuple[str, ...] = (),
-    ) -> "WorldNounMatcherBuilder":
+        aliases: tuple[str, ...] = (),
+    ) -> WorldNounMatcherBuilder:
         """スポットを登録。``place_spot:str(spot_id)`` の cue として recall に
         繋がる。aliases も同じ value で登録される。"""
         self._add_all(
@@ -346,8 +346,8 @@ class WorldNounMatcherBuilder:
         name: str,
         player_id: int,
         *,
-        aliases: Tuple[str, ...] = (),
-    ) -> "WorldNounMatcherBuilder":
+        aliases: tuple[str, ...] = (),
+    ) -> WorldNounMatcherBuilder:
         """キャラクター (player) を登録。``entity:spot_graph_player_{id}`` cue。"""
         self._add_all(
             (name, *aliases),
@@ -362,8 +362,8 @@ class WorldNounMatcherBuilder:
         name: str,
         world_object_id: int,
         *,
-        aliases: Tuple[str, ...] = (),
-    ) -> "WorldNounMatcherBuilder":
+        aliases: tuple[str, ...] = (),
+    ) -> WorldNounMatcherBuilder:
         """ワールドオブジェクトを登録。``object:world_object_{id}`` cue。"""
         self._add_all(
             (name, *aliases),
@@ -378,8 +378,8 @@ class WorldNounMatcherBuilder:
         name: str,
         item_instance_id: int,
         *,
-        aliases: Tuple[str, ...] = (),
-    ) -> "WorldNounMatcherBuilder":
+        aliases: tuple[str, ...] = (),
+    ) -> WorldNounMatcherBuilder:
         """アイテム instance を登録。``object:item_instance_{id}`` cue。"""
         self._add_all(
             (name, *aliases),
@@ -391,7 +391,7 @@ class WorldNounMatcherBuilder:
 
     def _add_all(
         self,
-        names: Tuple[str, ...],
+        names: tuple[str, ...],
         *,
         axis: str,
         value: str,

@@ -1,28 +1,29 @@
-from typing import Optional, List, Tuple
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus, QuestObjectiveType
-from ai_rpg_world.domain.quest.exception.quest_exception import (
-    InvalidQuestStatusException,
-    CannotAcceptQuestException,
-    CannotCancelQuestException,
-    QuestObjectivesNotCompleteException,
-)
+from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType, QuestStatus
 from ai_rpg_world.domain.quest.event.quest_event import (
+    QuestAcceptedEvent,
+    QuestApprovedEvent,
+    QuestCancelledEvent,
+    QuestCompletedEvent,
     QuestIssuedEvent,
     QuestPendingApprovalEvent,
-    QuestApprovedEvent,
-    QuestAcceptedEvent,
-    QuestCompletedEvent,
-    QuestCancelledEvent,
+)
+from ai_rpg_world.domain.quest.exception.quest_exception import (
+    CannotAcceptQuestException,
+    CannotCancelQuestException,
+    InvalidQuestStatusException,
+    QuestObjectivesNotCompleteException,
 )
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
-from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 
 
 class QuestAggregate(AggregateRoot):
@@ -32,16 +33,16 @@ class QuestAggregate(AggregateRoot):
         self,
         quest_id: QuestId,
         status: QuestStatus,
-        objectives: List[QuestObjective],
+        objectives: list[QuestObjective],
         reward: QuestReward,
         scope: QuestScope,
-        issuer_player_id: Optional[PlayerId] = None,
-        guild_id: Optional[int] = None,
-        acceptor_player_id: Optional[PlayerId] = None,
+        issuer_player_id: PlayerId | None = None,
+        guild_id: int | None = None,
+        acceptor_player_id: PlayerId | None = None,
         reserved_gold: int = 0,
-        reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = (),
+        reserved_item_instance_ids: tuple[ItemInstanceId, ...] = (),
         version: int = 0,
-        created_at: Optional[datetime] = None,
+        created_at: datetime | None = None,
     ):
         super().__init__()
         self._quest_id = quest_id
@@ -67,7 +68,7 @@ class QuestAggregate(AggregateRoot):
         return self._status
 
     @property
-    def objectives(self) -> List[QuestObjective]:
+    def objectives(self) -> list[QuestObjective]:
         return list(self._objectives)
 
     @property
@@ -79,15 +80,15 @@ class QuestAggregate(AggregateRoot):
         return self._scope
 
     @property
-    def issuer_player_id(self) -> Optional[PlayerId]:
+    def issuer_player_id(self) -> PlayerId | None:
         return self._issuer_player_id
 
     @property
-    def guild_id(self) -> Optional[int]:
+    def guild_id(self) -> int | None:
         return self._guild_id
 
     @property
-    def acceptor_player_id(self) -> Optional[PlayerId]:
+    def acceptor_player_id(self) -> PlayerId | None:
         return self._acceptor_player_id
 
     @property
@@ -95,7 +96,7 @@ class QuestAggregate(AggregateRoot):
         return self._reserved_gold
 
     @property
-    def reserved_item_instance_ids(self) -> Tuple[ItemInstanceId, ...]:
+    def reserved_item_instance_ids(self) -> tuple[ItemInstanceId, ...]:
         return self._reserved_item_instance_ids
 
     @property
@@ -110,13 +111,13 @@ class QuestAggregate(AggregateRoot):
     def issue_quest(
         cls,
         quest_id: QuestId,
-        objectives: List[QuestObjective],
+        objectives: list[QuestObjective],
         reward: QuestReward,
         scope: QuestScope,
-        issuer_player_id: Optional[PlayerId] = None,
-        guild_id: Optional[int] = None,
+        issuer_player_id: PlayerId | None = None,
+        guild_id: int | None = None,
         reserved_gold: int = 0,
-        reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = (),
+        reserved_item_instance_ids: tuple[ItemInstanceId, ...] = (),
     ) -> "QuestAggregate":
         """クエストを発行する。ギルド掲示時は guild_id を渡すと status=PENDING_APPROVAL になる。"""
         if not objectives:
@@ -136,6 +137,7 @@ class QuestAggregate(AggregateRoot):
             version=0,
             created_at=None,
         )
+        event: BaseDomainEvent[Any, Any]
         if status == QuestStatus.PENDING_APPROVAL:
             event = QuestPendingApprovalEvent.create(
                 aggregate_id=quest_id,
@@ -217,7 +219,7 @@ class QuestAggregate(AggregateRoot):
         self,
         objective_type: QuestObjectiveType,
         target_id: int,
-        target_id_secondary: Optional[int] = None,
+        target_id_secondary: int | None = None,
     ) -> bool:
         """
         指定した目標の進捗を 1 進める。

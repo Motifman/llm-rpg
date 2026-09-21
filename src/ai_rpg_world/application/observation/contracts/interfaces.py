@@ -33,7 +33,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.observation.contracts.dtos import (
@@ -43,8 +43,8 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 
 if TYPE_CHECKING:  # pragma: no cover - 型検査時のみ
     from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 __all__ = [
@@ -61,7 +61,7 @@ class IWorldObjectToPlayerResolver(ABC):
     """WorldObjectId に紐づくプレイヤーIDを解決するポート（観測配信先解決で利用）"""
 
     @abstractmethod
-    def resolve_player_id(self, object_id: WorldObjectId) -> Optional[PlayerId]:
+    def resolve_player_id(self, object_id: WorldObjectId) -> PlayerId | None:
         """WorldObjectId に紐づくプレイヤーIDを返す。プレイヤーでなければ None。"""
         pass
 
@@ -75,7 +75,7 @@ class IRecipientResolutionStrategy(ABC):
         pass
 
     @abstractmethod
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         """配信先プレイヤーIDのリストを返す（重複含み可。Resolver が重複除去する）。"""
         pass
 
@@ -84,7 +84,7 @@ class IObservationRecipientResolver(ABC):
     """イベントから観測の配信先プレイヤーID一覧を解決するポート"""
 
     @abstractmethod
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         """イベントに応じた配信先プレイヤーIDのリストを返す。観測対象外なら空リスト。"""
         pass
 
@@ -97,8 +97,8 @@ class IObservationFormatter(ABC):
         self,
         event: Any,
         recipient_player_id: PlayerId,
-        attention_level: Optional[AttentionLevel] = None,
-    ) -> Optional[ObservationOutput]:
+        attention_level: AttentionLevel | None = None,
+    ) -> ObservationOutput | None:
         """
         指定プレイヤー向けの観測出力を生成する。
         スキップする場合は None を返す。
@@ -116,7 +116,7 @@ class IObservationContextBuffer(ABC):
         player_id: PlayerId,
         entry: ObservationEntry,
         *,
-        runtime_context: Optional[ToolRuntimeContextDto] = None,
+        runtime_context: ToolRuntimeContextDto | None = None,
     ) -> None:
         """指定プレイヤーの観測を1件追加する。
 
@@ -126,11 +126,11 @@ class IObservationContextBuffer(ABC):
         pass
 
     @abstractmethod
-    def get_observations(self, player_id: PlayerId) -> List[ObservationEntry]:
+    def get_observations(self, player_id: PlayerId) -> list[ObservationEntry]:
         """指定プレイヤーの蓄積済み観測一覧を返す（順序保持）。"""
         pass
 
     @abstractmethod
-    def drain(self, player_id: PlayerId) -> List[ObservationEntry]:
+    def drain(self, player_id: PlayerId) -> list[ObservationEntry]:
         """指定プレイヤーの観測を取得し、バッファから削除する。"""
         pass

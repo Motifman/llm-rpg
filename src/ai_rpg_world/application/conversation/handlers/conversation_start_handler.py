@@ -1,19 +1,18 @@
 """WorldObjectInteractedEvent(TALK) を受けて会話セッションを開始するハンドラ"""
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
-from ai_rpg_world.domain.common.event_handler import EventHandler
-from ai_rpg_world.domain.world.event.map_events import WorldObjectInteractedEvent
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-from ai_rpg_world.application.conversation.services.conversation_command_service import (
-    ConversationCommandService,
-)
 from ai_rpg_world.application.conversation.contracts.commands import (
     StartConversationCommand,
 )
+from ai_rpg_world.application.conversation.services.conversation_command_service import (
+    ConversationCommandService,
+)
+from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
+from ai_rpg_world.domain.world.event.map_events import WorldObjectInteractedEvent
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class ConversationStartHandler(EventHandler[WorldObjectInteractedEvent]):
@@ -22,7 +21,7 @@ class ConversationStartHandler(EventHandler[WorldObjectInteractedEvent]):
     def __init__(
         self,
         conversation_command_service: ConversationCommandService,
-        resolve_player_id_from_actor: Callable[[WorldObjectId], Optional[PlayerId]],
+        resolve_player_id_from_actor: Callable[[WorldObjectId], PlayerId | None],
     ):
         self._conversation_command_service = conversation_command_service
         self._resolve_player_id_from_actor = resolve_player_id_from_actor

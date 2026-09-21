@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, TypeVar
 
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -22,10 +24,10 @@ from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import Discov
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
     InteractionCooldownScope,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
@@ -47,15 +49,13 @@ from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     StateDisplayRule,
 )
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphConnectionRecordInvariantError,
     SpotGraphStateDecodeError,
@@ -70,7 +70,7 @@ def _enum_name(value: Enum) -> str:
     return value.name
 
 
-def _parse_enum(enum_cls: Type[E], name: str) -> E:
+def _parse_enum(enum_cls: type[E], name: str) -> E:
     return enum_cls[name]
 
 
@@ -179,11 +179,11 @@ def loads_spot_interior(blob: str) -> SpotInterior:
 
 
 def _encode_connection_records(
-    connection_records: Tuple[SpotGraphConnectionRecord, ...],
-) -> List[dict[str, Any]]:
+    connection_records: tuple[SpotGraphConnectionRecord, ...],
+) -> list[dict[str, Any]]:
     if not connection_records:
         return []
-    out: List[dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for record in connection_records:
         conn = record.connection
         if not record.is_bidirectional:
@@ -824,7 +824,7 @@ def _decode_optional_bool(
 
 def _decode_optional_string(
     payload: dict[str, Any], key: str, *, owner: str,
-) -> Optional[str]:
+) -> str | None:
     value = payload.get(key)
     if value is not None and not isinstance(value, str):
         raise SpotGraphStateDecodeError(f"{owner} {key} must be a str or None")

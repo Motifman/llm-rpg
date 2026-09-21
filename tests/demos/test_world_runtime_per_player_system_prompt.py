@@ -7,12 +7,11 @@
 
 from pathlib import Path
 
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.world_runtime.default_prompt_builder_adapters import (
     WorldSystemPromptBuilder,
 )
-from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
-
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FORBIDDEN_LIBRARY = (

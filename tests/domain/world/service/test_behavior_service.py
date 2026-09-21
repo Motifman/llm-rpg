@@ -1,37 +1,39 @@
-import pytest
 import math
 from unittest.mock import MagicMock
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import (
-    ObjectTypeEnum,
-    DirectionEnum,
-    BehaviorActionType,
-    Disposition,
-)
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
-from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
-from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+
+import pytest
+
+from ai_rpg_world.domain.common.exception import ValidationException
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent
+from ai_rpg_world.domain.world.enum.world_enum import (
+    BehaviorActionType,
+    DirectionEnum,
+    Disposition,
+    ObjectTypeEnum,
+)
+from ai_rpg_world.domain.world.exception.behavior_exception import (
+    FOVAngleValidationException,
+    VisionRangeValidationException,
+)
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.domain.world.service.allegiance_service import PackAllegianceService
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
-from ai_rpg_world.domain.world.service.allegiance_service import PackAllegianceService
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
-from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.value_object.behavior_context import GrowthContext
-from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
-from ai_rpg_world.domain.world.exception.behavior_exception import (
-    VisionRangeValidationException,
-    FOVAngleValidationException,
-)
-from ai_rpg_world.domain.common.exception import ValidationException
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 
 
 class TestAutonomousBehaviorComponent:
@@ -75,7 +77,6 @@ class TestBehaviorService:
 
     @pytest.fixture
     def hostility_service(self):
-        from ai_rpg_world.domain.world.enum.world_enum import Disposition
         return ConfigurableHostilityService(
             race_disposition_table={"goblin": {"human": Disposition.HOSTILE}}
         )

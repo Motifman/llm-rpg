@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
+
 from ai_rpg_world.domain.player.exception import StatGrowthFactorValidationException
 
 
@@ -18,7 +19,7 @@ class StatGrowthFactor:
     critical_rate_factor: float
     evasion_rate_factor: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.hp_factor < 0:
             raise StatGrowthFactorValidationException(f"hp_factor must be greater than or equal to 0. hp_factor: {self.hp_factor}")
         if self.mp_factor < 0:

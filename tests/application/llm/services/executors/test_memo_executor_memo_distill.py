@@ -6,19 +6,25 @@ U5 (予測誤差統一設計 §2 U5): memo_done 成功時、transcriber が注�
 本ファイルは「memo_executor がいつ・どう呼ぶか」(配線側の責務) に絞る。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
+
+from tests.application.llm._memo_being_test_helpers import make_memo_being_setup
+
 from ai_rpg_world.application.llm.services.executors.memo_executor import MemoToolExecutor
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+    InMemoryBeliefEvidenceBufferStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import MemoDistillEvidenceTranscriber
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMO_DONE
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
-from tests.application.llm._memo_being_test_helpers import make_memo_being_setup
+
 
 def _episode(episode_id: str) -> SubjectiveEpisode:
     return SubjectiveEpisode(episode_id=episode_id, player_id=1, being_id=BeingId('being_w1_p1'), occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='memo_add'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=())

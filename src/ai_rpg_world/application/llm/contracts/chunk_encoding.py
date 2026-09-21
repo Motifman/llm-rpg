@@ -6,15 +6,16 @@ RecentEventsFormatter と同じ行テキスト規則で観測・行動結果を 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Sequence, Tuple, Union
+from typing import Literal, Union
 
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     format_action_call_for_history,
 )
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
@@ -33,7 +34,7 @@ class UnifiedRecentEventEntry:
     occurred_at: datetime
     game_time_label: str | None
     kind: UnifiedRecentEventKind
-    payload: Union[ObservationEntry, ActionResultEntry]
+    payload: ObservationEntry | ActionResultEntry
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -53,7 +54,7 @@ class UnifiedRecentEventEntry:
             )
 
     @classmethod
-    def from_observation(cls, entry: ObservationEntry) -> "UnifiedRecentEventEntry":
+    def from_observation(cls, entry: ObservationEntry) -> UnifiedRecentEventEntry:
         return cls(
             occurred_at=entry.occurred_at,
             game_time_label=entry.game_time_label,
@@ -64,7 +65,7 @@ class UnifiedRecentEventEntry:
     @classmethod
     def from_action_result(
         cls, entry: ActionResultEntry
-    ) -> "UnifiedRecentEventEntry":
+    ) -> UnifiedRecentEventEntry:
         return cls(
             occurred_at=entry.occurred_at,
             game_time_label=entry.game_time_label,
@@ -172,7 +173,7 @@ class UnifiedRecentEventLine:
 def merge_observations_and_action_results_to_unified_timeline(
     observations: Sequence[ObservationEntry],
     action_results: Sequence[ActionResultEntry],
-) -> Tuple[UnifiedRecentEventLine, ...]:
+) -> tuple[UnifiedRecentEventLine, ...]:
     """
     観測と行動結果を occurred_at 昇順にマージした統一タイムラインを返す。
     各行の text は DefaultRecentEventsFormatter と同一規則。
@@ -220,16 +221,16 @@ class ChunkEncodingInput:
     """
 
     player_id: PlayerId
-    observations: Tuple[ObservationEntry, ...]
-    action_results: Tuple[ActionResultEntry, ...]
-    unified_timeline: Tuple[UnifiedRecentEventLine, ...]
-    observation_overflow_from_window: Tuple[ObservationEntry, ...] = ()
+    observations: tuple[ObservationEntry, ...]
+    action_results: tuple[ActionResultEntry, ...]
+    unified_timeline: tuple[UnifiedRecentEventLine, ...]
+    observation_overflow_from_window: tuple[ObservationEntry, ...] = ()
     # U10b (予測誤差統一設計 部品6・pending prediction 清算): この chunk を
     # 補完する時点で being が保持している「窓が開いた約束」(tick_from に達した
     # pending) の一覧。chunk 主観補完 LLM に「これらは果たされたか」を判定
     # させるためにプロンプトへ載せる。coordinator が close 判定時に注入する
     # (flag OFF / store 未配線なら常に空 = 導入前と byte 一致)。
-    active_pending_predictions: Tuple[PendingPrediction, ...] = ()
+    active_pending_predictions: tuple[PendingPrediction, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.player_id, PlayerId):

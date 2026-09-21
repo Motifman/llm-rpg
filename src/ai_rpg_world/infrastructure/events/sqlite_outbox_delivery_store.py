@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
-from typing import Callable, Union
+from typing import Union
 
 from ai_rpg_world.application.common.outbox_worker import (
     OutboxFailureDisposition,
@@ -19,7 +20,7 @@ class SqliteOutboxDeliveryStore:
 
     def __init__(
         self,
-        database: Union[str, Path],
+        database: str | Path,
         *,
         retry_policy: OutboxRetryPolicy | None = None,
         now_provider: Callable[[], datetime] | None = None,

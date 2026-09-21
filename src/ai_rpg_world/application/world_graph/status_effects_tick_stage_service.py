@@ -10,7 +10,7 @@ SpotGraphSimulationApplicationService の tick パイプラインに組み込む
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -46,17 +46,15 @@ class StatusEffectsTickStageService:
     def __init__(
         self,
         *,
-        per_tick_hp_delta: Optional[dict[StatusEffectType, int]] = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
-        ] = None,
+        per_tick_hp_delta: dict[StatusEffectType, int] | None = None,
+        command_scope_factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._per_tick_hp_delta = per_tick_hp_delta or dict(DEFAULT_PER_TICK_HP_DELTA)
         self._command_scope_factory = command_scope_factory
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort],
     ) -> None:
         """本番stageを1回の独立した確定境界へ接続する。"""
         self._command_scope_factory = factory

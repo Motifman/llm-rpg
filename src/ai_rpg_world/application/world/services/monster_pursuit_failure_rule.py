@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
@@ -20,7 +20,7 @@ class MonsterPursuitFailureRule:
         physical_map: PhysicalMapAggregate,
         actor_coordinate: Coordinate,
         observation: Any,
-    ) -> Optional[PursuitFailureReason]:
+    ) -> PursuitFailureReason | None:
         if not monster.has_active_pursuit:
             return None
         if monster.behavior_state not in (
@@ -51,7 +51,7 @@ class MonsterPursuitFailureRule:
         actor_coordinate: Coordinate,
         observation: Any,
         action: Any,
-    ) -> Optional[PursuitFailureReason]:
+    ) -> PursuitFailureReason | None:
         if monster.behavior_state != BehaviorStateEnum.SEARCH:
             return None
         if not monster.has_active_pursuit:

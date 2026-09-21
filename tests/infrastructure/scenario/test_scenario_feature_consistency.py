@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 import pytest
 
@@ -12,12 +13,12 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
-    ScenarioLoader,
     _DAY_NIGHT_FEATURE,
     _INTERACTION_CONDITION_FEATURE_REQUIREMENTS,
     _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS,
     _WEATHER_FEATURE,
+    ScenarioLoader,
+    ScenarioLoadError,
 )
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"

@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
+
 from ai_rpg_world.domain.player.exception import ExpTableValidationException
 
 
@@ -14,7 +15,7 @@ class ExpTable:
     exponent: float  # 指数（成長曲線の傾き）
     level_offset: float = 0.0  # レベルオフセット
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.base_exp <= 0:
             raise ExpTableValidationException(f"base_exp must be greater than 0. base_exp: {self.base_exp}")
         if self.exponent <= 0:

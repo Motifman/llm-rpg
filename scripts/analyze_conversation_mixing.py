@@ -32,18 +32,20 @@ trace に kind=action / observation が出ている前提で動く。
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import statistics
 import sys
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, TextIO
+from typing import Any, TextIO
 
 SPEECH_TOOL_PREFIX = "speech_"
 SPEECH_OBSERVATION_CATEGORY = "speech"
 
 
-def iter_trace_events(paths: Sequence[Path]) -> Iterable[Dict[str, Any]]:
+def iter_trace_events(paths: Sequence[Path]) -> Iterable[dict[str, Any]]:
     """JSONL 群を 1 件ずつ dict として yield。壊れた行は skip。"""
     for p in paths:
         with p.open("r", encoding="utf-8") as f:
@@ -58,9 +60,9 @@ def iter_trace_events(paths: Sequence[Path]) -> Iterable[Dict[str, Any]]:
                     continue
 
 
-def extract_speech_actions(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def extract_speech_actions(events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """kind=action かつ tool が speech_ で始まる event を取り出す。"""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for ev in events:
         if ev.get("kind") != "action":
             continue
@@ -73,10 +75,10 @@ def extract_speech_actions(events: Iterable[Dict[str, Any]]) -> List[Dict[str, A
 
 
 def extract_speech_observations(
-    events: Iterable[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    events: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """kind=observation かつ category=speech の event を取り出す。"""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for ev in events:
         if ev.get("kind") != "observation":
             continue
@@ -87,8 +89,8 @@ def extract_speech_observations(
     return out
 
 
-def count_by_player(events: List[Dict[str, Any]]) -> Dict[int, int]:
-    counts: Dict[int, int] = defaultdict(int)
+def count_by_player(events: list[dict[str, Any]]) -> dict[int, int]:
+    counts: dict[int, int] = defaultdict(int)
     for ev in events:
         pid = ev.get("player_id")
         if pid is None:
@@ -98,15 +100,15 @@ def count_by_player(events: List[Dict[str, Any]]) -> Dict[int, int]:
 
 
 def consecutive_runs(
-    actions: List[Dict[str, Any]],
-) -> Dict[int, List[int]]:
+    actions: list[dict[str, Any]],
+) -> dict[int, list[int]]:
     """player 別の「連続発言 tick 数」のリストを返す。
 
     同じ player が tick T, T+1, T+2 と続けて speech_ すると、長さ 3 の
     run として記録する。
     """
     # player_id → sorted list of unique ticks where they spoke
-    by_player_ticks: Dict[int, List[int]] = defaultdict(list)
+    by_player_ticks: dict[int, list[int]] = defaultdict(list)
     for ev in actions:
         pid = ev.get("player_id")
         tick = ev.get("tick")
@@ -114,15 +116,15 @@ def consecutive_runs(
             continue
         by_player_ticks[int(pid)].append(int(tick))
 
-    out: Dict[int, List[int]] = {}
+    out: dict[int, list[int]] = {}
     for pid, ticks in by_player_ticks.items():
         ticks = sorted(set(ticks))
-        runs: List[int] = []
+        runs: list[int] = []
         if not ticks:
             out[pid] = runs
             continue
         run = 1
-        for prev, cur in zip(ticks, ticks[1:]):
+        for prev, cur in itertools.pairwise(ticks):
             if cur == prev + 1:
                 run += 1
             else:
@@ -136,16 +138,16 @@ def consecutive_runs(
 
 
 def reply_lags(
-    observations: List[Dict[str, Any]],
-    actions: List[Dict[str, Any]],
-) -> List[int]:
+    observations: list[dict[str, Any]],
+    actions: list[dict[str, Any]],
+) -> list[int]:
     """speech observation 到来 tick → その recipient の次 speech_speak action までの delta。
 
     recipient = observation の player_id。LLM の prompt はその tick に組み立てられ
     るので、observation を見てから返事するまで何 tick 待つかが reply lag に近い。
     """
     # player_id → sorted list of action ticks
-    actions_by_player: Dict[int, List[int]] = defaultdict(list)
+    actions_by_player: dict[int, list[int]] = defaultdict(list)
     for ev in actions:
         pid = ev.get("player_id")
         tick = ev.get("tick")
@@ -155,7 +157,7 @@ def reply_lags(
     for pid in actions_by_player:
         actions_by_player[pid].sort()
 
-    lags: List[int] = []
+    lags: list[int] = []
     for ob in observations:
         pid = ob.get("player_id")
         tick = ob.get("tick")
@@ -176,14 +178,14 @@ def reply_lags(
     return lags
 
 
-def crosstalk_count(actions: List[Dict[str, Any]]) -> Dict[int, int]:
+def crosstalk_count(actions: list[dict[str, Any]]) -> dict[int, int]:
     """tick → その tick に発言した player の数 (>=2 のものだけ返す)。
 
     同 spot 判定までは厳密にやらず、tick-only でカウント (cross-spot で
     たまたま同 tick に発言した分も込みのラフ推定)。実験 #25 では 4 人で
     spot が同じことが多いので、十分シグナルになる。
     """
-    by_tick_players: Dict[int, set] = defaultdict(set)
+    by_tick_players: dict[int, set] = defaultdict(set)
     for ev in actions:
         tick = ev.get("tick")
         pid = ev.get("player_id")
@@ -193,19 +195,19 @@ def crosstalk_count(actions: List[Dict[str, Any]]) -> Dict[int, int]:
     return {t: len(p) for t, p in by_tick_players.items() if len(p) >= 2}
 
 
-def percentiles(values: List[int], pcts: Sequence[float]) -> Dict[str, Optional[float]]:
+def percentiles(values: list[int], pcts: Sequence[float]) -> dict[str, float | None]:
     if not values:
         return {f"p{int(p)}": None for p in pcts}
     sorted_v = sorted(values)
     n = len(sorted_v)
-    out: Dict[str, Optional[float]] = {}
+    out: dict[str, float | None] = {}
     for p in pcts:
-        idx = max(0, min(n - 1, int(round((p / 100.0) * (n - 1)))))
+        idx = max(0, min(n - 1, round((p / 100.0) * (n - 1))))
         out[f"p{int(p)}"] = float(sorted_v[idx])
     return out
 
 
-def summarize(paths: Sequence[Path]) -> Dict[str, Any]:
+def summarize(paths: Sequence[Path]) -> dict[str, Any]:
     events = list(iter_trace_events(paths))
     actions = extract_speech_actions(events)
     observations = extract_speech_observations(events)
@@ -213,7 +215,7 @@ def summarize(paths: Sequence[Path]) -> Dict[str, Any]:
     lags = reply_lags(observations, actions)
     crosstalk = crosstalk_count(actions)
 
-    summary: Dict[str, Any] = {
+    summary: dict[str, Any] = {
         "trace_files": [str(p) for p in paths],
         "total_speech_actions": len(actions),
         "total_speech_observations": len(observations),
@@ -241,7 +243,7 @@ def summarize(paths: Sequence[Path]) -> Dict[str, Any]:
     return summary
 
 
-def write_markdown(summary: Dict[str, Any], out: TextIO) -> None:
+def write_markdown(summary: dict[str, Any], out: TextIO) -> None:
     out.write("# 会話混線分析レポート\n\n")
     out.write(f"対象 trace: {summary['trace_files']}\n\n")
     out.write("## 全体\n\n")
@@ -296,7 +298,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     for p in args.trace_files:
         if not p.exists():

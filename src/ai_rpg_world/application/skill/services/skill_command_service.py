@@ -1,5 +1,6 @@
 import logging
-from typing import Callable, Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.skill.contracts.commands import (
     AcceptSkillProposalCommand,
@@ -16,13 +17,15 @@ from ai_rpg_world.application.skill.exceptions.base_exception import (
 from ai_rpg_world.application.skill.exceptions.command.skill_command_exception import (
     SkillCommandException,
 )
+from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
+from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.repository.skill_repository import (
@@ -37,15 +40,14 @@ from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillD
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
-from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
-from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
-from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.common.value_object import WorldTick
+
+_Result = TypeVar("_Result")
 
 
 class SkillCommandService:
@@ -231,7 +233,7 @@ class SkillCommandService:
                 raise SkillCommandException(f"skill not found in slot: {command.slot_index}")
 
             # 1. マップとアクターの取得
-            spot_id = SpotId(command.spot_id)
+            spot_id = SpotId.create(command.spot_id)
             physical_map = self._physical_map_repository.find_by_id(spot_id)
             if not physical_map:
                 raise SkillCommandException(f"map not found: {command.spot_id}")
@@ -308,10 +310,16 @@ class SkillCommandService:
             if not spec:
                 raise SkillCommandException(f"skill spec not found: {proposal.offered_skill_id}")
 
+            target_slot_index = proposal.target_slot_index
+            if target_slot_index is None:
+                raise SkillCommandException(
+                    f"proposal has no target slot: {command.proposal_id}"
+                )
+
             # ロードアウトの更新（提案されたデッキティアとスロットを使用）
             loadout.equip_skill(
                 deck_tier=proposal.deck_tier,
-                slot_index=proposal.target_slot_index,
+                slot_index=target_slot_index,
                 skill=spec,
                 actor_id=progress.owner_id,
             )
@@ -330,7 +338,9 @@ class SkillCommandService:
             
             self._skill_deck_progress_repository.save(progress)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except SkillApplicationException as e:
@@ -339,11 +349,11 @@ class SkillCommandService:
             raise SkillCommandException(str(e), cause=e, **context)
         except Exception as e:
             self._logger.error(
-                f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                 extra=context,
             )
             raise SkillSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

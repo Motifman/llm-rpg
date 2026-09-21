@@ -24,7 +24,6 @@ from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-
 _DRILL = (
     Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 )

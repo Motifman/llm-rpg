@@ -72,7 +72,7 @@ class MarketOrder:
         unit_price_gold: int,
         listed_at_tick: int,
         expires_in_ticks: int,
-    ) -> "MarketOrder":
+    ) -> MarketOrder:
         """板に載せられる注文だけを作る。"""
         if not isinstance(side, MarketOrderSide):
             raise MarketOrderValidationException(
@@ -122,7 +122,7 @@ class MarketOrder:
         """
         return current_tick > self.expires_at_tick
 
-    def filled_by(self, quantity: int) -> "MarketOrder":
+    def filled_by(self, quantity: int) -> MarketOrder:
         """その数量ぶんが約定した注文を返す。"""
         if self.is_awaiting_collection:
             raise MarketOrderStateException(
@@ -141,7 +141,7 @@ class MarketOrder:
             )
         return replace(self, quantity=self.quantity - quantity)
 
-    def repriced(self, new_unit_price: int) -> "MarketOrder":
+    def repriced(self, new_unit_price: int) -> MarketOrder:
         """単価だけを変えた注文を返す。
 
         期限は動かさない。伸びると値下げが**期限の延命**に使え、板に居座り
@@ -154,7 +154,7 @@ class MarketOrder:
         _require_positive_int(new_unit_price, field="unit_price_gold")
         return replace(self, unit_price_gold=new_unit_price)
 
-    def awaiting_collection(self) -> "MarketOrder":
+    def awaiting_collection(self) -> MarketOrder:
         """引き取り待ちの状態にした注文を返す。"""
         return replace(self, is_awaiting_collection=True)
 

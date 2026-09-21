@@ -2,24 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from contextvars import ContextVar, Token
 from enum import Enum
 from types import TracebackType
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Generic,
-    Iterable,
-    Optional,
-    Protocol,
-    Sequence,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import (
-    CommandPostCommitException,
     CommandEventDispatchLimitException,
+    CommandPostCommitException,
     CommandRollbackException,
     CommandScopeStateException,
     NestedCommandScopeException,
@@ -87,7 +79,7 @@ class RollbackParticipantPort(Protocol):
 class SyncDomainEventDispatcherPort(Protocol):
     """transaction内でドメインイベントを同期処理するport。"""
 
-    def dispatch(self, event: DomainEvent, context: "CommandContext") -> None:
+    def dispatch(self, event: DomainEvent, context: CommandContext[Any]) -> None:
         """1件を処理し、追加イベントは同じcontextへ収集する。"""
         ...
 
@@ -108,7 +100,7 @@ class RepositoryProviderFactoryPort(Protocol[RepositoryProviderT]):
 
     def create(
         self,
-        context: "CommandContext[RepositoryProviderT]",
+        context: CommandContext[RepositoryProviderT],
         transaction: TransactionPort,
     ) -> RepositoryProviderT:
         """現在のtransaction資源に参加するproviderを一度生成する。"""
@@ -142,7 +134,7 @@ class CommandContext(Generic[RepositoryProviderT]):
     def __init__(self, collector: DomainEventCollector) -> None:
         self._collector = collector
         self._seen_event_ids: set[int] = set()
-        self._repository_provider: Optional[RepositoryProviderT] = None
+        self._repository_provider: RepositoryProviderT | None = None
         self._is_open = True
 
     @property
@@ -196,7 +188,7 @@ class CommandContext(Generic[RepositoryProviderT]):
         )
 
 
-_ACTIVE_COMMAND_SCOPE: ContextVar[Optional["CommandScope"]] = ContextVar(
+_ACTIVE_COMMAND_SCOPE: ContextVar[CommandScope[Any] | None] = ContextVar(
     "active_command_scope",
     default=None,
 )
@@ -211,10 +203,8 @@ class CommandScope(Generic[RepositoryProviderT]):
         *,
         sync_dispatcher: SyncDomainEventDispatcherPort,
         after_commit_handoff: AfterCommitHandoffPort,
-        repository_provider_factory: Optional[
-            RepositoryProviderFactoryPort[RepositoryProviderT]
-        ] = None,
-        transactional_outbox: Optional["TransactionalOutboxPort"] = None,
+        repository_provider_factory: RepositoryProviderFactoryPort[RepositoryProviderT] | None = None,
+        transactional_outbox: TransactionalOutboxPort | None = None,
         max_sync_events: int = 1000,
     ) -> None:
         if (
@@ -236,7 +226,7 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._dispatched_events: list[DomainEvent] = []
         self._state = CommandScopeState.NEW
         self._completion = CommandCompletion.NONE
-        self._active_scope_token: Optional[Token[Optional["CommandScope"]]] = None
+        self._active_scope_token: Token[CommandScope[Any] | None] | None = None
 
     @property
     def state(self) -> CommandScopeState:
@@ -278,18 +268,18 @@ class CommandScope(Generic[RepositoryProviderT]):
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> bool:
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """同期処理とtransactionの成否に従って終了し、例外は握らない。"""
         self._require_state(CommandScopeState.ACTIVE, "finish")
         if exc_val is not None:
             self._rollback_after(exc_val)
-            return False
+            return
 
-        cleanup_error: Optional[BaseException] = None
-        staged_outbox: Optional["StagedOutboxBatch"] = None
+        cleanup_error: BaseException | None = None
+        staged_outbox: StagedOutboxBatch | None = None
         try:
             self._dispatch_sync_events_until_empty()
             if self._transactional_outbox is not None:
@@ -309,8 +299,8 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._completion = CommandCompletion.COMMITTED
         self._context._close()
         self._deactivate_active_scope()
-        handoff_error: Optional[Exception] = None
-        outbox_error: Optional[Exception] = None
+        handoff_error: Exception | None = None
+        outbox_error: Exception | None = None
         try:
             try:
                 self._after_commit_handoff.handoff(tuple(self._dispatched_events))
@@ -342,7 +332,7 @@ class CommandScope(Generic[RepositoryProviderT]):
                 handoff_error=handoff_error,
                 outbox_error=outbox_error,
             ) from (handoff_error or outbox_error or cleanup_error)
-        return False
+        return
 
     def _dispatch_sync_events_until_empty(self) -> None:
         while True:

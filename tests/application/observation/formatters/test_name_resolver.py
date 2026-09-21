@@ -1,11 +1,11 @@
 """ObservationNameResolver の単体テスト（正常・例外・フォールバックを網羅）。"""
 
-import pytest
-from unittest.mock import Mock
 from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
-    ObservationNameResolver,
     FALLBACK_GUILD_LABEL,
     FALLBACK_ITEM_LABEL,
     FALLBACK_MONSTER_LABEL,
@@ -15,6 +15,7 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
     FALLBACK_SKILL_LABEL,
     FALLBACK_SNS_USER_LABEL,
     FALLBACK_SPOT_LABEL,
+    ObservationNameResolver,
 )
 from ai_rpg_world.domain.item.exception.item_exception import ItemInstanceIdValidationException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

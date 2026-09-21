@@ -6,24 +6,24 @@ PhysicalMapAggregate と PathfindingService, SkillSelectionPolicy を使って
 
 import logging
 import math
-from typing import Optional, Callable
+from collections.abc import Callable
 
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
 from ai_rpg_world.domain.world.exception.map_exception import (
+    InvalidPathRequestException,
     ObjectNotFoundException,
     PathNotFoundException,
-    InvalidPathRequestException,
 )
-from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
+from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
 def create_monster_action_resolver_factory(
@@ -154,7 +154,7 @@ class MonsterActionResolverImpl:
         self,
         start: Coordinate,
         goal: Coordinate,
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         """start から goal への次の一歩を返す。"""
         try:
             path = self._pathfinding_service.calculate_path(
@@ -179,7 +179,7 @@ class MonsterActionResolverImpl:
 
     def _calculate_chase_move(
         self, monster: MonsterAggregate, actor_coordinate: Coordinate
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         if monster.behavior_last_known_position is None:
             return None
         return self._get_next_step_to(
@@ -189,7 +189,7 @@ class MonsterActionResolverImpl:
 
     def _calculate_flee_move(
         self, monster: MonsterAggregate, actor_coordinate: Coordinate
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         target_id = monster.behavior_target_id
         if target_id is None:
             return self._calculate_return_move(monster, actor_coordinate)
@@ -206,7 +206,7 @@ class MonsterActionResolverImpl:
 
     def _find_flee_goal(
         self, actor_coordinate: Coordinate, enemy_coord: Coordinate
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         best_coord = None
         max_dist = actor_coordinate.euclidean_distance_to(enemy_coord)
         r = self._component.vision_range
@@ -228,7 +228,7 @@ class MonsterActionResolverImpl:
 
     def _calculate_return_move(
         self, monster: MonsterAggregate, actor_coordinate: Coordinate
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         if monster.behavior_initial_position is None:
             return None
         if actor_coordinate == monster.behavior_initial_position:
@@ -240,7 +240,7 @@ class MonsterActionResolverImpl:
 
     def _calculate_search_move(
         self, monster: MonsterAggregate, actor_coordinate: Coordinate
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         if monster.behavior_last_known_position is None:
             return self._calculate_return_move(monster, actor_coordinate)
         if actor_coordinate != monster.behavior_last_known_position:
@@ -253,7 +253,7 @@ class MonsterActionResolverImpl:
 
     def _calculate_patrol_move(
         self, monster: MonsterAggregate, actor_coordinate: Coordinate
-    ) -> Optional[Coordinate]:
+    ) -> Coordinate | None:
         if not self._component.patrol_points:
             return None
         idx = monster.behavior_patrol_index

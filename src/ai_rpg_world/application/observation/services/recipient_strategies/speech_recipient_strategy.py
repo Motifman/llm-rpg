@@ -1,6 +1,6 @@
 """プレイヤー間発言イベントの観測配信先解決戦略（囁き・発言・シャウト）"""
 
-from typing import Any, List, Set
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -8,13 +8,12 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 # 発言・シャウトの届く範囲（マンハッタン距離タイル数）
 DEFAULT_SAY_RANGE = 5
@@ -46,12 +45,12 @@ class SpeechRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if not isinstance(event, PlayerSpokeEvent):
             return []
 
-        result: List[PlayerId] = []
-        seen: Set[int] = set()
+        result: list[PlayerId] = []
+        seen: set[int] = set()
 
         def add(pid: PlayerId) -> None:
             if pid.value in seen:

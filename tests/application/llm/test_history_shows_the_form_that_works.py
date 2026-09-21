@@ -18,7 +18,7 @@ target_label 側で「quote ごとでも解釈する」と約束していたの�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, ClassVar
 
 import pytest
 
@@ -101,7 +101,7 @@ class TestCollectingTheCanonicalValue:
     """正規値は、生値と違うものだけを集める。raw args は変更しない。"""
 
     def test_a_difference_is_collected(self) -> None:
-        args: Dict[str, Any] = {"destination_label": '"広場"'}
+        args: dict[str, Any] = {"destination_label": '"広場"'}
 
         assert canonical_identifiers(
             args, destination_label="広場"
@@ -109,7 +109,7 @@ class TestCollectingTheCanonicalValue:
 
     def test_no_difference_collects_nothing(self) -> None:
         """生値と同じなら集めない (無駄な差分を作らない)。"""
-        args: Dict[str, Any] = {"destination_label": "広場"}
+        args: dict[str, Any] = {"destination_label": "広場"}
 
         assert canonical_identifiers(args, destination_label="広場") == {}
 
@@ -119,7 +119,7 @@ class TestCollectingTheCanonicalValue:
         raw args は fingerprint と行動要約のフォールバック表示にも使われる。
         内部キーを混ぜると、そちらへ漏れる。
         """
-        args: Dict[str, Any] = {"destination_label": '"広場"'}
+        args: dict[str, Any] = {"destination_label": '"広場"'}
 
         canonical_identifiers(args, destination_label="広場")
 
@@ -137,7 +137,7 @@ class TestTheWholePathWithARealWorld:
 
         return create_world_runtime("data/scenarios/offering_race_v1.json")
 
-    def _dispatch(self, race, player_int: int, tool: str, args: Dict[str, Any]):
+    def _dispatch(self, race, player_int: int, tool: str, args: dict[str, Any]):
         from ai_rpg_world.application.llm.services.world_llm_turn import tool_dispatch
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -166,12 +166,13 @@ class TestTheWholePathWithARealWorld:
         run t73 で失敗した実際の入力。ツール定義が target_label 側で約束して
         いた「quote ごとでも解釈する」を action_name にも適用した。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
@@ -213,12 +214,13 @@ class TestTheWholePathWithARealWorld:
         travel_to だけ直しても、他の識別引数が崩れたまま積まれれば同じ
         定着が起きる。両方の経路を見る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
@@ -247,6 +249,8 @@ class TestTheWholePathWithARealWorld:
         増やしても何も起きない静かな no-op になる。** dispatch が raw args
         にも射影を置くことで、両方の記録経路が同じ値を見る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.llm.services.action_summary_format import (
             ACTION_HISTORY_PROJECTION_KEY,
             action_history_projection,
@@ -256,7 +260,6 @@ class TestTheWholePathWithARealWorld:
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
@@ -299,7 +302,7 @@ class TestWhichIdentifiersAreNormalizedSoFar:
     """
 
     #: (引数名, 正規値を報告する resolver がある)
-    _COVERAGE = {
+    _COVERAGE: ClassVar[dict[str, bool]] = {
         "destination_label": True,   # travel_to
         "target_label": True,        # interact
         "action_name": True,         # interact

@@ -17,12 +17,10 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
-
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"

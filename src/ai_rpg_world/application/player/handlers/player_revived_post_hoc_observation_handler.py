@@ -23,8 +23,9 @@ commit後にその値を一度だけ消費するため、状態確定と正確�
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_appender import (
@@ -40,7 +41,7 @@ from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-CaregiverNameResolver = Callable[[PlayerId], Optional[str]]
+CaregiverNameResolver = Callable[[PlayerId], str | None]
 """``PlayerId`` → 表示名 を引く resolver。未解決 (persona 未登録 等) は None。"""
 
 
@@ -54,7 +55,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         observation_appender: ObservationAppender,
         current_tick_provider: Callable[[], int],
         caregiver_name_resolver: CaregiverNameResolver,
-        downed_incident_log: Optional[DownedIncidentLog] = None,
+        downed_incident_log: DownedIncidentLog | None = None,
     ) -> None:
         if not isinstance(grace_timer, PlayerDeathGraceTimer):
             raise TypeError("grace_timer must be PlayerDeathGraceTimer")
@@ -117,7 +118,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
                 int(revived_pid),
             )
 
-    def _drain_incidents(self, revived_pid: PlayerId) -> tuple:
+    def _drain_incidents(self, revived_pid: PlayerId) -> tuple[Any, ...]:
         """倒れている間に受けた行為を取り出す。log 未注入なら空。
 
         log 側の障害で revive 全体を倒さない。被害の申し送りが欠けるのは
@@ -134,7 +135,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             return ()
 
     @staticmethod
-    def _build_incident_phrase(incidents: tuple) -> str:
+    def _build_incident_phrase(incidents: tuple[Any, ...]) -> str:
         """「倒れている間にされたこと」を 1 文にまとめる。
 
         断定形で書く。「〜かもしれない」と濁すと、荷が減った事実に対して
@@ -198,7 +199,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         return f"{ticks} tick の間、意識を失っていた。"
 
     def _build_caregiver_phrase(
-        self, caregiver_player_id: Optional[PlayerId]
+        self, caregiver_player_id: PlayerId | None
     ) -> str:
         if caregiver_player_id is None:
             return ""

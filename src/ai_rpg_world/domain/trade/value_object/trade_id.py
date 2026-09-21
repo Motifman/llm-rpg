@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.trade.exception.trade_exception import TradeIdValidationException
 
 
@@ -11,13 +12,15 @@ class TradeId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.value <= 0:
-            raise TradeIdValidationException(self.value)
+            raise TradeIdValidationException(
+                f"TradeId must be positive: {self.value}"
+            )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "TradeId":
+    def create(cls, value: int | str) -> "TradeId":
         """intまたはstrからTradeIdを作成"""
         if isinstance(value, str):
             try:

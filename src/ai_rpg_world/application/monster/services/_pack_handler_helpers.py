@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -22,7 +20,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 
 def resolve_monster_spot(
     graph: SpotGraphAggregate, monster: MonsterAggregate,
-) -> Optional[SpotId]:
+) -> SpotId | None:
     """graph 上の monster の現在 spot を取得する。未配置なら None。
 
     pack handler 群 (援護 / 警戒共有) で「仲間までの距離を測る」際に共通

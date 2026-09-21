@@ -29,9 +29,9 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
 )
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
+    AttentionLevelOptionDto,
     AvailableLocationAreaDto,
     AvailableMoveDto,
-    AttentionLevelOptionDto,
     AwakenedActionDto,
     ChestItemDto,
     ConversationChoiceDto,

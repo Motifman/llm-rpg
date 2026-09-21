@@ -1,6 +1,6 @@
 """名前解決ヘルパー。各 formatter で重複実装しない。"""
 
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.domain.item.exception.item_exception import ItemInstanceIdValidationException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -150,4 +150,4 @@ class ObservationNameResolver:
         if user is None:
             return FALLBACK_SNS_USER_LABEL
         info = user.get_user_profile_info()
-        return info.get("display_name", FALLBACK_SNS_USER_LABEL)
+        return str(info.get("display_name", FALLBACK_SNS_USER_LABEL))

@@ -1,13 +1,12 @@
 """観測コンテキストバッファのデフォルト実装（in-memory）"""
 
-from typing import List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -25,7 +24,7 @@ class DefaultObservationContextBuffer(IObservationContextBuffer):
         player_id: PlayerId,
         entry: ObservationEntry,
         *,
-        runtime_context: Optional[ToolRuntimeContextDto] = None,
+        runtime_context: ToolRuntimeContextDto | None = None,
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -37,12 +36,12 @@ class DefaultObservationContextBuffer(IObservationContextBuffer):
             raise TypeError("runtime_context must be ToolRuntimeContextDto or None")
         self._event_store.append_pending_observation(player_id, entry)
 
-    def get_observations(self, player_id: PlayerId) -> List[ObservationEntry]:
+    def get_observations(self, player_id: PlayerId) -> list[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         return self._event_store.get_pending_observations(player_id)
 
-    def drain(self, player_id: PlayerId) -> List[ObservationEntry]:
+    def drain(self, player_id: PlayerId) -> list[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         return self._event_store.drain_pending_observations(player_id)

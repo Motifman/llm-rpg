@@ -1,26 +1,28 @@
 """
 InMemoryReplyRepository - ReplyAggregateを使用するインメモリ実装
 """
-from typing import List, Optional, Dict, Set, Union
 from datetime import datetime, timedelta
-from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
+from typing import Any, Union
+
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
 from ai_rpg_world.domain.sns.value_object.post_id import PostId
 from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from .in_memory_repository_base import InMemoryRepositoryBase
+
 from .in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from .in_memory_repository_base import InMemoryRepositoryBase
 
 
 class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
     """ReplyAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _replies(self) -> Dict[ReplyId, ReplyAggregate]:
+    def _replies(self) -> dict[ReplyId, ReplyAggregate]:
         return self._data_store.replies
 
     def generate_reply_id(self) -> ReplyId:
@@ -40,38 +42,38 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         self._register_pending_if_uow(reply.reply_id, reply)
         return self._execute_operation(operation)
 
-    def find_by_id(self, reply_id: ReplyId) -> Optional[ReplyAggregate]:
+    def find_by_id(self, reply_id: ReplyId) -> ReplyAggregate | None:
         """IDでリプライを取得"""
         pending = self._get_pending_aggregate(reply_id)
         if pending is not None:
             return self._clone(pending)
         return self._replies.get(reply_id)
 
-    def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+    def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         """特定のポストへのリプライ一覧を取得"""
         replies = [r for r in self._replies.values() if r.parent_post_id == post_id and not r.deleted]
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[offset:offset + limit]
 
-    def find_by_post_id_include_deleted(self, post_id: PostId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+    def find_by_post_id_include_deleted(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         """特定のポストへのリプライ一覧を取得（削除済みを含む）"""
         replies = [r for r in self._replies.values() if r.parent_post_id == post_id]
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[offset:offset + limit]
 
-    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         """特定のユーザーのリプライ一覧を取得"""
         replies = [r for r in self._replies.values() if r.author_user_id == user_id and not r.deleted]
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[offset:offset + limit]
 
-    def find_by_parent_reply_id(self, parent_reply_id: ReplyId, limit: int = 20) -> List[ReplyAggregate]:
+    def find_by_parent_reply_id(self, parent_reply_id: ReplyId, limit: int = 20) -> list[ReplyAggregate]:
         """特定の親リプライへのリプライ一覧を取得（スレッド表示用）"""
         replies = [r for r in self._replies.values() if r.parent_reply_id == parent_reply_id and not r.deleted]
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[:limit]
 
-    def find_replies_mentioning_user(self, user_name: str, limit: int = 20) -> List[ReplyAggregate]:
+    def find_replies_mentioning_user(self, user_name: str, limit: int = 20) -> list[ReplyAggregate]:
         """指定ユーザーをメンションしたリプライを取得"""
         replies = []
         for reply in self._replies.values():
@@ -80,7 +82,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[:limit]
 
-    def find_replies_liked_by_user(self, user_id: UserId, limit: int = 20) -> List[ReplyAggregate]:
+    def find_replies_liked_by_user(self, user_id: UserId, limit: int = 20) -> list[ReplyAggregate]:
         """指定ユーザーがいいねしたリプライ一覧を取得"""
         replies = []
         for reply in self._replies.values():
@@ -89,10 +91,10 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[:limit]
 
-    def find_replies_with_parent_posts(self, limit: int = 20) -> List[tuple]:
+    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple[Any, ...]]:
         return []
 
-    def search_replies_by_content(self, query: str, limit: int = 20) -> List[ReplyAggregate]:
+    def search_replies_by_content(self, query: str, limit: int = 20) -> list[ReplyAggregate]:
         """コンテンツでリプライを検索"""
         replies = []
         query_lower = query.lower()
@@ -106,11 +108,11 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """特定のポストへのリプライ数を取得"""
         return len([r for r in self._replies.values() if r.parent_post_id == post_id and not r.deleted])
 
-    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> Dict[Union[PostId, ReplyId], List[ReplyAggregate]]:
+    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId | ReplyId, list[ReplyAggregate]]:
         """ポストへのリプライツリーを取得（スレッド表示用）"""
         result = {}
 
-        def collect_replies(parent_id: Union[PostId, ReplyId], current_depth: int):
+        def collect_replies(parent_id: PostId | ReplyId, current_depth: int):
             if current_depth > max_depth:
                 return
 
@@ -129,11 +131,11 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         collect_replies(root_post_id, 0)
         return result
 
-    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> Dict[Union[PostId, ReplyId], List[ReplyAggregate]]:
+    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId | ReplyId, list[ReplyAggregate]]:
         """ポストへのリプライツリーを取得（スレッド表示用、削除済みを含む）"""
         result = {}
 
-        def collect_replies(parent_id: Union[PostId, ReplyId], current_depth: int):
+        def collect_replies(parent_id: PostId | ReplyId, current_depth: int):
             if current_depth > max_depth:
                 return
 
@@ -152,7 +154,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         collect_replies(root_post_id, 0)
         return result
 
-    def find_replies_by_post_ids(self, post_ids: List[PostId]) -> Dict[PostId, List[ReplyAggregate]]:
+    def find_replies_by_post_ids(self, post_ids: list[PostId]) -> dict[PostId, list[ReplyAggregate]]:
         """複数のポストへのリプライを取得"""
         result = {}
         for post_id in post_ids:
@@ -161,7 +163,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
             result[post_id] = replies
         return result
 
-    def get_user_reply_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_reply_stats(self, user_id: UserId) -> dict[str, int]:
         """ユーザーのリプライ統計を取得"""
         user_replies = [r for r in self._replies.values() if r.author_user_id == user_id and not r.deleted]
         total_likes = sum(len(reply.likes) for reply in user_replies)
@@ -172,7 +174,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
             "replies_this_month": len([r for r in user_replies if (datetime.now() - r.created_at).days <= 30])
         }
 
-    def find_recent_replies(self, limit: int = 20) -> List[ReplyAggregate]:
+    def find_recent_replies(self, limit: int = 20) -> list[ReplyAggregate]:
         """最新のリプライを取得"""
         replies = [r for r in self._replies.values() if not r.deleted]
         replies.sort(key=lambda x: x.created_at, reverse=True)
@@ -181,14 +183,14 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
     def find_replies_excluding_blocked_users(
         self,
         user_id: UserId,
-        blocked_user_ids: List[UserId],
+        blocked_user_ids: list[UserId],
         limit: int = 20
-    ) -> List[ReplyAggregate]:
+    ) -> list[ReplyAggregate]:
         replies = [r for r in self._replies.values() if not r.deleted]
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[:limit]
 
-    def bulk_delete_replies(self, reply_ids: List[ReplyId], user_id: UserId) -> int:
+    def bulk_delete_replies(self, reply_ids: list[ReplyId], user_id: UserId) -> int:
         """複数のリプライを一括削除（自分のリプライのみ）"""
         def operation():
             deleted_count = 0
@@ -212,7 +214,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
         return len(deleted_replies)
 
-    def find_by_ids(self, entity_ids: List[int]) -> List[ReplyAggregate]:
+    def find_by_ids(self, entity_ids: list[int]) -> list[ReplyAggregate]:
         """IDのリストでリプライを検索"""
         reply_ids = [ReplyId(rid) for rid in entity_ids]
         return [self._replies.get(rid) for rid in reply_ids if rid in self._replies and not self._replies[rid].deleted]
@@ -229,7 +231,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
             
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[ReplyAggregate]:
+    def find_all(self) -> list[ReplyAggregate]:
         """全てのリプライを取得（削除済みは除く）"""
         return [reply for reply in self._replies.values() if not reply.deleted]
 

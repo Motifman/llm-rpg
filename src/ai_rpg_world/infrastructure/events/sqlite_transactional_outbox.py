@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
-from typing import Callable, Sequence, Union
+from typing import Union
 
 from ai_rpg_world.application.common.command_scope import TransactionPort
 from ai_rpg_world.application.common.transactional_outbox import StagedOutboxBatch
@@ -24,7 +25,7 @@ class SqliteTransactionalOutbox:
 
     def __init__(
         self,
-        database: Union[str, Path],
+        database: str | Path,
         *,
         serializer: EventPayloadSerializer,
         is_durable: Callable[[DomainEvent], bool],

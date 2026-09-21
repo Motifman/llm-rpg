@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pathlib
 import shutil
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -48,7 +48,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any]):
+    def call(self, tool: str, args: dict[str, Any]):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )

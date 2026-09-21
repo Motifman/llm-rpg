@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class StartHarvestCommand:
     """採集開始コマンド"""

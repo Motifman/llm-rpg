@@ -11,6 +11,9 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.being.experiment_snapshot_session import (
+    _default_world_subsystem_codecs,
+)
 from ai_rpg_world.application.being.world_subsystems import (
     DistantCueStateSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
@@ -18,9 +21,6 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerPositionSubsystemCodec,
     PlayerVitalsSubsystemCodec,
     WorldTickSubsystemCodec,
-)
-from ai_rpg_world.application.being.experiment_snapshot_session import (
-    _default_world_subsystem_codecs,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds

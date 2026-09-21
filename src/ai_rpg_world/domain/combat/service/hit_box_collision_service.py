@@ -1,4 +1,4 @@
-from typing import Tuple, Any
+
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -12,7 +12,7 @@ class HitBoxCollisionDomainService:
         physical_map: PhysicalMapAggregate,
         hit_box: HitBoxAggregate,
         max_collision_checks: int,
-    ) -> Tuple[int, bool]:
+    ) -> tuple[int, bool]:
         """
         HitBoxの被覆座標に対して、障害物→オブジェクトの順で衝突判定を行う。
         

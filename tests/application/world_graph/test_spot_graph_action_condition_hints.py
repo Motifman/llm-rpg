@@ -28,7 +28,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-
 #: この試験世界が宣言している時刻帯の呼び名。
 #:
 #: 実シナリオでは `environment.day_night.phases[].display_text` が持つ。コード側に

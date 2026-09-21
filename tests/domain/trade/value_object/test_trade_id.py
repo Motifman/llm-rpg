@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+
 from ai_rpg_world.domain.trade.exception.trade_exception import TradeIdValidationException
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 class TestTradeId:

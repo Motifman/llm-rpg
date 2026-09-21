@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
-from typing import Any, Type
+from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -26,7 +26,6 @@ from ai_rpg_world.domain.trade.value_object.trade_requested_gold import (
     TradeRequestedGold,
 )
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-
 
 _SCHEMA_VERSION = 1
 _SUPPORTED_EVENT_TYPES = (
@@ -137,7 +136,7 @@ class TradeEventJsonSerializer:
     def deserialize(
         self,
         payload: bytes,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
     ) -> DomainEvent:
         """JSONを指定された取引イベント型へ復元する。"""
         if event_type not in _SUPPORTED_EVENT_TYPES:

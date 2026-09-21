@@ -1,25 +1,26 @@
 """
 InMemorySnsNotificationRepository - Notificationを使用するインメモリ実装
 """
-from typing import List, Optional, Dict
 from datetime import datetime
-from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
+
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.entity.notification import Notification
+from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from .in_memory_repository_base import InMemoryRepositoryBase
+
 from .in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from .in_memory_repository_base import InMemoryRepositoryBase
 
 
 class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepositoryBase):
     """Notificationを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _notifications(self) -> Dict[NotificationId, Notification]:
+    def _notifications(self) -> dict[NotificationId, Notification]:
         return self._data_store.sns_notifications
 
     def clear(self) -> None:
@@ -44,14 +45,14 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
         self._register_pending_if_uow(notification.notification_id, notification)
         return self._execute_operation(operation)
 
-    def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
+    def find_by_id(self, notification_id: NotificationId) -> Notification | None:
         """通知IDで通知を取得"""
         pending = self._get_pending_aggregate(notification_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._notifications.get(notification_id))
 
-    def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> List[Notification]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> list[Notification]:
         """ユーザーIDで通知を取得（新しい順）"""
         user_notifications = [
             self._clone(notification) for notification in self._notifications.values()
@@ -60,7 +61,7 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
         user_notifications.sort(key=lambda n: n.created_at, reverse=True)
         return user_notifications[offset:offset + limit]
 
-    def find_unread_by_user_id(self, user_id: UserId) -> List[Notification]:
+    def find_unread_by_user_id(self, user_id: UserId) -> list[Notification]:
         """ユーザーIDで未読通知を取得"""
         return [
             self._clone(notification) for notification in self._notifications.values()
@@ -132,7 +133,7 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
             if notification.user_id == user_id and not notification.is_read
         ])
 
-    def find_by_ids(self, notification_ids: List[NotificationId]) -> List[Notification]:
+    def find_by_ids(self, notification_ids: list[NotificationId]) -> list[Notification]:
         """IDのリストで通知を検索"""
         return [
             self._notifications[notification_id]
@@ -150,6 +151,6 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
             
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[Notification]:
+    def find_all(self) -> list[Notification]:
         """全ての通知を取得"""
         return list(self._notifications.values())

@@ -5,10 +5,9 @@ idle tick でも LLM エージェントが行動できるようにする合成�
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import inspect
-from typing import List, Optional
 
 import pytest
 
@@ -46,7 +45,7 @@ class _AllLlmPlayerResolver(ILLMPlayerResolver):
 class _RecordingTurnTrigger(ILlmTurnTrigger):
     """schedule_turn の呼び出し履歴を記録するだけのトリガ。"""
 
-    scheduled: List[int] = field(default_factory=list)
+    scheduled: list[int] = field(default_factory=list)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         self.scheduled.append(player_id.value)
@@ -58,7 +57,7 @@ class _RecordingTurnTrigger(ILlmTurnTrigger):
 def _build_emitter(
     *,
     interval_ticks: int = 5,
-    llm_players: Optional[List[PlayerId]] = None,
+    llm_players: list[PlayerId] | None = None,
 ) -> tuple[
     HeartbeatObservationEmitter,
     DefaultObservationContextBuffer,
@@ -167,7 +166,7 @@ class TestHeartbeatObservationEmitter:
             llm_player_resolver=_AllLlmPlayerResolver(),
         )
 
-        def boom() -> List[PlayerId]:
+        def boom() -> list[PlayerId]:
             raise RuntimeError("provider failed")
 
         emitter = HeartbeatObservationEmitter(

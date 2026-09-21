@@ -3,12 +3,13 @@
 post-commit orchestration が async handler の実行を委譲する抽象。
 in-process adapter や将来の outbox/worker adapter が実装する。
 """
-from typing import Protocol, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Protocol
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 
-AsyncDispatchTask = Tuple[DomainEvent, EventHandler[DomainEvent]]
+AsyncDispatchTask = tuple[DomainEvent, EventHandler[DomainEvent]]
 
 
 class AsyncEventExecutor(Protocol):

@@ -2,9 +2,10 @@
 
 import logging
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Mapping, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -14,13 +15,13 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.services.action_summary_format import (
-    CANONICAL_IDENTIFIERS_KEY,
-)
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
     require_target,
     require_target_type,
+)
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    CANONICAL_IDENTIFIERS_KEY,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,8 +53,8 @@ _NO_ACTION_PLACEHOLDER_RE = re.compile(
 
 
 def canonical_identifiers(
-    args: Mapping[str, Any], **resolved: Optional[str]
-) -> Dict[str, str]:
+    args: Mapping[str, Any], **resolved: str | None
+) -> dict[str, str]:
     """解決に使った正規値のうち、生値と違うものだけを集める。
 
     resolver は崩れた表記を救って成功させる。履歴に生値を残すと「その
@@ -65,7 +66,7 @@ def canonical_identifiers(
     漏れる。resolver の出力にだけ載せる (`ACTION_HISTORY_PROJECTION_KEY`
     と同じ流儀)。
     """
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for name, value in resolved.items():
         if not isinstance(value, str) or not value:
             continue
@@ -153,7 +154,7 @@ def pick_action_name(
     )
 
 
-def _strip_symmetric_quotes(text: str) -> Optional[str]:
+def _strip_symmetric_quotes(text: str) -> str | None:
     """対称な ``"..."`` / ``'...'`` を剥がす。剥がせなければ None。"""
     s = text.strip()
     if len(s) >= 2 and (
@@ -164,7 +165,7 @@ def _strip_symmetric_quotes(text: str) -> Optional[str]:
     return None
 
 
-def normalize_action_name_candidates(action: str) -> List[str]:
+def normalize_action_name_candidates(action: str) -> list[str]:
     """LLM が action_name に入れがちな崩れ表現から候補形を生成する。
 
     ラベル側 (`_normalize_label_candidates`) と同じ規約を操作名にも適用する。
@@ -179,7 +180,7 @@ def normalize_action_name_candidates(action: str) -> List[str]:
     s = action.strip()
     if not s:
         return []
-    out: List[str] = [s]
+    out: list[str] = [s]
 
     # 対称な quote を剥がす: ``"offer_wheat"`` → ``offer_wheat``
     unquoted = _strip_symmetric_quotes(s)
@@ -196,7 +197,7 @@ def normalize_action_name_candidates(action: str) -> List[str]:
                 out.append(tail_unquoted)
 
     seen: set = set()
-    unique: List[str] = []
+    unique: list[str] = []
     for c in out:
         if c and c not in seen:
             seen.add(c)
@@ -204,7 +205,7 @@ def normalize_action_name_candidates(action: str) -> List[str]:
     return unique
 
 
-def _normalize_label_candidates(label: str) -> List[str]:
+def _normalize_label_candidates(label: str) -> list[str]:
     """LLM が destination_label / target_label に入れがちな崩れ表現から
     解決可能な候補形を生成する。同じ候補は除去しつつ出現順を保つ。
 
@@ -216,7 +217,7 @@ def _normalize_label_candidates(label: str) -> List[str]:
     s = label.strip()
     if not s:
         return []
-    out: List[str] = [s]
+    out: list[str] = [s]
 
     # PR Y_after_pr_all_200tick 後続: prompt 表記が ``"拠点"`` のように
     # ``""`` で囲んだ値を「渡すべき値」と明示する規約になったため、
@@ -267,7 +268,7 @@ def _normalize_label_candidates(label: str) -> List[str]:
 
     # dedup keep order, drop empty
     seen: set[str] = set()
-    deduped: List[str] = []
+    deduped: list[str] = []
     for c in out:
         c = c.strip()
         if not c or c in seen:
@@ -280,13 +281,13 @@ def _normalize_label_candidates(label: str) -> List[str]:
 def _candidate_display_names(
     runtime_context: ToolRuntimeContextDto,
     predicate: Callable[[ToolRuntimeTargetDto], bool],
-) -> List[str]:
+) -> list[str]:
     """runtime target から LLM が次に指定できる表示名だけを順序保持で集める。
 
     失敗文は次の一手を修正するために LLM が読む。内部ラベル (S1 / OBJ1 等)
     ではなく prompt に露出している display_name だけを返し、同名は重複させない。
     """
-    names: List[str] = []
+    names: list[str] = []
     seen: set[str] = set()
     for target in runtime_context.targets.values():
         if not predicate(target):
@@ -299,7 +300,7 @@ def _candidate_display_names(
     return names
 
 
-def _format_valid_candidates(candidate_label: str, candidates: List[str]) -> str:
+def _format_valid_candidates(candidate_label: str, candidates: list[str]) -> str:
     """有効候補一覧を失敗文に埋め込む短い日本語へ整形する。"""
     if not candidates:
         return f"有効な{candidate_label}: ありません"
@@ -332,7 +333,7 @@ def resolve_destination_target(
             "接続先名が指定されていません。",
             "INVALID_DESTINATION_LABEL",
         )
-    target: Optional[ToolRuntimeTargetDto] = None
+    target: ToolRuntimeTargetDto | None = None
     kind_mismatch = False
     for c in _normalize_label_candidates(label):
         if c in runtime_context.targets:
@@ -426,7 +427,7 @@ def _resolve_target_with_display_name_fallback(
     # ``resolve_target`` は直接 lookup も ``accept_kinds`` で絞るので、載せ替えると
     # この経路が汎用文面に落ち、「今いる場所に落ちているものではありません」という
     # 具体的な案内が消える。統合は呼び出し元の意味論を整理してから行う。
-    target: Optional[ToolRuntimeTargetDto] = None
+    target: ToolRuntimeTargetDto | None = None
     kind_mismatch = False
     for c in _normalize_label_candidates(label):
         if c in runtime_context.targets:
@@ -602,9 +603,9 @@ def resolve_object_target(
 
 
 def resolve_sub_location_target(
-    label: Optional[str],
+    label: str | None,
     runtime_context: ToolRuntimeContextDto,
-) -> Optional[ToolRuntimeTargetDto]:
+) -> ToolRuntimeTargetDto | None:
     """set_sub_location 用のラベル解決。label が空なら None を返す
     (sub_location クリア指示)。
 
@@ -616,7 +617,7 @@ def resolve_sub_location_target(
     """
     if not label:
         return None
-    target: Optional[ToolRuntimeTargetDto] = None
+    target: ToolRuntimeTargetDto | None = None
     for c in _normalize_label_candidates(label):
         if c in runtime_context.targets:
             hit = runtime_context.targets[c]
@@ -685,7 +686,7 @@ def _find_target_by_display_name(
     *,
     kind: str,
     display_name: str,
-) -> Optional[ToolRuntimeTargetDto]:
+) -> ToolRuntimeTargetDto | None:
     """`runtime_context.targets` を全スキャンし、同 kind かつ display_name 一致の最初の target を返す。
 
     LLM が会話履歴に残った `S1` などのスポット相対ラベルを次 turn でも再利用すると、
@@ -717,29 +718,29 @@ def _find_target_by_display_name(
     return matches[0]
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
-    TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
-    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
-    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
-    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
-    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
-    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 
@@ -790,7 +791,7 @@ ACTION_NAME_JUDGMENT_KEY = "__action_name_judgment"
 
 def _action_name_judgment_payload(
     resolution: ActionNameResolution,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """判断を問うた場合だけ、trace と結果文に要る値を dict で返す。"""
     judgment = resolution.judgment
     if judgment is None:
@@ -809,7 +810,7 @@ def _action_name_judgment_payload(
     }
 
 
-def _inner_thought_value(args: Dict[str, Any]) -> str:
+def _inner_thought_value(args: dict[str, Any]) -> str:
     raw = args.get("inner_thought", "")
     if not isinstance(raw, str):
         return str(raw) if raw is not None else ""
@@ -834,12 +835,12 @@ def _give_quantity_or_raise(raw: Any) -> int:
 
 
 def _with_inner_thought(
-    base: Dict[str, Any],
-    args: Dict[str, Any],
+    base: dict[str, Any],
+    args: dict[str, Any],
     *,
-    canonical: Optional[Mapping[str, str]] = None,
-    action_name_judgment: Optional[Mapping[str, Any]] = None,
-) -> Dict[str, Any]:
+    canonical: Mapping[str, str] | None = None,
+    action_name_judgment: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
 
@@ -904,9 +905,9 @@ class SpotGraphArgumentResolver:
     def resolve_args(
         self,
         tool_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name not in _SPOT_GRAPH_TOOLS:
             return None
         if tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO:
@@ -962,8 +963,8 @@ class SpotGraphArgumentResolver:
         return None
 
     def _resolve_market(
-        self, tool_name: str, args: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        self, tool_name: str, args: dict[str, Any],
+    ) -> dict[str, Any]:
         """市場ツールの引数を整える。
 
         **品名は名前のまま通す。** 板に出ている品は自分の所持品とは限らず
@@ -1018,9 +1019,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_trade_offer(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """``trade_offer`` の相手と、差し出す品を解決する。
 
         **gives と asks で解決先が違う。**
@@ -1082,7 +1083,7 @@ class SpotGraphArgumentResolver:
         self,
         raw: Any,
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """自分が差し出す側を、所持アイテム表示から解決する。"""
         side = self._read_side_shape(raw, "gives")
         items = []
@@ -1111,7 +1112,7 @@ class SpotGraphArgumentResolver:
             )
         return {"items": items, "gold": side["gold"]}
 
-    def _read_requested_side(self, raw: Any) -> Dict[str, Any]:
+    def _read_requested_side(self, raw: Any) -> dict[str, Any]:
         """相手に求める側は、名前のまま通す (突き合わせは executor)。"""
         side = self._read_side_shape(raw, "asks")
         return {
@@ -1123,7 +1124,7 @@ class SpotGraphArgumentResolver:
         }
 
     @staticmethod
-    def _read_side_shape(raw: Any, field: str) -> Dict[str, Any]:
+    def _read_side_shape(raw: Any, field: str) -> dict[str, Any]:
         """片側の形 (items と gold) を検証して読む。"""
         if raw is None:
             raw = {}
@@ -1180,9 +1181,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_trade_answer(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """``trade_accept`` / ``trade_decline`` の相手を解決する。
 
         省略できる (自分宛ての申し出が 1 件なら) ので、指定が無ければ
@@ -1212,11 +1213,11 @@ class SpotGraphArgumentResolver:
 
     def _resolve_merchant_trade(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
         *,
         selling: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """``buy_item`` / ``sell_item`` の品名と数量を解決する。
 
         商人は引数で指さない。**その品を扱う商人が同席していれば、それが
@@ -1325,7 +1326,7 @@ class SpotGraphArgumentResolver:
 
     @staticmethod
     def _no_merchant_message(
-        item_label: str, merchants: List[Any], *, selling: bool,
+        item_label: str, merchants: list[Any], *, selling: bool,
     ) -> str:
         """その品を扱う商人が居ないときの文面。扱う品を添えて次の手を残す。"""
         if not merchants:
@@ -1343,9 +1344,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_use_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """所持アイテムラベル (I1 等) を item_spec_id に解決する。
 
         実験 #25 で発覚 (#356 trace): tool catalog は ``item_label`` を要求し、
@@ -1392,9 +1393,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_single_give_entry(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """1 件の give entry (item_label + target_player_label) を解決する
         内部 helper。``_resolve_give_item`` (batch-always) が gives 配列の
         各 entry に対して呼び出す。
@@ -1457,9 +1458,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_give_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """``give_item`` (batch-always) の gives 配列を各 entry ごとに解決する。
 
         PR-α (Y_after_pr639_640 後続): 旧 give_item (単発) と give_items (batch)
@@ -1483,7 +1484,7 @@ class SpotGraphArgumentResolver:
                 "INVALID_ARGUMENT",
             )
 
-        resolved: list[Dict[str, Any]] = []
+        resolved: list[dict[str, Any]] = []
         for i, entry in enumerate(gives):
             if not isinstance(entry, dict):
                 resolved.append({
@@ -1532,9 +1533,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_drop_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """所持アイテムラベル (I1 等) を item_spec_id に解決する。
 
         ラベルは「同じ種類の集約表示」なので、resolver 時点で代表 slot を
@@ -1581,9 +1582,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_pickup_item(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """その場に落ちているアイテムの名前を item_instance_id に解決する。"""
         label = args.get("ground_item_label")
         # PR #441: display_name fallback
@@ -1620,9 +1621,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_vote(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """`spot_graph_vote` の target_player_label を player_id に解決する。
 
         **空ラベルは棄権**なので、解決せずそのまま通す。ここで「名前が無い」
@@ -1645,9 +1646,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_report_body(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """`spot_graph_report_body` の target_player_label を player_id に解決する。
 
         **投票と違って空ラベルを通さない。** 投票の空欄は棄権という意思表示
@@ -1673,9 +1674,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_tend_to_player(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """`spot_graph_tend_to_player` の target_player_label を player_id に解決する。
 
         Issue #621 Phase 3b: 同 spot に倒れた仲間を介抱して revive する。
@@ -1735,9 +1736,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_attack(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """`spot_graph_attack` の target_label をモンスター ID に解決する。
 
         ラベルが MonsterToolRuntimeTargetDto に解決できない場合、または
@@ -1769,9 +1770,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_travel_to(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         target = resolve_destination_target(
             args.get("destination_label"),  # type: ignore[arg-type]
             runtime_context,
@@ -1786,9 +1787,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_set_sub_location(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         target = resolve_sub_location_target(
             args.get("sub_location_label"), runtime_context
         )
@@ -1797,9 +1798,9 @@ class SpotGraphArgumentResolver:
 
     def _resolve_interact(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """``target_label`` を物体・対象プレイヤー・所持道具に解決する。
 
         対人 interaction は専用ツールを増やさず ``interact`` に載せる

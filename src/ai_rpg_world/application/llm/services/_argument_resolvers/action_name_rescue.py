@@ -26,8 +26,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from semantic_resolver import (
     Assessment,
@@ -82,14 +83,14 @@ class ActionNameJudgment:
         unavailable_reason: 判断を得られなかったときの理由。得られたときは None
     """
 
-    chosen: Optional[str]
-    probability: Optional[float]
-    confidence: Optional[float]
+    chosen: str | None
+    probability: float | None
+    confidence: float | None
     min_confidence: float
     accepted: bool
-    latency_ms: Optional[float] = None
-    source: Optional[str] = None
-    unavailable_reason: Optional[str] = None
+    latency_ms: float | None = None
+    source: str | None = None
+    unavailable_reason: str | None = None
 
 
 class ActionNameRescue:
@@ -109,11 +110,11 @@ class ActionNameRescue:
 
     def rescue(
         self,
-        resolution: "ActionNameResolution",
+        resolution: ActionNameResolution,
         *,
-        target: "ToolRuntimeTargetDto",
-        inner_thought: Optional[str],
-    ) -> "ActionNameResolution":
+        target: ToolRuntimeTargetDto,
+        inner_thought: str | None,
+    ) -> ActionNameResolution:
         """当たらなかった名前だけを問い直し、確信があれば置き換えた結果を返す。
 
         置き換えないときは受け取った ``resolution`` をそのまま返す (判断を
@@ -249,7 +250,7 @@ class _ActionNamePolicy:
         )
 
 
-def _offered_options(target: "ToolRuntimeTargetDto") -> Dict[str, Optional[str]]:
+def _offered_options(target: ToolRuntimeTargetDto) -> dict[str, str | None]:
     """対象が持つ操作名 → 意味ラベル。ラベルの無い操作は None。
 
     候補は ``available_interactions`` だけにする。表示で「いまできない」に
@@ -265,12 +266,12 @@ def _offered_options(target: "ToolRuntimeTargetDto") -> Dict[str, Optional[str]]
 
 def _state(
     written: str,
-    target: "ToolRuntimeTargetDto",
-    inner_thought: Optional[str],
-    options: Mapping[str, Optional[str]],
-) -> Dict[str, Any]:
+    target: ToolRuntimeTargetDto,
+    inner_thought: str | None,
+    options: Mapping[str, str | None],
+) -> dict[str, Any]:
     """判断の材料。**名前だけを入れ、整数 ID を入れない** (設計原則 1)。"""
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "written_action_name": written,
         "target": target.display_name,
         "available_interactions": {

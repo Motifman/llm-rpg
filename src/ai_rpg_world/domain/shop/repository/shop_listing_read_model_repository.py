@@ -1,6 +1,5 @@
 """ショップリストReadModelリポジトリインターフェース"""
 from abc import abstractmethod
-from typing import List
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.shop.read_model.shop_listing_read_model import ShopListingReadModel
@@ -15,6 +14,6 @@ class ShopListingReadModelRepository(Repository[ShopListingReadModel, ShopListin
     """
 
     @abstractmethod
-    def find_by_shop_id(self, shop_id: ShopId) -> List[ShopListingReadModel]:
+    def find_by_shop_id(self, shop_id: ShopId) -> list[ShopListingReadModel]:
         """ショップIDに紐づく出品リスト一覧を取得する"""
         pass

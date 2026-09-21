@@ -26,8 +26,8 @@ tick 単位の intent 群をフェーズ・優先度・seed 順で決定論的�
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.intent.exception.intent_exception import (

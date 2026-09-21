@@ -6,12 +6,31 @@
 """
 
 import logging
-from typing import Callable, Any, Optional
+from collections.abc import Callable
+from typing import Any
 
+from ai_rpg_world.application.world.contracts.commands import DestroyPlaceableCommand, PlaceObjectCommand
+from ai_rpg_world.application.world.exceptions.base_exception import (
+    WorldApplicationException,
+    WorldSystemErrorException,
+)
+from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
+    ItemNotPlaceableException,
+    NoItemInSlotException,
+    NoPlaceableInFrontException,
+    PlaceCommandException,
+    PlacementBlockedException,
+    PlacementSpotNotFoundException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ChestComponent,
@@ -20,26 +39,10 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     StaticPlaceableInnerComponent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
-from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
-
-from ai_rpg_world.application.world.contracts.commands import PlaceObjectCommand, DestroyPlaceableCommand
-from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
-from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
-    PlaceCommandException,
-    ItemNotPlaceableException,
-    NoItemInSlotException,
-    PlacementSpotNotFoundException,
-    PlacementBlockedException,
-    NoPlaceableInFrontException,
-)
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _build_placeable_component(placeable_object_type: str, item_spec_id: ItemSpecId) -> PlaceableComponent:
@@ -93,7 +96,7 @@ class PlaceObjectApplicationService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 
@@ -213,8 +216,8 @@ class PlaceObjectApplicationService:
 
             front_coord = actor.coordinate.neighbor(actor.direction)
             objects_at_front = physical_map.get_objects_at(front_coord)
-            target_object_id: Optional[WorldObjectId] = None
-            item_spec_id_to_return: Optional[ItemSpecId] = None
+            target_object_id: WorldObjectId | None = None
+            item_spec_id_to_return: ItemSpecId | None = None
 
             for obj in objects_at_front:
                 if obj.component and isinstance(obj.component, PlaceableComponent):

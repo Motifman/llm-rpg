@@ -20,8 +20,9 @@ spawn / despawn が確定した後、graph の domain event を observation pipe
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -35,8 +36,8 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
     SkillLoadoutRepository,
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -74,10 +75,10 @@ _logger = logging.getLogger(__name__)
 class _CommandContextEventPublisher:
     """graph eventをspawn commandの収集口へ適合させる。"""
 
-    def __init__(self, context: "CommandContext") -> None:
+    def __init__(self, context: CommandContext) -> None:
         self._context = context
 
-    def publish_all(self, events: Tuple[Any, ...]) -> None:
+    def publish_all(self, events: tuple[Any, ...]) -> None:
         self._context.collect_all(events)
 
 
@@ -95,16 +96,16 @@ class MonsterSpawnSlot:
     spot_id: SpotId
     coordinate: Coordinate
     # 軸: ANY 軸が指定されていれば AND で評価される。空 tuple は「制約なし」。
-    day_night_phase_names: Tuple[str, ...]
-    required_flags: Tuple[str, ...]
-    forbidden_flags: Tuple[str, ...]
-    weather_type_names: Tuple[str, ...]
+    day_night_phase_names: tuple[str, ...]
+    required_flags: tuple[str, ...]
+    forbidden_flags: tuple[str, ...]
+    weather_type_names: tuple[str, ...]
 
 
 # 評価用の provider 関数群 (runtime が runtime 内のものを渡す)
-TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
-FlagsProvider = Callable[[], FrozenSet[str]]
-WeatherTypeNameProvider = Callable[[], Optional[str]]  # WeatherTypeEnum.name
+TimeOfDayProvider = Callable[[], TimeOfDay | None]
+FlagsProvider = Callable[[], frozenset[str]]
+WeatherTypeNameProvider = Callable[[], str | None]  # WeatherTypeEnum.name
 
 
 class SpotGraphMonsterSpawnStageService:
@@ -118,20 +119,18 @@ class SpotGraphMonsterSpawnStageService:
     def __init__(
         self,
         *,
-        slots: Tuple[MonsterSpawnSlot, ...],
+        slots: tuple[MonsterSpawnSlot, ...],
         monster_repository: MonsterRepository,
         skill_loadout_repository: SkillLoadoutRepository,
         spot_graph_repository: ISpotGraphRepository,
-        time_of_day_provider: Optional[TimeOfDayProvider] = None,
-        flags_provider: Optional[FlagsProvider] = None,
-        weather_type_provider: Optional[WeatherTypeNameProvider] = None,
-        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
-        monster_id_factory: Optional[Callable[[], int]] = None,
-        loadout_id_factory: Optional[Callable[[], int]] = None,
-        world_object_id_factory: Optional[Callable[[], int]] = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]"
-        ] = None,
+        time_of_day_provider: TimeOfDayProvider | None = None,
+        flags_provider: FlagsProvider | None = None,
+        weather_type_provider: WeatherTypeNameProvider | None = None,
+        predicate_evaluator: ScenarioPredicateEvaluator | None = None,
+        monster_id_factory: Callable[[], int] | None = None,
+        loadout_id_factory: Callable[[], int] | None = None,
+        world_object_id_factory: Callable[[], int] | None = None,
+        command_scope_factory: CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._slots = slots
         self._monster_repository = monster_repository
@@ -152,7 +151,7 @@ class SpotGraphMonsterSpawnStageService:
         self._next_world_object_id_value = 2_000_000
 
         # slot_key → 現在 spawn 中の MonsterId。None なら未配置。
-        self._slot_to_monster: Dict[str, Optional[MonsterId]] = {
+        self._slot_to_monster: dict[str, MonsterId | None] = {
             slot.slot_key: None for slot in slots
         }
         self._validate_scope_counter_contract(command_scope_factory)
@@ -160,7 +159,7 @@ class SpotGraphMonsterSpawnStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをslot 1件単位の確定境界へ接続する。"""
         self._validate_scope_counter_contract(factory)
@@ -168,7 +167,7 @@ class SpotGraphMonsterSpawnStageService:
 
     def _validate_scope_counter_contract(
         self,
-        factory: "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort] | None",
+        factory: CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort] | None,
     ) -> None:
         if factory is None:
             return
@@ -186,7 +185,7 @@ class SpotGraphMonsterSpawnStageService:
 
     def rollback_snapshot(
         self,
-    ) -> tuple[Dict[str, Optional[MonsterId]], int, int, int]:
+    ) -> tuple[dict[str, MonsterId | None], int, int, int]:
         """slot対応と内部採番をrollback用に複製する。"""
         return (
             dict(self._slot_to_monster),
@@ -197,7 +196,7 @@ class SpotGraphMonsterSpawnStageService:
 
     def restore_rollback_snapshot(
         self,
-        snapshot: tuple[Dict[str, Optional[MonsterId]], int, int, int],
+        snapshot: tuple[dict[str, MonsterId | None], int, int, int],
     ) -> None:
         """失敗commandのslot対応と採番を開始前へ戻す。"""
         slots, monster_id, loadout_id, world_object_id = snapshot
@@ -250,7 +249,7 @@ class SpotGraphMonsterSpawnStageService:
         spawn: bool,
         monster_id: MonsterId | None = None,
         scope_factory: (
-            "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]
         ),
     ) -> None:
         """slot 1件のspawnまたはdespawnを一つのscopeで確定する。"""
@@ -403,11 +402,11 @@ class SpotGraphMonsterSpawnStageService:
         self,
         graph: Any,
         *,
-        existing_events: Tuple[Any, ...],
+        existing_events: tuple[Any, ...],
         spot_graph_repository: ISpotGraphRepository,
         event_publisher: Any | None,
     ) -> None:
-        events: Tuple[Any, ...] = ()
+        events: tuple[Any, ...] = ()
         if event_publisher is not None:
             all_events = tuple(graph.get_events())
             events = all_events[len(existing_events):]
@@ -436,6 +435,6 @@ class SpotGraphMonsterSpawnStageService:
         self._next_world_object_id_value += 1
         return self._next_world_object_id_value
 
-    def active_slot_keys(self) -> List[str]:
+    def active_slot_keys(self) -> list[str]:
         """現在 spawn 中のスロットキー一覧 (テスト / 観測用)。"""
         return [k for k, m in self._slot_to_monster.items() if m is not None]

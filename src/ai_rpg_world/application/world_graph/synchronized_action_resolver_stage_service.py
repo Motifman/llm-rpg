@@ -8,7 +8,7 @@
   いないなら何もしない）
 
 prepare 観測（誰かが prepare したことの通知）はこのステージではなく、
-prepare_action ツール側で即時に publish される。
+interact から準備を登録した側で即時に publish される。
 
 SHOW_MESSAGE は完成・時間切れのどちらでも、実際に prepare した参加者へ
 結果観測として届ける。group は場所を持たないため、非参加者へ世界横断で
@@ -24,11 +24,12 @@ GIVE_ITEM 等は interior が必要だが、resolver は特定のスポットに
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List, Literal, Set, Tuple, TYPE_CHECKING
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, Literal
 
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
-    SyncPrepareEntry,
     SynchronizedActionRegistry,
+    SyncPrepareEntry,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
@@ -36,11 +37,11 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
-    PassageChangeCauseEnum,
-)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
 )
 from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
     SynchronizedActionMessageEvent,
@@ -92,7 +93,7 @@ class SynchronizedActionResolverStageService:
         world_flag_state: MutableWorldFlagState,
         effect_service: WorldGraphEffectService | None = None,
         command_scope_factory: (
-            "CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort] | None"
+            CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort] | None
         ) = None,
     ) -> None:
         self._groups = tuple(groups)
@@ -115,7 +116,7 @@ class SynchronizedActionResolverStageService:
     def set_command_scope_factory(
         self,
         factory: (
-            "CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort]
         ),
     ) -> None:
         """本番stageをgroup 1件単位の確定境界へ接続する。"""
@@ -126,7 +127,7 @@ class SynchronizedActionResolverStageService:
         group: SynchronizedActionGroup,
         current_tick: WorldTick,
         *,
-        factory: "CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort],
     ) -> None:
         """1 groupの状態変更・graph event・messageを同じ確定区間へ収集する。"""
         with factory.create() as context:
@@ -156,7 +157,7 @@ class SynchronizedActionResolverStageService:
         self,
         graph: SpotGraphAggregate,
         existing_events: tuple[Any, ...],
-        context: "CommandContext[SynchronizedActionCommandRepositoryProviderPort]",
+        context: CommandContext[SynchronizedActionCommandRepositoryProviderPort],
     ) -> None:
         """このgroupが追加したgraph eventだけを確定後配送へ移す。"""
         all_events = tuple(graph.get_events())
@@ -237,7 +238,7 @@ class SynchronizedActionResolverStageService:
         self,
         group: SynchronizedActionGroup,
         outcome: Literal["completed", "timed_out"],
-        effects: Tuple[InteractionEffect, ...],
+        effects: tuple[InteractionEffect, ...],
         participants: list[SyncPrepareEntry],
         graph: SpotGraphAggregate,
     ) -> tuple[tuple[tuple[int, ...], str], ...]:
@@ -292,8 +293,8 @@ class SynchronizedActionResolverStageService:
 
     def _clear_group_preps(self, group: SynchronizedActionGroup) -> None:
         """この group の required_action_names に紐付く全 prepare flag を削除。"""
-        seen_flags: Set[str] = set()
-        all_entries: List[SyncPrepareEntry] = []
+        seen_flags: set[str] = set()
+        all_entries: list[SyncPrepareEntry] = []
         for aid in group.required_action_names:
             for e in self._registry.entries_for(aid):
                 if e.flag in seen_flags:

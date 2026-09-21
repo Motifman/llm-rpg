@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
@@ -34,7 +35,6 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 NOTICE_BOARD_OBJECT_ID = "notice_board"
 CODE_LOCK_OBJECT_ID = "code_lock"

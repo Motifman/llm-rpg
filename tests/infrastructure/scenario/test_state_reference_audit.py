@@ -8,9 +8,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.entity.spot_object import (
     _STOCK_POOL_STATE_KEYS,

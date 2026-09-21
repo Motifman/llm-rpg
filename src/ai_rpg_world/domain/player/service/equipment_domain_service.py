@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
+
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.exception.player_exceptions import (
+    EquipmentSlotMismatchException,
     InvalidEquipmentItemException,
-    EquipmentSlotMismatchException
 )
 
 if TYPE_CHECKING:
@@ -18,7 +19,7 @@ class EquipmentDomainService:
     """
 
     # 装備スロットタイプと適合する装備アイテムタイプのマッピング
-    EQUIPMENT_SLOT_TO_EQUIPMENT_TYPE_MAPPING: dict[EquipmentSlotType, list[EquipmentType]] = {
+    EQUIPMENT_SLOT_TO_EQUIPMENT_TYPE_MAPPING: ClassVar[dict[EquipmentSlotType, list[EquipmentType]]] = {
         EquipmentSlotType.WEAPON: [EquipmentType.WEAPON],
         EquipmentSlotType.HELMET: [EquipmentType.HELMET],
         EquipmentSlotType.ARMOR: [EquipmentType.ARMOR],
@@ -62,9 +63,17 @@ class EquipmentDomainService:
 
         # スロット適合性チェック
         compatible_equipment_types = EquipmentDomainService._get_compatible_equipment_types_for_slot(target_slot)
-        if item_spec.equipment_type not in compatible_equipment_types:
+        equipment_type = item_spec.equipment_type
+        if equipment_type is None:
+            # is_equipment() は item_type しか見ない。装備品なのに
+            # equipment_type が無い spec はスロットを決められない。
+            raise InvalidEquipmentItemException(
+                f"Equipment item has no equipment_type. "
+                f"item_spec_id: {item_spec.item_spec_id.value}"
+            )
+        if equipment_type not in compatible_equipment_types:
             raise EquipmentSlotMismatchException(
-                f"Equipment type {item_spec.equipment_type.value} cannot be equipped to "
+                f"Equipment type {equipment_type.value} cannot be equipped to "
                 f"{target_slot.value} slot. Compatible equipment types: {[t.value for t in compatible_equipment_types]}"
             )
 

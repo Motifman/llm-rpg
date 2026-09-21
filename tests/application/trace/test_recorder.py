@@ -4,13 +4,17 @@
 # BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+
 being_id = _MIG_BeingId('being_w1_p1')
 'TraceRecorder と TraceEvent の挙動テスト (Issue #188 Phase 1d)。'
 import json
 from pathlib import Path
+
 import pytest
+
 from ai_rpg_world.application.trace.events import TraceEvent, TraceEventKind
 from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder, NullTraceRecorder, load_trace_events
+
 
 class TestTraceEvent:
     """TraceEvent の dict 化往復。"""
@@ -124,14 +128,22 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
         import time
         from datetime import datetime, timezone
         from typing import Any
+
         from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
         from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
         from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import ThreadPoolEpisodicSubjectiveScheduler
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
+        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+            ThreadPoolEpisodicSubjectiveScheduler,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         being_id = BeingId('being_w1_p1')
 

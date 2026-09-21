@@ -11,7 +11,7 @@ tool 一覧にも並んだ** (survival_island_v4_coop で 16 → 17)。会議を
 過去 run との比較可能性が切れる。しかも「tool が 1 つ増えた」は trace を
 眺めていて気付ける類の変化ではない。
 
-同時行動 (prepare_action) が宣言のあるシナリオにだけ出るのと同じ形にする。
+売買 (buy_item) が商人の宣言のあるシナリオにだけ出るのと同じ形にする。
 """
 
 from __future__ import annotations

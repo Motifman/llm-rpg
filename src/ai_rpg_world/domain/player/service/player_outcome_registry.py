@@ -16,14 +16,13 @@ set 時に optional callback を呼べるので、observation 経路で「○○
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Mapping, Optional
+from collections.abc import Callable, Mapping
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     PlayerOutcomeRegistryValidationException,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 # (player_id, old_outcome, new_outcome) を受ける callback。
 # observation event 発火等に使う想定。
@@ -39,11 +38,11 @@ class PlayerOutcomeRegistry:
     """
 
     def __init__(self) -> None:
-        self._outcomes: Dict[int, PlayerOutcomeEnum] = {}
-        self._callbacks: List[OutcomeChangedCallback] = []
+        self._outcomes: dict[int, PlayerOutcomeEnum] = {}
+        self._callbacks: list[OutcomeChangedCallback] = []
 
     @classmethod
-    def new_for_players(cls, player_ids: List[PlayerId]) -> "PlayerOutcomeRegistry":
+    def new_for_players(cls, player_ids: list[PlayerId]) -> PlayerOutcomeRegistry:
         """指定プレイヤー全員を UNRESOLVED で初期化したレジストリを返す。"""
         reg = cls()
         for pid in player_ids:
@@ -114,7 +113,7 @@ class PlayerOutcomeRegistry:
         """
         return all(o.is_resolved for o in self._outcomes.values())
 
-    def unresolved_player_ids(self) -> List[PlayerId]:
+    def unresolved_player_ids(self) -> list[PlayerId]:
         """まだ UNRESOLVED のプレイヤー ID のリスト。"""
         return [
             PlayerId(pid)
@@ -122,7 +121,7 @@ class PlayerOutcomeRegistry:
             if o is PlayerOutcomeEnum.UNRESOLVED
         ]
 
-    def snapshot(self) -> Dict[int, PlayerOutcomeEnum]:
+    def snapshot(self) -> dict[int, PlayerOutcomeEnum]:
         """全プレイヤーの現在 outcome を不変な dict として返す (デバッグ・ログ用)。"""
         return dict(self._outcomes)
 
@@ -135,7 +134,7 @@ class PlayerOutcomeRegistry:
         payload を受け入れると、欠けた player だけ旧値が残るため、現在の
         registry と player 集合が完全に一致する場合だけ置換する。
         """
-        replacement: Dict[int, PlayerOutcomeEnum] = {}
+        replacement: dict[int, PlayerOutcomeEnum] = {}
         for player_id, outcome in outcomes.items():
             if not isinstance(player_id, PlayerId):
                 raise PlayerOutcomeRegistryValidationException(

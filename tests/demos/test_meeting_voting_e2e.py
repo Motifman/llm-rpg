@@ -23,12 +23,12 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"

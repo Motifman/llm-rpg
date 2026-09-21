@@ -1,28 +1,29 @@
+
 import pytest
-from typing import Dict, Optional
-from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventoryCompactionCompletedEvent,
+    InventoryCompactionRequestedEvent,
+    InventorySlotOverflowEvent,
+    InventorySortRequestedEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
-    ItemUnequippedEvent,
     ItemEquipRequestedEvent,
-    InventorySlotOverflowEvent,
-    InventoryCompactionRequestedEvent,
-    InventoryCompactionCompletedEvent,
-    InventorySortRequestedEvent
+    ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.exception.player_exceptions import (
+    EquipmentSlotValidationException,
     InvalidSlotException,
     ItemNotInSlotException,
-    EquipmentSlotValidationException,
     ItemReservedException,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 # テスト用のヘルパー関数
@@ -43,8 +44,8 @@ def create_test_slot_id(value: int = 0) -> SlotId:
 
 def create_test_inventory_slots(
     max_slots: int = 20,
-    occupied_slots: Optional[Dict[int, int]] = None
-) -> Dict[SlotId, Optional[ItemInstanceId]]:
+    occupied_slots: dict[int, int] | None = None
+) -> dict[SlotId, ItemInstanceId | None]:
     """テスト用のインベントリスロットを作成"""
     slots = {}
     for i in range(max_slots):
@@ -58,8 +59,8 @@ def create_test_inventory_slots(
 
 
 def create_test_equipment_slots(
-    occupied_slots: Optional[Dict[EquipmentSlotType, int]] = None
-) -> Dict[EquipmentSlotType, Optional[ItemInstanceId]]:
+    occupied_slots: dict[EquipmentSlotType, int] | None = None
+) -> dict[EquipmentSlotType, ItemInstanceId | None]:
     """テスト用の装備スロットを作成"""
     slots = {}
     for equipment_type in EquipmentSlotType:
@@ -75,8 +76,8 @@ def create_test_equipment_slots(
 def create_test_inventory_aggregate(
     player_id: int = 1,
     max_slots: int = 20,
-    inventory_slots: Optional[Dict[int, int]] = None,
-    equipment_slots: Optional[Dict[EquipmentSlotType, int]] = None
+    inventory_slots: dict[int, int] | None = None,
+    equipment_slots: dict[EquipmentSlotType, int] | None = None
 ) -> PlayerInventoryAggregate:
     """テスト用のPlayerInventoryAggregateを作成"""
     inventory_slot_dict = create_test_inventory_slots(max_slots, inventory_slots)

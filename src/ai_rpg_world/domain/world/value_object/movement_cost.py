@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.world.exception.map_exception import MovementCostValidationException
 
 
@@ -7,7 +8,7 @@ class MovementCost:
     """移動にかかる重み"""
     value: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise MovementCostValidationException(f"Movement cost cannot be negative: {self.value}")
 

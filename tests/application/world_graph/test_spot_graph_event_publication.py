@@ -9,7 +9,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, call
 
 import pytest
-
 from tests.support.command_scope_fakes import (
     install_passthrough_spot_interaction_constructor,
 )
@@ -36,6 +35,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFl
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -55,7 +55,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 
 
 def _build_graph_with_entity(spot_id: SpotId, entity_id: EntityId) -> SpotGraphAggregate:

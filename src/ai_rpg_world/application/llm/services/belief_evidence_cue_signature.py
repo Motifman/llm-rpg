@@ -15,7 +15,7 @@ U2 (証拠台帳統一設計 §2 U2): 「新しい抽出ロジックを発明し
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
@@ -71,9 +71,9 @@ def _to_direct_actor_value(entity_value: str) -> str:
 
 def build_hearsay_cue_signature(
     claim_text: str,
-    noun_matcher: Optional[Any],
+    noun_matcher: Any | None,
     *,
-    self_player_id: Optional[int] = None,
+    self_player_id: int | None = None,
 ) -> str:
     """伝聞の主張文から cue_signature を決める (P9)。
 
@@ -103,9 +103,9 @@ def build_hearsay_cue_signature(
         if self_player_id is not None
         else None
     )
-    best_start: Optional[int] = None
-    best_axis: Optional[str] = None
-    best_value: Optional[str] = None
+    best_start: int | None = None
+    best_axis: str | None = None
+    best_value: str | None = None
     for m in matches:
         axis = getattr(m, "axis", "")
         if axis not in _HEARSAY_AXIS_TO_CUE_PREFIX:

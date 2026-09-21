@@ -21,15 +21,6 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
-    GameEndConditionTypeEnum,
-)
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    GameEndConditionValidationException,
-)
-from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
-    GameEndConditionEvaluator,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -37,14 +28,23 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
+    GameEndConditionTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
+    GameResultEnum,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    GameEndConditionValidationException,
+)
+from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
+    GameEndConditionEvaluator,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
     GameEndCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
-    GameResultEnum,
-)
 
 #: この単体試験は「成立したか」だけを見る。勝敗はシナリオがどちらの
 #: リストに書いたかで決まるので、ここでは片側に固定して構わない。

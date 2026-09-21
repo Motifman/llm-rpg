@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace as dataclass_replace
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.action_summary_format import (
-    format_action_summary_for_display,
     action_history_projection,
+    format_action_summary_for_display,
+)
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    QUESTION_NAME as MEMO_COMPLETED_QUESTION,
+)
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    MemoHintDetection,
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
@@ -19,23 +25,6 @@ from ai_rpg_world.application.llm.services.subjective_args import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     command_post_commit_result,
 )
-from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
-)
-from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
-    QUESTION_NAME as MEMO_COMPLETED_QUESTION,
-    MemoHintDetection,
-)
-from ai_rpg_world.application.trace import TraceEventKind
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.intent.value_object.intent import Intent
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     tool_names_from_payload,
 )
@@ -52,13 +41,25 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     restore_nav_state,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import (
-    LlmPhaseAResult,
     WORLD_ACTION_HESITATION,
     WORLD_ACTION_MOMENTARY_BLANK,
     WORLD_RESULT_HESITATION,
     WORLD_RESULT_MOMENTARY_BLANK,
+    LlmPhaseAResult,
     action_result_extra_trace_payload,
 )
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+)
+from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.intent.value_object.intent import Intent
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
     # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない world_runtime
     # 専用 wiring のための補完。
     trace_recorder = getattr(wiring.runtime, "trace_recorder", None)
-    current_tick: Optional[int] = None
+    current_tick: int | None = None
     if trace_recorder is not None:
         try:
             current_tick = int(wiring.runtime.current_tick())
@@ -368,12 +369,12 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
     return result
 
 def _record_memo_completion_judgments(
-    detection: "MemoHintDetection",
+    detection: MemoHintDetection,
     *,
-    trace_recorder: Optional[Any],
-    current_tick: Optional[int],
+    trace_recorder: Any | None,
+    current_tick: int | None,
     player_id: PlayerId,
-    tool_name: Optional[str],
+    tool_name: str | None,
 ) -> None:
     """memo 完了の判断を trace に残す。記録の失敗で行動を落とさない。"""
     if trace_recorder is None:

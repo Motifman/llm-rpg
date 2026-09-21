@@ -1,7 +1,8 @@
 """QuestRecipientStrategy のテスト（正常系・境界・例外）"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
@@ -13,15 +14,17 @@ from ai_rpg_world.application.observation.services.recipient_strategies.quest_re
     QuestRecipientStrategy,
 )
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
+from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType, QuestStatus
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
     QuestApprovedEvent,
@@ -31,6 +34,7 @@ from ai_rpg_world.domain.quest.event.quest_event import (
     QuestPendingApprovalEvent,
 )
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
@@ -45,9 +49,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
 )
-from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType, QuestStatus
-from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 
 
 def _make_audience_query(status_repo: PlayerStatusRepository) -> PlayerAudienceQueryService:
@@ -107,8 +108,8 @@ class TestQuestRecipientStrategyNormal:
         )
         from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
         from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-        from ai_rpg_world.domain.player.value_object.growth import Growth
         from ai_rpg_world.domain.player.value_object.gold import Gold
+        from ai_rpg_world.domain.player.value_object.growth import Growth
         from ai_rpg_world.domain.player.value_object.hp import Hp
         from ai_rpg_world.domain.player.value_object.mp import Mp
         from ai_rpg_world.domain.player.value_object.stamina import Stamina

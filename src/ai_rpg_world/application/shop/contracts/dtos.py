@@ -1,7 +1,7 @@
 """ショップコマンド・クエリ結果DTO"""
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -9,7 +9,7 @@ class ShopCommandResultDto:
     """ショップコマンド実行結果DTO"""
     success: bool
     message: str
-    data: Optional[dict] = None
+    data: dict[str, Any] | None = None
 
 
 # --- クエリ用DTO ---
@@ -23,7 +23,7 @@ class ShopSummaryDto:
     location_area_id: int
     name: str
     description: str
-    owner_ids: List[int]
+    owner_ids: list[int]
     listing_count: int
     created_at: datetime
 
@@ -39,11 +39,11 @@ class ShopListingDto:
     price_per_unit: int
     quantity: int
     listed_by: int
-    listed_at: Optional[datetime] = None
+    listed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
 class ShopDetailDto:
     """ショップ詳細DTO（サマリ＋出品一覧）"""
     summary: ShopSummaryDto
-    listings: List[ShopListingDto]
+    listings: list[ShopListingDto]

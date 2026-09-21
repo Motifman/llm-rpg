@@ -1,5 +1,6 @@
 import random
-from typing import Dict, Set
+from typing import ClassVar
+
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
@@ -13,7 +14,7 @@ class WeatherSimulationService:
     # 天候の遷移規則と重み
     # {現在の天候: {次になり得る天候: 重み}}
     # 重みが大きいほど、その天候になりやすい。
-    TRANSITION_WEIGHTS: Dict[WeatherTypeEnum, Dict[WeatherTypeEnum, int]] = {
+    TRANSITION_WEIGHTS: ClassVar[dict[WeatherTypeEnum, dict[WeatherTypeEnum, int]]] = {
         WeatherTypeEnum.CLEAR: {
             WeatherTypeEnum.CLEAR: 70, 
             WeatherTypeEnum.CLOUDY: 25, 
@@ -59,7 +60,7 @@ class WeatherSimulationService:
     }
 
     @classmethod
-    def get_possible_transitions(cls, current_weather: WeatherTypeEnum) -> Set[WeatherTypeEnum]:
+    def get_possible_transitions(cls, current_weather: WeatherTypeEnum) -> set[WeatherTypeEnum]:
         """現在の天候から遷移可能な天候のリストを返す"""
         return set(cls.TRANSITION_WEIGHTS.get(current_weather, {WeatherTypeEnum.CLEAR: 1}).keys())
 

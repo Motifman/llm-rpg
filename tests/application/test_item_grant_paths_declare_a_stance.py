@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Dict, Set
 
 _SRC = Path(__file__).resolve().parents[2] / "src" / "ai_rpg_world"
 
@@ -46,7 +45,7 @@ _INFRASTRUCTURE = "付与の実装そのもの (構えは呼び出し側が決�
 #:
 #: `_NO_GUARD_YET` はいま 1 件も無い。**枠は残す** — 次に穴を見つけた人が
 #: 記録する場所が要る。表を空にして消すと、見つけた人が書く場所を失う。
-_STANCE: Dict[str, str] = {
+_STANCE: dict[str, str] = {
     # ── 塞がっている ──────────────────────────────────────────────
     "application/world_graph/spot_graph_item_transfer_service.py": _REFUSE,
     "application/world_graph/spot_graph_merchant_trade_service.py": _REFUSE,
@@ -74,12 +73,12 @@ _STANCE: Dict[str, str] = {
 }
 
 
-def _modules_that_grant_items() -> Set[str]:
+def _modules_that_grant_items() -> set[str]:
     """品を所持品へ入れる呼び出しを持つモジュールを集める。
 
     import せず AST で読む。import すると副作用で経路が増減しうるため。
     """
-    found: Set[str] = set()
+    found: set[str] = set()
     for path in _SRC.rglob("*.py"):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))

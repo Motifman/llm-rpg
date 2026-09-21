@@ -1,9 +1,10 @@
 """AllegianceService のテスト"""
 
 import pytest
+
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.service.allegiance_service import PackAllegianceService
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
 
 
 class TestPackAllegianceService:

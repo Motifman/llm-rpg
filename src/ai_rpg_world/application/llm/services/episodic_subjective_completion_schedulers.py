@@ -39,17 +39,21 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
+from ai_rpg_world.application.llm.services._pending_prediction_recording import (
+    record_pending_prediction_if_applicable,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
+    resolve_pending_predictions_if_applicable,
 )
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
+    prediction_context_ids_from_actions,
+    record_recall_hits_if_applicable,
+    stamp_recall_prediction_outcome_if_applicable,
+)
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
     compute_chunk_attribution,
@@ -57,31 +61,27 @@ from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
-from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
-    prediction_context_ids_from_actions,
-    record_recall_hits_if_applicable,
-    stamp_recall_prediction_outcome_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_recording import (
-    record_pending_prediction_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
-    resolve_pending_predictions_if_applicable,
-)
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
-)
 from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
     IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+    PendingPredictionRepository,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 _logger = logging.getLogger(__name__)
 
 
 def _resolve_recorder_from_provider(
-    recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
-) -> Optional[ITraceRecorder]:
+    recorder_provider: Callable[[], ITraceRecorder | None] | None,
+) -> ITraceRecorder | None:
     """U10a: trace_recorder_provider を安全に解決する小さな helper。
 
     ``_emit_trace`` 内の同等ロジックと重複するが、``record_pending_prediction_if_applicable``
@@ -137,8 +137,8 @@ def _run_sidecar_safely(
 
 
 def _emit_trace(
-    recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]],
-    tick_provider: Optional[Callable[[], Optional[int]]],
+    recorder_provider: Callable[[], ITraceRecorder | None] | None,
+    tick_provider: Callable[[], int | None] | None,
     *,
     kind: str,
     player_id: int,
@@ -146,7 +146,7 @@ def _emit_trace(
 ) -> None:
     """trace event を最善努力で記録する (例外は握りつぶす、ただし監視可能な
     粒度でログには残す)。"""
-    recorder: Optional[ITraceRecorder] = None
+    recorder: ITraceRecorder | None = None
     if recorder_provider is not None:
         try:
             recorder = recorder_provider()
@@ -161,7 +161,7 @@ def _emit_trace(
             recorder = None
     if recorder is None:
         return
-    tick: Optional[int] = None
+    tick: int | None = None
     if tick_provider is not None:
         try:
             tick = tick_provider()
@@ -193,15 +193,15 @@ class InlineEpisodicSubjectiveScheduler:
         service: EpisodicChunkSubjectiveFieldsService,
         episode_store: EpisodicEpisodeRepository,
         *,
-        trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
+        belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
         belief_attribution_enabled: bool = False,
-        recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+        recall_buffer_store: EpisodicRecallBufferRepository | None = None,
         error_driven_reinterpretation_enabled: bool = False,
-        recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
+        recall_success_store: IEpisodicRecallSuccessStore | None = None,
         recall_hit_boost_enabled: bool = False,
-        pending_prediction_store: Optional[PendingPredictionRepository] = None,
+        pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
@@ -307,7 +307,7 @@ class InlineEpisodicSubjectiveScheduler:
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: Optional[str] = None,
+        actor_name: str | None = None,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -456,7 +456,7 @@ class InlineEpisodicSubjectiveScheduler:
             )
 
     def set_recall_buffer_store(
-        self, recall_buffer_store: Optional[EpisodicRecallBufferRepository]
+        self, recall_buffer_store: EpisodicRecallBufferRepository | None
     ) -> None:
         """U9a: recall_buffer を構築後に差し込むための setter。
 
@@ -475,7 +475,7 @@ class InlineEpisodicSubjectiveScheduler:
         self._recall_buffer_store = recall_buffer_store
 
     def set_recall_success_store(
-        self, recall_success_store: Optional[IEpisodicRecallSuccessStore]
+        self, recall_success_store: IEpisodicRecallSuccessStore | None
     ) -> None:
         """U9b: 的中側 sidecar を構築後に差し込むための setter。
 
@@ -492,7 +492,7 @@ class InlineEpisodicSubjectiveScheduler:
         self._recall_success_store = recall_success_store
 
     def set_pending_prediction_store(
-        self, pending_prediction_store: Optional[PendingPredictionRepository]
+        self, pending_prediction_store: PendingPredictionRepository | None
     ) -> None:
         """U10a: pending prediction store を構築後に差し込むための setter。
 
@@ -507,7 +507,7 @@ class InlineEpisodicSubjectiveScheduler:
             )
         self._pending_prediction_store = pending_prediction_store
 
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         # 同期実装はキュー無し。何もしない。
         del timeout
 
@@ -536,15 +536,15 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         *,
         max_workers: int = 1,
         max_queue_size: int = 100,
-        trace_recorder_provider: Optional[Callable[[], Optional[ITraceRecorder]]] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        belief_evidence_transcriber: Optional[BeliefEvidenceTranscriber] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
+        belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
         belief_attribution_enabled: bool = False,
-        recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
+        recall_buffer_store: EpisodicRecallBufferRepository | None = None,
         error_driven_reinterpretation_enabled: bool = False,
-        recall_success_store: Optional[IEpisodicRecallSuccessStore] = None,
+        recall_success_store: IEpisodicRecallSuccessStore | None = None,
         recall_hit_boost_enabled: bool = False,
-        pending_prediction_store: Optional[PendingPredictionRepository] = None,
+        pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
@@ -629,7 +629,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: Optional[str] = None,
+        actor_name: str | None = None,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -765,7 +765,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         draft: SubjectiveEpisode,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: Optional[str] = None,
+        actor_name: str | None = None,
     ) -> None:
         """ワーカー thread の本体。例外は呼び出し元に propagate しないこと。"""
         start = time.monotonic()
@@ -909,7 +909,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
 
     def set_recall_buffer_store(
-        self, recall_buffer_store: Optional[EpisodicRecallBufferRepository]
+        self, recall_buffer_store: EpisodicRecallBufferRepository | None
     ) -> None:
         """U9a: recall_buffer を構築後に差し込むための setter。
 
@@ -930,7 +930,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._recall_buffer_store = recall_buffer_store
 
     def set_recall_success_store(
-        self, recall_success_store: Optional[IEpisodicRecallSuccessStore]
+        self, recall_success_store: IEpisodicRecallSuccessStore | None
     ) -> None:
         """U9b: 的中側 sidecar を構築後に差し込むための setter。
 
@@ -947,7 +947,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._recall_success_store = recall_success_store
 
     def set_pending_prediction_store(
-        self, pending_prediction_store: Optional[PendingPredictionRepository]
+        self, pending_prediction_store: PendingPredictionRepository | None
     ) -> None:
         """U10a: pending prediction store を構築後に差し込むための setter。
 
@@ -963,7 +963,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
         self._pending_prediction_store = pending_prediction_store
 
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。
 
         ``timeout=None`` は完了まで無期限待機。``timeout`` 秒経っても残って

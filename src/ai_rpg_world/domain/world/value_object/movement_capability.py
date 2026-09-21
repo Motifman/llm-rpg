@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
-from typing import Set, Dict, FrozenSet
+
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum
 
 
 @dataclass(frozen=True)
 class MovementCapability:
     """アクターの移動能力と速度倍率を管理する値オブジェクト"""
-    capabilities: FrozenSet[MovementCapabilityEnum] = field(default_factory=lambda: frozenset({MovementCapabilityEnum.WALK}))
+    capabilities: frozenset[MovementCapabilityEnum] = field(default_factory=lambda: frozenset({MovementCapabilityEnum.WALK}))
     speed_modifier: float = 1.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.speed_modifier < 0:
             object.__setattr__(self, 'speed_modifier', 0.0)
 

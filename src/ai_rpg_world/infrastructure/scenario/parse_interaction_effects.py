@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional, Set, Tuple
+from collections.abc import Mapping
+from typing import Any
 
-from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
-    reject_values_the_world_does_not_have,
-)
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
@@ -21,6 +19,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 )
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
 
 _TARGET_PLAYER_CAPABLE_EFFECTS = frozenset(
     {
@@ -40,7 +41,7 @@ _TARGET_PLAYER_NOT_WIRED_YET = frozenset(
     }
 )
 
-def parse_effect_target( raw: Dict[str, Any], *, actor_context: str
+def parse_effect_target( raw: dict[str, Any], *, actor_context: str
 ) -> EffectTarget:
     """``effects[].target`` を検証して返す。既定は行為者。
 
@@ -115,7 +116,7 @@ _PLAYER_STATE_WRITERS = {
 
 def _written_player_state_keys(
     effect_type_str: str, params: Mapping[str, Any]
-) -> Tuple[str, ...]:
+) -> tuple[str, ...]:
     """その効果が書き換える、本人 state の key を返す。"""
     source = _PLAYER_STATE_WRITERS.get(effect_type_str)
     if source is None:
@@ -161,7 +162,7 @@ def _reject_writes_to_unchangeable_attributes(
 
 
 def parse_interaction_effect(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     actor_context: str = "interaction",
@@ -204,7 +205,7 @@ def parse_interaction_effect(
         visibility_raw = params.pop("visibility")
     else:
         params.pop("visibility", None)
-    visibility: Optional[EffectVisibility] = None
+    visibility: EffectVisibility | None = None
     if isinstance(visibility_raw, EffectVisibility):
         visibility = visibility_raw
     elif isinstance(visibility_raw, str) and visibility_raw:
@@ -364,7 +365,7 @@ _TELEPORT_PARAM_KEYS = frozenset(
 
 _TELEPORT_MESSAGE_PLACEHOLDERS = frozenset({"{actor}"})
 
-def validate_teleport_observation_messages( params: Dict[str, Any], raw: Dict[str, Any]
+def validate_teleport_observation_messages( params: dict[str, Any], raw: dict[str, Any]
 ) -> None:
     """観測文の宣言ミスを起動時に落とす。
 
@@ -416,7 +417,7 @@ def validate_teleport_observation_messages( params: Dict[str, Any], raw: Dict[st
                 )
 
 def validate_change_atmosphere_params(
-    params: Dict[str, Any], raw: Dict[str, Any]
+    params: dict[str, Any], raw: dict[str, Any]
 ) -> None:
     """CHANGE_ATMOSPHERE の対象 spot と enum 値を読み込み時に検証する。
 

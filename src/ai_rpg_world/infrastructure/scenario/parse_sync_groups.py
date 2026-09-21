@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
@@ -16,9 +16,10 @@ from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
+
 def reject_unreachable_synchronized_action_names(
-    groups: Tuple[SynchronizedActionGroup, ...],
-    raw: Dict[str, Any],
+    groups: tuple[SynchronizedActionGroup, ...],
+    raw: dict[str, Any],
 ) -> None:
     """`required_action_names` が到達可能な名前を指していることを確かめる。
 
@@ -47,7 +48,7 @@ def reject_unreachable_synchronized_action_names(
     if not groups:
         return
     declared = declared_action_names(raw)
-    unreachable: List[str] = []
+    unreachable: list[str] = []
     for group in groups:
         for name in group.required_action_names:
             if name not in declared:
@@ -67,7 +68,7 @@ def parse_synchronized_action_groups(
     mapper: ScenarioIdMapper,
     *,
     player_attribute_specs: PlayerAttributeSpecs,
-) -> Tuple[SynchronizedActionGroup, ...]:
+) -> tuple[SynchronizedActionGroup, ...]:
     """`synchronized_action_groups` を SynchronizedActionGroup 値オブジェクト
     の tuple にパースする。
 

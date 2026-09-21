@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.trade.services.market_service import (
     MarketItemNotOwnedError,
@@ -38,7 +39,6 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrderSide
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 _TOWN = Path(__file__).resolve().parents[4] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)
@@ -52,7 +52,7 @@ _BREAD = "焼きたてのパン"
 def town(tmp_path: Path) -> Any:
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
         raw["players"].append({

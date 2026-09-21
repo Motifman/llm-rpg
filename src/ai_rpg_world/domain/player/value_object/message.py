@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Union
+
 from ai_rpg_world.domain.player.exception import MessageValidationException
 
 
@@ -18,7 +18,7 @@ class Message:
     content: str
     timestamp: datetime
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.message_id <= 0:
             raise MessageValidationException(f"メッセージIDは正の数値である必要があります。message_id: {self.message_id}")

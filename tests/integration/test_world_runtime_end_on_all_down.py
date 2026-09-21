@@ -7,7 +7,6 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import runtime_config
 
-
 _SCENARIO_PATH = Path("data/scenarios/survival_island_v4_coop.json")
 _PERSISTENT_SCENARIO_PATH = Path("data/scenarios/persistent_world_demo.json")
 

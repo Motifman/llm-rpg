@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+
 from ai_rpg_world.domain.world.exception.map_exception import LocationAreaIdValidationException
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
 
 class TestLocationAreaId:

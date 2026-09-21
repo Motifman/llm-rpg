@@ -9,7 +9,7 @@ class UserNotFoundException(UserProfileException):
     """ユーザーが見つからない場合の例外"""
     error_code = "USER_NOT_FOUND"
 
-    def __init__(self, user_id: int, message: str = None):
+    def __init__(self, user_id: int | str, message: str | None = None):
         self.user_id = user_id
         if message is None:
             message = f"ユーザーが見つかりません: {user_id}"
@@ -20,7 +20,7 @@ class UserIdValidationException(UserProfileException):
     """ユーザーIDバリデーション例外"""
     error_code = "USER_ID_VALIDATION_ERROR"
 
-    def __init__(self, user_id: int, message: str = None):
+    def __init__(self, user_id: int | str, message: str | None = None):
         self.user_id = user_id
         if message is None:
             message = f"ユーザーIDは正の数値である必要があります。入力値: {user_id}"
@@ -31,7 +31,7 @@ class UserNameValidationException(UserProfileException):
     """ユーザー名バリデーション例外"""
     error_code = "USER_NAME_VALIDATION_ERROR"
 
-    def __init__(self, user_name: str, message: str = None):
+    def __init__(self, user_name: str, message: str | None = None):
         self.user_name = user_name
         if message is None:
             message = f"ユーザー名は3-20文字である必要があります。入力値: '{user_name}' (長さ: {len(user_name)})"
@@ -42,7 +42,7 @@ class DisplayNameValidationException(UserProfileException):
     """表示名バリデーション例外"""
     error_code = "DISPLAY_NAME_VALIDATION_ERROR"
 
-    def __init__(self, display_name: str, message: str = None):
+    def __init__(self, display_name: str, message: str | None = None):
         self.display_name = display_name
         if message is None:
             message = f"表示名は1-30文字である必要があります。入力値: '{display_name}' (長さ: {len(display_name)})"
@@ -53,7 +53,7 @@ class BioValidationException(UserProfileException):
     """Bioバリデーション例外"""
     error_code = "BIO_VALIDATION_ERROR"
 
-    def __init__(self, bio: str, message: str = None):
+    def __init__(self, bio: str, message: str | None = None):
         self.bio = bio
         if message is None:
             message = f"Bioは200文字以内である必要があります。入力値の長さ: {len(bio)}"
@@ -64,7 +64,7 @@ class ProfileUpdateValidationException(UserProfileException):
     """プロフィール更新時のバリデーション例外"""
     error_code = "PROFILE_UPDATE_VALIDATION_ERROR"
 
-    def __init__(self, message: str = None):
+    def __init__(self, message: str | None = None):
         if message is None:
             message = "プロフィール更新時には少なくとも1つのフィールドを指定する必要があります。"
         super().__init__(message)

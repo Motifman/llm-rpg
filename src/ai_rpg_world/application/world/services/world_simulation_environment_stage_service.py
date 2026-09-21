@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Dict, List
+from collections.abc import Callable
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -31,7 +31,7 @@ class WorldSimulationEnvironmentStageService:
     def run(
         self,
         current_tick: WorldTick,
-        maps: List[PhysicalMapAggregate],
+        maps: list[PhysicalMapAggregate],
     ) -> None:
         latest_weather = self._update_weather_if_needed(current_tick)
         for physical_map in maps:
@@ -39,8 +39,8 @@ class WorldSimulationEnvironmentStageService:
 
     def _update_weather_if_needed(
         self, current_tick: WorldTick
-    ) -> Dict[SpotId, WeatherState]:
-        latest_weather: Dict[SpotId, WeatherState] = {}
+    ) -> dict[SpotId, WeatherState]:
+        latest_weather: dict[SpotId, WeatherState] = {}
         weather_config_service = (
             self._weather_config_service_getter()
             if self._weather_config_service_getter is not None
@@ -91,7 +91,7 @@ class WorldSimulationEnvironmentStageService:
     def _sync_weather_to_map(
         self,
         physical_map: PhysicalMapAggregate,
-        latest_weather: Dict[SpotId, WeatherState],
+        latest_weather: dict[SpotId, WeatherState],
     ) -> None:
         if physical_map.spot_id in latest_weather:
             physical_map.set_weather(latest_weather[physical_map.spot_id])

@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Optional
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
-from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 
 class Notification(AggregateRoot):
@@ -18,7 +18,7 @@ class Notification(AggregateRoot):
         content: NotificationContent,
         created_at: datetime,
         is_read: bool = False,
-        expires_at: Optional[datetime] = None
+        expires_at: datetime | None = None
     ):
         super().__init__()
         self._notification_id = notification_id
@@ -60,7 +60,7 @@ class Notification(AggregateRoot):
         return self._is_read
 
     @property
-    def expires_at(self) -> Optional[datetime]:
+    def expires_at(self) -> datetime | None:
         """有効期限（Noneの場合は中期通知）"""
         return self._expires_at
 
@@ -88,7 +88,7 @@ class Notification(AggregateRoot):
         notification_type: NotificationType,
         content: NotificationContent,
         expires_at: datetime,
-        created_at: Optional[datetime] = None
+        created_at: datetime | None = None
     ) -> "Notification":
         """プッシュ通知を作成（一時的）"""
         if created_at is None:
@@ -110,7 +110,7 @@ class Notification(AggregateRoot):
         user_id: UserId,
         notification_type: NotificationType,
         content: NotificationContent,
-        created_at: Optional[datetime] = None
+        created_at: datetime | None = None
     ) -> "Notification":
         """中期通知を作成（永続的）"""
         if created_at is None:

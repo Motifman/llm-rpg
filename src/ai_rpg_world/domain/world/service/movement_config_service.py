@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 
 

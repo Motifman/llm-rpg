@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import sqlite3
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.repository.sns_notification_repository import (
@@ -38,7 +38,7 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteSnsNotificationRepository":
+    ) -> SqliteSnsNotificationRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
@@ -47,7 +47,7 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteSnsNotificationRepository":
+    ) -> SqliteSnsNotificationRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -71,7 +71,7 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
             return
         sink.add_events_from_aggregate(aggregate)
 
-    def _hydrate(self, row: sqlite3.Row | None) -> Optional[Notification]:
+    def _hydrate(self, row: sqlite3.Row | None) -> Notification | None:
         if row is None:
             return None
         return copy.deepcopy(
@@ -181,14 +181,14 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
             raise
         return copy.deepcopy(notification)
 
-    def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
+    def find_by_id(self, notification_id: NotificationId) -> Notification | None:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_notifications WHERE notification_id = ?",
             (int(notification_id),),
         )
         return self._hydrate(cur.fetchone())
 
-    def find_by_ids(self, notification_ids: List[NotificationId]) -> List[Notification]:
+    def find_by_ids(self, notification_ids: list[NotificationId]) -> list[Notification]:
         return [x for notification_id in notification_ids for x in [self.find_by_id(notification_id)] if x is not None]
 
     def delete(self, notification_id: NotificationId) -> bool:
@@ -212,13 +212,13 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
             raise
         return cur.rowcount > 0
 
-    def find_all(self) -> List[Notification]:
+    def find_all(self) -> list[Notification]:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_notifications ORDER BY created_at DESC, notification_id DESC"
         )
         return [x for row in cur.fetchall() for x in [self._hydrate(row)] if x is not None]
 
-    def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> List[Notification]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> list[Notification]:
         cur = self._conn.execute(
             """
             SELECT *
@@ -231,7 +231,7 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
         )
         return [x for row in cur.fetchall() for x in [self._hydrate(row)] if x is not None]
 
-    def find_unread_by_user_id(self, user_id: UserId) -> List[Notification]:
+    def find_unread_by_user_id(self, user_id: UserId) -> list[Notification]:
         cur = self._conn.execute(
             """
             SELECT *

@@ -6,8 +6,8 @@ PlayerStatusAggregate に保持される。
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 
@@ -16,7 +16,7 @@ from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedTy
 class AgentNeeds:
     """エージェントの全欲求を保持する不変コレクション。"""
 
-    _needs: Tuple[AgentNeed, ...]
+    _needs: tuple[AgentNeed, ...]
 
     @classmethod
     def empty(cls) -> AgentNeeds:
@@ -30,7 +30,7 @@ class AgentNeeds:
             AgentNeed.create(NeedType.FATIGUE, 0, max_value),
         ))
 
-    def get(self, need_type: NeedType) -> Optional[AgentNeed]:
+    def get(self, need_type: NeedType) -> AgentNeed | None:
         for n in self._needs:
             if n.need_type == need_type:
                 return n
@@ -50,7 +50,7 @@ class AgentNeeds:
             new_needs = self._needs + (updated,)
         return AgentNeeds(new_needs)
 
-    def increase_all(self, rates: Dict[NeedType, int]) -> AgentNeeds:
+    def increase_all(self, rates: dict[NeedType, int]) -> AgentNeeds:
         """全欲求を指定レートで増加させる（tick経過用）。"""
         new_needs = []
         for n in self._needs:
@@ -58,13 +58,13 @@ class AgentNeeds:
             new_needs.append(n.increase(rate) if rate > 0 else n)
         return AgentNeeds(tuple(new_needs))
 
-    def describe_all(self) -> Tuple[str, ...]:
+    def describe_all(self) -> tuple[str, ...]:
         """全欲求の状態テキストをタプルで返す。"""
         return tuple(n.describe() for n in self._needs)
 
     def describe_all_with_deltas(
-        self, deltas: "Mapping[NeedType, int]"
-    ) -> Tuple[str, ...]:
+        self, deltas: Mapping[NeedType, int]
+    ) -> tuple[str, ...]:
         """PR-T: 各 need の状態テキストに「前 turn からの delta」を併記したタプル
         を返す。``deltas`` に該当 need が無いか 0 のときは従来の describe と
         同じ表現になる。
@@ -85,5 +85,5 @@ class AgentNeeds:
     def __len__(self) -> int:
         return len(self._needs)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[AgentNeed]:
         return iter(self._needs)

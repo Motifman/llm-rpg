@@ -38,7 +38,6 @@ follower (= 同 pack の他 member で `pack_flee_follower=True` のもの) も
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -56,7 +55,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     MonsterNotInGraphException,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +76,7 @@ class MonsterPackFleeHandler:
         spot_id: SpotId,
         current_tick: WorldTick,
         *,
-        pack_members: Optional[List[MonsterAggregate]] = None,
+        pack_members: list[MonsterAggregate] | None = None,
     ) -> bool:
         """`monster` が pack leader の FLEE に追従して FLEE に入ったら True。
 
@@ -144,16 +142,16 @@ class MonsterPackFleeHandler:
     def _find_fleeing_pack_leader_from(
         self,
         monster: MonsterAggregate,
-        members: List[MonsterAggregate],
+        members: list[MonsterAggregate],
         current_tick: WorldTick,
-    ) -> Optional[MonsterAggregate]:
+    ) -> MonsterAggregate | None:
         """与えられた pack member 群から FLEE 中の leader を返す。複数該当
         する場合は monster_id 昇順の先頭 (pack に複数 leader が居る異常系
         の防御)。
 
         leader 不在 / leader が ALIVE 以外 / FLEE 中でない場合は None。
         """
-        candidates: List[MonsterAggregate] = []
+        candidates: list[MonsterAggregate] = []
         for member in members:
             if member.monster_id == monster.monster_id:
                 continue

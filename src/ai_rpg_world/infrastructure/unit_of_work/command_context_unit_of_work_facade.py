@@ -1,6 +1,7 @@
 """CommandContextへイベントを集約するインメモリrepository用UoW facade。"""
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.aggregate_event_sink import (
     CommandContextAggregateEventSink,
@@ -38,7 +39,7 @@ class CommandContextUnitOfWorkFacade:
     ) -> None:
         self._unit_of_work.register_pending_aggregate(repo_key, entity_id, aggregate)
 
-    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Optional[Any]:
+    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Any | None:
         return self._unit_of_work.get_pending_aggregate(repo_key, entity_id)
 
 

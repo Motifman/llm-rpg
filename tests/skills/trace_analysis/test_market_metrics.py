@@ -15,10 +15,9 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
-
 
 _SCRIPT = (
     Path(__file__).resolve().parents[3]
@@ -42,7 +41,7 @@ def mm():
     return _load_module()
 
 
-def _market(tick: int, event: str, **payload: Any) -> Dict[str, Any]:
+def _market(tick: int, event: str, **payload: Any) -> dict[str, Any]:
     return {
         "kind": "market_activity",
         "tick": tick,
@@ -65,7 +64,7 @@ def _snapshot(tick, order_id, item, side, price, qty=1, actor="商人"):
 
 
 def _action(tick: int, tool: str, *, success: bool = True, error_code=None,
-            player_id: int = 1, **payload: Any) -> Dict[str, Any]:
+            player_id: int = 1, **payload: Any) -> dict[str, Any]:
     return {
         "kind": "action_result",
         "tick": tick,
@@ -75,7 +74,7 @@ def _action(tick: int, tool: str, *, success: bool = True, error_code=None,
     }
 
 
-def _llm_call(tools: List[str]) -> Dict[str, Any]:
+def _llm_call(tools: list[str]) -> dict[str, Any]:
     return {"kind": "llm_call", "tick": 1, "payload": {"tool_names": tools}}
 
 

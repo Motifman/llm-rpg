@@ -1,33 +1,28 @@
 import pytest
+
+from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerEvadedEvent,
-    PlayerRevivedEvent,
-    PlayerLevelUpEvent,
-    PlayerHpHealedEvent,
-    PlayerMpConsumedEvent,
-    PlayerMpHealedEvent,
-    PlayerStaminaConsumedEvent,
-    PlayerStaminaHealedEvent,
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
+    PlayerHpHealedEvent,
+    PlayerLevelUpEvent,
+    PlayerMpConsumedEvent,
+    PlayerMpHealedEvent,
+    PlayerRevivedEvent,
+    PlayerStaminaConsumedEvent,
+    PlayerStaminaHealedEvent,
 )
 from ai_rpg_world.domain.player.exception import (
     CannotSwitchPursuitTargetException,
+    InsufficientGoldException,
+    InsufficientHpException,
     InsufficientMpException,
     InsufficientStaminaException,
-    InsufficientHpException,
-    InsufficientGoldException,
     NoActivePursuitException,
     PlayerDownedException,
     PlayerNotDownedException,
@@ -35,8 +30,18 @@ from ai_rpg_world.domain.player.exception import (
     PursuitTargetMismatchException,
     SpeechValidationException,
 )
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.event.pursuit_events import (
     PursuitCancelledEvent,
@@ -50,13 +55,9 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
-from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 
 
 # テスト用のヘルパー関数
@@ -656,9 +657,9 @@ class TestPlayerStatusAggregate:
 
     def test_location_updates(self):
         """位置情報と経路情報の更新テスト"""
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
         from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
         aggregate = create_test_status_aggregate()
         spot1 = SpotId(1)
@@ -1155,10 +1156,10 @@ class TestPlayerStatusAggregate:
     class TestStatusEffects:
         def test_effective_stats_with_multiplicative_buffs_via_domain_service(self):
             # 実効ステータスはアプリ層で compute_effective_stats を使用する
-            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
-            from ai_rpg_world.domain.common.value_object import WorldTick
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+            from ai_rpg_world.domain.common.value_object import WorldTick
 
             aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
@@ -1170,10 +1171,10 @@ class TestPlayerStatusAggregate:
             assert effective_stats.attack == 36  # 20 * 1.5 * 1.2
 
         def test_effective_stats_filters_expired_effects_via_domain_service(self):
-            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
-            from ai_rpg_world.domain.common.value_object import WorldTick
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+            from ai_rpg_world.domain.common.value_object import WorldTick
 
             aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
@@ -1187,10 +1188,10 @@ class TestPlayerStatusAggregate:
             assert len(aggregate.active_effects) == 1
 
         def test_buff_and_debuff_stacking_via_domain_service(self):
-            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
-            from ai_rpg_world.domain.common.value_object import WorldTick
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+            from ai_rpg_world.domain.common.value_object import WorldTick
 
             aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))

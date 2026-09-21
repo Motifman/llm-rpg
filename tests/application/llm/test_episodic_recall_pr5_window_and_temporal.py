@@ -6,9 +6,15 @@ R2: ``situation_cues`` が空のときのみ temporal 軸 が fallback として
 cue が立っているときは temporal 軸は走らない。
 """
 from __future__ import annotations
+
 from datetime import datetime, timedelta, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import PASSIVE_RECALL_AXIS_TEMPORAL, EpisodicPassiveRecallRetrievalService
+
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    PASSIVE_RECALL_AXIS_TEMPORAL,
+    EpisodicPassiveRecallRetrievalService,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
@@ -19,6 +25,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue, EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 _being = BeingId('being_w1_p1')
 
 def _episode(*, episode_id: str, occurred_at: datetime, cues: tuple[EpisodicCue, ...]=()) -> SubjectiveEpisode:
@@ -176,6 +183,7 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
     def test_emits_warning_for_none(self, caplog: pytest.LogCaptureFixture) -> None:
         """文字列が返ったら warning して None 扱い。"""
         import logging
+
         from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
         from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 
@@ -204,4 +212,4 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
         else:
             min_recall_dt = raw_oldest
         assert min_recall_dt is None
-        assert any(('unexpected type' in r.message for r in caplog.records))
+        assert any('unexpected type' in r.message for r in caplog.records)

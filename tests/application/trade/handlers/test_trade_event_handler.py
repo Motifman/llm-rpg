@@ -1,28 +1,30 @@
 from datetime import datetime
+from unittest.mock import Mock
 
 import pytest
-from unittest.mock import Mock
 
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
     TradeProjectionPrerequisiteMissingException,
 )
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
-    TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
     TradeDeclinedEvent,
+    TradeOfferedEvent,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
 from ai_rpg_world.infrastructure.events.trade_projection_executor import (
     InMemoryTradeProjectionExecutor,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import (
+    InMemoryTradeReadModelRepository,
 )
 
 _TS = datetime(2024, 1, 1, 12, 0, 0)

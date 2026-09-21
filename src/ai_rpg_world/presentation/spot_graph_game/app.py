@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import math
 import os
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Callable, Protocol
+from typing import Protocol
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from ai_rpg_world.presentation.spot_graph_game.dependencies import (
     set_runtime_manager,
 )
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    GameRuntimeManager,
+from ai_rpg_world.presentation.spot_graph_game.outbox_runtime import (
+    build_trade_outbox_delivery_loop_from_env,
 )
 from ai_rpg_world.presentation.spot_graph_game.routers import (
     characters,
@@ -27,11 +28,11 @@ from ai_rpg_world.presentation.spot_graph_game.routers import (
     sessions,
     worlds,
 )
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
+    GameRuntimeManager,
+)
 from ai_rpg_world.presentation.spot_graph_game.tick_loop import (
     SimulationTickLoop,
-)
-from ai_rpg_world.presentation.spot_graph_game.outbox_runtime import (
-    build_trade_outbox_delivery_loop_from_env,
 )
 from ai_rpg_world.presentation.spot_graph_game.websocket_handler import (
     game_event_websocket,

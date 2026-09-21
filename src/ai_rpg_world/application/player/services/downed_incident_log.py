@@ -24,7 +24,6 @@ observation_buffer と同じ粒度の欠落であり、per-Being store の永続
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Tuple
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -37,7 +36,7 @@ class DownedIncidentLog:
     MAX_ENTRIES_PER_PLAYER = 8
 
     def __init__(self) -> None:
-        self._entries: Dict[int, List[str]] = defaultdict(list)
+        self._entries: dict[int, list[str]] = defaultdict(list)
 
     def record(self, player_id: PlayerId, description: str) -> None:
         """``player_id`` が受けた行為を 1 件記録する。
@@ -53,13 +52,13 @@ class DownedIncidentLog:
         if len(bucket) > self.MAX_ENTRIES_PER_PLAYER:
             del bucket[: len(bucket) - self.MAX_ENTRIES_PER_PLAYER]
 
-    def drain(self, player_id: PlayerId) -> Tuple[str, ...]:
+    def drain(self, player_id: PlayerId) -> tuple[str, ...]:
         """``player_id`` ぶんを取り出して空にする。
 
         drain しないと、2 度目の復活で 1 度目の被害まで再び読まされる。
         """
         return tuple(self._entries.pop(int(player_id), []))
 
-    def peek(self, player_id: PlayerId) -> Tuple[str, ...]:
+    def peek(self, player_id: PlayerId) -> tuple[str, ...]:
         """消さずに覗く (テスト・デバッグ用)。"""
         return tuple(self._entries.get(int(player_id), []))

@@ -36,6 +36,10 @@ export = [
     "datasets>=5.0.0",
     "pyarrow>=25.0.0",
 ]
+dev = [
+    "mypy==2.3.1",
+    "ruff==0.16.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -43,6 +47,104 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+src = ["src"]
+# 既定の 88 だと import 整列が既存の 1 行 import を軒並み括弧へ折り返し、
+# 並べ替えの差分に書式変更が混ざる。import 行の 99% が 115 文字以内なので、
+# 折り返しが起きない値にして、この PR を並べ替えだけに閉じる。
+line-length = 120
+
+[tool.ruff.lint]
+# 既定のルールセットは 15,000 件以上を報告する。緑にできた分類だけを
+# ここへ足し、CI を常に緑に保つ。分類を増やす PR と、違反を潰す PR は分ける。
+select = ["E9", "F811", "F821", "I", "RUF", "UP"]
+ignore = [
+    # Union[X, Y] を X | Y にする。実行時に評価される位置 (型エイリアスの代入、
+    # 基底クラスの添字) で使われている 5 件が残っており、変換すると
+    # types.UnionType になって typing.Union と挙動が分かれる。1 件ずつ確かめて
+    # から外す。
+    "UP007",
+    # % 書式を format 指定子にする。残り 4 件はログ出力で、% 書式のまま遅延
+    # 評価させている。書き換えると評価時点が変わる。
+    "UP031",
+
+    # 全角の約物 (（）：！など) を「紛らわしい文字」として報告する。報告の
+    # 85% がこの 3 つで、内訳は全角丸括弧だけで 6462 件。このリポジトリは
+    # 説明文を日本語で書くので、文章そのものを報告し続けることになる。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+
+    # a + [b] を [*a, b] にする。22 件はどれも読んで意味が取れる式で、
+    # 書き換えても読みやすさが上がらない。
+    "RUF005",
+
+    # list(x)[0] を next(iter(x)) にする。16 件は全てテストの中にあり、
+    # 要素が無いときの失敗が IndexError から StopIteration に変わる。
+    # テストの失敗は IndexError の方が原因を読み取りやすい。
+    "RUF015",
+
+    # __all__ の並べ替え。並びが変わるだけで、読み手の判断は変わらない。
+    "RUF022",
+
+    # pytest.raises(match=...) の pattern をエスケープするか raw 文字列にする。
+    # 63 件のうち 34 件は .* を意図して使っており、29 件は識別子の中の . が
+    # 拾われたもの。実害のある取りこぼしは見つからなかった。
+    "RUF043",
+
+    # タプル展開で使わない変数。607 件の大半はテストが助け関数から多数の値を
+    # 受け取る形で、_ を付けて回るだけになる。
+    "RUF059",
+
+    # 使われていない noqa。E402 / E501 / BLE001 向けに書かれたもので、
+    # これらを select に入れた時点で必要になる。いま消すと意図が失われる。
+    "RUF100",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# dataclass の既定値で呼んでいる値オブジェクトの構築子。いずれも
+# @dataclass(frozen=True) で、インスタンス間で共有されても書き換わらない。
+# default_factory へ移すと「毎回作り直す必要がある」と読めてしまうので、
+# 不変であることをここに書く。
+extend-immutable-calls = [
+    "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
+    "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
+    "ai_rpg_world.domain.world.value_object.movement_cost.MovementCost.normal",
+]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+# strict で入れる。既定モードは注釈の無い関数を検査せず素通りさせるので、
+# 「通ったのに何も見ていない」状態になる。
+strict = true
+# まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
+follow_imports = "silent"
+# domain は全体。application は緑にできた文脈から 1 つずつ足す。
+# 残りの件数 (strict で計測): llm 338 / world_graph 188 / world 141 /
+# social 92 / world_runtime 86
+files = [
+    "src/ai_rpg_world/domain",
+    "src/ai_rpg_world/application/being",
+    "src/ai_rpg_world/application/common",
+    "src/ai_rpg_world/application/conversation",
+    "src/ai_rpg_world/application/encounter",
+    "src/ai_rpg_world/application/guild",
+    "src/ai_rpg_world/application/harvest",
+    "src/ai_rpg_world/application/intent",
+    "src/ai_rpg_world/application/inventory",
+    "src/ai_rpg_world/application/monster",
+    "src/ai_rpg_world/application/observation",
+    "src/ai_rpg_world/application/player",
+    "src/ai_rpg_world/application/quest",
+    "src/ai_rpg_world/application/shop",
+    "src/ai_rpg_world/application/skill",
+    "src/ai_rpg_world/application/speech",
+    "src/ai_rpg_world/application/trade",
+    "src/ai_rpg_world/application/trace",
+]
 
 [tool.uv.sources]
 semantic-resolver = { git = "https://github.com/Motifman/semantic-resolver.git", rev = "f164e0973c0cb6aa59aaa75837107f2a962b4d08" }
