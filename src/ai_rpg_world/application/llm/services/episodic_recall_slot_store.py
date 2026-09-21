@@ -250,6 +250,16 @@ class IEpisodicRecallSlotStore(Protocol):
         """
         ...
 
+    def force_insert(
+        self,
+        being_id: BeingId,
+        entry: RecallSlotEntry,
+        *,
+        capacity: int,
+    ) -> None:
+        """recall_by_handle 経由で能動的に思い出した episode を slot に格上げする。"""
+        ...
+
 
 class InMemoryEpisodicRecallSlotStore(IEpisodicRecallSlotStore):
     """プロセスメモリ常駐の sidecar 実装。experiment run の単位で破棄される。

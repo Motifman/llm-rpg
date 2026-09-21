@@ -231,6 +231,8 @@ class SnsToolExecutor:
         post_id, error = self._resolve_post_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert post_id is not None
         try:
             result = self._post_service.delete_post(
                 DeletePostCommand(post_id=post_id, user_id=player_id)
@@ -247,6 +249,8 @@ class SnsToolExecutor:
         reply_id, error = self._resolve_reply_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert reply_id is not None
         try:
             result = self._reply_service.delete_reply(
                 DeleteReplyCommand(reply_id=reply_id, user_id=player_id)
@@ -294,6 +298,8 @@ class SnsToolExecutor:
         notification_id, error = self._resolve_notification_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert notification_id is not None
         try:
             result = self._notification_command_service.mark_notification_as_read(
                 MarkNotificationAsReadCommand(
@@ -399,6 +405,8 @@ class SnsToolExecutor:
         post_id, error = self._resolve_post_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert post_id is not None
         try:
             result = self._post_service.like_post(
                 LikePostCommand(post_id=post_id, user_id=player_id)
@@ -415,6 +423,8 @@ class SnsToolExecutor:
         reply_id, error = self._resolve_reply_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert reply_id is not None
         try:
             result = self._reply_service.like_reply(
                 LikeReplyCommand(reply_id=reply_id, user_id=player_id)
@@ -431,6 +441,8 @@ class SnsToolExecutor:
         target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert target_user_id is not None
         try:
             result = self._user_command_service.follow_user(
                 FollowUserCommand(
@@ -450,6 +462,8 @@ class SnsToolExecutor:
         target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert target_user_id is not None
         try:
             result = self._user_command_service.unfollow_user(
                 UnfollowUserCommand(
@@ -469,6 +483,8 @@ class SnsToolExecutor:
         target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert target_user_id is not None
         try:
             result = self._user_command_service.subscribe_user(
                 SubscribeUserCommand(
@@ -488,6 +504,8 @@ class SnsToolExecutor:
         target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert target_user_id is not None
         try:
             result = self._user_command_service.unsubscribe_user(
                 UnsubscribeUserCommand(
@@ -507,6 +525,8 @@ class SnsToolExecutor:
         target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert target_user_id is not None
         try:
             result = self._user_command_service.block_user(
                 BlockUserCommand(
@@ -526,6 +546,8 @@ class SnsToolExecutor:
         target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
         if error is not None:
             return error
+        # resolver は値か error のどちらかを必ず返す (両方 None は無い)
+        assert target_user_id is not None
         try:
             result = self._user_command_service.unblock_user(
                 UnblockUserCommand(

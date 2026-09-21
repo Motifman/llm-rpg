@@ -142,7 +142,7 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             bucket = self._episodes_by_being.get(being_id)
             if not bucket:
                 return []
-            episodes = bucket.values()
+            episodes: list[SubjectiveEpisode] = list(bucket.values())
             if min_occurred_at is not None:
                 episodes = [
                     ep

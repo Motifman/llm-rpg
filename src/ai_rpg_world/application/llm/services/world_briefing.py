@@ -301,7 +301,7 @@ def _duty_places(
                     continue
                 for condition in getattr(interaction, "preconditions", ()) or ():
                     required = getattr(condition, "required_state", None) or {}
-                    duty = required.get(duty_state_key)
+                    duty: Any = required.get(duty_state_key)
                     if not duty:
                         continue
                     _append(

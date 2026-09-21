@@ -524,6 +524,9 @@ class BeliefConsolidationCoordinator:
         last = self._last_reflect_turn.get(cap_key)
         if last is not None and (turn - last) < self._stall_min_interval_turns:
             return False
+        # _resolve_reflect_verdict が sink 未注入なら None を返し、verdict が
+        # ここまで来ている時点で sink は在る
+        assert self._reflect_observation_sink is not None
         try:
             self._reflect_observation_sink(
                 PlayerId(player_id), statement.strip(), verdict
@@ -969,7 +972,7 @@ class BeliefConsolidationCoordinator:
             }
             for b in shortlist
         ]
-        user_content = {
+        user_content: dict[str, Any] = {
             "evidence": evidence_payload,
             "shortlist": shortlist_payload,
         }

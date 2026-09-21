@@ -141,7 +141,7 @@ def resolve_whisper_target(
     # 偽装する単純な namespace で fallback の resolver API に合わせる。
     rtc = type("_RTCStub", (), {"targets": targets})()
     try:
-        return resolve_player_target(target_label, rtc)  # type: ignore[arg-type]
+        return resolve_player_target(target_label, rtc)
     except ToolArgumentResolutionException:
         return None
 

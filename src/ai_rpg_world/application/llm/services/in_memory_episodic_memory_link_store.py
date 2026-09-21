@@ -35,6 +35,13 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
             BeingId, defaultdict[str, set[BeingLinkKey]]
         ] = defaultdict(lambda: defaultdict(set))
 
+    def _keys_for(self, being_id: BeingId, episode_id: str) -> set[BeingLinkKey]:
+        """その being の episode に紐づく link key。defaultdict を触らずに読む。"""
+        by_episode = self._by_being_episode.get(being_id)
+        if by_episode is None:
+            return set()
+        return by_episode.get(episode_id, set())
+
     def _register_being_episode(
         self, being_id: BeingId, episode_id: str, key: BeingLinkKey
     ) -> None:
@@ -98,7 +105,7 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
         if limit <= 0:
             return []
         eid = episode_id.strip()
-        keys = self._by_being_episode.get(being_id, {}).get(eid, set())
+        keys = self._keys_for(being_id, eid)
         out: list[MemoryLink] = []
         for k in keys:
             link = self._by_being_key.get(k)
@@ -120,7 +127,7 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         eid = episode_id.strip()
-        keys = self._by_being_episode.get(being_id, {}).get(eid, set())
+        keys = self._keys_for(being_id, eid)
         out: list[MemoryLink] = []
         for k in keys:
             link = self._by_being_key.get(k)
@@ -134,7 +141,7 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         eid = episode_id.strip()
-        return len(self._by_being_episode.get(being_id, {}).get(eid, set()))
+        return len(self._keys_for(being_id, eid))
 
     def remove_weakest_link_for_episode_by_being(
         self,
@@ -145,7 +152,7 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
     ) -> bool:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
-        keys = list(self._by_being_episode.get(being_id, {}).get(episode_id.strip(), set()))
+        keys = list(self._keys_for(being_id, episode_id.strip()))
         if not keys:
             return False
         weakest_key = min(

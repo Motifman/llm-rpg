@@ -8,6 +8,7 @@ formatter は件数のみ出力し本 builder がラベル一覧を担当する�
 """
 
 
+from typing import TypedDict
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
     AttentionLevelToolRuntimeTargetDto,
@@ -78,6 +79,30 @@ _VISIBLE_KIND_LABEL = {
     "object": "オブジェクト",
     "destination": "移動先",
 }
+
+
+class _VisibleTargetKwargs(TypedDict):
+    """視界内 target DTO 群に共通で渡すフィールド。
+
+    どの DTO も ToolRuntimeTargetDto の派生で追加フィールドを持たないため、
+    ``**`` 展開で使い回す。dict のままだと値型が join されて展開が通らない。
+    """
+
+    label: str
+    kind: str
+    display_name: str
+    player_id: int | None
+    world_object_id: int | None
+    distance: int | None
+    direction: str | None
+    target_x: int | None
+    target_y: int | None
+    target_z: int | None
+    relative_dx: int | None
+    relative_dy: int | None
+    relative_dz: int | None
+    interaction_type: str | None
+    available_interactions: tuple[str, ...]
 
 
 class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
@@ -415,7 +440,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         obj: VisibleObjectDto,
         world_state,
     ) -> ToolRuntimeTargetDto:
-        common_kwargs = dict(
+        common_kwargs = _VisibleTargetKwargs(
             label=label,
             kind=kind,
             display_name=display_name,

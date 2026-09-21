@@ -1,6 +1,6 @@
 """ToolArgumentResolver 用の共通ヘルパー関数。"""
 
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
@@ -15,6 +15,9 @@ class ToolArgumentResolutionException(Exception):
     def __init__(self, message: str, error_code: str):
         super().__init__(message)
         self.error_code = error_code
+
+
+_Target = TypeVar("_Target", bound=ToolRuntimeTargetDto)
 
 
 def require_target(
@@ -43,11 +46,11 @@ def require_target_type(
     label: Any,
     runtime_context: ToolRuntimeContextDto,
     label_name: str,
-    expected_types: tuple[type[ToolRuntimeTargetDto], ...],
+    expected_types: tuple[type[_Target], ...],
     *,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",
-) -> ToolRuntimeTargetDto:
+) -> _Target:
     """ラベルに対応する target を期待型で取得する。型が合わない場合は例外。"""
     target = require_target(
         label,
@@ -61,6 +64,19 @@ def require_target_type(
             invalid_kind_code,
         )
     return target
+
+
+def required_int_arg(args: dict[str, Any], name: str) -> int:
+    """tool 引数を int にする。欠落は TypeError。
+
+    executor は ``except Exception`` で失敗 DTO に落とすので、独自の例外へ
+    変えると失敗の種別が実行経路ごとにばらつく。int(None) と同じ TypeError に
+    そろえ、どの引数が欠けたのかだけメッセージに足す。
+    """
+    value = args.get(name)
+    if value is None:
+        raise TypeError(f"{name} is required")
+    return int(value)
 
 
 def safe_int(

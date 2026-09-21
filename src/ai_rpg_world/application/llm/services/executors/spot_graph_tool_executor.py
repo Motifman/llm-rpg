@@ -7,6 +7,9 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from ai_rpg_world.application.llm.services._resolver_helpers import (
+    required_int_arg,
+)
 from ai_rpg_world.application.common.command_context_event_publisher import (
     CommandContextEventPublisher,
 )
@@ -389,6 +392,8 @@ class SpotGraphToolExecutor:
         # のため）。
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
+        # use_item の効果適用を厳格にするか。command scope 側から差し替える
+        self._use_item_strict_effects = False
         # attack_orchestrator が注入されていれば優先利用。注入されない場合は
         # 内部でリポジトリから組み立てる（後方互換: 旧 wiring が orchestrator
         # を渡さず monster/player リポジトリだけ渡してきても動く）。
@@ -524,6 +529,8 @@ class SpotGraphToolExecutor:
             return
         try:
             status.apply_fatigue(amount)
+            # _get_status は repo 未注入なら None を返すので、status があれば repo もある
+            assert self._player_status_repository is not None
             self._player_status_repository.save(status)
         except Exception:
             pass
@@ -539,6 +546,8 @@ class SpotGraphToolExecutor:
             return
         try:
             status.recover_fatigue(amount)
+            # _get_status は repo 未注入なら None を返すので、status があれば repo もある
+            assert self._player_status_repository is not None
             self._player_status_repository.save(status)
         except Exception:
             if getattr(self, "_use_item_strict_effects", False):
@@ -741,6 +750,8 @@ class SpotGraphToolExecutor:
                 detail="正の整数または 0/None を指定してください",
             )
         try:
+            # movement 未注入なら except Exception が失敗 DTO に落とす
+            assert self._svc.movement is not None
             self._svc.movement.move_to_sub_location(PlayerId(player_id), sub)
             return LlmCommandResultDto(
                 success=True,
@@ -1095,7 +1106,7 @@ class SpotGraphToolExecutor:
                 remediation=get_remediation("NOT_WIRED"),
             )
         try:
-            target_player_id = int(args.get("target_player_id"))
+            target_player_id = required_int_arg(args, "target_player_id")
         except (TypeError, ValueError):
             return build_invalid_arg_failure(
                 arg_name="target_player_id",
@@ -2207,8 +2218,8 @@ class SpotGraphToolExecutor:
             order = service.place_sell_order(
                 PlayerId(player_id),
                 item_label=str(args.get("item_label")),
-                quantity=int(args.get("quantity")),
-                unit_price=int(args.get("unit_price")),
+                quantity=required_int_arg(args, "quantity"),
+                unit_price=required_int_arg(args, "unit_price"),
                 current_tick=self._current_tick_value(),
             )
         except MarketException as exc:
@@ -2254,7 +2265,7 @@ class SpotGraphToolExecutor:
             purchase = service.buy_best(
                 PlayerId(player_id),
                 item_label=str(args.get("item_label")),
-                quantity=int(args.get("quantity")),
+                quantity=required_int_arg(args, "quantity"),
                 current_tick=self._current_tick_value(),
             )
         except MarketException as exc:
@@ -2316,8 +2327,8 @@ class SpotGraphToolExecutor:
             order = service.place_buy_order(
                 PlayerId(player_id),
                 item_label=str(args.get("item_label")),
-                quantity=int(args.get("quantity")),
-                unit_price=int(args.get("unit_price")),
+                quantity=required_int_arg(args, "quantity"),
+                unit_price=required_int_arg(args, "unit_price"),
                 current_tick=self._current_tick_value(),
             )
         except MarketException as exc:
@@ -2358,7 +2369,7 @@ class SpotGraphToolExecutor:
             sale = service.sell_best(
                 PlayerId(player_id),
                 item_label=str(args.get("item_label")),
-                quantity=int(args.get("quantity")),
+                quantity=required_int_arg(args, "quantity"),
                 current_tick=self._current_tick_value(),
             )
         except MarketException as exc:
@@ -2430,7 +2441,7 @@ class SpotGraphToolExecutor:
                 PlayerId(player_id),
                 item_label=item_label,
                 side=MarketOrderSide(str(args.get("side", "sell"))),
-                new_unit_price=int(args.get("new_unit_price")),
+                new_unit_price=required_int_arg(args, "new_unit_price"),
             )
         except MarketException as exc:
             return self._market_failure(exc)
@@ -2933,6 +2944,13 @@ class SpotGraphToolExecutor:
         クライアントや provider の変換崩れで届きうるので、実行側でも弾く
         (設計 doc H-6)。
         """
+        if self._runtime is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="cast_voteは本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
         raw = args.get("target_player_id")
         target = PlayerId(int(raw)) if raw is not None else None
         return self._runtime.cast_vote(PlayerId(player_id), target)
@@ -2949,6 +2967,13 @@ class SpotGraphToolExecutor:
         クライアントや provider の変換崩れで届きうるので、実行側でも弾く
         (設計 doc H-6)。vote と同じ形。
         """
+        if self._runtime is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="report_bodyは本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
         raw = args.get("target_player_id")
         if raw is None:
             return LlmCommandResultDto(

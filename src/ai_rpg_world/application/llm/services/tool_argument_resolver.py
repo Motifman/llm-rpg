@@ -1,6 +1,6 @@
 """LLM の UI 向けラベル引数を canonical args に解決する。"""
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional, Protocol, TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import IToolArgumentResolver
@@ -32,6 +32,17 @@ __all__ = [
 ]
 
 
+class _ArgumentResolver(Protocol):
+    """tool_name に応じて引数を解決する resolver。共通の基底クラスは無い。"""
+
+    def resolve_args(
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> dict[str, Any] | None: ...
+
+
 class DefaultToolArgumentResolver(IToolArgumentResolver):
     """ツール名ごとに UI ラベルを既存アプリケーション層の引数へ解決する。"""
 
@@ -49,7 +60,7 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             item_spec_repository=item_spec_repository,
             player_profile_repository=player_profile_repository,
         )
-        self._resolvers = [
+        self._resolvers: list[_ArgumentResolver] = [
             SpotGraphArgumentResolver(),
             MovementArgumentResolver(),
             WorldArgumentResolver(),

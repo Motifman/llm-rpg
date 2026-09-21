@@ -197,10 +197,12 @@ class UnifiedRecentEventStore:
     def observations_in_storage_order(
         self, player_id: PlayerId
     ) -> list[ObservationEntry]:
+        # kind と payload の型が一致することは UnifiedRecentEventEntry の
+        # __post_init__ が保証するが、その対応は型では表現されていない
         return [
             event.payload
             for event in self._entries.get(self._key(player_id), [])
-            if event.kind == "observation"
+            if isinstance(event.payload, ObservationEntry)
         ]
 
     def action_results_in_storage_order(
@@ -209,7 +211,7 @@ class UnifiedRecentEventStore:
         return [
             event.payload
             for event in self._entries.get(self._key(player_id), [])
-            if event.kind == "action_result"
+            if isinstance(event.payload, ActionResultEntry)
         ]
 
     def get_recent_observations(
@@ -267,10 +269,16 @@ class UnifiedRecentEventStore:
         key = self._key(player_id)
         entries = self._entries.get(key, [])
         observation_indices = [
-            index for index, event in enumerate(entries) if event.kind == "observation"
+            index
+            for index, event in enumerate(entries)
+            if isinstance(event.payload, ObservationEntry)
         ][:count]
         remove = set(observation_indices)
-        removed = [entries[index].payload for index in observation_indices]
+        removed = [
+            payload
+            for index in observation_indices
+            if isinstance(payload := entries[index].payload, ObservationEntry)
+        ]
         self._entries[key] = [
             event for index, event in enumerate(entries) if index not in remove
         ]
@@ -296,7 +304,9 @@ class UnifiedRecentEventStore:
         self, player_id: PlayerId
     ) -> list[ObservationEntry]:
         return [
-            event.payload for event in self._pending.get(self._key(player_id), [])
+            event.payload
+            for event in self._pending.get(self._key(player_id), [])
+            if isinstance(event.payload, ObservationEntry)
         ]
 
     def drain_pending_observations(
@@ -305,7 +315,11 @@ class UnifiedRecentEventStore:
         key = self._key(player_id)
         entries = self._pending.get(key, [])
         self._pending[key] = []
-        return [event.payload for event in entries]
+        return [
+            event.payload
+            for event in entries
+            if isinstance(event.payload, ObservationEntry)
+        ]
 
     def replace_timeline(
         self, player_id: PlayerId, entries: Iterable[UnifiedRecentEventEntry]

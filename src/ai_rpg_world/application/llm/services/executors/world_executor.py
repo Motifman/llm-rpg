@@ -7,6 +7,9 @@ ToolCommandMapper のサブマッパーとして、ワールド・ゲーム全�
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional
 
+from ai_rpg_world.application.llm.services._resolver_helpers import (
+    required_int_arg,
+)
 from ai_rpg_world.application.conversation.contracts.commands import AdvanceConversationCommand
 from ai_rpg_world.application.conversation.contracts.dtos import AdvanceConversationResultDto
 from ai_rpg_world.application.harvest.contracts.dtos import HarvestCommandResultDto
@@ -212,7 +215,7 @@ class WorldToolExecutor:
             result: AdvanceConversationResultDto = self._conversation_service.advance_conversation(
                 AdvanceConversationCommand(
                     player_id=player_id,
-                    npc_id_value=int(args.get("npc_world_object_id")),
+                    npc_id_value=required_int_arg(args, "npc_world_object_id"),
                     choice_index=args.get("choice_index"),
                 )
             )
@@ -231,7 +234,7 @@ class WorldToolExecutor:
         try:
             self._place_object_service.place_from_inventory_slot(
                 player_id=player_id,
-                inventory_slot_id=int(args.get("inventory_slot_id")),
+                inventory_slot_id=required_int_arg(args, "inventory_slot_id"),
             )
             target_display_name = args.get("target_display_name") or "アイテム"
             return LlmCommandResultDto(success=True, message=f"{target_display_name}を設置しました。")
@@ -300,8 +303,8 @@ class WorldToolExecutor:
         try:
             self._chest_service.store_item_by_target(
                 player_id=player_id,
-                chest_world_object_id=int(args.get("chest_world_object_id")),
-                item_instance_id=int(args.get("item_instance_id")),
+                chest_world_object_id=required_int_arg(args, "chest_world_object_id"),
+                item_instance_id=required_int_arg(args, "item_instance_id"),
             )
             return LlmCommandResultDto(
                 success=True,
@@ -318,8 +321,8 @@ class WorldToolExecutor:
         try:
             self._chest_service.take_item_by_target(
                 player_id=player_id,
-                chest_world_object_id=int(args.get("chest_world_object_id")),
-                item_instance_id=int(args.get("item_instance_id")),
+                chest_world_object_id=required_int_arg(args, "chest_world_object_id"),
+                item_instance_id=required_int_arg(args, "item_instance_id"),
             )
             return LlmCommandResultDto(
                 success=True,
@@ -336,8 +339,8 @@ class WorldToolExecutor:
         try:
             self._skill_tool_service.use_skill(
                 player_id=player_id,
-                skill_loadout_id=int(args.get("skill_loadout_id")),
-                skill_slot_index=int(args.get("skill_slot_index")),
+                skill_loadout_id=required_int_arg(args, "skill_loadout_id"),
+                skill_slot_index=required_int_arg(args, "skill_slot_index"),
                 target_direction=args.get("target_direction"),
                 auto_aim=bool(args.get("auto_aim", False)),
             )
@@ -355,10 +358,10 @@ class WorldToolExecutor:
         try:
             self._skill_tool_service.equip_skill(
                 player_id=player_id,
-                loadout_id=int(args.get("loadout_id")),
+                loadout_id=required_int_arg(args, "loadout_id"),
                 deck_tier=args.get("deck_tier"),
-                slot_index=int(args.get("slot_index")),
-                skill_id=int(args.get("skill_id")),
+                slot_index=required_int_arg(args, "slot_index"),
+                skill_id=required_int_arg(args, "skill_id"),
             )
             skill_display_name = args.get("skill_display_name", "スキル")
             slot_display_name = args.get("slot_display_name", "スロット")
@@ -376,8 +379,8 @@ class WorldToolExecutor:
             return unknown_tool("スキル提案受諾ツールはまだ利用できません。")
         try:
             self._skill_tool_service.accept_skill_proposal(
-                progress_id=int(args.get("progress_id")),
-                proposal_id=int(args.get("proposal_id")),
+                progress_id=required_int_arg(args, "progress_id"),
+                proposal_id=required_int_arg(args, "proposal_id"),
             )
             proposal_display_name = args.get("proposal_display_name", "提案")
             slot_display_name = args.get("slot_display_name", "スロット")
@@ -395,8 +398,8 @@ class WorldToolExecutor:
             return unknown_tool("スキル提案却下ツールはまだ利用できません。")
         try:
             self._skill_tool_service.reject_skill_proposal(
-                progress_id=int(args.get("progress_id")),
-                proposal_id=int(args.get("proposal_id")),
+                progress_id=required_int_arg(args, "progress_id"),
+                proposal_id=required_int_arg(args, "proposal_id"),
             )
             proposal_display_name = args.get("proposal_display_name", "提案")
             return LlmCommandResultDto(
@@ -414,7 +417,7 @@ class WorldToolExecutor:
         try:
             self._skill_tool_service.activate_awakened_mode(
                 player_id=player_id,
-                loadout_id=int(args.get("loadout_id")),
+                loadout_id=required_int_arg(args, "loadout_id"),
             )
             return LlmCommandResultDto(success=True, message="覚醒モードを発動しました。")
         except Exception as e:

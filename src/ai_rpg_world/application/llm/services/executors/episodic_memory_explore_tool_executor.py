@@ -179,8 +179,8 @@ class EpisodicMemoryExploreToolExecutor:
             for entry in self.afterglow_store.get_index(being_id):
                 add_handle(entry.episode_id)
         if self.slot_store is not None:
-            for entry in self.slot_store.get_slot(being_id):
-                add_handle(entry.episode_id)
+            for slot_entry in self.slot_store.get_slot(being_id):
+                add_handle(slot_entry.episode_id)
         if not handles:
             return (
                 "指定された handle は見つかりません。"

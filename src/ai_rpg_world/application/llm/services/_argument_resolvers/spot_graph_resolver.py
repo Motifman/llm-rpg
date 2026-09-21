@@ -8,6 +8,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    MerchantToolRuntimeTargetDto,
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
@@ -1239,10 +1240,12 @@ class SpotGraphArgumentResolver:
 
         merchant_label = args.get("merchant_label")
         # targets は {label: target} の dict。**キーを回すと文字列が来る。**
+        # kind == "merchant" の target は MerchantToolRuntimeTargetDto として
+        # 組み立てられるが、targets の値型はその絞り込みを持ち越せない
         merchants = [
             target
             for target in (runtime_context.targets or {}).values()
-            if getattr(target, "kind", "") == "merchant"
+            if isinstance(target, MerchantToolRuntimeTargetDto)
         ]
         # **同席する商人が 0 人なのは「場所を間違えた」で、品名の誤りとは
         # 別の失敗にする。** 文面が同じでも error_code は状況ごとに正直で

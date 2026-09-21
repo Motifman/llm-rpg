@@ -238,7 +238,7 @@ class TradeToolExecutor:
                 if raw_tab is None or (
                     isinstance(raw_tab, str) and not raw_tab.strip()
                 ):
-                    tab = MyTradesTab.SELLING
+                    tab: MyTradesTab | None = MyTradesTab.SELLING
                 else:
                     tab = _parse_my_trades_tab_strict(raw_tab)
                     if tab is None:

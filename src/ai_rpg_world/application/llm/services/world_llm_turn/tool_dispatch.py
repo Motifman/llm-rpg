@@ -19,9 +19,11 @@ from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescu
 from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (
     ActionNameRescue,
 )
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    CANONICAL_IDENTIFIERS_KEY,
+)
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     ACTION_NAME_JUDGMENT_KEY,
-    CANONICAL_IDENTIFIERS_KEY,
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
@@ -687,7 +689,9 @@ def adapt_executor_handler(
     return _handler
 
 def adapt_executor_handler_with_resolver(
-    raw_handler: Callable[[int, dict[str, Any]], LlmCommandResultDto],
+    # adapt_executor_handler と同じく runtime_context を第3引数で渡すため、
+    # 引数の数を固定した Callable では表現できない
+    raw_handler: Callable[..., LlmCommandResultDto],
     tool_name: str,
     argument_resolver: Any,
     *,

@@ -718,7 +718,10 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             self._inflight[eid] = future
         # done callback は inflight からの除去のみ。trace は worker 内で吐く
         # (成功 / 失敗で分けるため)。
-        future.add_done_callback(lambda _fut, _eid=eid: self._on_done(_eid))
+        def _done(_fut: Future[None], _eid: str = eid) -> None:
+            self._on_done(_eid)
+
+        future.add_done_callback(_done)
 
     def _on_done(self, episode_id: str) -> None:
         with self._inflight_lock:
