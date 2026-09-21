@@ -231,6 +231,36 @@ class TestSkillCommandService:
             assert hitboxes[0].owner_id == WorldObjectId(player_id)
             assert hitboxes[0].skill_id == "1"
 
+        def test_use_skill_accepts_string_spot_id(self, setup):
+            """spot_id が文字列でもスキルを実行できる。
+
+            UsePlayerSkillCommand.spot_id は str と宣言されており、本番の
+            呼び出し元 (player_skill_tool_service) は str を渡す。既存テストが
+            int しか渡していなかったため、SpotId(...) が文字列で落ちる状態に
+            気づけなかった。
+            """
+            service, loadout_repo, spec_repo, _, player_repo, map_repo, hitbox_repo, _ = setup
+            player_id = 100
+            spot_id = 1
+
+            map_repo.save(_create_sample_map(spot_id))
+            pmap = map_repo.find_by_id(SpotId(spot_id))
+            pmap.add_object(_create_sample_actor(player_id, Coordinate(5, 5, 0), DirectionEnum.NORTH))
+            map_repo.save(pmap)
+            player_repo.save(_sample_status(player_id))
+
+            skill = _sample_skill(1, mp_cost=10)
+            spec_repo.save(skill)
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), player_id, 10, 10)
+            loadout.equip_skill(DeckTier.NORMAL, 0, skill)
+            loadout_repo.save(loadout)
+
+            service.use_player_skill(
+                UsePlayerSkillCommand(player_id, 1, 0, 10, spot_id=str(spot_id))
+            )
+
+            assert len(hitbox_repo.find_active_by_spot_id(SpotId(spot_id))) == 1
+
         def test_use_skill_with_auto_aim_success(self, setup):
             service, loadout_repo, spec_repo, _, player_repo, map_repo, hitbox_repo, _ = setup
             player_id = 100
@@ -546,6 +576,29 @@ class TestSkillCommandService:
             
             assert loadout_repo.find_by_id(SkillLoadoutId(100)).normal_deck.get_skill(0) == skill
             assert len(progress_repo.find_by_id(SkillDeckProgressId(1)).pending_proposals) == 0
+
+        def test_accept_proposal_without_target_slot_raises(self, setup):
+            """スロットの決まっていない提案を受諾すると SkillCommandException になる。
+
+            SkillProposal.target_slot_index は None を取りうる。None のまま
+            equip_skill へ渡すと、スロット検証まで None が届いていた。
+            """
+            service, loadout_repo, spec_repo, progress_repo, _, _, _, _ = setup
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(100), 100, 10, 10)
+            loadout_repo.save(loadout)
+
+            progress = SkillDeckProgressAggregate(SkillDeckProgressId(1), 100)
+            progress.register_proposals([
+                SkillProposal(
+                    1, SkillProposalType.ADD, SkillId(2),
+                    deck_tier=DeckTier.NORMAL, target_slot_index=None,
+                )
+            ])
+            progress_repo.save(progress)
+            spec_repo.save(_sample_skill(2))
+
+            with pytest.raises(SkillCommandException, match="target slot"):
+                service.accept_skill_proposal(AcceptSkillProposalCommand(1, 1))
 
     class TestActivatePlayerAwakenedMode:
         def test_activate_awakened_mode_success(self, setup):

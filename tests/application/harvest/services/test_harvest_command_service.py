@@ -177,6 +177,72 @@ class TestHarvestCommandService:
         updated_map = s["physical_map_repo"].find_by_spot_id(spot_id)
         assert updated_map.get_object(target_id).component.get_available_quantity(WorldTick(105)) == 0
 
+    def test_finish_harvest_accepts_repository_returning_item_spec(self, setup_service):
+        """ItemSpec を返すリポジトリ配線でも採集を完了できる。
+
+        ItemSpecRepository の 2 実装は別の型を返す。InMemory は
+        ItemSpecReadModel、SQLite は ItemSpec。呼び出し側が
+        to_item_spec() だけを前提にしていたため、SQLite 配線では
+        AttributeError になっていた。契約をどちらに揃えるかは #1364。
+        """
+        s = setup_service
+        service = s["service"]
+
+        spot_id = SpotId.create(1)
+        actor_id = WorldObjectId(1)
+        target_id = WorldObjectId(2)
+
+        from ai_rpg_world.domain.world.entity.tile import Tile
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+        from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+
+        tiles = [
+            Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+        ]
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5, stamina_cost=10)
+        target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
+        actor_obj = WorldObject(
+            actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC,
+            component=ActorComponent(direction=DirectionEnum.EAST),
+        )
+        s["physical_map_repo"].save(
+            PhysicalMapAggregate.create(spot_id, tiles, objects=[actor_obj, target_obj])
+        )
+        s["loot_table_repo"].save(
+            LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
+        )
+
+        player_id = PlayerId(1)
+        s["status_repo"].save(PlayerStatusAggregate(
+            player_id=player_id,
+            base_stats=MagicMock(), stat_growth_factor=MagicMock(), exp_table=MagicMock(),
+            growth=MagicMock(), gold=MagicMock(), hp=MagicMock(), mp=MagicMock(),
+            stamina=Stamina.create(100, 100),
+        ))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
+
+        # SQLite 実装と同じく、ドメインの ItemSpec をそのまま返す配線にする。
+        item_spec = ItemSpec(
+            item_spec_id=ItemSpecId(9),
+            name="鉄鉱石",
+            item_type=ItemType.MATERIAL,
+            rarity=Rarity.COMMON,
+            description="鉄の素材",
+            max_stack_size=MaxStackSize(64),
+        )
+        s["item_spec_repo"].find_by_id = lambda _spec_id: item_spec
+
+        service.start_harvest(
+            StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100)
+        )
+        result = service.finish_harvest(
+            FinishHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=105)
+        )
+
+        assert result.success is True
+        assert result.data["acquired_items"][0]["item_name"] == "鉄鉱石"
+
     def test_start_harvest_insufficient_stamina(self, setup_service):
         """スタミナ不足で採集を開始できないテスト"""
         s = setup_service
