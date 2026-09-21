@@ -44,7 +44,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         """失敗した投影処理の前に取得した状態へread modelを戻す。"""
         self._trades = deepcopy(snapshot)
 
-    def _setup_sample_data(self):
+    def _setup_sample_data(self) -> None:
         """サンプル取引データのセットアップ"""
         # 現在の時間を基準に過去の取引を作成
         base_time = datetime.now()

@@ -13,13 +13,13 @@ from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repos
 class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadModelRepository):
     """ItemTradeStatisticsReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._statistics: dict[ItemSpecId, ItemTradeStatisticsReadModel] = {}
 
         # サンプル統計データを作成
         self._setup_sample_data()
 
-    def _setup_sample_data(self):
+    def _setup_sample_data(self) -> None:
         """サンプル統計データのセットアップ"""
         # 現在の時間を基準に統計データを作成
         base_time = datetime.now()

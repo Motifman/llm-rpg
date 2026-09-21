@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
@@ -25,7 +26,8 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
     def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: PlayerProfileAggregate | None = self._clone(pending)
+            return cloned
         return self._profiles.get(player_id)
     
     def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerProfileAggregate]:
@@ -42,7 +44,7 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
 
     def save(self, profile: PlayerProfileAggregate) -> PlayerProfileAggregate:
         cloned_profile = self._clone(profile)
-        def operation():
+        def operation() -> Any:
             self._profiles[cloned_profile.player_id] = cloned_profile
             return cloned_profile
             
@@ -51,7 +53,7 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
         return self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:
-        def operation():
+        def operation() -> bool:
             if player_id in self._profiles:
                 del self._profiles[player_id]
                 return True

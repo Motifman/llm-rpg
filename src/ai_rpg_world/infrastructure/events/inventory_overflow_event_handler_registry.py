@@ -26,7 +26,9 @@ class InventoryOverflowEventHandlerRegistry:
             is_synchronous=True,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler[Any]":
+    def _create_event_handler(
+        self, handler_method: Callable[[Any], None]
+    ) -> "EventHandler[Any]":
         class EventHandlerImpl(EventHandler[Any]):
             def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method

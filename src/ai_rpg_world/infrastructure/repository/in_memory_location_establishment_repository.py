@@ -2,6 +2,7 @@
 InMemoryLocationEstablishmentRepository - ロケーションスロットのインメモリリポジトリ
 """
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
@@ -43,7 +44,8 @@ class InMemoryLocationEstablishmentRepository(
     ) -> LocationEstablishmentAggregate | None:
         pending = self._get_pending_aggregate(slot_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: LocationEstablishmentAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._location_establishments.get(slot_id))
 
     def find_by_spot_and_location(
@@ -67,7 +69,7 @@ class InMemoryLocationEstablishmentRepository(
     def save(self, slot: LocationEstablishmentAggregate) -> LocationEstablishmentAggregate:
         cloned = self._clone(slot)
 
-        def operation():
+        def operation() -> Any:
             self._location_establishments[cloned.id] = cloned
             return cloned
 
@@ -76,7 +78,7 @@ class InMemoryLocationEstablishmentRepository(
         return self._execute_operation(operation)
 
     def delete(self, slot_id: LocationSlotId) -> bool:
-        def operation():
+        def operation() -> bool:
             if slot_id in self._location_establishments:
                 del self._location_establishments[slot_id]
                 return True

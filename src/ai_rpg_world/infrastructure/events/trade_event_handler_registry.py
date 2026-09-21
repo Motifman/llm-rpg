@@ -81,7 +81,9 @@ class TradeEventHandlerRegistry:
             guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler[Any]":
+    def _create_event_handler(
+        self, handler_method: Callable[[Any], None]
+    ) -> "EventHandler[Any]":
         """イベントハンドラオブジェクトを作成"""
         class EventHandlerImpl(EventHandler[Any]):
             def __init__(self, method: Callable[[Any], None]) -> None:

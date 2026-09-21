@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -29,7 +30,8 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
     def find_by_id(self, entity_id: HitBoxId) -> HitBoxAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: HitBoxAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._hit_boxes.get(entity_id))
 
     def find_by_ids(self, entity_ids: list[HitBoxId]) -> list[HitBoxAggregate]:
@@ -38,7 +40,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
     def save(self, entity: HitBoxAggregate) -> HitBoxAggregate:
         cloned = self._clone(entity)
 
-        def operation():
+        def operation() -> Any:
             self._hit_boxes[cloned.hit_box_id] = cloned
             return cloned
 
@@ -47,7 +49,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def delete(self, entity_id: HitBoxId) -> bool:
-        def operation():
+        def operation() -> bool:
             if entity_id in self._hit_boxes:
                 del self._hit_boxes[entity_id]
                 return True
@@ -65,7 +67,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
         return [self._clone(hb) for hb in self._hit_boxes.values() if hb.spot_id == spot_id and hb.is_active]
 
     def generate_id(self) -> HitBoxId:
-        def operation():
+        def operation() -> Any:
             hit_box_id = HitBoxId(self._data_store.next_hit_box_id)
             self._data_store.next_hit_box_id += 1
             return hit_box_id
@@ -83,7 +85,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
     def save_all(self, entities: list[HitBoxAggregate]) -> None:
         cloned_entities = [self._clone(e) for e in entities]
 
-        def operation():
+        def operation() -> None:
             for entity in cloned_entities:
                 self._hit_boxes[entity.hit_box_id] = entity
 

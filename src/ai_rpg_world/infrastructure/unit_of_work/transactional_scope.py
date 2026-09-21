@@ -1,3 +1,4 @@
+from types import TracebackType
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 """TransactionalScope - Phase 4: post-commit orchestration を担う wrapper
@@ -40,15 +41,20 @@ class TransactionalScope:
         return False
 
     @property
-    def sync_event_dispatcher(self):
+    def sync_event_dispatcher(self) -> Any:
         """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。"""
         return self._sync_event_dispatcher
 
-    def __enter__(self):
+    def __enter__(self) -> "TransactionalScope":
         self._uow.begin()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if exc_type is not None:
             self._uow.rollback()
             return False

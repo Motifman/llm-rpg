@@ -2,6 +2,7 @@
 InMemoryShopRepository - ショップ関連のインメモリリポジトリ
 """
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
@@ -34,7 +35,8 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
     def find_by_id(self, shop_id: ShopId) -> ShopAggregate | None:
         pending = self._get_pending_aggregate(shop_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: ShopAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._shops.get(shop_id))
 
     def find_by_ids(self, shop_ids: list[ShopId]) -> list[ShopAggregate]:
@@ -43,7 +45,7 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
     def save(self, shop: ShopAggregate) -> ShopAggregate:
         cloned_shop = self._clone(shop)
 
-        def operation():
+        def operation() -> Any:
             self._shops[cloned_shop.shop_id] = cloned_shop
             return cloned_shop
 
@@ -52,7 +54,7 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def delete(self, shop_id: ShopId) -> bool:
-        def operation():
+        def operation() -> bool:
             if shop_id in self._shops:
                 del self._shops[shop_id]
                 return True

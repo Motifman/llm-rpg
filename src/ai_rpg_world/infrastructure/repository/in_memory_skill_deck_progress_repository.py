@@ -40,7 +40,8 @@ class InMemorySkillDeckProgressRepository(
     ) -> SkillDeckProgressAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: SkillDeckProgressAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._progresses.get(entity_id))
 
     def find_by_ids(

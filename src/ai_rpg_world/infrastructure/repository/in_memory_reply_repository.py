@@ -49,7 +49,8 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """IDでリプライを取得"""
         pending = self._get_pending_aggregate(reply_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: ReplyAggregate | None = self._clone(pending)
+            return cloned
         return self._replies.get(reply_id)
 
     def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
@@ -115,7 +116,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """ポストへのリプライツリーを取得（スレッド表示用）"""
         result = {}
 
-        def collect_replies(parent_id: PostId | ReplyId, current_depth: int):
+        def collect_replies(parent_id: PostId | ReplyId, current_depth: int) -> None:
             if current_depth > max_depth:
                 return
 
@@ -138,7 +139,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """ポストへのリプライツリーを取得（スレッド表示用、削除済みを含む）"""
         result = {}
 
-        def collect_replies(parent_id: PostId | ReplyId, current_depth: int):
+        def collect_replies(parent_id: PostId | ReplyId, current_depth: int) -> None:
             if current_depth > max_depth:
                 return
 
@@ -195,7 +196,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
     def bulk_delete_replies(self, reply_ids: list[ReplyId], user_id: UserId) -> int:
         """複数のリプライを一括削除（自分のリプライのみ）"""
-        def operation():
+        def operation() -> Any:
             deleted_count = 0
             for reply_id in reply_ids:
                 reply = self._replies.get(reply_id)
@@ -228,7 +229,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
     def delete(self, entity_id: ReplyId) -> bool:
         """リプライを削除（論理削除）"""
-        def operation():
+        def operation() -> bool:
             if entity_id in self._replies:
                 reply = self._replies[entity_id]
                 if not reply.deleted:

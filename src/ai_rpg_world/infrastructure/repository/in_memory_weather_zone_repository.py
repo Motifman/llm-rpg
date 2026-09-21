@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
@@ -24,7 +25,7 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
 
     def save(self, weather_zone: WeatherZone) -> WeatherZone:
         cloned_zone = self._clone(weather_zone)
-        def operation():
+        def operation() -> Any:
             self._zones[cloned_zone.zone_id] = cloned_zone
             return cloned_zone
 
@@ -34,7 +35,8 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
     def find_by_id(self, zone_id: WeatherZoneId) -> WeatherZone | None:
         pending = self._get_pending_aggregate(zone_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: WeatherZone | None = self._clone(pending)
+            return cloned
         return self._clone(self._zones.get(zone_id))
 
     def find_by_ids(self, zone_ids: list[WeatherZoneId]) -> list[WeatherZone]:
@@ -53,7 +55,7 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
         return [self._clone(zone) for zone in self._zones.values()]
 
     def delete(self, zone_id: WeatherZoneId) -> bool:
-        def operation():
+        def operation() -> bool:
             if zone_id in self._zones:
                 del self._zones[zone_id]
                 return True

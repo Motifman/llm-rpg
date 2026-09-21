@@ -2,6 +2,7 @@
 InMemoryQuestRepository - クエストのインメモリリポジトリ
 """
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
@@ -33,7 +34,8 @@ class InMemoryQuestRepository(QuestRepository, InMemoryRepositoryBase):
     def find_by_id(self, quest_id: QuestId) -> QuestAggregate | None:
         pending = self._get_pending_aggregate(quest_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: QuestAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._quests.get(quest_id))
 
     def find_by_ids(self, quest_ids: list[QuestId]) -> list[QuestAggregate]:
@@ -42,7 +44,7 @@ class InMemoryQuestRepository(QuestRepository, InMemoryRepositoryBase):
     def save(self, quest: QuestAggregate) -> QuestAggregate:
         cloned = self._clone(quest)
 
-        def operation():
+        def operation() -> Any:
             self._quests[cloned.quest_id] = cloned
             return cloned
 
@@ -51,7 +53,7 @@ class InMemoryQuestRepository(QuestRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def delete(self, quest_id: QuestId) -> bool:
-        def operation():
+        def operation() -> bool:
             if quest_id in self._quests:
                 del self._quests[quest_id]
                 return True

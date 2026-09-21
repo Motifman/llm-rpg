@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
@@ -24,7 +25,8 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
     def find_by_id(self, spot_id: SpotId) -> Spot | None:
         pending = self._get_pending_aggregate(spot_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: Spot | None = self._clone(pending)
+            return cloned
         return self._clone(self._spot_dict.get(spot_id))
 
     def find_by_ids(self, spot_ids: list[SpotId]) -> list[Spot]:
@@ -32,7 +34,7 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
 
     def save(self, spot: Spot) -> Spot:
         cloned = self._clone(spot)
-        def operation():
+        def operation() -> Any:
             self._spot_dict[cloned.spot_id] = cloned
             return cloned
 
@@ -40,7 +42,7 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def delete(self, spot_id: SpotId) -> bool:
-        def operation():
+        def operation() -> bool:
             if spot_id in self._spot_dict:
                 del self._spot_dict[spot_id]
                 return True

@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -20,7 +21,8 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
         """IDで検索"""
         pending = self._get_pending_aggregate(item_instance_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: ItemAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._data_store.items.get(item_instance_id))
 
     def find_by_ids(self, item_instance_ids: list[ItemInstanceId]) -> list[ItemAggregate]:
@@ -34,7 +36,7 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
     def save(self, aggregate: ItemAggregate) -> ItemAggregate:
         """保存"""
         cloned_aggregate = self._clone(aggregate)
-        def operation():
+        def operation() -> Any:
             self._data_store.items[cloned_aggregate.item_instance_id] = cloned_aggregate
             return cloned_aggregate
             
@@ -44,7 +46,7 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
 
     def delete(self, item_instance_id: ItemInstanceId) -> bool:
         """削除"""
-        def operation():
+        def operation() -> bool:
             if item_instance_id in self._data_store.items:
                 del self._data_store.items[item_instance_id]
                 return True

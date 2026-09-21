@@ -2,6 +2,7 @@
 InMemoryGuildRepository - ギルドのインメモリリポジトリ
 """
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
@@ -34,7 +35,8 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
     def find_by_id(self, guild_id: GuildId) -> GuildAggregate | None:
         pending = self._get_pending_aggregate(guild_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: GuildAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._guilds.get(guild_id))
 
     def find_by_ids(self, guild_ids: list[GuildId]) -> list[GuildAggregate]:
@@ -43,7 +45,7 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
     def save(self, guild: GuildAggregate) -> GuildAggregate:
         cloned = self._clone(guild)
 
-        def operation():
+        def operation() -> Any:
             self._guilds[cloned.guild_id] = cloned
             return cloned
 
@@ -52,7 +54,7 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def delete(self, guild_id: GuildId) -> bool:
-        def operation():
+        def operation() -> bool:
             if guild_id in self._guilds:
                 del self._guilds[guild_id]
                 return True

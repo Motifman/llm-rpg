@@ -12,6 +12,9 @@ from .in_memory_data_store import InMemoryDataStore
 
 T = TypeVar('T')
 
+_Result = TypeVar("_Result")
+
+
 class RepositoryUnitOfWorkPort(Protocol):
     """InMemory リポジトリが実際に呼ぶぶんだけの口。
 
@@ -78,7 +81,7 @@ class InMemoryRepositoryBase:
             clear_events()
         return cloned
 
-    def _execute_operation(self, operation: Callable[[], Any]) -> Any:
+    def _execute_operation(self, operation: Callable[[], _Result]) -> _Result:
         """操作を実行またはUOWに登録
         
         Args:

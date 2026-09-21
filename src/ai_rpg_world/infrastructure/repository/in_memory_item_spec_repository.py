@@ -24,7 +24,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
         # サンプルアイテムデータをセットアップ
         self._setup_sample_data()
 
-    def _setup_sample_data(self):
+    def _setup_sample_data(self) -> None:
         """サンプルアイテムデータのセットアップ"""
         # 装備品系アイテム
         sword_spec = ItemSpecReadModel(
@@ -220,7 +220,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
         )
         self._save_item_spec(leather_helmet_spec)
 
-    def _save_item_spec(self, item_spec: ItemSpecReadModel):
+    def _save_item_spec(self, item_spec: ItemSpecReadModel) -> None:
         """アイテムスペックを保存（内部用）"""
         self._item_specs[item_spec.item_spec_id] = item_spec
         self._name_to_item_spec[item_spec.name] = item_spec

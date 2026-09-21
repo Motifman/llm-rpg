@@ -30,7 +30,8 @@ class InMemorySkillLoadoutRepository(SkillLoadoutRepository, InMemoryRepositoryB
     def find_by_id(self, entity_id: SkillLoadoutId) -> SkillLoadoutAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: SkillLoadoutAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._loadouts.get(entity_id))
 
     def find_by_ids(self, entity_ids: list[SkillLoadoutId]) -> list[SkillLoadoutAggregate]:

@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
@@ -24,7 +25,8 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
     def find_by_id(self, player_id: PlayerId) -> PlayerInventoryAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: PlayerInventoryAggregate | None = self._clone(pending)
+            return cloned
         return self._inventories.get(player_id)
 
     def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerInventoryAggregate]:
@@ -32,7 +34,7 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
 
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
         cloned_inventory = self._clone(inventory)
-        def operation():
+        def operation() -> Any:
             self._inventories[cloned_inventory.player_id] = cloned_inventory
             return cloned_inventory
 
@@ -41,7 +43,7 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
         return self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:
-        def operation():
+        def operation() -> bool:
             if player_id in self._inventories:
                 del self._inventories[player_id]
                 return True

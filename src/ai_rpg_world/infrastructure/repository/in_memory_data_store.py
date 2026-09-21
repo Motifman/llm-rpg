@@ -138,13 +138,13 @@ class InMemoryDataStore:
         # サンプルデータの投入
         self._setup_sample_data()
 
-    def _setup_sample_data(self):
+    def _setup_sample_data(self) -> None:
         """全てのドメインのサンプルデータをセットアップ"""
         self._setup_sns_users()
         self._setup_sns_posts()
         self._setup_sns_replies()
 
-    def _setup_sns_users(self):
+    def _setup_sns_users(self) -> None:
         """SNSユーザーのサンプルデータ"""
         # ユーザー1: 勇者
         u1_profile = UserProfile("hero_user", "勇者", "世界を救う勇者です")
@@ -198,7 +198,7 @@ class InMemoryDataStore:
 
         self.sns_next_user_id = 7
 
-    def _setup_sns_posts(self):
+    def _setup_sns_posts(self) -> None:
         """SNSポストのサンプルデータ"""
         base_time = datetime.now()
         
@@ -274,7 +274,7 @@ class InMemoryDataStore:
 
         self.next_post_id = 21
 
-    def _setup_sns_replies(self):
+    def _setup_sns_replies(self) -> None:
         """SNSリプライのサンプルデータ"""
         base_time = datetime.now()
         
@@ -299,7 +299,7 @@ class InMemoryDataStore:
             
         self.next_reply_id = 11
 
-    def clear_all(self):
+    def clear_all(self) -> None:
         """全てのデータをクリア"""
         self.sns_users.clear()
         self.sns_username_to_user_id.clear()

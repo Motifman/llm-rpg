@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import cast
 
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
@@ -44,7 +45,9 @@ from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_a
 class _ScopeBoundPendingTradeOfferStore:
     """期限切れ処理に必要な提案store操作だけをscope内へ限定する。"""
 
-    def __init__(self, store: InMemoryPendingTradeOfferStore, require_active) -> None:
+    def __init__(
+        self, store: InMemoryPendingTradeOfferStore, require_active: Callable[[], None]
+    ) -> None:
         self._store = store
         self._require_active = require_active
 

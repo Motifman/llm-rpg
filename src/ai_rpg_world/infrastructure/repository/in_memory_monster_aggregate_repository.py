@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
@@ -33,7 +34,8 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def find_by_id(self, entity_id: MonsterId) -> MonsterAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: MonsterAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._monsters.get(entity_id))
 
     def find_by_ids(self, entity_ids: list[MonsterId]) -> list[MonsterAggregate]:
@@ -48,7 +50,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def generate_monster_id(self) -> MonsterId:
         """ID発行はリポジトリの責務。"""
 
-        def operation():
+        def operation() -> Any:
             mid = MonsterId(self._data_store.next_monster_id)
             self._data_store.next_monster_id += 1
             return mid
@@ -58,7 +60,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def generate_world_object_id_for_npc(self) -> WorldObjectId:
         """NPC用の WorldObjectId を発行する（プレイヤーIDと衝突しない範囲）。"""
 
-        def operation():
+        def operation() -> Any:
             wid = WorldObjectId(self._data_store.next_world_object_id)
             self._data_store.next_world_object_id += 1
             return wid
@@ -73,7 +75,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
                 result.append(self._clone(m))
         return result
 
-    def find_by_pack_id(self, pack_id) -> list[MonsterAggregate]:
+    def find_by_pack_id(self, pack_id: str) -> list[MonsterAggregate]:
         """指定 pack_id に属するモンスター一覧（ALIVE/DEAD 問わず）。
 
         Phase 4-O C: pack 援護で同 pack の member を引く用途。
@@ -87,7 +89,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def save(self, entity: MonsterAggregate) -> MonsterAggregate:
         cloned = self._clone(entity)
 
-        def operation():
+        def operation() -> Any:
             # 古いインデックスがあれば削除（world_object_idが変更される可能性を考慮）
             if cloned.monster_id in self._monsters:
                 old_monster = self._monsters[cloned.monster_id]
@@ -103,7 +105,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
         return self._execute_operation(operation)
 
     def delete(self, entity_id: MonsterId) -> bool:
-        def operation():
+        def operation() -> bool:
             if entity_id in self._monsters:
                 monster = self._monsters[entity_id]
                 if monster.world_object_id in self._world_object_to_monster_id:

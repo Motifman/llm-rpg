@@ -1,6 +1,7 @@
 """
 InMemoryPostRepository - PostAggregateを使用するインメモリ実装
 """
+from typing import Any
 from datetime import datetime, timedelta
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -32,7 +33,8 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
             post_id_obj = PostId(post_id) if not isinstance(post_id, PostId) else post_id
             pending = self._get_pending_aggregate(post_id_obj)
             if pending is not None:
-                return self._clone(pending)
+                cloned: PostAggregate | None = self._clone(pending)
+                return cloned
             return self._posts.get(post_id_obj)
         except (ValueError, TypeError):
             return None
@@ -49,7 +51,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
     def save(self, post: PostAggregate) -> PostAggregate:
         """ポストを保存"""
         cloned_post = self._clone(post)
-        def operation():
+        def operation() -> Any:
             self._posts[cloned_post.post_id] = cloned_post
             return cloned_post
 
@@ -59,7 +61,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
 
     def delete(self, post_id: PostId) -> bool:
         """ポストを削除"""
-        def operation():
+        def operation() -> bool:
             if post_id in self._posts:
                 del self._posts[post_id]
                 return True
@@ -201,7 +203,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
 
     def bulk_delete_posts(self, post_ids: list[PostId], user_id: UserId) -> int:
         """複数のポストを一括削除（自分のポストのみ）"""
-        def operation():
+        def operation() -> Any:
             deleted_count = 0
             for post_id in post_ids:
                 post = self._posts.get(post_id)

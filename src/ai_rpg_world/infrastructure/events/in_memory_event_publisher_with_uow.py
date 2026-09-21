@@ -41,14 +41,19 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         self._async_transport = async_transport
         self._async_executor = async_executor
 
-    def register_handler(self, event_type: type[DomainEvent], handler: EventHandler[DomainEvent], is_synchronous: bool = False):
+    def register_handler(
+        self,
+        event_type: type[DomainEvent],
+        handler: EventHandler[DomainEvent],
+        is_synchronous: bool = False,
+    ) -> None:
         """イベントハンドラーを登録"""
         target_dict = self._sync_handlers if is_synchronous else self._async_handlers
         if event_type not in target_dict:
             target_dict[event_type] = []
         target_dict[event_type].append(handler)
 
-    def publish(self, event: DomainEvent):
+    def publish(self, event: DomainEvent) -> None:
         """単一のイベントを発行"""
         # Unit of Workのトランザクション内でのみ発行可能
         if not self._unit_of_work.is_in_transaction():
@@ -57,7 +62,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         # 保留中のイベントに追加
         self._unit_of_work.add_events([event])
 
-    def publish_all(self, events: list[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]) -> None:
         """複数のイベントを発行"""
         # Unit of Workのトランザクション内でのみ発行可能
         if not self._unit_of_work.is_in_transaction():

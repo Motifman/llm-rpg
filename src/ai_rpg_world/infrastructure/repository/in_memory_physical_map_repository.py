@@ -1,4 +1,5 @@
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -25,7 +26,8 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
     def find_by_id(self, entity_id: SpotId) -> PhysicalMapAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: PhysicalMapAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._maps.get(entity_id))
 
     def find_by_spot_id(self, spot_id: SpotId) -> PhysicalMapAggregate | None:
@@ -38,7 +40,7 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
         cloned_map = self._clone(physical_map)
         index = self._data_store.world_object_id_to_spot_id
 
-        def operation():
+        def operation() -> Any:
             old_map = self._maps.get(cloned_map.spot_id)
             if old_map is not None:
                 for obj in old_map.get_all_objects():
@@ -56,7 +58,7 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
     def delete(self, spot_id: SpotId) -> bool:
         index = self._data_store.world_object_id_to_spot_id
 
-        def operation():
+        def operation() -> bool:
             if spot_id not in self._maps:
                 return False
             old_map = self._maps[spot_id]

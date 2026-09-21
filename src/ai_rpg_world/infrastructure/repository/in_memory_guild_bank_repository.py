@@ -2,6 +2,7 @@
 InMemoryGuildBankRepository - ギルド金庫のインメモリリポジトリ
 """
 
+from typing import Any
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.repository.guild_bank_repository import GuildBankRepository
@@ -31,7 +32,8 @@ class InMemoryGuildBankRepository(GuildBankRepository, InMemoryRepositoryBase):
     def find_by_id(self, guild_id: GuildId) -> GuildBankAggregate | None:
         pending = self._get_pending_aggregate(guild_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: GuildBankAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._guild_banks.get(guild_id))
 
     def find_by_ids(self, guild_ids: list[GuildId]) -> list[GuildBankAggregate]:
@@ -40,7 +42,7 @@ class InMemoryGuildBankRepository(GuildBankRepository, InMemoryRepositoryBase):
     def save(self, entity: GuildBankAggregate) -> GuildBankAggregate:
         cloned = self._clone(entity)
 
-        def operation():
+        def operation() -> Any:
             self._guild_banks[cloned.guild_id] = cloned
             return cloned
 
@@ -49,7 +51,7 @@ class InMemoryGuildBankRepository(GuildBankRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def delete(self, entity_id: GuildId) -> bool:
-        def operation():
+        def operation() -> bool:
             if entity_id in self._guild_banks:
                 del self._guild_banks[entity_id]
                 return True

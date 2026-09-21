@@ -96,7 +96,7 @@ class DependencyInjectionContainer:
     SNS 用リポジトリは共有 `InMemoryDataStore` と In-Memory UoW に紐づく。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """初期化"""
         self._data_store = InMemoryDataStore()
         self._unit_of_work_factory: UnitOfWorkFactory | None = None
