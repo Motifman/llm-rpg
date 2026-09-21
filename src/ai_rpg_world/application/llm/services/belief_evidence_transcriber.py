@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
@@ -367,7 +368,7 @@ class BeliefEvidenceTranscriber:
         goal: GoalEntry,
         *,
         outcome: str,
-        occurred_at,
+        occurred_at: datetime,
     ) -> BeliefEvidence | None:
         """本人が閉じた目的 (achieved / abandoned) を belief evidence に転記する (P8)。
 

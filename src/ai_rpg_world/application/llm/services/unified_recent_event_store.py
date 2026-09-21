@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import TypeVar
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
@@ -12,6 +13,8 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_Entry = TypeVar("_Entry", ObservationEntry, ActionResultEntry)
 
 
 @dataclass(frozen=True)
@@ -52,7 +55,7 @@ class UnifiedRecentEventStore:
         self._entries.setdefault(key, []).append(
             UnifiedRecentEventEntry.from_observation(entry)
         )
-        return self._trim_kind(key, "observation", max_entries)
+        return self._trim_kind(key, "observation", ObservationEntry, max_entries)
 
     def append_action_result(
         self,
@@ -67,14 +70,15 @@ class UnifiedRecentEventStore:
         self._entries.setdefault(key, []).append(
             UnifiedRecentEventEntry.from_action_result(entry)
         )
-        return self._trim_kind(key, "action_result", max_entries)
+        return self._trim_kind(key, "action_result", ActionResultEntry, max_entries)
 
     def _trim_kind(
         self,
         key: int,
         kind: UnifiedRecentEventKind,
+        payload_type: type[_Entry],
         max_entries: int | None,
-    ) -> list:
+    ) -> list[_Entry]:
         if max_entries is None:
             return []
         if max_entries <= 0:
@@ -85,7 +89,11 @@ class UnifiedRecentEventStore:
         if overflow_count == 0:
             return []
         remove = set(indices[:overflow_count])
-        removed = [entries[index].payload for index in indices[:overflow_count]]
+        removed = [
+            payload
+            for index in indices[:overflow_count]
+            if isinstance(payload := entries[index].payload, payload_type)
+        ]
         sizes = self._completed_turn_sizes.get(key, [])
         if sizes:
             removed_per_bucket = [0] * len(sizes)
@@ -197,10 +205,12 @@ class UnifiedRecentEventStore:
     def observations_in_storage_order(
         self, player_id: PlayerId
     ) -> list[ObservationEntry]:
+        # kind と payload の型が一致することは UnifiedRecentEventEntry の
+        # __post_init__ が保証するが、その対応は型では表現されていない
         return [
             event.payload
             for event in self._entries.get(self._key(player_id), [])
-            if event.kind == "observation"
+            if isinstance(event.payload, ObservationEntry)
         ]
 
     def action_results_in_storage_order(
@@ -209,7 +219,7 @@ class UnifiedRecentEventStore:
         return [
             event.payload
             for event in self._entries.get(self._key(player_id), [])
-            if event.kind == "action_result"
+            if isinstance(event.payload, ActionResultEntry)
         ]
 
     def get_recent_observations(
@@ -223,6 +233,7 @@ class UnifiedRecentEventStore:
             player_id,
             limit,
             "observation",
+            ObservationEntry,
             newest_equal_first=newest_equal_first,
         )
 
@@ -230,7 +241,7 @@ class UnifiedRecentEventStore:
         self, player_id: PlayerId, limit: int
     ) -> list[ActionResultEntry]:
         return self._get_recent_kind(
-            player_id, limit, "action_result", newest_equal_first=False
+            player_id, limit, "action_result", ActionResultEntry, newest_equal_first=False
         )
 
     def _get_recent_kind(
@@ -238,9 +249,10 @@ class UnifiedRecentEventStore:
         player_id: PlayerId,
         limit: int,
         kind: UnifiedRecentEventKind,
+        payload_type: type[_Entry],
         *,
         newest_equal_first: bool,
-    ) -> list:
+    ) -> list[_Entry]:
         if limit < 0:
             raise ValueError("limit must be 0 or greater")
         entries = [
@@ -257,7 +269,11 @@ class UnifiedRecentEventStore:
             ),
             reverse=True,
         )
-        return [event.payload for _, event in entries[:limit]]
+        return [
+            payload
+            for _, event in entries[:limit]
+            if isinstance(payload := event.payload, payload_type)
+        ]
 
     def pop_oldest_observations(
         self, player_id: PlayerId, count: int
@@ -267,10 +283,16 @@ class UnifiedRecentEventStore:
         key = self._key(player_id)
         entries = self._entries.get(key, [])
         observation_indices = [
-            index for index, event in enumerate(entries) if event.kind == "observation"
+            index
+            for index, event in enumerate(entries)
+            if isinstance(event.payload, ObservationEntry)
         ][:count]
         remove = set(observation_indices)
-        removed = [entries[index].payload for index in observation_indices]
+        removed = [
+            payload
+            for index in observation_indices
+            if isinstance(payload := entries[index].payload, ObservationEntry)
+        ]
         self._entries[key] = [
             event for index, event in enumerate(entries) if index not in remove
         ]
@@ -296,7 +318,9 @@ class UnifiedRecentEventStore:
         self, player_id: PlayerId
     ) -> list[ObservationEntry]:
         return [
-            event.payload for event in self._pending.get(self._key(player_id), [])
+            event.payload
+            for event in self._pending.get(self._key(player_id), [])
+            if isinstance(event.payload, ObservationEntry)
         ]
 
     def drain_pending_observations(
@@ -305,7 +329,11 @@ class UnifiedRecentEventStore:
         key = self._key(player_id)
         entries = self._pending.get(key, [])
         self._pending[key] = []
-        return [event.payload for event in entries]
+        return [
+            event.payload
+            for event in entries
+            if isinstance(event.payload, ObservationEntry)
+        ]
 
     def replace_timeline(
         self, player_id: PlayerId, entries: Iterable[UnifiedRecentEventEntry]

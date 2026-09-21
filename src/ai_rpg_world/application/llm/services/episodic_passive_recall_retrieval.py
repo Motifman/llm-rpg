@@ -395,8 +395,8 @@ class EpisodicPassiveRecallRetrievalService:
         for _label, _rows, _granular, cue_keys in cue_arms:
             for eid, keys in cue_keys.items():
                 accum[eid].update(keys)
-        for eid, keys in accum.items():
-            multi_cue_canonicals[eid] = frozenset(keys)
+        for eid, accumulated in accum.items():
+            multi_cue_canonicals[eid] = frozenset(accumulated)
 
         def multi_cue_score(eid: str) -> int:
             return len(multi_cue_canonicals.get(eid, frozenset()))
@@ -506,12 +506,12 @@ class EpisodicPassiveRecallRetrievalService:
                 if eid in episode_by_id:
                     continue
                 # being_id がここまで来ているなら必ず非 None (= 上記 if で確認済)
-                ep = self._store.get_by_being(being_id, eid)
-                if ep is None:
+                spreading_ep = self._store.get_by_being(being_id, eid)
+                if spreading_ep is None:
                     continue
-                episode_by_id[eid] = ep
+                episode_by_id[eid] = spreading_ep
                 source_axes_by_episode[eid].add(PASSIVE_RECALL_AXIS_SPREADING)
-                spreading_rows.append(ep)
+                spreading_rows.append(spreading_ep)
 
         raw_counts: list[tuple[str, int]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, len(temporal_rows))]
         raw_counts.extend((lab, len(rows)) for lab, rows, _g, _k in cue_arms)
@@ -560,10 +560,10 @@ class EpisodicPassiveRecallRetrievalService:
             for entry in slot_decision.new_slot:
                 if entry.episode_id in episode_by_id:
                     continue
-                ep = self._store.get_by_being(being_id, entry.episode_id)
-                if ep is None:
+                retained_ep = self._store.get_by_being(being_id, entry.episode_id)
+                if retained_ep is None:
                     continue
-                episode_by_id[entry.episode_id] = ep
+                episode_by_id[entry.episode_id] = retained_ep
                 # retained 由来は cue arm から外れているので source_axes に
                 # 「slot_retained」を立て、trace で識別可能にする。
                 source_axes_by_episode[entry.episode_id].add("slot_retained")

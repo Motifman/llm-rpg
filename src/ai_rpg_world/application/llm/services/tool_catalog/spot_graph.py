@@ -1,6 +1,8 @@
 """スポットグラフ用 LLM ツール定義"""
 
 
+from typing import Any
+
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.spot_graph_availability_resolvers import (
@@ -685,7 +687,7 @@ _TRADE_RULES = (
 )
 
 
-def _trade_side_schema(role: str) -> dict:
+def _trade_side_schema(role: str) -> dict[str, Any]:
     """差し出す側 / 求める側の中身。**きまりは親側に 1 度だけ書く。**"""
     return {
         "type": "object",

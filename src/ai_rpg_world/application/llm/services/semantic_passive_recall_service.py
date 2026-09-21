@@ -18,6 +18,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
@@ -58,7 +59,7 @@ class SemanticRecallCandidate:
     importance: float
     relevance: float
 
-    def to_trace_payload(self) -> dict:
+    def to_trace_payload(self) -> dict[str, Any]:
         """trace event 用の薄い dict (Phase 1c の SEMANTIC_PASSIVE_RECALL)。"""
         return {
             "entry_id": self.entry.entry_id,

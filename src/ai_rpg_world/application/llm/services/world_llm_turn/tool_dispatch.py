@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
+        WorldLlmWiring,
+    )
+
 import json
 import logging
 from collections.abc import Callable, Collection
@@ -21,7 +28,6 @@ from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescu
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     ACTION_NAME_JUDGMENT_KEY,
-    CANONICAL_IDENTIFIERS_KEY,
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
@@ -29,6 +35,7 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
     ACTION_HISTORY_PROJECTION_KEY,
+    CANONICAL_IDENTIFIERS_KEY,
     project_action_arguments_for_history,
 )
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
@@ -106,7 +113,7 @@ BUSY_FREE_TOOLS: frozenset[str] = frozenset({
     TOOL_NAME_TODO_COMPLETE,
 })
 
-def wire_missing_spot_graph_tools(wiring) -> None:
+def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     """#344: spot_graph_use_item / attack / give_item / pickup_item /
     drop_item / prepare_action を experiment runtime から呼べるよう、
     SpotGraphToolExecutor を runtime のリポジトリ群で組み立てて handler を
@@ -416,7 +423,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
     # 止めるのは過剰なので例外なら警告だけ残す。
     wiring._validate_tool_handler_consistency()
 
-def definitions_across_phases(wiring) -> list:
+def definitions_across_phases(wiring: Any) -> list[Any]:
     """**どのフェーズでも**露出しうる tool 定義をまとめて返す。
 
     現在フェーズだけを見ると、会議中にしか出ない tool (vote) が検査を
@@ -427,7 +434,7 @@ def definitions_across_phases(wiring) -> list:
 
     フェーズを問わない tool は両方に出るので、名前で重複を除く。
     """
-    seen: dict = {}
+    seen: dict[str, Any] = {}
     for as_meeting in (False, True):
         try:
             definitions = wiring.runtime.get_tool_definitions(
@@ -442,7 +449,7 @@ def definitions_across_phases(wiring) -> list:
             seen.setdefault(definition.name, definition)
     return list(seen.values())
 
-def validate_tool_handler_consistency_for_wiring(wiring) -> None:
+def validate_tool_handler_consistency_for_wiring(wiring: WorldLlmWiring) -> None:
     """runtime が expose する tool 定義集合と _tool_handlers のキー集合が
     矛盾していないか確認する。expose されているのに handler 未登録の tool
     があれば ``ToolHandlerConsistencyError`` を投げて起動を止める。
@@ -640,7 +647,9 @@ def resolver_failure_remediation(tool_name: str, error_code: str) -> str:
         "ツール説明と「現在の状況」を確認し、そのツールが要求する種類の名前を指定してください。"
     )
 
-def _wrap_every_handler_with_gold_change(wiring, runtime) -> None:
+def _wrap_every_handler_with_gold_change(
+    wiring: WorldLlmWiring, runtime: Any
+) -> None:
     """登録済みの**全ツール**を、所持金の変化を測る包みで囲む。
 
     所持金が動いたのに記録が出ないツールがあると、分析側は「どのツールが
@@ -687,7 +696,9 @@ def adapt_executor_handler(
     return _handler
 
 def adapt_executor_handler_with_resolver(
-    raw_handler: Callable[[int, dict[str, Any]], LlmCommandResultDto],
+    # adapt_executor_handler と同じく runtime_context を第3引数で渡すため、
+    # 引数の数を固定した Callable では表現できない
+    raw_handler: Callable[..., LlmCommandResultDto],
     tool_name: str,
     argument_resolver: Any,
     *,
@@ -796,7 +807,7 @@ def adapt_executor_handler_with_resolver(
 
     return _handler
 
-def _current_tick_or_none(wiring) -> int | None:
+def _current_tick_or_none(wiring: WorldLlmWiring) -> int | None:
     """trace に載せる現在 tick。取れなければ None (記録自体は落とさない)。"""
     runtime = getattr(wiring, "runtime", None)
     getter = getattr(runtime, "current_tick", None)
@@ -853,7 +864,7 @@ def _with_interpretation_note(
 
 
 def maybe_interrupt_busy(
-    wiring, player_id: PlayerId, tool_name: str
+    wiring: WorldLlmWiring, player_id: PlayerId, tool_name: str
 ) -> tuple[bool, PlayerSpotNavigationState | None]:
     """重い tool が来たら travel をキャンセルして agent を現在地に着地させる。
 
@@ -898,7 +909,7 @@ def maybe_interrupt_busy(
     return True, nav_snapshot
 
 def restore_nav_state(
-    wiring,
+    wiring: WorldLlmWiring,
     player_id: PlayerId,
     nav_snapshot: PlayerSpotNavigationState,
 ) -> None:
@@ -935,12 +946,12 @@ def coerce_arguments(raw_arguments: Any) -> dict[str, Any]:
     return {}
 
 def reason_tool_is_not_offered(
-    wiring,
+    wiring: WorldLlmWiring,
     name: str,
     player_id: PlayerId,
     *,
     offered_tool_names_at_prompt: Collection[str],
-):
+) -> LlmCommandResultDto | None:
     """いま出していないツールなら、その理由を返す。出していれば None。
 
     **UNSUPPORTED_TOOL とは区別する。** あちらは「そんなツールは無い」で、
@@ -995,7 +1006,7 @@ def reason_tool_is_not_offered(
     )
 
 def execute_tool(
-    wiring,
+    wiring: WorldLlmWiring,
     player_id: PlayerId,
     name: str,
     arguments: dict[str, Any],
@@ -1125,7 +1136,7 @@ def execute_tool(
 # 防御 UNSUPPORTED_TOOL を返すだけの dead code だったので削除する。
 
 def make_auxiliary_tool_handler(
-    wiring, tool_name: str
+    wiring: WorldLlmWiring, tool_name: str
 ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
     """TODO/memo ツール用のハンドラを tool_name 固定で返す。
 
@@ -1140,8 +1151,9 @@ def make_auxiliary_tool_handler(
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         del runtime_context
-        return wiring.runtime.run_llm_auxiliary_tool(
+        aux_result: LlmCommandResultDto = wiring.runtime.run_llm_auxiliary_tool(
             player_id, tool_name, arguments
         )
+        return aux_result
 
     return handler

@@ -60,9 +60,7 @@ class QuestObjectiveTargetResolver:
             )
 
         tid_val: int | None = None
-        has_target_name = isinstance(target_name, str) and bool(target_name.strip())
-
-        if has_target_name:
+        if isinstance(target_name, str) and target_name.strip():
             name = target_name.strip()
             if ot_stripped == "kill_monster":
                 if self._monster_template_repository is None:

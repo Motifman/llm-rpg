@@ -115,6 +115,9 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 # 環境変数名: 1 / true / yes / on (case-insensitive) で有効化
@@ -188,7 +191,7 @@ class EpisodicStack:
     chunk_coordinator: EpisodicChunkCoordinator
     passive_recall: EpisodicPassiveRecallRetrievalService
     noun_matcher: IWorldNounMatcher
-    episode_store: InMemorySubjectiveEpisodeStore
+    episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
     # semantic 拡張 (default OFF)。``semantic_passive_top_k > 0`` または LLM gist
     # 有効時に full 共有 builder (build_episodic_memory_stack) で組み、
@@ -363,7 +366,7 @@ def build_episodic_stack(
     # (chunk_coordinator 側のコメント参照)。
     player_name_provider: Callable[[PlayerId], str] | None = None,
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
-    episode_store: InMemorySubjectiveEpisodeStore | None = None,
+    episode_store: EpisodicEpisodeRepository | None = None,
     semantic_enabled: bool = False,
     semantic_passive_top_k: int = 0,
     semantic_gist_service: Any | None = None,
@@ -766,6 +769,8 @@ def build_episodic_stack(
             SemanticPassiveRecallService,
         )
 
+        # semantic_enabled のときは semantic スタックが store を組む
+        assert semantic_memory_store is not None
         semantic_passive_recall = SemanticPassiveRecallService(
             semantic_memory_store,
         )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION
@@ -30,7 +30,7 @@ ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS: frozenset[str] = frozenset({
 })
 
 
-def filter_definitions_for_escape_llm(definitions):
+def filter_definitions_for_escape_llm(definitions: Sequence[Any]) -> list[Any]:
     """``ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS`` に含まれる tool definition を除外する。
 
     入力順を保ったまま、name 属性が除外対象に該当するものだけを取り除く。

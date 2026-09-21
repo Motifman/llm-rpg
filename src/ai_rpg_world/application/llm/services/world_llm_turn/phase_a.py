@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
+        WorldLlmWiring,
+    )
+
 import copy
 import logging
 import uuid
@@ -37,7 +44,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
 
 
 def resolve_reason_first_gate(
-    wiring, player_id: PlayerId
+    wiring: WorldLlmWiring, player_id: PlayerId
 ) -> ReasonFirstGateDecision:
     """reason-first 2段階 turn の Phase A gate を解決する。
 
@@ -74,7 +81,7 @@ def resolve_reason_first_gate(
         return ReasonFirstGateDecision(True, "stagnation_strong")
     return ReasonFirstGateDecision(False, "no_trigger")
 
-def has_recent_same_failure(wiring, player_id: PlayerId) -> bool:
+def has_recent_same_failure(wiring: WorldLlmWiring, player_id: PlayerId) -> bool:
     """ActionResultStore の直近2件が同一失敗なら True。
 
     新しい検知器は作らず、Phase B が既に保存している共有 action result を
@@ -110,7 +117,7 @@ def action_failure_key(entry: Any) -> tuple[str, str, str] | None:
         return None
     return (tool_name, error_code, identity)
 
-def is_stagnation_reason_first_armed(wiring, player_id: PlayerId) -> bool:
+def is_stagnation_reason_first_armed(wiring: WorldLlmWiring, player_id: PlayerId) -> bool:
     """停滞 reflect 注入直後の一発ラッチと band strong が揃ったときだけ True。
 
     band-gated reasoning と同じ入力を使うが、band だけを見ると停滞中の
@@ -138,7 +145,7 @@ def is_stagnation_reason_first_armed(wiring, player_id: PlayerId) -> bool:
         logger.exception("reason-first gate: stagnation band resolution failed")
         return False
 
-def consume_stagnation_reason_first_latch(wiring, player_id: PlayerId) -> None:
+def consume_stagnation_reason_first_latch(wiring: WorldLlmWiring, player_id: PlayerId) -> None:
     """reason-first が停滞ラッチを使ったとき、一発権を消費する。
 
     reason-first 経路では ``resolve_turn_reasoning_effort`` を呼ばないため、
@@ -156,7 +163,7 @@ def consume_stagnation_reason_first_latch(wiring, player_id: PlayerId) -> None:
         logger.exception("reason-first gate: stagnation latch consume failed")
 
 def build_tools_payload(
-    wiring, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
+    wiring: WorldLlmWiring, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
 ) -> list[dict[str, Any]]:
     """runtime tool 定義を LLM API の tools payload へ変換する。"""
 
@@ -181,7 +188,7 @@ def build_tools_payload(
         )
     ]
 
-def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
+def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
     """Phase A: snapshot 構築 + LLM 呼び出し。並列化可能。
 
     - build_full_prompt は observation buffer を drain するが、buffer は
@@ -237,12 +244,12 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
     last_llm_call_id: str | None = None
 
     def _invoke(
-        effort,
+        effort: Any,
         *,
         attempt_index: int,
         parent_attempt_id: str | None = None,
         messages_override: list[dict[str, Any]] | None = None,
-    ):
+    ) -> dict[str, Any] | None:
         nonlocal last_llm_call_id
         # tool_choice は解決済み実験設定をそのまま渡す。required が両立しない
         # provider を使う run だけ、profile で明示した auto と末尾指示を使う。
@@ -267,12 +274,15 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
         }
         if prompt_capture_context is not None:
             invoke_kwargs["prompt_capture_context"] = prompt_capture_context
-        return wiring.llm_client.invoke(
+        invoked: dict[str, Any] | None = wiring.llm_client.invoke(
             messages, tools_payload, tool_choice,
             **invoke_kwargs,
         )
+        return invoked
 
-    def _result(tool_call, exception):
+    def _result(
+        tool_call: dict[str, Any] | None, exception: BaseException | None
+    ) -> LlmPhaseAResult:
         return LlmPhaseAResult(
             player_id=player_id,
             prompt=prompt,
@@ -282,7 +292,7 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
             llm_call_id=last_llm_call_id,
         )
 
-    def _fallback_without_reasoning():
+    def _fallback_without_reasoning() -> LlmPhaseAResult:
         # 餓死ループ修正: 熟考ターンが失敗 (例外 / tool_call なし) したら latch を
         # 消費して「同条件での再試行」を止め、reasoning なしで 1 回だけ降格再試行
         # して行動を成立させる。これをしないと詰まった agent が毎行動 same-condition
@@ -360,7 +370,7 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
     return _result(tool_call, None)
 
 def run_reason_first_phase_a(
-    wiring, player_id: PlayerId, prompt: dict, *, gate_reason: str,
+    wiring: Any, player_id: PlayerId, prompt: dict[str, Any], *, gate_reason: str,
 ) -> LlmPhaseAResult:
     """reason-first 2段階ターンの Phase A。
 
@@ -414,7 +424,7 @@ def run_reason_first_phase_a(
         consume_stagnation_reason_first_latch(wiring, player_id)
 
     def _result(
-        tool_call: dict | None,
+        tool_call: dict[str, Any] | None,
         exception: BaseException | None,
         *,
         subjective_overrides: dict[str, Any] | None = None,
@@ -441,7 +451,7 @@ def run_reason_first_phase_a(
         attempt_index: int,
         parent_attempt_id: str | None,
         phase: str,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         nonlocal last_llm_call_id
         prompt_capture_context = build_prompt_capture_context(
             wiring,
@@ -463,12 +473,13 @@ def run_reason_first_phase_a(
         }
         if prompt_capture_context is not None:
             invoke_kwargs["prompt_capture_context"] = prompt_capture_context
-        return wiring.llm_client.invoke(
+        invoked: dict[str, Any] | None = wiring.llm_client.invoke(
             messages,
             tools_payload,
             tool_choice,
             **invoke_kwargs,
         )
+        return invoked
 
     assessment: dict[str, str] | None = None
     parent_attempt_id: str | None = None
@@ -624,7 +635,7 @@ def run_reason_first_phase_a(
     )
 
 def parse_assessment_tool_call(
-    tool_call: dict | None,
+    tool_call: dict[str, Any] | None,
 ) -> tuple[dict[str, str] | None, str]:
     if not isinstance(tool_call, dict):
         return None, "no_tool_call"
@@ -689,7 +700,7 @@ def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
     )
 
 def build_llm_metrics_sink(
-    wiring, player_id: PlayerId, tool_names: list[str] | None = None,
+    wiring: WorldLlmWiring, player_id: PlayerId, tool_names: list[str] | None = None,
 ) -> Any | None:
     """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
 

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
+        WorldLlmWiring,
+    )
+
 import logging
 from typing import Any
 
@@ -10,7 +17,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 logger = logging.getLogger(__name__)
 
 def record_reason_first_trace(
-    wiring, kind: str, player_id: PlayerId, **payload: Any
+    wiring: WorldLlmWiring, kind: str, player_id: PlayerId, **payload: Any
 ) -> None:
     trace_recorder = getattr(wiring.runtime, "trace_recorder", None)
     if trace_recorder is None:

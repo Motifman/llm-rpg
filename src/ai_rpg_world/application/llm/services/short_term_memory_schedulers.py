@@ -144,7 +144,7 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
             thread_name_prefix="st_summary",
         )
         self._inflight_lock = threading.Lock()
-        self._inflight: set[Future] = set()
+        self._inflight: set[Future[None]] = set()
         self._is_shutdown = False
 
     def submit(self, player_id: int, task: L4GenerationTask) -> bool:
@@ -230,7 +230,7 @@ class ThreadPoolShortTermMemoryScheduler(IShortTermMemoryScheduler):
                 latency_ms=latency_ms,
             )
 
-    def _on_done(self, future: Future) -> None:
+    def _on_done(self, future: Future[None]) -> None:
         with self._inflight_lock:
             self._inflight.discard(future)
 

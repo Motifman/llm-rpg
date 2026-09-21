@@ -157,8 +157,8 @@ def emit_semantic_passive_recall_trace(
     builder: "DefaultPromptBuilder",
     *,
     player_id: PlayerId,
-    situation_cues: tuple,
-    candidates: list,
+    situation_cues: tuple[Any, ...],
+    candidates: list[Any],
 ) -> None:
     """``SEMANTIC_PASSIVE_RECALL`` を 1 件 emit する (失敗は握りつぶす)。
 
@@ -178,7 +178,7 @@ def emit_semantic_passive_recall_trace(
         cue_keys = [c.to_canonical() for c in situation_cues]
     except Exception:
         cue_keys = []
-    cand_payload: list[dict] = []
+    cand_payload: list[dict[str, Any]] = []
     for cand in candidates:
         try:
             cand_payload.append(cand.to_trace_payload())

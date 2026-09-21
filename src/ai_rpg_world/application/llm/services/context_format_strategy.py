@@ -195,7 +195,7 @@ _PLACEHOLDER_RECENT_EVENTS = "（なし）"
 _RECENT_EVENTS_PREAMBLE = "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。"
 
 
-def _emit_objective(sections: list, objective_text: str) -> None:
+def _emit_objective(sections: list[str], objective_text: str) -> None:
     if objective_text.strip():
         sections.extend([
             "【現在の目的】",
@@ -204,14 +204,14 @@ def _emit_objective(sections: list, objective_text: str) -> None:
         ])
 
 
-def _emit_current_state(sections: list, current_state_text: str) -> None:
+def _emit_current_state(sections: list[str], current_state_text: str) -> None:
     sections.extend([
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
     ])
 
 
-def _emit_active_memos(sections: list, active_memos_text: str) -> None:
+def _emit_active_memos(sections: list[str], active_memos_text: str) -> None:
     if active_memos_text.strip():
         sections.extend([
             "",
@@ -220,7 +220,7 @@ def _emit_active_memos(sections: list, active_memos_text: str) -> None:
         ])
 
 
-def _emit_recent_events(sections: list, recent_events_text: str) -> None:
+def _emit_recent_events(sections: list[str], recent_events_text: str) -> None:
     sections.extend([
         "",
         "【直近の出来事】",
@@ -229,7 +229,7 @@ def _emit_recent_events(sections: list, recent_events_text: str) -> None:
     ])
 
 
-def _emit_prediction_feedback(sections: list, prediction_feedback_text: str) -> None:
+def _emit_prediction_feedback(sections: list[str], prediction_feedback_text: str) -> None:
     if prediction_feedback_text.strip():
         sections.extend([
             "",
@@ -238,7 +238,7 @@ def _emit_prediction_feedback(sections: list, prediction_feedback_text: str) -> 
         ])
 
 
-def _emit_pending_predictions(sections: list, pending_predictions_text: str) -> None:
+def _emit_pending_predictions(sections: list[str], pending_predictions_text: str) -> None:
     """U10a (予測誤差統一設計 部品6): 【保留中の予測】section を emit する。
 
     【前回の予測と実際】の隣に置く (計画書の配置指定)。再浮上した pending が
@@ -252,7 +252,7 @@ def _emit_pending_predictions(sections: list, pending_predictions_text: str) -> 
         ])
 
 
-def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None:
+def _emit_relevant_memories(sections: list[str], relevant_memories_text: str) -> None:
     """【関連する記憶】 section を emit する。
 
     受動想起 service が未注入なら ``relevant_memories_text`` は空文字
@@ -267,7 +267,7 @@ def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None
         ])
 
 
-def _emit_learned(sections: list, learned_text: str) -> None:
+def _emit_learned(sections: list[str], learned_text: str) -> None:
     """``【関連する学び】`` (semantic top-K) を呼び出し位置へ挿入する。"""
     if learned_text.strip():
         sections.extend([
@@ -277,7 +277,7 @@ def _emit_learned(sections: list, learned_text: str) -> None:
         ])
 
 
-def _emit_mid_summary(sections: list, mid_summary_text: str) -> None:
+def _emit_mid_summary(sections: list[str], mid_summary_text: str) -> None:
     """``【最近の流れ】`` (L4 mid summary) を呼び出し位置へ挿入する。"""
     if mid_summary_text.strip():
         sections.extend([
@@ -287,7 +287,7 @@ def _emit_mid_summary(sections: list, mid_summary_text: str) -> None:
         ])
 
 
-def _emit_long_summary(sections: list, long_summary_text: str) -> None:
+def _emit_long_summary(sections: list[str], long_summary_text: str) -> None:
     """``【自己像と世界観】`` (L5 long summary) を呼び出し位置へ挿入する。"""
     if long_summary_text.strip():
         sections.extend([

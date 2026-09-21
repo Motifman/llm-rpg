@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from difflib import SequenceMatcher
+from typing import Any
 
 _SUFFIX_RATIO_CUTOFF: float = 0.5
 _SHORTENED_NAME_SCORE: float = 0.95
@@ -67,7 +68,7 @@ def suggest_closest_tool_name(
 
 
 def _fuzzy_score_variant(
-    requested: str, valid_list: list[str], SequenceMatcher
+    requested: str, valid_list: list[str], SequenceMatcher: Any
 ) -> tuple[str | None, float]:
     """1 つの ``requested`` variant について、valid 側から最高スコアを持つ
     候補を返す。``suggest_closest_tool_name`` の内部ヘルパー。"""

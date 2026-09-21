@@ -398,8 +398,8 @@ class MemoToolExecutor:
         """
         if self._short_term_memory is None and self._action_result_store is None:
             return None
-        observations: tuple = ()
-        actions: tuple = ()
+        observations: tuple[Any, ...] = ()
+        actions: tuple[Any, ...] = ()
         if self._short_term_memory is not None:
             try:
                 recent_obs = self._short_term_memory.get_recent(

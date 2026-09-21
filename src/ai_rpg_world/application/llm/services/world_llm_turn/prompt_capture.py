@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
+        WorldLlmWiring,
+    )
+
 import hashlib
 import logging
 from types import SimpleNamespace
@@ -18,10 +25,10 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 logger = logging.getLogger(__name__)
 
 def build_prompt_capture_context(
-    wiring,
+    wiring: WorldLlmWiring,
     *,
     player_id: PlayerId,
-    prompt: dict,
+    prompt: dict[str, Any],
     tool_choice: Any,
     reasoning_effort: str | None,
     attempt_index: int,
@@ -66,7 +73,7 @@ def build_prompt_capture_context(
     return SimpleNamespace(sink=sink, context=context)
 
 
-def llm_session_id(wiring, player_id: PlayerId) -> str:
+def llm_session_id(wiring: WorldLlmWiring, player_id: PlayerId) -> str:
     """同じ run・世界・player の LLM 呼び出しへ安定した会話 ID を返す。"""
 
     raw = (
@@ -78,7 +85,7 @@ def llm_session_id(wiring, player_id: PlayerId) -> str:
     return "llm-rpg:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def llm_session_kwargs(wiring, player_id: PlayerId) -> dict[str, str]:
+def llm_session_kwargs(wiring: WorldLlmWiring, player_id: PlayerId) -> dict[str, str]:
     """配信先固定を使うときだけ session_id の送信値を組み立てる。
 
     無効時は空文字や ``None`` を渡さず、キーワード自体を省く。これにより
@@ -91,7 +98,7 @@ def llm_session_kwargs(wiring, player_id: PlayerId) -> dict[str, str]:
     return {"session_id": llm_session_id(wiring, player_id)}
 
 
-def resolve_prompt_capture_being_id(wiring, player_id: PlayerId) -> str:
+def resolve_prompt_capture_being_id(wiring: WorldLlmWiring, player_id: PlayerId) -> str:
     resolver = getattr(wiring.runtime, "aux_being_resolver", None)
     world_id = getattr(wiring.runtime, "aux_being_default_world_id", None)
     if resolver is None or world_id is None:
@@ -107,7 +114,7 @@ def resolve_prompt_capture_being_id(wiring, player_id: PlayerId) -> str:
     return str(being_id.value)
 
 
-def resolve_prompt_capture_world_id(wiring) -> int | None:
+def resolve_prompt_capture_world_id(wiring: WorldLlmWiring) -> int | None:
     world_id = getattr(wiring.runtime, "aux_being_default_world_id", None)
     value = getattr(world_id, "value", None)
     try:
@@ -116,7 +123,7 @@ def resolve_prompt_capture_world_id(wiring) -> int | None:
         return None
 
 
-def resolve_prompt_capture_character_name(wiring, player_id: PlayerId) -> str:
+def resolve_prompt_capture_character_name(wiring: WorldLlmWiring, player_id: PlayerId) -> str:
     for spawn in getattr(getattr(wiring.runtime, "scenario", None), "player_spawns", []):
         try:
             if int(spawn.player_id) == int(player_id.value):
@@ -127,7 +134,7 @@ def resolve_prompt_capture_character_name(wiring, player_id: PlayerId) -> str:
 
 
 def record_prompt_dataset_turn_result(
-    wiring,
+    wiring: WorldLlmWiring,
     phase_a: LlmPhaseAResult,
     result: LlmCommandResultDto,
 ) -> None:
@@ -159,5 +166,5 @@ def record_prompt_dataset_turn_result(
     )
 
 
-def time_label(wiring) -> str:
+def time_label(wiring: WorldLlmWiring) -> str:
     return wiring._time_label()

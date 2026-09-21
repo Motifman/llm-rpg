@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 #: 商人を宣言したシナリオでだけ出すツール (経済統合 Phase 1)。
 #:
@@ -164,7 +165,7 @@ class ToolExposure:
     market_declared: bool = False
 
     @classmethod
-    def from_scenario(cls, scenario, *, meeting_declared: bool) -> ToolExposure:
+    def from_scenario(cls, scenario: Any, *, meeting_declared: bool) -> ToolExposure:
         """シナリオの宣言から組み立てる。
 
         ``meeting_declared`` を引数で受けるのは、会議の有効判定が runtime 側の
@@ -205,12 +206,12 @@ class ToolExposure:
             return False
         return True
 
-    def filter_names(self, names: Iterable[str]) -> tuple:
+    def filter_names(self, names: Iterable[str]) -> tuple[str, ...]:
         """この世界に在るツール名だけを宣言順で返す。"""
         return tuple(name for name in names if self.is_exposed(name))
 
     @staticmethod
-    def order_for_payload(names: Iterable[str]) -> tuple:
+    def order_for_payload(names: Iterable[str]) -> tuple[str, ...]:
         """定義元を越えて、実際の tools payload に使う安定順を返す。
 
         既知の順序を先に置き、それ以外は入力順を保つ。新しいツールを追加した
@@ -228,7 +229,7 @@ class ToolExposure:
         *,
         in_meeting: bool,
         voting_completed: bool,
-    ) -> tuple:
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """(共通ブロック, フェーズ固有ブロック) を返す。**通常はこれを使う。**
 
         2 つの問いを両方通す入口。``is_available_in_phase`` だけを呼ぶと

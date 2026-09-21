@@ -524,6 +524,9 @@ class BeliefConsolidationCoordinator:
         last = self._last_reflect_turn.get(cap_key)
         if last is not None and (turn - last) < self._stall_min_interval_turns:
             return False
+        # _resolve_reflect_verdict が sink 未注入なら None を返し、verdict が
+        # ここまで来ている時点で sink は在る
+        assert self._reflect_observation_sink is not None
         try:
             self._reflect_observation_sink(
                 PlayerId(player_id), statement.strip(), verdict
@@ -969,7 +972,7 @@ class BeliefConsolidationCoordinator:
             }
             for b in shortlist
         ]
-        user_content = {
+        user_content: dict[str, Any] = {
             "evidence": evidence_payload,
             "shortlist": shortlist_payload,
         }
@@ -1400,7 +1403,8 @@ class BeliefConsolidationCoordinator:
         if self._trace_recorder_provider is None:
             return None
         try:
-            return self._trace_recorder_provider()
+            recorder: ITraceRecorder | None = self._trace_recorder_provider()
+            return recorder
         except Exception:
             _logger.debug(
                 "trace_recorder_provider raised; skipping trace", exc_info=True
@@ -1411,7 +1415,8 @@ class BeliefConsolidationCoordinator:
         if self._current_tick_provider is None:
             return None
         try:
-            return self._current_tick_provider()
+            tick: int | None = self._current_tick_provider()
+            return tick
         except Exception:
             return None
 

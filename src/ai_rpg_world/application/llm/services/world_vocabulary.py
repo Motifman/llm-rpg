@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any
 
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
@@ -61,7 +62,7 @@ WEATHER_DISPLAY: dict[str, str] = {
 }
 
 #: 網羅テストが見る (enum, 表) の組。**表を足したらここにも足す。**
-DISPLAY_TABLES: tuple = (
+DISPLAY_TABLES: tuple[tuple[type[Enum], dict[Any, str]], ...] = (
     (LightingEnum, LIGHTING_DISPLAY),
     (TemperatureEnum, TEMPERATURE_DISPLAY),
     (WeatherTypeEnum, WEATHER_DISPLAY),

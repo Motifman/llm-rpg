@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -87,7 +88,7 @@ class GoalRevisionApplier:
         *,
         observation_sink: Callable[[PlayerId, str], None],
         current_tick_provider: Callable[[], int],
-        now_provider: Callable[[], object],
+        now_provider: Callable[[], datetime],
         settlement_transcriber_provider: Callable[[], Any | None] | None = None,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
     ) -> None:

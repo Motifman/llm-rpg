@@ -169,7 +169,7 @@ class _Pattern:
 
 @dataclass
 class _Node:
-    children: dict = field(default_factory=dict)
+    children: dict[str, _Node] = field(default_factory=dict)
     failure: _Node | None = None
     outputs: list[_Pattern] = field(default_factory=list)
 

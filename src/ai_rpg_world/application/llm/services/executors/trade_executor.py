@@ -178,7 +178,8 @@ class TradeToolExecutor:
 
     def _snapshot_message(self, player_id: int) -> str:
         assert self._trade_page_query_service is not None
-        return self._trade_page_query_service.build_current_page_snapshot_json(player_id)
+        snapshot_json: str = self._trade_page_query_service.build_current_page_snapshot_json(player_id)
+        return snapshot_json
 
     def _execute_view_current_page(
         self, player_id: int, args: dict[str, Any]
@@ -238,7 +239,7 @@ class TradeToolExecutor:
                 if raw_tab is None or (
                     isinstance(raw_tab, str) and not raw_tab.strip()
                 ):
-                    tab = MyTradesTab.SELLING
+                    tab: MyTradesTab | None = MyTradesTab.SELLING
                 else:
                     tab = _parse_my_trades_tab_strict(raw_tab)
                     if tab is None:

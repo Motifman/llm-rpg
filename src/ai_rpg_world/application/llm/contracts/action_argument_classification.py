@@ -8,8 +8,9 @@ tool が増えても同じ表示規約が効き、新しい property を分類�
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from enum import Enum
+from typing import Any
 
 
 class ActionArgumentClassificationError(RuntimeError):
@@ -106,12 +107,12 @@ _FREE_TEXT_ARGUMENT_PLACEHOLDERS: Mapping[str, str] = {
 
 
 def unclassified_action_argument_names(
-    definitions: object,
+    definitions: Iterable[Any],
 ) -> tuple[str, ...]:
     """tool 定義群に在る未分類 property 名を辞書順で返す。"""
 
     missing: set[str] = set()
-    for definition in definitions:  # type: ignore[union-attr]
+    for definition in definitions:
         parameters = getattr(definition, "parameters", {})
         properties = parameters.get("properties", {}) if isinstance(parameters, dict) else {}
         if not isinstance(properties, dict):

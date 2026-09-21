@@ -36,7 +36,7 @@ class LlmFailureStreakMonitor:
         self._lock = threading.Lock()
         self._streak = 0
         self._streak_error_codes: list[str] = []
-        self._streak_ticks: set = set()
+        self._streak_ticks: set[int] = set()
         #: 止めた瞬間の連続を凍結して持つ。並列 Phase A では停止を決めたあとに
         #: 遅れて成功が着地し、生のカウンタは 0 に戻る。**止まるのに「0 件連続で
         #: 失敗した ()」が report と trace に載る**形だった。
@@ -72,7 +72,8 @@ class LlmFailureStreakMonitor:
                 return
             self._streak += 1
             self._streak_error_codes.append(str(error_code) or _UNKNOWN_ERROR_CODE)
-            self._streak_ticks.add(tick if tick is not None else object())
+            # tick が無い失敗も 1 回として数えるため、重複しない負値を入れる
+            self._streak_ticks.add(tick if tick is not None else -len(self._streak_ticks) - 1)
             if self._tripped_reason is None and self._should_trip():
                 self._tripped_reason = self._describe_locked()
 

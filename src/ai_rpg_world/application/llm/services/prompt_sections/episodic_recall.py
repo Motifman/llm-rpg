@@ -171,8 +171,8 @@ def emit_episodic_recall_trace(
     builder: "DefaultPromptBuilder",
     *,
     player_id: PlayerId,
-    situation_cues: tuple,
-    candidates: list,
+    situation_cues: tuple[Any, ...],
+    candidates: list[Any],
     relevant_memories_text: str = "",
     retrieval_debug: EpisodicPassiveRecallRetrievalDebug | None = None,
 ) -> None:
@@ -213,7 +213,7 @@ def emit_episodic_recall_trace(
             }
         except Exception:
             penalty_by_ep = {}
-    cand_payload: list[dict] = []
+    cand_payload: list[dict[str, Any]] = []
     for cand in candidates:
         try:
             ep = cand.episode
@@ -231,7 +231,7 @@ def emit_episodic_recall_trace(
             continue
     # debug 由来の追加キーは ``retrieval_debug`` が与えられたときだけ
     # 載せる (= 既存 trace 読み手の non-strict 互換)。
-    debug_kwargs: dict = {}
+    debug_kwargs: dict[str, Any] = {}
     if retrieval_debug is not None:
         try:
             debug_kwargs["raw_row_count_by_axis"] = {

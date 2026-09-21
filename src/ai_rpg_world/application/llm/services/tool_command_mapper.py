@@ -97,7 +97,8 @@ class ToolCommandMapper:
 
         executor = self._executor_map.get(tool_name)
         if executor is not None:
-            return executor(player_id, args)
+            executed: LlmCommandResultDto = executor(player_id, args)
+            return executed
         return LlmCommandResultDto(
             success=False,
             message="未知のツールです。",

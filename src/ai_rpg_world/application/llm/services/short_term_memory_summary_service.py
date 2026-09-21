@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
@@ -166,7 +167,7 @@ class _ParsedSummary:
     unresolved: tuple[str, ...]
 
 
-def _parse_raw(raw: dict) -> _ParsedSummary:
+def _parse_raw(raw: dict[str, Any]) -> _ParsedSummary:
     activity = raw.get("compressed_activity")
     if not isinstance(activity, str) or not activity.strip():
         raise ValueError("LLM L4 response missing or empty compressed_activity")

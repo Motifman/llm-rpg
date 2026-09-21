@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
+        WorldLlmWiring,
+    )
+
 import logging
 from dataclasses import replace as dataclass_replace
 from typing import Any
@@ -64,7 +71,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 logger = logging.getLogger(__name__)
 
 
-def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
+def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
     """Phase B: Phase A の結果を受けて世界 mutation を適用する。
 
     serial 実行が前提 (世界 mutation / 観測 broadcast / trace 順序が決定論
@@ -417,7 +424,7 @@ def _record_memo_completion_judgments(
 
 
 def record_structured_failure_evidence(
-    wiring, player_id: PlayerId, trigger: Any
+    wiring: WorldLlmWiring, player_id: PlayerId, trigger: Any
 ) -> None:
     """U6 (STRUCTURED_FAILURE + salience): loop_guard の cross_tick_failure
     閾値到達を ``BeliefEvidence`` に転記する。
@@ -454,7 +461,7 @@ def record_structured_failure_evidence(
             "structured_failure_transcriber.record_if_triggered failed"
         )
 def emit_action_failed_observation(
-    wiring,
+    wiring: WorldLlmWiring,
     player_id: PlayerId,
     tool_name: str,
     arguments: dict[str, Any],

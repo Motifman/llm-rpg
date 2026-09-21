@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
+    MerchantToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
@@ -196,7 +197,7 @@ def normalize_action_name_candidates(action: str) -> list[str]:
             if tail_unquoted:
                 out.append(tail_unquoted)
 
-    seen: set = set()
+    seen: set[str] = set()
     unique: list[str] = []
     for c in out:
         if c and c not in seen:
@@ -377,11 +378,12 @@ def resolve_destination_target(
 
 
 def _resolve_target_with_display_name_fallback(
-    label: str,
+    # 本体で isinstance(label, str) を確かめるので、require_target と同じく Any で受ける
+    label: Any,
     runtime_context: ToolRuntimeContextDto,
     *,
     kind: str,
-    expected_types: tuple = (),
+    expected_types: tuple[type[ToolRuntimeTargetDto], ...] = (),
     label_name: str,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",
@@ -471,7 +473,7 @@ def resolve_target(
     label: str,
     runtime_context: ToolRuntimeContextDto,
     *,
-    accept_kinds: tuple,
+    accept_kinds: tuple[str, ...],
     label_name: str,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",
@@ -1239,10 +1241,12 @@ class SpotGraphArgumentResolver:
 
         merchant_label = args.get("merchant_label")
         # targets は {label: target} の dict。**キーを回すと文字列が来る。**
+        # kind == "merchant" の target は MerchantToolRuntimeTargetDto として
+        # 組み立てられるが、targets の値型はその絞り込みを持ち越せない
         merchants = [
             target
             for target in (runtime_context.targets or {}).values()
-            if getattr(target, "kind", "") == "merchant"
+            if isinstance(target, MerchantToolRuntimeTargetDto)
         ]
         # **同席する商人が 0 人なのは「場所を間違えた」で、品名の誤りとは
         # 別の失敗にする。** 文面が同じでも error_code は状況ごとに正直で

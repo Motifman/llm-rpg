@@ -189,14 +189,14 @@ def merge_observations_and_action_results_to_unified_timeline(
                 text=format_observation_line_for_recent_events(e),
             )
         )
-    for e in action_results:
-        if not isinstance(e, ActionResultEntry):
+    for ar in action_results:
+        if not isinstance(ar, ActionResultEntry):
             raise TypeError("action_results must contain only ActionResultEntry")
         merged.append(
             UnifiedRecentEventLine(
-                occurred_at=e.occurred_at,
+                occurred_at=ar.occurred_at,
                 kind="action_result",
-                text=format_action_result_line_for_recent_events(e),
+                text=format_action_result_line_for_recent_events(ar),
             )
         )
     merged.sort(key=lambda line: line.occurred_at.timestamp(), reverse=False)

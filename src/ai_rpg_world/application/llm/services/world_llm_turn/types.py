@@ -56,9 +56,9 @@ class LlmPhaseAResult:
     ``exception`` に詰め、Phase B 側で LlmCommandResultDto を組み立てる。
     """
     player_id: PlayerId
-    prompt: dict
-    tools_payload: list
-    tool_call: dict | None
+    prompt: dict[str, Any]
+    tools_payload: list[Any]
+    tool_call: dict[str, Any] | None
     exception: BaseException | None
     llm_call_id: str | None = None
     subjective_overrides: dict[str, Any] = field(default_factory=dict)

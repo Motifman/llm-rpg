@@ -110,7 +110,8 @@ def reconstruct_request(
         if isinstance(tools, str):
             tools = json.loads(tools)
         request["tools"] = copy.deepcopy(tools)
-    return request
+    captured: dict[str, Any] = request
+    return captured
 
 
 class PromptDatasetCaptureSink:

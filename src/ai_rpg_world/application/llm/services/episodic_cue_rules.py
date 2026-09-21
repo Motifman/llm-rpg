@@ -666,6 +666,7 @@ def _cues_from_observation_structured(structured: Mapping[str, Any]) -> list[Epi
     if wi is not None:
         val = _sanitize_id_segment("world_object", wi)
         out.append(EpisodicCue(axis="object", value=val, source=src))
+    av: str | None
     if is_secret_target_actor_observation(structured):
         av = SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE
     else:
