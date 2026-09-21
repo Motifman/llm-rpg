@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
@@ -23,6 +23,7 @@ from ai_rpg_world.application.social.exceptions import (
 )
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import UserNotFoundForCommandException
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate import UserAggregate
@@ -34,18 +35,22 @@ from ai_rpg_world.domain.sns.repository import UserRepository
 from ai_rpg_world.domain.sns.service.relationship_domain_service import RelationshipDomainService
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
+_Result = TypeVar("_Result")
+
 
 class UserCommandService:
     """ユーザーコマンドサービス"""
 
-    def __init__(self, user_repository: UserRepository, event_publisher: EventPublisher, unit_of_work: UnitOfWork):
+    def __init__(self, user_repository: UserRepository, event_publisher: EventPublisher[DomainEvent], unit_of_work: UnitOfWork):
         self.user_repository = user_repository
         self.event_publisher = event_publisher
         self._unit_of_work = unit_of_work
         self.logger = logging.getLogger(self.__class__.__name__)
         self._register_event_handlers()
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()

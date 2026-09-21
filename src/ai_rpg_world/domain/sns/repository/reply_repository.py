@@ -10,6 +10,11 @@ class ReplyRepository(Repository[ReplyAggregate, ReplyId]):
     """ReplyAggregateのリポジトリインターフェース"""
 
     @abstractmethod
+    def generate_reply_id(self) -> ReplyId:
+        """新しいReplyIdを生成"""
+        pass
+
+    @abstractmethod
     def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         """特定のポストへのリプライ一覧を取得"""
         pass

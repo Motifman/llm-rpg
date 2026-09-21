@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -119,4 +120,4 @@ class CommandResultDto:
     """コマンド実行結果DTO"""
     success: bool
     message: str | None = None
-    data: dict | None = None  # 作成されたユーザーIDなど
+    data: dict[str, Any] | None = None  # 作成されたユーザーIDなど

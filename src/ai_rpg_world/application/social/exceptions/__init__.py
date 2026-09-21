@@ -45,6 +45,8 @@ from ai_rpg_world.application.social.exceptions.query.user_query_exception impor
 )
 
 __all__ = [
+    # 例外ファクトリ
+    "ApplicationExceptionFactory",
     # 基底例外
     "ApplicationException",
     "SystemErrorException",

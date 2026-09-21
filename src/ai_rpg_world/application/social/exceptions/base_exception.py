@@ -2,12 +2,13 @@
 アプリケーション層の基底例外定義
 """
 
+from typing import Any
 
 
 class ApplicationException(Exception):
     """アプリケーション層の基底例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, **context: Any) -> None:
         """
         統一されたアプリケーション例外コンストラクタ
 

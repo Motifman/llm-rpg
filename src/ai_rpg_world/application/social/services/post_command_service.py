@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
@@ -20,6 +20,7 @@ from ai_rpg_world.application.social.exceptions.command.post_command_exception i
     PostLikeException,
     PostNotFoundForCommandException,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate import PostAggregate
@@ -30,18 +31,22 @@ from ai_rpg_world.domain.sns.exception import (
 from ai_rpg_world.domain.sns.repository import PostRepository, UserRepository
 from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId
 
+_Result = TypeVar("_Result")
+
 
 class PostCommandService:
     """ポストコマンドサービス"""
 
-    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, event_publisher: EventPublisher, unit_of_work: UnitOfWork):
+    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, event_publisher: EventPublisher[DomainEvent], unit_of_work: UnitOfWork):
         self._post_repository = post_repository
         self._user_repository = user_repository
         self._event_publisher = event_publisher
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -136,7 +141,7 @@ class PostCommandService:
                 raise UserNotFoundException(command.user_id, f"ユーザーが見つかりません: {command.user_id}")
 
             # ポストの取得
-            post_aggregate = self._post_repository.find_by_id(command.post_id)
+            post_aggregate = self._post_repository.find_by_id(PostId(command.post_id))
             if post_aggregate is None:
                 raise PostNotFoundForCommandException(command.post_id, "like_post")
 
@@ -178,7 +183,7 @@ class PostCommandService:
                 raise UserNotFoundException(command.user_id, f"ユーザーが見つかりません: {command.user_id}")
 
             # ポストの取得
-            post_aggregate = self._post_repository.find_by_id(command.post_id)
+            post_aggregate = self._post_repository.find_by_id(PostId(command.post_id))
             if post_aggregate is None:
                 raise PostNotFoundForCommandException(command.post_id, "delete_post")
 

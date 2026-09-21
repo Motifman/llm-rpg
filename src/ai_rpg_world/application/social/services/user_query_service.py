@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
@@ -21,6 +21,8 @@ from ai_rpg_world.domain.sns.exception import (
 from ai_rpg_world.domain.sns.repository import UserRepository
 from ai_rpg_world.domain.sns.value_object import UserId
 
+_Result = TypeVar("_Result")
+
 
 class UserQueryService:
     """ユーザー検索サービス"""
@@ -29,7 +31,9 @@ class UserQueryService:
         self._user_repository = user_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -177,7 +181,7 @@ class UserQueryService:
         related_user_profile_infos = self._get_users_profile_info(related_user_ids, viewer_user_id)
         return related_user_profile_infos
 
-    def _get_relationship_getter(self, relationship_type: UserRelationshipType):
+    def _get_relationship_getter(self, relationship_type: UserRelationshipType) -> Callable[[UserId], list[UserId]]:
         """関係性タイプに応じた取得関数を取得"""
         relationship_getter_map = {
             UserRelationshipType.FOLLOWEES: self._user_repository.find_followees,

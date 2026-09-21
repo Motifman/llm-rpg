@@ -5,7 +5,7 @@ create_from_domain_exception には DomainException のサブクラスのみ渡�
 """
 
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
@@ -106,7 +106,7 @@ class ApplicationExceptionFactory:
         user_id: int | None = None,
         target_user_id: int | None = None,
         post_id: int | None = None,
-        **additional_context
+        **additional_context: Any
     ) -> ApplicationException:
         """
         ドメイン例外から適切なアプリケーション例外を作成

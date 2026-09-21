@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.exceptions import (
@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
 
 
+_Result = TypeVar("_Result")
+
+
 class NotificationQueryService:
     """通知クエリサービス"""
 
@@ -22,7 +25,9 @@ class NotificationQueryService:
         self._notification_repository = notification_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()

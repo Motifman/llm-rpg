@@ -2,7 +2,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto, PostDto, ReplyDto, ReplyThreadDto
 from ai_rpg_world.application.social.exceptions import (
@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 
 
+_Result = TypeVar("_Result")
+
+
 class ReplyQueryService:
     """リプライ検索サービス"""
 
@@ -38,7 +41,9 @@ class ReplyQueryService:
         self._reply_repository = reply_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -59,7 +64,7 @@ class ReplyQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def _get_user_profile_info(self, user_id: UserId) -> dict:
+    def _get_user_profile_info(self, user_id: UserId) -> dict[str, Any]:
         """ユーザーのプロフィール情報を取得"""
         user_aggregate = self._user_repository.find_by_id(user_id)
         if user_aggregate is None:
@@ -86,7 +91,7 @@ class ReplyQueryService:
             deletion_message="このポストは削除されています"
         )
 
-    def _convert_reply_to_dto(self, reply: "ReplyAggregate", viewer_user_id: UserId, author_profile_info: dict, depth: int = 0) -> ReplyDto:
+    def _convert_reply_to_dto(self, reply: "ReplyAggregate", viewer_user_id: UserId, author_profile_info: dict[str, Any], depth: int = 0) -> ReplyDto:
         """ReplyAggregateをReplyDtoに変換（削除リプライ対応）"""
         display_info = reply.get_display_info(viewer_user_id)
 
@@ -139,7 +144,7 @@ class ReplyQueryService:
         replies: list["ReplyAggregate"],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
-        author_user_map: dict | None = None
+        author_user_map: dict[UserId, "UserAggregate"] | None = None
     ) -> list[ReplyDto]:
         """リプライの権限チェックとDTO変換を行う共通メソッド"""
         result = []
@@ -159,14 +164,14 @@ class ReplyQueryService:
 
         for reply in replies:
             author_user_id = reply.author_user_id
-            author_user = author_user_map.get(author_user_id)
+            reply_author = author_user_map.get(author_user_id)
 
-            if author_user is None:
+            if reply_author is None:
                 continue
 
             # 権限チェック（削除リプライも特別に許可）
-            can_view_reply = (not reply.deleted and PostVisibilityDomainService.can_view_reply(reply, viewer_user, author_user)) or \
-                           (reply.deleted and PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, viewer_user, author_user))
+            can_view_reply = (not reply.deleted and PostVisibilityDomainService.can_view_reply(reply, viewer_user, reply_author)) or \
+                           (reply.deleted and PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, viewer_user, reply_author))
 
             if can_view_reply:
                 author_profile_info = author_profile_cache[author_user_id]
@@ -290,7 +295,7 @@ class ReplyQueryService:
         current_depth: int = 0
     ) -> list[ReplyDto]:
         """リプライツリーをフラットなDTOリストに変換"""
-        result = []
+        result: list[ReplyDto] = []
 
         # 著者情報を取得するためのマップを作成
         all_replies = []
@@ -312,7 +317,7 @@ class ReplyQueryService:
             author_profile_cache[author_user_id] = author_user.get_user_profile_info()
 
         # ツリーを再帰的に処理
-        def process_replies(parent_id: Any, depth: int):
+        def process_replies(parent_id: Any, depth: int) -> None:
             if depth > 3:  # 最大深度制限
                 return
 
