@@ -32,12 +32,14 @@ self_image / world_view が空に戻る)。``schema_version`` を 1 → 2 に上
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
+from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
@@ -77,6 +79,14 @@ def _observation_entry_to_dict(entry: Any) -> dict[str, Any]:
     }
 
 
+def _as_observation_category(raw: Any) -> ObservationCategory:
+    """保存された文字列を ObservationCategory に戻す。範囲外は self_only に倒す。"""
+    value = str(raw)
+    if value in ("self_only", "social", "environment"):
+        return cast(ObservationCategory, value)
+    return "self_only"
+
+
 def _dict_to_observation_entry(data: dict[str, Any]) -> Any:
     from ai_rpg_world.application.observation.contracts.dtos import (
         ObservationEntry,
@@ -87,7 +97,9 @@ def _dict_to_observation_entry(data: dict[str, Any]) -> Any:
     output = ObservationOutput(
         prose=str(out_d["prose"]),
         structured=dict(out_d.get("structured", {})),
-        observation_category=str(out_d.get("observation_category", "self_only")),
+        observation_category=_as_observation_category(
+            out_d.get("observation_category", "self_only")
+        ),
         schedules_turn=bool(out_d.get("schedules_turn", False)),
         breaks_movement=bool(out_d.get("breaks_movement", False)),
     )
@@ -168,7 +180,7 @@ def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
 
 def _capture_dict_store(
     store_dict: dict[int, list[Any]],
-    entry_to_dict,
+    entry_to_dict: Callable[[Any], dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """共通 capture: ``{player_id: [Entry, ...]}`` を JSON-serializable に。"""
     return sorted(
@@ -186,7 +198,7 @@ def _capture_dict_store(
 def _restore_dict_store(
     store_dict: dict[int, list[Any]],
     entries_data: list[dict[str, Any]],
-    dict_to_entry,
+    dict_to_entry: Callable[[dict[str, Any]], Any],
 ) -> None:
     """共通 restore: store_dict を clear + repopulate。"""
     store_dict.clear()
@@ -398,7 +410,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
 
     def capture(self, runtime: Any) -> dict[str, Any]:
         store = getattr(runtime, "_recent_event_store", None)
-        memory = getattr(runtime, "_short_term_memory", None)
+        memory: Any = getattr(runtime, "_short_term_memory", None)
         if store is None:
             return {
                 "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
@@ -410,7 +422,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                 "long_summaries": [],
                 "long_gen_indices": [],
             }
-        entries = []
+        entries: list[dict[str, Any]] = []
         completed_turn_sizes = []
         pending = []
         for pid in sorted(store.player_ids()):
@@ -486,7 +498,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
             data, _RECENT_EVENT_SUBSYSTEM_KEY, _RECENT_EVENT_SCHEMA_VERSION
         )
         store = getattr(runtime, "_recent_event_store", None)
-        memory = getattr(runtime, "_short_term_memory", None)
+        memory: Any = getattr(runtime, "_short_term_memory", None)
         if store is None:
             return
         for pid in store.player_ids():
@@ -557,7 +569,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         return self._capture_sliding(sw)
 
     def _capture_sliding(self, sw: Any) -> dict[str, Any]:
-        entries = []
+        entries: list[dict[str, Any]] = []
         for pid in sorted(sw._event_store.player_ids()):
             observations = sw._event_store.observations_in_storage_order(
                 PlayerId(pid)
@@ -590,8 +602,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
             long_snapshot: dict[int, L5LongSummary] = dict(sw._long)
             gen_snapshot: dict[int, int] = dict(sw._long_gen_index)
         raw_entries = self._capture_sliding(sw)["entries"]
-        mid_summaries = sorted(
-            (
+        mid_groups: list[dict[str, Any]] = list(
                 {
                     "player_id": int(pid),
                     "summaries": [
@@ -599,19 +610,16 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                     ],
                 }
                 for pid, summaries in mid_snapshot.items()
-            ),
-            key=lambda d: d["player_id"],
         )
-        long_summaries = sorted(
-            (
+        mid_summaries = sorted(mid_groups, key=lambda d: d["player_id"])
+        long_groups: list[dict[str, Any]] = list(
                 {
                     "player_id": int(pid),
                     "summary": _l5_long_summary_to_dict(l5),
                 }
                 for pid, l5 in long_snapshot.items()
-            ),
-            key=lambda d: d["player_id"],
         )
+        long_summaries = sorted(long_groups, key=lambda d: d["player_id"])
         long_gen_indices = sorted(
             (
                 {"player_id": int(pid), "index": int(idx)}

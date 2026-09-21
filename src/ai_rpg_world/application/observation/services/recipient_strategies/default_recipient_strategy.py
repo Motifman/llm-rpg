@@ -1,6 +1,7 @@
 """観測対象イベント全体を扱うデフォルト配信先解決戦略（既存ロジックを集約）"""
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
@@ -161,14 +162,14 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             add(player_id)
 
     def _resolve_location_entered(
-        self, event: LocationEnteredEvent, add
+        self, event: LocationEnteredEvent, add: Callable[[PlayerId], None]
     ) -> None:
         if event.player_id_value is not None:
             add(PlayerId(event.player_id_value))
         for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
-    def _resolve_location_exited(self, event: LocationExitedEvent, add) -> None:
+    def _resolve_location_exited(self, event: LocationExitedEvent, add: Callable[[PlayerId], None]) -> None:
         pid = self._world_object_to_player_resolver.resolve_player_id(
             event.object_id
         )
@@ -176,21 +177,21 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             add(pid)
 
     def _resolve_player_location_changed(
-        self, event: PlayerLocationChangedEvent, add
+        self, event: PlayerLocationChangedEvent, add: Callable[[PlayerId], None]
     ) -> None:
         add(event.aggregate_id)
         for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
             add(pid)
 
     def _resolve_item_stored_in_chest(
-        self, event: ItemStoredInChestEvent, add
+        self, event: ItemStoredInChestEvent, add: Callable[[PlayerId], None]
     ) -> None:
         add(PlayerId(event.player_id_value))
         for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
     def _resolve_spot_weather_changed(
-        self, event: SpotWeatherChangedEvent, add
+        self, event: SpotWeatherChangedEvent, add: Callable[[PlayerId], None]
     ) -> None:
         # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接
         # 見えない前提）。SpotGraph 上で is_outdoor=False のスポットは配信先から外す。

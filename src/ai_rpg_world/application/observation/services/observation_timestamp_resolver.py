@@ -1,7 +1,7 @@
 """イベントの occurred_at とゲーム内時刻ラベルを解決するサービス"""
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.service.world_time_config_service import (
@@ -32,7 +32,7 @@ class ObservationTimestampResolver:
         occurred_at = getattr(event, "occurred_at", None)
         if occurred_at is None:
             return datetime.now(timezone.utc)
-        return occurred_at
+        return cast(datetime, occurred_at)
 
     def resolve_game_time_label(self, event: Any) -> str | None:
         """

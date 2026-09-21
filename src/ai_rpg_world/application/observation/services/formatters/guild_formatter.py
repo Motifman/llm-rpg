@@ -50,7 +50,7 @@ class GuildObservationFormatter:
     ) -> ObservationOutput | None:
         prose = f"ギルド「{event.name}」が創設されました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_created",
             "guild_name": event.name,
             "guild_id_value": guild_id_value,
@@ -67,7 +67,7 @@ class GuildObservationFormatter:
         member_name = self._context.name_resolver.player_name(event.membership.player_id)
         prose = f"{member_name}がギルドに加入しました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_member_joined",
             "member": member_name,
             "guild_id_value": guild_id_value,
@@ -85,7 +85,7 @@ class GuildObservationFormatter:
         member_name = self._context.name_resolver.player_name(event.player_id)
         prose = f"{member_name}がギルドから脱退しました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_member_left",
             "member": member_name,
             "role": event.role.value,
@@ -103,7 +103,7 @@ class GuildObservationFormatter:
         member_name = self._context.name_resolver.player_name(event.player_id)
         prose = f"{member_name}の役職が{event.old_role.value}から{event.new_role.value}に変わりました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_role_changed",
             "member": member_name,
             "old": event.old_role.value,
@@ -127,7 +127,7 @@ class GuildObservationFormatter:
         actor = self._context.name_resolver.player_name(event.deposited_by)
         prose = f"{actor}がギルド金庫に{event.amount}ゴールドを入金しました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_bank_deposited",
             "amount": event.amount,
             "by": actor,
@@ -145,7 +145,7 @@ class GuildObservationFormatter:
         actor = self._context.name_resolver.player_name(event.withdrawn_by)
         prose = f"{actor}がギルド金庫から{event.amount}ゴールドを出金しました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_bank_withdrawn",
             "amount": event.amount,
             "by": actor,
@@ -162,7 +162,7 @@ class GuildObservationFormatter:
     ) -> ObservationOutput | None:
         prose = "ギルドが解散しました。"
         guild_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "guild_disbanded",
             "guild_id_value": guild_id_value,
         }

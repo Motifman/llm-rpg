@@ -35,7 +35,7 @@ class ConversationObservationFormatter:
     ) -> ObservationOutput | None:
         npc_name = self._context.name_resolver.npc_name(event.npc_id_value)
         prose = f"{npc_name}と会話を始めました。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "conversation_started",
             "npc_name": npc_name,
             "world_object_id": event.npc_id_value,
@@ -70,7 +70,7 @@ class ConversationObservationFormatter:
         if event.quest_unlocked_ids:
             parts.append(f"新しいクエストが{len(event.quest_unlocked_ids)}件解放されました。")
         prose = " ".join(parts)
-        structured = {
+        structured: dict[str, Any] = {
             "type": "conversation_ended",
             "npc_name": npc_name,
             "world_object_id": event.npc_id_value,

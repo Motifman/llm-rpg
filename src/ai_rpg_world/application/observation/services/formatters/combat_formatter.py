@@ -63,7 +63,7 @@ class CombatObservationFormatter:
             if event.target_id
             else None
         )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "hitbox_hit",
             "owner_world_object_id": owner_id,
             "target_world_object_id": target_id,

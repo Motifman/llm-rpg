@@ -315,7 +315,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         """
         self._resolve_known_player_entity(event.entity_id, add)
 
-    def _resolve_known_player_entity(self, entity_id: EntityId, add) -> None:
+    def _resolve_known_player_entity(self, entity_id: EntityId, add: Callable[[PlayerId], None]) -> None:
         """`entity_id` が known player の ID と一致するなら recipient に追加。
 
         Phase 5 環境音観測など「entity 本人にだけ届く」観測で使う。
@@ -356,14 +356,14 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         return physical + [pid for pid in departed if int(pid) not in seen]
 
     def _resolve_at_spot_excluding_actor(
-        self, spot_id: SpotId, actor_entity_id: EntityId, add
+        self, spot_id: SpotId, actor_entity_id: EntityId, add: Callable[[PlayerId], None]
     ) -> None:
         for pid in self._players_at_spot_on_graph(spot_id):
             if pid.value != actor_entity_id.value:
                 add(pid)
 
     def _resolve_connection_changed(
-        self, event: ConnectionStateChangedEvent, add
+        self, event: ConnectionStateChangedEvent, add: Callable[[PlayerId], None]
     ) -> None:
         """ConnectionStateChangedEvent の配信先を解決する。
 
@@ -421,7 +421,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             result.extend(self._players_at_spot_on_graph(spot_id))
         return result
 
-    def _resolve_all_at_spot(self, spot_id: SpotId, add) -> None:
+    def _resolve_all_at_spot(self, spot_id: SpotId, add: Callable[[PlayerId], None]) -> None:
         for pid in self._players_at_spot_on_graph(spot_id):
             add(pid)
 

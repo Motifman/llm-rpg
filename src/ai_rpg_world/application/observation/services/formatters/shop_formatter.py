@@ -45,7 +45,7 @@ class ShopObservationFormatter:
     ) -> ObservationOutput | None:
         prose = "ショップが開設されました。"
         shop_id = event.aggregate_id.value
-        structured = {"type": "shop_created", "shop_id_value": shop_id}
+        structured: dict[str, Any] = {"type": "shop_created", "shop_id_value": shop_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -58,7 +58,7 @@ class ShopObservationFormatter:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"ショップに{item_name}が出品されました。"
         shop_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "shop_item_listed",
             "item_name": item_name,
             "shop_id_value": shop_id_value,
@@ -79,7 +79,7 @@ class ShopObservationFormatter:
     ) -> ObservationOutput | None:
         prose = "ショップの出品が取り下げられました。"
         shop_id_value = event.aggregate_id.value
-        structured = {"type": "shop_item_unlisted", "shop_id_value": shop_id_value}
+        structured: dict[str, Any] = {"type": "shop_item_unlisted", "shop_id_value": shop_id_value}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -96,7 +96,7 @@ class ShopObservationFormatter:
         shop_id = event.aggregate_id.value
         if is_buyer:
             prose = f"{item_name}を{event.quantity}個購入しました（支払い: {event.total_gold}ゴールド）。"
-            structured = {
+            structured: dict[str, Any] = {
                 "type": "shop_purchase",
                 "role": "buyer",
                 "item_name": item_name,
@@ -129,7 +129,7 @@ class ShopObservationFormatter:
     ) -> ObservationOutput | None:
         prose = "ショップが閉鎖されました。"
         shop_id_value = event.aggregate_id.value
-        structured = {"type": "shop_closed", "shop_id_value": shop_id_value}
+        structured: dict[str, Any] = {"type": "shop_closed", "shop_id_value": shop_id_value}
         return ObservationOutput(
             prose=prose,
             structured=structured,

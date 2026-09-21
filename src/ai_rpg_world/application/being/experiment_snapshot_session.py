@@ -34,7 +34,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemorySnapshotService,
@@ -626,7 +626,7 @@ class ExperimentSnapshotSession:
             current_scenario=current_scenario,
             strict_subsystems=True,
         )
-        return snapshot
+        return cast("WorldStateSnapshot | None", snapshot)
 
     @property
     def world_snapshot_service(self) -> WorldStateSnapshotService:

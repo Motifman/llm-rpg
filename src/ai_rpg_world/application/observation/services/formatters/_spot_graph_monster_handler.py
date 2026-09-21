@@ -60,7 +60,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         )
         spot_name = self._resolve_spot_name(event.spot_id)
         prose = f"{monster_name}が{spot_name}に現れた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_appeared_at_spot",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -116,7 +116,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
             # 第三者からは「{name} が倒れた」とより明確に出したいが、最小
             # 実装では共通 suffix で済ませる。
             prose = prose + _INCAPACITATION_SUFFIX_FOR_PLAYER_TARGET
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_attacked_player",
             "attacker_monster_id": event.attacker_monster_id.value,
             "monster_name": monster_name,
@@ -150,7 +150,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         prose = f"{actor_name}が{monster_name}を攻撃した。"
         if event.target_incapacitated:
             prose = prose + _INCAPACITATION_SUFFIX_FOR_MONSTER_TARGET
-        structured = {
+        structured: dict[str, Any] = {
             "type": "player_attacked_monster",
             "attacker_entity_id": event.attacker_entity_id.value,
             "actor_name": actor_name,
@@ -182,7 +182,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
             event.item_spec_id.value
         )
         prose = f"{monster_name}が{item_name}を食べた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_ate_ground_item",
             "monster_id": event.monster_id.value,
             "monster_name": monster_name,
@@ -218,7 +218,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
             prose = f"{attacker_name}が{prey_name}を仕留めた。"
         else:
             prose = f"{attacker_name}が{prey_name}に襲いかかった。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_predated_monster",
             "attacker_monster_id": event.attacker_monster_id.value,
             "attacker_name": attacker_name,
@@ -249,7 +249,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         )
         spot_name = self._resolve_spot_name(event.spot_id)
         prose = f"{monster_name}の姿が見えなくなった。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_left_spot",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,

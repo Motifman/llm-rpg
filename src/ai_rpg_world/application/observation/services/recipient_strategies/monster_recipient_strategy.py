@@ -1,5 +1,6 @@
 """モンスター系イベントの観測配信先解決戦略"""
 
+from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
@@ -37,11 +38,13 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class MonsterRecipientStrategy(IRecipientResolutionStrategy):
@@ -187,12 +190,12 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         """
         self._add_all_at_spot(self._spot_id_from_world_object(event.actor_id), add)
 
-    def _spot_id_from_world_object(self, object_id) -> SpotId | None:
+    def _spot_id_from_world_object(self, object_id: WorldObjectId) -> SpotId | None:
         if self._physical_map_repository is None:
             return None
         return self._physical_map_repository.find_spot_id_by_object_id(object_id)
 
-    def _spot_id_from_monster(self, monster_id) -> SpotId | None:
+    def _spot_id_from_monster(self, monster_id: MonsterId) -> SpotId | None:
         if self._monster_repository is None:
             return None
         monster = self._monster_repository.find_by_id(monster_id)

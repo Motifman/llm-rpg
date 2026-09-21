@@ -64,6 +64,7 @@ habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOA
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
@@ -139,10 +140,10 @@ SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
 
 
 def _decode_list(
-    raw_list: list,
-    decoder,
+    raw_list: list[Any],
+    decoder: Callable[[Any], Any],
     key: str,
-):
+) -> list[Any]:
     """list の各 dict 要素を ``decoder`` で VO に変換。エラーは format error に wrap。
 
     payload 形式エラー (= dict key 欠落、enum 未知値、型不一致) は

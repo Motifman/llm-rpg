@@ -73,7 +73,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.monster_id
         )
         prose = f"{monster_name}が怯えて逃げ出した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_started_fleeing",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -115,7 +115,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         else:
             # target id 両方 None は不整合だが防御
             prose = f"{monster_name}が何かを追い始めた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_started_chasing",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -155,7 +155,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.monster_id
         )
         prose = f"{monster_name}は追跡を諦めて立ち去った。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_abandoned_chase",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -187,7 +187,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             prose = f"{monster_name}は暑さで弱っている。"
         else:
             prose = f"{monster_name}は環境に苦しんでいる。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_felt_temperature_discomfort",
             "monster_name": monster_name,
             "monster_id": event.monster_id.value,
@@ -233,7 +233,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             )
         else:
             prose = f"{responder_name}が{victim_name}の救援に駆け付けた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_responded_to_pack_help",
             "responder_name": responder_name,
             "responder_id": event.responder_monster_id.value,
@@ -273,7 +273,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.leader_monster_id
         )
         prose = f"{follower_name}も{leader_name}に続いて逃げ出した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_followed_pack_flee",
             "follower_name": follower_name,
             "follower_id": event.follower_monster_id.value,
@@ -318,7 +318,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
                 f"{responder_name}が{scout_name}の警戒を察して"
                 "追跡を始めた。"
             )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "monster_alerted_by_pack",
             "responder_name": responder_name,
             "responder_id": event.responder_monster_id.value,
