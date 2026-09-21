@@ -24,6 +24,24 @@ class TestConfigurableHostilityServiceGetDisposition:
         target = _comp("human", "player")
         assert service.get_disposition(actor, target) == Disposition.NEUTRAL
 
+    def test_non_actor_component_raises_component_required(self):
+        """アクターでない component を渡すと ComponentRequiredForDispositionException になる。
+
+        race / faction は ActorComponent の属性で、基底の WorldObjectComponent
+        には無い。以前は基底型で受けており、アクター以外を渡すと
+        AttributeError になっていた。
+        """
+        from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+        from ai_rpg_world.domain.world.entity.world_object_component import (
+            GroundItemComponent,
+        )
+
+        service = ConfigurableHostilityService()
+        non_actor = GroundItemComponent(item_instance_id=ItemInstanceId(1))
+
+        with pytest.raises(ComponentRequiredForDispositionException):
+            service.get_disposition(non_actor, _comp())
+
     def test_race_disposition_table_hostile(self):
         """race_disposition_table で HOSTILE が返ること"""
         service = ConfigurableHostilityService(
