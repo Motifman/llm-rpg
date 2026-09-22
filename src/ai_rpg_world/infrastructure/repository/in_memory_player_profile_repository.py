@@ -1,9 +1,14 @@
 
+from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -12,7 +17,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositoryBase):
     """プレイヤープロフィールリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
@@ -22,7 +27,8 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
     def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: PlayerProfileAggregate | None = self._clone(pending)
+            return cloned
         return self._profiles.get(player_id)
     
     def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerProfileAggregate]:
@@ -39,16 +45,17 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
 
     def save(self, profile: PlayerProfileAggregate) -> PlayerProfileAggregate:
         cloned_profile = self._clone(profile)
-        def operation():
+        def operation() -> Any:
             self._profiles[cloned_profile.player_id] = cloned_profile
             return cloned_profile
             
         self._register_aggregate(profile)
         self._register_pending_if_uow(profile.player_id, profile)
-        return self._execute_operation(operation)
+        result_value: PlayerProfileAggregate = self._execute_operation(operation)
+        return result_value
     
     def delete(self, player_id: PlayerId) -> bool:
-        def operation():
+        def operation() -> bool:
             if player_id in self._profiles:
                 del self._profiles[player_id]
                 return True

@@ -3,6 +3,7 @@ InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
 from collections.abc import Callable
+from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -41,9 +42,15 @@ class InMemoryUnitOfWork(UnitOfWork):
     複数の集約更新の一貫性を保証します。
     """
 
-    def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None, sync_event_dispatcher=None):
+    def __init__(
+        self,
+        event_publisher: Any = None,
+        unit_of_work_factory: Any = None,
+        data_store: Any = None,
+        sync_event_dispatcher: Any = None,
+    ) -> None:
         self._in_transaction = False
-        self._pending_operations: list[Callable[[], None]] = []
+        self._pending_operations: list[Callable[[], object]] = []
         self._pending_events: list[BaseDomainEvent[Any, Any]] = []
         self._pending_aggregates: dict[tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
@@ -60,7 +67,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         # post-commit orchestration 分離後は未使用。後方互換のため引数は受け取るが保持しない。
 
     @property
-    def sync_event_dispatcher(self):
+    def sync_event_dispatcher(self) -> Any:
         """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。create_with_event_publisher で生成された場合のみ存在。"""
         return self._sync_event_dispatcher
 
@@ -231,7 +238,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             return None
         return self._pending_aggregates.get((repo_key, entity_id))
 
-    def add_operation(self, operation: Callable[[], None]) -> None:
+    def add_operation(self, operation: Callable[[], object]) -> None:
         """保留中の操作を追加"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
@@ -294,12 +301,17 @@ class InMemoryUnitOfWork(UnitOfWork):
         """コミット済みかどうかを返す（テスト用）"""
         return self._committed
 
-    def __enter__(self):
+    def __enter__(self) -> "InMemoryUnitOfWork":
         """コンテキストマネージャー開始"""
         self.begin()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """コンテキストマネージャー終了"""
         if exc_type is not None:
             # 例外が発生したらロールバック
@@ -309,7 +321,9 @@ class InMemoryUnitOfWork(UnitOfWork):
             self.commit()
 
     @classmethod
-    def create_with_event_publisher(cls, unit_of_work_factory=None, data_store=None) -> tuple[Any, "InMemoryEventPublisherWithUow"]:
+    def create_with_event_publisher(
+        cls, unit_of_work_factory: Any = None, data_store: Any = None
+    ) -> tuple[Any, "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーを作成し、適切に接続する
 
         Phase 4: TransactionalScope を返し、commit 後の post-commit orchestration を

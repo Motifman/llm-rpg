@@ -2,10 +2,15 @@
 InMemorySnsUserRepository - UserAggregateを使用するインメモリ実装
 """
 
+from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -14,7 +19,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
     """UserAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
@@ -29,7 +34,8 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
         """ユーザーIDでユーザーを検索"""
         pending = self._get_pending_aggregate(user_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: UserAggregate | None = self._clone(pending)
+            return cloned
         return self._users.get(user_id)
 
     def find_by_ids(self, user_ids: list[UserId]) -> list[UserAggregate]:
@@ -65,7 +71,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def find_mutual_follows(self, user_id: UserId) -> list[UserId]:
         """相互フォロー関係を取得"""
-        mutual_follows = []
+        mutual_follows: list[UserId] = []
         user = self._users.get(user_id)
         if not user:
             return mutual_follows
@@ -135,16 +141,17 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             return False
         return follower_user.is_following(followee_user_id)
 
-    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate | None:
+    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate | None:  # type: ignore[override]  # Issue #1381
         """ユーザープロフィールを更新"""
-        def operation():
+        def operation() -> Any:
             user = self._users.get(user_id)
             if not user:
                 return None
             user.update_user_profile(bio, display_name)
             return user
             
-        return self._execute_operation(operation)
+        result_value: UserAggregate | None = self._execute_operation(operation)
+        return result_value
 
     def search_users(self, query: str, limit: int = 20) -> list[UserAggregate]:
         """ユーザー検索"""
@@ -162,7 +169,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def bulk_update_relationships(self, relationships: list[tuple[UserId, UserId, str]]) -> int:
         """複数の関係性を一括更新（フォロー/ブロック/サブスクライブ）"""
-        def operation():
+        def operation() -> Any:
             updated_count = 0
             for from_user_id, to_user_id, relationship_type in relationships:
                 from_user = self._users.get(from_user_id)
@@ -181,7 +188,8 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                     updated_count += 1
             return updated_count
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def cleanup_broken_relationships(self) -> int:
         """無効な関係性をクリーンアップ（テスト用）"""
@@ -200,7 +208,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
     def save(self, user: UserAggregate) -> UserAggregate:
         """ユーザーを保存"""
         cloned_user = self._clone(user)
-        def operation():
+        def operation() -> Any:
             self._users[cloned_user.user_id] = cloned_user
             profile_info = cloned_user.get_user_profile_info()
             self._username_to_user_id[profile_info["user_name"]] = cloned_user.user_id
@@ -208,11 +216,12 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             
         self._register_aggregate(user)
         self._register_pending_if_uow(user.user_id, user)
-        return self._execute_operation(operation)
+        result_value: UserAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, user_id: UserId) -> bool:
         """ユーザーを削除"""
-        def operation():
+        def operation() -> bool:
             if user_id in self._users:
                 user = self._users[user_id]
                 profile_info = user.get_user_profile_info()

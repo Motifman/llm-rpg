@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
@@ -9,6 +10,8 @@ from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handl
     MonsterSpawnedMapPlacementHandler,
 )
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
+from ai_rpg_world.domain.common.domain_event import DomainEvent
+from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDiedEvent,
@@ -39,7 +42,7 @@ class CombatEventHandlerRegistry:
         self._monster_died_map_removal_handler = monster_died_map_removal_handler
         self._monster_spawned_map_placement_handler = monster_spawned_map_placement_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         # HitBoxヒット時にダメージ適用とヘイト更新を行う
         event_publisher.register_handler(
             HitBoxHitRecordedEvent,
@@ -83,12 +86,14 @@ class CombatEventHandlerRegistry:
             is_synchronous=True,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
-        class EventHandlerImpl:
-            def __init__(self, method):
+    def _create_event_handler(
+        self, handler_method: Callable[[Any], None]
+    ) -> "EventHandler[Any]":
+        class EventHandlerImpl(EventHandler[Any]):
+            def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method
 
-            def handle(self, event):
+            def handle(self, event: Any) -> None:
                 self._method(event)
 
         return EventHandlerImpl(handler_method)

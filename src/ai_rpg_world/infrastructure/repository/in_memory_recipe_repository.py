@@ -16,7 +16,7 @@ from ai_rpg_world.domain.item.value_object.recipe_result import RecipeResult
 class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
     """RecipeAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._recipes: dict[RecipeId, RecipeAggregate] = {}
         self._result_item_to_recipes: dict[ItemSpecId, list[RecipeAggregate]] = {}
         self._ingredient_item_to_recipes: dict[ItemSpecId, list[RecipeAggregate]] = {}
@@ -25,7 +25,7 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
         # サンプルレシピデータをセットアップ
         self._setup_sample_data()
 
-    def _setup_sample_data(self):
+    def _setup_sample_data(self) -> None:
         """サンプルレシピデータのセットアップ"""
         # レシピ1: 鉄の剣の作成
         iron_sword_recipe = RecipeAggregate(
@@ -66,7 +66,7 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
         )
         self._save_recipe(steel_ingot_recipe)
 
-    def _save_recipe(self, recipe: RecipeAggregate):
+    def _save_recipe(self, recipe: RecipeAggregate) -> None:
         """レシピを保存し、インデックスを更新"""
         self._recipes[recipe.recipe_id] = recipe
 

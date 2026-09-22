@@ -13,6 +13,9 @@ if TYPE_CHECKING:
         InMemoryEventPublisherWithUow,
     )
     from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+    from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import (
+        TransactionalScope,
+    )
 
 
 class SyncEventDispatcher:
@@ -24,7 +27,7 @@ class SyncEventDispatcher:
 
     def __init__(
         self,
-        unit_of_work: "InMemoryUnitOfWork",
+        unit_of_work: "InMemoryUnitOfWork | TransactionalScope",
         event_publisher: "InMemoryEventPublisherWithUow | None",
     ) -> None:
         self._unit_of_work = unit_of_work

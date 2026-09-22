@@ -1,3 +1,7 @@
+from types import TracebackType
+
+from ai_rpg_world.domain.common.domain_event import DomainEvent
+
 """TransactionalScope - Phase 4: post-commit orchestration を担う wrapper
 
 UoW の commit から非同期配信トリガーを分離し、commit 後の
@@ -18,12 +22,12 @@ class TransactionalScope:
     非同期イベント配信を orchestrator 側で明示的に行う。UoW.commit は async 配信を知らない。
     """
 
-    def __init__(self, unit_of_work: Any, event_publisher: "EventPublisher | None" = None):
+    def __init__(self, unit_of_work: Any, event_publisher: "EventPublisher[DomainEvent] | None" = None):
         self._uow = unit_of_work
         self._event_publisher = event_publisher
         self._sync_event_dispatcher = None
 
-    def set_event_publisher(self, event_publisher: "EventPublisher") -> None:
+    def set_event_publisher(self, event_publisher: "EventPublisher[DomainEvent]") -> None:
         """post-commit orchestration 用の EventPublisher を設定（遅延バインディング）"""
         self._event_publisher = event_publisher
 
@@ -38,18 +42,23 @@ class TransactionalScope:
         return False
 
     @property
-    def sync_event_dispatcher(self):
+    def sync_event_dispatcher(self) -> Any:
         """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。"""
         return self._sync_event_dispatcher
 
-    def __enter__(self):
+    def __enter__(self) -> "TransactionalScope":
         self._uow.begin()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if exc_type is not None:
             self._uow.rollback()
-            return False
+            return
 
         self._uow.commit()
 
@@ -58,8 +67,6 @@ class TransactionalScope:
         if events and self._event_publisher is not None:
             self._event_publisher.publish_async_events(events)
         self._uow.clear_committed_events()
-
-        return False
 
     def __getattr__(self, name: str) -> Any:
         """UoW のメソッド・プロパティを委譲"""

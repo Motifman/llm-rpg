@@ -268,8 +268,8 @@ def parse_monster_attack_status_effects( raw: Any, template_index: int,
         try:
             parsed.append(AttackStatusEffectChance(
                 effect_type=effect_type,
-                chance=item.get("chance"),
-                duration_ticks=item.get("duration_ticks"),
+                chance=float(item.get("chance", 0.0)),
+                duration_ticks=int(item.get("duration_ticks", 0)),
                 value=item.get("value", 1.0),
             ))
         except MonsterTemplateValidationException as exc:
@@ -537,7 +537,7 @@ def parse_player_initial_state(
 
 
 
-def _require_initial_items_fit(items: tuple, *, owner_id: str) -> None:
+def _require_initial_items_fit(items: tuple[Any, ...], *, owner_id: str) -> None:
     """初期所持品が所持枠に収まっていることを、読み込みの時点で確かめる。
 
     枠を超えるぶんは `acquire_item` が**黙って捨てる**。run が始まってから

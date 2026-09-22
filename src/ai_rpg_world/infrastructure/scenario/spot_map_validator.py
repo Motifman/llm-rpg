@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from math import ceil, hypot, isfinite
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 
 Severity = Literal["error", "warning", "info"]
 
@@ -874,7 +874,7 @@ def _positions(raw: Mapping[str, Any]) -> dict[str, tuple[float, float]]:
     return out
 
 
-def _is_number(value: object) -> bool:
+def _is_number(value: object) -> TypeGuard[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
 
 

@@ -9,6 +9,9 @@ from typing import Any
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
@@ -131,7 +134,7 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         )
         return [copy.deepcopy(self._build_monster_from_row(row)) for row in cur.fetchall()]
 
-    def find_by_pack_id(self, pack_id) -> list[MonsterAggregate]:
+    def find_by_pack_id(self, pack_id: PackId) -> list[MonsterAggregate]:
         """Phase 4-O C: 同 pack の member を引く。pack_id は str (PackId.value)。"""
         cur = self._conn.execute(
             "SELECT * FROM game_monsters WHERE pack_id = ? ORDER BY monster_id ASC",
@@ -156,6 +159,8 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             loadout_repo = SqliteSkillLoadoutRepository.for_shared_unit_of_work(self._conn)
             loadout_repo.save(entity.skill_loadout)
 
+            # 同じ呼び出しを None 判定と値の取り出しで 2 回するのをやめる
+            respawn_coordinate = entity.get_respawn_coordinate()
             self._conn.execute(
                 """
                 INSERT INTO game_monsters (
@@ -235,9 +240,9 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     None if entity.coordinate is None else entity.coordinate.z,
                     None if entity.pack_id is None else entity.pack_id.value,
                     1 if entity.is_pack_leader else 0,
-                    None if entity.get_respawn_coordinate() is None else entity.get_respawn_coordinate().x,
-                    None if entity.get_respawn_coordinate() is None else entity.get_respawn_coordinate().y,
-                    None if entity.get_respawn_coordinate() is None else entity.get_respawn_coordinate().z,
+                    None if respawn_coordinate is None else respawn_coordinate.x,
+                    None if respawn_coordinate is None else respawn_coordinate.y,
+                    None if respawn_coordinate is None else respawn_coordinate.z,
                     None if entity.spawned_at_tick is None else entity.spawned_at_tick.value,
                     entity.behavior_state.value,
                     None if entity.behavior_target_id is None else int(entity.behavior_target_id),
@@ -260,10 +265,10 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                         else entity.persistence_chase_attacker_ref.kind.value,
                     None if entity.persistence_chase_attacker_ref is None
                         or not entity.persistence_chase_attacker_ref.is_player
-                        else int(entity.persistence_chase_attacker_ref.player_id),
+                        else int(entity.persistence_chase_attacker_ref.player_id or 0),
                     None if entity.persistence_chase_attacker_ref is None
                         or not entity.persistence_chase_attacker_ref.is_monster
-                        else int(entity.persistence_chase_attacker_ref.monster_id),
+                        else int(entity.persistence_chase_attacker_ref.monster_id or 0),
                     None if entity.persistence_chase_started_at_tick is None
                         else entity.persistence_chase_started_at_tick.value,
                     None if entity.pursuit_state is None or entity.pursuit_state.failure_reason is None else entity.pursuit_state.failure_reason.value,
@@ -383,13 +388,13 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
 
     def _build_monster_from_row(self, row: sqlite3.Row) -> MonsterAggregate:
         template_repo = SqliteMonsterTemplateRepository.for_connection(self._conn)
-        template = template_repo.find_by_id(int(row["template_id"]))
+        template = template_repo.find_by_id(MonsterTemplateId(int(row["template_id"])))
         if template is None:
             raise RuntimeError(
                 "game_monsters が参照する template_id に対応する game_monster_templates が見つかりません"
             )
         loadout_repo = SqliteSkillLoadoutRepository.for_standalone_connection(self._conn)
-        loadout = loadout_repo.find_by_id(int(row["skill_loadout_id"]))
+        loadout = loadout_repo.find_by_id(SkillLoadoutId(int(row["skill_loadout_id"])))
         if loadout is None:
             raise RuntimeError(
                 "game_monsters が参照する skill_loadout_id に対応する game_skill_loadouts が見つかりません"

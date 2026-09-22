@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
@@ -143,7 +144,7 @@ def build_reply_aggregate(
     )
 
 
-def build_notification(row: tuple) -> Notification:
+def build_notification(row: tuple[Any, ...]) -> Notification:
     (
         notification_id,
         user_id,

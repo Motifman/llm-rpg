@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime
 from typing import Any
 
@@ -19,7 +20,7 @@ from ai_rpg_world.domain.world.value_object.location_area_id import LocationArea
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
-def build_shop(*, row: object, owner_rows: list[object], listing_rows: list[object]) -> ShopAggregate:
+def build_shop(*, row: sqlite3.Row, owner_rows: list[sqlite3.Row], listing_rows: list[sqlite3.Row]) -> ShopAggregate:
     listings = {
         ShopListingId(int(listing_row["listing_id"])): ShopListing(
             listing_id=ShopListingId(int(listing_row["listing_id"])),

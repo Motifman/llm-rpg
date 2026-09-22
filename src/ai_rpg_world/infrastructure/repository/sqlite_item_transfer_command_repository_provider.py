@@ -1,6 +1,6 @@
 """CommandScope専用のSQLiteアイテム受渡しrepository provider。"""
 
-from typing import cast
+from typing import Any, cast
 
 from ai_rpg_world.application.common.aggregate_event_sink import (
     CommandContextAggregateEventSink,
@@ -53,7 +53,7 @@ from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteU
 class SqliteItemTransferCommandRepositoryProvider:
     """同じSQLite transactionへ参加するgive_item用repository束。"""
 
-    def __init__(self, unit_of_work: SqliteUnitOfWork, context: CommandContext) -> None:
+    def __init__(self, unit_of_work: SqliteUnitOfWork, context: CommandContext[Any]) -> None:
         self._unit_of_work = unit_of_work
         self._context = context
         guard = self._require_active
@@ -141,7 +141,7 @@ class SqliteItemTransferCommandRepositoryProviderFactory:
 
     def create(
         self,
-        context: CommandContext,
+        context: CommandContext[Any],
         transaction: TransactionPort,
     ) -> SqliteItemTransferCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)

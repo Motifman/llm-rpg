@@ -1,6 +1,6 @@
 """インメモリSpotGraph移動command用repository provider。"""
 
-from typing import cast
+from typing import Any, cast
 
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
@@ -37,7 +37,7 @@ class InMemoryMovementCommandRepositoryProvider:
     def __init__(
         self,
         unit_of_work: InMemoryUnitOfWork,
-        context: CommandContext,
+        context: CommandContext[Any],
         *,
         spot_graph: ISpotGraphRepository,
     ) -> None:

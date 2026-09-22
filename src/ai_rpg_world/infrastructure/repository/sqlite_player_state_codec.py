@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from typing import Any
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -36,7 +38,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
-def build_player_inventory(*, row: object, inventory_slot_rows: list[object], equipment_slot_rows: list[object], reserved_item_rows: list[object]) -> PlayerInventoryAggregate:
+def build_player_inventory(*, row: sqlite3.Row, inventory_slot_rows: list[sqlite3.Row], equipment_slot_rows: list[sqlite3.Row], reserved_item_rows: list[sqlite3.Row]) -> PlayerInventoryAggregate:
     inventory_slots = {
         SlotId(int(slot_row["slot_id"])): (
             None if slot_row["item_instance_id"] is None else ItemInstanceId(int(slot_row["item_instance_id"]))
@@ -62,7 +64,7 @@ def build_player_inventory(*, row: object, inventory_slot_rows: list[object], eq
     )
 
 
-def build_player_status(*, row: object, path_rows: list[object], active_effect_rows: list[object], pursuit_target_row: object | None, pursuit_last_known_row: object | None, need_rows: list[object] | None = None) -> PlayerStatusAggregate:
+def build_player_status(*, row: sqlite3.Row, path_rows: list[sqlite3.Row], active_effect_rows: list[sqlite3.Row], pursuit_target_row: sqlite3.Row | None, pursuit_last_known_row: sqlite3.Row | None, need_rows: list[sqlite3.Row] | None = None) -> PlayerStatusAggregate:
     exp_table = ExpTable(
         base_exp=float(row["exp_table_base_exp"]),
         exponent=float(row["exp_table_exponent"]),
@@ -85,7 +87,12 @@ def build_player_status(*, row: object, path_rows: list[object], active_effect_r
                 coordinate=Coordinate(int(pursuit_last_known_row["x"]), int(pursuit_last_known_row["y"]), int(pursuit_last_known_row["z"])),
                 observed_at_tick=None if pursuit_last_known_row["observed_at_tick"] is None else WorldTick(int(pursuit_last_known_row["observed_at_tick"])),
             )
-        target_id = target_snapshot.target_id if target_snapshot is not None else last_known.target_id
+        # 外側の or が「どちらかは在る」を保証している
+        if target_snapshot is not None:
+            target_id = target_snapshot.target_id
+        else:
+            assert last_known is not None
+            target_id = last_known.target_id
         pursuit_state = PlayerPursuitState.from_parts(
             pursuit=PursuitState(
                 actor_id=WorldObjectId.create(int(row["player_id"])),
@@ -153,7 +160,7 @@ def build_player_status(*, row: object, path_rows: list[object], active_effect_r
     )
 
 
-def _state_from_row(row) -> dict:
+def _state_from_row(row: sqlite3.Row) -> dict[str, Any]:
     """row から state_json を読み出して dict に戻す。旧 schema との互換あり。"""
     try:
         keys = row.keys()
@@ -171,7 +178,7 @@ def _state_from_row(row) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def _build_needs(need_rows: list[object]) -> AgentNeeds:
+def _build_needs(need_rows: list[sqlite3.Row]) -> AgentNeeds:
     """SQLite の game_player_needs 行から AgentNeeds を復元する。"""
     if not need_rows:
         return AgentNeeds.default()
@@ -185,7 +192,7 @@ def _build_needs(need_rows: list[object]) -> AgentNeeds:
     return AgentNeeds(tuple(needs)) if needs else AgentNeeds.default()
 
 
-def _coord_or_none(x: object, y: object, z: object) -> Coordinate | None:
+def _coord_or_none(x: int | None, y: int | None, z: int | None) -> Coordinate | None:
     if x is None or y is None or z is None:
         return None
     return Coordinate(int(x), int(y), int(z))

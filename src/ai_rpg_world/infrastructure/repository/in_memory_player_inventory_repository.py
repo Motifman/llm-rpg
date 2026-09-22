@@ -1,8 +1,13 @@
 
+from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -11,7 +16,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepositoryBase):
     """プレイヤーインベントリリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
@@ -21,7 +26,8 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
     def find_by_id(self, player_id: PlayerId) -> PlayerInventoryAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: PlayerInventoryAggregate | None = self._clone(pending)
+            return cloned
         return self._inventories.get(player_id)
 
     def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerInventoryAggregate]:
@@ -29,16 +35,17 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
 
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
         cloned_inventory = self._clone(inventory)
-        def operation():
+        def operation() -> Any:
             self._inventories[cloned_inventory.player_id] = cloned_inventory
             return cloned_inventory
 
         self._register_aggregate(inventory)
         self._register_pending_if_uow(inventory.player_id, inventory)
-        return self._execute_operation(operation)
+        result_value: PlayerInventoryAggregate = self._execute_operation(operation)
+        return result_value
     
     def delete(self, player_id: PlayerId) -> bool:
-        def operation():
+        def operation() -> bool:
             if player_id in self._inventories:
                 del self._inventories[player_id]
                 return True

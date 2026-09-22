@@ -150,7 +150,7 @@ class SqliteReplyRepository(ReplyRepository):
         )
         return self._hydrate_reply(cur.fetchone())
 
-    def find_by_ids(self, entity_ids: list[int | ReplyId]) -> list[ReplyAggregate]:
+    def find_by_ids(self, entity_ids: list[ReplyId]) -> list[ReplyAggregate]:
         normalized = [ReplyId(entity_id) if isinstance(entity_id, int) else entity_id for entity_id in entity_ids]
         return [x for entity_id in normalized for x in [self.find_by_id(entity_id)] if x is not None]
 
@@ -330,7 +330,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(user_id), limit),
         )
 
-    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple]:
+    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple[Any, ...]]:
         cur = self._conn.execute(
             """
             SELECT r.reply_id, r.parent_post_id, p.post_id
@@ -402,15 +402,19 @@ class SqliteReplyRepository(ReplyRepository):
         for reply in replies:
             self._collect_thread_replies(reply.reply_id, current_depth + 1, max_depth, include_deleted, result)
 
-    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId, list[ReplyAggregate]]:
+    def find_thread_replies(
+        self, root_post_id: PostId, max_depth: int = 3
+    ) -> dict[PostId | ReplyId, list[ReplyAggregate]]:
         result: dict[PostId | ReplyId, list[ReplyAggregate]] = {}
         self._collect_thread_replies(root_post_id, 0, max_depth, False, result)
-        return result  # type: ignore[return-value]
+        return result
 
-    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId, list[ReplyAggregate]]:
+    def find_thread_replies_include_deleted(
+        self, root_post_id: PostId, max_depth: int = 3
+    ) -> dict[PostId | ReplyId, list[ReplyAggregate]]:
         result: dict[PostId | ReplyId, list[ReplyAggregate]] = {}
         self._collect_thread_replies(root_post_id, 0, max_depth, True, result)
-        return result  # type: ignore[return-value]
+        return result
 
     def find_replies_by_post_ids(self, post_ids: list[PostId]) -> dict[PostId, list[ReplyAggregate]]:
         return {post_id: self.find_by_post_id(post_id, limit=1000, offset=0) for post_id in post_ids}

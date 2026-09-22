@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterable
 from datetime import datetime
 
@@ -18,7 +19,7 @@ from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 
 def build_quest(
     *,
-    row: object,
+    row: sqlite3.Row,
     objective_rows: Iterable[tuple[str, int, int, int, int | None]],
     reward_rows: Iterable[tuple[int, int]],
     reserved_item_rows: Iterable[int],

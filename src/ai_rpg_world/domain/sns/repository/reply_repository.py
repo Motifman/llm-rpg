@@ -60,12 +60,12 @@ class ReplyRepository(Repository[ReplyAggregate, ReplyId]):
         pass
 
     @abstractmethod
-    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId, list[ReplyAggregate]]:
+    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId | ReplyId, list[ReplyAggregate]]:
         """ポストへのリプライツリーを取得（スレッド表示用）"""
         pass
 
     @abstractmethod
-    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId, list[ReplyAggregate]]:
+    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId | ReplyId, list[ReplyAggregate]]:
         """ポストへのリプライツリーを取得（スレッド表示用、削除済みを含む）"""
         pass
 

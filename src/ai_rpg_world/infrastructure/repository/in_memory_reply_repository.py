@@ -10,6 +10,9 @@ from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
 from ai_rpg_world.domain.sns.value_object.post_id import PostId
 from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -18,7 +21,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
     """ReplyAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
@@ -31,12 +34,12 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         self._data_store.next_reply_id += 1
         return reply_id
 
-    def save(self, reply: ReplyAggregate) -> None:
-        """リプライを保存"""
+    def save(self, reply: ReplyAggregate) -> ReplyAggregate:
+        """リプライを保存し、保存した集約を返す (SQLite 実装と同じ契約)。"""
         cloned_reply = self._clone(reply)
-        def operation():
+        def operation() -> ReplyAggregate:
             self._replies[cloned_reply.reply_id] = cloned_reply
-            return None
+            return cloned_reply
 
         self._register_aggregate(reply)
         self._register_pending_if_uow(reply.reply_id, reply)
@@ -46,7 +49,8 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """IDでリプライを取得"""
         pending = self._get_pending_aggregate(reply_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: ReplyAggregate | None = self._clone(pending)
+            return cloned
         return self._replies.get(reply_id)
 
     def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
@@ -112,7 +116,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """ポストへのリプライツリーを取得（スレッド表示用）"""
         result = {}
 
-        def collect_replies(parent_id: PostId | ReplyId, current_depth: int):
+        def collect_replies(parent_id: PostId | ReplyId, current_depth: int) -> None:
             if current_depth > max_depth:
                 return
 
@@ -135,7 +139,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         """ポストへのリプライツリーを取得（スレッド表示用、削除済みを含む）"""
         result = {}
 
-        def collect_replies(parent_id: PostId | ReplyId, current_depth: int):
+        def collect_replies(parent_id: PostId | ReplyId, current_depth: int) -> None:
             if current_depth > max_depth:
                 return
 
@@ -192,7 +196,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
     def bulk_delete_replies(self, reply_ids: list[ReplyId], user_id: UserId) -> int:
         """複数のリプライを一括削除（自分のリプライのみ）"""
-        def operation():
+        def operation() -> Any:
             deleted_count = 0
             for reply_id in reply_ids:
                 reply = self._replies.get(reply_id)
@@ -201,7 +205,8 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
                     deleted_count += 1
             return deleted_count
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def cleanup_deleted_replies(self, older_than_days: int = 30) -> int:
         """古い削除済みリプライをクリーンアップ"""
@@ -214,14 +219,18 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
         return len(deleted_replies)
 
-    def find_by_ids(self, entity_ids: list[int]) -> list[ReplyAggregate]:
-        """IDのリストでリプライを検索"""
-        reply_ids = [ReplyId(rid) for rid in entity_ids]
-        return [self._replies.get(rid) for rid in reply_ids if rid in self._replies and not self._replies[rid].deleted]
+    def find_by_ids(self, entity_ids: list[ReplyId]) -> list[ReplyAggregate]:
+        """IDのリストでリプライを検索 (SQLite 実装と同じく int も受ける)。"""
+        reply_ids = [ReplyId(rid) if isinstance(rid, int) else rid for rid in entity_ids]
+        return [
+            self._replies[rid]
+            for rid in reply_ids
+            if rid in self._replies and not self._replies[rid].deleted
+        ]
 
     def delete(self, entity_id: ReplyId) -> bool:
         """リプライを削除（論理削除）"""
-        def operation():
+        def operation() -> bool:
             if entity_id in self._replies:
                 reply = self._replies[entity_id]
                 if not reply.deleted:

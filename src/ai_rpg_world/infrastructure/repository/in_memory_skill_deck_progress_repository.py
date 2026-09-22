@@ -15,6 +15,7 @@ from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import (
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
     InMemoryRepositoryBase,
+    RepositoryUnitOfWorkPort,
 )
 
 
@@ -26,7 +27,7 @@ class InMemorySkillDeckProgressRepository(
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ) -> None:
         super().__init__(data_store, unit_of_work)
 
@@ -39,7 +40,8 @@ class InMemorySkillDeckProgressRepository(
     ) -> SkillDeckProgressAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: SkillDeckProgressAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._progresses.get(entity_id))
 
     def find_by_ids(

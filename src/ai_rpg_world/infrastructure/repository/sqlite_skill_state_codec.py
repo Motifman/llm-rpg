@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections import defaultdict
 from collections.abc import Iterable
 
@@ -24,12 +25,12 @@ from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 
 def build_skill_spec(
     *,
-    row: object,
+    row: sqlite3.Row,
     required_skill_rows: Iterable[int],
     slayer_race_rows: Iterable[str],
     hit_effect_rows: Iterable[tuple[str, int, float, float]],
-    segment_rows: Iterable[object],
-    coordinate_rows: Iterable[object],
+    segment_rows: Iterable[sqlite3.Row],
+    coordinate_rows: Iterable[sqlite3.Row],
 ) -> SkillSpec:
     coords_by_segment: dict[int, list[RelativeCoordinate]] = defaultdict(list)
     for coord_row in coordinate_rows:
@@ -94,13 +95,13 @@ def build_skill_spec(
 
 def build_skill_loadout(
     *,
-    row: object,
-    slot_rows: Iterable[object],
+    row: sqlite3.Row,
+    slot_rows: Iterable[sqlite3.Row],
     cooldown_rows: Iterable[tuple[int, int]],
     skill_specs_by_id: dict[int, SkillSpec],
 ) -> SkillLoadoutAggregate:
-    normal_slots = [None] * 5
-    awakened_slots = [None] * 5
+    normal_slots: list[SkillSpec | None] = [None] * 5
+    awakened_slots: list[SkillSpec | None] = [None] * 5
     for slot_row in slot_rows:
         skill = skill_specs_by_id.get(int(slot_row["skill_id"]))
         if skill is None:
@@ -132,10 +133,10 @@ def build_skill_loadout(
 
 def build_skill_deck_progress(
     *,
-    row: object,
+    row: sqlite3.Row,
     capacity_bonus_rows: Iterable[tuple[int, int]],
-    proposal_rows: Iterable[object],
-    required_skill_rows: Iterable[object],
+    proposal_rows: Iterable[sqlite3.Row],
+    required_skill_rows: Iterable[sqlite3.Row],
 ) -> SkillDeckProgressAggregate:
     required_by_proposal: dict[int, list[SkillId]] = defaultdict(list)
     for required_row in required_skill_rows:

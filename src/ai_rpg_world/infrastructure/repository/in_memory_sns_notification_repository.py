@@ -2,12 +2,16 @@
 InMemorySnsNotificationRepository - Notificationを使用するインメモリ実装
 """
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -16,7 +20,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepositoryBase):
     """Notificationを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
@@ -37,19 +41,21 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
     def save(self, notification: Notification) -> Notification:
         """通知を保存"""
         cloned_notification = self._clone(notification)
-        def operation():
+        def operation() -> Any:
             self._notifications[cloned_notification.notification_id] = cloned_notification
             return cloned_notification
 
         self._register_aggregate(notification)
         self._register_pending_if_uow(notification.notification_id, notification)
-        return self._execute_operation(operation)
+        result_value: Notification = self._execute_operation(operation)
+        return result_value
 
     def find_by_id(self, notification_id: NotificationId) -> Notification | None:
         """通知IDで通知を取得"""
         pending = self._get_pending_aggregate(notification_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: Notification | None = self._clone(pending)
+            return cloned
         return self._clone(self._notifications.get(notification_id))
 
     def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> list[Notification]:
@@ -74,7 +80,7 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
         if not notification:
             return
             
-        def operation():
+        def operation() -> None:
             target = self._notifications.get(notification_id)
             if target:
                 target.mark_as_read()
@@ -89,7 +95,7 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
         for n in unread_notifications:
             self._register_aggregate(n)
             
-        def operation():
+        def operation() -> None:
             for notification in unread_notifications:
                 notification.mark_as_read()
                     
@@ -97,7 +103,7 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
 
     def delete_expired_notifications(self, current_time: datetime) -> int:
         """期限切れ通知を削除"""
-        def operation():
+        def operation() -> Any:
             expired_ids = [
                 notification_id for notification_id, notification in self._notifications.items()
                 if notification.is_expired(current_time)
@@ -106,11 +112,12 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
                 del self._notifications[notification_id]
             return len(expired_ids)
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def delete_old_notifications(self, user_id: UserId, keep_count: int = 100) -> int:
         """古い通知を削除"""
-        def operation():
+        def operation() -> Any:
             user_notifications = [
                 (notification_id, notification) for notification_id, notification in self._notifications.items()
                 if notification.user_id == user_id and notification.expires_at is None
@@ -124,7 +131,8 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
                 return deleted_count
             return 0
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def get_unread_count(self, user_id: UserId) -> int:
         """未読通知数を取得"""
@@ -143,7 +151,7 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
 
     def delete(self, notification_id: NotificationId) -> bool:
         """通知を削除"""
-        def operation():
+        def operation() -> bool:
             if notification_id in self._notifications:
                 del self._notifications[notification_id]
                 return True

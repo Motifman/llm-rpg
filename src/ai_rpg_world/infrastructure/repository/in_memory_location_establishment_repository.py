@@ -2,6 +2,8 @@
 InMemoryLocationEstablishmentRepository - ロケーションスロットのインメモリリポジトリ
 """
 
+from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
@@ -12,6 +14,9 @@ from ai_rpg_world.domain.world.repository.location_establishment_repository impo
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -25,7 +30,7 @@ class InMemoryLocationEstablishmentRepository(
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 
@@ -40,7 +45,8 @@ class InMemoryLocationEstablishmentRepository(
     ) -> LocationEstablishmentAggregate | None:
         pending = self._get_pending_aggregate(slot_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: LocationEstablishmentAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._location_establishments.get(slot_id))
 
     def find_by_spot_and_location(
@@ -64,16 +70,17 @@ class InMemoryLocationEstablishmentRepository(
     def save(self, slot: LocationEstablishmentAggregate) -> LocationEstablishmentAggregate:
         cloned = self._clone(slot)
 
-        def operation():
+        def operation() -> Any:
             self._location_establishments[cloned.id] = cloned
             return cloned
 
         self._register_aggregate(slot)
         self._register_pending_if_uow(slot.id, slot)
-        return self._execute_operation(operation)
+        result_value: LocationEstablishmentAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, slot_id: LocationSlotId) -> bool:
-        def operation():
+        def operation() -> bool:
             if slot_id in self._location_establishments:
                 del self._location_establishments[slot_id]
                 return True

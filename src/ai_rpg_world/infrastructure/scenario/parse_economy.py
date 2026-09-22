@@ -158,8 +158,8 @@ def parse_merchants(
         )
 
     merchants: list[ScenarioMerchantDefinition] = []
-    seen_ids: set = set()
-    seen_names: set = set()
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
     for index, raw in enumerate(raw_block):
         if not isinstance(raw, dict):
             raise ScenarioLoadError(
@@ -261,7 +261,7 @@ def parse_merchant_price_list(
         )
 
     entries: list[ScenarioMerchantPriceEntry] = []
-    seen_item_specs: set = set()
+    seen_item_specs: set[str] = set()
     for index, raw in enumerate(raw_list):
         if not isinstance(raw, dict):
             raise ScenarioLoadError(
@@ -393,7 +393,7 @@ def parse_consume_effect( raw: Any, sid: str,
     parsed = [parse_single_consume_effect(e, sid) for e in entries]
     if len(parsed) == 1:
         return parsed[0]
-    return CompositeItemEffect(effects=tuple(parsed))
+    return CompositeItemEffect(effects=tuple(parsed))  # type: ignore[abstract]  # Issue #1380
 
 def parse_single_consume_effect( entry: dict[str, Any], sid: str,
 ) -> ItemEffect:
@@ -406,22 +406,22 @@ def parse_single_consume_effect( entry: dict[str, Any], sid: str,
     if not etype:
         raise ValueError(f"item '{sid}': consume_effect entry missing 'type'")
     if etype == "heal_hp":
-        return HealEffect(amount=int(entry["amount"]))
+        return HealEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
     if etype == "damage_hp":
-        return DamageHpEffect(amount=int(entry["amount"]))
+        return DamageHpEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
     if etype == "recover_mp":
-        return RecoverMpEffect(amount=int(entry["amount"]))
+        return RecoverMpEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
     if etype == "gold":
-        return GoldEffect(amount=int(entry["amount"]))
+        return GoldEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
     if etype == "exp":
-        return ExpEffect(amount=int(entry["amount"]))
+        return ExpEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
     if etype == "satisfy_need":
         need = entry.get("need_type") or entry.get("need_type_name")
         if not need:
             raise ValueError(
                 f"item '{sid}': satisfy_need requires 'need_type' (e.g. 'HUNGER')"
             )
-        return SatisfyNeedEffect(
+        return SatisfyNeedEffect(  # type: ignore[abstract]  # Issue #1380
             need_type_name=str(need), amount=int(entry["amount"]),
         )
     if etype == "revive":
@@ -432,7 +432,7 @@ def parse_single_consume_effect( entry: dict[str, Any], sid: str,
             raise ValueError(
                 f"item '{sid}': revive requires 'hp_rate' (e.g. 0.4)"
             )
-        return ReviveEffect(hp_rate=float(entry["hp_rate"]))
+        return ReviveEffect(hp_rate=float(entry["hp_rate"]))  # type: ignore[abstract]  # Issue #1380
     raise ValueError(
         f"item '{sid}': unknown consume_effect type '{etype}' "
         "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need / revive)"
@@ -766,7 +766,7 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
         # **配列を残すのは後方互換のためだけではない。** 数値や時刻の
         # ように、値に呼び名を付けようがない属性がある。
         values = body.get("values")
-        value_display_names: dict = {}
+        value_display_names: dict[str, str] = {}
         if isinstance(values, dict):
             if not all(
                 isinstance(k, str) and k and isinstance(v, str) and v

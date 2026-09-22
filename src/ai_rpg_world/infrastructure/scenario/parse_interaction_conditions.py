@@ -173,7 +173,8 @@ def parse_required_lighting( raw: dict[str, Any]) -> str | None:
         raise ScenarioLoadError(
             f"required_lighting must be one of {valid}, got {value!r}: {raw!r}"
         )
-    return value
+    result_value: str | None = value
+    return result_value
 
 _WEATHER_CONDITIONS = ("WEATHER_IS", "WEATHER_IS_NOT")
 
@@ -204,7 +205,8 @@ def parse_required_weather_type( raw: dict[str, Any]) -> str | None:
         raise ScenarioLoadError(
             f"required_weather_type must be one of {valid}, got {value!r}: {raw!r}"
         )
-    return value
+    result_value: str | None = value
+    return result_value
 
 def parse_required_spot_id( raw: dict[str, Any], mapper: ScenarioIdMapper
 ) -> SpotId | None:

@@ -2,7 +2,7 @@
 Unit of Work Factory Implementation - Unit of Workファクトリの具体実装
 """
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -56,7 +56,7 @@ class InMemoryUnitOfWorkFactory(UnitOfWorkFactory):
             event_publisher: 関連付けるイベントパブリッシャー（任意）
         """
         self._event_publisher = event_publisher
-        self._factory_function: callable | None = None
+        self._factory_function: Callable[[], InMemoryUnitOfWork] | None = None
 
     def create(self) -> UnitOfWork:
         """Unit of Workインスタンスを作成

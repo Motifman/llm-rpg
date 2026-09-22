@@ -13,7 +13,7 @@ _MAX_PUBLISHED_EVENTS = 10_000
 
 
 class InMemoryEventPublisher(EventPublisher[DomainEvent]):
-    def __init__(self):
+    def __init__(self) -> None:
         self._handlers: dict[type[DomainEvent], list[EventHandler[DomainEvent]]] = {}
         self._published_events: deque[DomainEvent] = deque(maxlen=_MAX_PUBLISHED_EVENTS)
 
@@ -28,7 +28,7 @@ class InMemoryEventPublisher(EventPublisher[DomainEvent]):
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
 
-    def publish(self, event: DomainEvent):
+    def publish(self, event: DomainEvent) -> None:
         # テスト用にイベントを記録
         self._published_events.append(event)
 
@@ -37,7 +37,7 @@ class InMemoryEventPublisher(EventPublisher[DomainEvent]):
         for handler in handlers:
             handler.handle(event)
 
-    def publish_all(self, events: list[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]) -> None:
         for event in events:
             self.publish(event)
 

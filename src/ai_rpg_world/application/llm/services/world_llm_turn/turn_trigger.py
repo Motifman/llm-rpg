@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 @dataclass
-class WorldLlmTurnTrigger:
+class WorldLlmTurnTrigger(ILlmTurnTrigger):
     """Queues LLM turns and runs them against the session runtime.
 
     ## 「turn」「ターン」という言葉について

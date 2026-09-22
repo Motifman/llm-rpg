@@ -50,4 +50,5 @@ class InMemoryDialogueTreeRepository(DialogueTreeRepository):
         data = self._trees.get(tree_id.value)
         if not data:
             return None
-        return data["nodes"].get(node_id.value)
+        result_value: DialogueNode | None = data["nodes"].get(node_id.value)
+        return result_value

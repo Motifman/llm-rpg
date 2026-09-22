@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
@@ -30,16 +32,16 @@ from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnu
 
 def build_monster_template(
     *,
-    row: object,
+    row: sqlite3.Row,
     skill_ids: list[int],
     phase_thresholds: list[float],
-    threat_races: list[str],
-    prey_races: list[str],
-    growth_stage_rows: list[object],
+    threat_races: list[Race],
+    prey_races: list[Race],
+    growth_stage_rows: list[sqlite3.Row],
     preferred_feed_item_spec_ids: list[int],
     respawn_preferred_weather: list[str],
     respawn_required_area_traits: list[str],
-    attack_status_effect_rows: list[object],
+    attack_status_effect_rows: list[sqlite3.Row],
 ) -> MonsterTemplate:
     respawn_condition = None
     if row["respawn_time_band"] is not None or respawn_preferred_weather or respawn_required_area_traits:
@@ -160,7 +162,7 @@ def build_monster_template(
     )
 
 
-def _optional_bool(row: object, key: str, *, default: bool) -> bool:
+def _optional_bool(row: sqlite3.Row, key: str, *, default: bool) -> bool:
     """row[key] が無い (旧スキーマ) なら default、あれば 0/1 を bool 化。"""
     try:
         value = row[key]
@@ -172,7 +174,7 @@ def _optional_bool(row: object, key: str, *, default: bool) -> bool:
 
 
 def _optional_temperature(
-    row: object, key: str, *, default: TemperatureEnum,
+    row: sqlite3.Row, key: str, *, default: TemperatureEnum,
 ) -> TemperatureEnum:
     """row[key] が無い (旧スキーマ) なら default、あれば TemperatureEnum 化。"""
     try:
@@ -184,7 +186,7 @@ def _optional_temperature(
     return TemperatureEnum(str(value))
 
 
-def _optional_int(row: object, key: str, *, default: int) -> int:
+def _optional_int(row: sqlite3.Row, key: str, *, default: int) -> int:
     """row[key] が無い (旧スキーマ) なら default、あれば int 化。"""
     try:
         value = row[key]

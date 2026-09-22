@@ -2,10 +2,15 @@
 InMemoryTradeRepository - 取引関連のインメモリリポジトリ
 """
 
+from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -14,7 +19,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
     """取引リポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
@@ -24,7 +29,8 @@ class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
     def find_by_id(self, trade_id: TradeId) -> TradeAggregate | None:
         pending = self._get_pending_aggregate(trade_id)
         if pending is not None:
-            return self._clone(pending)
+            cloned: TradeAggregate | None = self._clone(pending)
+            return cloned
         return self._clone(self._trades.get(trade_id))
 
     def find_by_ids(self, trade_ids: list[TradeId]) -> list[TradeAggregate]:
@@ -32,16 +38,17 @@ class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
 
     def save(self, trade: TradeAggregate) -> TradeAggregate:
         cloned_trade = self._clone(trade)
-        def operation():
+        def operation() -> Any:
             self._trades[cloned_trade.trade_id] = cloned_trade
             return cloned_trade
 
         self._register_aggregate(trade)
         self._register_pending_if_uow(trade.trade_id, trade)
-        return self._execute_operation(operation)
+        result_value: TradeAggregate = self._execute_operation(operation)
+        return result_value
     
     def delete(self, trade_id: TradeId) -> bool:
-        def operation():
+        def operation() -> bool:
             if trade_id in self._trades:
                 del self._trades[trade_id]
                 return True

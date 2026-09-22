@@ -176,7 +176,8 @@ class _WorldSpawnAllPlayersLlmResolver(ILLMPlayerResolver):
 def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
     """Return the string ID for *numeric_id*, falling back to str(numeric_id)."""
     try:
-        return mapper.get_str(namespace, numeric_id)
+        mapped: str = mapper.get_str(namespace, numeric_id)
+        return mapped
     except (ScenarioIdMappingError, KeyError):
         return str(numeric_id)
 
@@ -185,7 +186,7 @@ def _read_scenario_metadata(path: Path) -> dict[str, Any] | None:
     """Read only the metadata section from a scenario JSON without full parse."""
     try:
         with open(path, encoding="utf-8") as f:
-            raw = json.load(f)
+            raw: dict[str, Any] = json.load(f)
         return raw
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to read scenario %s: %s", path, exc)
@@ -441,6 +442,9 @@ class GameRuntimeManager:
         # 共有する (同じ observation buffer に書き込み、同じ turn trigger を
         # 呼ぶため)。
         appender = ObservationAppender(runtime._obs_buffer)
+        # 使えるキーが無い設定はここで落ちる。1 件目の判断まで進ませない。
+        runtime_config = runtime._runtime_config
+        assert runtime_config is not None
         # 注意: llm_wiring を構築する前に turn_scheduler を作る必要がある
         # ため、最初に空の wiring を作り、それから scheduler / emitter を
         # 組み立てて wiring に注入する流れにする。
@@ -448,11 +452,9 @@ class GameRuntimeManager:
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
-            llm_client=create_llm_client_from_config(runtime._runtime_config),
+            llm_client=create_llm_client_from_config(runtime_config),
             # 使えるキーが無い設定はここで落ちる。1 件目の判断まで進ませない。
-            typed_judgment_port=create_typed_judgment_port_from_config(
-                runtime._runtime_config
-            ),
+            typed_judgment_port=create_typed_judgment_port_from_config(runtime_config),
             llm_session_run_id=sid,
             llm_session_world_id=request.world_id,
         )

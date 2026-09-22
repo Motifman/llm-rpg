@@ -2,12 +2,16 @@
 InMemoryPostRepository - PostAggregateを使用するインメモリ実装
 """
 from datetime import datetime, timedelta
+from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 from ai_rpg_world.domain.sns.repository.post_repository import PostRepository
 from ai_rpg_world.domain.sns.value_object.post_id import PostId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -16,20 +20,21 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
     """PostAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
     def _posts(self) -> dict[PostId, PostAggregate]:
         return self._data_store.posts
 
-    def find_by_id(self, post_id: int) -> PostAggregate | None:
+    def find_by_id(self, post_id: PostId) -> PostAggregate | None:
         """ポストIDでポストを検索"""
         try:
             post_id_obj = PostId(post_id) if not isinstance(post_id, PostId) else post_id
             pending = self._get_pending_aggregate(post_id_obj)
             if pending is not None:
-                return self._clone(pending)
+                cloned: PostAggregate | None = self._clone(pending)
+                return cloned
             return self._posts.get(post_id_obj)
         except (ValueError, TypeError):
             return None
@@ -46,17 +51,18 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
     def save(self, post: PostAggregate) -> PostAggregate:
         """ポストを保存"""
         cloned_post = self._clone(post)
-        def operation():
+        def operation() -> Any:
             self._posts[cloned_post.post_id] = cloned_post
             return cloned_post
 
         self._register_aggregate(post)
         self._register_pending_if_uow(post.post_id, post)
-        return self._execute_operation(operation)
+        result_value: PostAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, post_id: PostId) -> bool:
         """ポストを削除"""
-        def operation():
+        def operation() -> bool:
             if post_id in self._posts:
                 del self._posts[post_id]
                 return True
@@ -198,7 +204,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
 
     def bulk_delete_posts(self, post_ids: list[PostId], user_id: UserId) -> int:
         """複数のポストを一括削除（自分のポストのみ）"""
-        def operation():
+        def operation() -> Any:
             deleted_count = 0
             for post_id in post_ids:
                 post = self._posts.get(post_id)
@@ -207,7 +213,8 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
                     deleted_count += 1
             return deleted_count
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def cleanup_deleted_posts(self, older_than_days: int = 30) -> int:
         """古い削除済みポストをクリーンアップ"""

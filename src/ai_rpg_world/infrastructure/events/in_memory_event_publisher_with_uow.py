@@ -2,6 +2,13 @@
 InMemoryEventPublisherWithUow - Unit of Workと統合されたインメモリイベントパブリッシャー
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import (
+        TransactionalScope,
+    )
+
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask, AsyncEventExecutor
 from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport
 from ai_rpg_world.domain.common.domain_event import DomainEvent
@@ -28,7 +35,8 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
 
     def __init__(
         self,
-        unit_of_work: InMemoryUnitOfWork,
+        # TransactionalScope も __getattr__ で同じ口を提供する
+        unit_of_work: "InMemoryUnitOfWork | TransactionalScope",
         async_transport: AsyncEventTransport | None = None,
         *,
         async_executor: AsyncEventExecutor | None = None,
@@ -41,14 +49,19 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         self._async_transport = async_transport
         self._async_executor = async_executor
 
-    def register_handler(self, event_type: type[DomainEvent], handler: EventHandler[DomainEvent], is_synchronous: bool = False):
+    def register_handler(
+        self,
+        event_type: type[DomainEvent],
+        handler: EventHandler[DomainEvent],
+        is_synchronous: bool = False,
+    ) -> None:
         """イベントハンドラーを登録"""
         target_dict = self._sync_handlers if is_synchronous else self._async_handlers
         if event_type not in target_dict:
             target_dict[event_type] = []
         target_dict[event_type].append(handler)
 
-    def publish(self, event: DomainEvent):
+    def publish(self, event: DomainEvent) -> None:
         """単一のイベントを発行"""
         # Unit of Workのトランザクション内でのみ発行可能
         if not self._unit_of_work.is_in_transaction():
@@ -57,7 +70,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         # 保留中のイベントに追加
         self._unit_of_work.add_events([event])
 
-    def publish_all(self, events: list[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]) -> None:
         """複数のイベントを発行"""
         # Unit of Workのトランザクション内でのみ発行可能
         if not self._unit_of_work.is_in_transaction():

@@ -12,13 +12,13 @@ from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository imp
 class InMemoryRecentTradeReadModelRepository(RecentTradeReadModelRepository):
     """RecentTradeReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._read_models: dict[ItemSpecId, RecentTradeReadModel] = {}
 
         # サンプルデータを設定
         self._setup_sample_data()
 
-    def _setup_sample_data(self):
+    def _setup_sample_data(self) -> None:
         """サンプルデータのセットアップ"""
         # 現在の時間を基準に過去の取引を作成
         base_time = datetime.now()

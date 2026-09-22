@@ -18,7 +18,7 @@ import os
 import re
 import time
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, TypeVar
 
 import litellm
 from litellm import AuthenticationError as LitellmAuthenticationError
@@ -297,6 +297,9 @@ def _load_dotenv_if_available() -> None:
         pass
 
 
+_Result = TypeVar("_Result")
+
+
 class LiteLLMClient(
     ILLMClient,
     IEpisodicChunkSubjectiveCompletionPort,
@@ -403,7 +406,7 @@ class LiteLLMClient(
 
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _call_with_wall_cap(self, call_fn: Callable[[], Any]) -> Any:
+    def _call_with_wall_cap(self, call_fn: Callable[[], _Result]) -> _Result:
         """``self._wall_cap_seconds`` を per-attempt wall-time hard cap として強制する。
 
         ``concurrent.futures.ThreadPoolExecutor.result(timeout=)`` で wall-time を
@@ -426,7 +429,7 @@ class LiteLLMClient(
         # litellm.Timeout を遅延 import (テストで mock しやすいように、
         # クラスレベルでなくここで取得する)
         try:
-            from litellm import Timeout as LitellmTimeout  # type: ignore
+            from litellm import Timeout as LitellmTimeout
         except ImportError:  # pragma: no cover
             LitellmTimeout = Exception  # type: ignore
 
@@ -459,7 +462,7 @@ class LiteLLMClient(
             # 実行中の 1 本には効かない)。
             ex.shutdown(wait=False)
 
-    def _call_with_selective_retry(self, call_fn):
+    def _call_with_selective_retry(self, call_fn: Callable[[], _Result]) -> _Result:
         """RateLimit / 一時 5xx のみ手動 backoff で retry し、それ以外は即 raise。
 
         各 attempt は ``_call_with_wall_cap`` で wall-time 上限を強制される。

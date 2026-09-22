@@ -16,7 +16,7 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 class CommandContextUnitOfWorkFacade:
     """repositoryが必要とする操作だけを公開し、イベントをcontextへ送る。"""
 
-    def __init__(self, unit_of_work: InMemoryUnitOfWork, context: CommandContext) -> None:
+    def __init__(self, unit_of_work: InMemoryUnitOfWork, context: CommandContext[Any]) -> None:
         self._unit_of_work = unit_of_work
         self._event_sink = CommandContextAggregateEventSink(
             context,
@@ -31,7 +31,7 @@ class CommandContextUnitOfWorkFacade:
     def is_in_transaction(self) -> bool:
         return self._unit_of_work.is_in_transaction()
 
-    def add_operation(self, operation: Callable[[], None]) -> None:
+    def add_operation(self, operation: Callable[[], object]) -> None:
         self._unit_of_work.add_operation(operation)
 
     def register_pending_aggregate(

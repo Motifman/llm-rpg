@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
-def build_loot_table(*, loot_table_id: int, name: str, entry_rows: list[object]) -> LootTableAggregate:
+def build_loot_table(*, loot_table_id: int, name: str, entry_rows: list[sqlite3.Row]) -> LootTableAggregate:
     return LootTableAggregate.create(
         loot_table_id=LootTableId(loot_table_id),
         name=name,

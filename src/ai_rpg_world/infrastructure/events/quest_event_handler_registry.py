@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     ConversationEndedQuestProgressHandler,
@@ -9,6 +10,8 @@ from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     MonsterDiedQuestProgressHandler,
     PlayerDownedQuestProgressHandler,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
+from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
@@ -47,7 +50,7 @@ class QuestEventHandlerRegistry:
         self._item_added_to_inventory_handler = item_added_to_inventory_handler
         self._conversation_ended_handler = conversation_ended_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         """全イベントハンドラを EventPublisher に登録（非同期）"""
         event_publisher.register_handler(
             MonsterDiedEvent,
@@ -85,12 +88,14 @@ class QuestEventHandlerRegistry:
             is_synchronous=False,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
-        class EventHandlerImpl:
-            def __init__(self, method):
+    def _create_event_handler(
+        self, handler_method: Callable[[Any], None]
+    ) -> "EventHandler[Any]":
+        class EventHandlerImpl(EventHandler[Any]):
+            def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method
 
-            def handle(self, event):
+            def handle(self, event: Any) -> None:
                 self._method(event)
 
         return EventHandlerImpl(handler_method)

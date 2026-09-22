@@ -122,9 +122,7 @@ mypy_path = "src"
 strict = true
 # まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
 follow_imports = "silent"
-# domain は全体。application は緑にできた文脈から 1 つずつ足す。
-# 残りの件数 (strict で計測): llm 338 / world_graph 188 / world 141 /
-# social 92
+# src 配下は全レイヤーが対象。
 files = [
     "src/ai_rpg_world/domain",
     "src/ai_rpg_world/application/being",
@@ -149,7 +147,15 @@ files = [
     "src/ai_rpg_world/application/world_graph",
     "src/ai_rpg_world/application/world_runtime",
     "src/ai_rpg_world/application/trace",
+    "src/ai_rpg_world/infrastructure",
+    "src/ai_rpg_world/presentation",
 ]
+
+# litellm は __all__ を持たないため、実在する例外クラスの import も
+# 「明示的に再輸出していない」として報告される。
+[[tool.mypy.overrides]]
+module = "litellm.*"
+implicit_reexport = true
 
 [tool.uv.sources]
 semantic-resolver = { git = "https://github.com/Motifman/semantic-resolver.git", rev = "f164e0973c0cb6aa59aaa75837107f2a962b4d08" }

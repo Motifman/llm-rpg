@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any
@@ -20,7 +21,7 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 
 
-def build_item_spec(*, row: object, effect_rows: Iterable[object]) -> ItemSpec:
+def build_item_spec(*, row: sqlite3.Row, effect_rows: Iterable[sqlite3.Row]) -> ItemSpec:
     rows = list(effect_rows)
     effect = _build_effect_tree(rows)
     equipment_type = row["equipment_type"]
@@ -108,28 +109,28 @@ def _non_empty_text(value: object) -> str | None:
     return text or None
 
 
-def _build_effect_tree(rows: list[object]) -> ItemEffect | None:
+def _build_effect_tree(rows: list[sqlite3.Row]) -> ItemEffect | None:
     if not rows:
         return None
-    by_parent: dict[int | None, list[object]] = defaultdict(list)
+    by_parent: dict[int | None, list[sqlite3.Row]] = defaultdict(list)
     for row in rows:
         by_parent[row["parent_effect_id"]].append(row)
     for siblings in by_parent.values():
         siblings.sort(key=lambda row: int(row["effect_order"]))
 
-    def build(row: object) -> ItemEffect:
+    def build(row: sqlite3.Row) -> ItemEffect:
         kind = str(row["effect_kind"])
         amount = row["amount"]
         if kind == "composite":
-            return CompositeItemEffect(tuple(build(child) for child in by_parent.get(int(row["effect_id"]), [])))
+            return CompositeItemEffect(tuple(build(child) for child in by_parent.get(int(row["effect_id"]), [])))  # type: ignore[abstract]  # Issue #1380
         if kind == "heal":
-            return HealEffect(int(amount))
+            return HealEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
         if kind == "recover_mp":
-            return RecoverMpEffect(int(amount))
+            return RecoverMpEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
         if kind == "gold":
-            return GoldEffect(int(amount))
+            return GoldEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
         if kind == "exp":
-            return ExpEffect(int(amount))
+            return ExpEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
         raise ValueError(f"unknown item effect kind: {kind}")
 
     roots = by_parent.get(None, [])
@@ -170,7 +171,7 @@ def _payload_to_effect(payload: dict[str, Any] | None) -> ItemEffect | None:
     kind = str(payload["kind"])
     if kind == "composite":
         raw_children = payload.get("effects", [])
-        return CompositeItemEffect(
+        return CompositeItemEffect(  # type: ignore[abstract]  # Issue #1380
             tuple(
                 child
                 for child in (_payload_to_effect(raw_child) for raw_child in raw_children)
@@ -179,13 +180,13 @@ def _payload_to_effect(payload: dict[str, Any] | None) -> ItemEffect | None:
         )
     amount = int(payload["amount"])
     if kind == "heal":
-        return HealEffect(amount)
+        return HealEffect(amount)  # type: ignore[abstract]  # Issue #1380
     if kind == "recover_mp":
-        return RecoverMpEffect(amount)
+        return RecoverMpEffect(amount)  # type: ignore[abstract]  # Issue #1380
     if kind == "gold":
-        return GoldEffect(amount)
+        return GoldEffect(amount)  # type: ignore[abstract]  # Issue #1380
     if kind == "exp":
-        return ExpEffect(amount)
+        return ExpEffect(amount)  # type: ignore[abstract]  # Issue #1380
     raise ValueError(f"unknown consume_effect kind: {kind}")
 
 

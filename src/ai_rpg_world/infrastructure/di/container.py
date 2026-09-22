@@ -67,6 +67,26 @@ from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import I
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+    from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
+    from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
+        SqlitePlayerInventoryWriteRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_player_profile_write_repository import (
+        SqlitePlayerProfileWriteRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repository import (
+        SqlitePlayerStatusWriteRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import SqliteTradeAggregateRepository
+
+
+TradeCommandRepositories = tuple[
+    "SqliteTradeAggregateRepository",
+    "SqlitePlayerInventoryWriteRepository",
+    "SqlitePlayerStatusWriteRepository",
+    "SqlitePlayerProfileWriteRepository",
+    "SqliteItemWriteRepository",
+]
 
 
 class DependencyInjectionContainer:
@@ -76,7 +96,7 @@ class DependencyInjectionContainer:
     SNS 用リポジトリは共有 `InMemoryDataStore` と In-Memory UoW に紐づく。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """初期化"""
         self._data_store = InMemoryDataStore()
         self._unit_of_work_factory: UnitOfWorkFactory | None = None
@@ -97,7 +117,7 @@ class DependencyInjectionContainer:
             self._unit_of_work_factory._event_publisher = self._event_publisher
         return self._unit_of_work_factory
 
-    def _init_uow_and_publisher(self):
+    def _init_uow_and_publisher(self) -> None:
         """UOWとパブリッシャーの初期化"""
         if self._unit_of_work is None:
             self._unit_of_work, self._event_publisher = InMemoryUnitOfWork.create_with_event_publisher()
@@ -105,6 +125,9 @@ class DependencyInjectionContainer:
     def get_unit_of_work_and_publisher(self) -> tuple[InMemoryUnitOfWork, "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーのペアを取得"""
         self.get_unit_of_work_factory()
+        # get_unit_of_work_factory が _init_uow_and_publisher を通す
+        assert self._unit_of_work is not None
+        assert self._event_publisher is not None
         return self._unit_of_work, self._event_publisher
 
     def get_data_store(self) -> InMemoryDataStore:
@@ -234,7 +257,7 @@ class SqliteGameDependencyInjectionContainer:
         self._skill: SkillSqliteRepositories | None = None
         self._conversation: ConversationSqliteRepositories | None = None
         self._social: SocialSqliteRepositories | None = None
-        self._trade_command_repositories: tuple | None = None
+        self._trade_command_repositories: TradeCommandRepositories | None = None
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._connection is None:
@@ -298,7 +321,7 @@ class SqliteGameDependencyInjectionContainer:
             self._social = attach_social_sqlite_repositories(self._get_connection())
         return self._social
 
-    def get_trade_command_repositories(self) -> tuple:
+    def get_trade_command_repositories(self) -> TradeCommandRepositories:
         if self._trade_command_repositories is None:
             self._trade_command_repositories = attach_trade_command_sqlite_repositories(
                 self._get_connection()

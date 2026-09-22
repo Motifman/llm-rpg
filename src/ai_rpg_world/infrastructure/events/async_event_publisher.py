@@ -5,7 +5,7 @@ from ai_rpg_world.domain.common.event_publisher import EventPublisher
 
 
 class AsyncEventPublisher(EventPublisher[DomainEvent]):
-    def __init__(self):
+    def __init__(self) -> None:
         self._handlers: dict[type[DomainEvent], list[EventHandler[DomainEvent]]] = {}
 
     def register_handler(
@@ -19,13 +19,13 @@ class AsyncEventPublisher(EventPublisher[DomainEvent]):
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
 
-    def publish(self, event: DomainEvent):
+    def publish(self, event: DomainEvent) -> None:
         event_type = type(event)
         handlers = self._handlers.get(event_type, [])
         for handler in handlers:
             handler.handle(event)
 
-    def publish_all(self, events: list[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]) -> None:
         for event in events:
             self.publish(event)
 

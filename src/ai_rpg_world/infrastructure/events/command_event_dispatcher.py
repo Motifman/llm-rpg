@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.application.common.event_delivery import (
@@ -54,7 +54,13 @@ class CommandEventDispatcher:
     ) -> None:
         """失敗時にcommand全体を戻す必須handlerを登録する。"""
         self._validate_registration(event_type, handler)
-        self._before_commit.append(_BeforeCommitRegistration(event_type, handler))
+        # 保持は具体型で行う。登録時に event_type と handler の対応は
+        # _validate_registration が確かめている。
+        self._before_commit.append(
+            _BeforeCommitRegistration(
+                event_type, cast("RequiredBeforeCommitHandler", handler)
+            )
+        )
 
     def register_after_commit(
         self,
@@ -71,10 +77,12 @@ class CommandEventDispatcher:
         if not isinstance(guarantee, DeliveryGuarantee):
             raise TypeError("guaranteeはDeliveryGuaranteeである必要があります")
         self._after_commit.append(
-            _AfterCommitRegistration(event_type, handler, channel, guarantee)
+            _AfterCommitRegistration(
+                event_type, cast("AfterCommitHandler", handler), channel, guarantee
+            )
         )
 
-    def dispatch(self, event: DomainEvent, context: CommandContext) -> None:
+    def dispatch(self, event: DomainEvent, context: CommandContext[Any]) -> None:
         """commit前必須handlerだけを登録順に実行し、例外を伝播する。"""
         for registration in self._before_commit:
             if isinstance(event, registration.event_type):

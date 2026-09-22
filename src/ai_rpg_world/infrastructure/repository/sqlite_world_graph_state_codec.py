@@ -321,7 +321,7 @@ def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
 
 
 def _passage_to_dict(passage: Passage) -> dict[str, Any]:
-    payload = {
+    payload: dict[str, Any] = {
         "kind": passage.kind.value,
         "state": passage.state,
         "traversable": passage.traversable,
@@ -467,7 +467,7 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
 
 
 def _state_display_rule_to_dict(rule: StateDisplayRule) -> dict[str, Any]:
-    out = {"key": rule.key, "text": rule.text}
+    out: dict[str, Any] = {"key": rule.key, "text": rule.text}
     if rule.within_ticks is not None:
         out["within_ticks"] = rule.within_ticks
     elif rule.at_least is not None:

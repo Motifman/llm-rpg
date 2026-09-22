@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -20,6 +21,7 @@ from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
@@ -36,13 +38,13 @@ logger = logging.getLogger(__name__)
 
 def build_monster(
     *,
-    row: object,
-    template: object,
+    row: sqlite3.Row,
+    template: MonsterTemplate,
     skill_loadout: SkillLoadoutAggregate,
-    active_effect_rows: list[object],
-    feed_memory_rows: list[object],
-    pursuit_target_row: object | None,
-    pursuit_last_known_row: object | None,
+    active_effect_rows: list[sqlite3.Row],
+    feed_memory_rows: list[sqlite3.Row],
+    pursuit_target_row: sqlite3.Row | None,
+    pursuit_last_known_row: sqlite3.Row | None,
 ) -> MonsterAggregate:
     behavior_state = MonsterBehaviorState.from_parts(
         state=BehaviorStateEnum(str(row["behavior_state"])),
@@ -123,7 +125,7 @@ def build_monster(
     return monster
 
 
-def _optional_spot_id(row: object, key: str) -> SpotId | None:
+def _optional_spot_id(row: sqlite3.Row, key: str) -> SpotId | None:
     """row[key] が NULL なら None、そうでなければ SpotId を作る。
 
     migration v24 で追加された行 (behavior_last_observed_target_spot_id 等)
@@ -139,7 +141,7 @@ def _optional_spot_id(row: object, key: str) -> SpotId | None:
     return SpotId(int(value))
 
 
-def _optional_tick(row: object, key: str) -> WorldTick | None:
+def _optional_tick(row: sqlite3.Row, key: str) -> WorldTick | None:
     """row[key] が NULL なら None、そうでなければ WorldTick を作る。"""
     try:
         value = row[key]
@@ -150,7 +152,7 @@ def _optional_tick(row: object, key: str) -> WorldTick | None:
     return WorldTick(int(value))
 
 
-def _decode_attacker_ref(row: object) -> AttackerRef | None:
+def _decode_attacker_ref(row: sqlite3.Row) -> AttackerRef | None:
     """`behavior_chase_attacker_ref_kind` + 該当 ID から AttackerRef を復元。
 
     kind=NULL なら None。kind='player' なら player_id 側、'monster' なら
@@ -194,7 +196,9 @@ def _decode_attacker_ref(row: object) -> AttackerRef | None:
     return AttackerRef.of_monster(MonsterId(int(monster_id_value)))
 
 
-def _coordinate_or_none(x: object, y: object, z: object) -> Coordinate | None:
+def _coordinate_or_none(
+    x: int | None, y: int | None, z: int | None
+) -> Coordinate | None:
     if x is None or y is None or z is None:
         return None
     return Coordinate(int(x), int(y), int(z))
@@ -204,8 +208,8 @@ def _build_pursuit_state(
     *,
     world_object_id: int,
     failure_reason: object,
-    pursuit_target_row: object | None,
-    pursuit_last_known_row: object | None,
+    pursuit_target_row: sqlite3.Row | None,
+    pursuit_last_known_row: sqlite3.Row | None,
 ) -> MonsterPursuitState:
     target_snapshot = None
     if pursuit_target_row is not None:
@@ -236,7 +240,12 @@ def _build_pursuit_state(
         )
     if target_snapshot is None and last_known is None:
         return MonsterPursuitState()
-    target_id = target_snapshot.target_id if target_snapshot is not None else last_known.target_id
+    if target_snapshot is not None:
+        target_id = target_snapshot.target_id
+    else:
+        # 直前の早期 return が「どちらかは在る」を保証している
+        assert last_known is not None
+        target_id = last_known.target_id
     return MonsterPursuitState(
         pursuit=PursuitState(
             actor_id=WorldObjectId(world_object_id),

@@ -4,7 +4,7 @@ Unit of Workとの統合ロジックを提供します。
 """
 import copy
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
@@ -12,10 +12,34 @@ from .in_memory_data_store import InMemoryDataStore
 
 T = TypeVar('T')
 
+_Result = TypeVar("_Result")
+
+
+class RepositoryUnitOfWorkPort(Protocol):
+    """InMemory リポジトリが実際に呼ぶぶんだけの口。
+
+    ``UnitOfWork`` 全体は要らない。command scope の facade のように、
+    トランザクション制御を持たず記録だけを担う実装も受け取れるようにする。
+    """
+
+    def is_in_transaction(self) -> bool: ...
+
+    # 戻り値は捨てられるので、操作が何を返しても受け取れる
+    def add_operation(self, operation: Callable[[], object]) -> None: ...
+
+    def add_events_from_aggregate(self, aggregate: Any) -> None: ...
+
+    def register_pending_aggregate(
+        self, repo_key: str, entity_id: Any, aggregate: Any
+    ) -> None: ...
+
+    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Any | None: ...
+
+
 class InMemoryRepositoryBase:
     """インメモリリポジトリの共通基底クラス"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         """初期化
         
         Args:
@@ -50,14 +74,15 @@ class InMemoryRepositoryBase:
         非対応) はそのまま複製する。
         """
         if obj is None:
-            return None
+            # 呼び出し側が None を渡しうるので素通しする
+            return obj
         cloned = copy.deepcopy(obj)
         clear_events = getattr(cloned, "clear_events", None)
         if callable(clear_events):
             clear_events()
         return cloned
 
-    def _execute_operation(self, operation: Callable[[], Any]) -> Any:
+    def _execute_operation(self, operation: Callable[[], _Result]) -> _Result:
         """操作を実行またはUOWに登録
         
         Args:
@@ -70,8 +95,10 @@ class InMemoryRepositoryBase:
             # TODO: InMemoryUnitOfWorkに直接依存せずにProtocolで解決したいが
             # 現状はInMemoryUnitOfWorkのadd_operationメソッドが必要
             if hasattr(self._unit_of_work, 'add_operation'):
+                # UoW に積むので、この場では結果を返せない。呼び出し側は
+                # トランザクション中の戻り値を使わない契約になっている。
                 self._unit_of_work.add_operation(operation)
-                return None
+                return cast("_Result", None)
             
         # トランザクション外、またはUOWが指定されていない場合は即時実行
         return operation()

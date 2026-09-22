@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterable
 
 from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
@@ -9,7 +10,7 @@ from ai_rpg_world.domain.conversation.value_object.dialogue_node import Dialogue
 
 def build_dialogue_node(
     *,
-    row: object,
+    row: sqlite3.Row,
     choice_rows: Iterable[tuple[str, int]],
     reward_item_rows: Iterable[tuple[int, int]],
     unlock_rows: Iterable[int],

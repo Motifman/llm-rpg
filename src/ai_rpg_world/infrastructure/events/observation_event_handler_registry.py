@@ -4,6 +4,7 @@ from ai_rpg_world.application.observation.handlers.observation_event_handler imp
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxHitRecordedEvent,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
@@ -228,7 +229,7 @@ class ObservationEventHandlerRegistry:
     def __init__(self, observation_handler: ObservationEventHandler) -> None:
         self._handler = observation_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         """全観測対象イベント型に対して同一ハンドラを非同期で登録する"""
         for event_type in _OBSERVED_EVENT_TYPES:
             event_publisher.register_handler(

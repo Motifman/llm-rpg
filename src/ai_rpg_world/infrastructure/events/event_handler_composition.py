@@ -5,6 +5,7 @@
 
 from typing import Any, Protocol
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 
@@ -14,7 +15,7 @@ from .event_handler_profile import EventHandlerProfile
 class EventHandlerRegistryProtocol(Protocol):
     """register_handlers を持つオブジェクトのプロトコル（各 *EventHandlerRegistry が満たす）"""
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         ...
 
 
@@ -57,7 +58,7 @@ class EventHandlerComposition:
 
     def register_for_profile(
         self,
-        event_publisher: EventPublisher,
+        event_publisher: EventPublisher[DomainEvent],
         profile: EventHandlerProfile,
     ) -> None:
         """
@@ -76,7 +77,7 @@ class EventHandlerComposition:
         else:
             raise ValueError(f"Unknown profile: {profile}")
 
-    def _register_movement_handlers(self, event_publisher: EventPublisher) -> None:
+    def _register_movement_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         if self._gateway_handler is not None:
             event_publisher.register_handler(
                 GatewayTriggeredEvent,
@@ -86,13 +87,13 @@ class EventHandlerComposition:
         if self._map_interaction_registry is not None:
             self._map_interaction_registry.register_handlers(event_publisher)
 
-    def _register_combat_handlers(self, event_publisher: EventPublisher) -> None:
+    def _register_combat_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         if self._combat_registry is not None:
             self._combat_registry.register_handlers(event_publisher)
         if self._monster_registry is not None:
             self._monster_registry.register_handlers(event_publisher)
 
-    def _register_full_handlers(self, event_publisher: EventPublisher) -> None:
+    def _register_full_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         if self._quest_registry is not None:
             self._quest_registry.register_handlers(event_publisher)
         if self._shop_registry is not None:

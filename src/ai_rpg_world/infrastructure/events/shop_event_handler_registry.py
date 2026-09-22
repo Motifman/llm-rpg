@@ -1,7 +1,10 @@
 """ショップイベントハンドラの登録"""
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.shop.handlers.shop_event_handler import ShopEventHandler
+from ai_rpg_world.domain.common.domain_event import DomainEvent
+from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.shop.event.shop_event import (
     ShopCreatedEvent,
@@ -20,7 +23,7 @@ class ShopEventHandlerRegistry:
     def __init__(self, shop_event_handler: ShopEventHandler):
         self._shop_event_handler = shop_event_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         """全イベントハンドラをEventPublisherに登録"""
         event_publisher.register_handler(
             ShopCreatedEvent,
@@ -45,13 +48,15 @@ class ShopEventHandlerRegistry:
             is_synchronous=False,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
+    def _create_event_handler(
+        self, handler_method: Callable[[Any], None]
+    ) -> "EventHandler[Any]":
         """イベントハンドラオブジェクトを作成"""
-        class EventHandlerImpl:
-            def __init__(self, method):
+        class EventHandlerImpl(EventHandler[Any]):
+            def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method
 
-            def handle(self, event):
+            def handle(self, event: Any) -> None:
                 self._method(event)
 
         return EventHandlerImpl(handler_method)
