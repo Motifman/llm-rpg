@@ -10,11 +10,16 @@ from ai_rpg_world.domain.world.value_object.facing import Facing
 
 
 class ToolArgumentResolutionException(Exception):
-    """UI ラベル引数を解決できないときの例外。"""
+    """UI ラベル引数を解決できないときの例外。
+
+    ``judgment`` は、名前を意味で選び直す判断を問うたのに採らなかったときの
+    記録。失敗として返しつつ trace に残すために運ぶ。問うていなければ None。
+    """
 
     def __init__(self, message: str, error_code: str):
         super().__init__(message)
         self.error_code = error_code
+        self.judgment: dict[str, Any] | None = None
 
 
 _Target = TypeVar("_Target", bound=ToolRuntimeTargetDto)
