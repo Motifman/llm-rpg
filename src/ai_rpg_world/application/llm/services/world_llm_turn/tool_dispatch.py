@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     is_reschedulable_error_code,
     should_reschedule_for_next_tick,
 )
+from ai_rpg_world.application.llm.remediation_mapping import DEFAULT_REMEDIATION_BY_ERROR_CODE
 from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (
     QUESTION_NAME as ACTION_NAME_RESCUE_QUESTION,
 )
@@ -629,12 +630,15 @@ def build_travel_to_invalid_label_failure(
     label = str(arguments.get("destination_label", ""))
     valid_destinations = list_destination_labels(targets)
     error_code = getattr(exc, "error_code", "INVALID_DESTINATION_LABEL")
-    if error_code == "INVALID_DESTINATION_KIND":
+    if error_code in ("INVALID_DESTINATION_KIND", "DESTINATION_NOT_ADJACENT"):
         return LlmCommandResultDto(
             success=False,
             message=str(exc),
             error_code=error_code,
-            remediation=resolver_failure_remediation(TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, error_code),
+            remediation=(
+                DEFAULT_REMEDIATION_BY_ERROR_CODE.get(error_code)
+                or resolver_failure_remediation(TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, error_code)
+            ),
             should_reschedule=is_reschedulable_error_code(error_code),
         )
     return LlmCommandResultDto(

@@ -1137,6 +1137,10 @@ class SpotGraphCurrentStateBuilder:
             ))
             status = "通行可" if traversable else "通行不可（音は届く可能性あり）"
             connection_lines.append(f"- {conn.name} → {dest_spot.name}（{status}）")
+        nearby_names = {node.name} | {c.destination_spot_name for c in connections}
+        distant_spot_names = tuple(
+            other.name for other in graph.iter_spot_nodes() if other.name not in nearby_names
+        )
 
         distant_view_result = self._build_distant_view_result(
             graph=graph,
@@ -1604,6 +1608,7 @@ class SpotGraphCurrentStateBuilder:
             connections=tuple(connections),
             objects=tuple(objects),
             dark_hidden_object_names=tuple(dark_hidden_object_names),
+            distant_spot_names=distant_spot_names,
             sub_locations=tuple(sub_locations),
             atmosphere=atmosphere,
             weather=weather,

@@ -589,6 +589,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             tool_runtime_context=ToolRuntimeContextDto(
                 targets=collector.get_targets(),
                 dark_hidden_object_names=snap.dark_hidden_object_names,
+                distant_spot_names=snap.distant_spot_names,
                 current_spot_id=snap.current_spot_id,
                 current_sub_location_id=_current_sub_location_id_from_snapshot(snap),
             ),

@@ -15,6 +15,8 @@ _RESCHEDULE_ERROR_CODES = frozenset({
     "LLM_API_CALL_FAILED",    # 一時的 API 失敗
     "LLM_RATE_LIMIT",         # レート制限
     "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
+    # 隣接していない場所は、失敗文に並ぶ隣の場所から即座に選び直せる。
+    "DESTINATION_NOT_ADJACENT",
     # 前提不足は失敗理由に必要品・状態が出るため、別の行動へ即座に切り替えられる。
     "INTERACTION_PRECONDITION_FAILED",
     # 対象名の未解決は移動先名の未解決と同質で、現在の候補一覧から選び直せる。
@@ -635,6 +637,9 @@ class ToolRuntimeContextDto:
     # resolver の候補にはせず、LLM が名前を指定した場合の失敗理由を
     # 「不存在」から「暗くて見えない」へ正すためだけに使う。
     dark_hidden_object_names: tuple[str, ...] = ()
+    # この世界に在るが隣接していない場所の名前。行き先の候補にはせず、書かれた
+    # ときの失敗理由を「見つからない」から「隣接していない」へ正すためだけに使う。
+    distant_spot_names: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.targets, dict):
@@ -648,6 +653,10 @@ class ToolRuntimeContextDto:
             raise TypeError("dark_hidden_object_names must be tuple")
         if not all(isinstance(name, str) for name in self.dark_hidden_object_names):
             raise TypeError("dark_hidden_object_names must contain only str")
+        if not isinstance(self.distant_spot_names, tuple):
+            raise TypeError("distant_spot_names must be tuple")
+        if not all(isinstance(name, str) for name in self.distant_spot_names):
+            raise TypeError("distant_spot_names must contain only str")
         for name, value in (
             ("current_x", self.current_x),
             ("current_y", self.current_y),

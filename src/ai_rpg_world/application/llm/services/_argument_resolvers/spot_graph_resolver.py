@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup import (
+    NotFound,
     TargetIndex,
     ToolIsExposed,
     candidate_names,
@@ -271,6 +272,35 @@ def resolve_destination_target(
             "INVALID_DESTINATION_KIND",
         )
     return target
+
+
+DESTINATION_NOT_ADJACENT = "DESTINATION_NOT_ADJACENT"
+
+
+def _reject_distant_spot(label: Any, runtime_context: ToolRuntimeContextDto) -> None:
+    """隣接していない既知の場所を行き先に書いたら、その理由で失敗させる。
+
+    travel_to の失敗 51 件 (83 run) のほぼ全部がこの型だった。「見つかりません」と
+    返すと当人はその部屋が無いと誤解し、意味で選び直す口 (#229) に渡すと途中の
+    部屋へ寄せる余地が生まれる。決定的に分かるので、どちらより先に決める。
+    経路は教えない。行ける場所を並べるだけにして、地図は歩いて知る。
+    """
+    if not isinstance(label, str) or not label.strip():
+        return
+    distant = getattr(runtime_context, "distant_spot_names", ()) or ()
+    if not distant:
+        return
+    index = TargetIndex.from_context(runtime_context)
+    if not isinstance(index.lookup(label, accept_kinds=("spot_graph_destination",)), NotFound):
+        return
+    written = next((form for form in label_forms(label) if form in distant), None)
+    if written is None:
+        return
+    names = candidate_names(index.of_kinds(("spot_graph_destination",)))
+    raise ToolArgumentResolutionException(
+        f"「{written}」はここと隣接していません。{format_candidates('接続先', names)}",
+        DESTINATION_NOT_ADJACENT,
+    )
 
 
 def resolve_object_target(
@@ -1488,6 +1518,7 @@ class SpotGraphArgumentResolver:
         runtime_context: ToolRuntimeContextDto,
     ) -> dict[str, Any]:
         label = args.get("destination_label")
+        _reject_distant_spot(label, runtime_context)
         judgments: list[dict[str, Any]] = []
         target = self._resolve_named(
             label,
