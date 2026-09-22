@@ -1,6 +1,9 @@
 
 import pytest
 
+from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
+    UserNotFoundException,
+)
 from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 from ai_rpg_world.domain.sns.value_object import UserId
 
@@ -180,3 +183,16 @@ class _TestUserRepositoryInterface:
         assert len(users) == 6
         user_ids = [user.user_id for user in users]
         assert set(user_ids) == {UserId(1), UserId(2), UserId(3), UserId(4), UserId(5), UserId(6)}
+
+    def test_update_profile_updates_bio_and_display_name(self, repository):
+        """既存ユーザーに update_profile を呼ぶと bio と display_name が更新され、更新後の集約が返る。"""
+        updated_user = repository.update_profile(UserId(1), "新しい自己紹介", "新勇者")
+
+        profile_info = updated_user.get_user_profile_info()
+        assert profile_info["bio"] == "新しい自己紹介"
+        assert profile_info["display_name"] == "新勇者"
+
+    def test_update_profile_raises_when_user_does_not_exist(self, repository):
+        """存在しないユーザーに update_profile を呼ぶと UserNotFoundException を投げる。"""
+        with pytest.raises(UserNotFoundException):
+            repository.update_profile(UserId(999), "テスト", "テストユーザー")

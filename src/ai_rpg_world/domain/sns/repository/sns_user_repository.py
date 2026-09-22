@@ -75,7 +75,10 @@ class UserRepository(Repository[UserAggregate, UserId]):
 
     @abstractmethod
     def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate:
-        """ユーザープロフィールを更新"""
+        """ユーザープロフィールを更新
+
+        対象ユーザーが存在しないときは UserNotFoundException を投げる。
+        """
         pass
 
     @abstractmethod
