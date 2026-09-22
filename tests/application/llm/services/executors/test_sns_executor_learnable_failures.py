@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.executors.sns_executor import (
     SnsToolExecutor,
 )
@@ -47,39 +48,39 @@ def _assert_learnable(result, expected_error_code: str) -> None:
 
 
 class TestResolveRefStaleness:
-    """``_resolve_*_ref_from_args`` の stale ref 失敗。"""
+    """``_resolve_*_from_args`` が古い ref に対して learnable な失敗 DTO を返すこと。"""
 
     def test_post_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        _post_id, err = executor._resolve_post_id_from_args(
+        result = executor._resolve_post_id_from_args(
             player_id=1, args={"post_ref": "stale-1"}
         )
-        assert err is not None
-        _assert_learnable(err, "SNS_REF_STALE")
+        assert isinstance(result, LlmCommandResultDto)
+        _assert_learnable(result, "SNS_REF_STALE")
 
     def test_reply_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        _reply_id, err = executor._resolve_reply_id_from_args(
+        result = executor._resolve_reply_id_from_args(
             player_id=1, args={"reply_ref": "stale-r"}
         )
-        assert err is not None
-        _assert_learnable(err, "SNS_REF_STALE")
+        assert isinstance(result, LlmCommandResultDto)
+        _assert_learnable(result, "SNS_REF_STALE")
 
     def test_notification_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        _nid, err = executor._resolve_notification_id_from_args(
+        result = executor._resolve_notification_id_from_args(
             player_id=1, args={"notification_ref": "stale-n"}
         )
-        assert err is not None
-        _assert_learnable(err, "SNS_REF_STALE")
+        assert isinstance(result, LlmCommandResultDto)
+        _assert_learnable(result, "SNS_REF_STALE")
 
     def test_target_user_ref_stale_is_learnable(self) -> None:
         executor = _build_executor(sns_page_session=_stale_ref_session())
-        _uid, err = executor._resolve_target_user_id_from_args(
+        result = executor._resolve_target_user_id_from_args(
             player_id=1, args={"target_user_ref": "stale-u"}
         )
-        assert err is not None
-        _assert_learnable(err, "SNS_REF_STALE")
+        assert isinstance(result, LlmCommandResultDto)
+        _assert_learnable(result, "SNS_REF_STALE")
 
 
 class TestOpenPageRefStaleness:
