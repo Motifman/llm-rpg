@@ -83,5 +83,5 @@ class SkillAlreadyEquippedException(SkillDomainException, BusinessRuleException)
 
 
 class SkillRotationAngleUnsupportedException(SkillDomainException, ValidationException):
-    """ヒットボックスの回転角が、対応表に無い角度だった場合の例外"""
+    """ヒットボックスを回転できない場合の例外 (回転角を持たない向き / 対応表に無い角度)"""
     error_code = "SKILL.ROTATION_ANGLE_UNSUPPORTED"

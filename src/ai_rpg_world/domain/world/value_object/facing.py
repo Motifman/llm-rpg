@@ -62,7 +62,8 @@ class Facing:
         }
         return labels.get(self.direction, self.direction.value)
 
-    def rotation_from_south_degrees(self) -> float:
+    def rotation_from_south_degrees(self) -> float | None:
+        """SOUTH を基準とした回転角を返す。UP / DOWN は平面上の回転角を持たないので None。"""
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
         angles = {
@@ -75,7 +76,7 @@ class Facing:
             DirectionEnum.WEST: 90.0,
             DirectionEnum.SOUTHWEST: 45.0,
         }
-        return angles.get(self.direction, 0.0)
+        return angles.get(self.direction)
 
     @classmethod
     def from_direction(cls, direction: DirectionEnum) -> Facing:

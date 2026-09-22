@@ -36,3 +36,26 @@ class TestFacing:
         """dx と dy がゼロでも dz があれば、例外にせず UP / DOWN を返す。"""
         assert Facing.from_delta(0, 0, 1).to_direction() == DirectionEnum.UP
         assert Facing.from_delta(0, 0, -1).to_direction() == DirectionEnum.DOWN
+
+    def test_rotation_from_south_degrees_returns_none_for_vertical_directions(self):
+        """UP と DOWN は平面上の回転角を持たないので None を返し、SOUTH の 0.0 と区別できる。"""
+        assert Facing.from_direction(DirectionEnum.UP).rotation_from_south_degrees() is None
+        assert Facing.from_direction(DirectionEnum.DOWN).rotation_from_south_degrees() is None
+        assert Facing.from_direction(DirectionEnum.SOUTH).rotation_from_south_degrees() == 0.0
+
+    def test_rotation_from_south_degrees_returns_a_multiple_of_45_for_every_compass_direction(self):
+        """8 方位はいずれも回転角を持ち、その値は 45 度の倍数になる。"""
+        compass = [
+            DirectionEnum.NORTH,
+            DirectionEnum.NORTHEAST,
+            DirectionEnum.EAST,
+            DirectionEnum.SOUTHEAST,
+            DirectionEnum.SOUTH,
+            DirectionEnum.SOUTHWEST,
+            DirectionEnum.WEST,
+            DirectionEnum.NORTHWEST,
+        ]
+        for direction in compass:
+            degrees = Facing.from_direction(direction).rotation_from_south_degrees()
+            assert degrees is not None
+            assert degrees % 45.0 == 0.0

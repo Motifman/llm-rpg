@@ -71,6 +71,18 @@ class TestSkillToHitBoxDomainService:
 
             assert rotated == RelativeCoordinate(1, 1, 0)
 
+        def test_vertical_direction_leaves_velocity_untouched(self, service):
+            """UP / DOWN は平面上の回転をしないので、速度がそのまま返る。"""
+            vel = HitBoxVelocity(0, 1, 0)
+
+            assert service._rotate_velocity(vel, DirectionEnum.UP) == vel
+            assert service._rotate_velocity(vel, DirectionEnum.DOWN) == vel
+
+        def test_rotating_by_a_direction_without_a_planar_angle_raises(self, service):
+            """回転角を持たない向きを回転に渡すと、0 度扱いにせず例外を投げる。"""
+            with pytest.raises(SkillRotationAngleUnsupportedException):
+                service._rotate_xy_precise(0.0, 1.0, DirectionEnum.UP)
+
         def test_unsupported_rotation_angle_raises(self, service, monkeypatch):
             """cos/sin の表に無い回転角を渡されると、黙って回さずに例外を投げる。"""
             monkeypatch.setattr(Facing, "rotation_from_south_degrees", lambda self: 30.0)
