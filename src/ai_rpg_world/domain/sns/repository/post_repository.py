@@ -19,8 +19,11 @@ class PostRepository(Repository[PostAggregate, PostId]):
         pass
 
     @abstractmethod
-    def find_by_user_ids(self, user_ids: list[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at") -> list[PostAggregate]:
-        """複数のユーザーのポストを取得（フォロー中ユーザーの投稿取得用、ソート付き）"""
+    def find_by_user_ids(self, user_ids: list[UserId], limit: int = 50, offset: int = 0) -> list[PostAggregate]:
+        """複数のユーザーのポストを取得（フォロー中ユーザーの投稿取得用）
+
+        作成日時の降順で返す。作成日時が同じ場合は post_id の降順。
+        """
         pass
 
     @abstractmethod

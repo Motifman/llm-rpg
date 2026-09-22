@@ -89,22 +89,15 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         user_posts.sort(key=lambda p: p.created_at, reverse=True)
         return user_posts[offset:offset + limit]
 
-    def find_by_user_ids(self, user_ids: list[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at") -> list[PostAggregate]:
-        """複数のユーザーのポストを取得（フォロー中ユーザーの投稿取得用、ソート付き）"""
+    def find_by_user_ids(self, user_ids: list[UserId], limit: int = 50, offset: int = 0) -> list[PostAggregate]:
+        """複数のユーザーのポストを取得（フォロー中ユーザーの投稿取得用）"""
         result = []
         # 全ての投稿から対象ユーザーのものを抽出（効率は悪いがインメモリなので許容）
         for post in self._posts.values():
             if post.author_user_id in user_ids:
                 result.append(post)
 
-        # ソートキーの決定
-        if sort_by == "created_at":
-            sort_key = lambda p: p.created_at
-        else:
-            sort_key = lambda p: p.created_at  # デフォルトは作成日時
-
-        # ソート
-        result.sort(key=sort_key, reverse=True)
+        result.sort(key=lambda p: (p.created_at, p.post_id.value), reverse=True)
 
         # offsetとlimitを適用
         return result[offset:offset + limit]
