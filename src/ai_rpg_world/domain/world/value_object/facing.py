@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.domain.world.exception.map_exception import SameCoordinateDirectionException
+
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
@@ -99,4 +101,9 @@ class Facing:
             (-1, 0): DirectionEnum.WEST,
             (-1, -1): DirectionEnum.NORTHWEST,
         }
-        return cls(mapping[(step_x, step_y)])
+        direction = mapping.get((step_x, step_y))
+        if direction is None:
+            raise SameCoordinateDirectionException(
+                f"変位がゼロのため向きを決められません: dx={dx}, dy={dy}, dz={dz}"
+            )
+        return cls(direction)
