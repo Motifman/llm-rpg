@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.executors.sns_executor import SnsToolExecutor
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SNS_CREATE_REPLY
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
@@ -107,3 +108,16 @@ class TestReplyParentResolution:
 
         assert not result.success
         reply_service.create_reply.assert_not_called()
+
+    def test_both_parents_failure_tells_the_agent_to_pick_one(
+        self, reply_service: MagicMock, page_session: SnsPageSessionService
+    ) -> None:
+        """親を 2 つ渡した失敗は専用の error_code を持ち、対処は汎用フォールバックではなく親を 1 つに絞るよう促す。"""
+        result = _handler(reply_service, page_session)(
+            1, {"content": "やあ", "parent_post_id": 7, "parent_reply_id": 9}
+        )
+
+        assert result.error_code == "SNS_REPLY_PARENT_AMBIGUOUS"
+        assert result.remediation == get_remediation("SNS_REPLY_PARENT_AMBIGUOUS")
+        assert result.remediation != get_remediation("UNREGISTERED_CODE_FOR_TEST")
+        assert "parent_post_ref" in result.remediation

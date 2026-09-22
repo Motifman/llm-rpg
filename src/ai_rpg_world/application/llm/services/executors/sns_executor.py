@@ -124,12 +124,9 @@ ReplyParent = ReplyToPost | ReplyToReply
 def _both_parents_specified_result() -> LlmCommandResultDto:
     return LlmCommandResultDto(
         success=False,
-        message=(
-            "親は parent_post_ref か parent_reply_ref の"
-            "どちらか一方だけを指定してください。"
-        ),
-        error_code="INVALID_TARGET_LABEL",
-        remediation=get_remediation("INVALID_TARGET_LABEL"),
+        message="リプライの親が 2 つ指定されています。",
+        error_code="SNS_REPLY_PARENT_AMBIGUOUS",
+        remediation=get_remediation("SNS_REPLY_PARENT_AMBIGUOUS"),
     )
 
 
