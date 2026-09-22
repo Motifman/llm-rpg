@@ -393,7 +393,7 @@ def parse_consume_effect( raw: Any, sid: str,
     parsed = [parse_single_consume_effect(e, sid) for e in entries]
     if len(parsed) == 1:
         return parsed[0]
-    return CompositeItemEffect(effects=tuple(parsed))  # type: ignore[abstract]  # Issue #1380
+    return CompositeItemEffect(effects=tuple(parsed))
 
 def parse_single_consume_effect( entry: dict[str, Any], sid: str,
 ) -> ItemEffect:
@@ -406,22 +406,22 @@ def parse_single_consume_effect( entry: dict[str, Any], sid: str,
     if not etype:
         raise ValueError(f"item '{sid}': consume_effect entry missing 'type'")
     if etype == "heal_hp":
-        return HealEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
+        return HealEffect(amount=int(entry["amount"]))
     if etype == "damage_hp":
-        return DamageHpEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
+        return DamageHpEffect(amount=int(entry["amount"]))
     if etype == "recover_mp":
-        return RecoverMpEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
+        return RecoverMpEffect(amount=int(entry["amount"]))
     if etype == "gold":
-        return GoldEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
+        return GoldEffect(amount=int(entry["amount"]))
     if etype == "exp":
-        return ExpEffect(amount=int(entry["amount"]))  # type: ignore[abstract]  # Issue #1380
+        return ExpEffect(amount=int(entry["amount"]))
     if etype == "satisfy_need":
         need = entry.get("need_type") or entry.get("need_type_name")
         if not need:
             raise ValueError(
                 f"item '{sid}': satisfy_need requires 'need_type' (e.g. 'HUNGER')"
             )
-        return SatisfyNeedEffect(  # type: ignore[abstract]  # Issue #1380
+        return SatisfyNeedEffect(
             need_type_name=str(need), amount=int(entry["amount"]),
         )
     if etype == "revive":
@@ -432,7 +432,7 @@ def parse_single_consume_effect( entry: dict[str, Any], sid: str,
             raise ValueError(
                 f"item '{sid}': revive requires 'hp_rate' (e.g. 0.4)"
             )
-        return ReviveEffect(hp_rate=float(entry["hp_rate"]))  # type: ignore[abstract]  # Issue #1380
+        return ReviveEffect(hp_rate=float(entry["hp_rate"]))
     raise ValueError(
         f"item '{sid}': unknown consume_effect type '{etype}' "
         "(expected: heal_hp / damage_hp / recover_mp / gold / exp / satisfy_need / revive)"

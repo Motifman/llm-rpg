@@ -5,7 +5,7 @@
 ConsumableEffectHandler が担当し、ドメイン間の依存を避ける。
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 
 from ai_rpg_world.domain.item.exception import ItemEffectValidationException
@@ -17,11 +17,18 @@ def _validate_non_negative(value: int, name: str) -> None:
 
 
 class ItemEffect(ABC):
-    """アイテム効果の基底。値オブジェクトとしてデータのみを保持する。"""
+    """アイテム効果の基底。値オブジェクトとしてデータのみを保持する。
 
-    @abstractmethod
-    def __repr__(self) -> str:
-        ...
+    直接生成できないことは ``@abstractmethod`` ではなく ``__new__`` のガードで
+    保つ。派生は全て ``@dataclass(frozen=True)`` で、抽象メンバーを宣言すると
+    dataclass が生成するメソッドを型検査が抽象の解除とみなさず、派生の生成が
+    型の上で「抽象クラスの生成」になってしまうため (Issue #1380)。
+    """
+
+    def __new__(cls, *args: object, **kwargs: object) -> "ItemEffect":
+        if cls is ItemEffect:
+            raise TypeError("ItemEffect は基底であり、直接生成できない")
+        return super().__new__(cls)
 
 
 @dataclass(frozen=True)
