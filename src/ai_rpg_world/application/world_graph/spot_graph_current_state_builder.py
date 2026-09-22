@@ -103,27 +103,16 @@ from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 logger = logging.getLogger(__name__)
 
 
-def _has_failing_object_state_precondition(
-    interaction: InteractionDef, interior: SpotInterior
-) -> bool:
-    """interaction の OBJECT_STATE precondition が現在 失敗しているか判定する。
-
-    第24回実験 (#343) で cockpit を 19 回 retry した silent failure の対策。
-    OBJECT_STATE は「取り尽くした」「もう空だ」のような永続失敗を持つ唯一の
-    precondition 種別。HAS_ITEM / TIME_OF_DAY / WEATHER 等のプレイヤー / 環境
-    依存は対象外。
-
-    現在は action を隠すためではなく、失敗理由ヒントを prompt に添えるための
-    判定に使う。action 自体を落とすと、LLM が存在しない操作名を発明する原因に
-    なるため。
-    """
-    return bool(_object_state_precondition_failure_hints(interaction, interior))
-
-
 def _object_state_precondition_failure_hints(
     interaction: InteractionDef, interior: SpotInterior
 ) -> tuple[str, ...]:
-    """現在失敗している OBJECT_STATE precondition の failure_message を返す。"""
+    """現在失敗している OBJECT_STATE precondition の failure_message を返す。
+
+    第24回実験 (#343) で cockpit を 19 回 retry した静かな失敗の対策。
+    OBJECT_STATE は「取り尽くした」のような永続失敗を持つ唯一の precondition
+    種別なので、HAS_ITEM / TIME_OF_DAY / WEATHER 等のプレイヤー / 環境依存は
+    対象外にする。
+    """
     hints: list[str] = []
     for cond in interaction.preconditions:
         if cond.condition_type != InteractionConditionTypeEnum.OBJECT_STATE:
