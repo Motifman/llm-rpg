@@ -165,13 +165,15 @@ class TestSatisfiedObjectStateProducesNoHint:
 class TestNonObjectStateConditionsProduceNoHint:
     """HAS_ITEM / ALWAYS は OBJECT_STATE ではないので、この関数はヒントを出さない。"""
 
-    def test_has_item_returns_empty(self) -> None:
-        """HAS_ITEM の充足はプレイヤー状態で決まるので、ここではヒントを出さない。"""
-        interior = _make_interior({})
+    def test_has_item_returns_empty_even_with_mismatched_object_state(self) -> None:
+        """HAS_ITEM に不一致の required_state が付いていても、OBJECT_STATE ではないのでヒントを出さない。"""
+        interior = _make_interior({"opened": True})
         interaction = _make_interaction(
             InteractionCondition(
                 condition_type=InteractionConditionTypeEnum.HAS_ITEM,
                 target_item_spec_id=ItemSpecId.create(42),
+                target_object_id=COCKPIT_ID,
+                required_state={"opened": False},
                 failure_message="道具が足りない",
             )
         )
@@ -200,6 +202,19 @@ class TestIncompleteConditionsProduceNoHint:
                 condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
                 target_object_id=None,
                 required_state={"opened": False},
+                failure_message="出てはいけない",
+            )
+        )
+        assert _object_state_precondition_failure_hints(interaction, interior) == ()
+
+    def test_required_state_unspecified_returns_empty(self) -> None:
+        """required_state が未指定のとき、比較する値が無いのでヒントを出さない。"""
+        interior = _make_interior({"opened": True})
+        interaction = _make_interaction(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+                target_object_id=COCKPIT_ID,
+                required_state=None,
                 failure_message="出てはいけない",
             )
         )
