@@ -28,7 +28,14 @@ from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescu
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     ACTION_NAME_JUDGMENT_KEY,
+    TARGET_LABEL_JUDGMENT_KEY,
     SpotGraphArgumentResolver,
+)
+from ai_rpg_world.application.llm.services._argument_resolvers.target_label_rescue import (
+    QUESTION_NAME as TARGET_LABEL_RESCUE_QUESTION,
+)
+from ai_rpg_world.application.llm.services._argument_resolvers.target_label_rescue import (
+    TargetLabelRescue,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
@@ -364,8 +371,23 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
                 )
             ),
         )
+    # 対象の名前も同じ口で選び直す。閾値は行動名より高い (誤って寄せると、
+    # 世界に無いものを一番近いものに化けさせる)。
+    target_label_rescue = None
+    if typed_judgment_port is not None:
+        target_label_rescue = TargetLabelRescue(
+            port=typed_judgment_port,
+            min_confidence=float(
+                getattr(
+                    getattr(wiring.runtime, "_runtime_config", None),
+                    "typed_judgment_target_label_min_confidence",
+                    0.85,
+                )
+            ),
+        )
     argument_resolver = SpotGraphArgumentResolver(
-        action_name_rescue=action_name_rescue
+        action_name_rescue=action_name_rescue,
+        target_label_rescue=target_label_rescue,
     )
     # 組んだ resolver を配線に残す。何が注入されたかを外から確かめられる形に
     # しておかないと、注入漏れを検査するテストが書けない。
@@ -736,6 +758,16 @@ def adapt_executor_handler_with_resolver(
                 tool_name, arguments, runtime_context,
             )
         except ToolArgumentResolutionException as e:
+            # 対象名を問うたが採らなかった判断も trace に残す。残さないと
+            # 「問わなかった」と「問って断った」が同じに見える。
+            if isinstance(getattr(e, "judgment", None), dict):
+                _record_judgment(
+                    e.judgment,
+                    question=TARGET_LABEL_RESCUE_QUESTION,
+                    player_id=player_id,
+                    trace_recorder_provider=trace_recorder_provider,
+                    current_tick_provider=current_tick_provider,
+                )
             if invalid_label_failure_builder is not None:
                 return invalid_label_failure_builder(
                     runtime_context, arguments, e,
@@ -787,6 +819,7 @@ def adapt_executor_handler_with_resolver(
         # 解釈を結果文で当人に見せる。**黙って置き換えない。** 黙って通すと
         # 発明した名前が通ると学び、同じ名前を書き続ける。
         judgment = resolved.pop(ACTION_NAME_JUDGMENT_KEY, None)
+        target_judgment = resolved.pop(TARGET_LABEL_JUDGMENT_KEY, None)
         resolved[ACTION_HISTORY_PROJECTION_KEY] = projection
         # **generic 経路 (do_* を通らない tool) にも同じ射影を届ける。**
         # 投影を読むのは executor 側の 5 経路だけで、それ以外は phase_b が
@@ -800,7 +833,17 @@ def adapt_executor_handler_with_resolver(
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
             )
+        if isinstance(target_judgment, dict):
+            _record_judgment(
+                target_judgment,
+                question=TARGET_LABEL_RESCUE_QUESTION,
+                player_id=player_id,
+                trace_recorder_provider=trace_recorder_provider,
+                current_tick_provider=current_tick_provider,
+            )
         result = raw_handler(int(player_id.value), resolved, runtime_context)
+        if isinstance(target_judgment, dict) and target_judgment.get("accepted"):
+            result = _with_interpretation_note(result, target_judgment)
         if isinstance(judgment, dict) and judgment.get("accepted"):
             return _with_interpretation_note(result, judgment)
         return result
@@ -826,6 +869,23 @@ def _record_action_name_judgment(
     trace_recorder_provider: Callable[[], Any] | None,
     current_tick_provider: Callable[[], int | None] | None,
 ) -> None:
+    _record_judgment(
+        judgment,
+        question=ACTION_NAME_RESCUE_QUESTION,
+        player_id=player_id,
+        trace_recorder_provider=trace_recorder_provider,
+        current_tick_provider=current_tick_provider,
+    )
+
+
+def _record_judgment(
+    judgment: dict[str, Any],
+    *,
+    question: str,
+    player_id: PlayerId,
+    trace_recorder_provider: Callable[[], Any] | None,
+    current_tick_provider: Callable[[], int | None] | None,
+) -> None:
     """発火した判断を 1 件 trace に残す。採否に関わらず残す。
 
     recorder が無い経路 (単体試験・観測を組まない run) では何もしない。ここで
@@ -840,7 +900,7 @@ def _record_action_name_judgment(
             TraceEventKind.TYPED_JUDGMENT,
             tick=tick,
             player_id=int(player_id.value),
-            question=ACTION_NAME_RESCUE_QUESTION,
+            question=question,
             **judgment,
         )
     except Exception:  # pragma: no cover - 記録の失敗で行動を落とさない

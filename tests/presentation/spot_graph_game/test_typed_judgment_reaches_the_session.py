@@ -152,6 +152,36 @@ class TestTheArgumentResolverGetsTheJudgment:
 
 
 
+class TestTheArgumentResolverGetsTheTargetLabelJudgment:
+    """対象の名前を解決する resolver にも、判断が注入されることを保証する。"""
+
+    def test_the_resolver_can_rescue_target_labels_when_the_profile_asks_for_judgment(self) -> None:
+        """provider が判断を求めていれば、resolver は対象名を選び直す口を持つ。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.argument_resolver.target_label_rescue is not None
+
+    def test_the_resolver_has_no_target_label_rescue_by_default(self) -> None:
+        """profile が求めなければ、resolver は対象名を選び直さない (**正の対照**)。"""
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
+            assert wiring.argument_resolver.target_label_rescue is None
+
+    def test_the_target_label_threshold_comes_from_the_profile(self) -> None:
+        """対象名の閾値が profile から resolver まで届き、既定は行動名より高い 0.85。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.argument_resolver.target_label_rescue.min_confidence == 0.85
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(
+                typed_judgment_provider="stub",
+                typed_judgment_target_label_min_confidence=0.9,
+            )
+        ):
+            assert wiring.argument_resolver.target_label_rescue.min_confidence == 0.9
+
+
 class TestTheTurnTriggerGetsTheGate:
     """tick の終わりに回す人を決める trigger に、門が挟まることを保証する。
 

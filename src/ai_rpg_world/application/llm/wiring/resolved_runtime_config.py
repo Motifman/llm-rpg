@@ -128,6 +128,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "STATE_COLLAPSE_EVIDENCE_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
+    "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_API_KEY_ENV",
     "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
     "TYPED_JUDGMENT_ENDPOINT",
@@ -183,6 +184,8 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_timeout_seconds: 1 回の呼び出しを打ち切る秒数
         typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
         typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
+        typed_judgment_target_label_min_confidence: 対象の名前を置き換える閾値。
+            行動名より高い (既定 0.85)
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
         typed_judgment_turn_gate_enabled: tick の終わりに pending の全員へ「いま
             動く必要があるか」を問う門を挟む。**既定は off**。provider を jev に
@@ -240,6 +243,7 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_timeout_seconds: float
     typed_judgment_api_key_env: str
     typed_judgment_action_name_min_confidence: float
+    typed_judgment_target_label_min_confidence: float
     typed_judgment_memo_min_probability: float
     typed_judgment_turn_gate_enabled: bool
     typed_judgment_turn_gate_skip_below: float
@@ -593,6 +597,11 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
             default=_DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE,
         )
+        typed_judgment_target_label_min_confidence = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
+            default=_DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE,
+        )
         typed_judgment_memo_min_probability = _resolve_ratio_with_default(
             source,
             "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
@@ -772,6 +781,9 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_action_name_min_confidence=(
                 typed_judgment_action_name_min_confidence
             ),
+            typed_judgment_target_label_min_confidence=(
+                typed_judgment_target_label_min_confidence
+            ),
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
             typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
             typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
@@ -878,6 +890,9 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_api_key_env=_DEFAULT_TYPED_JUDGMENT_API_KEY_ENV,
             typed_judgment_action_name_min_confidence=(
                 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE
+            ),
+            typed_judgment_target_label_min_confidence=(
+                _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE
             ),
             typed_judgment_memo_min_probability=(
                 _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
@@ -997,6 +1012,10 @@ _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 #: confidence 0.96 だった。人手ラベル 50 件で較正して決め直す (#1319)。
 #: 低くすると、意図していない操作へ寄せて別の失敗に化ける。
 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
+
+#: 対象の名前を置き換える閾値。過去 run で正しく寄せた 5 件の最小は確率 0.93 /
+#: 確信 0.89、誤った寄せは 0.8 台だった (scripts/jev_target_label_rescue_demo.py)。
+_DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE = 0.85
 
 #: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の門 (#217) で
 #: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
