@@ -16,6 +16,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "GATEWAY_OBJECT_NOT_FOUND": "移動先のゲートウェイまたはオブジェクトを確認してください。",
     "GATEWAY_MONSTER_NOT_FOUND": "移動先のゲートウェイを確認してください。",
     "INVALID_DESTINATION_LABEL": "「現在の状況」の接続先に表示されているスポット名を destination_label に指定してください。矢印の左側の道や扉の名前ではなく、\"\" で囲まれた行き先名を使ってください。",
+    "DESTINATION_NOT_ADJACENT": "その場所はここから直接は行けません。「現在の状況」の接続先に表示されている隣の場所を destination_label に指定し、順に進んでください。",
     "INVALID_DESTINATION_KIND": "destination_label には移動先として使えるスポット名を指定してください。アイテム名・プレイヤー名・オブジェクト名は移動先には使えません。",
     "INVALID_TARGET_LABEL": "「現在の状況」に表示されている対象の名前を指定してください。名前が \"\" で囲まれている場合は、その中身をそのまま引数に入れてください。",
     "INVALID_TARGET_KIND": "指定した名前はこの操作の対象ではありません。ツール説明と「現在の状況」を確認し、オブジェクト名・所持アイテム名・その場に落ちているものの名前・プレイヤー名・モンスター名のうち、そのツールが要求する名前を指定してください。",

@@ -47,6 +47,7 @@ _REPEATED_FAILURE_PHRASING: dict[str, str] = {
     # --- 対象や行き先の指し方が通らない ---
     "INVALID_TARGET_LABEL": "その名前の相手や物が見つからず",
     "INVALID_DESTINATION_LABEL": "その名前の行き先が見つからず",
+    "DESTINATION_NOT_ADJACENT": "その行き先がここと隣接しておらず",
     "INTERACTION_ACTION_NOT_FOUND": "その操作が対象に無く",
     "INVALID_ARGUMENT": "指定の書き方が通らず",
     # --- 前提条件・状態が満たされない ---
