@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ai_rpg_world.domain.world.exception.map_exception import SameCoordinateDirectionException
+from ai_rpg_world.domain.world.exception.map_exception import (
+    DirectionDeltaUndefinedException,
+    SameCoordinateDirectionException,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
@@ -42,7 +45,9 @@ class Facing:
             return (0, 0, -step)
         vec = self.to_2d_vector()
         if vec is None:
-            return (0, 0, 0)
+            raise DirectionDeltaUndefinedException(
+                f"{self.direction.value} の移動量が定義されていません"
+            )
         return (vec[0] * step, vec[1] * step, 0)
 
     def to_display_label(self) -> str:

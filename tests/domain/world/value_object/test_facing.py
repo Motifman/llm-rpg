@@ -1,7 +1,10 @@
 import pytest
 
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.exception.map_exception import SameCoordinateDirectionException
+from ai_rpg_world.domain.world.exception.map_exception import (
+    DirectionDeltaUndefinedException,
+    SameCoordinateDirectionException,
+)
 from ai_rpg_world.domain.world.value_object.facing import Facing
 
 
@@ -59,3 +62,22 @@ class TestFacing:
             degrees = Facing.from_direction(direction).rotation_from_south_degrees()
             assert degrees is not None
             assert degrees % 45.0 == 0.0
+
+    def test_to_delta_raises_when_the_direction_has_no_2d_vector(self, monkeypatch):
+        """平面上の移動量を持たない向きの to_delta は、(0, 0, 0) ではなく例外を投げる。"""
+        monkeypatch.setattr(Facing, "to_2d_vector", lambda self: None)
+
+        with pytest.raises(DirectionDeltaUndefinedException):
+            Facing.from_direction(DirectionEnum.NORTH).to_delta()
+
+    def test_to_delta_for_vertical_directions_does_not_read_the_2d_vector(self, monkeypatch):
+        """UP / DOWN の移動量は平面のベクトルを見ずに決まるので、そちらが無くても返る。"""
+        monkeypatch.setattr(Facing, "to_2d_vector", lambda self: None)
+
+        assert Facing.from_direction(DirectionEnum.UP).to_delta() == (0, 0, 1)
+        assert Facing.from_direction(DirectionEnum.DOWN).to_delta() == (0, 0, -1)
+
+    def test_to_delta_scales_by_the_given_step(self):
+        """step を渡すと、向きのベクトルがその倍数になる。"""
+        assert Facing.from_direction(DirectionEnum.EAST).to_delta(3) == (3, 0, 0)
+        assert Facing.from_direction(DirectionEnum.UP).to_delta(3) == (0, 0, 3)
