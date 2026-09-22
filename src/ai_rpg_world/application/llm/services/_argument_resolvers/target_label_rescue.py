@@ -154,6 +154,7 @@ class TargetLabelRescue:
         answer = result.judgment.evidence
         chosen = result.judgment.value
         accepted = isinstance(result, Resolved)
+        target = by_name.get(str(result.value)) if isinstance(result, Resolved) else None
         judgment = TargetLabelJudgment(
             chosen=chosen,
             probability=answer.probabilities.get(str(answer.value)),
@@ -163,7 +164,6 @@ class TargetLabelRescue:
             latency_ms=answer.latency_ms,
             source=answer.source.value,
         )
-        target = by_name.get(str(result.value)) if accepted else None
         return TargetLabelResolution(original=written, target=target, judgment=judgment)
 
 
