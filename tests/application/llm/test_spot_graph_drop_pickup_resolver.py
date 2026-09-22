@@ -176,7 +176,7 @@ class TestPickupItemResolver:
         assert exc.value.error_code == "INVALID_TARGET_KIND"
 
     def test_pickup_inventory_item_message_uses_natural_place_wording(self) -> None:
-        """所持アイテムを pickup に渡した失敗文は「地面アイテム」と言わず、場所の状態を示す。"""
+        """所持アイテムを pickup に渡した失敗文は「地面アイテム」と言わず、すでに持っていると伝える。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -185,7 +185,9 @@ class TestPickupItemResolver:
                 _make_context(),
             )
         message = str(exc.value)
-        assert "今いる場所に落ちているものではありません" in message
+        assert exc.value.error_code == "INVALID_TARGET_KIND"
+        assert "手持ちの品で、拾うものの名前には使えません" in message
+        assert "すでに持っている" in message
         _assert_llm_facing_message_has_no_internal_terms(message)
 
     def test_pickup_unresolved_ground_target_message_hides_internal_terms(self) -> None:

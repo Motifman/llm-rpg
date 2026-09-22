@@ -161,9 +161,8 @@ class TestResolveUseItemDisplayNameFallback:
                 {"item_label": "貝", "inner_thought": ""},  # 貝は ground_item
                 _make_inventory_context(),
             )
-        # _resolve_target_with_display_name_fallback では kind="inventory_item" で
-        # 探すので、貝 (ground_item) は見つからない → INVALID_TARGET_LABEL
-        assert exc.value.error_code == "INVALID_TARGET_LABEL"
+        assert exc.value.error_code == "INVALID_TARGET_KIND"
+        assert "足元の品" in str(exc.value)
 
 
 class TestResolveDropItemDisplayNameFallback:
@@ -198,7 +197,7 @@ class TestResolvePickupItemDisplayNameFallback:
         assert result["item_instance_id"] == 2002
 
     def test_inventory_item_display_name_pickup_kind_mismatch(self) -> None:
-        """pickup は ground_item 限定。inventory item を指したら見つからず label error。"""
+        """pickup は ground_item 限定。手持ちの品を指したら種類違いで弾く。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -206,4 +205,4 @@ class TestResolvePickupItemDisplayNameFallback:
                 {"ground_item_label": "真水 (食料)", "inner_thought": ""},
                 _make_inventory_context(),
             )
-        assert exc.value.error_code == "INVALID_TARGET_LABEL"
+        assert exc.value.error_code == "INVALID_TARGET_KIND"

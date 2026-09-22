@@ -16,10 +16,17 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup import (
+    TargetIndex,
+    ToolIsExposed,
+    candidate_names,
+    format_candidates,
+    label_forms,
+    require,
+    strip_symmetric_quotes,
+)
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
-    require_target,
-    require_target_type,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
     CANONICAL_IDENTIFIERS_KEY,
@@ -37,20 +44,6 @@ if TYPE_CHECKING:
     )
 
 
-# Issue #269 第17回 R2 で観測された LLM の destination_label 崩れパターン:
-# - "S2: 禁書扉 → 館長書斎" — prompt 行をそのまま貼る
-# - "S2 (館長書斎)" — 括弧つきラベル
-# - "解読室" — スポット名直書き (display_name 経路で吸収)
-# - "S1" — 既存ラベル経路
-# 共通解として、入力文字列から以下の候補を抽出して順に解決を試す:
-# 1. 入力そのまま
-# 2. 先頭の S\d+ / SL\d+ / P\d+ / OBJ\d+ / I\d+ / M\d+ ラベル
-# 3. 括弧内 (..) または （..） の中身
-# 4. " → " で区切られた右端 (末尾の括弧つき注釈を除いた行先名)
-# 5. ":" / "：" 区切りで右側 (label プレフィックス除去後の本体)
-_LEADING_LABEL_RE = re.compile(r"^(S\d+|SL\d+|OBJ\d+|P\d+|I\d+|M\d+)\b")
-_PAREN_RE = re.compile(r"[(（]([^()（）]+)[)）]")
-_TRAILING_PAREN_RE = re.compile(r"\s*[(（][^()（）]*[)）]\s*$")
 _NO_ACTION_PLACEHOLDER_RE = re.compile(
     r"^(?:[.…]+\s*)?[（(]\s*なし\s*[）)]$"
 )
@@ -158,17 +151,6 @@ def pick_action_name(
     )
 
 
-def _strip_symmetric_quotes(text: str) -> str | None:
-    """対称な ``"..."`` / ``'...'`` を剥がす。剥がせなければ None。"""
-    s = text.strip()
-    if len(s) >= 2 and (
-        (s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'")
-    ):
-        inner = s[1:-1].strip()
-        return inner or None
-    return None
-
-
 def normalize_action_name_candidates(action: str) -> list[str]:
     """LLM が action_name に入れがちな崩れ表現から候補形を生成する。
 
@@ -187,7 +169,7 @@ def normalize_action_name_candidates(action: str) -> list[str]:
     out: list[str] = [s]
 
     # 対称な quote を剥がす: ``"offer_wheat"`` → ``offer_wheat``
-    unquoted = _strip_symmetric_quotes(s)
+    unquoted = strip_symmetric_quotes(s)
     if unquoted:
         out.append(unquoted)
 
@@ -196,7 +178,7 @@ def normalize_action_name_candidates(action: str) -> list[str]:
         tail = s.rsplit("→", 1)[1].strip()
         if tail:
             out.append(tail)
-            tail_unquoted = _strip_symmetric_quotes(tail)
+            tail_unquoted = strip_symmetric_quotes(tail)
             if tail_unquoted:
                 out.append(tail_unquoted)
 
@@ -209,306 +191,42 @@ def normalize_action_name_candidates(action: str) -> list[str]:
     return unique
 
 
-def _normalize_label_candidates(label: str) -> list[str]:
-    """LLM が destination_label / target_label に入れがちな崩れ表現から
-    解決可能な候補形を生成する。同じ候補は除去しつつ出現順を保つ。
-
-    例:
-    - "S2: 禁書扉 → 館長書斎" → ["S2: ...", "S2", "禁書扉", "館長書斎"]
-    - "S2 (館長書斎)" → ["S2 (館長書斎)", "S2", "館長書斎"]
-    - "解読室" → ["解読室"]
-    """
-    s = label.strip()
-    if not s:
-        return []
-    out: list[str] = [s]
-
-    # PR Y_after_pr_all_200tick 後続: prompt 表記が ``"拠点"`` のように
-    # ``""`` で囲んだ値を「渡すべき値」と明示する規約になったため、
-    # LLM が quote ごと渡してきても resolver が中身を取り出せるようにする。
-    # 対称な ``"..."`` または ``'...'`` のみを剥がす (片側だけは触らない)。
-    if len(s) >= 2 and (
-        (s[0] == '"' and s[-1] == '"')
-        or (s[0] == "'" and s[-1] == "'")
-    ):
-        inner = s[1:-1].strip()
-        if inner:
-            out.append(inner)
-
-    # 矢印の尾に quote が付く表記 (``S2: 扉 → "書斎"``) も剥がす。
-    # 操作名側だけ剥がしていて、同じ表示規約のラベル側が救われない
-    # 非対称になっていた。
-    if "→" in s:
-        tail = s.rsplit("→", 1)[1].strip()
-        tail_unquoted = _strip_symmetric_quotes(tail) if tail else None
-        if tail_unquoted:
-            out.append(tail_unquoted)
-
-    m = _LEADING_LABEL_RE.match(s)
-    if m:
-        out.append(m.group(1))
-
-    m2 = _PAREN_RE.search(s)
-    if m2:
-        out.append(m2.group(1).strip())
-
-    if "→" in s:
-        right = s.split("→")[-1].strip()
-        right = _TRAILING_PAREN_RE.sub("", right).strip()
-        if right:
-            out.append(right)
-
-    if ":" in s or "：" in s:
-        parts = re.split(r"[:：]", s, maxsplit=1)
-        if len(parts) == 2:
-            after = parts[1].strip()
-            after = _TRAILING_PAREN_RE.sub("", after).strip()
-            if after and after != s:
-                out.append(after)
-                if "→" in after:
-                    left = after.split("→")[0].strip()
-                    if left:
-                        out.append(left)
-
-    # dedup keep order, drop empty
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for c in out:
-        c = c.strip()
-        if not c or c in seen:
-            continue
-        seen.add(c)
-        deduped.append(c)
-    return deduped
+# 旧名。テストと他モジュールが import しているので残す。新しい呼び出しは
+# target_lookup を直接使う。
+_normalize_label_candidates = label_forms
+_strip_symmetric_quotes = strip_symmetric_quotes
+_format_valid_candidates = format_candidates
 
 
 def _candidate_display_names(
     runtime_context: ToolRuntimeContextDto,
     predicate: Callable[[ToolRuntimeTargetDto], bool],
 ) -> list[str]:
-    """runtime target から LLM が次に指定できる表示名だけを順序保持で集める。
-
-    失敗文は次の一手を修正するために LLM が読む。内部ラベル (S1 / OBJ1 等)
-    ではなく prompt に露出している display_name だけを返し、同名は重複させない。
-    """
-    names: list[str] = []
-    seen: set[str] = set()
-    for target in runtime_context.targets.values():
-        if not predicate(target):
-            continue
-        name = target.display_name.strip()
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        names.append(name)
-    return names
-
-
-def _format_valid_candidates(candidate_label: str, candidates: list[str]) -> str:
-    """有効候補一覧を失敗文に埋め込む短い日本語へ整形する。"""
-    if not candidates:
-        return f"有効な{candidate_label}: ありません"
-    return f"有効な{candidate_label}: {' / '.join(candidates)}"
-
-
-def resolve_destination_target(
-    label: str,
-    runtime_context: ToolRuntimeContextDto,
-) -> "DestinationToolRuntimeTargetDto":
-    """destination_label を ``DestinationToolRuntimeTargetDto`` に解決する。
-
-    Issue #276: world_runtime の ``_handle_travel_to`` と本家
-    ``_resolve_travel_to`` で同じ解決ロジックを 2 ヶ所に書いていたのを
-    こちらに集約した。world_runtime 経路は本関数で target を得てから
-    ``runtime.do_move`` を直接呼ぶ。本家経路は本関数の結果から
-    ``destination_spot_id`` を抽出して canonical 引数に変換する。
-
-    解決順:
-    1. ``_normalize_label_candidates(label)`` で崩れ表現 (連結文字列 / 括弧
-       つき / 矢印つき) から候補形を抽出
-    2. 各候補について ``runtime_context.targets`` 直接 lookup →
-       display_name 一致の順で ``DestinationToolRuntimeTargetDto`` を探す
-    3. どれにも該当しなければ ``INVALID_DESTINATION_LABEL``、kind 違いだけが
-       見つかれば ``INVALID_DESTINATION_KIND``、spot_id が None なら
-       ``INVALID_DESTINATION_KIND``
-    """
-    if not isinstance(label, str) or not label:
-        raise ToolArgumentResolutionException(
-            "接続先名が指定されていません。",
-            "INVALID_DESTINATION_LABEL",
-        )
-    target: ToolRuntimeTargetDto | None = None
-    kind_mismatch = False
-    for c in _normalize_label_candidates(label):
-        if c in runtime_context.targets:
-            hit = runtime_context.targets[c]
-            if isinstance(hit, DestinationToolRuntimeTargetDto):
-                target = hit
-                break
-            kind_mismatch = True
-            continue
-        found = _find_target_by_display_name(
-            runtime_context,
-            kind="spot_graph_destination",
-            display_name=c,
-        )
-        if found is not None and isinstance(found, DestinationToolRuntimeTargetDto):
-            target = found
-            break
-    if target is None:
-        if kind_mismatch:
-            raise ToolArgumentResolutionException(
-                f"接続先名として使えない値です: {label}",
-                "INVALID_DESTINATION_KIND",
-            )
-        candidates = _candidate_display_names(
-            runtime_context,
-            lambda target: isinstance(target, DestinationToolRuntimeTargetDto),
-        )
-        raise ToolArgumentResolutionException(
-            (
-                f"指定された接続先名は現在の候補にありません: {label} → "
-                f"{_format_valid_candidates('接続先', candidates)}"
-            ),
-            "INVALID_DESTINATION_LABEL",
-        )
-    if target.spot_id is None:
-        raise ToolArgumentResolutionException(
-            f"移動先として解決できない名前です: {label}",
-            "INVALID_DESTINATION_KIND",
-        )
-    return target  # type: ignore[return-value]
-
-
-def _resolve_target_with_display_name_fallback(
-    # 本体で isinstance(label, str) を確かめるので、require_target と同じく Any で受ける
-    label: Any,
-    runtime_context: ToolRuntimeContextDto,
-    *,
-    kind: str,
-    expected_types: tuple[type[ToolRuntimeTargetDto], ...] = (),
-    label_name: str,
-    invalid_label_code: str = "INVALID_TARGET_LABEL",
-    invalid_kind_code: str = "INVALID_TARGET_KIND",
-) -> ToolRuntimeTargetDto:
-    """PR #441: label を「内部 label key (旧形式)」「LLM が渡す display_name」
-    「崩れ表現 (連結 / 括弧つき) 」のいずれでも解決する共通 helper。
-
-    PR #421 / #425 の「名前直書き」refactor 後、LLM は display_name を引数として
-    渡すようになった。``resolve_destination_target`` / ``resolve_sub_location_target``
-    は同等の fallback 経路を既に持っていたが、**object / use_item / drop_item /
-    pickup_item / attack / give_item の 6 resolver は require_target 直叩きのまま
-    で fallback 経路を持たず、display_name lookup が完全に効かない silent failure を
-    抱えていた** (実験 #438 で 252 件 INVALID_TARGET_LABEL = 全 action の 92.3%
-    失敗として顕在化、PR #440 で確認)。
-
-    解決順:
-    1. ``_normalize_label_candidates(label)`` で崩れ表現を分解
-    2. 各候補について ``runtime_context.targets`` の直接 lookup
-    3. miss なら ``_find_target_by_display_name(kind=kind)`` で display_name 一致を探す
-    4. expected_types が指定されていれば、見つかった target の型一致もチェック
-
-    Args:
-        label: LLM が渡した文字列
-        kind: display_name fallback で絞る ``ToolRuntimeTargetDto.kind`` 値
-            (例: ``"spot_graph_object"`` / ``"inventory_item"`` / ``"ground_item"``
-            / ``"spot_graph_monster"``)
-        expected_types: 見つかった target の許容型 tuple。空 tuple なら型 check 無し
-        label_name: エラーメッセージに含める日本語名 (例: ``"オブジェクト名"``)
-
-    Raises:
-        ToolArgumentResolutionException: 解決できないとき
-    """
-    if not isinstance(label, str) or not label.strip():
-        raise ToolArgumentResolutionException(
-            f"{label_name}が指定されていません。",
-            invalid_label_code,
-        )
-    # NOTE: 本ヘルパを ``resolve_target`` の上に載せ替えようとして失敗した経緯を
-    # 残す。``kind`` と ``expected_types`` の **不一致が意図的に使われている**
-    # 呼び出し元がある (pickup_item は ``kind="ground_item"`` +
-    # ``expected_types=(InventoryToolRuntimeTargetDto,)`` で「所持アイテムとして
-    # 解決させてから ground_item でないことを自前の文面で弾く」)。
-    # ``resolve_target`` は直接 lookup も ``accept_kinds`` で絞るので、載せ替えると
-    # この経路が汎用文面に落ち、「今いる場所に落ちているものではありません」という
-    # 具体的な案内が消える。統合は呼び出し元の意味論を整理してから行う。
-    target: ToolRuntimeTargetDto | None = None
-    kind_mismatch = False
-    for c in _normalize_label_candidates(label):
-        if c in runtime_context.targets:
-            hit = runtime_context.targets[c]
-            if not expected_types or isinstance(hit, expected_types):
-                target = hit
-                break
-            kind_mismatch = True
-            continue
-        found = _find_target_by_display_name(
-            runtime_context,
-            kind=kind,
-            display_name=c,
-        )
-        if found is not None:
-            if not expected_types or isinstance(found, expected_types):
-                target = found
-                break
-            kind_mismatch = True
-    if target is None:
-        if kind_mismatch:
-            raise ToolArgumentResolutionException(
-                f"{label_name}として使えない値です: {label}",
-                invalid_kind_code,
-            )
-        candidates = _candidate_display_names(
-            runtime_context,
-            lambda target: target.kind == kind,
-        )
-        raise ToolArgumentResolutionException(
-            (
-                f"指定された{label_name}は現在の候補にありません: {label} → "
-                f"{_format_valid_candidates(label_name, candidates)}"
-            ),
-            invalid_label_code,
-        )
-    return target
+    """失敗文に載せる表示名。内部ラベルは出さず、同名は 1 度だけ。"""
+    return candidate_names(t for t in runtime_context.targets.values() if predicate(t))
 
 
 def resolve_target(
-    label: str,
+    label: Any,
     runtime_context: ToolRuntimeContextDto,
     *,
     accept_kinds: tuple[str, ...],
     label_name: str,
+    candidates_label: str | None = None,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",
+    tool_is_exposed: ToolIsExposed | None = None,
 ) -> ToolRuntimeTargetDto:
     """名前から対象を引く唯一の入口。複数の種別を同じ規約で受け付ける。
 
-    対人インタラクションでは 1 つの引数に object と player の両方が入るため、
-    種別ごとに分かれていた解決を 1 本にまとめる。
+    失敗は原因ごとに分ける。原因が違えば当人が次に取る手も違う。
 
-    それ以前の問題として、**同じ仕事なのに失敗の返し方が食い違っていた**。
-    ``resolve_object_target`` は例外を投げるのに ``resolve_player_target`` は
-    ``None`` を返しており、後者は呼び出し側が None を握り潰せば静かな失敗に
-    なる。本関数は **常に例外で失敗を返す**。
-
-    失敗は 2 種類に分ける。原因が違えば LLM が次に取る手も違うため。
-
-    - ``INVALID_TARGET_LABEL``: その名前が候補に無い → 名前を直す
-      (**受け付ける全種別の候補一覧を文面に含める**)
-    - ``INVALID_TARGET_KIND``: 内部ラベル (``O1`` 等) で直接引けたが種別が違う
-      → 別の対象を選ぶ
-
-    表示名が別種別のものと一致した場合は ``INVALID_TARGET_KIND`` にせず
-    ``INVALID_TARGET_LABEL`` にする。KIND の文面には候補一覧が付かないため、
-    「その名前は別の種類だ」と正確に言う代わりに「では何が書けるのか」を
-    失うことになり、LLM が次の一手を選べなくなるため。
-
-    候補一覧は ``accept_kinds`` の**全種別**から集める。object だけ / player
-    だけを挙げると「他に何を書けばよいか」が分からず同じ失敗を繰り返す。
-
-    Args:
-        accept_kinds: 受け付ける ``ToolRuntimeTargetDto.kind`` の tuple
-        label_name: エラーメッセージに含める日本語名 (例: ``"対象の名前"``)
+    - ``invalid_label_code``: その名前はどこにも無い → 名前を直す
+      (受け付ける全種別の候補一覧を文面に含める)
+    - ``invalid_kind_code``: 名前は在るが別の種別 → 「無い」ではなく「種類が違う」
+      と伝え、使うべきツールと候補一覧を添える。「大型カニ」を interact の対象に
+      書いたとき「候補にありません」と返すと、当人は敵がいないと誤解する
+    - ``AMBIGUOUS_TARGET_LABEL``: 受け付ける種別に同名が複数 → 黙って先勝ちにしない
 
     Raises:
         ToolArgumentResolutionException: 解決できないとき
@@ -518,86 +236,60 @@ def resolve_target(
             f"{label_name}が指定されていません。",
             invalid_label_code,
         )
+    lookup = TargetIndex.from_context(runtime_context).lookup(label, accept_kinds=accept_kinds)
+    return require(
+        lookup,
+        written=label,
+        label_name=label_name,
+        candidates_label=candidates_label,
+        invalid_label_code=invalid_label_code,
+        invalid_kind_code=invalid_kind_code,
+        tool_is_exposed=tool_is_exposed,
+    )
 
-    kind_mismatch = False
-    for candidate in _normalize_label_candidates(label):
-        hit = runtime_context.targets.get(candidate)
-        if hit is not None:
-            if hit.kind in accept_kinds:
-                return hit
-            kind_mismatch = True
-            continue
-        # 表示名の探索は種別を順に見るので、素朴に最初の一致を返すと
-        # 「物体『リン』とプレイヤー『リン』が同席している」ときに先に見た
-        # 種別が常に勝つ。刺したつもりが物体を調べていた、のような成功として
-        # 返る誤動作になるので、種別を跨いだ一致は全部集めてから判断する。
-        # (`build_ordinal_disambiguator` はセクションごとに別々の名前リストへ
-        #  適用されるため、種別横断の衝突には `#N` が付かない。)
-        found_across_kinds = [
-            f
-            for f in (
-                _find_target_by_display_name(
-                    runtime_context, kind=kind, display_name=candidate
-                )
-                for kind in accept_kinds
-            )
-            if f is not None
-        ]
-        if len(found_across_kinds) > 1:
-            raise ToolArgumentResolutionException(
-                (
-                    f"{label_name}「{candidate}」は複数の対象と一致します。"
-                    "短縮ラベル ("
-                    + "、".join(f.label for f in found_across_kinds)
-                    + ") のいずれかで指定し直してください。"
-                ),
-                "AMBIGUOUS_TARGET_LABEL",
-            )
-        if found_across_kinds:
-            return found_across_kinds[0]
 
-    if kind_mismatch:
-        raise ToolArgumentResolutionException(
-            f"{label_name}として使えない値です: {label}",
-            invalid_kind_code,
-        )
-    candidates = _candidate_display_names(
+def resolve_destination_target(
+    label: Any,
+    runtime_context: ToolRuntimeContextDto,
+    *,
+    tool_is_exposed: ToolIsExposed | None = None,
+) -> "DestinationToolRuntimeTargetDto":
+    """destination_label を ``DestinationToolRuntimeTargetDto`` に解決する。"""
+    target = resolve_target(
+        label,
         runtime_context,
-        lambda target: target.kind in accept_kinds,
+        accept_kinds=("spot_graph_destination",),
+        label_name="接続先名",
+        candidates_label="接続先",
+        invalid_label_code="INVALID_DESTINATION_LABEL",
+        invalid_kind_code="INVALID_DESTINATION_KIND",
+        tool_is_exposed=tool_is_exposed,
     )
-    raise ToolArgumentResolutionException(
-        (
-            f"指定された{label_name}は現在の候補にありません: {label} → "
-            f"{_format_valid_candidates(label_name, candidates)}"
-        ),
-        invalid_label_code,
-    )
+    if not isinstance(target, DestinationToolRuntimeTargetDto) or target.spot_id is None:
+        raise ToolArgumentResolutionException(
+            f"移動先として解決できない名前です: {label}",
+            "INVALID_DESTINATION_KIND",
+        )
+    return target
 
 
 def resolve_object_target(
-    label: str,
+    label: Any,
     runtime_context: ToolRuntimeContextDto,
+    *,
+    tool_is_exposed: ToolIsExposed | None = None,
 ) -> ToolRuntimeTargetDto:
-    """interact 用の target_label を target に解決する。
+    """interact 用の target_label を物体に解決する。
 
-    Issue #276 経路二重化解消: world_runtime の ``_handle_interact`` と本家
-    ``_resolve_interact`` の target_label → world_object_id 解決を共通化。
-
-    PR #441: PR #421 / #425 の「名前直書き」refactor に追従し、display_name
-    fallback を追加 (実験 #438 で全 interact が INVALID_TARGET_LABEL で失敗
-    した silent failure の root fix)。
+    物体は専用の DTO サブクラスを持たず基底のまま登録されるので、
+    ``world_object_id`` の有無で「物体として扱えるか」を判定する。
     """
-    # NOTE: ここだけ ``expected_types`` を渡していないのは意図的で、書き忘れでは
-    # ない。object は他の target と違い専用の DTO サブクラスを持たず、基底の
-    # ``ToolRuntimeTargetDto`` のまま登録される。したがって isinstance では
-    # 絞れないので、代わりに ``world_object_id`` フィールドの有無で「object と
-    # して扱えるか」を判定している。統一時にここへ ``expected_types`` を足そうと
-    # しても、渡すべきクラスが存在しない。
-    target = _resolve_target_with_display_name_fallback(
+    target = resolve_target(
         label,
         runtime_context,
-        kind="spot_graph_object",
+        accept_kinds=("spot_graph_object",),
         label_name="オブジェクト名",
+        tool_is_exposed=tool_is_exposed,
     )
     if target.world_object_id is None:
         raise ToolArgumentResolutionException(
@@ -610,44 +302,20 @@ def resolve_object_target(
 def resolve_sub_location_target(
     label: str | None,
     runtime_context: ToolRuntimeContextDto,
+    *,
+    tool_is_exposed: ToolIsExposed | None = None,
 ) -> ToolRuntimeTargetDto | None:
-    """set_sub_location 用のラベル解決。label が空なら None を返す
-    (sub_location クリア指示)。
-
-    PR-EE/FF/X (Y_after_pr639_640 後続): prompt 表示で
-    ``- "祭壇前"（現在ここ）`` のように quote されるようになったため、
-    LLM が quote ごと渡してきても解決できる必要がある。他 4 resolver
-    (object/player/attack/tend) と同じく ``_normalize_label_candidates``
-    経由で崩れ表現を分解する。
-    """
+    """set_sub_location 用のラベル解決。label が空なら None を返す (区画クリア指示)。"""
     if not label:
         return None
-    target: ToolRuntimeTargetDto | None = None
-    for c in _normalize_label_candidates(label):
-        if c in runtime_context.targets:
-            hit = runtime_context.targets[c]
-            target = hit
-            break
-        found = _find_target_by_display_name(
-            runtime_context,
-            kind="spot_graph_sub_location",
-            display_name=c,
-        )
-        if found is not None:
-            target = found
-            break
-    if target is None:
-        candidates = _candidate_display_names(
-            runtime_context,
-            lambda target: target.kind == "spot_graph_sub_location",
-        )
-        raise ToolArgumentResolutionException(
-            (
-                f"指定されたサブロケーション名は現在の候補にありません: {label} → "
-                f"{_format_valid_candidates('サブロケーション', candidates)}"
-            ),
-            "INVALID_TARGET_LABEL",
-        )
+    target = resolve_target(
+        label,
+        runtime_context,
+        accept_kinds=("spot_graph_sub_location",),
+        label_name="サブロケーション名",
+        candidates_label="サブロケーション",
+        tool_is_exposed=tool_is_exposed,
+    )
     if target.sub_location_id is None:
         raise ToolArgumentResolutionException(
             f"サブロケーションとして解決できない名前です: {label}",
@@ -657,70 +325,25 @@ def resolve_sub_location_target(
 
 
 def resolve_player_target(
-    label: str,
+    label: Any,
     runtime_context: ToolRuntimeContextDto,
+    *,
+    tool_is_exposed: ToolIsExposed | None = None,
 ) -> ToolRuntimeTargetDto:
-    """target_label を spot_graph_player target に解決する。
-
-    「P1」のラベル / 「リン」の display_name / 「P1 (リン)」の連結形のいずれでも
-    引ける (Issue #269 + #276)。
-
-    かつては同等のループを手書きし、**見つからなければ `None` を返して**いた。
-    兄弟の ``resolve_object_target`` は例外を投げるので、同じ「名前から対象を
-    引く」仕事なのに失敗の返し方が食い違っており、呼び出し側が None を握り
-    潰せば静かな失敗になる状態だった。``resolve_target`` に寄せて **例外で
-    失敗を返す** ようにした。
+    """target_label を同じ場所にいる人に解決する。解決できなければ例外。
 
     None が欲しい呼び出し元 (whisper のように独自の失敗文面を組み立てたい側)
-    は、例外を捕まえて自分で変換する。「暗黙に None」ではなく「明示的に
-    変換している」ことがコード上で見えるようにするため。
-
-    Raises:
-        ToolArgumentResolutionException: 解決できないとき
+    は、例外を捕まえて自分で変換する。
     """
     return resolve_target(
         label,
         runtime_context,
         accept_kinds=("spot_graph_player",),
         label_name="相手の名前",
+        tool_is_exposed=tool_is_exposed,
     )
 
 
-def _find_target_by_display_name(
-    runtime_context: ToolRuntimeContextDto,
-    *,
-    kind: str,
-    display_name: str,
-) -> ToolRuntimeTargetDto | None:
-    """`runtime_context.targets` を全スキャンし、同 kind かつ display_name 一致の最初の target を返す。
-
-    LLM が会話履歴に残った `S1` などのスポット相対ラベルを次 turn でも再利用すると、
-    自スポット移動後にラベルの指す先が反転して bouncing が起きる。これを避けるため、
-    スポット名 (display_name) そのものを引数として受け付け、不変な意味で解決できるようにする。
-
-    PR 6 (#404 後続) で名前+ordinal 設計に倒した後の挙動:
-        - prompt 側で同名衝突時は ``灰色のオオカミ #1`` / ``灰色のオオカミ #2``
-          のように disambiguate された display_name が target に格納される
-        - LLM はこの disambiguated 名をそのまま引数として渡す想定
-        - したがって本関数で複数マッチが起きるのは、シナリオ JSON で人為的に
-          同一の display_name (disambiguated 後でも) を作ってしまった病的
-          ケースのみ。warning は引き続き残しておく
-    """
-    matches: list[ToolRuntimeTargetDto] = []
-    for target in runtime_context.targets.values():
-        if target.kind == kind and target.display_name == display_name:
-            matches.append(target)
-    if not matches:
-        return None
-    if len(matches) > 1:
-        logger.warning(
-            "Multiple runtime targets share the same display_name; "
-            "using the first match. kind=%s display_name=%s labels=%s",
-            kind,
-            display_name,
-            [t.label for t in matches],
-        )
-    return matches[0]
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
@@ -904,6 +527,7 @@ class SpotGraphArgumentResolver:
         *,
         action_name_rescue: Optional["ActionNameRescue"] = None,
         target_label_rescue: Optional["TargetLabelRescue"] = None,
+        tool_is_exposed: ToolIsExposed | None = None,
     ) -> None:
         """
         Args:
@@ -917,6 +541,8 @@ class SpotGraphArgumentResolver:
         #: (design_decisions #41)。
         self.action_name_rescue = action_name_rescue
         self.target_label_rescue = target_label_rescue
+        # 「種類が違う」の失敗文に載せるツール名は、この世界に在るものだけにする。
+        self._tool_is_exposed = tool_is_exposed
 
     def resolve_args(
         self,
@@ -1058,7 +684,7 @@ class SpotGraphArgumentResolver:
                 "持ちかける相手の名前が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        target = resolve_player_target(target_label, runtime_context)
+        target = resolve_player_target(target_label, runtime_context, tool_is_exposed=self._tool_is_exposed)
         if target.player_id is None:
             raise ToolArgumentResolutionException(
                 f"この名前は取引の相手として扱えません: {target_label}",
@@ -1105,14 +731,14 @@ class SpotGraphArgumentResolver:
         items = []
         for entry in side["entries"]:
             label = entry["item_label"]
-            target = _resolve_target_with_display_name_fallback(
+            target = resolve_target(
                 label,
                 runtime_context,
-                kind="inventory_item",
-                expected_types=(InventoryToolRuntimeTargetDto,),
+                accept_kinds=("inventory_item",),
                 label_name="差し出す品の名前",
                 invalid_label_code="INVALID_TARGET_LABEL",
                 invalid_kind_code="INVALID_TARGET_KIND",
+                tool_is_exposed=self._tool_is_exposed,
             )
             if target.kind != "inventory_item" or target.item_instance_id is None:
                 raise ToolArgumentResolutionException(
@@ -1213,7 +839,7 @@ class SpotGraphArgumentResolver:
                 "申し出た相手の名前は文字列で指定してください。",
                 "INVALID_TARGET_LABEL",
             )
-        target = resolve_player_target(label, runtime_context)
+        target = resolve_player_target(label, runtime_context, tool_is_exposed=self._tool_is_exposed)
         if target.player_id is None:
             raise ToolArgumentResolutionException(
                 f"この名前は申し出た相手として扱えません: {label}",
@@ -1377,14 +1003,14 @@ class SpotGraphArgumentResolver:
         """
         label = args.get("item_label")
         # PR #441: display_name fallback で「真水 (食料)」等の prompt 表記も受理
-        target = _resolve_target_with_display_name_fallback(
+        target = resolve_target(
             label,
             runtime_context,
-            kind="inventory_item",
-            expected_types=(InventoryToolRuntimeTargetDto,),
+            accept_kinds=("inventory_item",),
             label_name="使用するアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         if target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
@@ -1424,14 +1050,14 @@ class SpotGraphArgumentResolver:
         """
         item_label = args.get("item_label")
         # PR #441: display_name fallback
-        item_target = _resolve_target_with_display_name_fallback(
+        item_target = resolve_target(
             item_label,
             runtime_context,
-            kind="inventory_item",
-            expected_types=(InventoryToolRuntimeTargetDto,),
+            accept_kinds=("inventory_item",),
             label_name="渡すアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         if item_target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
@@ -1456,7 +1082,7 @@ class SpotGraphArgumentResolver:
         # resolve_player_target は解決できなければ例外を投げる (候補一覧つき)。
         # 以前はここで None を受けて同等の例外へ変換していたが、二重に候補を
         # 組み立てる必要は無くなった。
-        player_target = resolve_player_target(target_player_label, runtime_context)
+        player_target = resolve_player_target(target_player_label, runtime_context, tool_is_exposed=self._tool_is_exposed)
         if player_target.player_id is None:
             raise ToolArgumentResolutionException(
                 f"この名前は渡す相手として扱えません: {target_player_label}",
@@ -1562,14 +1188,14 @@ class SpotGraphArgumentResolver:
         """
         label = args.get("item_label")
         # PR #441: display_name fallback
-        target = _resolve_target_with_display_name_fallback(
+        target = resolve_target(
             label,
             runtime_context,
-            kind="inventory_item",
-            expected_types=(InventoryToolRuntimeTargetDto,),
+            accept_kinds=("inventory_item",),
             label_name="落とすアイテム名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         # その場に落ちているアイテム (kind="ground_item") は drop の対象にならない
         if target.kind != "inventory_item":
@@ -1606,14 +1232,14 @@ class SpotGraphArgumentResolver:
         """その場に落ちているアイテムの名前を item_instance_id に解決する。"""
         label = args.get("ground_item_label")
         # PR #441: display_name fallback
-        target = _resolve_target_with_display_name_fallback(
+        target = resolve_target(
             label,
             runtime_context,
-            kind="ground_item",
-            expected_types=(InventoryToolRuntimeTargetDto,),
+            accept_kinds=("ground_item",),
             label_name="拾うものの名前",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         if target.kind != "ground_item":
             raise ToolArgumentResolutionException(
@@ -1651,14 +1277,14 @@ class SpotGraphArgumentResolver:
         label = args.get("target_player_label")
         if not isinstance(label, str) or not label.strip():
             return {**args, "target_player_id": None}
-        target = _resolve_target_with_display_name_fallback(
+        target = resolve_target(
             label,
             runtime_context,
-            kind="spot_graph_player",
-            expected_types=(PlayerToolRuntimeTargetDto,),
+            accept_kinds=("spot_graph_player",),
             label_name="投票する相手の名前",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         return {**args, "target_player_id": target.player_id}
 
@@ -1679,14 +1305,14 @@ class SpotGraphArgumentResolver:
                 "倒れている相手の名前が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        target = _resolve_target_with_display_name_fallback(
+        target = resolve_target(
             label,
             runtime_context,
-            kind="spot_graph_player",
-            expected_types=(PlayerToolRuntimeTargetDto,),
+            accept_kinds=("spot_graph_player",),
             label_name="倒れている相手の名前",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         return {**args, "target_player_id": target.player_id}
 
@@ -1710,14 +1336,14 @@ class SpotGraphArgumentResolver:
                 "INVALID_TARGET_LABEL",
             )
         try:
-            target = _resolve_target_with_display_name_fallback(
+            target = resolve_target(
                 label,
                 runtime_context,
-                kind="spot_graph_player",
-                expected_types=(PlayerToolRuntimeTargetDto,),
+                accept_kinds=("spot_graph_player",),
                 label_name="蘇生対象の名前",
                 invalid_label_code="INVALID_TARGET_LABEL",
                 invalid_kind_code="INVALID_TARGET_KIND",
+                tool_is_exposed=self._tool_is_exposed,
             )
         except ToolArgumentResolutionException as e:
             # Y_after_pr639_640_200tick 後続: 「候補にない」だけの message は
@@ -1764,14 +1390,14 @@ class SpotGraphArgumentResolver:
         """
         label = args.get("target_label")
         # PR #441: display_name fallback
-        target = _resolve_target_with_display_name_fallback(
+        target = resolve_target(
             label,
             runtime_context,
-            kind="spot_graph_monster",
-            expected_types=(MonsterToolRuntimeTargetDto,),
+            accept_kinds=("spot_graph_monster",),
             label_name="攻撃対象名",
             invalid_label_code="INVALID_TARGET_LABEL",
             invalid_kind_code="INVALID_TARGET_KIND",
+            tool_is_exposed=self._tool_is_exposed,
         )
         if target.monster_id is None:
             raise ToolArgumentResolutionException(
@@ -1792,8 +1418,9 @@ class SpotGraphArgumentResolver:
         runtime_context: ToolRuntimeContextDto,
     ) -> dict[str, Any]:
         target = resolve_destination_target(
-            args.get("destination_label"),  # type: ignore[arg-type]
+            args.get("destination_label"),
             runtime_context,
+            tool_is_exposed=self._tool_is_exposed,
         )
         return _with_inner_thought(
             {"destination_spot_id": target.spot_id},
@@ -1810,7 +1437,7 @@ class SpotGraphArgumentResolver:
     ) -> dict[str, Any]:
         target = resolve_sub_location_target(
             args.get("sub_location_label"), runtime_context
-        )
+        , tool_is_exposed=self._tool_is_exposed)
         sub_location_id = target.sub_location_id if target is not None else None
         return _with_inner_thought({"sub_location_id": sub_location_id}, args)
 
@@ -1832,10 +1459,11 @@ class SpotGraphArgumentResolver:
         target_judgment: dict[str, Any] | None = None
         try:
             target = resolve_target(
-                args.get("target_label"),  # type: ignore[arg-type]
+                args.get("target_label"),
                 runtime_context,
                 accept_kinds=accept_kinds,
                 label_name="対象の名前",
+                tool_is_exposed=self._tool_is_exposed,
             )
         except ToolArgumentResolutionException as exc:
             # 候補に当たらなかったときだけ意味で問い直す。種別違い・曖昧・空は
