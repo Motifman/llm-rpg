@@ -135,9 +135,9 @@ class TestHarvestCommandService:
         s["inventory_repo"].save(inventory)
         
         # 2. 採集開始
-        # ItemSpecReadModel を保存しておく必要がある (鉄鉱石 ID:9)
-        from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-        s["item_spec_repo"].save(ItemSpecReadModel(
+        # 鉄鉱石 (ID:9) の ItemSpec を保存しておく必要がある
+        from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+        s["item_spec_repo"].save(ItemSpec(
             item_spec_id=ItemSpecId(9),
             name="鉄鉱石",
             item_type=ItemType.MATERIAL,
@@ -178,13 +178,7 @@ class TestHarvestCommandService:
         assert updated_map.get_object(target_id).component.get_available_quantity(WorldTick(105)) == 0
 
     def test_finish_harvest_accepts_repository_returning_item_spec(self, setup_service):
-        """ItemSpec を返すリポジトリ配線でも採集を完了できる。
-
-        ItemSpecRepository の 2 実装は別の型を返す。InMemory は
-        ItemSpecReadModel、SQLite は ItemSpec。呼び出し側が
-        to_item_spec() だけを前提にしていたため、SQLite 配線では
-        AttributeError になっていた。契約をどちらに揃えるかは #1364。
-        """
+        """ItemSpec を返すリポジトリ配線でも採集を完了できる。"""
         s = setup_service
         service = s["service"]
 
@@ -474,7 +468,7 @@ class TestHarvestCommandService:
         service = s["service"]
         
         # 正常なセットアップ
-        from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+        from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
         from ai_rpg_world.domain.world.entity.tile import Tile
         from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
         spot_id = SpotId.create(1)
@@ -497,8 +491,7 @@ class TestHarvestCommandService:
         loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
         s["loot_table_repo"].save(loot_table)
         
-        # ItemSpecReadModel を保存する
-        s["item_spec_repo"].save(ItemSpecReadModel(
+        s["item_spec_repo"].save(ItemSpec(
             item_spec_id=ItemSpecId(9), 
             name="鉄鉱石", 
             item_type=ItemType.MATERIAL, 
@@ -596,8 +589,8 @@ class TestHarvestCommandService:
 
         loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
         s["loot_table_repo"].save(loot_table)
-        from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-        s["item_spec_repo"].save(ItemSpecReadModel(item_spec_id=ItemSpecId(9), name="鉄鉱石", item_type=ItemType.MATERIAL, rarity=Rarity.COMMON, description="鉄の素材", max_stack_size=MaxStackSize(64)))
+        from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+        s["item_spec_repo"].save(ItemSpec(item_spec_id=ItemSpecId(9), name="鉄鉱石", item_type=ItemType.MATERIAL, rarity=Rarity.COMMON, description="鉄の素材", max_stack_size=MaxStackSize(64)))
 
         service.start_harvest(StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100))
 
@@ -631,8 +624,8 @@ class TestHarvestCommandService:
 
         loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
         s["loot_table_repo"].save(loot_table)
-        from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-        s["item_spec_repo"].save(ItemSpecReadModel(item_spec_id=ItemSpecId(9), name="鉄鉱石", item_type=ItemType.MATERIAL, rarity=Rarity.COMMON, description="鉄の素材", max_stack_size=MaxStackSize(64)))
+        from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+        s["item_spec_repo"].save(ItemSpec(item_spec_id=ItemSpecId(9), name="鉄鉱石", item_type=ItemType.MATERIAL, rarity=Rarity.COMMON, description="鉄の素材", max_stack_size=MaxStackSize(64)))
 
         from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import (
             HarvestActorNotFoundException,

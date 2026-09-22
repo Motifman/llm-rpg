@@ -33,7 +33,7 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -357,7 +357,7 @@ class TestWorldSimulationApplicationService:
         player_status_repo.save(self._player_status(1))
         inventory_repo.save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
         item_spec_repo.save(
-            ItemSpecReadModel(
+            ItemSpec(
                 item_spec_id=ItemSpecId(9),
                 name="鉄鉱石",
                 item_type=ItemType.MATERIAL,

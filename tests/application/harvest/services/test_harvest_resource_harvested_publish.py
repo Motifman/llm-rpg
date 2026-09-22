@@ -61,9 +61,7 @@ class TestResourceHarvestedPublishedThroughFinish:
             LootTableAggregate,
         )
         from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-        from ai_rpg_world.domain.item.read_model.item_spec_read_model import (
-            ItemSpecReadModel,
-        )
+        from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
         from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
@@ -171,7 +169,7 @@ class TestResourceHarvestedPublishedThroughFinish:
         loot_repo = service._loot_table_repository
         loot_repo.save(LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)]))
         service._item_spec_repository.save(
-            ItemSpecReadModel(
+            ItemSpec(
                 item_spec_id=ItemSpecId(9),
                 name="鉄鉱石",
                 item_type=ItemType.MATERIAL,

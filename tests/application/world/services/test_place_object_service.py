@@ -14,7 +14,6 @@ from ai_rpg_world.application.world.exceptions.command.place_command_exception i
 from ai_rpg_world.application.world.services.place_object_service import PlaceObjectApplicationService
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -152,17 +151,7 @@ class TestPlaceObjectApplicationService:
         map_repo, inv_repo, status_repo, item_repo, spec_repo = repos
         pmap, actor_id, player_id_val = map_with_player
         spec = _placeable_chest_spec()
-        spec_rm = ItemSpecReadModel(
-            item_spec_id=spec.item_spec_id,
-            name=spec.name,
-            item_type=spec.item_type,
-            rarity=spec.rarity,
-            description=spec.description,
-            max_stack_size=spec.max_stack_size,
-            is_placeable=spec.is_placeable,
-            placeable_object_type=spec.placeable_object_type,
-        )
-        spec_repo.save(spec_rm)
+        spec_repo.save(spec)
         item_instance_id = item_repo.generate_item_instance_id()
         item_agg = ItemAggregate.create(item_instance_id, spec, durability=None, quantity=1)
         item_repo.save(item_agg)

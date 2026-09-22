@@ -289,14 +289,9 @@ def _create_and_acquire(
     item_spec_repository: ItemSpecRepository,
 ) -> None:
     """`ItemAggregate` を生成して inventory に acquire させる内部 helper。"""
-    spec_union = item_spec_repository.find_by_id(spec_id)
-    if spec_union is None:
+    spec = item_spec_repository.find_by_id(spec_id)
+    if spec is None:
         return
-    spec = (
-        spec_union.to_item_spec()
-        if hasattr(spec_union, "to_item_spec")
-        else spec_union
-    )
     instance_id = item_repository.generate_item_instance_id()
     item_aggregate = ItemAggregate.create(
         item_instance_id=instance_id,

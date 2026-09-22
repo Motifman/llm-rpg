@@ -40,7 +40,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
@@ -172,7 +172,7 @@ def _build_app(initial_items: tuple[ItemSpecId, ...]):
         (INGOT_SPEC_ID, "鉄インゴット"),
     ]:
         item_spec_repo.save(
-            ItemSpecReadModel(
+            ItemSpec(
                 item_spec_id=spec_id,
                 name=name,
                 item_type=ItemType.MATERIAL,
@@ -484,7 +484,7 @@ class TestQuantityIntegration:
         inventory_repo = InMemoryPlayerInventoryRepository(data_store)
         item_repo = InMemoryItemRepository(data_store)
         item_spec_repo = InMemoryItemSpecRepository()
-        item_spec_repo.save(ItemSpecReadModel(
+        item_spec_repo.save(ItemSpec(
             item_spec_id=ORE_SPEC_ID, name="鉄鉱石",
             item_type=ItemType.MATERIAL, rarity=Rarity.COMMON,
             description="d", max_stack_size=MaxStackSize(99),

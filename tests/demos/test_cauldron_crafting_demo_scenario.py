@@ -47,7 +47,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
@@ -113,7 +113,7 @@ def cauldron():
     # シナリオ JSON で定義された item_spec を read model としてリポジトリへ登録
     for item_def in loaded.item_spec_definitions:
         item_spec_repo.save(
-            ItemSpecReadModel(
+            ItemSpec(
                 item_spec_id=item_def.spec_id,
                 name=item_def.name,
                 item_type=ItemType.MATERIAL,

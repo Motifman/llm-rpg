@@ -25,9 +25,6 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import (
-    ItemSpecReadModel,
-)
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
@@ -235,18 +232,10 @@ class HarvestCommandService:
         obtained_items = []
 
         if loot_result:
-            found_spec = self._item_spec_repository.find_by_id(loot_result.item_spec_id)
-            if not found_spec:
+            item_spec = self._item_spec_repository.find_by_id(loot_result.item_spec_id)
+            if not item_spec:
                 raise HarvestCommandException(f"Item spec {loot_result.item_spec_id} not found")
 
-            # InMemory 実装は ItemSpecReadModel、SQLite 実装は ItemSpec を返す。
-            # どちらの配線でも動くよう、ここで ItemSpec へ揃える。
-            # どちらを正とするかは #1364 で決める。
-            item_spec = (
-                found_spec.to_item_spec()
-                if isinstance(found_spec, ItemSpecReadModel)
-                else found_spec
-            )
             new_item_id = self._item_repository.generate_item_instance_id()
             obtained_items.append(
                 {

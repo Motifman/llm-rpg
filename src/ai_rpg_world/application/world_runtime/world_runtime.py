@@ -295,7 +295,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
@@ -4713,7 +4713,7 @@ def create_world_runtime(
             ItemType.CONSUMABLE if item_def.consume_effect is not None
             else ItemType.QUEST
         )
-        spec = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_def.spec_id,
             name=item_def.name,
             item_type=item_type,
@@ -5380,12 +5380,12 @@ def create_world_runtime(
                 item_type_value = item.item_spec.item_type.value
                 description_value = item.item_spec.description or ""
                 usage_hint_value = (
-                    (getattr(item_spec_definition, "usage_hint", None) or "")
+                    (item_spec_definition.usage_hint or "")
                     if item_spec_definition is not None
                     else (item.item_spec.usage_hint or "")
                 )
                 category_value = (
-                    str(getattr(item_spec_definition, "category", "") or "")
+                    item_spec_definition.category
                     if item_spec_definition is not None
                     else ""
                 )
@@ -5439,9 +5439,9 @@ def create_world_runtime(
 
     # 光源アイテムを自動検出
     light_source_item_spec_ids = frozenset(
-        rm.item_spec_id
-        for rm in item_spec_repo.find_all()
-        if getattr(rm, "is_light_source", False)
+        spec.item_spec_id
+        for spec in item_spec_repo.find_all()
+        if spec.is_light_source
     )
 
     def _owned_item_spec_ids_provider(entity_id: int) -> frozenset[Any]:
@@ -5509,10 +5509,9 @@ def create_world_runtime(
     def _resolve_item_spec_name(spec_id_value: int) -> str:
         """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
-        spec_union = item_spec_repo.find_by_id(_ISpecId.create(spec_id_value))
-        if spec_union is None:
+        spec = item_spec_repo.find_by_id(_ISpecId.create(spec_id_value))
+        if spec is None:
             return ""
-        spec = spec_union.to_item_spec() if hasattr(spec_union, "to_item_spec") else spec_union
         return spec.name
 
     def _observe_visible_monster_for_player(player_id: int, entry: Any) -> None:

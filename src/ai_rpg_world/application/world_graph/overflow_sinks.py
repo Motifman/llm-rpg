@@ -156,14 +156,9 @@ class GroundOverflowSink:
     def _create_item(self, spec_id: ItemSpecId) -> Any:
         from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 
-        spec_union = self._item_specs.find_by_id(spec_id)
-        if spec_union is None:
+        spec = self._item_specs.find_by_id(spec_id)
+        if spec is None:
             return None
-        spec = (
-            spec_union.to_item_spec()
-            if hasattr(spec_union, "to_item_spec")
-            else spec_union
-        )
         aggregate = ItemAggregate.create(
             item_instance_id=self._items.generate_item_instance_id(),
             item_spec=spec,
