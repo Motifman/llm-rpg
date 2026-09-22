@@ -23,7 +23,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     TypedJudgmentUnavailableException,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-    TARGET_LABEL_JUDGMENT_KEY,
+    TARGET_LABEL_JUDGMENTS_KEY,
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.target_label_rescue import (
@@ -91,7 +91,7 @@ class TestTheRescueOnlyRunsWhenTheNameDidNotMatch:
 
         assert resolved["object_id"] == 11
         assert port.calls == []
-        assert TARGET_LABEL_JUDGMENT_KEY not in resolved
+        assert TARGET_LABEL_JUDGMENTS_KEY not in resolved
 
     def test_without_a_rescue_the_failure_is_unchanged(self) -> None:
         """救済を配線していなければ、従来どおり INVALID_TARGET_LABEL で失敗する (**正の対照**)。"""
@@ -110,7 +110,7 @@ class TestAnUnmatchedNameIsAskedAboutAndCanBeReplaced:
         resolved = _resolve(port, "East Shrine")
 
         assert resolved["object_id"] == 11
-        judgment = resolved[TARGET_LABEL_JUDGMENT_KEY]
+        (judgment,) = resolved[TARGET_LABEL_JUDGMENTS_KEY]
         assert judgment["original"] == "East Shrine"
         assert judgment["replaced_with"] == "東の祭壇"
         assert judgment["accepted"] is True

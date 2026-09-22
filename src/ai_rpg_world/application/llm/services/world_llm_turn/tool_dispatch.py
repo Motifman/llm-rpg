@@ -28,7 +28,7 @@ from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescu
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     ACTION_NAME_JUDGMENT_KEY,
-    TARGET_LABEL_JUDGMENT_KEY,
+    TARGET_LABEL_JUDGMENTS_KEY,
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.target_label_rescue import (
@@ -852,7 +852,9 @@ def adapt_executor_handler_with_resolver(
         # 解釈を結果文で当人に見せる。**黙って置き換えない。** 黙って通すと
         # 発明した名前が通ると学び、同じ名前を書き続ける。
         judgment = resolved.pop(ACTION_NAME_JUDGMENT_KEY, None)
-        target_judgment = resolved.pop(TARGET_LABEL_JUDGMENT_KEY, None)
+        target_judgments = [
+            j for j in (resolved.pop(TARGET_LABEL_JUDGMENTS_KEY, None) or ()) if isinstance(j, dict)
+        ]
         resolved[ACTION_HISTORY_PROJECTION_KEY] = projection
         # **generic 経路 (do_* を通らない tool) にも同じ射影を届ける。**
         # 投影を読むのは executor 側の 5 経路だけで、それ以外は phase_b が
@@ -866,7 +868,7 @@ def adapt_executor_handler_with_resolver(
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
             )
-        if isinstance(target_judgment, dict):
+        for target_judgment in target_judgments:
             _record_judgment(
                 target_judgment,
                 question=TARGET_LABEL_RESCUE_QUESTION,
@@ -875,8 +877,10 @@ def adapt_executor_handler_with_resolver(
                 current_tick_provider=current_tick_provider,
             )
         result = raw_handler(int(player_id.value), resolved, runtime_context)
-        if isinstance(target_judgment, dict) and target_judgment.get("accepted"):
-            result = _with_interpretation_note(result, target_judgment)
+        # 注釈は先頭に足すので、逆順に掛けると最初の判断が最初に読める。
+        for target_judgment in reversed(target_judgments):
+            if target_judgment.get("accepted"):
+                result = _with_interpretation_note(result, target_judgment)
         if isinstance(judgment, dict) and judgment.get("accepted"):
             return _with_interpretation_note(result, judgment)
         return result
