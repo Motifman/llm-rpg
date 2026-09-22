@@ -122,15 +122,15 @@ def _build_effect_tree(rows: list[sqlite3.Row]) -> ItemEffect | None:
         kind = str(row["effect_kind"])
         amount = row["amount"]
         if kind == "composite":
-            return CompositeItemEffect(tuple(build(child) for child in by_parent.get(int(row["effect_id"]), [])))  # type: ignore[abstract]  # Issue #1380
+            return CompositeItemEffect(tuple(build(child) for child in by_parent.get(int(row["effect_id"]), [])))
         if kind == "heal":
-            return HealEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
+            return HealEffect(int(amount))
         if kind == "recover_mp":
-            return RecoverMpEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
+            return RecoverMpEffect(int(amount))
         if kind == "gold":
-            return GoldEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
+            return GoldEffect(int(amount))
         if kind == "exp":
-            return ExpEffect(int(amount))  # type: ignore[abstract]  # Issue #1380
+            return ExpEffect(int(amount))
         raise ValueError(f"unknown item effect kind: {kind}")
 
     roots = by_parent.get(None, [])
@@ -171,7 +171,7 @@ def _payload_to_effect(payload: dict[str, Any] | None) -> ItemEffect | None:
     kind = str(payload["kind"])
     if kind == "composite":
         raw_children = payload.get("effects", [])
-        return CompositeItemEffect(  # type: ignore[abstract]  # Issue #1380
+        return CompositeItemEffect(
             tuple(
                 child
                 for child in (_payload_to_effect(raw_child) for raw_child in raw_children)
@@ -180,13 +180,13 @@ def _payload_to_effect(payload: dict[str, Any] | None) -> ItemEffect | None:
         )
     amount = int(payload["amount"])
     if kind == "heal":
-        return HealEffect(amount)  # type: ignore[abstract]  # Issue #1380
+        return HealEffect(amount)
     if kind == "recover_mp":
-        return RecoverMpEffect(amount)  # type: ignore[abstract]  # Issue #1380
+        return RecoverMpEffect(amount)
     if kind == "gold":
-        return GoldEffect(amount)  # type: ignore[abstract]  # Issue #1380
+        return GoldEffect(amount)
     if kind == "exp":
-        return ExpEffect(amount)  # type: ignore[abstract]  # Issue #1380
+        return ExpEffect(amount)
     raise ValueError(f"unknown consume_effect kind: {kind}")
 
 
