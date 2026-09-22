@@ -1,8 +1,12 @@
 
+import itertools
+from datetime import datetime
+
 import pytest
 
+from ai_rpg_world.domain.sns.aggregate import PostAggregate
 from ai_rpg_world.domain.sns.repository.post_repository import PostRepository
-from ai_rpg_world.domain.sns.value_object import PostId, UserId
+from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId
 
 
 class _TestPostRepositoryInterface:
@@ -46,6 +50,36 @@ class _TestPostRepositoryInterface:
         assert isinstance(posts, list)
         user_ids = set(post.author_user_id for post in posts)
         assert user_ids.issubset({UserId(1), UserId(2)})
+
+    def test_find_by_user_ids_orders_by_created_at_descending(self, repository):
+        """find_by_user_ids は作成日時の降順で返す。"""
+        posts = repository.find_by_user_ids([UserId(1), UserId(2)], limit=50)
+        assert len(posts) > 1
+        for newer, older in itertools.pairwise(posts):
+            assert newer.created_at >= older.created_at
+
+    def test_find_by_user_ids_breaks_created_at_ties_by_post_id_descending(self, repository):
+        """find_by_user_ids は作成日時が同じポストを post_id の降順で返す。"""
+        same_time = datetime(2026, 1, 1, 0, 0, 0)
+        for post_id in (101, 102, 103):
+            repository.save(
+                PostAggregate(
+                    PostId(post_id),
+                    UserId(1),
+                    PostContent(content=f"同時刻のポスト {post_id}"),
+                    set(),
+                    set(),
+                    set(),
+                    False,
+                    None,
+                    None,
+                    same_time,
+                )
+            )
+
+        posts = repository.find_by_user_ids([UserId(1)], limit=50)
+        tied_post_ids = [post.post_id for post in posts if post.created_at == same_time]
+        assert tied_post_ids == [PostId(103), PostId(102), PostId(101)]
 
     def test_find_recent_posts(self, repository):
         """最新ポスト取得テスト"""

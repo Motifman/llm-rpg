@@ -263,19 +263,16 @@ class SqlitePostRepository(PostRepository):
             (int(user_id), limit, offset),
         )
 
-    def find_by_user_ids(
-        self, user_ids: list[UserId], limit: int = 50, offset: int = 0, sort_by: str = "created_at"
-    ) -> list[PostAggregate]:
+    def find_by_user_ids(self, user_ids: list[UserId], limit: int = 50, offset: int = 0) -> list[PostAggregate]:
         if not user_ids:
             return []
         placeholders = ",".join("?" for _ in user_ids)
-        order_by = "created_at DESC, post_id DESC"
         return self._load_query(
             f"""
             SELECT *
             FROM game_sns_posts
             WHERE author_user_id IN ({placeholders})
-            ORDER BY {order_by}
+            ORDER BY created_at DESC, post_id DESC
             LIMIT ? OFFSET ?
             """,
             tuple(int(user_id) for user_id in user_ids) + (limit, offset),
