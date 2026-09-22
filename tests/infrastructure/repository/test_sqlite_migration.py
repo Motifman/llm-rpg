@@ -14,6 +14,20 @@ from ai_rpg_world.infrastructure.repository.sqlite_migration import (
 )
 
 
+def _game_write_migrations_before(version: int) -> tuple[SqliteMigration, ...]:
+    """game_write の migration を、指定 version の手前まで返す。
+
+    末尾からの相対位置で切ると、migration を 1 つ足すたびに境界が黙って
+    ずれる。ここでは「この migration が走る直前の状態」を作りたいので、
+    version で指す。
+    """
+    from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
+        _GAME_WRITE_MIGRATIONS,
+    )
+
+    return tuple(m for m in _GAME_WRITE_MIGRATIONS if m.version < version)
+
+
 class TestSqliteMigration:
     def test_apply_migrations_tracks_namespace_version(self) -> None:
         conn = sqlite3.connect(":memory:")
@@ -148,7 +162,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 34,
+            "game_write": 35,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
@@ -158,7 +172,6 @@ class TestInitGameDbSchema:
     def test_migration_v32_normalizes_legacy_naive_trade_datetime(self) -> None:
         """旧schemaのタイムゾーンなし取引日時をUTC付きにし、outboxイベントへ引き継げる。"""
         from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
-            _GAME_WRITE_MIGRATIONS,
             init_game_write_schema,
         )
 
@@ -166,7 +179,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-3],
+            migrations=_game_write_migrations_before(32),
         )
         conn.execute(
             """
@@ -186,12 +199,11 @@ class TestInitGameDbSchema:
         ).fetchone()
         assert row is not None
         assert row[0] == "2026-08-14T01:02:03+00:00"
-        assert get_applied_version(conn, "game_write") == 34
+        assert get_applied_version(conn, "game_write") == 35
 
     def test_migration_v32_rejects_invalid_legacy_trade_datetime(self) -> None:
         """解釈できない旧取引日時は推測変換せず、v32 migration全体をrollbackする。"""
         from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
-            _GAME_WRITE_MIGRATIONS,
             init_game_write_schema,
         )
 
@@ -199,7 +211,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-3],
+            migrations=_game_write_migrations_before(32),
         )
         conn.execute(
             """
@@ -225,7 +237,6 @@ class TestInitGameDbSchema:
     def test_migration_v33_preserves_existing_outbox_rows_and_order(self) -> None:
         """v32のpending・delivered行を失わず、従来の作成順をoutbox_idへ移す。"""
         from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
-            _GAME_WRITE_MIGRATIONS,
             init_game_write_schema,
         )
 
@@ -233,7 +244,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-2],
+            migrations=_game_write_migrations_before(33),
         )
         conn.execute(
             """
@@ -274,7 +285,6 @@ class TestInitGameDbSchema:
     def test_migration_v34_preserves_v33_outbox_rows_and_retry_metadata(self) -> None:
         """v33行の登録順と試行情報を保ち、再試行制御列を追加する。"""
         from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
-            _GAME_WRITE_MIGRATIONS,
             init_game_write_schema,
         )
 
@@ -282,7 +292,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-1],
+            migrations=_game_write_migrations_before(34),
         )
         conn.execute(
             """

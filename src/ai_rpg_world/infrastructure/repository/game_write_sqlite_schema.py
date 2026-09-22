@@ -2090,6 +2090,27 @@ def _migration_v34(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v35(connection: sqlite3.Connection) -> None:
+    """item spec の光源・腐敗・疲労回復を静的マスタへ追加する。
+
+    この 3 つは `name` / `item_type` と同じく作者がシナリオに書く静的定義だが、
+    SQLite 側はテーブル定義・writer・デコーダのどこにも持っていなかった。
+    そのため SQLite 配線では、ランタンが光らず、食料が腐らず、疲労も回復しない
+    状態へ黙って落ちる。既存行は ItemSpec の既定値 (無効) と同じ値にする。
+    """
+    connection.execute(
+        "ALTER TABLE game_item_specs "
+        "ADD COLUMN is_light_source INTEGER NOT NULL DEFAULT 0"
+    )
+    connection.execute(
+        "ALTER TABLE game_item_specs ADD COLUMN spoils_after_ticks INTEGER"
+    )
+    connection.execute(
+        "ALTER TABLE game_item_specs "
+        "ADD COLUMN fatigue_recovery INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -2125,6 +2146,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=32, apply=_migration_v32),
     SqliteMigration(version=33, apply=_migration_v33),
     SqliteMigration(version=34, apply=_migration_v34),
+    SqliteMigration(version=35, apply=_migration_v35),
 )
 
 

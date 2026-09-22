@@ -27,6 +27,8 @@ from ai_rpg_world.infrastructure.repository.sqlite_item_spec_repository import (
 
 _SPEC_ID = ItemSpecId(4001)
 _SPEC_NAME = "契約試験の剣"
+_LANTERN_ID = ItemSpecId(4002)
+_LANTERN_NAME = "契約試験のランタン"
 
 
 def _seeded_spec() -> ItemSpec:
@@ -42,16 +44,34 @@ def _seeded_spec() -> ItemSpec:
     )
 
 
+def _lantern_spec() -> ItemSpec:
+    """光源・腐敗・疲労回復を同時に持つ spec。3 つとも既定値から外してある。"""
+    return ItemSpec(
+        item_spec_id=_LANTERN_ID,
+        name=_LANTERN_NAME,
+        item_type=ItemType.QUEST,
+        rarity=Rarity.COMMON,
+        description="暗所を照らし、時間で傷み、使うと疲れが取れる",
+        max_stack_size=MaxStackSize(1),
+        is_light_source=True,
+        spoils_after_ticks=120,
+        fatigue_recovery=15,
+    )
+
+
 def _in_memory_repository() -> ItemSpecRepository:
     repo = InMemoryItemSpecRepository()
     repo.replace_spec(_seeded_spec())
+    repo.replace_spec(_lantern_spec())
     return repo
 
 
 def _sqlite_repository() -> ItemSpecRepository:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
-    SqliteItemSpecWriter.for_standalone_connection(connection).replace_spec(_seeded_spec())
+    writer = SqliteItemSpecWriter.for_standalone_connection(connection)
+    writer.replace_spec(_seeded_spec())
+    writer.replace_spec(_lantern_spec())
     return SqliteItemSpecRepository.for_connection(connection)
 
 
@@ -121,3 +141,39 @@ class TestItemSpecRepositoryReturnType:
     ) -> None:
         """投入していない ID を渡すと None が返る。"""
         assert repository.find_by_id(ItemSpecId(999_001)) is None
+
+
+class TestItemSpecRepositoryKeepsScenarioDefinedFields:
+    """作者がシナリオに書く光源・腐敗・疲労回復が、実装に依らず保たれることを保証する。"""
+
+    def test_is_light_source_survives(self, repository: ItemSpecRepository) -> None:
+        """is_light_source=True で投入した spec は、取得しても True のまま返る。"""
+        found = repository.find_by_id(_LANTERN_ID)
+
+        assert found is not None
+        assert found.is_light_source is True
+
+    def test_spoils_after_ticks_survives(self, repository: ItemSpecRepository) -> None:
+        """spoils_after_ticks=120 で投入した spec は、取得しても 120 のまま返る。"""
+        found = repository.find_by_id(_LANTERN_ID)
+
+        assert found is not None
+        assert found.spoils_after_ticks == 120
+
+    def test_fatigue_recovery_survives(self, repository: ItemSpecRepository) -> None:
+        """fatigue_recovery=15 で投入した spec は、取得しても 15 のまま返る。"""
+        found = repository.find_by_id(_LANTERN_ID)
+
+        assert found is not None
+        assert found.fatigue_recovery == 15
+
+    def test_defaults_stay_off_when_not_declared(
+        self, repository: ItemSpecRepository
+    ) -> None:
+        """3 つを指定せずに投入した spec は、取得しても既定の無効値で返る。"""
+        found = repository.find_by_id(_SPEC_ID)
+
+        assert found is not None
+        assert found.is_light_source is False
+        assert found.spoils_after_ticks is None
+        assert found.fatigue_recovery == 0
