@@ -80,3 +80,8 @@ class SkillAlreadyEquippedException(SkillDomainException, BusinessRuleException)
     """スキルが既に装備されている場合の例外"""
     error_code = "SKILL.ALREADY_EQUIPPED"
 
+
+
+class SkillRotationAngleUnsupportedException(SkillDomainException, ValidationException):
+    """ヒットボックスの回転角が、対応表に無い角度だった場合の例外"""
+    error_code = "SKILL.ROTATION_ANGLE_UNSUPPORTED"
