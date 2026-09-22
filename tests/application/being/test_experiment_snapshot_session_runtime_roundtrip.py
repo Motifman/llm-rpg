@@ -107,8 +107,8 @@ def _add_item_fixture(runtime: Any, *, holder: PlayerId) -> None:
     """実 runtime の item / inventory / spot_interior repo に最小 item 状態を作る。"""
     carried_id = ItemInstanceId(9001)
     ground_id = ItemInstanceId(9002)
-    carried_spec = runtime._item_spec_repo.find_by_id(ItemSpecId(6)).to_item_spec()
-    ground_spec = runtime._item_spec_repo.find_by_id(ItemSpecId(9)).to_item_spec()
+    carried_spec = runtime._item_spec_repo.find_by_id(ItemSpecId(6))
+    ground_spec = runtime._item_spec_repo.find_by_id(ItemSpecId(9))
     runtime._item_repo.save(
         ItemAggregate.create(
             carried_id,

@@ -23,7 +23,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFl
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
@@ -285,7 +285,7 @@ def _build(events: tuple[ScenarioEventDef, ...]) -> _Harness:
     status_repository.save(_status())
     inventory_repository.save(PlayerInventoryAggregate(player_id=PLAYER_ID))
     item_spec_repository.save(
-        ItemSpecReadModel(
+        ItemSpec(
             item_spec_id=REWARD_SPEC_ID,
             name="reward",
             item_type=ItemType.MATERIAL,

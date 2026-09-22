@@ -435,9 +435,7 @@ class TestItemInstanceCodec:
             save=lambda agg: dst_store.update({agg.item_instance_id: agg}),
         )
         dst_spec_repo = SimpleNamespace(
-            find_by_id=lambda spec_id: SimpleNamespace(
-                to_item_spec=lambda: spec if spec_id == spec.item_spec_id else None
-            )
+            find_by_id=lambda spec_id: spec if spec_id == spec.item_spec_id else None
         )
 
         ItemInstanceSubsystemCodec().restore(

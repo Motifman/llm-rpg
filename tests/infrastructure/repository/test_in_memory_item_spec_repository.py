@@ -16,7 +16,7 @@ class TestInMemoryItemSpecRepository:
         # Sample data contains ID 1 (鉄の剣)
         spec = repo.find_by_id(ItemSpecId(1))
         assert spec is not None
-        # Should be an ItemSpec or ItemSpecReadModel that works as ItemSpec
+        assert isinstance(spec, ItemSpec)
         assert spec.name == "鉄の剣"
         assert isinstance(spec.item_spec_id, ItemSpecId)
 

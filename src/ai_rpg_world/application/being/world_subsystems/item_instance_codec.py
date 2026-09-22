@@ -152,15 +152,7 @@ class ItemInstanceSubsystemCodec(WorldSubsystemCodec):
                         ItemSpecId,
                     )
 
-                    spec_read_model = item_spec_repo.find_by_id(
-                        ItemSpecId(int(spec_id_raw))
-                    )
-                    if spec_read_model is not None:
-                        spec = (
-                            spec_read_model.to_item_spec()
-                            if hasattr(spec_read_model, "to_item_spec")
-                            else spec_read_model
-                        )
+                    spec = item_spec_repo.find_by_id(ItemSpecId(int(spec_id_raw)))
                 if spec is None:
                     raise RuntimeError(
                         "item_instance restore: item_instance_id=%s not found in "

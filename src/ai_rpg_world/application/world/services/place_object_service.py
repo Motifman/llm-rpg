@@ -240,16 +240,14 @@ class PlaceObjectApplicationService:
 
             new_item_instance_id = self._item_repository.generate_item_instance_id()
             from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
-            spec_rm = self._item_spec_repository.find_by_id(item_spec_id_to_return)
-            if not spec_rm:
+            item_spec = self._item_spec_repository.find_by_id(item_spec_id_to_return)
+            if not item_spec:
                 raise PlaceCommandException(
                     f"ItemSpec {item_spec_id_to_return} not found for drop",
                     error_code="ITEM_SPEC_NOT_FOUND",
                     player_id=command.player_id,
                     spot_id=command.spot_id,
                 )
-            # 同上 (Issue #1364)
-            item_spec = spec_rm.to_item_spec()  # type: ignore[attr-defined]
             new_item = ItemAggregate.create(
                 item_instance_id=new_item_instance_id,
                 item_spec=item_spec,

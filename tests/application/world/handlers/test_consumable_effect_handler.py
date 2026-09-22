@@ -15,7 +15,6 @@ from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
 )
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect,
     DamageHpEffect,
@@ -105,17 +104,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=HealEffect(amount=30),
         )
-        spec_rm = ItemSpecReadModel(
-            item_spec_id=spec.item_spec_id,
-            name=spec.name,
-            item_type=spec.item_type,
-            rarity=spec.rarity,
-            description=spec.description,
-            max_stack_size=spec.max_stack_size,
-            consume_effect=spec.consume_effect,
-        )
-        spec_rm.consume_effect = spec.consume_effect
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status(1, hp_current=50, hp_max=100)
         player_status_repo.find_by_id.return_value = player_status
 
@@ -134,7 +123,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(905)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="毒キノコ",
             item_type=ItemType.CONSUMABLE,
@@ -143,7 +132,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=DamageHpEffect(amount=15),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status(1, hp_current=80, hp_max=100)
         player_status_repo.find_by_id.return_value = player_status
 
@@ -162,7 +151,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(901)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="MPポーション",
             item_type=ItemType.CONSUMABLE,
@@ -171,7 +160,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=RecoverMpEffect(amount=20),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status(mp_current=30, mp_max=50)
         player_status_repo.find_by_id.return_value = player_status
         initial_mp = player_status.mp.value
@@ -191,7 +180,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(902)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="金袋",
             item_type=ItemType.CONSUMABLE,
@@ -200,7 +189,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=GoldEffect(amount=500),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status()
         player_status_repo.find_by_id.return_value = player_status
         initial_gold = player_status.gold.value
@@ -220,7 +209,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(903)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="経験値の書",
             item_type=ItemType.CONSUMABLE,
@@ -229,7 +218,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=ExpEffect(amount=100),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status()
         player_status_repo.find_by_id.return_value = player_status
 
@@ -250,7 +239,7 @@ class TestConsumableEffectHandler:
         composite = CompositeItemEffect(
             effects=(HealEffect(amount=10), GoldEffect(amount=50))
         )
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="複合ポーション",
             item_type=ItemType.CONSUMABLE,
@@ -259,7 +248,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=composite,
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status(1, hp_current=50, hp_max=100)
         player_status_repo.find_by_id.return_value = player_status
         initial_gold = player_status.gold.value
@@ -291,7 +280,7 @@ class TestConsumableEffectHandler:
     def test_consume_effect_raises(self):
         """consume_effect が None の場合は ConsumeEffectMissingException"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=ItemSpecId(905),
             name="効果なし",
             item_type=ItemType.CONSUMABLE,
@@ -300,7 +289,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=None,
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
 
         event = ConsumableUsedEvent.create(
             aggregate_id=PlayerId(1),
@@ -313,7 +302,7 @@ class TestConsumableEffectHandler:
     def test_player_status_found_raises(self):
         """PlayerStatus が見つからない場合は PlayerNotFoundForConsumableEffectException"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=ItemSpecId(906),
             name="回復ポーション",
             item_type=ItemType.CONSUMABLE,
@@ -322,7 +311,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=HealEffect(amount=50),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status_repo.find_by_id.return_value = None
 
         event = ConsumableUsedEvent.create(
@@ -338,7 +327,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(910)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="パン",
             item_type=ItemType.CONSUMABLE,
@@ -347,7 +336,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=SatisfyNeedEffect(need_type_name="HUNGER", amount=50),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         needs = AgentNeeds((
             AgentNeed.create(NeedType.HUNGER, 80, 100),
             AgentNeed.create(NeedType.FATIGUE, 0, 100),
@@ -373,7 +362,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(911)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="睡眠薬",
             item_type=ItemType.CONSUMABLE,
@@ -382,7 +371,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=SatisfyNeedEffect(need_type_name="FATIGUE", amount=40),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         needs = AgentNeeds((
             AgentNeed.create(NeedType.HUNGER, 0, 100),
             AgentNeed.create(NeedType.FATIGUE, 60, 100),
@@ -408,7 +397,7 @@ class TestConsumableEffectHandler:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(912)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="不思議な果実",
             item_type=ItemType.CONSUMABLE,
@@ -417,7 +406,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=SatisfyNeedEffect(need_type_name="UNKNOWN_NEED", amount=10),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status()
         player_status_repo.find_by_id.return_value = player_status
 
@@ -438,7 +427,7 @@ class TestConsumableEffectHandler:
         composite = CompositeItemEffect(
             effects=(HealEffect(amount=20), SatisfyNeedEffect(need_type_name="HUNGER", amount=30))
         )
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="弁当",
             item_type=ItemType.CONSUMABLE,
@@ -447,7 +436,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(5),
             consume_effect=composite,
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         needs = AgentNeeds((
             AgentNeed.create(NeedType.HUNGER, 70, 100),
             AgentNeed.create(NeedType.FATIGUE, 0, 100),
@@ -472,7 +461,7 @@ class TestConsumableEffectHandler:
     def test_unknown_effect_type_raises_system_error(self):
         """未知の効果タイプの場合は SystemErrorException"""
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=ItemSpecId(907),
             name="謎のアイテム",
             item_type=ItemType.CONSUMABLE,
@@ -481,7 +470,7 @@ class TestConsumableEffectHandler:
             max_stack_size=MaxStackSize(10),
             consume_effect=_FakeItemEffect(),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status()
         player_status_repo.find_by_id.return_value = player_status
 
@@ -507,7 +496,7 @@ class TestReviveEffect:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(921)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="救急用品",
             item_type=ItemType.CONSUMABLE,
@@ -516,7 +505,7 @@ class TestReviveEffect:
             max_stack_size=MaxStackSize(1),
             consume_effect=ReviveEffect(hp_rate=0.4),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         # HP 0 でダウン状態の player
         # 注: _create_player_status は base_stats.max_hp=10 で作る (= ヘルパ
         # default)。revive(0.4) は base_stats.max_hp × 0.4 = 10 × 0.4 = 4 で
@@ -543,7 +532,7 @@ class TestReviveEffect:
         handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
         player_id = PlayerId(1)
         item_spec_id = ItemSpecId(922)
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="救急用品",
             item_type=ItemType.CONSUMABLE,
@@ -552,7 +541,7 @@ class TestReviveEffect:
             max_stack_size=MaxStackSize(1),
             consume_effect=ReviveEffect(hp_rate=0.4),
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         # 元気な player に対する revive
         player_status = _create_player_status(hp_current=80, hp_max=100)
         assert player_status.is_down is False
@@ -578,7 +567,7 @@ class TestReviveEffect:
         composite = CompositeItemEffect(
             effects=(ReviveEffect(hp_rate=0.4), HealEffect(amount=20))
         )
-        spec_rm = ItemSpecReadModel(
+        spec = ItemSpec(
             item_spec_id=item_spec_id,
             name="高級救急用品",
             item_type=ItemType.CONSUMABLE,
@@ -587,7 +576,7 @@ class TestReviveEffect:
             max_stack_size=MaxStackSize(1),
             consume_effect=composite,
         )
-        item_spec_repo.find_by_id.return_value = spec_rm
+        item_spec_repo.find_by_id.return_value = spec
         player_status = _create_player_status(hp_current=0, hp_max=100)
         player_status._is_down = True
         player_status_repo.find_by_id.return_value = player_status

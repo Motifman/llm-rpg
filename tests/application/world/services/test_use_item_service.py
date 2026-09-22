@@ -17,7 +17,6 @@ from ai_rpg_world.application.world.services.use_item_service import UseItemAppl
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_effect import HealEffect
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -118,16 +117,7 @@ class TestUseItemApplicationService:
         inv_repo, status_repo, item_repo, spec_repo = repos
         player_id_val = 1
         spec = _consumable_heal_spec(900)
-        spec_rm = ItemSpecReadModel.create_from_item_spec(
-            item_spec_id=spec.item_spec_id,
-            name=spec.name,
-            item_type=spec.item_type,
-            rarity=spec.rarity,
-            description=spec.description,
-            max_stack_size=spec.max_stack_size,
-            consume_effect=spec.consume_effect,
-        )
-        spec_repo.save(spec_rm)
+        spec_repo.save(spec)
         item_instance_id = item_repo.generate_item_instance_id()
         item_agg = ItemAggregate.create(item_instance_id, spec, durability=None, quantity=1)
         item_repo.save(item_agg)
@@ -181,15 +171,7 @@ class TestUseItemApplicationService:
         inv_repo, status_repo, item_repo, spec_repo = repos
         player_id_val = 1
         spec = _non_consumable_spec(901)
-        spec_rm = ItemSpecReadModel.create_from_item_spec(
-            item_spec_id=spec.item_spec_id,
-            name=spec.name,
-            item_type=spec.item_type,
-            rarity=spec.rarity,
-            description=spec.description,
-            max_stack_size=spec.max_stack_size,
-        )
-        spec_repo.save(spec_rm)
+        spec_repo.save(spec)
         item_instance_id = item_repo.generate_item_instance_id()
         item_agg = ItemAggregate.create(item_instance_id, spec, durability=None, quantity=1)
         item_repo.save(item_agg)
@@ -335,16 +317,7 @@ class TestPlayerUseItemApplicationService:
         inv_repo, status_repo, item_repo, spec_repo = repos
         player_id_val = 1
         spec = _consumable_heal_spec(900)
-        spec_rm = ItemSpecReadModel.create_from_item_spec(
-            item_spec_id=spec.item_spec_id,
-            name=spec.name,
-            item_type=spec.item_type,
-            rarity=spec.rarity,
-            description=spec.description,
-            max_stack_size=spec.max_stack_size,
-            consume_effect=spec.consume_effect,
-        )
-        spec_repo.save(spec_rm)
+        spec_repo.save(spec)
         item_instance_id = item_repo.generate_item_instance_id()
         item_agg = ItemAggregate.create(item_instance_id, spec, durability=None, quantity=1)
         item_repo.save(item_agg)

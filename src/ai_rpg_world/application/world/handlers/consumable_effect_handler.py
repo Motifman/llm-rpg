@@ -67,13 +67,10 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
 
     def _handle_impl(self, event: ConsumableUsedEvent) -> None:
         player_id = event.aggregate_id
-        spec_rm = self._item_spec_repository.find_by_id(event.item_spec_id)
-        if spec_rm is None:
+        item_spec = self._item_spec_repository.find_by_id(event.item_spec_id)
+        if item_spec is None:
             raise ItemSpecNotFoundForConsumableEffectException(event.item_spec_id.value)
 
-        # ItemSpecRepository の戻り値が実装ごとに ItemSpec / ItemSpecReadModel と
-        # 食い違っており、SQLite 実装ではここで AttributeError になる (Issue #1364)
-        item_spec = spec_rm.to_item_spec()  # type: ignore[attr-defined]
         if item_spec.consume_effect is None:
             raise ConsumeEffectMissingException(event.item_spec_id.value)
 

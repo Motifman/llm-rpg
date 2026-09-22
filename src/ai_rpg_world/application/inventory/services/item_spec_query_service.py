@@ -11,6 +11,7 @@ from ai_rpg_world.application.inventory.exceptions.item_info_query_application_e
 )
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 _Result = TypeVar("_Result")
@@ -42,17 +43,17 @@ class ItemSpecQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def _convert_to_item_spec_dto(self, read_model: Any) -> ItemSpecDto:
-        """ItemSpecReadModelをItemSpecDtoに変換"""
+    def _convert_to_item_spec_dto(self, item_spec: ItemSpec) -> ItemSpecDto:
+        """ItemSpec を ItemSpecDto に変換"""
         return ItemSpecDto(
-            item_spec_id=read_model.item_spec_id.value,
-            name=read_model.name,
-            item_type=read_model.item_type,
-            rarity=read_model.rarity,
-            description=read_model.description,
-            max_stack_size=read_model.max_stack_size.value,
-            durability_max=read_model.durability_max,
-            equipment_type=read_model.equipment_type
+            item_spec_id=item_spec.item_spec_id.value,
+            name=item_spec.name,
+            item_type=item_spec.item_type,
+            rarity=item_spec.rarity,
+            description=item_spec.description,
+            max_stack_size=item_spec.max_stack_size.value,
+            durability_max=item_spec.durability_max,
+            equipment_type=item_spec.equipment_type
         )
 
     def get_item_spec(self, item_spec_id: int) -> ItemSpecDto:
