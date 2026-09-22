@@ -24,7 +24,7 @@ Phase 2 以降は**まだ計画**で、実 LLM run の分析を見てから着�
 |---|---|---|
 | Gold 値オブジェクト | `domain/player/value_object/gold.py` | 加算・減算・下限 0 検証あり |
 | gold の増減 + ドメインイベント | `PlayerStatusAggregate.earn_gold / pay_gold` (`player_status_aggregate.py:825-855`) | `InsufficientGoldException` あり。未配線なだけ |
-| アイテム定義 | `ItemSpecReadModel` (scenario `item_specs` から構築) | 現行 run で使用中 |
+| アイテム定義 | `ItemSpec` (scenario `item_specs` から構築) | 現行 run で使用中 |
 | レシピ集約 | `domain/item/aggregate/recipe_aggregate.py` | クラフト用。ツール未露出 |
 | 店の集約 | `ShopAggregate` (`domain/shop/aggregate/shop_aggregate.py`) | **SpotId に紐づく**店 + 出品リスト。現行世界の物理感と相性が良い |
 | 取引の集約 | `TradeAggregate` (`domain/trade/aggregate/trade_aggregate.py`) | 「1 アイテム ⇄ gold」の掲示モデル。scope は global / direct |
