@@ -134,6 +134,11 @@ class SameCoordinateDirectionException(MapDomainException, BusinessRuleException
     error_code = "MAP.SAME_COORDINATE_DIRECTION"
 
 
+class DirectionDeltaUndefinedException(MapDomainException, BusinessRuleException):
+    """移動量が定義されていない向きを使おうとした際の例外"""
+    error_code = "MAP.DIRECTION_DELTA_UNDEFINED"
+
+
 class LocationAreaIdValidationException(MapDomainException, ValidationException):
     """ロケーションエリアIDバリデーション例外"""
     error_code = "MAP.LOCATION_AREA_ID_VALIDATION"
