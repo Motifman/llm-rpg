@@ -760,9 +760,10 @@ def adapt_executor_handler_with_resolver(
         except ToolArgumentResolutionException as e:
             # 対象名を問うたが採らなかった判断も trace に残す。残さないと
             # 「問わなかった」と「問って断った」が同じに見える。
-            if isinstance(getattr(e, "judgment", None), dict):
+            carried_judgment = getattr(e, "judgment", None)
+            if isinstance(carried_judgment, dict):
                 _record_judgment(
-                    e.judgment,
+                    carried_judgment,
                     question=TARGET_LABEL_RESCUE_QUESTION,
                     player_id=player_id,
                     trace_recorder_provider=trace_recorder_provider,
