@@ -2,7 +2,7 @@
 
 import logging
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
@@ -415,8 +415,9 @@ _SPOT_GRAPH_TOOLS = frozenset({
 #: 載せて、``adapt_executor_handler_with_resolver`` に渡す
 #: (``CANONICAL_IDENTIFIERS_KEY`` と同じ流儀)。
 ACTION_NAME_JUDGMENT_KEY = "__action_name_judgment"
-#: 対象名を意味で選び直したときの判断。trace と結果文へ運ぶ。
-TARGET_LABEL_JUDGMENT_KEY = "__target_label_judgment"
+#: 対象名を意味で選び直したときの判断の列。trace と結果文へ運ぶ。
+#: give_item は品と相手を entry ごとに引くので、1 回の呼び出しで複数になる。
+TARGET_LABEL_JUDGMENTS_KEY = "__target_label_judgments"
 
 
 def _action_name_judgment_payload(
@@ -470,7 +471,7 @@ def _with_inner_thought(
     *,
     canonical: Mapping[str, str] | None = None,
     action_name_judgment: Mapping[str, Any] | None = None,
-    target_label_judgment: Mapping[str, Any] | None = None,
+    target_label_judgments: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
@@ -499,8 +500,8 @@ def _with_inner_thought(
         out[CANONICAL_IDENTIFIERS_KEY] = dict(canonical)
     if action_name_judgment is not None:
         out[ACTION_NAME_JUDGMENT_KEY] = dict(action_name_judgment)
-    if target_label_judgment is not None:
-        out[TARGET_LABEL_JUDGMENT_KEY] = dict(target_label_judgment)
+    if target_label_judgments:
+        out[TARGET_LABEL_JUDGMENTS_KEY] = [dict(j) for j in target_label_judgments]
     for passthrough_key in (
         "say_inline",
         "expected_result",
@@ -603,6 +604,63 @@ class SpotGraphArgumentResolver:
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
+
+    def _resolve_named(
+        self,
+        label: Any,
+        runtime_context: ToolRuntimeContextDto,
+        *,
+        accept_kinds: tuple[str, ...],
+        label_name: str,
+        tool: str,
+        args: dict[str, Any],
+        judgments: list[dict[str, Any]],
+        candidates_label: str | None = None,
+        invalid_label_code: str = "INVALID_TARGET_LABEL",
+        invalid_kind_code: str = "INVALID_TARGET_KIND",
+    ) -> ToolRuntimeTargetDto:
+        """名前で対象を引く。候補があるのに当たらなければ意味で選び直す。
+
+        段は 3 つで、上から順に決まる (design_decisions #228 / #229)。
+
+        1. 表示名で当たる、別の種別に在る、同名が複数: 決定的に分かるので
+           ``resolve_target`` がそのまま返すか失敗させる
+        2. どこにも無く、候補が空: 選び直す先が無いので失敗させる
+        3. どこにも無く、候補がある: Jev に「該当なし」を含めて問う。採れば
+           置き換え、採らなければ従来どおり失敗させる
+
+        問うた判断は採否にかかわらず ``judgments`` に積む。採らなかったときは
+        例外にも載せる。give_item のように呼び出し側が例外を握って部分成功に
+        する経路では、列の方だけが trace に届く。
+        """
+        try:
+            return resolve_target(
+                label,
+                runtime_context,
+                accept_kinds=accept_kinds,
+                label_name=label_name,
+                candidates_label=candidates_label,
+                invalid_label_code=invalid_label_code,
+                invalid_kind_code=invalid_kind_code,
+                tool_is_exposed=self._tool_is_exposed,
+            )
+        except ToolArgumentResolutionException as exc:
+            if self.target_label_rescue is None or exc.error_code != invalid_label_code:
+                raise
+            rescued = self.target_label_rescue.rescue(
+                str(label or ""),
+                candidates=TargetIndex.from_context(runtime_context).of_kinds(accept_kinds),
+                tool=tool,
+                argument=label_name,
+                inner_thought=_inner_thought_value(args),
+            )
+            payload = rescued.payload()
+            if payload is not None:
+                judgments.append(payload)
+            if rescued.target is None:
+                exc.judgment = payload
+                raise
+            return rescued.target
 
     def _resolve_market(
         self, tool_name: str, args: dict[str, Any],
@@ -1002,15 +1060,15 @@ class SpotGraphArgumentResolver:
         その慣習に合わせて item_spec_id として exec 側に渡す。
         """
         label = args.get("item_label")
-        # PR #441: display_name fallback で「真水 (食料)」等の prompt 表記も受理
-        target = resolve_target(
+        judgments: list[dict[str, Any]] = []
+        target = self._resolve_named(
             label,
             runtime_context,
             accept_kinds=("inventory_item",),
             label_name="使用するアイテム名",
-            invalid_label_code="INVALID_TARGET_LABEL",
-            invalid_kind_code="INVALID_TARGET_KIND",
-            tool_is_exposed=self._tool_is_exposed,
+            tool=TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+            args=args,
+            judgments=judgments,
         )
         if target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
@@ -1033,12 +1091,14 @@ class SpotGraphArgumentResolver:
             },
             args,
             canonical=canonical_identifiers(args, item_label=target.display_name),
+            target_label_judgments=judgments,
         )
 
     def _resolve_single_give_entry(
         self,
         args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
+        judgments: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """1 件の give entry (item_label + target_player_label) を解決する
         内部 helper。``_resolve_give_item`` (batch-always) が gives 配列の
@@ -1049,15 +1109,14 @@ class SpotGraphArgumentResolver:
         - target_player_label (P1 等 / 名前): resolve_player_target で player_id を取り出す
         """
         item_label = args.get("item_label")
-        # PR #441: display_name fallback
-        item_target = resolve_target(
+        item_target = self._resolve_named(
             item_label,
             runtime_context,
             accept_kinds=("inventory_item",),
             label_name="渡すアイテム名",
-            invalid_label_code="INVALID_TARGET_LABEL",
-            invalid_kind_code="INVALID_TARGET_KIND",
-            tool_is_exposed=self._tool_is_exposed,
+            tool=TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            args=args,
+            judgments=judgments,
         )
         if item_target.kind != "inventory_item":
             raise ToolArgumentResolutionException(
@@ -1079,10 +1138,15 @@ class SpotGraphArgumentResolver:
                 "渡す相手の名前が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        # resolve_player_target は解決できなければ例外を投げる (候補一覧つき)。
-        # 以前はここで None を受けて同等の例外へ変換していたが、二重に候補を
-        # 組み立てる必要は無くなった。
-        player_target = resolve_player_target(target_player_label, runtime_context, tool_is_exposed=self._tool_is_exposed)
+        player_target = self._resolve_named(
+            target_player_label,
+            runtime_context,
+            accept_kinds=("spot_graph_player",),
+            label_name="相手の名前",
+            tool=TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+            args=args,
+            judgments=judgments,
+        )
         if player_target.player_id is None:
             raise ToolArgumentResolutionException(
                 f"この名前は渡す相手として扱えません: {target_player_label}",
@@ -1129,6 +1193,7 @@ class SpotGraphArgumentResolver:
             )
 
         resolved: list[dict[str, Any]] = []
+        judgments: list[dict[str, Any]] = []
         for i, entry in enumerate(gives):
             if not isinstance(entry, dict):
                 resolved.append({
@@ -1142,9 +1207,10 @@ class SpotGraphArgumentResolver:
                     {
                         "item_label": entry.get("item_label"),
                         "target_player_label": entry.get("target_player_label"),
-                        "inner_thought": "",
+                        "inner_thought": _inner_thought_value(args),
                     },
                     runtime_context,
+                    judgments,
                 )
                 quantity = _give_quantity_or_raise(entry.get("quantity"))
                 resolved.append({
@@ -1173,6 +1239,7 @@ class SpotGraphArgumentResolver:
                 "say_inline": args.get("say_inline", ""),
             },
             args,
+            target_label_judgments=judgments,
         )
 
     def _resolve_drop_item(
@@ -1188,14 +1255,15 @@ class SpotGraphArgumentResolver:
         """
         label = args.get("item_label")
         # PR #441: display_name fallback
-        target = resolve_target(
+        judgments: list[dict[str, Any]] = []
+        target = self._resolve_named(
             label,
             runtime_context,
             accept_kinds=("inventory_item",),
             label_name="落とすアイテム名",
-            invalid_label_code="INVALID_TARGET_LABEL",
-            invalid_kind_code="INVALID_TARGET_KIND",
-            tool_is_exposed=self._tool_is_exposed,
+            tool=TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
+            args=args,
+            judgments=judgments,
         )
         # その場に落ちているアイテム (kind="ground_item") は drop の対象にならない
         if target.kind != "inventory_item":
@@ -1222,6 +1290,7 @@ class SpotGraphArgumentResolver:
                 "stealth": bool(args.get("stealth", False)),
             },
             args,
+            target_label_judgments=judgments,
         )
 
     def _resolve_pickup_item(
@@ -1231,15 +1300,15 @@ class SpotGraphArgumentResolver:
     ) -> dict[str, Any]:
         """その場に落ちているアイテムの名前を item_instance_id に解決する。"""
         label = args.get("ground_item_label")
-        # PR #441: display_name fallback
-        target = resolve_target(
+        judgments: list[dict[str, Any]] = []
+        target = self._resolve_named(
             label,
             runtime_context,
             accept_kinds=("ground_item",),
             label_name="拾うものの名前",
-            invalid_label_code="INVALID_TARGET_LABEL",
-            invalid_kind_code="INVALID_TARGET_KIND",
-            tool_is_exposed=self._tool_is_exposed,
+            tool=TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+            args=args,
+            judgments=judgments,
         )
         if target.kind != "ground_item":
             raise ToolArgumentResolutionException(
@@ -1261,6 +1330,7 @@ class SpotGraphArgumentResolver:
                 "stealth": bool(args.get("stealth", False)),
             },
             args,
+            target_label_judgments=judgments,
         )
 
     def _resolve_vote(
@@ -1417,17 +1487,32 @@ class SpotGraphArgumentResolver:
         args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> dict[str, Any]:
-        target = resolve_destination_target(
-            args.get("destination_label"),
+        label = args.get("destination_label")
+        judgments: list[dict[str, Any]] = []
+        target = self._resolve_named(
+            label,
             runtime_context,
-            tool_is_exposed=self._tool_is_exposed,
+            accept_kinds=("spot_graph_destination",),
+            label_name="接続先名",
+            candidates_label="接続先",
+            tool=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            args=args,
+            judgments=judgments,
+            invalid_label_code="INVALID_DESTINATION_LABEL",
+            invalid_kind_code="INVALID_DESTINATION_KIND",
         )
+        if not isinstance(target, DestinationToolRuntimeTargetDto) or target.spot_id is None:
+            raise ToolArgumentResolutionException(
+                f"移動先として解決できない名前です: {label}",
+                "INVALID_DESTINATION_KIND",
+            )
         return _with_inner_thought(
             {"destination_spot_id": target.spot_id},
             args,
             canonical=canonical_identifiers(
                 args, destination_label=target.display_name
             ),
+            target_label_judgments=judgments,
         )
 
     def _resolve_set_sub_location(
@@ -1455,36 +1540,16 @@ class SpotGraphArgumentResolver:
         **どちらか一方だけ**を埋める。両方埋めると executor 側が物体への操作
         なのか対人操作なのか判別できなくなる。
         """
-        accept_kinds = ("spot_graph_object", "spot_graph_player", "inventory_item")
-        target_judgment: dict[str, Any] | None = None
-        try:
-            target = resolve_target(
-                args.get("target_label"),
-                runtime_context,
-                accept_kinds=accept_kinds,
-                label_name="対象の名前",
-                tool_is_exposed=self._tool_is_exposed,
-            )
-        except ToolArgumentResolutionException as exc:
-            # 候補に当たらなかったときだけ意味で問い直す。種別違い・曖昧・空は
-            # 名前の問題ではないので問わない。
-            if self.target_label_rescue is None or exc.error_code != "INVALID_TARGET_LABEL":
-                raise
-            rescued = self.target_label_rescue.rescue(
-                str(args.get("target_label") or ""),
-                candidates=[
-                    t for t in runtime_context.targets.values() if t.kind in accept_kinds
-                ],
-                tool="interact",
-                inner_thought=_inner_thought_value(args),
-            )
-            target_judgment = rescued.payload()
-            if rescued.target is None:
-                # 問うたが採らなかった。失敗はそのまま返し、判断は例外に載せて
-                # trace へ運ぶ。採らなかった判断も残す。
-                exc.judgment = target_judgment
-                raise
-            target = rescued.target
+        judgments: list[dict[str, Any]] = []
+        target = self._resolve_named(
+            args.get("target_label"),
+            runtime_context,
+            accept_kinds=("spot_graph_object", "spot_graph_player", "inventory_item"),
+            label_name="対象の名前",
+            tool=TOOL_NAME_SPOT_GRAPH_INTERACT,
+            args=args,
+            judgments=judgments,
+        )
         action = args.get("action_name", "")
         if not isinstance(action, str) or not action.strip():
             raise ToolArgumentResolutionException(
@@ -1528,7 +1593,7 @@ class SpotGraphArgumentResolver:
                 args,
                 canonical=canonical,
                 action_name_judgment=judgment_payload,
-                target_label_judgment=target_judgment,
+                target_label_judgments=judgments,
             )
         if target.kind == "inventory_item":
             if target.item_instance_id is None:
@@ -1548,7 +1613,7 @@ class SpotGraphArgumentResolver:
                 args,
                 canonical=canonical,
                 action_name_judgment=judgment_payload,
-                target_label_judgment=target_judgment,
+                target_label_judgments=judgments,
             )
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
@@ -1565,5 +1630,5 @@ class SpotGraphArgumentResolver:
             args,
             canonical=canonical,
             action_name_judgment=judgment_payload,
-            target_label_judgment=target_judgment,
+            target_label_judgments=judgments,
         )
