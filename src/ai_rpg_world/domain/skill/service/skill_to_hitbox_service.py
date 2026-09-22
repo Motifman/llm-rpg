@@ -111,6 +111,10 @@ class SkillToHitBoxDomainService:
         速度が漏れる。
         """
         degrees = Facing.from_direction(direction).rotation_from_south_degrees()
+        if degrees is None:
+            raise SkillRotationAngleUnsupportedException(
+                f"{direction.value} は平面上の回転角を持ちません"
+            )
         cos_sin = _COS_SIN_BY_DEGREES.get(degrees)
         if cos_sin is None:
             raise SkillRotationAngleUnsupportedException(
