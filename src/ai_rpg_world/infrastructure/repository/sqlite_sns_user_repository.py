@@ -7,6 +7,9 @@ import sqlite3
 from typing import Any
 
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
+    UserNotFoundException,
+)
 from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
@@ -397,7 +400,7 @@ class SqliteSnsUserRepository(UserRepository):
         self._assert_shared_transaction_active()
         user = self.find_by_id(user_id)
         if user is None:
-            raise ValueError(f"user not found: {user_id}")
+            raise UserNotFoundException(user_id.value)
         user.update_user_profile(bio, display_name)
         return self.save(user)
 

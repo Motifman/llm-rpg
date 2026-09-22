@@ -199,20 +199,25 @@ class TestInMemorySnsUserRepository:
         assert self.repository.is_subscribed(UserId(1), UserId(3)) == False  # 勇者 -> 戦士（購読なし）
         assert self.repository.is_subscribed(UserId(3), UserId(1)) == False  # 戦士 -> 勇者（購読なし）
 
-    def test_update_profile(self):
-        """プロフィール更新テスト"""
+    def test_update_profile_updates_bio_and_display_name(self):
+        """既存ユーザーに update_profile を呼ぶと bio と display_name が更新され、更新後の集約が返る。"""
         from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
-        # 既存ユーザーのプロフィール更新
         updated_user = self.repository.update_profile(UserId(1), "新しい自己紹介", "新勇者")
-        assert updated_user is not None
+
         profile_info = updated_user.get_user_profile_info()
         assert profile_info["bio"] == "新しい自己紹介"
         assert profile_info["display_name"] == "新勇者"
 
-        # 存在しないユーザーの更新
-        updated_user = self.repository.update_profile(UserId(999), "テスト", "テストユーザー")
-        assert updated_user is None
+    def test_update_profile_raises_when_user_does_not_exist(self):
+        """存在しないユーザーに update_profile を呼ぶと UserNotFoundException を投げる。"""
+        from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
+            UserNotFoundException,
+        )
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
+
+        with pytest.raises(UserNotFoundException):
+            self.repository.update_profile(UserId(999), "テスト", "テストユーザー")
 
     def test_search_users(self):
         """ユーザー検索テスト"""

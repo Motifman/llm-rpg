@@ -6,6 +6,9 @@ from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
+    UserNotFoundException,
+)
 from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
@@ -141,16 +144,16 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             return False
         return follower_user.is_following(followee_user_id)
 
-    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate | None:  # type: ignore[override]  # Issue #1381
+    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate:
         """ユーザープロフィールを更新"""
         def operation() -> Any:
             user = self._users.get(user_id)
             if not user:
-                return None
+                raise UserNotFoundException(user_id.value)
             user.update_user_profile(bio, display_name)
             return user
-            
-        result_value: UserAggregate | None = self._execute_operation(operation)
+
+        result_value: UserAggregate = self._execute_operation(operation)
         return result_value
 
     def search_users(self, query: str, limit: int = 20) -> list[UserAggregate]:
