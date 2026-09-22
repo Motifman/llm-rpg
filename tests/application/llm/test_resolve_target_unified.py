@@ -121,14 +121,13 @@ class TestResolveTargetFailsLoudly:
             )
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
 
-    def test_display_name_of_other_kind_raises_label_error_with_candidates(
+    def test_display_name_of_other_kind_raises_kind_error_with_candidates(
         self,
     ) -> None:
-        """別種別の表示名を渡すと INVALID_TARGET_LABEL になり、候補一覧が付く。
+        """別種別の表示名を渡すと INVALID_TARGET_KIND になり、種別と候補一覧の両方が付く。
 
-        「その名前はプレイヤーです」と正確に言う (INVALID_TARGET_KIND) 方が
-        一見親切だが、KIND の文面には候補一覧が付かない。「では何が書けるのか」
-        を失う方が LLM にとって痛いので、候補つきの LABEL を返す。
+        「候補にありません」と返すと、当人はその人がいないと誤解する。「その名前は
+        人だ」と言いつつ「では何が書けるのか」も失わないよう、候補一覧を添える。
         """
         with pytest.raises(ToolArgumentResolutionException) as exc_info:
             resolve_target(
@@ -137,7 +136,8 @@ class TestResolveTargetFailsLoudly:
                 accept_kinds=("spot_graph_object",),
                 label_name="オブジェクト名",
             )
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
+        assert "「リン」はこの場所にいる人で、オブジェクト名には使えません。" in str(exc_info.value)
         assert "焚き火跡" in str(exc_info.value)
 
     def test_internal_label_of_other_kind_raises_kind_error(self) -> None:

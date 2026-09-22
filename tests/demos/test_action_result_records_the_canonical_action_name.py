@@ -145,7 +145,8 @@ def test_failed_interaction_does_not_expose_rejected_call_as_a_prompt_example(
 
     assert result.success is False
     assert "[失敗]" in user
-    assert "INVALID_TARGET_LABEL" in user
+    assert "INVALID_TARGET_KIND" in user
+    assert "travel_to" in user
     assert "呼び出し:" not in user
     assert 'action_name="進む"' not in user
 

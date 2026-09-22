@@ -115,10 +115,10 @@ class TestTravelToByDisplayName:
 
 
 class TestTravelToDisplayNameDuplicate:
-    """同名スポットが複数ある防御ケース。最初の 1 件を採用する。"""
+    """同名の行き先が複数ある防御ケース。黙って先の 1 件を選ばない。"""
 
     def test_spot_multiple(self) -> None:
-        """display_name の重複時は最初にマッチした target の spot_id が返る。"""
+        """display_name が重複したら AMBIGUOUS_TARGET_LABEL で失敗し、行き先を取り違えない。"""
         context = ToolRuntimeContextDto(
             targets={
                 "S1": DestinationToolRuntimeTargetDto(
@@ -138,14 +138,13 @@ class TestTravelToDisplayNameDuplicate:
             },
         )
         resolver = SpotGraphArgumentResolver()
-        result = resolver.resolve_args(
-            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-            {"destination_label": "入口広間", "inner_thought": "進む"},
-            context,
-        )
-        assert result is not None
-        # dict 挿入順で最初の S1 の spot_id=10 が採用される
-        assert result["destination_spot_id"] == 10
+        with pytest.raises(ToolArgumentResolutionException) as exc:
+            resolver.resolve_args(
+                TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                {"destination_label": "入口広間", "inner_thought": "進む"},
+                context,
+            )
+        assert exc.value.error_code == "AMBIGUOUS_TARGET_LABEL"
 
 
 class TestTravelToLenientLabelCandidates:

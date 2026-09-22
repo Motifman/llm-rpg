@@ -182,6 +182,23 @@ class TestTheArgumentResolverGetsTheTargetLabelJudgment:
             assert wiring.argument_resolver.target_label_rescue.min_confidence == 0.9
 
 
+class TestTheArgumentResolverKnowsWhichToolsExist:
+    """「種類が違う」の失敗文に載せるツール名が、この世界の露出判断を通ることを保証する。
+
+    露出判断を注入し忘れると、resolver は全ツールを在るものとして勧める。シナリオが
+    `disabled_tools` で落としたツールを失敗文が宣伝し、当人は存在しないツールを呼ぶ。
+    """
+
+    def test_the_resolver_answers_exposure_with_the_runtime_decision(self) -> None:
+        """session の resolver は runtime.tool_exposure と同じ答えを返す口を持つ。"""
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
+            asks = wiring.argument_resolver._tool_is_exposed
+            assert asks is not None
+            exposure = wiring.runtime.tool_exposure
+            for tool in ("attack", "travel_to", "give_item", "no_such_tool"):
+                assert asks(tool) == exposure.is_exposed(tool)
+
+
 class TestTheTurnTriggerGetsTheGate:
     """tick の終わりに回す人を決める trigger に、門が挟まることを保証する。
 

@@ -388,6 +388,7 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     argument_resolver = SpotGraphArgumentResolver(
         action_name_rescue=action_name_rescue,
         target_label_rescue=target_label_rescue,
+        tool_is_exposed=_tool_is_exposed_in(wiring),
     )
     # 組んだ resolver を配線に残す。何が注入されたかを外から確かめられる形に
     # しておかないと、注入漏れを検査するテストが書けない。
@@ -444,6 +445,18 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     # それ自体は通常運用で起きるべきでないが、検証ロジックの破綻で実験を
     # 止めるのは過剰なので例外なら警告だけ残す。
     wiring._validate_tool_handler_consistency()
+
+def _tool_is_exposed_in(wiring: WorldLlmWiring) -> Callable[[str], bool] | None:
+    """この世界に在るツールかを答える口。露出判断を持たない runtime では None。
+
+    None なら失敗文は全ツールを在るものとして案内する。テスト用の最小 wiring の
+    挙動を変えないためで、本番 runtime は必ず ``tool_exposure`` を持つ。
+    """
+    exposure = getattr(getattr(wiring, "runtime", None), "tool_exposure", None)
+    if exposure is None:
+        return None
+    return lambda tool_name: bool(exposure.is_exposed(tool_name))
+
 
 def definitions_across_phases(wiring: Any) -> list[Any]:
     """**どのフェーズでも**露出しうる tool 定義をまとめて返す。
@@ -532,6 +545,17 @@ def build_interact_invalid_label_failure(
     # ただし、記憶や目的文から正しい名前を指定した場合に「存在しない」と
     # 返すのも嘘になる。今回の snapshot が内部に保持した名前との完全一致
     # のときだけ、物体名を列挙せず視界の理由を返す。
+    # 「在るが種類が違う」「同名が複数」は resolver が使うツールまで添えて
+    # 説明している。ここで「見つかりません」に書き換えると、当人は敵や隣の
+    # 場所を「無い」と学ぶ。
+    if error_code in ("INVALID_TARGET_KIND", "AMBIGUOUS_TARGET_LABEL"):
+        return LlmCommandResultDto(
+            success=False,
+            message=str(exc),
+            error_code=error_code,
+            remediation=resolver_failure_remediation(TOOL_NAME_SPOT_GRAPH_INTERACT, error_code),
+            should_reschedule=is_reschedulable_error_code(error_code),
+        )
     normalized_label = label.strip().strip('"\'「」')
     dark_hidden_names = tuple(
         getattr(runtime_context, "dark_hidden_object_names", ()) or ()
@@ -605,6 +629,14 @@ def build_travel_to_invalid_label_failure(
     label = str(arguments.get("destination_label", ""))
     valid_destinations = list_destination_labels(targets)
     error_code = getattr(exc, "error_code", "INVALID_DESTINATION_LABEL")
+    if error_code == "INVALID_DESTINATION_KIND":
+        return LlmCommandResultDto(
+            success=False,
+            message=str(exc),
+            error_code=error_code,
+            remediation=resolver_failure_remediation(TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, error_code),
+            should_reschedule=is_reschedulable_error_code(error_code),
+        )
     return LlmCommandResultDto(
         success=False,
         message=(

@@ -130,7 +130,7 @@ class TestAttackResolverDisplayNameFallback:
         assert result["monster_id"] == 101
 
     def test_display_name_player_invalid_target_kind(self) -> None:
-        """display_name 経路でも Player target を指した場合は kind mismatch で弾く。"""
+        """人の名前を攻撃対象に書くと、種類違いとして弾き、人だと伝える。"""
         resolver = SpotGraphArgumentResolver()
         with pytest.raises(ToolArgumentResolutionException) as exc:
             resolver.resolve_args(
@@ -138,7 +138,5 @@ class TestAttackResolverDisplayNameFallback:
                 {"target_label": "勇者", "inner_thought": ""},
                 _make_context(),
             )
-        # 「勇者」は kind=spot_graph_player の display_name なので
-        # _find_target_by_display_name(kind=spot_graph_monster) では見つからない
-        # → INVALID_TARGET_LABEL (= 候補に無い)
-        assert exc.value.error_code == "INVALID_TARGET_LABEL"
+        assert exc.value.error_code == "INVALID_TARGET_KIND"
+        assert "この場所にいる人" in str(exc.value)

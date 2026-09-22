@@ -47,6 +47,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     JudgmentResult,
     TypedJudgmentUnavailableException,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup import KIND_LABEL
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
@@ -55,13 +56,6 @@ logger = logging.getLogger(__name__)
 
 NO_MATCH_OPTION = "__no_match__"
 QUESTION_NAME = "target_label_rescue"
-
-_KIND_LABEL = {
-    "spot_graph_object": "この場所の物",
-    "spot_graph_player": "この場所にいる人",
-    "inventory_item": "手持ちの品",
-    "ground_item": "足元の品",
-}
 
 
 @dataclass(frozen=True)
@@ -225,7 +219,7 @@ def _by_display_name(candidates: Sequence[ToolRuntimeTargetDto]) -> dict[str, To
 
 def _hint(target: ToolRuntimeTargetDto) -> str:
     """候補の説明。種別と、持っている操作の意味ラベル。整数 ID は入れない。"""
-    parts = [_KIND_LABEL.get(target.kind, target.kind)]
+    parts = [KIND_LABEL.get(target.kind, target.kind)]
     labels = [label for _, label in (target.interaction_labels or ()) if label]
     if labels:
         parts.append("できること: " + " / ".join(labels[:4]))
