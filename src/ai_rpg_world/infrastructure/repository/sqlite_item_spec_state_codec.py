@@ -39,6 +39,9 @@ def build_item_spec(*, row: sqlite3.Row, effect_rows: Iterable[sqlite3.Row]) -> 
         consume_effect=effect,
         usage_hint=_non_empty_text(row["usage_hint"]),
         category=str(row["category"] or ""),
+        is_light_source=bool(row["is_light_source"]),
+        spoils_after_ticks=row["spoils_after_ticks"],
+        fatigue_recovery=int(row["fatigue_recovery"]),
     )
 
 
@@ -80,6 +83,9 @@ def item_spec_to_payload(item_spec: ItemSpec) -> dict[str, Any]:
         "consume_effect": _effect_to_payload(item_spec.consume_effect),
         "usage_hint": item_spec.usage_hint or "",
         "category": item_spec.category or "",
+        "is_light_source": item_spec.is_light_source,
+        "spoils_after_ticks": item_spec.spoils_after_ticks,
+        "fatigue_recovery": item_spec.fatigue_recovery,
     }
 
 
@@ -101,6 +107,9 @@ def payload_to_item_spec(payload: dict[str, Any]) -> ItemSpec:
         consume_effect=_payload_to_effect(payload.get("consume_effect")),
         usage_hint=_non_empty_text(payload.get("usage_hint")),
         category=str(payload.get("category") or ""),
+        is_light_source=bool(payload.get("is_light_source", False)),
+        spoils_after_ticks=payload.get("spoils_after_ticks"),
+        fatigue_recovery=int(payload.get("fatigue_recovery", 0)),
     )
 
 
