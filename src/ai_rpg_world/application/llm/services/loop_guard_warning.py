@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -31,6 +32,8 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+logger = logging.getLogger(__name__)
 
 _CROSS_TICK_WARNING_TEMPLATES: tuple[str, ...] = (
     "⚠ あなたは直近 {window} tick 以内で {action_summary} を同じ失敗 "
@@ -383,8 +386,28 @@ class LoopWarningEmitter:
         見立てが無いときは区分を足さない。見立てを入れていない run の trace を
         今と同じ形に保つため。
         """
-        if self._diagnosis is None:
+        diagnosis = self._diagnosis
+        if diagnosis is None:
             return default_prose, {}
+        try:
+            return self._word_by_diagnosis(
+                diagnosis, player_id, signal, pattern, default_prose, recent
+            )
+        except Exception:
+            # ここで漏れると警告も gate signal も出ず、離れた tick の失敗は発火を
+            # 記録済みなので窓の間は二度と鳴らない。
+            logger.exception("loop_diagnosis wording failed")
+            return default_prose, {"wording": _DEFAULT_WORDING}
+
+    def _word_by_diagnosis(
+        self,
+        diagnosis: LoopDiagnosis,
+        player_id: PlayerId,
+        signal: RepeatSignal,
+        pattern: str,
+        default_prose: str,
+        recent: Sequence[RecentAction],
+    ) -> tuple[str, dict[str, str]]:
         action = build_action_summary(signal.tool_name, signal.fingerprint)
         location = self._location(player_id)
         observations = [
@@ -393,7 +416,7 @@ class LoopWarningEmitter:
             if e.output.prose
         ][-_OBSERVATION_LIMIT:]
         state = self._state(signal, action, recent, location, observations)
-        judgment = self._diagnosis.diagnose(state)
+        judgment = diagnosis.diagnose(state)
         self._record_judgment(player_id, signal, pattern, state, judgment)
         if judgment.reason is None:
             return default_prose, {"wording": _DEFAULT_WORDING}
@@ -485,7 +508,7 @@ class LoopWarningEmitter:
                 state=state,
             )
         except Exception:
-            pass
+            logger.exception("trace_recorder.record(loop_diagnosis) failed")
 
     def _record_trace(self, **payload: Any) -> None:
         recorder = self._resolve_trace_recorder()

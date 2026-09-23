@@ -406,3 +406,106 @@ class TestTheStateCarriesWhatWasSaid:
 
         [prose] = _warnings(buffer)
         assert "同じ内容を伝えたのは 3 回目" in prose
+
+
+class TestEachReasonStatesItsFact:
+    """理由ごとの文面が、その理由で読み落としていそうな事実を実際に載せることを保証する。"""
+
+    def test_waiting_tells_the_location_and_the_observations_now(self) -> None:
+        """「待機」なら、居場所と、いま届いている観測の件数を伝える。"""
+        buffer = DefaultObservationContextBuffer()
+        guard = _guard(_FixedPort(RepeatReason.WAITING.value), buffer=buffer)
+
+        for _ in range(3):
+            guard.record_and_check(_PID, "wait", {}, success=True)
+
+        [prose] = _warnings(buffer)
+        assert "いまの居場所は「薬草の土手」" in prose
+        assert "いま届いている観測は" in prose
+
+    def test_achieved_quotes_the_earlier_success(self) -> None:
+        """「達成済み」なら、同じ行動が前に成功したときの結果の文を載せる。"""
+        buffer = DefaultObservationContextBuffer()
+        guard = _guard(_FixedPort(RepeatReason.ACHIEVED.value), buffer=buffer)
+
+        _travel_twice(guard)
+
+        [prose] = _warnings(buffer)
+        assert "この行動は前に成功している: 「薬草の土手へ移動しました」" in prose
+
+    def test_fixed_means_quotes_what_the_same_means_brought(self) -> None:
+        """「手段の固着」なら、同じ手段で得た直近の結果の文を載せる。"""
+        buffer = DefaultObservationContextBuffer()
+        guard = _guard(_FixedPort(RepeatReason.FIXED_MEANS.value), buffer=buffer)
+
+        _travel_twice(guard)
+
+        [prose] = _warnings(buffer)
+        assert "同じ手段で得た結果: 「移動先が見つかりません: 薬草の土手」" in prose
+
+
+class TestTheWarningTraceTellsWhichWordingWasUsed:
+    """警告の trace が、見立ての文面か今の文面かを区別できることを保証する。"""
+
+    def test_a_fallback_is_traced_as_the_default_wording(self) -> None:
+        """見立てが閾値未満で今の文面に戻ったとき、LOOP_GUARD_WARNING の wording は default。"""
+        recorder = _Recorder()
+
+        _travel_twice(
+            _guard(_FixedPort(RepeatReason.WAITING.value, probability=0.5), recorder=recorder)
+        )
+
+        [event] = recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
+        assert event["wording"] == "default"
+
+
+class _ExplodingDiagnosis(LoopDiagnosis):
+    def diagnose(self, state):  # type: ignore[no-untyped-def,override]
+        raise RuntimeError("bug outside the port")
+
+
+class _FailingTypedJudgmentTrace(_Recorder):
+    def record(self, kind, *, tick=None, player_id=None, **payload):  # type: ignore[no-untyped-def,override]
+        if kind == TraceEventKind.TYPED_JUDGMENT:
+            raise RuntimeError("trace sink down")
+        return super().record(kind, tick=tick, player_id=player_id, **payload)
+
+
+class TestAFailureAroundTheDiagnosisKeepsTheWarning:
+    """見立ての周りで例外が出ても、警告そのものは今の文面で出ることを保証する。"""
+
+    def test_an_error_outside_the_port_still_emits_the_current_warning(self) -> None:
+        """見立ての処理が RuntimeError を投げても、今の文面で警告を出し、trace の wording は default。"""
+        buffer = DefaultObservationContextBuffer()
+        recorder = _Recorder()
+        guard = ToolCallLoopGuardService(
+            buffer,
+            time_label_provider=lambda: "深夜 2:05",
+            clock=lambda: datetime(2026, 1, 1),
+            trace_recorder=recorder,
+            current_tick_provider=_Tick(),
+            loop_diagnosis=_ExplodingDiagnosis(port=_FixedPort("waiting"), min_confidence=0.7),
+            location_provider=lambda pid: "薬草の土手",
+        )
+
+        _travel_twice(guard)
+
+        assert _warnings(buffer) == TestFallingBackToTheCurrentWording()._baseline()
+        [event] = recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
+        assert event["wording"] == "default"
+
+    def test_a_failing_judgment_trace_is_logged_and_the_warning_is_emitted(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """TYPED_JUDGMENT の記録が失敗しても警告は出て、失敗はログに残る (黙って消さない)。"""
+        buffer = DefaultObservationContextBuffer()
+        guard = _guard(
+            _FixedPort(RepeatReason.STATE_MISTAKEN.value),
+            buffer=buffer, recorder=_FailingTypedJudgmentTrace(),
+        )
+
+        with caplog.at_level("ERROR"):
+            _travel_twice(guard)
+
+        assert len(_warnings(buffer)) == 1
+        assert "loop_diagnosis" in caplog.text
