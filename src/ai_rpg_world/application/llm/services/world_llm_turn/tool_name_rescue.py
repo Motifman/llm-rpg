@@ -417,11 +417,18 @@ def _state(
     arguments: Mapping[str, Any],
     offered: Mapping[str, str | None],
 ) -> dict[str, Any]:
-    """判断の材料。どの引数を書いたかは意図を強く示す (``say`` と ``content``)。"""
+    """判断の材料。どの引数を書いたかは意図を強く示す (``say`` と ``content``)。
+
+    整数の引数は入れない。発明された呼び出しでも ``item_id`` のような ID を
+    書いてくることがあり、判断に整数 ID を渡さない (設計原則 1)。
+    """
     state: dict[str, Any] = {
         "called_tool_name": requested,
         "arguments": {
-            key: value for key, value in arguments.items() if key not in _INTENT_FIELDS
+            key: value
+            for key, value in arguments.items()
+            if key not in _INTENT_FIELDS
+            and not (isinstance(value, int) and not isinstance(value, bool))
         },
         "available_tools": {name: offered[name] or name for name in sorted(offered)},
     }

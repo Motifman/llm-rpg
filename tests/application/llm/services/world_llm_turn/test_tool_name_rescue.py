@@ -164,6 +164,18 @@ class TestTheStateCarriesWhatTheCallSaid:
         assert state["inner_thought"] == "暗い所は一人で入りたくない"
         assert state["expected_result"] == "誰かが一緒に来てくれる"
 
+    def test_integer_arguments_are_left_out_of_the_state(self) -> None:
+        """整数の引数 (item_id など) は state に入れない。名前の引数は残す (設計原則 1)。"""
+        port = _RecordingPort()
+
+        _suggest(
+            port,
+            "give",
+            arguments={"item_id": 42, "target_label": "アオイ", "urgent": True},
+        )
+
+        assert port.state["arguments"] == {"target_label": "アオイ", "urgent": True}
+
 
 class TestItFallsBackToTheSimilaritySuggestion:
     """判断を採らないとき、文字の類似度による今の提案に戻ることを保証する。
