@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -184,7 +184,7 @@ class TestItFallsBackToTheSimilaritySuggestion:
     戻ったことを提案の中身で確かめる。
     """
 
-    _OFFERED_WITH_PICKUP: dict[str, str | None] = {
+    _OFFERED_WITH_PICKUP: ClassVar[dict[str, str | None]] = {
         "pickup_item": "足元の品を拾う。",
         "speak": "話しかける。",
     }

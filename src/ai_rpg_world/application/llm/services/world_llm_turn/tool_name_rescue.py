@@ -49,8 +49,8 @@ QUESTION_NAME = "tool_name_rescue"
 
 #: 閾値の既定。profile に無いときに使う。
 #:
-#: 行動名の救済と同じ仮置き。誤っても実行はせず提案が外れるだけなので、行動名より
-#: 高くはしない。過去 run の 24 件で較正して決め直す。
+#: 過去 run の 24 件では、採った正答の最低が 0.76、採らなかった誤答が 0.64 だった
+#: (#1413)。誤っても実行はせず提案が外れるだけなので、行動名より高くはしない。
 DEFAULT_MIN_CONFIDENCE: float = 0.7
 
 #: state では引数から外し、別の欄に置く。意図を示す材料として名前を付けて渡す。
@@ -325,7 +325,7 @@ class ToolNameRescue:
             confidence=answer.confidence,
             min_confidence=self.min_confidence,
             accepted=accepted,
-            fallback_reason=None if accepted else str(result.reason),
+            fallback_reason=None if isinstance(result, Resolved) else result.reason,
             latency_ms=answer.latency_ms,
             source=answer.source.value,
         )

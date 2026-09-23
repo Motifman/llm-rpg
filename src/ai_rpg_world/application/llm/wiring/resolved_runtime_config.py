@@ -1028,9 +1028,9 @@ _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 #: 低くすると、意図していない操作に置き換えて別の失敗に化ける。
 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 
-#: 存在しない tool 名への提案を差し替える閾値の暫定値。行動名と同じ仮置き。
+#: 存在しない tool 名への提案を差し替える閾値。
 #:
-#: 誤っても実行はせず、提案が外れるだけ。過去 run の 24 件で較正して決め直す (#1413)。
+#: 過去 run の 24 件で、採った正答の最低が 0.76、採らなかった誤答が 0.64 だった (#1413)。
 _DEFAULT_TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE = 0.7
 
 #: 対象の名前を置き換える閾値。過去 run で正しく置き換えた 5 件の最小は確率 0.93 /
