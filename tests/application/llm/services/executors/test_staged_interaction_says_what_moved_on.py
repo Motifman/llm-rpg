@@ -212,3 +212,27 @@ class TestOpenNowFollowsWhatTheActorCanSee:
         _make_dead(runtime, _AOI, "machine_room")
 
         assert _open_action_names(runtime, _AOI, "main_distribution_panel") == []
+
+
+class TestTheRefusalSurvivesABrokenLookup:
+    """いま通る手順を調べる処理が壊れても、元の拒否はそのまま返る。"""
+
+    def test_a_failing_lookup_falls_back_to_the_plain_refusal(
+        self, runtime, monkeypatch
+    ) -> None:
+        """いま通る手順の問い合わせが例外を投げても、拒否文と区分は案内なしの従来どおりになり、例外は外へ出ない。"""
+        executor = _executor(runtime)
+        _interact(runtime, executor, _MORI, "verify_cable_labels")
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError("壊れた問い合わせ")
+
+        monkeypatch.setattr(
+            runtime._interaction_service, "interactions_open_now", broken
+        )
+
+        result = _interact(runtime, executor, _AOI, "verify_cable_labels")
+
+        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert result.trace_payload == {"precondition_failure_kind": "permanent"}
+        assert result.message == "行動が拒否された: いまその手順に取りかかる段ではない。"

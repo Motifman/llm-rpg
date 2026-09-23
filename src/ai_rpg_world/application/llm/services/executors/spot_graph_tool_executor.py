@@ -338,13 +338,13 @@ def _counterparty_player_ids(settlements: Any) -> tuple[int, ...]:
     return tuple(sorted(set(out)))
 
 
-
 def _failed_on_object_state(exc: InteractionNotAllowedException) -> bool:
     condition = getattr(exc, "failed_condition", None)
     return (
         getattr(condition, "condition_type", None)
         is InteractionConditionTypeEnum.OBJECT_STATE
     )
+
 
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
@@ -1629,11 +1629,22 @@ class SpotGraphToolExecutor:
             if self._time_provider is not None
             else None
         )
-        return interaction.interactions_open_now(
-            PlayerId(player_id),
-            SpotObjectId.create(object_id),
-            current_tick=current_tick,
-        )
+        # 拒否に添える案内なので、調べられなくても拒否そのものは返す。
+        # ここで例外を通すと、上の段で汎用の失敗文に置き換わり拒否理由まで消える。
+        try:
+            return interaction.interactions_open_now(
+                PlayerId(player_id),
+                SpotObjectId.create(object_id),
+                current_tick=current_tick,
+            )
+        except Exception:
+            logger.warning(
+                "interactions_open_now failed player_id=%s object_id=%s",
+                player_id,
+                object_id,
+                exc_info=True,
+            )
+            return ()
 
     def _precondition_failure_result(
         self,
