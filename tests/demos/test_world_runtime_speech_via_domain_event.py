@@ -141,7 +141,7 @@ class TestWorldRuntimeSpeechViaDomainEvent:
         monkeypatch,
         tmp_path,
     ) -> None:
-        """死者への whisper は届かないため、tool 実行時点で INVALID_WHISPER にする。"""
+        """幽霊を使わない世界で生者が死者に囁くと、発話イベントを出す前に INVALID_WHISPER で拒否される。"""
         stub = StubLlmClient(
             tool_call_to_return={
                 "name": "speak",
