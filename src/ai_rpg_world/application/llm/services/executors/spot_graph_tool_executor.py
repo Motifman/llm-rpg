@@ -964,7 +964,7 @@ class SpotGraphToolExecutor:
             )
         except InteractionNotAllowedException as exc:
             return self._precondition_failure_result(
-                exc, open_now=self._open_alternatives(player_id, oid)
+                exc, open_now=self._next_steps(player_id, oid, exc)
             )
         except InteractionNotFoundException:
             # 実験 #26 で発覚: LLM が表示に無い action_name を
@@ -1620,9 +1620,11 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _open_alternatives(self, player_id: int, object_id: int) -> tuple[Any, ...]:
+    def _next_steps(
+        self, player_id: int, object_id: int, exc: InteractionNotAllowedException
+    ) -> tuple[Any, ...]:
         interaction = self._svc.interaction
-        if interaction is None:
+        if interaction is None or not _failed_on_object_state(exc):
             return ()
         current_tick = (
             self._time_provider.get_current_tick()
@@ -1632,14 +1634,15 @@ class SpotGraphToolExecutor:
         # 拒否に添える案内なので、調べられなくても拒否そのものは返す。
         # ここで例外を通すと、上の段で汎用の失敗文に置き換わり拒否理由まで消える。
         try:
-            return interaction.interactions_open_now(
+            return interaction.next_steps_open_now(
                 PlayerId(player_id),
                 SpotObjectId.create(object_id),
+                exc.failed_condition,
                 current_tick=current_tick,
             )
         except Exception:
             logger.warning(
-                "interactions_open_now failed player_id=%s object_id=%s",
+                "next_steps_open_now failed player_id=%s object_id=%s",
                 player_id,
                 object_id,
                 exc_info=True,
@@ -1665,13 +1668,19 @@ class SpotGraphToolExecutor:
         reason = str(exc) or "前提条件を満たさない"
         if isinstance(exc, InteractionActorPlaneNotAllowedException):
             kind = PreconditionFailureKind.ACTOR_PLANE
-        elif open_now and _failed_on_object_state(exc):
-            kind = PreconditionFailureKind.STATE_MOVED_ON
         else:
             kind = classify_precondition_failure(
                 getattr(exc, "failed_condition", None),
                 bindings=self._reactive_object_state_bindings,
             )
+            # 「待てば戻る」「条件が変われば戻る」は宣言から分かる確かな区分なので
+            # 残す。上書きするのは「もう変わらない」と言いかけた場合だけ。
+            if (
+                kind is PreconditionFailureKind.PERMANENT
+                and open_now
+                and _failed_on_object_state(exc)
+            ):
+                kind = PreconditionFailureKind.STATE_MOVED_ON
         message = f"行動が拒否された: {reason}"
         if kind is PreconditionFailureKind.STATE_MOVED_ON:
             message += "いまできるのは " + "、".join(
