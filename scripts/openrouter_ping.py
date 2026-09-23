@@ -25,9 +25,14 @@
     # JSON mode 疎通もしたい場合
     python scripts/openrouter_ping.py --json
 
+    # provider 選定: run と同じ tool_choice=required で、直列に 12 回叩く
+    python scripts/openrouter_ping.py --model openrouter/deepseek/deepseek-v4-flash-0731 \
+        --provider DeepInfra --tools-required --repeat 12 --interval 5
+
 注意:
 - 本スクリプトは API key の値を **絶対に stdout / log に出さない**。
-- 1 call のみ。loop しない (誤って課金が膨らむのを防ぐ)。
+- 既定は 1 call。``--repeat`` でも上限 ``_MAX_REPEAT`` 回 (誤って課金が膨らむのを防ぐ)。
+- provider の選び方は docs/llm_provider_selection.md。
 """
 
 from __future__ import annotations
@@ -49,6 +54,19 @@ from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 # Models ページで確認すること。litellm は "openrouter/<provider>/<model>" 形式
 # でも "openai/<model>" 形式 (api_base 指定時) でも受け付ける。
 _DEFAULT_PING_MODEL = "openrouter/google/gemma-4-31b-it"
+
+_MAX_REPEAT = 30
+
+# run の主ターンは tool_choice=required で呼ぶ。provider の宣言
+# (supported_parameters) は値ごとの動作を保証しないので、同じ値で実際に叩く。
+_PROBE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "ping",
+        "description": "疎通確認のために呼ぶ。",
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -105,6 +123,29 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "サポートする provider のみに限定する (tools / response_format を要求する"
             "ときの安全弁)。"
         ),
+    )
+    parser.add_argument(
+        "--tools-required",
+        action="store_true",
+        help=(
+            "ツールを 1 つ渡し tool_choice=required で叩く。run の主ターンと同じ条件で、"
+            "OpenRouter のツール互換性の判定で外される provider はここで 404 になる。"
+        ),
+    )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help=(
+            f"直列に叩く回数 (上限 {_MAX_REPEAT})。共有プールの枯渇は時間帯で起き、"
+            "1 回では分からない。"
+        ),
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=5.0,
+        help="--repeat のときの呼び出し間隔 (秒)。",
     )
     parser.add_argument(
         "--list-models",
@@ -210,6 +251,29 @@ def _ping_json(
     return _summarize(response, latency_ms)
 
 
+def _ping_tools_required(
+    client: LiteLLMClient,
+    prompt: str,
+    max_tokens: int,
+    provider: str | None,
+    quantization: str | None = None,
+    require_params: bool = False,
+) -> dict[str, Any]:
+    """ツールを 1 つ渡し、tool_choice=required で 1 回叩く。"""
+    kwargs = client.completion_base_kwargs()
+    kwargs["max_tokens"] = max_tokens
+    kwargs.update(_provider_extra_body(provider, quantization, require_params))
+    started = time.monotonic()
+    response = litellm.completion(
+        messages=[{"role": "user", "content": prompt}],
+        tools=[_PROBE_TOOL],
+        tool_choice="required",
+        **kwargs,
+    )
+    latency_ms = int((time.monotonic() - started) * 1000)
+    return _summarize(response, latency_ms)
+
+
 def _list_providers(model_id: str) -> int:
     """OpenRouter /models/<id>/endpoints を叩いて provider 一覧を出す。"""
     import urllib.parse
@@ -284,6 +348,8 @@ def _summarize(response: Any, latency_ms: int) -> dict[str, Any]:
         "ok": True,
         "latency_ms": latency_ms,
         "model": getattr(response, "model", None),
+        "finish_reason": getattr(choice0, "finish_reason", None),
+        "tool_called": bool(getattr(msg, "tool_calls", None)) if msg else False,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "content_snippet": (content or "")[:120],
@@ -304,6 +370,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_providers:
         return _list_providers(args.model)
 
+    if not 1 <= args.repeat <= _MAX_REPEAT:
+        sys.stderr.write(f"[error] --repeat は 1〜{_MAX_REPEAT}\n")
+        return 2
+
     try:
         client = LiteLLMClient(model=args.model)
     except Exception as e:
@@ -318,9 +388,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.provider:
         sys.stdout.write(f"provider  = pinned to '{args.provider}' (no fallback)\n")
-    try:
-        if args.json:
-            summary = _ping_json(
+    if args.json:
+        ping = _ping_json
+    elif args.tools_required:
+        ping = _ping_tools_required
+    else:
+        ping = _ping_chat
+    passed = 0
+    for i in range(args.repeat):
+        if i:
+            time.sleep(args.interval)
+        try:
+            summary = ping(
                 client,
                 args.prompt,
                 args.max_tokens,
@@ -328,26 +407,20 @@ def main(argv: list[str] | None = None) -> int:
                 args.quantization,
                 args.require_params,
             )
-        else:
-            summary = _ping_chat(
-                client,
-                args.prompt,
-                args.max_tokens,
-                args.provider,
-                args.quantization,
-                args.require_params,
+        except LlmApiCallException as e:
+            sys.stderr.write(
+                f"[error] LlmApiCallException error_code={e.error_code} message={e}\n"
             )
-    except LlmApiCallException as e:
-        sys.stderr.write(
-            f"[error] LlmApiCallException error_code={e.error_code} message={e}\n"
-        )
-        return 3
-    except Exception as e:
-        sys.stderr.write(f"[error] {type(e).__name__}: {e}\n")
-        return 4
-
-    sys.stdout.write(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
-    return 0 if summary.get("ok") else 1
+            summary = {"ok": False, "reason": e.error_code}
+        except Exception as e:
+            sys.stderr.write(f"[error] {type(e).__name__}: {e}\n")
+            summary = {"ok": False, "reason": type(e).__name__}
+        if args.tools_required and summary.get("ok") and not summary.get("tool_called"):
+            summary = {**summary, "ok": False, "reason": "no_tool_call"}
+        passed += bool(summary.get("ok"))
+        sys.stdout.write(json.dumps(summary, ensure_ascii=False) + "\n")
+    sys.stdout.write(f"--- passed {passed}/{args.repeat}\n")
+    return 0 if passed == args.repeat else 1
 
 
 if __name__ == "__main__":

@@ -1199,6 +1199,11 @@ DeepSeek V4 Flash の 2026-07-31 更新版は、新しい `belief_goal_v4` profi
 行い、公開メタデータと実際の `tool_choice=required` 対応が一致しないことを確認した
 PR #898。
 
+**追記 (2026-09-23)**: 0731 版の DeepInfra は fp8 に変わっていた。provider の
+対応状況は予告なく変わるので、選ぶときの条件と確かめ方は
+[llm_provider_selection.md](llm_provider_selection.md) にまとめ、この節の provider の
+記述はその時点の記録として読む。
+
 ## 40. `CALL_MEETING.trigger` は宣言値を実行まで運び、未知値へ縮退しない
 
 `CALL_MEETING` の `parameters.trigger` は、会議状態と観測に残る招集理由である。
