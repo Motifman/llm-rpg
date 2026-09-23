@@ -63,7 +63,11 @@ from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace impo
     wrap_with_gold_change,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
+    QUESTION_NAME as TOOL_NAME_RESCUE_QUESTION,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     build_unsupported_tool_message,
+    format_unsupported_tool_message,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -1106,6 +1110,32 @@ def reason_tool_is_not_offered(
         should_reschedule=True,
     )
 
+def _unsupported_tool_message(
+    wiring: WorldLlmWiring,
+    player_id: PlayerId,
+    name: str,
+    arguments: dict[str, Any],
+    offered: Mapping[str, str | None],
+) -> str:
+    """存在しない tool 名への失敗文。判断が使えるなら提案を意味で選ぶ。"""
+    rescue = getattr(wiring, "tool_name_rescue", None)
+    if rescue is None:
+        return build_unsupported_tool_message(requested=name, valid_tools=offered.keys())
+    suggestion = rescue.suggest(name, offered=offered, arguments=arguments)
+    payload = suggestion.trace_payload()
+    if payload is not None:
+        _record_judgment(
+            payload,
+            question=TOOL_NAME_RESCUE_QUESTION,
+            player_id=player_id,
+            trace_recorder_provider=lambda: getattr(wiring.runtime, "trace_recorder", None),
+            current_tick_provider=lambda: _current_tick_or_none(wiring),
+        )
+    return format_unsupported_tool_message(
+        requested=name, valid_tools=offered.keys(), suggestion=suggestion.tool
+    )
+
+
 def execute_tool(
     wiring: WorldLlmWiring,
     player_id: PlayerId,
@@ -1161,9 +1191,8 @@ def execute_tool(
         # ないので、3 が最重要。
         # 提案も一覧も、そのターンに送った tool から作る。handler 表から作ると、
         # 会議中に隠した tool やこの世界で出していない tool まで勧める (#1413)。
-        message = build_unsupported_tool_message(
-            requested=name,
-            valid_tools=offered_tools_at_prompt.keys(),
+        message = _unsupported_tool_message(
+            wiring, player_id, name, arguments, offered_tools_at_prompt
         )
         # PR-J: should_reschedule は _RESCHEDULE_ERROR_CODES SSOT 経由で
         # 決定する。ハードコードすると将来 policy を変えた時に乖離する。

@@ -47,6 +47,12 @@ NO_MATCH_OPTION = "__no_match__"
 #: trace と呼び出し側の分岐に使う質問名。
 QUESTION_NAME = "tool_name_rescue"
 
+#: 閾値の既定。profile に無いときに使う。
+#:
+#: 行動名の救済と同じ仮置き。誤っても実行はせず提案が外れるだけなので、行動名より
+#: 高くはしない。過去 run の 24 件で較正して決め直す。
+DEFAULT_MIN_CONFIDENCE: float = 0.7
+
 #: state では引数から外し、別の欄に置く。意図を示す材料として名前を付けて渡す。
 _INTENT_FIELDS: tuple[str, ...] = ("inner_thought", "expected_result")
 
