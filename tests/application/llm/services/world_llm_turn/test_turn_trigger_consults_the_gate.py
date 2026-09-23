@@ -1,4 +1,4 @@
-"""run_scheduled_turns が、回す前に門へ pending を渡し、返された人だけを回す。"""
+"""run_scheduled_turns が、回す前に起動判定へ pending を渡し、返された人だけを回す。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _trigger(gate) -> WorldLlmTurnTrigger:
 
 class TestTheTriggerRunsOnlyWhoTheGateReturns:
     def test_players_the_gate_drops_are_not_run(self) -> None:
-        """門が返さなかった人は run_turn されず、返した人だけが回る。"""
+        """起動判定が返さなかった人は run_turn されず、返した人だけが回る。"""
         gate = MagicMock()
         gate.candidates.side_effect = lambda ids: list(ids)
         gate.decide_wave.return_value = [PlayerId(2)]
@@ -43,7 +43,7 @@ class TestTheTriggerRunsOnlyWhoTheGateReturns:
         assert trigger.pending_player_ids == set()
 
     def test_without_a_gate_everyone_pending_runs(self) -> None:
-        """門が無ければ pending の全員が回る (**正の対照**)。"""
+        """起動判定が無ければ pending の全員が回る (**正の対照**)。"""
         trigger = _trigger(None)
         trigger.schedule_turn(PlayerId(1)); trigger.schedule_turn(PlayerId(2))
 
@@ -52,7 +52,7 @@ class TestTheTriggerRunsOnlyWhoTheGateReturns:
         assert trigger.wiring.run_turn.call_count == 2
 
     def test_when_the_gate_drops_everyone_nothing_runs(self) -> None:
-        """門が誰も返さなければ、この tick は誰も回らない。"""
+        """起動判定が誰も返さなければ、この tick は誰も回らない。"""
         gate = MagicMock(); gate.candidates.side_effect = lambda ids: list(ids); gate.decide_wave.return_value = []
         trigger = _trigger(gate)
         trigger.schedule_turn(PlayerId(1))
@@ -64,7 +64,7 @@ class TestTheTriggerRunsOnlyWhoTheGateReturns:
 
 class TestTheTriggerWidensCandidatesThroughTheGate:
     def test_candidates_come_from_the_gate_and_scheduled_players_are_passed_along(self) -> None:
-        """trigger は候補を門に広げさせ、pending に居た人を scheduled として門に渡す。"""
+        """trigger は候補を起動判定に広げさせ、pending に居た人を scheduled として起動判定に渡す。"""
         gate = MagicMock()
         gate.candidates.return_value = [PlayerId(1), PlayerId(3)]
         gate.decide_wave.return_value = [PlayerId(3)]

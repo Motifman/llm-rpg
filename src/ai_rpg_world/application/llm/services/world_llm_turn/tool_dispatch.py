@@ -372,7 +372,7 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
                 )
             ),
         )
-    # 対象の名前も同じ口で選び直す。閾値は行動名より高い (誤って寄せると、
+    # 対象の名前も同じ仕組みで選び直す。閾値は行動名より高い (誤って置き換えると、
     # 世界に無いものを一番近いものに化けさせる)。
     target_label_rescue = None
     if typed_judgment_port is not None:
@@ -448,7 +448,7 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
     wiring._validate_tool_handler_consistency()
 
 def _tool_is_exposed_in(wiring: WorldLlmWiring) -> Callable[[str], bool] | None:
-    """この世界に在るツールかを答える口。露出判断を持たない runtime では None。
+    """この世界に在るツールかを答える関数。露出判断を持たない runtime では None。
 
     None なら失敗文は全ツールを在るものとして案内する。テスト用の最小 wiring の
     挙動を変えないためで、本番 runtime は必ず ``tool_exposure`` を持つ。
@@ -765,7 +765,7 @@ def adapt_executor_handler_with_resolver(
     # optional builder。渡されない場合は従来通り generic message を使う。
     # 他 tool (interact / attack 等) 統合時も同じ pattern を再利用できる。
     invalid_label_failure_builder: Callable[[Any, dict[str, Any], Exception], LlmCommandResultDto] | None = None,
-    # #1321: 行動名の選び直しを trace に残すための口。recorder は session 作成
+    # #1321: 行動名の選び直しを trace に残すための経路。recorder は session 作成
     # 後に差し込まれる経路があるので、callable provider 経由で使用時に引く
     # (loop guard と同じ流儀)。
     trace_recorder_provider: Callable[[], Any] | None = None,

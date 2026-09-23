@@ -755,13 +755,13 @@ class TestExperimentProfileManifest:
     def test_station_drill_reply_gate_only_turns_on_judgment_and_moves_provider(
         self,
     ) -> None:
-        """返答の門の観察腕は thinking から provider と型付き判断の 2 つだけを変える。"""
+        """返答の要否による起動判定の観察用 profile は thinking から provider と型付き判断の 2 つだけを変える。"""
         thinking = self._load_profile("station_drill_thinking")
         reply_gate = self._load_profile("station_drill_reply_gate")
         expected = dict(thinking)
         expected["profile"] = "station_drill_reply_gate"
         expected["description"] = (
-            "他者の発言で起こすかを Jev の返答判断で決める門の観察用。"
+            "他者の発言で起こすかを Jev の返答判断で決める起動判定の観察用。"
             "station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の"
             " 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で"
             " tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯"

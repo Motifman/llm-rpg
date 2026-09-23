@@ -234,7 +234,7 @@ class TestNothingIsBlockedDuringFreeRoam:
     # ツールが自由時間なら通る」という嘘を保証してしまう。**
     @pytest.mark.parametrize("name", ["interact", "travel_to", "recall", "speak"])
     def test_ordinary_tools_pass_the_gate(self, free_roam, name) -> None:
-        """普段使うツールは門で止まらない。
+        """普段使うツールは検査で止まらない。
 
         **既存 run への影響がゼロであること**をここで担保する。引数不足で
         失敗するのは構わない。見たいのは `TOOL_NOT_OFFERED_NOW` にならない

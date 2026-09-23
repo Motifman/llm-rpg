@@ -2,7 +2,7 @@
 
 Issue #470 Phase 1 cleanup A3: 旧 ``contracts/interfaces.py`` から本ファイルに
 分離。``ports/`` 配下の他の completion port (``*CompletionPort``) と同じく
-**外部 LLM API への口** という責務。
+**外部 LLM API との境界** という責務。
 
 他 port との違い: ``I*CompletionPort`` は「無ツール JSON 完了」(messages → dict)
 専用だが、本 port は **tool_use 付き** で tool_call を返す。LLM agent ターン

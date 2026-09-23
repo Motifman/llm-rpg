@@ -282,7 +282,7 @@ class _ContractRuntime:
         「出していないツールを dispatch する runtime」を演じていた。
 
         本物はそんな状態にならないし、実際 dispatch 側に「出していない
-        ツールは実行させない」門を入れたら、この代役だけが引っかかった。
+        ツールは実行させない」検査を入れたら、この代役だけが引っかかった。
         代役のほうを実態に寄せる。
         """
         from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (

@@ -86,7 +86,7 @@ class ActionNameSource(Enum):
 
     #: 生値がそのまま対象の操作一覧に在った
     VERBATIM = "verbatim"
-    #: 表示の写し崩れを直して一覧の名前に当てた
+    #: 表示を写したときの表記の崩れを直して一覧の名前に当てた
     NORMALIZED = "normalized"
     #: 候補集合はあったが、どれにも当たらなかった
     UNRESOLVED = "unresolved"
@@ -122,7 +122,7 @@ class ActionNameResolution:
 def pick_action_name(
     action: str, target: "ToolRuntimeTargetDto"
 ) -> ActionNameResolution:
-    """表示の写し崩れを、対象が実際に持つ操作名へ寄せる。
+    """表示を写したときの表記の崩れを、対象が実際に持つ操作名に直す。
 
     候補が対象の ``available_interactions`` に無ければ**生値をそのまま送る**。
     表示に無い名前の発明 (65 run で 111 件の主因) はここで救わず、従来どおり
@@ -161,7 +161,7 @@ def normalize_action_name_candidates(action: str) -> list[str]:
     いた。**約束が片側にしか実装されていなかった**ので、表示どおりに
     ``"offer_wheat"`` と渡した側が落ちていた (供物競争 run t73)。
 
-    救うのは表示の写し崩れだけで、**表示に無い名前の発明は救わない**
+    救うのは表示を写したときの表記の崩れだけで、**表示に無い名前の発明は救わない**
     (候補を作っても対象の操作一覧に無ければ従来どおり失敗する)。
     """
     s = action.strip()
@@ -227,7 +227,7 @@ def resolve_target(
     - ``invalid_kind_code``: 名前は在るが別の種別 → 「無い」ではなく「種類が違う」
       と伝え、使うべきツールと候補一覧を添える。「大型カニ」を interact の対象に
       書いたとき「候補にありません」と返すと、当人は敵がいないと誤解する
-    - ``AMBIGUOUS_TARGET_LABEL``: 受け付ける種別に同名が複数 → 黙って先勝ちにしない
+    - ``AMBIGUOUS_TARGET_LABEL``: 受け付ける種別に同名が複数 → 最初の 1 件を黙って採らない
 
     Raises:
         ToolArgumentResolutionException: 解決できないとき
@@ -282,7 +282,7 @@ def _reject_distant_spot(label: Any, runtime_context: ToolRuntimeContextDto) -> 
 
     travel_to の失敗 51 件 (83 run) のほぼ全部がこの型だった。「見つかりません」と
     返すと当人はその部屋が無いと誤解し、意味で選び直す口 (#229) に渡すと途中の
-    部屋へ寄せる余地が生まれる。決定的に分かるので、どちらより先に決める。
+    部屋に置き換える余地が生まれる。規則で確定できるので、どちらより先に確定する。
     経路は教えない。行ける場所を並べるだけにして、地図は歩いて知る。
     """
     if not isinstance(label, str) or not label.strip():
@@ -653,7 +653,7 @@ class SpotGraphArgumentResolver:
 
         段は 3 つで、上から順に決まる (design_decisions #228 / #229)。
 
-        1. 表示名で当たる、別の種別に在る、同名が複数: 決定的に分かるので
+        1. 表示名で当たる、別の種別に在る、同名が複数: 規則で確定できるので
            ``resolve_target`` がそのまま返すか失敗させる
         2. どこにも無く、候補が空: 選び直す先が無いので失敗させる
         3. どこにも無く、候補がある: Jev に「該当なし」を含めて問う。採れば
@@ -1592,7 +1592,7 @@ class SpotGraphArgumentResolver:
                 "候補なしの表示は action_name として実行できません。",
                 "INVALID_ARGUMENT",
             )
-        # 表示の写し崩れ (quote つき / 表示行の丸ごとコピー) を救う。
+        # 表示を写したときの表記の崩れ (quote つき / 表示行の丸ごとコピー) を救う。
         # 対象が持つ操作に一致する候補があればそれを採り、無ければ生値の
         # まま先へ送って従来どおり「その操作はありません」で失敗させる。
         resolution = pick_action_name(action, target)

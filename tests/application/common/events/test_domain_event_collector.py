@@ -78,7 +78,7 @@ class TestEventIdDedup:
         drained = collector.drain()
 
         assert len(drained) == 1
-        assert drained[0].name == "first"  # 先勝ち
+        assert drained[0].name == "first"  # 最初の 1 件を採る
 
     def test_dedup_state_resets_after_drain(self) -> None:
         """drain 後は dedup 状態もリセットされ、同 event_id を再収集できる。"""
