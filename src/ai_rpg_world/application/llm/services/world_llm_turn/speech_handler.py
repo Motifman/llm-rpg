@@ -94,7 +94,15 @@ def handle_speech(
             )
         target_player_id_obj = PlayerId(target.player_id)
         outcome_registry = getattr(wiring.runtime, "_player_outcome_registry", None)
-        if outcome_registry is not None:
+        perception_policy = getattr(wiring.runtime, "_player_perception_policy", None)
+        # 幽霊として聞き続ける相手は拒否しない。届くかどうかは say と同じ
+        # 知覚規則に任せ、ここで先に弾くと say は届くのに囁きだけ届かない
+        # 非対称になる。
+        target_listens_as_departed = (
+            perception_policy is not None
+            and perception_policy.is_departed(target_player_id_obj)
+        )
+        if outcome_registry is not None and not target_listens_as_departed:
             if outcome_registry.get_outcome(
                 target_player_id_obj
             ).is_eliminated:
@@ -107,7 +115,7 @@ def handle_speech(
                     ),
                     error_code="INVALID_WHISPER",
                     remediation=(
-                        "channel=whisper は生存している同じスポット内の相手にだけ"
+                        "channel=whisper は声を聞ける同じスポット内の相手にだけ"
                         "届きます。別の相手を選ぶか、say / shout を使ってください。"
                     ),
                 )
