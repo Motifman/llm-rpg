@@ -78,7 +78,21 @@ class CrossTickFailureRepeat:
     tick: int
 
 
-RepeatSignal = Union[ConsecutiveRepeat, CrossTickFailureRepeat]
+@dataclass(frozen=True)
+class SemanticRepeat:
+    """直近 K 件の行動が、言い方を変えた同じ試みの繰り返しだと判断された (#1412)。
+
+    ``tool_name`` と ``fingerprint`` は窓の最後の行動。
+    """
+
+    tool_name: str
+    fingerprint: str
+    count: int
+    probability: float
+    tick: int | None
+
+
+RepeatSignal = Union[ConsecutiveRepeat, CrossTickFailureRepeat, SemanticRepeat]
 
 
 class RepeatDetector(Protocol):

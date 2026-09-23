@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     ConsecutiveRepeat,
     CrossTickFailureRepeat,
     RepeatSignal,
+    SemanticRepeat,
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
@@ -172,6 +173,11 @@ def _quote(text: str | None) -> str:
 def _repetition_fact(signal: RepeatSignal, action: str) -> str:
     if isinstance(signal, ConsecutiveRepeat):
         return f"⚠ {action} を {signal.consecutive} 回続けて同じ引数で実行している。"
+    if isinstance(signal, SemanticRepeat):
+        return (
+            f"⚠ {action} までの直近 {signal.count} 回の行動は、言い回しや呼び名が"
+            "違っても同じ試みの繰り返しになっている。"
+        )
     return (
         f"⚠ {action} は直近 {signal.window} tick 以内に {signal.count} 回、"
         f"同じ理由 (`{signal.error_code}`) で失敗している。"
@@ -246,6 +252,25 @@ class LoopWarningEmitter:
         self._cross_tick_warn_count: dict[int, int] = {}
         self._last_gate_signal: dict[int, LoopGuardGateSignal] = {}
 
+    def emit_all(
+        self,
+        player_id: PlayerId,
+        signals: Sequence[RepeatSignal],
+        recent: Sequence[RecentAction] = (),
+    ) -> list[RepeatSignal]:
+        """同じ行動で発火した signal から 1 件だけ出し、出したものを返す。
+
+        同じ繰り返しに警告を 2 件届けると、待機へ押す力が強くなりすぎる。見立ても
+        警告ごとに問うので、2 件出すと判断を 2 回呼ぶ。優先は、失敗の理由を持つ
+        離れた tick の失敗、連続の同一行動、意味上の繰り返しの順。
+        """
+        for kind in (CrossTickFailureRepeat, ConsecutiveRepeat, SemanticRepeat):
+            for signal in signals:
+                if isinstance(signal, kind):
+                    self.emit(player_id, signal, recent)
+                    return [signal]
+        return []
+
     def emit(
         self,
         player_id: PlayerId,
@@ -256,6 +281,8 @@ class LoopWarningEmitter:
             self._emit_consecutive(player_id, signal, recent)
         elif isinstance(signal, CrossTickFailureRepeat):
             self._emit_cross_tick_failure(player_id, signal, recent)
+        elif isinstance(signal, SemanticRepeat):
+            self._emit_semantic_repeat(player_id, signal, recent)
         else:
             raise TypeError(f"unknown repeat signal: {type(signal).__name__}")
 
@@ -370,6 +397,52 @@ class LoopWarningEmitter:
             **wording,
         )
 
+    def _emit_semantic_repeat(
+        self,
+        player_id: PlayerId,
+        signal: SemanticRepeat,
+        recent: Sequence[RecentAction],
+    ) -> None:
+        game_time_label = self._time_label_provider()
+        action = build_action_summary(signal.tool_name, signal.fingerprint)
+        # 完全一致の警告と違い、引き継ぐ命令調の文面が無い。事実だけを伝える。
+        default_prose = _repetition_fact(signal, action) + "どの回も結果は変わっていない。"
+        prose, wording = self._word(
+            player_id, signal, "semantic_repeat", default_prose, recent
+        )
+        self._observation_buffer.append(
+            player_id,
+            self._entry(
+                prose,
+                structured={
+                    "loop_guard": True,
+                    "pattern": "semantic_repeat",
+                    "tool_name": signal.tool_name,
+                    "argument_fingerprint": signal.fingerprint,
+                    "count": signal.count,
+                    "probability": signal.probability,
+                },
+                game_time_label=game_time_label,
+            ),
+        )
+        self._last_gate_signal[player_id.value] = LoopGuardGateSignal(
+            pattern="semantic_repeat",
+            tool_name=signal.tool_name,
+            fingerprint=signal.fingerprint,
+            tick=signal.tick,
+        )
+        self._record_trace(
+            tick=signal.tick,
+            player_id=int(player_id.value),
+            tool_name=signal.tool_name,
+            argument_fingerprint=signal.fingerprint,
+            window_count=signal.count,
+            probability=signal.probability,
+            game_time_label=game_time_label,
+            pattern="semantic_repeat",
+            **wording,
+        )
+
     def _word(
         self,
         player_id: PlayerId,
@@ -428,6 +501,8 @@ class LoopWarningEmitter:
         """
         if isinstance(signal, ConsecutiveRepeat):
             repetition = f"同じ引数で {signal.consecutive} 回連続"
+        elif isinstance(signal, SemanticRepeat):
+            repetition = f"言い回しや呼び名を変えた同じ試みが、直近 {signal.count} 回"
         else:
             repetition = (
                 f"直近 {signal.window} tick 以内に、同じ失敗 ({signal.error_code}) で "

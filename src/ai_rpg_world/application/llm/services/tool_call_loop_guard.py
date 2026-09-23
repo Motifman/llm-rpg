@@ -45,12 +45,16 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     CrossTickFailureRepeat,
     RecordedAction,
     RepeatDetector,
+    RepeatSignal,
 )
 from ai_rpg_world.application.llm.services.loop_guard_warning import (
     LoopGuardGateSignal,
     LoopWarningEmitter,
     RecentAction,
     build_action_summary,
+)
+from ai_rpg_world.application.llm.services.semantic_repeat_detector import (
+    SemanticRepeatDetector,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -120,6 +124,7 @@ class ToolCallLoopGuardService:
         cross_tick_failure_threshold: int = DEFAULT_CROSS_TICK_FAILURE_THRESHOLD,
         loop_diagnosis: LoopDiagnosis | None = None,
         location_provider: Callable[[PlayerId], str | None] | None = None,
+        semantic_repeat_detector: SemanticRepeatDetector | None = None,
     ) -> None:
         """
         trace_recorder vs trace_recorder_provider:
@@ -133,6 +138,9 @@ class ToolCallLoopGuardService:
             None なら判断を引かず、今の文面で出す。
         location_provider:
             見立ての材料と文面に載せる現在地の名前。
+        semantic_repeat_detector:
+            与えると、完全一致で数えられない言い直しや往復も判断に問う (#1412)。
+            完全一致の検出の後に回し、発火したかを渡す。
         """
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError(
@@ -161,6 +169,12 @@ class ToolCallLoopGuardService:
             raise TypeError("loop_diagnosis must be LoopDiagnosis or None")
         if location_provider is not None and not callable(location_provider):
             raise TypeError("location_provider must be callable or None")
+        if semantic_repeat_detector is not None and not isinstance(
+            semantic_repeat_detector, SemanticRepeatDetector
+        ):
+            raise TypeError(
+                "semantic_repeat_detector must be SemanticRepeatDetector or None"
+            )
         cross_tick_detector = CrossTickFailureDetector(
             window=cross_tick_failure_window,
             threshold=cross_tick_failure_threshold,
@@ -179,6 +193,8 @@ class ToolCallLoopGuardService:
         # 時刻比較が TypeError になるため、既定 clock は aware (UTC) を返す
         #: 公開するのは、見立てが profile から届いたかを外から確かめるため。
         self.loop_diagnosis = loop_diagnosis
+        #: 公開する理由は ``loop_diagnosis`` と同じ。
+        self.semantic_repeat_detector = semantic_repeat_detector
         self._emitter = LoopWarningEmitter(
             observation_buffer=observation_buffer,
             time_label_provider=time_label_provider,
@@ -247,12 +263,19 @@ class ToolCallLoopGuardService:
                 said=_said(arguments),
             )
         )
-        cross_tick_trigger: CrossTickFailureTrigger | None = None
+        signals: list[RepeatSignal] = []
         for detector in self._detectors:
             signal = detector.observe(action)
-            if signal is None:
-                continue
-            self._emitter.emit(player_id, signal, tuple(recent))
+            if signal is not None:
+                signals.append(signal)
+        if self.semantic_repeat_detector is not None:
+            semantic = self.semantic_repeat_detector.observe(
+                action, exact_match_fired=bool(signals)
+            )
+            if semantic is not None:
+                signals.append(semantic)
+        cross_tick_trigger: CrossTickFailureTrigger | None = None
+        for signal in self._emitter.emit_all(player_id, signals, tuple(recent)):
             if isinstance(signal, CrossTickFailureRepeat):
                 cross_tick_trigger = CrossTickFailureTrigger(
                     tool_name=signal.tool_name,

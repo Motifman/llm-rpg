@@ -297,3 +297,38 @@ class TestTheLoopGuardGetsTheDiagnosis:
             ResolvedLlmRuntimeConfig.for_tests(typed_judgment_loop_diagnosis_enabled=True)
         ):
             assert wiring.tool_call_loop_guard.loop_diagnosis is None
+
+
+class TestTheLoopGuardGetsTheSemanticRepeatDetector:
+    """ループ警告に、意味上の繰り返しの検出器 (#1412) が届くことを保証する。"""
+
+    def test_the_detector_arrives_with_the_profile_settings(self) -> None:
+        """判断ポートがあり検出を有効にした profile では、同じポートと profile の閾値・窓で検出器を持つ。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(
+                typed_judgment_provider="stub",
+                typed_judgment_semantic_repeat_enabled=True,
+                typed_judgment_semantic_repeat_min_probability=0.9,
+                typed_judgment_semantic_repeat_window=5,
+            )
+        ):
+            detector = wiring.tool_call_loop_guard.semantic_repeat_detector
+            assert detector is not None
+            assert detector.judgment_port is wiring.typed_judgment_port
+            assert detector.threshold == 0.9
+            assert detector.window_size == 5
+
+    def test_judgment_alone_does_not_bring_the_detector(self) -> None:
+        """provider だけを入れた profile では、判断ポートは載るが検出器は入らない (既定 off)。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.typed_judgment_port is not None
+            assert wiring.tool_call_loop_guard.semantic_repeat_detector is None
+
+    def test_enabling_without_a_port_brings_no_detector(self) -> None:
+        """provider が off なら、検出を有効にしても入らない。判断ポートが無いため。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_semantic_repeat_enabled=True)
+        ):
+            assert wiring.tool_call_loop_guard.semantic_repeat_detector is None

@@ -29,6 +29,9 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     DEFAULT_MIN_PROBABILITY,
     MemoCompletionHintService,
 )
+from ai_rpg_world.application.llm.services.semantic_repeat_detector import (
+    SemanticRepeatDetector,
+)
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
@@ -178,6 +181,7 @@ class WorldLlmWiring:
                 else None
             ),
             loop_diagnosis=self._build_loop_diagnosis(),
+            semantic_repeat_detector=self._build_semantic_repeat_detector(),
             location_provider=(
                 self.runtime.get_player_spot_name
                 if hasattr(self.runtime, "get_player_spot_name")
@@ -387,6 +391,23 @@ class WorldLlmWiring:
         return LoopDiagnosis(
             port=self.typed_judgment_port,
             min_confidence=float(config.typed_judgment_loop_diagnosis_min_confidence),
+        )
+
+    def _build_semantic_repeat_detector(self) -> SemanticRepeatDetector | None:
+        """profile が意味上の繰り返しの検出を求め、判断ポートがあるときだけ組む (#1412)。"""
+        config = getattr(self.runtime, "_runtime_config", None)
+        if (
+            self.typed_judgment_port is None
+            or config is None
+            or not config.typed_judgment_semantic_repeat_enabled
+        ):
+            return None
+        return SemanticRepeatDetector(
+            self.typed_judgment_port,
+            player_name_resolver=self.runtime.get_player_name,
+            window_size=int(config.typed_judgment_semantic_repeat_window),
+            threshold=float(config.typed_judgment_semantic_repeat_min_probability),
+            trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
         )
 
     def _time_label(self) -> str:

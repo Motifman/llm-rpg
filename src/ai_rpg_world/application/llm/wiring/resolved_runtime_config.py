@@ -135,6 +135,9 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_ENDPOINT",
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
+    "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
+    "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
+    "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
     "TYPED_JUDGMENT_TURN_GATE_ENABLED",
     "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
@@ -202,6 +205,11 @@ class ResolvedLlmRuntimeConfig:
             有効にしても入らない
         typed_judgment_loop_diagnosis_min_confidence: 見立てた理由を採る閾値。
             確率と確信の両方がこれ以上のときだけ採る
+        typed_judgment_semantic_repeat_enabled: 直近の行動の窓を材料に、言い直しや
+            往復のような意味上の繰り返しを問う (#1412)。**既定は off**
+        typed_judgment_semantic_repeat_min_probability: 繰り返しと見なす確率の閾値。
+            警告が待機へ押すのを避けるため高めに置く
+        typed_judgment_semantic_repeat_window: 判断に渡す直近の行動の件数
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -260,6 +268,9 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_turn_gate_skip_below: float
     typed_judgment_loop_diagnosis_enabled: bool
     typed_judgment_loop_diagnosis_min_confidence: float
+    typed_judgment_semantic_repeat_enabled: bool
+    typed_judgment_semantic_repeat_min_probability: float
+    typed_judgment_semantic_repeat_window: int
 
     # Episodic memory
     episodic_enabled: bool
@@ -647,6 +658,26 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE",
             default=_DEFAULT_TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE,
         )
+        try:
+            typed_judgment_semantic_repeat_enabled = _parse_truthy(
+                source.get("TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED: {exc}") from exc
+        typed_judgment_semantic_repeat_min_probability = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
+            default=_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY,
+        )
+        typed_judgment_semantic_repeat_window = _resolve_positive_int(
+            source,
+            "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
+            default=_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW,
+        )
+        if typed_judgment_semantic_repeat_window < 2:
+            raise ValueError(
+                "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater"
+            )
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -823,6 +854,11 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_loop_diagnosis_min_confidence=(
                 typed_judgment_loop_diagnosis_min_confidence
             ),
+            typed_judgment_semantic_repeat_enabled=typed_judgment_semantic_repeat_enabled,
+            typed_judgment_semantic_repeat_min_probability=(
+                typed_judgment_semantic_repeat_min_probability
+            ),
+            typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -943,6 +979,13 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_loop_diagnosis_enabled=False,
             typed_judgment_loop_diagnosis_min_confidence=(
                 _DEFAULT_TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE
+            ),
+            typed_judgment_semantic_repeat_enabled=False,
+            typed_judgment_semantic_repeat_min_probability=(
+                _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY
+            ),
+            typed_judgment_semantic_repeat_window=(
+                _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
@@ -1072,6 +1115,11 @@ _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 #: 見立てた理由を採る閾値の暫定値。行動名の読み替えと同じ値から始める。
 #: 採らなくても警告は今の文面で出るので、低すぎるより高すぎる方が害が小さい。
 _DEFAULT_TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE = 0.7
+#: 過去 run の窓 20 件で測った (scripts/jev_semantic_repeat_demo.py)。繰り返しで
+#: ない窓の最大は 0.51 で、完全一致で拾えなかった繰り返し 10 件のうち 6 件が
+#: 0.86 以上だった。警告が待機へ押すのを避けるため、非繰り返しの最大から離して置く。
+_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY = 0.8
+_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW = 4
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
