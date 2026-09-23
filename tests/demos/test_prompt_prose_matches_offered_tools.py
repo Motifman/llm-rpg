@@ -229,7 +229,7 @@ class TestTheMeetingAnnouncementMatchesOfferedTools:
         )
         assert "vote" in offered
 
-    def test_ghost_is_told_they_can_only_speak(self) -> None:
+    def test_ghost_is_told_they_can_only_speak_and_listen(self) -> None:
         """死者への会議開始の観測は投票を勧めず、幽霊ルールと同じ言い方で、話すことと様子を見ることしかできないと書く。死者には vote を渡さない。"""
         runtime = create_world_runtime(_DRILL)
         _make_dead(runtime, _SENA, "greenhouse")
