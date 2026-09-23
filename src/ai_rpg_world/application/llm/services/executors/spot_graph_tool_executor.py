@@ -81,6 +81,9 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
 from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
     InteractionCommandRepositoryProviderPort,
 )
+from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
+    format_action_display_with_hints,
+)
 from ai_rpg_world.application.world_graph.precondition_failure_kind import (
     REMEDIATION_BY_KIND,
     PreconditionFailureKind,
@@ -166,6 +169,9 @@ from ai_rpg_world.domain.player.value_object.fatigue_exertion import (
     ExertionKind,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
+)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
@@ -331,6 +337,14 @@ def _counterparty_player_ids(settlements: Any) -> tuple[int, ...]:
                 out.append(int(side.entity_id))
     return tuple(sorted(set(out)))
 
+
+
+def _failed_on_object_state(exc: InteractionNotAllowedException) -> bool:
+    condition = getattr(exc, "failed_condition", None)
+    return (
+        getattr(condition, "condition_type", None)
+        is InteractionConditionTypeEnum.OBJECT_STATE
+    )
 
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
@@ -949,12 +963,9 @@ class SpotGraphToolExecutor:
                 ),
             )
         except InteractionNotAllowedException as exc:
-            # N2: precondition 失敗 (= scenario JSON の failure_message) を
-            # generic "LLM ツール実行に失敗しました" に潰さず、failure_message
-            # そのものを surface する。「枯渇」っぽい文言なら retry を抑える
-            # remediation を添える (= 同じ object に再度同 action_name を
-            # 投げない指示)。
-            return self._precondition_failure_result(exc)
+            return self._precondition_failure_result(
+                exc, open_now=self._open_alternatives(player_id, oid)
+            )
         except InteractionNotFoundException:
             # 実験 #26 で発覚: LLM が表示に無い action_name を
             # 発明して呼んでいた。当該 object で実際に使える一覧を
@@ -1609,8 +1620,26 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
+    def _open_alternatives(self, player_id: int, object_id: int) -> tuple[Any, ...]:
+        interaction = self._svc.interaction
+        if interaction is None:
+            return ()
+        current_tick = (
+            self._time_provider.get_current_tick()
+            if self._time_provider is not None
+            else None
+        )
+        return interaction.interactions_open_now(
+            PlayerId(player_id),
+            SpotObjectId.create(object_id),
+            current_tick=current_tick,
+        )
+
     def _precondition_failure_result(
-        self, exc: InteractionNotAllowedException
+        self,
+        exc: InteractionNotAllowedException,
+        *,
+        open_now: tuple[Any, ...] = (),
     ) -> LlmCommandResultDto:
         """前提条件の失敗を、シナリオ宣言から区分して返す。
 
@@ -1623,17 +1652,26 @@ class SpotGraphToolExecutor:
         と書いた上から「別の場所を選べ」を重ねていた。
         """
         reason = str(exc) or "前提条件を満たさない"
-        kind = (
-            PreconditionFailureKind.ACTOR_PLANE
-            if isinstance(exc, InteractionActorPlaneNotAllowedException)
-            else classify_precondition_failure(
+        if isinstance(exc, InteractionActorPlaneNotAllowedException):
+            kind = PreconditionFailureKind.ACTOR_PLANE
+        elif open_now and _failed_on_object_state(exc):
+            kind = PreconditionFailureKind.STATE_MOVED_ON
+        else:
+            kind = classify_precondition_failure(
                 getattr(exc, "failed_condition", None),
                 bindings=self._reactive_object_state_bindings,
             )
-        )
+        message = f"行動が拒否された: {reason}"
+        if kind is PreconditionFailureKind.STATE_MOVED_ON:
+            message += "いまできるのは " + "、".join(
+                format_action_display_with_hints(
+                    idef.action_name, (), display_label=idef.display_label
+                )
+                for idef in open_now
+            ) + "。"
         return LlmCommandResultDto(
             success=False,
-            message=f"行動が拒否された: {reason}",
+            message=message,
             error_code="INTERACTION_PRECONDITION_FAILED",
             remediation=REMEDIATION_BY_KIND[kind],
             # 区分を trace に残す。error_code は据え置く (実 run 最多の 679 件で、

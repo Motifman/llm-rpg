@@ -19,6 +19,7 @@ from ai_rpg_world.application.world_graph.declared_observation_message import (
 )
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
     is_hidden_from_state,
+    visible_interactions_for_actor_plane,
 )
 from ai_rpg_world.application.world_graph.interaction_actor_plane import (
     actor_plane_for,
@@ -1870,6 +1871,79 @@ class SpotInteractionApplicationService:
             )
         obj, idef = matches[0]
 
+        action_def = self._refuse_if_still_waiting(
+            player_id, obj.object_id, action_name, interior, current_tick
+        )
+        if action_def is not None and not self._interaction_allows_actor(
+            player_id, action_def
+        ):
+            raise self._actor_plane_refusal(player_id)
+        result = self._evaluate_preconditions_for_actor(
+            player_id, idef, obj, interior, graph, spot_id, current_tick
+        )
+        if not result.is_satisfied:
+            raise InteractionNotAllowedException(
+                result.failure_message or "Interaction not allowed",
+                failed_condition=result.failed_predicate,
+            )
+        return obj.object_id
+
+    def interactions_open_now(
+        self,
+        player_id: PlayerId,
+        object_id: SpotObjectId,
+        *,
+        current_tick: WorldTick | None = None,
+    ) -> tuple[InteractionDef, ...]:
+        """この行為者がいま、現在地のこの物体で通せる操作を宣言順に返す。
+
+        前提条件で拒否された人へ「同じ物体の別の手順ならいま通る」と返すための
+        問い。同じ tick に別の人が段階を先に進めると、tick の頭に作った prompt
+        の手順は拒否されるが、次の手順は通る。候補表示と同じ見え方の絞り込み
+        (役割・世界状態・存在層) と、実行と同じ前提条件の判定を通す。
+        """
+        graph = self._spot_graph_repository.find_graph()
+        spot_id = self._actor_spot(player_id, graph)
+        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        if interior is None:
+            return ()
+        obj = interior.get_object(object_id)
+        if obj is None:
+            return ()
+        plane = actor_plane_for(player_id, self._player_perception_policy)
+        if plane is None:
+            return ()
+        acting_status = (
+            self._player_status_repository.find_by_id(player_id)
+            if self._player_status_repository is not None
+            else None
+        )
+        return tuple(
+            idef
+            for idef in visible_interactions_for_actor_plane(
+                obj.interactions,
+                acting_status,
+                self._world_flag_state.as_frozen_set(),
+                plane,
+            )
+            if self.remaining_cooldown_ticks(
+                player_id, obj.object_id, idef, current_tick
+            ) <= 0
+            and self._evaluate_preconditions_for_actor(
+                player_id, idef, obj, interior, graph, spot_id, current_tick
+            ).is_satisfied
+        )
+
+    def _evaluate_preconditions_for_actor(
+        self,
+        player_id: PlayerId,
+        idef: InteractionDef,
+        obj: Any,
+        interior: SpotInterior,
+        graph: Any,
+        spot_id: SpotId,
+        current_tick: WorldTick | None,
+    ) -> Any:
         inv = self._player_inventory_repository.find_by_id(player_id)
         if inv is None:
             raise ApplicationException(
@@ -1898,15 +1972,7 @@ class SpotInteractionApplicationService:
         lighting = None
         if self._effective_lighting_resolver is not None:
             lighting = self._effective_lighting_resolver.resolve(spot_id)
-
-        action_def = self._refuse_if_still_waiting(
-            player_id, obj.object_id, action_name, interior, current_tick
-        )
-        if action_def is not None and not self._interaction_allows_actor(
-            player_id, action_def
-        ):
-            raise self._actor_plane_refusal(player_id)
-        result = self._interaction.evaluate_preconditions_result(
+        return self._interaction.evaluate_preconditions_result(
             idef,
             obj,
             owned,
@@ -1921,12 +1987,6 @@ class SpotInteractionApplicationService:
             current_spot_id=spot_id,
             interior=interior,
         )
-        if not result.is_satisfied:
-            raise InteractionNotAllowedException(
-                result.failure_message or "Interaction not allowed",
-                failed_condition=result.failed_predicate,
-            )
-        return obj.object_id
 
     def _build_public_observable_events(
         self,

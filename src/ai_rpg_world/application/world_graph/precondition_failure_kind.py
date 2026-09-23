@@ -87,6 +87,8 @@ class PreconditionFailureKind(Enum):
     CONDITION_RECOVERING = "condition_recovering"
     #: 戻す宣言が無い。別の対象を選ぶのが正しい。
     PERMANENT = "permanent"
+    #: 同じ物体の別の手順ならいま通る。誰かが先に段階を進めた形。
+    STATE_MOVED_ON = "state_moved_on"
     #: 持ち物・体力・天候などの前提が足りない。揃えてから戻る。
     MISSING_PREREQUISITE = "missing_prerequisite"
     #: 生者と幽霊の存在層が、操作の宣言と一致しない。
@@ -109,6 +111,9 @@ REMEDIATION_BY_KIND: dict[PreconditionFailureKind, str] = {
     PreconditionFailureKind.PERMANENT: (
         "ここはもう変わらない。同じ相手に同じことを繰り返さず、"
         "別の場所か別の対象を選ぶこと。"
+    ),
+    PreconditionFailureKind.STATE_MOVED_ON: (
+        "この対象は先に進んでいる。同じ対象の、いま通る手順を選ぶこと。"
     ),
     PreconditionFailureKind.MISSING_PREREQUISITE: (
         "足りない前提を先に満たすこと。"
