@@ -4,7 +4,7 @@ Issue #470 Phase 1 cleanup A3: ``application/llm/contracts/`` に同居してい
 スケジューラ Port を本 package に集約。
 
 スケジューラは **「いつ呼ぶか」の制御抽象** であり、``ports/`` (= 外部 LLM API
-への口) とは責務が異なるため別 package に分離した。実装は引き続き
+との境界) とは責務が異なるため別 package に分離した。実装は引き続き
 ``services/episodic_subjective_completion_schedulers.py`` 等に置く。
 """
 

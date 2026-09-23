@@ -188,8 +188,8 @@ class ResolvedLlmRuntimeConfig:
             行動名より高い (既定 0.85)
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
         typed_judgment_turn_gate_enabled: tick の終わりに pending の全員へ「いま
-            動く必要があるか」を問う門を挟む。**既定は off**。provider を jev に
-            しても門は入らない (#222)。観察するときだけ明示的に true にする
+            動く必要があるか」を問う起動判定を挟む。**既定は off**。provider を jev に
+            しても起動判定は入らない (#222)。観察するときだけ明示的に true にする
         typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
             回さない。取りこぼしを避けるため小さく置く
 
@@ -1010,14 +1010,14 @@ _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 #:
 #: **実測前の仮置きである。** 手元のプローブでは正しい救済が確率 0.97 /
 #: confidence 0.96 だった。人手ラベル 50 件で較正して決め直す (#1319)。
-#: 低くすると、意図していない操作へ寄せて別の失敗に化ける。
+#: 低くすると、意図していない操作に置き換えて別の失敗に化ける。
 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 
-#: 対象の名前を置き換える閾値。過去 run で正しく寄せた 5 件の最小は確率 0.93 /
+#: 対象の名前を置き換える閾値。過去 run で正しく置き換えた 5 件の最小は確率 0.93 /
 #: 確信 0.89、誤った寄せは 0.8 台だった (scripts/jev_target_label_rescue_demo.py)。
 _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE = 0.85
 
-#: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の門 (#217) で
+#: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の起動判定 (#217) で
 #: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
 _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 

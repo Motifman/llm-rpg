@@ -1,6 +1,6 @@
 {
   "profile": "station_drill_reply_gate",
-  "description": "他者の発言で起こすかを Jev の返答判断で決める門の観察用。station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯により全滅する。",
+  "description": "他者の発言で起こすかを Jev の返答判断で決める起動判定の観察用。station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯により全滅する。",
   "scenario": "data/scenarios/station_drill.json",
   "max_world_ticks": 50,
   "snapshot_save": false,

@@ -1,6 +1,6 @@
 {
   "profile": "station_drill_gemma_reply_gate",
-  "description": "返答の門を Gemma 4 31B で観察する。station_drill_reply_gate との差は LLM_MODEL・provider・LLM_REASONING_EFFORT の 3 つ。Venice は Gemma 側で tools と tool_choice=required を満たし稼働率が最も高い (DeepInfra fp4 は tools 非対応)。Gemma の thinking は on/off しかなく minimal でも 1 呼び出し 10〜40 秒かかるので none にする。",
+  "description": "返答の要否による起動判定を Gemma 4 31B で観察する。station_drill_reply_gate との差は LLM_MODEL・provider・LLM_REASONING_EFFORT の 3 つ。Venice は Gemma 側で tools と tool_choice=required を満たし稼働率が最も高い (DeepInfra fp4 は tools 非対応)。Gemma の thinking は on/off しかなく minimal でも 1 呼び出し 10〜40 秒かかるので none にする。",
   "scenario": "data/scenarios/station_drill.json",
   "max_world_ticks": 50,
   "snapshot_save": false,

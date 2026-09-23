@@ -117,7 +117,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         scheduled = list(self.pending_player_ids)
         self.pending_player_ids.clear()
         to_run = list(scheduled)
-        # tick 単位の門: 候補を「未読の観測がある人」全員に広げ、一人ひとりに
+        # tick 単位の起動判定: 候補を「未読の観測がある人」全員に広げ、一人ひとりに
         # ついて未読をまとめて「いま動く必要があるか」を問い、本当に不要と判定
         # できた人だけ回さない。観測は buffer に残る。前の tick に寝た人は、新しい
         # 観測が届かなくても溜まった未読で判断し直される。

@@ -2,7 +2,7 @@
 
 travel_to の失敗 51 件 (83 run) のほぼ全部が、目的文や記憶にある部屋 (機関室) を隣の
 場所として書いたものだった。「見つかりません」と返すと当人はその部屋が無いと誤解する。
-決定的に分かることなので、意味で選び直す口より先に決め、Jev には問わない。
+規則で確定できることなので、意味で選び直す処理より先に確定し、Jev には問わない。
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ class TestADistantRoomFailsWithItsOwnReason:
         assert caught.value.error_code == DESTINATION_NOT_ADJACENT
 
     def test_jev_is_not_asked_about_a_distant_room(self) -> None:
-        """救済が配線されていても、隣接していない部屋は Jev に問わない。途中の部屋へ寄せない。"""
+        """救済が配線されていても、隣接していない部屋は Jev に問わない。途中の部屋に置き換えない。"""
         port = _CountingPort()
 
         with pytest.raises(ToolArgumentResolutionException) as caught:

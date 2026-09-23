@@ -194,7 +194,7 @@ class TestPhaseLimitedToolsCannotSkipTheDispatchCheck:
     def test_the_meeting_only_tool_is_visible_to_the_check(self, runtime) -> None:
         """会議フェーズとして訊けば vote が出る。
 
-        検査はこの口を使って両フェーズを突き合わせる。ここが効かないと、
+        検査はこの手段を使って両フェーズを突き合わせる。ここが効かないと、
         会議専用 tool を足した人は起動時に何も言われない。
         """
         names = [

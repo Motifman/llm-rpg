@@ -115,9 +115,9 @@ from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noq
 
 
 def _build_turn_gate(runtime: Any, judgment_port: Any) -> TurnGate | None:
-    """tick の終わりに「いま動く必要があるか」を問う門を、profile が求めたときだけ組む。
+    """tick の終わりに「いま動く必要があるか」を問う起動判定を、profile が求めたときだけ組む。
 
-    provider が off なら判断ポートが無く、門も無い。門が無い run と門が全員回した
+    provider が off なら判断ポートが無く、起動判定も無い。起動判定が無い run と起動判定が全員回した
     run は trace の TYPED_JUDGMENT で見分ける。
     """
     config = runtime._runtime_config

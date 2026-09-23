@@ -4,7 +4,7 @@ DDD 再編 (Issue #470 Phase 1):
 - 旧: 本ファイルに L4MidSummary / L5LongSummary (Value Object) と
   Port (LLM 完了 interface) が同居していた
 - 新: Value Object は ``domain/memory/short_term/value_object/`` に昇格、
-  Port は application 層の責務 (= 外部 LLM API への口) として本ファイルに残る
+  Port は application 層の責務 (= 外部 LLM API との境界) として本ファイルに残る
 
 L4MidSummary / L5LongSummary を使うコードは
 ``ai_rpg_world.domain.memory.short_term.value_object`` から import すること。

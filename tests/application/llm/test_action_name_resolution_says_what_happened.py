@@ -70,7 +70,7 @@ class TestActionNameResolutionSaysWhatHappened:
         ['"reap_wheat"', "'reap_wheat'", '麦を刈り取る → "reap_wheat"'],
     )
     def test_a_copied_display_form_is_reported_as_normalized(self, raw: str) -> None:
-        """表示の写し崩れは一覧の名前へ寄り、source は normalized で生値が original に残る。"""
+        """表示を写したときの表記の崩れは一覧の名前に直され、source は normalized で生値が original に残る。"""
         resolution = pick_action_name(raw, _field("reap_wheat"))
 
         assert resolution.value == "reap_wheat"

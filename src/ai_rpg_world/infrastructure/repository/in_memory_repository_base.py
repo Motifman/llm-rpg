@@ -16,7 +16,7 @@ _Result = TypeVar("_Result")
 
 
 class RepositoryUnitOfWorkPort(Protocol):
-    """InMemory リポジトリが実際に呼ぶぶんだけの口。
+    """InMemory リポジトリが実際に呼ぶぶんだけのメソッド。
 
     ``UnitOfWork`` 全体は要らない。command scope の facade のように、
     トランザクション制御を持たず記録だけを担う実装も受け取れるようにする。

@@ -1,6 +1,6 @@
-"""tick の終わりに「いま動く必要があるか」を pending の全員に問う門の仕様。
+"""tick の終わりに「いま動く必要があるか」を pending の全員に問う起動判定の仕様。
 
-普通は pending の全員が毎 tick 起動する。門は Jev が「本当に不要」と判定できた人
+普通は pending の全員が毎 tick 起動する。起動判定は Jev が「本当に不要」と判定できた人
 だけ回さない。規則で判断を飛ばさない。唯一の例外は未読の観測が無い人で、判断の
 材料が無いのでそのまま回す。
 """
@@ -263,7 +263,7 @@ class TestTheTraceCarriesWhatJevSaw:
     def test_the_trace_records_the_observations_passed_to_the_judgment(self) -> None:
         """判断を引いた決定の trace に、Jev に渡した観測の見出しと本文が残る。
 
-        同じ tick 番号の観測には、門より後にターンの中で生まれた発言も混ざる。
+        同じ tick 番号の観測には、判定より後にターンの中で生まれた発言も混ざる。
         trace から state を復元すると誤読するので、見たものをそのまま残す。
         """
         w = _World(); port = _Port({"モリ": 0.05})

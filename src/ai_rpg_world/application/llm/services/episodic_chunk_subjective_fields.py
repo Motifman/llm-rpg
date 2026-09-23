@@ -594,7 +594,7 @@ def _normalize_pending_resolutions(
     - ``valid_pending_ids`` (= この chunk で prompt に載せた約束の id 群) に
       含まれない pending_id → 捨てる (存在しない約束を LLM が創作しても
       清算しない)
-    - 同一 pending_id の重複 → 先勝ち (最初の判定を採用)
+    - 同一 pending_id の重複 → 最初の判定を採用
     """
     if not isinstance(raw, (list, tuple)):
         return ()
