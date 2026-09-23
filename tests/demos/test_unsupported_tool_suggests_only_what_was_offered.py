@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
     JudgmentResult,
     JudgmentSource,
+    TypedJudgmentUnavailableException,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     offered_tools_from_payload,
@@ -198,6 +199,7 @@ class TestTheJudgmentSuggestsFromTheSentTools:
         assert "interact" not in question.options
         assert question.options["speak"] == offered["speak"]
         assert offered["speak"]
+        assert "\n" not in question.options["speak"]
 
     def test_one_typed_judgment_is_traced(self) -> None:
         """TYPED_JUDGMENT に question=tool_name_rescue が 1 件、提案と出所つきで残る。"""
@@ -217,3 +219,36 @@ class TestTheJudgmentSuggestsFromTheSentTools:
         assert result.error_code == "UNSUPPORTED_TOOL"
         assert "もしかして" not in result.message
         assert trace.of_kind(TraceEventKind.TYPED_JUDGMENT) == []
+
+
+class _Raises(ITypedJudgmentPort):
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+
+    def judge(self, state, questions):
+        raise self.exc
+
+
+class TestAJudgmentFailureKeepsTheUnsupportedToolFailure:
+    """判断が得られなくても、失敗は UNSUPPORTED_TOOL のまま届き、判断不能が trace に残ることを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("exc", "reason"),
+        [
+            (TypedJudgmentUnavailableException("down", error_code="TYPED_JUDGMENT_TRANSPORT_FAILED"),
+             "TYPED_JUDGMENT_TRANSPORT_FAILED"),
+            (ValueError("probability is not a number"), "UNEXPECTED_ERROR"),
+        ],
+    )
+    def test_the_failure_and_the_wake_up_survive_and_the_reason_is_traced(
+        self, exc: Exception, reason: str
+    ) -> None:
+        """判断ポートがどんな例外を投げても、UNSUPPORTED_TOOL と次 tick の起床が保たれ、trace に理由が残る。"""
+        result, trace, offered = _phase_b_calling("say", port=_Raises(exc))
+
+        assert result.error_code == "UNSUPPORTED_TOOL"
+        assert result.should_reschedule is True
+        assert "現在使える tool" in result.message
+        (event,) = trace.of_kind(TraceEventKind.TYPED_JUDGMENT)
+        assert event["fallback_reason"] == "unavailable"
+        assert event["unavailable_reason"] == reason

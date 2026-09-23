@@ -32,6 +32,9 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     Question,
     TypedJudgmentUnavailableException,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
+    offered_tools_from_payload,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     NO_MATCH_OPTION,
     QUESTION_NAME,
@@ -272,3 +275,65 @@ class TestConstruction:
         """閾値が (0, 1] の外なら ValueError。"""
         with pytest.raises(ValueError):
             ToolNameRescue(port=_RecordingPort(), min_confidence=bad)
+
+
+class _BrokenPort(ITypedJudgmentPort):
+    def judge(self, state, questions):  # type: ignore[no-untyped-def,override]
+        raise ValueError("probability is not a number")
+
+
+class TestAnUnexpectedErrorFallsBack:
+    """判断ポートの想定外の例外も、判断不能として類似度の提案に戻すことを保証する。"""
+
+    def test_an_unexpected_error_falls_back_and_says_why(self) -> None:
+        """判断ポートが ValueError を投げても例外を外へ出さず、UNEXPECTED_ERROR で類似度の提案に戻す。"""
+        suggestion = _suggest(
+            _BrokenPort(), "pickup",
+            offered=TestItFallsBackToTheSimilaritySuggestion._OFFERED_WITH_PICKUP,
+        )
+
+        assert suggestion.tool == "pickup_item"
+        assert suggestion.judgment is not None
+        assert suggestion.judgment.fallback_reason == "unavailable"
+        assert suggestion.judgment.unavailable_reason == "UNEXPECTED_ERROR"
+
+
+class TestConfidenceIsAlsoRequired:
+    """確率が閾値以上でも、confidence が閾値未満なら採らないことを保証する。"""
+
+    def test_a_high_probability_with_a_low_confidence_is_not_accepted(self) -> None:
+        """確率 0.95 でも confidence 0.5 (閾値 0.7) なら採らず、類似度の提案に戻す。"""
+        port = _RecordingPort(chosen="speak", probability=0.95, confidence=0.5)
+
+        suggestion = _suggest(
+            port, "pickup",
+            offered=TestItFallsBackToTheSimilaritySuggestion._OFFERED_WITH_PICKUP,
+        )
+
+        assert suggestion.tool == "pickup_item"
+        assert suggestion.judgment is not None
+        assert suggestion.judgment.accepted is False
+        assert suggestion.judgment.fallback_reason == "below_threshold"
+
+
+class TestTheMeaningIsTheFirstDescriptionLine:
+    """送った tool 定義から、選択肢の意味として説明の 1 行目を取り出すことを保証する。"""
+
+    @staticmethod
+    def _offered(description: object) -> dict[str, str | None]:
+        return offered_tools_from_payload(
+            [{"type": "function", "function": {"name": "speak", "description": description}}]
+        )
+
+    def test_a_multi_line_description_gives_its_first_line(self) -> None:
+        """複数行の説明は 1 行目だけになる。"""
+        assert self._offered("話しかける。\nchannel=say は同じ場所に届く") == {"speak": "話しかける。"}
+
+    def test_leading_blank_lines_and_spaces_are_skipped(self) -> None:
+        """先頭の空行と前後の空白を除いた最初の行を取る。"""
+        assert self._offered("\n\n  話しかける。  \n2 行目") == {"speak": "話しかける。"}
+
+    @pytest.mark.parametrize("description", ["", "   \n  ", None, 3])
+    def test_a_missing_description_gives_none(self, description: object) -> None:
+        """説明が空・空白だけ・無い・文字列でないときは None (名前で代用する側に任せる)。"""
+        assert self._offered(description) == {"speak": None}
