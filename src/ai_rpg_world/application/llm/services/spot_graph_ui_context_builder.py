@@ -42,6 +42,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     HERE_TARGET_LABEL,
     SHADOW_TARGET_PREFIX,
 )
+from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     format_action_display_with_hints,
@@ -484,6 +485,31 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         phase = getattr(current_state, "game_phase", None)
         return phase if isinstance(phase, GamePhase) else GamePhase.FREE_ROAM
 
+    @classmethod
+    def _what_the_departed_can_do_now(
+        cls, current_state: PlayerCurrentStateDto | None
+    ) -> str:
+        """死者がいまできることを、実際に出すツールに合わせて書く。
+
+        会議中は死者にも travel_to / interact を出さない。常に「移動と点検は
+        続けられる」と書いていたときは、会議中の死者がそれを選んで
+        TOOL_NOT_OFFERED_NOW になっていた。
+        """
+        in_meeting = cls._phase_of(current_state) is GamePhase.MEETING
+        if ToolExposure.offers_to_departed(
+            "travel_to", in_meeting=in_meeting
+        ) and ToolExposure.offers_to_departed("interact", in_meeting=in_meeting):
+            return "移動と許された点検作業は続けられ、変えた物の状態は生者とも共有される。"
+        vote = (
+            ""
+            if ToolExposure.offers_to_departed("vote", in_meeting=in_meeting)
+            else "投票はできない。"
+        )
+        return (
+            "話し合いのあいだは、話すことと様子を見ることしかできず、"
+            f"{vote}話し合いが終われば、移動と許された点検作業に戻れる。"
+        )
+
     def build(
         self,
         current_state_text: str,
@@ -506,7 +532,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     "【いまの存在状態】",
                     "あなたは死亡した後も世界に留まっている。生きている者には"
                     "姿が見えず、声も届かない。死亡した者同士は互いを見聞きできる。"
-                    "移動と許された点検作業は続けられ、変えた物の状態は生者とも共有される。",
+                    + self._what_the_departed_can_do_now(current_state),
                 )
             )
 

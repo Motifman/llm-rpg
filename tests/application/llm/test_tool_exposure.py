@@ -234,6 +234,15 @@ class TestTheOrderOfTheBlocks:
         with pytest.raises(TypeError):
             exposure.split_for_phase(("vote",), in_meeting=True)
 
+    def test_phase_split_requires_the_departed_state(self) -> None:
+        """投票状態を渡しても生死を省略した呼び出しは、生者へ黙って縮退せず TypeError で落ちる。"""
+        exposure = ToolExposure(meeting_declared=True)
+
+        with pytest.raises(TypeError):
+            exposure.split_for_phase(
+                ("vote",), in_meeting=True, voting_completed=False
+            )
+
     @pytest.mark.parametrize("in_meeting", [False, True])
     def test_always_present_tools_come_before_state_dependent_ones(
         self, in_meeting

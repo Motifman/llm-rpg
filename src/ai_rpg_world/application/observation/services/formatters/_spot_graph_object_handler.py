@@ -8,6 +8,7 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 import logging
 from typing import Any, ClassVar
 
+from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory, ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
     _derive_delta,
@@ -102,7 +103,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_meeting_vote_resolved(event, recipient_player_id)
         return None
 
-    #: 会議が始まったときに全員へ届く文。
+    #: 会議が始まったときに届く文。投票を渡さない死者には下の文を使う。
     #:
     #: **できることが変わったことを、切り替わった瞬間に伝える。** 状態行は
     #: 「いまも会議中」を伝えるが、切り替わりは 1 度きりで、そのときに一番
@@ -112,6 +113,19 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     #: 具体的なツール名は書かない。会議で出るツールは世界によって違い、
     #: 名前を書くと落とした世界で嘘になる (#892 / #920)。
     _MEETING_START_SUFFIX = "ここでできるのは、話すことと投票だけになった。"
+    #: 死者には会議中も vote を出さないので、投票を勧めない。観測は記憶に
+    #: 流れるため、状況行と違って次の手番で打ち消されない。言い方は幽霊
+    #: ルールに揃える (実際に渡るのは speak / listen / wait)。
+    _MEETING_START_SUFFIX_FOR_NON_VOTING_DEPARTED = (
+        "話し合いのあいだは、話すことと様子を見ることしかできず、投票はできない。"
+    )
+
+    def _meeting_start_suffix(self, recipient_id: PlayerId) -> str:
+        if self._context.is_departed(recipient_id) and not (
+            ToolExposure.offers_to_departed("vote", in_meeting=True)
+        ):
+            return self._MEETING_START_SUFFIX_FOR_NON_VOTING_DEPARTED
+        return self._MEETING_START_SUFFIX
 
     @staticmethod
     def _meeting_prose(table: dict[str, str], reason: str, *, fallback: str) -> str:
@@ -253,7 +267,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 fallback="招集がかかった。全員が集まる。",
             )
             prose = template.format(who=who) if who else "招集がかかった。全員が集まる。"
-            prose = f"{prose}{self._MEETING_START_SUFFIX}"
+            prose = f"{prose}{self._meeting_start_suffix(recipient_id)}"
         else:
             prose = self._meeting_prose(
                 self._MEETING_END_PROSE,
