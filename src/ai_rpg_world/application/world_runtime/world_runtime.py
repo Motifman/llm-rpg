@@ -14,7 +14,7 @@ import logging
 import os
 import random
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -142,11 +142,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -1352,8 +1350,8 @@ class WorldRuntime:
             return None
         return " / ".join(parts)
 
-    def _compute_meeting_status_line(self) -> str | None:
-        """会議中なら、状況を 1 行にまとめて返す。自由時間なら None。
+    def _compute_meeting_status_line(self, player_id: PlayerId) -> str | None:
+        """会議中なら、``player_id`` から見た状況を 1 行にまとめて返す。自由時間なら None。
 
         入れる情報は 3 つ。
 
@@ -1394,7 +1392,19 @@ class WorldRuntime:
         # だった。9 回 `wait` が出ていて、「待てば投票の機会が来る」と読んで
         # いるように見える。実際には待つと打ち切られて誰も追放されない。
         # 残り回数は出ていたが、**それが何を意味するかが書かれていなかった。**
-        if remaining <= _MEETING_URGENT_REMAINING_TICKS:
+        #
+        # 促すのは vote を実際に出す相手だけ。投票済みの人や死者にも促して
+        # いた run では、促しに従って vote を選び TOOL_NOT_OFFERED_NOW で
+        # 手番を捨てていた。
+        _, phase_tools = self._split_spot_tool_names_for(
+            ("vote",), player_id=player_id, in_meeting=True
+        )
+        if "vote" not in phase_tools:
+            if self._game_phase_store.has_voted(player_id):
+                parts.append("自分はもう投票した。あとは結果を待つ")
+            else:
+                parts.append("自分は投票できない。あとは結果を待つ")
+        elif remaining <= _MEETING_URGENT_REMAINING_TICKS:
             parts.append("いま投票しないと、誰も追放されないまま終わる")
         else:
             parts.append("投票しないまま打ち切られると、誰も追放されない")
@@ -1461,7 +1471,7 @@ class WorldRuntime:
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),
-            meeting_status_line=self._compute_meeting_status_line(),
+            meeting_status_line=self._compute_meeting_status_line(player_id),
             task_progress_line=self._compute_task_progress_line(),
             game_phase=self._game_phase_store.current.phase,
         )
@@ -1588,40 +1598,11 @@ class WorldRuntime:
         )
         # 2 つの問いを両方通す入口を使う。片方だけ呼ぶと無効化が効かない。
         by_name = {d.name: d for d in spot}
-        common_names, phase_names = self.tool_exposure.split_for_phase(
-            by_name.keys(),
-            in_meeting=in_meeting,
-            voting_completed=(
-                player_id is not None
-                and in_meeting
-                and self._game_phase_store.has_voted(player_id)
-            ),
+        common_names, phase_names = self._split_spot_tool_names_for(
+            by_name.keys(), player_id=player_id, in_meeting=in_meeting
         )
         common_spot = [by_name[n] for n in common_names]
         phase_spot = [by_name[n] for n in phase_names]
-        if (
-            player_id is not None
-            and self._player_perception_policy.is_departed(player_id)
-        ):
-            departed_tool_names = frozenset(
-                {
-                    TOOL_NAME_SPEECH,
-                    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-                    TOOL_NAME_SPOT_GRAPH_INTERACT,
-                    TOOL_NAME_SPOT_GRAPH_LISTEN,
-                    TOOL_NAME_SPOT_GRAPH_WAIT,
-                }
-            )
-            common_spot = [
-                definition
-                for definition in common_spot
-                if definition.name in departed_tool_names
-            ]
-            phase_spot = [
-                definition
-                for definition in phase_spot
-                if definition.name in departed_tool_names
-            ]
         assessment = (
             [
                 assess_situation_definition(
@@ -1637,6 +1618,33 @@ class WorldRuntime:
         by_name = {definition.name: definition for definition in definitions}
         ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
         return [by_name[name] for name in ordered_names] + assessment
+
+    def _split_spot_tool_names_for(
+        self,
+        names: Iterable[str],
+        *,
+        player_id: PlayerId | None,
+        in_meeting: bool,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """本人の状態を ``split_for_phase`` に渡す。
+
+        ツール定義と本文 (会議の状況行) の両方がここを通る。本文だけが別の
+        条件で書き分けると、投票済みの人に「いま投票しないと」と勧めながら
+        vote を出さない形になる。
+        """
+        return self.tool_exposure.split_for_phase(
+            names,
+            in_meeting=in_meeting,
+            voting_completed=(
+                player_id is not None
+                and in_meeting
+                and self._game_phase_store.has_voted(player_id)
+            ),
+            departed=(
+                player_id is not None
+                and self._player_perception_policy.is_departed(player_id)
+            ),
+        )
 
     def _build_spot_tool_definitions(
         self, tool_schema_mode: str

@@ -91,6 +91,14 @@ _MEETING_TOOLS = frozenset({"vote", "report_body"})
 #: 落とす。engine 側でここから外すと、蘇生のある世界を壊す。
 PHASE_COMMON_TOOLS = frozenset({"speak", "listen", "wait", "tend_to_player"})
 
+#: 死亡した本人に出してよいツール。フェーズの判断と重ねて使う。
+#:
+#: 会議中は travel_to / interact がフェーズで落ちるので、死者に残るのは
+#: 話す・聞く・待つだけになる。死者の本文 (幽霊ルール) はこの重ね合わせを
+#: ``offers_to_departed`` で引いて書き分ける。集合を runtime 側に置いていた
+#: ときは、本文が会議中も「移動と点検作業は続けられる」と言い続けた。
+DEPARTED_TOOLS = frozenset({"speak", "travel_to", "interact", "listen", "wait"})
+
 #: 生死・フェーズ・投票状態を問わず、実際の tools payload の先頭へ置く順序。
 #:
 #: ``listen`` と ``tend_to_player`` は状態やシナリオで落ちうるため含めない。
@@ -150,7 +158,7 @@ class ToolExposure:
     問いは 2 つあり、混ぜない。
 
     - ``is_exposed``: そもそもこの世界に在るか (run 中ずっと同じ)
-    - ``split_for_phase``: いまのフェーズと本人の投票状態から、どの
+    - ``split_for_phase``: いまのフェーズと本人の生死・投票状態から、どの
       ブロックに置くか
 
     静的な世界宣言と、フェーズ・本人ごとに変わる利用可否を同じ入口で合成する。
@@ -229,6 +237,7 @@ class ToolExposure:
         *,
         in_meeting: bool,
         voting_completed: bool,
+        departed: bool,
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """(共通ブロック, フェーズ固有ブロック) を返す。**通常はこれを使う。**
 
@@ -240,7 +249,12 @@ class ToolExposure:
         敵なので、同じ形をクラスの内側に作らない。個別メソッドは残すが、
         既定の入口はこちら。
         """
-        exposed = [name for name in names if self.is_exposed(name)]
+        exposed = [
+            name
+            for name in names
+            if self.is_exposed(name)
+            and (not departed or self.is_available_to_departed(name))
+        ]
         return (
             tuple(n for n in exposed if self.is_phase_common(n)),
             tuple(
@@ -249,6 +263,23 @@ class ToolExposure:
                 if self.is_available_in_phase(n, in_meeting=in_meeting)
                 and not (n == "vote" and voting_completed)
             ),
+        )
+
+    @staticmethod
+    def is_available_to_departed(tool_name: str) -> bool:
+        """死亡した本人に出してよいツールか。フェーズは見ない。"""
+        return tool_name in DEPARTED_TOOLS
+
+    @classmethod
+    def offers_to_departed(cls, tool_name: str, *, in_meeting: bool) -> bool:
+        """いまのフェーズで、死亡した本人に ``tool_name`` を出すか。
+
+        ``is_exposed`` は通さない。シナリオを持たない本文の側から、
+        死者の書き分けに使うための問いなので。
+        """
+        return cls.is_available_to_departed(tool_name) and (
+            cls.is_phase_common(tool_name)
+            or cls.is_available_in_phase(tool_name, in_meeting=in_meeting)
         )
 
     @staticmethod
