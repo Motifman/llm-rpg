@@ -302,20 +302,12 @@ class ToolNameRescue:
             # 静かに類似度へ戻さない。判断を得られなかったことを残す
             # (design_decisions #5)。
             logger.warning("tool name rescue unavailable: %s", exc)
-            return _by_similarity(
-                requested,
-                similar,
-                options,
-                judgment=ToolNameJudgment(
-                    chosen=None,
-                    probabilities={},
-                    confidence=None,
-                    min_confidence=self.min_confidence,
-                    accepted=False,
-                    fallback_reason="unavailable",
-                    unavailable_reason=exc.code,
-                ),
-            )
+            return self._unavailable(requested, similar, options, exc.code)
+        except Exception:
+            # 例外を外へ出すと、UNSUPPORTED_TOOL が汎用の失敗に変わり、tool の一覧と
+            # 次 tick の起床が失われる。
+            logger.exception("tool name rescue failed")
+            return self._unavailable(requested, similar, options, "UNEXPECTED_ERROR")
         assert result.judgment is not None
         answer = result.judgment.evidence
         accepted = isinstance(result, Resolved)
@@ -338,6 +330,28 @@ class ToolNameRescue:
                 judgment=judgment,
             )
         return _by_similarity(requested, similar, options, judgment=judgment)
+
+    def _unavailable(
+        self,
+        requested: str,
+        similar: str | None,
+        options: tuple[str, ...],
+        reason: str | None,
+    ) -> ToolNameSuggestion:
+        return _by_similarity(
+            requested,
+            similar,
+            options,
+            judgment=ToolNameJudgment(
+                chosen=None,
+                probabilities={},
+                confidence=None,
+                min_confidence=self.min_confidence,
+                accepted=False,
+                fallback_reason="unavailable",
+                unavailable_reason=reason,
+            ),
+        )
 
 
 def _by_similarity(
