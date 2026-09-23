@@ -258,3 +258,46 @@ class TestTheLoopDiagnosisSettingsComeFromTheProfile:
         """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
         with pytest.raises(ValueError):
             _config(TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE="1.5")
+
+
+class TestTheSemanticRepeatSettingsComeFromTheProfile:
+    """意味上の繰り返しの検出 (#1412) の有効化・閾値・窓の大きさが profile から入り、範囲外は起動前に落ちる。"""
+
+    def test_the_detector_is_off_by_default_even_with_jev(self) -> None:
+        """何も書かなければ無効。provider を jev にしても入らない。閾値の既定は 0.8、窓は 4 件。"""
+        config = _config(TYPED_JUDGMENT_PROVIDER="jev")
+
+        assert config.typed_judgment_semantic_repeat_enabled is False
+        assert config.typed_judgment_semantic_repeat_min_probability == 0.8
+        assert config.typed_judgment_semantic_repeat_window == 4
+
+    def test_a_profile_can_turn_the_detector_on_and_move_its_settings(self) -> None:
+        """有効化・閾値・窓の大きさは profile の値が解決済み設定に載る。"""
+        config = _config(
+            TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED="1",
+            TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY="0.9",
+            TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW="5",
+        )
+
+        assert config.typed_judgment_semantic_repeat_enabled is True
+        assert config.typed_judgment_semantic_repeat_min_probability == 0.9
+        assert config.typed_judgment_semantic_repeat_window == 5
+
+    def test_a_threshold_outside_the_unit_interval_is_rejected(self) -> None:
+        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
+        with pytest.raises(ValueError, match="must be in"):
+            _config(TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY="1.5")
+
+    @pytest.mark.parametrize("window", ["1", "0", "four"])
+    def test_a_window_smaller_than_two_is_rejected(self, window: str) -> None:
+        """窓が 2 件未満か整数でなければ ValueError になる。繰り返しを材料にできない。"""
+        with pytest.raises(ValueError, match="must be|is not an integer"):
+            _config(TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW=window)
+
+    def test_the_test_defaults_keep_the_detector_off(self) -> None:
+        """テスト用の既定設定でも検出は無効で、閾値と窓は profile の既定と同じ。"""
+        config = ResolvedLlmRuntimeConfig.for_tests()
+
+        assert config.typed_judgment_semantic_repeat_enabled is False
+        assert config.typed_judgment_semantic_repeat_min_probability == 0.8
+        assert config.typed_judgment_semantic_repeat_window == 4
