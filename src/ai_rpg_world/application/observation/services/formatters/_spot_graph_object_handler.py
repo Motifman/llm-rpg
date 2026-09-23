@@ -114,9 +114,10 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     #: 名前を書くと落とした世界で嘘になる (#892 / #920)。
     _MEETING_START_SUFFIX = "ここでできるのは、話すことと投票だけになった。"
     #: 死者には会議中も vote を出さないので、投票を勧めない。観測は記憶に
-    #: 流れるため、状況行と違って次の手番で打ち消されない。
+    #: 流れるため、状況行と違って次の手番で打ち消されない。言い方は幽霊
+    #: ルールに揃える (実際に渡るのは speak / listen / wait)。
     _MEETING_START_SUFFIX_FOR_NON_VOTING_DEPARTED = (
-        "話し合いのあいだは話すことしかできず、投票はできない。"
+        "話し合いのあいだは、話すことと様子を見ることしかできず、投票はできない。"
     )
 
     def _meeting_start_suffix(self, recipient_id: PlayerId) -> str:

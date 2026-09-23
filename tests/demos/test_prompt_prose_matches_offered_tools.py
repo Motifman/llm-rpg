@@ -230,7 +230,7 @@ class TestTheMeetingAnnouncementMatchesOfferedTools:
         assert "vote" in offered
 
     def test_ghost_is_told_they_can_only_speak(self) -> None:
-        """死者への会議開始の観測は投票を勧めず、話すことしかできないと書く。死者には vote を渡さない。"""
+        """死者への会議開始の観測は投票を勧めず、幽霊ルールと同じ言い方で、話すことと様子を見ることしかできないと書く。死者には vote を渡さない。"""
         runtime = create_world_runtime(_DRILL)
         _make_dead(runtime, _SENA, "greenhouse")
         runtime.call_emergency_meeting(_KUZE)
@@ -240,6 +240,6 @@ class TestTheMeetingAnnouncementMatchesOfferedTools:
 
         assert prose == (
             "クゼが緊急招集をかけた。全員が集まる。"
-            "話し合いのあいだは話すことしかできず、投票はできない。"
+            "話し合いのあいだは、話すことと様子を見ることしかできず、投票はできない。"
         )
         assert "vote" not in offered
