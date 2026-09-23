@@ -24,6 +24,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.loop_diagnosis import LoopDiagnosis
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     DEFAULT_MIN_PROBABILITY,
     MemoCompletionHintService,
@@ -174,6 +175,12 @@ class WorldLlmWiring:
             current_tick_provider=(
                 self.runtime.current_tick
                 if hasattr(self.runtime, "current_tick")
+                else None
+            ),
+            loop_diagnosis=self._build_loop_diagnosis(),
+            location_provider=(
+                self.runtime.get_player_spot_name
+                if hasattr(self.runtime, "get_player_spot_name")
                 else None
             ),
         )
@@ -367,6 +374,20 @@ class WorldLlmWiring:
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
         return coerce_arguments(raw_arguments)
+
+    def _build_loop_diagnosis(self) -> LoopDiagnosis | None:
+        """profile が見立てを求め、判断ポートがあるときだけ組む (#1411)。"""
+        config = getattr(self.runtime, "_runtime_config", None)
+        if (
+            self.typed_judgment_port is None
+            or config is None
+            or not config.typed_judgment_loop_diagnosis_enabled
+        ):
+            return None
+        return LoopDiagnosis(
+            port=self.typed_judgment_port,
+            min_confidence=float(config.typed_judgment_loop_diagnosis_min_confidence),
+        )
 
     def _time_label(self) -> str:
         runtime_label = getattr(self.runtime, "_time_label", None)

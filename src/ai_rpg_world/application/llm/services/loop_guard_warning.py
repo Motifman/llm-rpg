@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.loop_diagnosis import (
+    QUESTION_NAME as LOOP_DIAGNOSIS_QUESTION,
+)
+from ai_rpg_world.application.llm.services.loop_diagnosis import (
+    LoopDiagnosis,
+    LoopDiagnosisJudgment,
+    RepeatReason,
+)
 from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     ConsecutiveRepeat,
     CrossTickFailureRepeat,
@@ -139,8 +147,84 @@ class LoopGuardGateSignal:
     tick: int | None = None
 
 
+@dataclass(frozen=True)
+class RecentAction:
+    """見立ての材料にする直近の行動 1 件。"""
+
+    action: str
+    succeeded: bool | None
+    result: str | None
+    #: 発言の内容。行動の要約には対象名しか出ないので、依頼の言い直しを見分ける材料に足す。
+    said: str | None = None
+
+
+#: 見立ての材料に載せる、いま届いている観測の上限。
+_OBSERVATION_LIMIT = 8
+
+#: 文面の区分。見立てを採らなかったときは今の順繰りの文面を使う。
+_DEFAULT_WORDING = "default"
+
+
+def _quote(text: str | None) -> str:
+    return f"「{text.rstrip('。')}」" if text else ""
+
+
+def _repetition_fact(signal: RepeatSignal, action: str) -> str:
+    if isinstance(signal, ConsecutiveRepeat):
+        return f"⚠ {action} を {signal.consecutive} 回続けて同じ引数で実行している。"
+    return (
+        f"⚠ {action} は直近 {signal.window} tick 以内に {signal.count} 回、"
+        f"同じ理由 (`{signal.error_code}`) で失敗している。"
+    )
+
+
+def _reason_facts(
+    reason: RepeatReason,
+    *,
+    action: str,
+    location: str | None,
+    recent: Sequence[RecentAction],
+    observation_count: int,
+) -> str:
+    """理由ごとに、本人が読み落としていそうな世界の事実を並べる。命令は書かない。"""
+    same = [r for r in recent if r.action == action]
+    latest = same[-1] if same else None
+    latest_result = _quote(latest.result if latest else None)
+    here = f"いまの居場所は「{location}」。" if location else ""
+    if reason is RepeatReason.ACHIEVED:
+        success = next((r for r in reversed(same) if r.succeeded and r.result), None)
+        done = f"この行動は前に成功している: {_quote(success.result)}。" if success else ""
+        return done + here
+    if reason is RepeatReason.STATE_MISTAKEN:
+        last = f"直近の結果: {latest_result}。" if latest_result else ""
+        return here + last
+    if reason is RepeatReason.MISSING_PRECONDITION:
+        failure = next((r for r in reversed(same) if r.succeeded is False and r.result), None)
+        return (
+            f"直近の失敗: {_quote(failure.result)}。"
+            if failure
+            else ""
+        )
+    if reason is RepeatReason.WAITING:
+        return here + f"いま届いている観測は {observation_count} 件。"
+    if reason is RepeatReason.UNANSWERED_REQUEST:
+        last = f"直近の結果: {latest_result}。" if latest_result else ""
+        said = recent[-1].said if recent else None
+        if not said:
+            return last
+        # 宛先の有無で行動の要約が変わるので、発言は内容で数える。
+        times = sum(1 for r in recent if r.said == said)
+        return last + f"同じ内容を伝えたのは {times} 回目。"
+    last = f"同じ手段で得た結果: {latest_result}。" if latest_result else ""
+    return last
+
+
 class LoopWarningEmitter:
-    """signal を警告の観測にし、trace に残し、reason-first gate へ知らせる。"""
+    """signal を警告の観測にし、trace に残し、reason-first gate へ知らせる。
+
+    見立て (``diagnosis``) があれば、警告を出す前に繰り返しの理由を問い、
+    採れた理由の文面にする。採れなくても警告は必ず出す。
+    """
 
     def __init__(
         self,
@@ -149,20 +233,29 @@ class LoopWarningEmitter:
         time_label_provider: Callable[[], str | None],
         clock: Callable[[], datetime],
         trace_recorder_resolver: Callable[[], ITraceRecorder | None],
+        diagnosis: LoopDiagnosis | None = None,
+        location_provider: Callable[[PlayerId], str | None] | None = None,
     ) -> None:
         self._observation_buffer = observation_buffer
         self._time_label_provider = time_label_provider
         self._clock = clock
         self._resolve_trace_recorder = trace_recorder_resolver
+        self._diagnosis = diagnosis
+        self._location_provider = location_provider
         self._warn_count: dict[int, int] = {}
         self._cross_tick_warn_count: dict[int, int] = {}
         self._last_gate_signal: dict[int, LoopGuardGateSignal] = {}
 
-    def emit(self, player_id: PlayerId, signal: RepeatSignal) -> None:
+    def emit(
+        self,
+        player_id: PlayerId,
+        signal: RepeatSignal,
+        recent: Sequence[RecentAction] = (),
+    ) -> None:
         if isinstance(signal, ConsecutiveRepeat):
-            self._emit_consecutive(player_id, signal)
+            self._emit_consecutive(player_id, signal, recent)
         elif isinstance(signal, CrossTickFailureRepeat):
-            self._emit_cross_tick_failure(player_id, signal)
+            self._emit_cross_tick_failure(player_id, signal, recent)
         else:
             raise TypeError(f"unknown repeat signal: {type(signal).__name__}")
 
@@ -170,18 +263,22 @@ class LoopWarningEmitter:
         return self._last_gate_signal.pop(player_id.value, None)
 
     def _emit_consecutive(
-        self, player_id: PlayerId, signal: ConsecutiveRepeat
+        self,
+        player_id: PlayerId,
+        signal: ConsecutiveRepeat,
+        recent: Sequence[RecentAction],
     ) -> None:
         key = player_id.value
         game_time_label = self._time_label_provider()
         warn_index = self._warn_count.get(key, 0)
         self._warn_count[key] = warn_index + 1
         template = _WARNING_TEMPLATES[warn_index % len(_WARNING_TEMPLATES)]
-        prose = template.format(
+        default_prose = template.format(
             tool_name=signal.tool_name,
             action_summary=build_action_summary(signal.tool_name, signal.fingerprint),
             consecutive=signal.consecutive,
         )
+        prose, wording = self._word(player_id, signal, "streak", default_prose, recent)
         self._observation_buffer.append(
             player_id,
             self._entry(
@@ -202,6 +299,7 @@ class LoopWarningEmitter:
             argument_fingerprint=signal.fingerprint,
             consecutive_count=signal.consecutive,
             game_time_label=game_time_label,
+            **wording,
         )
         self._last_gate_signal[key] = LoopGuardGateSignal(
             pattern="streak",
@@ -211,7 +309,10 @@ class LoopWarningEmitter:
         )
 
     def _emit_cross_tick_failure(
-        self, player_id: PlayerId, signal: CrossTickFailureRepeat
+        self,
+        player_id: PlayerId,
+        signal: CrossTickFailureRepeat,
+        recent: Sequence[RecentAction],
     ) -> None:
         key = player_id.value
         warn_index = self._cross_tick_warn_count.get(key, 0)
@@ -220,13 +321,16 @@ class LoopWarningEmitter:
         template = _CROSS_TICK_WARNING_TEMPLATES[
             warn_index % len(_CROSS_TICK_WARNING_TEMPLATES)
         ]
-        prose = template.format(
+        default_prose = template.format(
             action_summary=build_action_summary(signal.tool_name, signal.fingerprint),
             tool_name=signal.tool_name,
             error_code=signal.error_code,
             count=signal.count,
             window=signal.window,
             remediation=get_remediation(signal.error_code),
+        )
+        prose, wording = self._word(
+            player_id, signal, "cross_tick_failure", default_prose, recent
         )
         self._observation_buffer.append(
             player_id,
@@ -263,7 +367,125 @@ class LoopWarningEmitter:
             game_time_label=game_time_label,
             pattern="cross_tick_failure",
             error_code=signal.error_code,
+            **wording,
         )
+
+    def _word(
+        self,
+        player_id: PlayerId,
+        signal: RepeatSignal,
+        pattern: str,
+        default_prose: str,
+        recent: Sequence[RecentAction],
+    ) -> tuple[str, dict[str, str]]:
+        """見立てを問い、文面と、警告の trace に足す文面の区分を返す。
+
+        見立てが無いときは区分を足さない。見立てを入れていない run の trace を
+        今と同じ形に保つため。
+        """
+        if self._diagnosis is None:
+            return default_prose, {}
+        action = build_action_summary(signal.tool_name, signal.fingerprint)
+        location = self._location(player_id)
+        observations = [
+            e.output.prose
+            for e in self._observation_buffer.get_observations(player_id)
+            if e.output.prose
+        ][-_OBSERVATION_LIMIT:]
+        state = self._state(signal, action, recent, location, observations)
+        judgment = self._diagnosis.diagnose(state)
+        self._record_judgment(player_id, signal, pattern, state, judgment)
+        if judgment.reason is None:
+            return default_prose, {"wording": _DEFAULT_WORDING}
+        prose = _repetition_fact(signal, action) + _reason_facts(
+            judgment.reason,
+            action=action,
+            location=location,
+            recent=recent,
+            observation_count=len(observations),
+        )
+        return prose, {"wording": judgment.reason.value}
+
+    def _location(self, player_id: PlayerId) -> str | None:
+        if self._location_provider is None:
+            return None
+        try:
+            return self._location_provider(player_id) or None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _state(
+        signal: RepeatSignal,
+        action: str,
+        recent: Sequence[RecentAction],
+        location: str | None,
+        observations: Sequence[str],
+    ) -> dict[str, Any]:
+        """判断の材料。名前だけを入れ、整数 ID と本人の目的は入れない (#222)。
+
+        件数は文で渡す。Jev に数えさせず、数値を ID と取り違えさせない。
+        """
+        if isinstance(signal, ConsecutiveRepeat):
+            repetition = f"同じ引数で {signal.consecutive} 回連続"
+        else:
+            repetition = (
+                f"直近 {signal.window} tick 以内に、同じ失敗 ({signal.error_code}) で "
+                f"{signal.count} 回"
+            )
+        state: dict[str, Any] = {
+            "repeated_action": action,
+            "repetition": repetition,
+            "recent_actions": [
+                {
+                    "action": r.action,
+                    **({"said": r.said} if r.said else {}),
+                    "succeeded": r.succeeded,
+                    "result": r.result,
+                }
+                for r in recent
+            ],
+        }
+        if location:
+            state["current_location"] = location
+        if observations:
+            state["observations_now"] = list(observations)
+        return state
+
+    def _record_judgment(
+        self,
+        player_id: PlayerId,
+        signal: RepeatSignal,
+        pattern: str,
+        state: dict[str, Any],
+        judgment: LoopDiagnosisJudgment,
+    ) -> None:
+        recorder = self._resolve_trace_recorder()
+        if recorder is None:
+            return
+        try:
+            recorder.record(
+                TraceEventKind.TYPED_JUDGMENT,
+                tick=signal.tick,
+                player_id=int(player_id.value),
+                question=LOOP_DIAGNOSIS_QUESTION,
+                pattern=pattern,
+                tool_name=signal.tool_name,
+                chosen=judgment.chosen,
+                probabilities=dict(judgment.probabilities),
+                probability=judgment.probability,
+                confidence=judgment.confidence,
+                min_confidence=judgment.min_confidence,
+                accepted=judgment.reason is not None,
+                reason=judgment.reason.value if judgment.reason else None,
+                fallback_reason=judgment.fallback.value if judgment.fallback else None,
+                unavailable_reason=judgment.unavailable_reason,
+                latency_ms=judgment.latency_ms,
+                source=judgment.source,
+                state=state,
+            )
+        except Exception:
+            pass
 
     def _record_trace(self, **payload: Any) -> None:
         recorder = self._resolve_trace_recorder()

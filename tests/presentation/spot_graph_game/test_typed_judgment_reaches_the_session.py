@@ -264,3 +264,36 @@ class TestTheWiringGetsTheToolNameJudgment:
             )
         ):
             assert wiring.tool_name_rescue.min_confidence == 0.9
+
+
+class TestTheLoopGuardGetsTheDiagnosis:
+    """ループ警告の出し口に、繰り返しの理由の見立て (#1411) が届くことを保証する。"""
+
+    def test_the_loop_guard_has_the_diagnosis_when_the_profile_turns_it_on(self) -> None:
+        """判断ポートがあり見立てを有効にした profile では、loop guard は同じポートと profile の閾値で見立てを持つ。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(
+                typed_judgment_provider="stub",
+                typed_judgment_loop_diagnosis_enabled=True,
+                typed_judgment_loop_diagnosis_min_confidence=0.8,
+            )
+        ):
+            diagnosis = wiring.tool_call_loop_guard.loop_diagnosis
+            assert diagnosis is not None
+            assert diagnosis.port is wiring.typed_judgment_port
+            assert diagnosis.min_confidence == 0.8
+
+    def test_judgment_alone_does_not_bring_the_diagnosis(self) -> None:
+        """provider だけを入れた profile では、判断ポートは載るが見立ては入らない (既定 off)。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.typed_judgment_port is not None
+            assert wiring.tool_call_loop_guard.loop_diagnosis is None
+
+    def test_enabling_without_a_port_brings_no_diagnosis(self) -> None:
+        """provider が off なら、見立てを有効にしても入らない。判断ポートが無いため。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_loop_diagnosis_enabled=True)
+        ):
+            assert wiring.tool_call_loop_guard.loop_diagnosis is None
