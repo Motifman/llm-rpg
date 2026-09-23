@@ -70,5 +70,8 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 - **0731 版 (`deepseek/deepseek-v4-flash-0731`)**
   - provider は 30 件ある
   - Baidu (fp8、入力 0.44 / キャッシュ 0.014 / 出力 1.32 ドル / MTok): `required` で 12/12 通過。0423 版の約 5 倍の単価
-  - DeepInfra (fp8、入力 0.06 / キャッシュ 0.015 / 出力 0.18 ドル / MTok): `required` で通過。設計判断 #39 を書いた時点では fp4 だったが、fp8 に変わっていた。run 中に共有プールの 429 が出たが、再試行で吸収された
-  - `station_drill_jev_deepinfra_0731` profile で使っている
+  - DeepInfra (fp8、入力 0.06 / キャッシュ 0.015 / 出力 0.18 ドル / MTok): `required` で通過。設計判断 #39 を書いた時点では fp4 だったが、fp8 に変わっていた
+  - `station_drill_jev_deepinfra_0731` profile で使っている。run `station_drill_deepseek0731_deepinfra_001` (37 tick、8 並列) の実測は次のとおり
+    - 主ターン 161 回のうち 7 回が失敗し、その手番の行動を失った。共有プールの 429 が 3 回の再試行でも通らなかったのが 4 回、API の失敗が 3 回
+    - 応答時間の中央値は 16 秒、90 パーセンタイルは 35 秒、最大は 97 秒
+    - キャッシュ率は 0.60、主ターンの費用は 0.07 ドル
