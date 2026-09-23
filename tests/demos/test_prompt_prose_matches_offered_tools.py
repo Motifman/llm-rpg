@@ -72,6 +72,21 @@ def _urgings_for_tools_not_offered(text: str, offered: set[str]) -> list[str]:
     ]
 
 
+def _ghost_rule(text: str) -> str:
+    """幽霊ルールの段落だけを返す。
+
+    本文全体で探すと、同じ言い回しを含む観測 (最近の出来事欄) に救われて
+    幽霊ルールが壊れても通ってしまう。
+    """
+    lines = text.splitlines()
+    return lines[lines.index("【いまの存在状態】") + 1]
+
+
+def _meeting_status_line(text: str) -> str:
+    """会議の状況行だけを返す。理由は ``_ghost_rule`` と同じ。"""
+    return next(line for line in text.splitlines() if line.startswith("話し合いの最中"))
+
+
 def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
     spot = SpotId.create(runtime.id_mapper.get_int("spot", spot_name))
     runtime._fallen_body_registry.record(
@@ -127,26 +142,26 @@ class TestThoseWhoCannotActAreToldWhy:
         """投票済みの人の本文には、自分はもう投票したことと結果を待つことが書かれる。"""
         text, _ = _prompt_and_offered_tools(meeting_with_a_ghost_and_a_voter, _MORI)
 
-        assert "自分はもう投票した" in text
+        assert "自分はもう投票した" in _meeting_status_line(text)
 
     def test_ghost_is_told_they_can_move_again_after_the_meeting(
         self, meeting_with_a_ghost_and_a_voter
     ) -> None:
-        """会議中の死者の本文には、会議が終われば移動と点検に戻れることが書かれる。"""
+        """会議中の死者の幽霊ルールには、会議が終われば移動と点検に戻れることが書かれる。"""
         text, _ = _prompt_and_offered_tools(meeting_with_a_ghost_and_a_voter, _SENA)
 
-        assert "話し合いが終われば" in text
+        assert "話し合いが終われば" in _ghost_rule(text)
 
     def test_ghost_is_told_they_cannot_vote(
         self, meeting_with_a_ghost_and_a_voter
     ) -> None:
-        """会議中の死者には vote を出さないので、本文にも投票できないと書かれる。"""
+        """会議中の死者には vote を出さないので、幽霊ルールにも投票できないと書かれる。"""
         text, offered = _prompt_and_offered_tools(
             meeting_with_a_ghost_and_a_voter, _SENA
         )
 
         assert "vote" not in offered
-        assert "投票はできない" in text
+        assert "投票はできない" in _ghost_rule(text)
 
 
 class TestTheUrgingStillReachesThoseWhoCanAct:
@@ -161,7 +176,7 @@ class TestTheUrgingStillReachesThoseWhoCanAct:
         )
 
         assert "vote" in offered
-        assert "投票しないまま打ち切られると" in text
+        assert "投票しないまま打ち切られると" in _meeting_status_line(text)
 
     def test_player_who_has_not_voted_is_urged_near_the_deadline(
         self, meeting_with_a_ghost_and_a_voter
@@ -173,7 +188,7 @@ class TestTheUrgingStillReachesThoseWhoCanAct:
         text, offered = _prompt_and_offered_tools(runtime, _AOI)
 
         assert "vote" in offered
-        assert "いま投票しないと" in text
+        assert "いま投票しないと" in _meeting_status_line(text)
 
     def test_ghost_in_free_roam_is_told_they_can_move_and_inspect(self) -> None:
         """自由時間の死者には travel_to と interact を渡し、移動と点検を続けられると書かれる。"""
@@ -183,7 +198,7 @@ class TestTheUrgingStillReachesThoseWhoCanAct:
         text, offered = _prompt_and_offered_tools(runtime, _SENA)
 
         assert {"travel_to", "interact"} <= offered
-        assert "移動と許された点検作業は続けられ" in text
+        assert "移動と許された点検作業は続けられ" in _ghost_rule(text)
 
 
 def _meeting_start_prose(runtime, player_id: PlayerId) -> str:
