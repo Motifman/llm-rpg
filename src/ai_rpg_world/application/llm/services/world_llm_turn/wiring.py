@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     )
 
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -330,13 +330,13 @@ class WorldLlmWiring:
         name: str,
         player_id: PlayerId,
         *,
-        offered_tool_names_at_prompt: Collection[str],
+        offered_tools_at_prompt: Mapping[str, str | None],
     ) -> LlmCommandResultDto | None:
         return reason_tool_is_not_offered(
             self,
             name,
             player_id,
-            offered_tool_names_at_prompt=offered_tool_names_at_prompt,
+            offered_tools_at_prompt=offered_tools_at_prompt,
         )
 
     def _llm_session_id(self, player_id: PlayerId) -> str:
@@ -373,11 +373,11 @@ class WorldLlmWiring:
         arguments: dict[str, Any],
         runtime_context: Any,
         *,
-        offered_tool_names_at_prompt: Collection[str],
+        offered_tools_at_prompt: Mapping[str, str | None],
     ) -> LlmCommandResultDto:
         return execute_tool(
             self, player_id, name, arguments, runtime_context,
-            offered_tool_names_at_prompt=offered_tool_names_at_prompt,
+            offered_tools_at_prompt=offered_tools_at_prompt,
         )
 
     @staticmethod

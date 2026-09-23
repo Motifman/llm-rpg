@@ -253,7 +253,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": label, "action_name": "examine"},
             context,
-            offered_tool_names_at_prompt=frozenset({"interact"}),
+            offered_tools_at_prompt={"interact": None},
         )
 
         assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
@@ -296,7 +296,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": "棚卸し帳", "action_name": "examine"},
             ui.tool_runtime_context,
-            offered_tool_names_at_prompt=frozenset({"interact"}),
+            offered_tools_at_prompt={"interact": None},
         )
 
         assert '"棚卸し帳"' in ui.current_state_text
@@ -366,7 +366,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": "風向風速計", "action_name": "examine"},
             ui.tool_runtime_context,
-            offered_tool_names_at_prompt=frozenset({"interact"}),
+            offered_tools_at_prompt={"interact": None},
         )
 
         assert result.error_code == "INVALID_TARGET_LABEL"
@@ -399,7 +399,7 @@ class TestTheMessageTheAgentActuallyReads:
                 "action_name": "inspect_grow_light_wiring_2",
             },
             ui.tool_runtime_context,
-            offered_tool_names_at_prompt=frozenset({"interact"}),
+            offered_tools_at_prompt={"interact": None},
         )
 
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
@@ -436,7 +436,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": "ハギ", "action_name": "strike_down"},
             ui.tool_runtime_context,
-            offered_tool_names_at_prompt=frozenset({"interact"}),
+            offered_tools_at_prompt={"interact": None},
         )
 
         assert result.success is True
@@ -538,7 +538,7 @@ class TestTheSameLeakOnThePersonSide:
             "interact",
             {"target_label": label, "action_name": "talk"},
             ui.tool_runtime_context,
-            offered_tool_names_at_prompt=frozenset({"interact"}),
+            offered_tools_at_prompt={"interact": None},
         ).message
 
     def test_a_crew_member_never_learns_of_the_kill(self, runtime) -> None:

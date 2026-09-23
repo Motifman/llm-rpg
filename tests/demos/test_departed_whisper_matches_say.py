@@ -73,7 +73,7 @@ def _speak(runtime, speaker: PlayerId, arguments: dict):
         "speak",
         arguments,
         context,
-        offered_tool_names_at_prompt=frozenset({"speak"}),
+        offered_tools_at_prompt={"speak": None},
     )
 
 

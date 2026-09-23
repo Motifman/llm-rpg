@@ -85,7 +85,7 @@ def _interact_with_main_distribution_panel(
         "interact",
         {"target_label": label, "action_name": action_name},
         context,
-        offered_tool_names_at_prompt=frozenset({"interact"}),
+        offered_tools_at_prompt={"interact": None},
     )
 
 
@@ -356,7 +356,7 @@ def test_departed_action_does_not_accumulate_fatigue(runtime) -> None:
         "interact",
         {"target_label": target_label, "action_name": "inspect_grow_light_wiring"},
         context,
-        offered_tool_names_at_prompt=frozenset({"interact"}),
+        offered_tools_at_prompt={"interact": None},
     )
 
     assert result.success is True

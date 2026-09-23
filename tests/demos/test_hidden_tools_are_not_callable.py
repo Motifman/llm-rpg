@@ -36,6 +36,9 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
+    offered_tools_from_payload,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -65,15 +68,14 @@ def _wiring(runtime) -> _WorldLlmWiring:
 
 def _call(runtime, name: str, arguments: dict):
     wiring = _wiring(runtime)
-    offered = {
-        tool["function"]["name"] for tool in wiring._build_tools_payload(_MORI)
-    }
     return wiring._execute_tool(
         _MORI,
         name,
         arguments,
         None,
-        offered_tool_names_at_prompt=offered,
+        offered_tools_at_prompt=offered_tools_from_payload(
+            wiring._build_tools_payload(_MORI)
+        ),
     )
 
 

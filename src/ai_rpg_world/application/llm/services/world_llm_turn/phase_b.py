@@ -33,7 +33,7 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     command_post_commit_result,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
-    tool_names_from_payload,
+    offered_tools_from_payload,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.prompt_capture import (
     record_prompt_dataset_turn_result,
@@ -186,7 +186,7 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
             name,
             arguments,
             prompt["tool_runtime_context"],
-            offered_tool_names_at_prompt=tool_names_from_payload(
+            offered_tools_at_prompt=offered_tools_from_payload(
                 phase_a.tools_payload
             ),
         )
