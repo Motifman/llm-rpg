@@ -276,7 +276,7 @@ class TestTheGuardSitsAtTheOnlyExit:
     def test_it_does_nothing_without_a_repository(self) -> None:
         """status を引けない組み立てでは何も落とさない。
 
-        この口を知らない既存の組み立て経路 (テスト用の直接構築など) の挙動を
+        この注入点を知らない既存の組み立て経路 (テスト用の直接構築など) の挙動を
         変えないため。塞ぐ側に倒すと、無関係なテストが黙って観測を失う。
         """
         from ai_rpg_world.application.observation.services.observation_recipient_resolver import (  # noqa: E501

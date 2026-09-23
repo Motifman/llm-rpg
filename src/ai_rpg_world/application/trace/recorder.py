@@ -31,7 +31,7 @@ _logger = logging.getLogger(__name__)
 
 
 class ITraceRecorder(ABC):
-    """シナリオ実行を「人間が振り返れるイベント列」として記録する口。"""
+    """シナリオ実行を「人間が振り返れるイベント列」として記録する入口。"""
 
     @abstractmethod
     def record(

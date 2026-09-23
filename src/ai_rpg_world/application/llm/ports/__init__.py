@@ -1,10 +1,10 @@
-"""LLM API への口となる Port interface 群。
+"""LLM API との境界となる Port interface 群。
 
 Issue #470 Phase 1 cleanup: 旧 ``application/llm/contracts/`` 配下に散在していた
 LLM Port を本 package に集約。``contracts/`` には domain VO の re-export と
 それ以外の interface (Repository / Service contract / DTO) のみが残る。
 
-Port = 外部 LLM API への口 (= application 層の責務)。
+Port = 外部 LLM API との境界 (= application 層の責務)。
 
 NOTE: スケジューリング抽象 ``IEpisodicSubjectiveCompletionScheduler``
 (= 「いつ呼ぶか」の制御) は LLM API 口ではないため ``application/llm/scheduler/``

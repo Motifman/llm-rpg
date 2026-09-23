@@ -2,10 +2,10 @@
 
 ## 文字の重なりでは寄せられなかった
 
-``_pick_action_name`` は表示の写し崩れ (quote つき、表示行の丸ごとコピー) だけを
+``_pick_action_name`` は表示を写したときの表記の崩れ (quote つき、表示行の丸ごとコピー) だけを
 救い、``gather`` のような発明された名前は「その操作はありません」で失敗させて
 いた。65 run で 111 件の主因である。``gather`` を ``reap_wheat`` に文字の
-類似度で寄せる安全な方法が無いので、意図的に諦めていた。
+類似度で置き換える安全な方法が無いので、意図的に諦めていた。
 
 意味で選べるなら寄せられる。確信が低いときは従来どおり失敗させる。
 
@@ -139,7 +139,7 @@ class TestTheRescueOnlyRunsWhenTheNameDidNotMatch:
         assert resolution.source is ActionNameSource.VERBATIM
 
     def test_a_copied_display_form_is_not_asked_about(self) -> None:
-        """写し崩れは従来の正規化で直るので、ポートを呼ばない。"""
+        """表記の崩れは従来の正規化で直るので、ポートを呼ばない。"""
         resolution, port = _rescued('"reap_wheat"', _wheat_field(), _RecordingPort())
 
         assert port.questions == []

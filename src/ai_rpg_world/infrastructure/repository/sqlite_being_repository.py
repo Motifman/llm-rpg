@@ -94,7 +94,7 @@ def _payload_dict_to_snapshot(data: dict[str, Any]) -> BeingSnapshot:
     """JSON 由来 dict から BeingSnapshot を再構築する。
 
     BeingSnapshot.__post_init__ の構造検証はそのまま走る (= all-or-nothing
-    の門で再度ガードされる)。
+    の入口で再度ガードされる)。
     """
     raw_kinds = data.get("declared_memory_kinds", [])
     if not isinstance(raw_kinds, list):

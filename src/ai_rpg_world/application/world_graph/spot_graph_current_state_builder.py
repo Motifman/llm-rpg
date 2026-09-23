@@ -416,7 +416,7 @@ class SpotGraphCurrentStateBuilder:
         # = 宣言していない世界の prompt は 1 文字も変わらない。
         merchants: Sequence[Any] = (),
         market_service: Any | None = None,
-        # 経済統合 Phase 2: 自分宛ての申し出を出すための口。未注入なら常に空
+        # 経済統合 Phase 2: 自分宛ての申し出を出すための注入点。未注入なら常に空
         # (取引を宣言しない世界と同じ挙動)。
         incoming_trade_offers_provider: Callable[[int], Sequence[Any]] | None = None,
     ) -> None:
@@ -652,7 +652,7 @@ class SpotGraphCurrentStateBuilder:
         と、エージェントはそれを選び、存在しないツールを呼ぶ。無効化しない
         より悪い状態になる。
 
-        未注入で出す側に倒すのは、この口を知らない既存の組み立て経路
+        未注入で出す側に倒すのは、この注入点を知らない既存の組み立て経路
         (テスト用の直接構築など) の挙動を変えないため。本番経路が必ず
         注入していることは `test_tool_exposure` が固定する。コメントの
         主張だけにしておくと、片方の経路で注入漏れが起きる。

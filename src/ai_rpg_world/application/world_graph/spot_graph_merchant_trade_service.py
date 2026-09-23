@@ -220,7 +220,7 @@ class SpotGraphMerchantTradeService:
         merchants: Sequence[Any] = (),
         item_spec_name_resolver: Any | None = None,
         event_publisher: Any | None = None,
-        # 経済統合 Phase 2: 取引に出しているぶんを差し引いて見るための口。
+        # 経済統合 Phase 2: 取引に出しているぶんを差し引いて見るための注入点。
         # 未注入なら凍結ゼロとして扱う (取引を宣言しない世界の挙動と一致)。
         trade_freeze_service: Any | None = None,
         overflow_sink: Any = None,

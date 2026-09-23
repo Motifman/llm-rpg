@@ -63,7 +63,7 @@ class TestScenariosWithoutTheDeclaration:
     def test_not_even_when_asked_as_the_meeting_phase(self) -> None:
         """会議フェーズとして訊いても出ない。
 
-        起動時の dispatch 整合検査がこの口を使う。ここで出てしまうと、
+        起動時の dispatch 整合検査がこの手段を使う。ここで出てしまうと、
         会議を持たないシナリオでも handler の有無を問われることになる。
         """
         assert not (

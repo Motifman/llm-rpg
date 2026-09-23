@@ -3115,7 +3115,7 @@ class WorldRuntime:
         両者を同じ「退場」として数える必要があるため (どちらも
         ``is_eliminated`` が True)。
 
-        集計と投票そのものは PR 6。ここは確定させる口だけを用意する
+        集計と投票そのものは PR 6。ここは確定させる手段だけを用意する
         (届かない enum メンバを残さないため、この PR で実行経路まで通す)。
         """
         from ai_rpg_world.domain.player.enum.player_outcome_enum import (

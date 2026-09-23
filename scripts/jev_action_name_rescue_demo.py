@@ -21,8 +21,8 @@
 ## 比べる相手
 
 - ``verbatim``: 生値がそのまま候補にあるか (= engine の現行判定)
-- ``normalized``: 引用符剥がし等の写し崩れ救済 (現行の ``_pick_action_name``)
-- ``difflib``: 文字の類似度で最も近い候補へ寄せる (閾値つき)
+- ``normalized``: 引用符剥がし等の表記の崩れの救済 (現行の ``_pick_action_name``)
+- ``difflib``: 文字の類似度で最も近い候補に置き換える (閾値つき)
 - ``jev``: 意味で選ぶ。「該当なし」を選択肢に含める
 
 ## 使い方
@@ -281,7 +281,7 @@ def judge_verbatim(case: Case) -> Outcome:
 
 
 def judge_normalized(case: Case) -> Outcome:
-    """写し崩れ (引用符つき / 表示行の丸ごとコピー) を剥がしてから照合する。"""
+    """表記の崩れ (引用符つき / 表示行の丸ごとコピー) を剥がしてから照合する。"""
     from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (  # noqa: E501
         normalize_action_name_candidates,
     )
@@ -293,7 +293,7 @@ def judge_normalized(case: Case) -> Outcome:
 
 
 def judge_difflib(case: Case, cutoff: float) -> Outcome:
-    """文字の類似度が最も高い候補へ寄せる。閾値未満なら選ばない。"""
+    """文字の類似度が最も高い候補に置き換える。閾値未満なら選ばない。"""
     best_name: str | None = None
     best_score = 0.0
     for name in case.available:

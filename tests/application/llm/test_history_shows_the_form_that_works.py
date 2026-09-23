@@ -33,7 +33,7 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 
 
 class TestBrokenActionNamesAreRecognized:
-    """表示の写し崩れから、実在する操作名の候補を取り出せる。"""
+    """表示を写したときの表記の崩れから、実在する操作名の候補を取り出せる。"""
 
     @pytest.mark.parametrize(
         "raw,expected",
