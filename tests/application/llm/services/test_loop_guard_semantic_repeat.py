@@ -279,3 +279,80 @@ class TestWithoutTheDetector:
         _rephrase(guard, 6)
 
         assert _warnings(buffer) == []
+
+
+class _BrokenPort(_Port):
+    def judge(self, state, questions):  # type: ignore[no-untyped-def,override]
+        self.asked.extend(questions)
+        raise RuntimeError("adapter bug")
+
+
+def _patterns(buffer: DefaultObservationContextBuffer) -> list[str]:
+    return [w.structured.get("pattern", "streak") for w in _warnings(buffer)]
+
+
+class TestTheSameRepetitionIsNotWarnedOnNeighbouringTurns:
+    """完全一致の警告と意味上の警告が、同じ繰り返しに隣り合うターンで重ならないことを保証する。"""
+
+    def test_nine_waits_with_the_default_window_are_warned_only_by_the_streak(self) -> None:
+        """K=4 で引数まで同じ wait を 9 回続けると、警告は連続の 3・6・9 回目の 3 件だけ。"""
+        buffer = DefaultObservationContextBuffer()
+        guard = _guard(_Port(repeat_probability=0.95), buffer=buffer, window=4)
+
+        for _ in range(9):
+            guard.record_and_check(_GAREN, "wait", {}, success=True, result_summary="待った")
+
+        assert _patterns(buffer) == ["streak", "streak", "streak"]
+
+
+class TestOneRecordGivesOneWarning:
+    """同じ行動で連続と離れた tick の失敗の両方が発火しても、観測を 1 件にまとめることを保証する。"""
+
+    def _fail_travel_twice(self, buffer: DefaultObservationContextBuffer) -> tuple[Any, Any]:
+        guard = ToolCallLoopGuardService(
+            buffer,
+            time_label_provider=lambda: "夕方 5:00",
+            current_tick_provider=lambda: 53,
+            cross_tick_failure_threshold=2,
+        )
+        results = [
+            guard.record_and_check(
+                _GAREN, "travel_to", {"destination_label": "祭壇"},
+                success=False, error_code="INVALID_DESTINATION_LABEL",
+                result_summary="移動先が見つかりません",
+            )
+            for _ in range(2)
+        ]
+        return guard, results[-1]
+
+    def test_only_the_cross_tick_failure_warning_is_emitted(self) -> None:
+        """travel_to の同じ失敗が 2 回で両方の閾値に届いても、観測は失敗の理由を持つ 1 件だけ。"""
+        buffer = DefaultObservationContextBuffer()
+
+        self._fail_travel_twice(buffer)
+
+        [warning] = _warnings(buffer)
+        assert warning.structured["pattern"] == "cross_tick_failure"
+
+    def test_the_cross_tick_trigger_is_still_returned(self) -> None:
+        """まとめても、belief への転記に使う CrossTickFailureTrigger は返る。"""
+        buffer = DefaultObservationContextBuffer()
+
+        _, trigger = self._fail_travel_twice(buffer)
+
+        assert trigger is not None
+        assert trigger.error_code == "INVALID_DESTINATION_LABEL"
+
+
+class TestAnUnexpectedErrorKeepsTheExactWarning:
+    """意味上の判断が想定外の例外を投げても、完全一致の警告は出ることを保証する。"""
+
+    def test_a_broken_port_does_not_swallow_the_streak_warning(self) -> None:
+        """判断ポートが RuntimeError を投げても、wait 3 回の連続の警告は出る。"""
+        buffer = DefaultObservationContextBuffer()
+        guard = _guard(_BrokenPort(), buffer=buffer, window=3)
+
+        for _ in range(3):
+            guard.record_and_check(_GAREN, "wait", {}, success=True, result_summary="待った")
+
+        assert _patterns(buffer) == ["streak"]

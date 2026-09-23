@@ -18,7 +18,10 @@ LLM のターンを先取りする 2 つ目のエージェントになる (desig
 ## 発火は控えめに
 
 警告を足しすぎると待機へ押す可能性がある。閾値は高めに置き、signal を出したら
-窓を空にして、新しい行動が K 件溜まるまで問わない。
+窓を空にして、新しい行動が K 件溜まるまで問わない。完全一致の検出が発火した
+ときも窓を空にする。空にしないと、完全一致の警告の次のターンに同じ繰り返しへ
+もう 1 件警告が届く (完全一致は閾値の倍数で、こちらは窓がそろった時点で発火し、
+ずれる)。
 """
 
 from __future__ import annotations
@@ -42,12 +45,21 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     RecordedAction,
     SemanticRepeat,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    GOAL_OUTCOME_FIELD_NAME,
+    GOAL_UPDATE_FIELD_NAME,
+)
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 
 QUESTION_NAME = "semantic_repeat"
+
+# 目的の同乗フィールドは fingerprint に残るので、要約の表に無い tool では JSON の
+# まま state に出てしまう。
+_GOAL_FIELDS = frozenset({GOAL_UPDATE_FIELD_NAME, GOAL_OUTCOME_FIELD_NAME})
+_RESULT_MAX_CHARS = 200
 
 
 @dataclass(frozen=True)
@@ -71,6 +83,7 @@ def _summarize(action: RecordedAction) -> str:
         arguments = {}
     if not isinstance(arguments, dict):
         arguments = {}
+    arguments = {k: v for k, v in arguments.items() if k not in _GOAL_FIELDS}
     return format_action_summary_for_display(action.tool_name, arguments)
 
 
@@ -127,12 +140,21 @@ class SemanticRepeatDetector:
         """行動を 1 件積み、窓が K 件そろっていれば問う。1 回の呼び出しで問うのは最大 1 回。
 
         ``exact_match_fired`` は同じ行動で完全一致の検出が発火したか。trace に
-        残して、2 つの検出の重なりを後から読めるようにする。まとめるのは警告の出し口。
+        残して、2 つの検出の重なりを後から読めるようにする。発火していれば、
+        この行動を最後に窓を空にする。警告を 1 件にまとめるのは警告の出し口。
         """
         key = int(action.player_key)
         window = self._windows.setdefault(key, deque(maxlen=self.window_size))
-        window.append(RecentAction(_summarize(action), action.result_summary or "", action.success))
+        window.append(
+            RecentAction(
+                _summarize(action),
+                (action.result_summary or "")[:_RESULT_MAX_CHARS],
+                action.success,
+            )
+        )
         if len(window) < self.window_size:
+            if exact_match_fired:
+                window.clear()
             return None
 
         actions = tuple(window)
@@ -152,6 +174,11 @@ class SemanticRepeatDetector:
             unavailable_reason = getattr(exc, "error_code", None) or "UNAVAILABLE"
         except KeyError:
             unavailable_reason = "TYPED_JUDGMENT_ANSWER_MISSING"
+        except Exception:
+            # ここから例外が漏れると、同じ行動で集めた完全一致の警告まで出なくなる。
+            logger.exception("semantic repeat judgment failed")
+            probability = None
+            unavailable_reason = "UNEXPECTED_ERROR"
 
         accepted = probability is not None and probability >= self.threshold
         self._record(
@@ -159,6 +186,8 @@ class SemanticRepeatDetector:
             accepted=accepted, exact_match_fired=exact_match_fired,
             latency_ms=latency_ms, source=source, unavailable_reason=unavailable_reason,
         )
+        if exact_match_fired:
+            window.clear()
         if probability is None or not accepted:
             return None
         window.clear()
@@ -193,9 +222,7 @@ class SemanticRepeatDetector:
                 tick=tick,
                 player_id=player_id,
                 question=QUESTION_NAME,
-                window=[
-                    {**a.as_state(), "result": a.result[:200]} for a in actions
-                ],
+                window=[a.as_state() for a in actions],
                 probability=round(probability, 4) if probability is not None else None,
                 threshold=self.threshold,
                 accepted=accepted,

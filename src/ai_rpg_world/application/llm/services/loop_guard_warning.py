@@ -258,16 +258,18 @@ class LoopWarningEmitter:
         signals: Sequence[RepeatSignal],
         recent: Sequence[RecentAction] = (),
     ) -> list[RepeatSignal]:
-        """同じ行動で発火した signal をまとめて出し、実際に出したものを返す。
+        """同じ行動で発火した signal から 1 件だけ出し、出したものを返す。
 
-        完全一致の検出が発火していれば、意味上の繰り返しは重ねて出さない。
-        同じ繰り返しに警告を 2 件届けると、待機へ押す力が強くなりすぎる。
+        同じ繰り返しに警告を 2 件届けると、待機へ押す力が強くなりすぎる。見立ても
+        警告ごとに問うので、2 件出すと判断を 2 回呼ぶ。優先は、失敗の理由を持つ
+        離れた tick の失敗、連続の同一行動、意味上の繰り返しの順。
         """
-        exact: list[RepeatSignal] = [s for s in signals if not isinstance(s, SemanticRepeat)]
-        emitted = exact if exact else list(signals)
-        for signal in emitted:
-            self.emit(player_id, signal, recent)
-        return emitted
+        for kind in (CrossTickFailureRepeat, ConsecutiveRepeat, SemanticRepeat):
+            for signal in signals:
+                if isinstance(signal, kind):
+                    self.emit(player_id, signal, recent)
+                    return [signal]
+        return []
 
     def emit(
         self,
