@@ -184,3 +184,47 @@ class TestTheUrgingStillReachesThoseWhoCanAct:
 
         assert {"travel_to", "interact"} <= offered
         assert "移動と許された点検作業は続けられ" in text
+
+
+def _meeting_start_prose(runtime, player_id: PlayerId) -> str:
+    return next(
+        e.output.prose
+        for e in runtime._obs_buffer.get_observations(player_id)
+        if e.output.structured.get("type") == "game_phase_changed"
+    )
+
+
+class TestTheMeetingAnnouncementMatchesOfferedTools:
+    """会議開始の観測が、受け取る本人に出すツールと食い違わない。
+
+    観測は記憶に流れるので、状況行と違って次の手番で書き換わらない。
+    """
+
+    def test_living_player_is_told_they_can_speak_and_vote(self) -> None:
+        """生者への会議開始の観測は「ここでできるのは、話すことと投票だけになった。」で終わり、実際に vote を渡す。"""
+        runtime = create_world_runtime(_DRILL)
+        runtime.call_emergency_meeting(_KUZE)
+
+        prose = _meeting_start_prose(runtime, _AOI)
+        _, offered = _prompt_and_offered_tools(runtime, _AOI)
+
+        assert prose == (
+            "クゼが緊急招集をかけた。全員が集まる。"
+            "ここでできるのは、話すことと投票だけになった。"
+        )
+        assert "vote" in offered
+
+    def test_ghost_is_told_they_can_only_speak(self) -> None:
+        """死者への会議開始の観測は投票を勧めず、話すことしかできないと書く。死者には vote を渡さない。"""
+        runtime = create_world_runtime(_DRILL)
+        _make_dead(runtime, _SENA, "greenhouse")
+        runtime.call_emergency_meeting(_KUZE)
+
+        prose = _meeting_start_prose(runtime, _SENA)
+        _, offered = _prompt_and_offered_tools(runtime, _SENA)
+
+        assert prose == (
+            "クゼが緊急招集をかけた。全員が集まる。"
+            "話し合いのあいだは話すことしかできず、投票はできない。"
+        )
+        assert "vote" not in offered
