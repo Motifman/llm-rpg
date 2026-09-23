@@ -193,7 +193,7 @@ class TestVotingClosesTheMeeting:
         result = wiring._reason_tool_is_not_offered(
             "vote",
             _MORI,
-            offered_tool_names_at_prompt=frozenset(),
+            offered_tools_at_prompt={},
         )
 
         assert result is not None

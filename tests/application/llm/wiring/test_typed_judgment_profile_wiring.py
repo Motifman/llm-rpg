@@ -218,6 +218,24 @@ class TestTheReplyGateSettingsComeFromTheProfile:
 
 
 
+class TestTheToolNameThresholdComesFromTheProfile:
+    """存在しない tool 名への提案を採る閾値が profile から入ることを保証する (#1413)。"""
+
+    def test_the_threshold_defaults_to_the_action_name_one(self) -> None:
+        """何も書かなければ閾値は 0.7 (行動名の救済と同じ仮置き)。"""
+        assert _config().typed_judgment_tool_name_min_confidence == 0.7
+
+    def test_a_profile_can_move_the_threshold(self) -> None:
+        """TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE の値が解決済み設定に載る。"""
+        config = _config(TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE="0.85")
+        assert config.typed_judgment_tool_name_min_confidence == 0.85
+
+    def test_a_threshold_outside_the_unit_interval_is_rejected(self) -> None:
+        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
+        with pytest.raises(ValueError):
+            _config(TYPED_JUDGMENT_TOOL_NAME_MIN_CONFIDENCE="0")
+
+
 class TestTheLoopDiagnosisSettingsComeFromTheProfile:
     """繰り返しの理由の見立て (#1411) の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
 

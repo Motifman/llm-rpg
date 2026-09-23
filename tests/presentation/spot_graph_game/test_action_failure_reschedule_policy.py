@@ -42,7 +42,7 @@ def test_common_tool_exit_applies_reschedule_policy_to_handler_result() -> None:
         "interact",
         {},
         None,
-        offered_tool_names_at_prompt=frozenset({"interact"}),
+        offered_tools_at_prompt={"interact": None},
     )
 
     assert result.should_reschedule is True

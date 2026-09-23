@@ -170,7 +170,7 @@ class TestExecuteToolReturnsReschedulableDto:
             "spot_graph_pickup",
             {"item_label": "野いちご"},
             None,
-            offered_tool_names_at_prompt=frozenset(),
+            offered_tools_at_prompt={},
         )
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
@@ -179,30 +179,30 @@ class TestExecuteToolReturnsReschedulableDto:
     def test_execute_tool_unknown_message_has_suggestion_and_valid_list(
         self, monkeypatch, tmp_path
     ):
+        """提案と一覧は、そのターンに送った tool から作る (#1413)。"""
         from tests.demos.test_world_runtime_dispatch_table import _create_session
+
+        from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
+            offered_tools_from_payload,
+        )
 
         state = _create_session(monkeypatch, tmp_path)
         wiring = state.llm_wiring
         pid = state.runtime.get_player_ids()[0]
+        offered = offered_tools_from_payload(wiring._build_tools_payload(pid))
+        assert "pickup_item" in offered and "memo_add" in offered
 
-        # PR-CC (bare 名化) 後: `spot_graph_travrl_to` は先頭 2 segment
-        # (spot / graph) を PR-CC の legacy prefix strip で剥がしても
-        # `travrl_to` になり、bare `travel_to` とは first segment (travrl
-        # != travel) が一致せず fuzzy match が効かない。代わりに、旧
-        # prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
+        # 旧 prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
         # ケース (LLM の旧習慣) をシミュレートする。
         result = wiring._execute_tool(
             pid,
             "spot_graph_pickup",
             {"item_label": "野いちご"},
             None,
-            offered_tool_names_at_prompt=frozenset(),
+            offered_tools_at_prompt=offered,
         )
-        # message に typoed name は含まれる
         assert "spot_graph_pickup" in result.message
-        # 旧 prefix 剥がしで pickup_item に fuzzy 救済されている
-        assert "pickup_item" in result.message
-        # valid 一覧も含まれる (= memo_add などが含まれているか確認)
+        assert "もしかして 'pickup_item' ですか?" in result.message
         assert "memo_add" in result.message
 
 

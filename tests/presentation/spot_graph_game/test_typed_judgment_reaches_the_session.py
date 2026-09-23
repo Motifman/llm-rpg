@@ -236,6 +236,36 @@ class TestTheTurnTriggerGetsTheGate:
             assert wiring.turn_gate is None
 
 
+class TestTheWiringGetsTheToolNameJudgment:
+    """存在しない tool 名への提案を選ぶ口に、判断と profile の閾値が届くことを保証する (#1413)。"""
+
+    def test_the_wiring_can_rescue_tool_names_when_the_profile_asks_for_judgment(self) -> None:
+        """provider が判断を求めていれば、配線は tool 名の提案を意味で選ぶ口を持つ。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.tool_name_rescue is not None
+
+    def test_the_wiring_has_no_tool_name_rescue_by_default(self) -> None:
+        """profile が判断を求めなければ、配線は判断を問う口を持たない (**正の対照**)。"""
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
+            assert wiring.tool_name_rescue is None
+
+    def test_the_tool_name_threshold_comes_from_the_profile(self) -> None:
+        """閾値が profile から配線まで届き、既定は 0.7。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.tool_name_rescue.min_confidence == 0.7
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(
+                typed_judgment_provider="stub",
+                typed_judgment_tool_name_min_confidence=0.9,
+            )
+        ):
+            assert wiring.tool_name_rescue.min_confidence == 0.9
+
+
 class TestTheLoopGuardGetsTheDiagnosis:
     """ループ警告の出し口に、繰り返しの理由の見立て (#1411) が届くことを保証する。"""
 
