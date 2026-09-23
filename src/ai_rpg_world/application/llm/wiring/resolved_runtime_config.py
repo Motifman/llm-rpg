@@ -136,6 +136,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_PROVIDER",
     "TYPED_JUDGMENT_TURN_GATE_ENABLED",
     "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
+    "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
+    "TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
@@ -192,6 +194,11 @@ class ResolvedLlmRuntimeConfig:
             しても起動判定は入らない (#222)。観察するときだけ明示的に true にする
         typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
             回さない。取りこぼしを避けるため小さく置く
+        typed_judgment_loop_diagnosis_enabled: ループ警告の発火時に、繰り返しの
+            理由を問うて文面を選ぶ (#1411)。**既定は off**。provider が off なら
+            有効にしても入らない
+        typed_judgment_loop_diagnosis_min_confidence: 見立てた理由を採る閾値。
+            確率と確信の両方がこれ以上のときだけ採る
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -247,6 +254,8 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_memo_min_probability: float
     typed_judgment_turn_gate_enabled: bool
     typed_judgment_turn_gate_skip_below: float
+    typed_judgment_loop_diagnosis_enabled: bool
+    typed_judgment_loop_diagnosis_min_confidence: float
 
     # Episodic memory
     episodic_enabled: bool
@@ -618,6 +627,17 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
             default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW,
         )
+        try:
+            typed_judgment_loop_diagnosis_enabled = _parse_truthy(
+                source.get("TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED: {exc}") from exc
+        typed_judgment_loop_diagnosis_min_confidence = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE",
+            default=_DEFAULT_TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE,
+        )
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -787,6 +807,10 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
             typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
             typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
+            typed_judgment_loop_diagnosis_enabled=typed_judgment_loop_diagnosis_enabled,
+            typed_judgment_loop_diagnosis_min_confidence=(
+                typed_judgment_loop_diagnosis_min_confidence
+            ),
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -900,6 +924,10 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_turn_gate_enabled=False,
             typed_judgment_turn_gate_skip_below=(
                 _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
+            ),
+            typed_judgment_loop_diagnosis_enabled=False,
+            typed_judgment_loop_diagnosis_min_confidence=(
+                _DEFAULT_TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
@@ -1020,6 +1048,10 @@ _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE = 0.85
 #: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の起動判定 (#217) で
 #: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
 _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
+
+#: 見立てた理由を採る閾値の暫定値。行動名の読み替えと同じ値から始める。
+#: 採らなくても警告は今の文面で出るので、低すぎるより高すぎる方が害が小さい。
+_DEFAULT_TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE = 0.7
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})

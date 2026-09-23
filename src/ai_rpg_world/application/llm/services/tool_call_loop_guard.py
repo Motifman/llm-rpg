@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,6 +33,7 @@ from typing import Any
 from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
+from ai_rpg_world.application.llm.services.loop_diagnosis import LoopDiagnosis
 from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     DEFAULT_CROSS_TICK_FAILURE_THRESHOLD,
     DEFAULT_CROSS_TICK_FAILURE_WINDOW,
@@ -47,6 +49,8 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
 from ai_rpg_world.application.llm.services.loop_guard_warning import (
     LoopGuardGateSignal,
     LoopWarningEmitter,
+    RecentAction,
+    build_action_summary,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -66,6 +70,9 @@ __all__ = [
 ]
 
 
+_RECENT_ACTION_LIMIT = 5
+
+
 @dataclass(frozen=True)
 class CrossTickFailureTrigger:
     """``record_and_check`` が cross_tick_failure 閾値到達を検知したときに
@@ -79,6 +86,11 @@ class CrossTickFailureTrigger:
     error_code: str
     count: int
     window: int
+
+
+def _said(arguments: dict[str, Any] | None) -> str | None:
+    content = (arguments or {}).get("content")
+    return content.strip() or None if isinstance(content, str) else None
 
 
 class ToolCallLoopGuardService:
@@ -106,6 +118,8 @@ class ToolCallLoopGuardService:
         current_tick_provider: Callable[[], int | None] | None = None,
         cross_tick_failure_window: int = DEFAULT_CROSS_TICK_FAILURE_WINDOW,
         cross_tick_failure_threshold: int = DEFAULT_CROSS_TICK_FAILURE_THRESHOLD,
+        loop_diagnosis: LoopDiagnosis | None = None,
+        location_provider: Callable[[PlayerId], str | None] | None = None,
     ) -> None:
         """
         trace_recorder vs trace_recorder_provider:
@@ -113,6 +127,12 @@ class ToolCallLoopGuardService:
             ``trace_recorder_provider`` は use 時に look-up する callable で、
             ``runtime.set_trace_recorder()`` のような後から差し込まれる構成で
             使う (実験スクリプト経路はこちら)。両方与えると provider 優先。
+
+        loop_diagnosis:
+            与えると、警告を出す前に繰り返しの理由を問い、文面を選ぶ (#1411)。
+            None なら判断を引かず、今の文面で出す。
+        location_provider:
+            見立ての材料と文面に載せる現在地の名前。
         """
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError(
@@ -137,6 +157,10 @@ class ToolCallLoopGuardService:
             )
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
+        if loop_diagnosis is not None and not isinstance(loop_diagnosis, LoopDiagnosis):
+            raise TypeError("loop_diagnosis must be LoopDiagnosis or None")
+        if location_provider is not None and not callable(location_provider):
+            raise TypeError("location_provider must be callable or None")
         cross_tick_detector = CrossTickFailureDetector(
             window=cross_tick_failure_window,
             threshold=cross_tick_failure_threshold,
@@ -153,12 +177,18 @@ class ToolCallLoopGuardService:
         )
         # datetime.utcnow は naive を返し、sliding window 内で aware な観測との
         # 時刻比較が TypeError になるため、既定 clock は aware (UTC) を返す
+        #: 公開するのは、見立てが profile から届いたかを外から確かめるため。
+        self.loop_diagnosis = loop_diagnosis
         self._emitter = LoopWarningEmitter(
             observation_buffer=observation_buffer,
             time_label_provider=time_label_provider,
             clock=clock or (lambda: datetime.now(timezone.utc)),
             trace_recorder_resolver=self._resolve_trace_recorder,
+            diagnosis=loop_diagnosis,
+            location_provider=location_provider,
         )
+        #: 見立ての材料。検出器の数え方とは独立に、直近の数件だけを持つ。
+        self._recent_actions: dict[int, deque[RecentAction]] = {}
 
     def _resolve_trace_recorder(self) -> ITraceRecorder | None:
         if self._trace_recorder_provider is not None:
@@ -176,6 +206,7 @@ class ToolCallLoopGuardService:
         *,
         success: bool | None = None,
         error_code: str | None = None,
+        result_summary: str | None = None,
     ) -> CrossTickFailureTrigger | None:
         """tool 呼出を記録し、繰り返しを見つけたら警告観測を注入する。
 
@@ -190,6 +221,7 @@ class ToolCallLoopGuardService:
             success: 成否。None は成否不明として cross_tick 側には記録しない。
             error_code: 失敗時の error_code。None または ``success!=False``
                 のときは cross_tick 側には記録しない。
+            result_summary: 行動の結果の文。見立ての材料にする。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -202,13 +234,25 @@ class ToolCallLoopGuardService:
             success=success,
             error_code=error_code,
             tick=self._get_current_tick_or_none(),
+            result_summary=result_summary,
+        )
+        recent = self._recent_actions.setdefault(
+            player_id.value, deque(maxlen=_RECENT_ACTION_LIMIT)
+        )
+        recent.append(
+            RecentAction(
+                action=build_action_summary(tool_name, action.fingerprint),
+                succeeded=success,
+                result=result_summary,
+                said=_said(arguments),
+            )
         )
         cross_tick_trigger: CrossTickFailureTrigger | None = None
         for detector in self._detectors:
             signal = detector.observe(action)
             if signal is None:
                 continue
-            self._emitter.emit(player_id, signal)
+            self._emitter.emit(player_id, signal, tuple(recent))
             if isinstance(signal, CrossTickFailureRepeat):
                 cross_tick_trigger = CrossTickFailureTrigger(
                     tool_name=signal.tool_name,

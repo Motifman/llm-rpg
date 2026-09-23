@@ -216,3 +216,27 @@ class TestTheReplyGateSettingsComeFromTheProfile:
         with pytest.raises(ValueError):
             _config(TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW="1.5")
 
+
+
+class TestTheLoopDiagnosisSettingsComeFromTheProfile:
+    """繰り返しの理由の見立て (#1411) の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
+
+    def test_the_diagnosis_is_off_by_default(self) -> None:
+        """何も書かなければ見立ては無効。provider を jev にしても入らない。閾値の既定は 0.7。"""
+        config = _config(TYPED_JUDGMENT_PROVIDER="jev")
+        assert config.typed_judgment_loop_diagnosis_enabled is False
+        assert config.typed_judgment_loop_diagnosis_min_confidence == 0.7
+
+    def test_a_profile_can_turn_the_diagnosis_on_and_move_the_threshold(self) -> None:
+        """TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED=1 と閾値 0.8 を書くと、解決済み設定に載る。"""
+        config = _config(
+            TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED="1",
+            TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE="0.8",
+        )
+        assert config.typed_judgment_loop_diagnosis_enabled is True
+        assert config.typed_judgment_loop_diagnosis_min_confidence == 0.8
+
+    def test_a_threshold_outside_the_unit_interval_is_rejected(self) -> None:
+        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
+        with pytest.raises(ValueError):
+            _config(TYPED_JUDGMENT_LOOP_DIAGNOSIS_MIN_CONFIDENCE="1.5")

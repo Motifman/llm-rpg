@@ -53,6 +53,7 @@ class RecordedAction:
     success: bool | None
     error_code: str | None
     tick: int | None
+    result_summary: str | None = None
 
 
 @dataclass(frozen=True)

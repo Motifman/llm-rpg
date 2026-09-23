@@ -361,6 +361,7 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
                 arguments,
                 success=result.success,
                 error_code=result.error_code,
+                result_summary=result.message,
             )
         except Exception:
             logger.exception("tool_call_loop_guard.record_and_check failed")
