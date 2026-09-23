@@ -38,9 +38,15 @@ def filter_definitions_for_escape_llm(definitions: Sequence[Any]) -> list[Any]:
     return [d for d in definitions if d.name not in ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS]
 
 
-def tool_names_from_payload(tools_payload: Iterable[Any]) -> frozenset[str]:
-    """実際に送った OpenAI tools payload から関数名だけを取り出す。"""
-    names: set[str] = set()
+def offered_tools_from_payload(
+    tools_payload: Iterable[Any],
+) -> dict[str, str | None]:
+    """実際に送った OpenAI tools payload から、tool 名 → 説明の 1 行目を取り出す。
+
+    説明が無い tool は None。名前だけでなく意味まで持つのは、存在しない名前を
+    呼ばれたときに「どれを意図したか」を名前の字面でなく意味で選ぶため (#1413)。
+    """
+    offered: dict[str, str | None] = {}
     for tool in tools_payload:
         if not isinstance(tool, dict):
             continue
@@ -48,9 +54,12 @@ def tool_names_from_payload(tools_payload: Iterable[Any]) -> frozenset[str]:
         if not isinstance(function, dict):
             continue
         name = function.get("name")
-        if isinstance(name, str) and name:
-            names.add(name)
-    return frozenset(names)
+        if not isinstance(name, str) or not name:
+            continue
+        description = function.get("description")
+        lines = description.strip().splitlines() if isinstance(description, str) else []
+        offered[name] = lines[0].strip() if lines else None
+    return offered
 
 
 def validate_tool_handler_consistency(

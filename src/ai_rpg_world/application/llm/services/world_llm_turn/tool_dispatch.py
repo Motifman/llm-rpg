@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 import json
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Mapping
 from dataclasses import replace as dataclass_replace
 from typing import Any
 
@@ -63,7 +63,11 @@ from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace impo
     wrap_with_gold_change,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
+    QUESTION_NAME as TOOL_NAME_RESCUE_QUESTION,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     build_unsupported_tool_message,
+    format_unsupported_tool_message,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -1051,7 +1055,7 @@ def reason_tool_is_not_offered(
     name: str,
     player_id: PlayerId,
     *,
-    offered_tool_names_at_prompt: Collection[str],
+    offered_tools_at_prompt: Mapping[str, str | None],
 ) -> LlmCommandResultDto | None:
     """いま出していないツールなら、その理由を返す。出していれば None。
 
@@ -1084,7 +1088,7 @@ def reason_tool_is_not_offered(
         return None
     if name in offered:
         return None
-    if name in offered_tool_names_at_prompt:
+    if name in offered_tools_at_prompt:
         return LlmCommandResultDto(
             success=False,
             message=(
@@ -1106,6 +1110,32 @@ def reason_tool_is_not_offered(
         should_reschedule=True,
     )
 
+def _unsupported_tool_message(
+    wiring: WorldLlmWiring,
+    player_id: PlayerId,
+    name: str,
+    arguments: dict[str, Any],
+    offered: Mapping[str, str | None],
+) -> str:
+    """存在しない tool 名への失敗文。判断が使えるなら提案を意味で選ぶ。"""
+    rescue = getattr(wiring, "tool_name_rescue", None)
+    if rescue is None:
+        return build_unsupported_tool_message(requested=name, valid_tools=offered.keys())
+    suggestion = rescue.suggest(name, offered=offered, arguments=arguments)
+    payload = suggestion.trace_payload()
+    if payload is not None:
+        _record_judgment(
+            payload,
+            question=TOOL_NAME_RESCUE_QUESTION,
+            player_id=player_id,
+            trace_recorder_provider=lambda: getattr(wiring.runtime, "trace_recorder", None),
+            current_tick_provider=lambda: _current_tick_or_none(wiring),
+        )
+    return format_unsupported_tool_message(
+        requested=name, valid_tools=offered.keys(), suggestion=suggestion.tool
+    )
+
+
 def execute_tool(
     wiring: WorldLlmWiring,
     player_id: PlayerId,
@@ -1113,7 +1143,7 @@ def execute_tool(
     arguments: dict[str, Any],
     runtime_context: Any,
     *,
-    offered_tool_names_at_prompt: Collection[str],
+    offered_tools_at_prompt: Mapping[str, str | None],
 ) -> LlmCommandResultDto:
     """ツール名から対応するハンドラを選んで実行する。
 
@@ -1147,7 +1177,7 @@ def execute_tool(
         not_offered = reason_tool_is_not_offered(
             wiring, name,
             player_id,
-            offered_tool_names_at_prompt=offered_tool_names_at_prompt,
+            offered_tools_at_prompt=offered_tools_at_prompt,
         )
         if not_offered is not None:
             return not_offered
@@ -1159,9 +1189,10 @@ def execute_tool(
         # 3. should_reschedule=True で次 tick の起床を確保 (= 配信)
         # 1/2 が無くても 3 (= message を agent に届ける) が無いと意味が
         # ないので、3 が最重要。
-        message = build_unsupported_tool_message(
-            requested=name,
-            valid_tools=wiring._tool_handlers.keys(),
+        # 提案も一覧も、そのターンに送った tool から作る。handler 表から作ると、
+        # 会議中に隠した tool やこの世界で出していない tool まで勧める (#1413)。
+        message = _unsupported_tool_message(
+            wiring, player_id, name, arguments, offered_tools_at_prompt
         )
         # PR-J: should_reschedule は _RESCHEDULE_ERROR_CODES SSOT 経由で
         # 決定する。ハードコードすると将来 policy を変えた時に乖離する。

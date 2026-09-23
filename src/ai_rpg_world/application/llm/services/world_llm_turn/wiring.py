@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     )
 
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -60,6 +60,12 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     restore_nav_state,
     validate_tool_handler_consistency_for_wiring,
     wire_missing_spot_graph_tools,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
+    DEFAULT_MIN_CONFIDENCE as DEFAULT_TOOL_NAME_MIN_CONFIDENCE,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
+    ToolNameRescue,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
     WorldLlmTurnTrigger,
@@ -135,6 +141,9 @@ class WorldLlmWiring:
     #: tick の終わりに「いま動く必要があるか」を問う起動判定。profile が求めなければ None。
     #: runtime_manager が typed_judgment_port から組んで差し込む。
     turn_gate: Any | None = None
+    #: 存在しない tool 名から意図した tool を意味で選ぶ口 (#1413)。
+    #: typed_judgment_port から __post_init__ で組む。None なら文字の類似度だけで提案する。
+    tool_name_rescue: ToolNameRescue | None = field(default=None, init=False)
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
@@ -217,6 +226,17 @@ class WorldLlmWiring:
             )
         else:
             self.memo_completion_hint_service = None
+        if self.typed_judgment_port is not None:
+            self.tool_name_rescue = ToolNameRescue(
+                port=self.typed_judgment_port,
+                min_confidence=float(
+                    getattr(
+                        runtime_config,
+                        "typed_judgment_tool_name_min_confidence",
+                        DEFAULT_TOOL_NAME_MIN_CONFIDENCE,
+                    )
+                ),
+            )
         # Issue #264 後続 B1: speech_say の audience resolver。
         # runtime の spot_graph_repo / player_status_repo / SoundPropagationService を
         # 集めて事前 audience 問い合わせを可能にする。これにより speech 結果
@@ -330,13 +350,13 @@ class WorldLlmWiring:
         name: str,
         player_id: PlayerId,
         *,
-        offered_tool_names_at_prompt: Collection[str],
+        offered_tools_at_prompt: Mapping[str, str | None],
     ) -> LlmCommandResultDto | None:
         return reason_tool_is_not_offered(
             self,
             name,
             player_id,
-            offered_tool_names_at_prompt=offered_tool_names_at_prompt,
+            offered_tools_at_prompt=offered_tools_at_prompt,
         )
 
     def _llm_session_id(self, player_id: PlayerId) -> str:
@@ -373,11 +393,11 @@ class WorldLlmWiring:
         arguments: dict[str, Any],
         runtime_context: Any,
         *,
-        offered_tool_names_at_prompt: Collection[str],
+        offered_tools_at_prompt: Mapping[str, str | None],
     ) -> LlmCommandResultDto:
         return execute_tool(
             self, player_id, name, arguments, runtime_context,
-            offered_tool_names_at_prompt=offered_tool_names_at_prompt,
+            offered_tools_at_prompt=offered_tools_at_prompt,
         )
 
     @staticmethod
