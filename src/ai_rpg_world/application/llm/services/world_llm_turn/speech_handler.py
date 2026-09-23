@@ -95,14 +95,16 @@ def handle_speech(
         target_player_id_obj = PlayerId(target.player_id)
         outcome_registry = getattr(wiring.runtime, "_player_outcome_registry", None)
         perception_policy = getattr(wiring.runtime, "_player_perception_policy", None)
-        # 幽霊として聞き続ける相手は拒否しない。届くかどうかは say と同じ
-        # 知覚規則に任せ、ここで先に弾くと say は届くのに囁きだけ届かない
-        # 非対称になる。
-        target_listens_as_departed = (
+        # 死者同士だけは拒否しない。死者の say は死者に届くので、ここで弾くと
+        # 囁きだけ届かない非対称になる。生者が話し手のときは拒否を残す。
+        # 通すと遺体から離れた幽霊について「同じスポットにいません」と返り、
+        # 届いたかどうかの出し分けで誰の幽霊がその場にいるかも分かってしまう。
+        both_departed = (
             perception_policy is not None
+            and perception_policy.is_departed(player_id)
             and perception_policy.is_departed(target_player_id_obj)
         )
-        if outcome_registry is not None and not target_listens_as_departed:
+        if outcome_registry is not None and not both_departed:
             if outcome_registry.get_outcome(
                 target_player_id_obj
             ).is_eliminated:
