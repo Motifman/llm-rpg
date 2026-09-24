@@ -237,7 +237,7 @@ class TestTheTurnTriggerGetsTheGate:
 
 
 class TestTheWiringGetsTheToolNameJudgment:
-    """存在しない tool 名への提案を選ぶ口に、判断と profile の閾値が届くことを保証する (#1413)。"""
+    """存在しない tool 名への提案を選ぶ口に、判断が届くことを保証する (#1413)。"""
 
     def test_the_wiring_can_rescue_tool_names_when_the_profile_asks_for_judgment(self) -> None:
         """provider が判断を求めていれば、配線は tool 名の提案を意味で選ぶ口を持つ。"""
@@ -251,37 +251,21 @@ class TestTheWiringGetsTheToolNameJudgment:
         for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
             assert wiring.tool_name_rescue is None
 
-    def test_the_tool_name_threshold_comes_from_the_profile(self) -> None:
-        """閾値が profile から配線まで届き、既定は 0.7。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
-            assert wiring.tool_name_rescue.min_confidence == 0.7
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(
-                typed_judgment_provider="stub",
-                typed_judgment_tool_name_min_confidence=0.9,
-            )
-        ):
-            assert wiring.tool_name_rescue.min_confidence == 0.9
-
 
 class TestTheLoopGuardGetsTheDiagnosis:
-    """ループ警告の出し口に、繰り返しの理由の見立て (#1411) が届くことを保証する。"""
+    """ループ警告の出し口に、繰り返しの理由の判定 (#1411) が届くことを保証する。"""
 
     def test_the_loop_guard_has_the_diagnosis_when_the_profile_turns_it_on(self) -> None:
-        """判断ポートがあり見立てを有効にした profile では、loop guard は同じポートと profile の閾値で見立てを持つ。"""
+        """判断ポートがあり判定を有効にした profile では、loop guard は同じポートで判定を持つ。"""
         for wiring in _session_wiring(
             ResolvedLlmRuntimeConfig.for_tests(
                 typed_judgment_provider="stub",
                 typed_judgment_loop_diagnosis_enabled=True,
-                typed_judgment_loop_diagnosis_min_confidence=0.8,
             )
         ):
             diagnosis = wiring.tool_call_loop_guard.loop_diagnosis
             assert diagnosis is not None
             assert diagnosis.port is wiring.typed_judgment_port
-            assert diagnosis.min_confidence == 0.8
 
     def test_judgment_alone_does_not_bring_the_diagnosis(self) -> None:
         """provider だけを入れた profile では、判断ポートは載るが見立ては入らない (既定 off)。"""

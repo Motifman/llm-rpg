@@ -194,7 +194,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     port = create_typed_judgment_port_from_config(
         ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")
     )
-    rescue = ToolNameRescue(port=port, min_confidence=args.min_confidence)
+    rescue = ToolNameRescue(port=port)
     cases = [Case(**c) for c in json.loads(Path(args.cases).read_text())]
     results = []
     for c in cases:
@@ -207,10 +207,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(
-        {"min_confidence": args.min_confidence, "results": results},
+        {"results": results},
         ensure_ascii=False, indent=1,
     ))
-    print(f"事例 {len(results)} 件 (閾値 {args.min_confidence}) → {out}")
+    print(f"事例 {len(results)} 件 → {out}")
     for r in results:
         c, j = r["case"], r["judgment"] or {}
         prob = (j.get("probabilities") or {}).get(str(j.get("chosen")))
@@ -233,7 +233,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     pr = sub.add_parser("run")
     pr.add_argument("--cases", default="var/jev_tool_name_demo/cases.json")
     pr.add_argument("--out", default="var/jev_tool_name_demo/results.json")
-    pr.add_argument("--min-confidence", type=float, default=0.7)
     pr.set_defaults(func=cmd_run)
     args = parser.parse_args(argv)
     return args.func(args)

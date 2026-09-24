@@ -1,17 +1,22 @@
-"""ループ警告が発火したとき、繰り返しの理由を型付き判断に見立てさせる (#1411)。
+"""ループ警告が発火したとき、繰り返しの理由を型付き判断に選ばせる (#1411)。
 
 繰り返しを見つけるのは検出器で、件数と tick 差はコードで数える。ここで問うのは
 「なぜ繰り返しているか」だけ。居場所を取り違えている人に要るのは「もう土手に
 居る」という事実で、「別の行動を選べ」ではない。理由ごとに伝える事実を変える。
 
-## 見立てで警告を消さない
+## 選んだ理由で警告を消さない
 
-どの理由を選んでも、警告は出す。「待機」の見立てで警告を消すと、見立てが外れた
+どの理由を選んでも、警告は出す。「待機」を選んだからと警告を消すと、判断が外れた
 ときに詰まったエージェントに誰も気づかない (design_decisions #222 と同じ非対称)。
 
-## 縮退は 3 通りあり、trace で分ける
+## 閾値は置かない
 
-「該当なし」、確信が閾値未満、判断が得られない。どれも今の文面で警告を出す。
+誤っても変わるのは警告の文面だけで、行動は実行されない。確率が低くても、
+「該当なし」以外を選べばその理由の文面にする (design_decisions #234)。
+
+## 縮退は 2 通りあり、trace で分ける
+
+「該当なし」と、判断が得られない。どちらも今の文面で警告を出す。
 「該当なし」が多い場面は選択肢が足りていない場面なので、区別して残す。
 """
 
@@ -72,20 +77,18 @@ _NONE_APPLICABLE_MEANING = "上のどの理由にも当たらない"
 
 class DiagnosisFallback(Enum):
     NONE_APPLICABLE = "none_applicable"
-    BELOW_THRESHOLD = "below_threshold"
     UNAVAILABLE = "unavailable"
 
 
 @dataclass(frozen=True)
 class LoopDiagnosisJudgment:
-    """見立ての結果。採らなかった判断も、採らなかった理由と対で残す。
+    """繰り返しの理由を問うた結果。採らなかった判断も、採らなかった理由と対で残す。
 
     ``reason`` と ``fallback`` はどちらか一方だけが None でない。
     """
 
     reason: RepeatReason | None
     fallback: DiagnosisFallback | None
-    min_confidence: float
     chosen: str | None = None
     probabilities: Mapping[str, float] = field(default_factory=dict)
     probability: float | None = None
@@ -96,18 +99,13 @@ class LoopDiagnosisJudgment:
 
 
 class LoopDiagnosis:
-    """繰り返しの理由を 1 回問い、閾値で採否を決める。"""
+    """繰り返しの理由を 1 回問い、「該当なし」以外を選べばその理由を採る。"""
 
-    def __init__(self, *, port: ITypedJudgmentPort, min_confidence: float) -> None:
+    def __init__(self, *, port: ITypedJudgmentPort) -> None:
         if not isinstance(port, ITypedJudgmentPort):
             raise TypeError("port must be ITypedJudgmentPort")
-        if not isinstance(min_confidence, (int, float)):
-            raise TypeError("min_confidence must be a number")
-        if not 0.0 < float(min_confidence) <= 1.0:
-            raise ValueError("min_confidence must be in (0, 1]")
+        #: 公開するのは、ポートが profile から届いたかを外から確かめるため。
         self.port = port
-        #: 公開するのは、ポートと閾値が profile から届いたかを外から確かめるため。
-        self.min_confidence = float(min_confidence)
 
     def diagnose(
         self, state: Mapping[str, Any] | Sequence[Any] | str
@@ -120,7 +118,7 @@ class LoopDiagnosis:
             logger.warning("loop diagnosis unavailable: %s", exc)
             return self._unavailable(exc.error_code)
         except Exception:
-            # 見立ては文面を選ぶだけなので、ここで落ちて警告まで消してはいけない。
+            # 理由は文面を選ぶだけなので、ここで落ちて警告まで消してはいけない。
             logger.exception("loop diagnosis failed unexpectedly")
             return self._unavailable("UNEXPECTED_ERROR")
         if answer is None:
@@ -131,7 +129,6 @@ class LoopDiagnosis:
         evidence = LoopDiagnosisJudgment(
             reason=None,
             fallback=None,
-            min_confidence=self.min_confidence,
             chosen=chosen,
             probabilities=dict(answer.probabilities),
             probability=probability,
@@ -149,20 +146,12 @@ class LoopDiagnosis:
                 fallback=DiagnosisFallback.UNAVAILABLE,
                 unavailable_reason="INVALID_RESPONSE",
             )
-        confident = (
-            probability is not None
-            and probability >= self.min_confidence
-            and (answer.confidence is None or answer.confidence >= self.min_confidence)
-        )
-        if not confident:
-            return replace(evidence, fallback=DiagnosisFallback.BELOW_THRESHOLD)
         return replace(evidence, reason=reason)
 
     def _unavailable(self, code: str) -> LoopDiagnosisJudgment:
         return LoopDiagnosisJudgment(
             reason=None,
             fallback=DiagnosisFallback.UNAVAILABLE,
-            min_confidence=self.min_confidence,
             unavailable_reason=code,
         )
 
