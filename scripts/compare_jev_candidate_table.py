@@ -53,7 +53,7 @@ def build_candidate_table(
     candidates: list[str],
 ) -> str:
     """保存済み runtime 候補を、ツールと引数の対応を保った表へ整形する。"""
-    lines = ["【現在指定できる引数】"]
+    lines = ["【現在選べる対象引数】"]
     if kind == "action_name":
         lines.append(f'- {tool}.target_label: "{target}"')
         lines.append(f'- {tool}.{argument_name} ("{target}"): {_quoted(candidates)}')

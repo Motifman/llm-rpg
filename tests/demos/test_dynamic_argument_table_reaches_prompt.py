@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import copy
 
+from tests.demos._world_runtime_helpers import create_world_runtime_session
+
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.demos._world_runtime_helpers import create_world_runtime_session
 
 
 class _CapturingClient(StubLlmClient):
@@ -36,7 +37,7 @@ def test_runtime_places_copyable_candidates_before_the_final_instruction(
     instruction = phase_a.prompt["action_instruction"]
     assert table
     assert user.endswith(instruction)
-    assert user.count("【現在指定できる引数】") == 1
+    assert user.count("【現在選べる対象引数】") == 1
     assert user.index(table) < user.index(instruction)
     assert "travel_to.destination_label" in table
     assert "interact.target_label" in table

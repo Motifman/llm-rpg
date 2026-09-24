@@ -582,10 +582,14 @@ def run_reason_first_phase_a(
             ),
         )
 
-    prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names))
     action_messages = append_reason_first_assessment(
         prompt["messages"], assessment
     )
+    prompt = dict(prompt)
+    prompt["messages"] = action_messages
+    prompt["action_instruction"] = _REASON_FIRST_ACTION_INSTRUCTION
+    prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names))
+    action_messages = prompt["messages"]
     try:
         action_tool_call = _invoke(
             action_messages,
@@ -674,10 +678,7 @@ def append_reason_first_assessment(
     expected_result = assessment.get("expected_result")
     if expected_result:
         lines.append(f"- 期待する結果: {expected_result}")
-    lines.append(
-        "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-        "inner_thought / expected_result は再生成しない。"
-    )
+    lines.append(_REASON_FIRST_ACTION_INSTRUCTION)
     suffix = "\n\n" + "\n".join(lines)
     if copied and copied[-1].get("role") == "user":
         copied[-1] = dict(copied[-1])
@@ -685,6 +686,12 @@ def append_reason_first_assessment(
         return copied
     copied.append({"role": "user", "content": suffix.lstrip()})
     return copied
+
+
+_REASON_FIRST_ACTION_INSTRUCTION = (
+    "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
+    "inner_thought / expected_result は再生成しない。"
+)
 
 def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
     if error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL":

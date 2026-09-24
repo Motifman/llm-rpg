@@ -3,9 +3,11 @@
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
+    MerchantOfferDto,
+    MerchantToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
-    ToolRuntimeTargetDto,
     ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
     WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
@@ -13,6 +15,20 @@ from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
     evaluate_dynamic_argument_choice,
     inject_dynamic_argument_candidate_table,
 )
+
+
+def _display_entries(entries: list[dict]) -> list[dict]:
+    """表示契約だけを見る試験では、実行時照合専用の補助情報を除く。"""
+    hidden = {
+        "match",
+        "accepted_values",
+        "target_accepted_values",
+        "required",
+        "required_when",
+        "alternative",
+        "allow_empty",
+    }
+    return [{key: value for key, value in entry.items() if key not in hidden} for entry in entries]
 
 
 def test_snapshot_keeps_action_names_attached_to_their_target() -> None:
@@ -36,7 +52,7 @@ def test_snapshot_keeps_action_names_attached_to_their_target() -> None:
 
     snapshot = build_dynamic_argument_candidate_snapshot(context, {"interact"})
 
-    assert snapshot["entries"] == [
+    assert _display_entries(snapshot["entries"]) == [
         {
             "tool": "interact",
             "argument": "target_label",
@@ -72,7 +88,7 @@ def test_snapshot_includes_generic_spot_graph_objects_with_interactions() -> Non
 
     snapshot = build_dynamic_argument_candidate_snapshot(context, {"interact"})
 
-    assert snapshot["entries"] == [
+    assert _display_entries(snapshot["entries"]) == [
         {
             "tool": "interact",
             "argument": "target_label",
@@ -98,7 +114,7 @@ def test_snapshot_only_contains_candidates_for_exposed_tools() -> None:
 
     snapshot = build_dynamic_argument_candidate_snapshot(context, {"travel_to"})
 
-    assert snapshot["entries"] == [
+    assert _display_entries(snapshot["entries"]) == [
         {
             "tool": "travel_to",
             "argument": "destination_label",
@@ -118,7 +134,7 @@ def test_snapshot_separates_give_item_player_and_item_candidates() -> None:
 
     snapshot = build_dynamic_argument_candidate_snapshot(context, {"give_item"})
 
-    assert snapshot["entries"] == [
+    assert _display_entries(snapshot["entries"]) == [
         {
             "tool": "give_item",
             "argument": "gives[].item_label",
@@ -130,6 +146,139 @@ def test_snapshot_separates_give_item_player_and_item_candidates() -> None:
             "values": ["ユノ"],
         },
     ]
+
+
+def test_snapshot_covers_meeting_communication_trade_and_management_targets() -> None:
+    """会議・会話・取引・ギルド・ショップ・任務の対象引数を公開ツールごとに列挙する。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": PlayerToolRuntimeTargetDto(
+                label="P1", kind="spot_graph_player", display_name="ユノ", player_id=2
+            ),
+            "SL1": ToolRuntimeTargetDto(
+                label="SL1", kind="spot_graph_sub_location", display_name="机の下"
+            ),
+            "G1": ToolRuntimeTargetDto(label="G1", kind="guild", display_name="調査隊"),
+            "SH1": ToolRuntimeTargetDto(label="SH1", kind="shop", display_name="雑貨店"),
+            "L1": ToolRuntimeTargetDto(
+                label="L1", kind="shop_listing", display_name="薬草の出品"
+            ),
+            "Q1": ToolRuntimeTargetDto(label="Q1", kind="quest", display_name="失踪者捜索"),
+        }
+    )
+    exposed = {
+        "set_sub_location",
+        "speak",
+        "vote",
+        "report_body",
+        "trade_offer",
+        "trade_accept",
+        "guild_add_member",
+        "shop_purchase",
+        "quest_accept",
+    }
+
+    snapshot = build_dynamic_argument_candidate_snapshot(context, exposed)
+    candidates = {
+        (entry["tool"], entry["argument"]): entry["values"]
+        for entry in snapshot["entries"]
+    }
+
+    assert candidates == {
+        ("set_sub_location", "sub_location_label"): ["机の下"],
+        ("speak", "target_label"): ["P1"],
+        ("vote", "target_player_label"): ["ユノ", ""],
+        ("report_body", "target_player_label"): ["ユノ"],
+        ("trade_offer", "target_player_label"): ["ユノ"],
+        ("trade_accept", "offerer_player_label"): ["ユノ"],
+        ("guild_add_member", "guild_label"): ["G1"],
+        ("guild_add_member", "target_player_label"): ["P1"],
+        ("shop_purchase", "shop_label"): ["SH1"],
+        ("shop_purchase", "listing_label"): ["L1"],
+        ("quest_accept", "quest_label"): ["Q1"],
+    }
+
+
+def test_tend_to_player_uses_the_schema_argument_name() -> None:
+    """tend_to_player は実際の schema と同じ target_player_label を表示する。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": PlayerToolRuntimeTargetDto(
+                label="P1", kind="spot_graph_player", display_name="ユノ", player_id=2
+            )
+        }
+    )
+
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"tend_to_player"})
+
+    assert snapshot["entries"][0]["argument"] == "target_player_label"
+
+
+def test_snapshot_covers_trade_items_and_merchant_offers() -> None:
+    """個人間取引の差出品と、商人売買の品・商人名も対象候補へ含める。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "I1": InventoryToolRuntimeTargetDto(
+                label="I1", kind="inventory_item", display_name="薬草"
+            ),
+            "MR1": MerchantToolRuntimeTargetDto(
+                label="MR1",
+                kind="merchant",
+                display_name="商人グスタフ",
+                sells=(MerchantOfferDto(item_name="パン", item_spec_id=1, price=3),),
+                buys=(MerchantOfferDto(item_name="薬草", item_spec_id=2, price=2),),
+            ),
+        }
+    )
+
+    snapshot = build_dynamic_argument_candidate_snapshot(
+        context, {"trade_offer", "buy_item", "sell_item"}
+    )
+    candidates = {
+        (entry["tool"], entry["argument"]): entry["values"]
+        for entry in snapshot["entries"]
+    }
+
+    assert candidates == {
+        ("trade_offer", "gives.items[].item_label"): ["薬草"],
+        ("buy_item", "item_label"): ["パン"],
+        ("buy_item", "merchant_label"): ["商人グスタフ"],
+        ("sell_item", "item_label"): ["薬草"],
+        ("sell_item", "merchant_label"): ["商人グスタフ"],
+    }
+
+
+def test_vote_keeps_abstention_when_no_player_target_exists() -> None:
+    """投票対象が0人でも、空文字による棄権は候補表から消えない。"""
+    snapshot = build_dynamic_argument_candidate_snapshot(
+        ToolRuntimeContextDto.empty(), {"vote"}
+    )
+
+    assert snapshot["entries"][0]["values"] == [""]
+    assert '- vote.target_player_label: ""' in snapshot["rendered"]
+
+
+def test_exact_label_specs_follow_the_resolver_target_kinds() -> None:
+    """会話・観察・採集中断は各resolverが受ける対象種別だけを候補にする。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": ToolRuntimeTargetDto(label="P1", kind="player", display_name="仲間"),
+            "N1": ToolRuntimeTargetDto(label="N1", kind="npc", display_name="案内人"),
+            "R1": ToolRuntimeTargetDto(label="R1", kind="resource", display_name="薬草群"),
+        }
+    )
+
+    snapshot = build_dynamic_argument_candidate_snapshot(
+        context, {"conversation_advance", "world_inspect_target", "harvest_cancel"}
+    )
+    candidates = {
+        (entry["tool"], entry["argument"]): entry["values"]
+        for entry in snapshot["entries"]
+    }
+
+    assert candidates[("conversation_advance", "target_label")] == ["N1"]
+    assert candidates[("world_inspect_target", "target_label")] == ["N1", "R1"]
+    assert candidates[("harvest_cancel", "target_label")] == ["R1"]
 
 
 def test_candidate_table_is_inserted_immediately_before_action_instruction() -> None:
@@ -157,16 +306,16 @@ def test_candidate_table_is_inserted_immediately_before_action_instruction() -> 
 
     user = result["messages"][-1]["content"]
     assert user.endswith(instruction)
-    assert user.index("【現在指定できる引数】") < user.index(instruction)
+    assert user.index("【現在選べる対象引数】") < user.index(instruction)
     assert '- travel_to.destination_label: "集会室"' in user
-    assert result["dynamic_argument_candidates"]["entries"] == [
+    assert _display_entries(result["dynamic_argument_candidates"]["entries"]) == [
         {
             "tool": "travel_to",
             "argument": "destination_label",
             "values": ["集会室"],
         }
     ]
-    assert "【現在指定できる引数】" not in prompt["messages"][-1]["content"]
+    assert "【現在選べる対象引数】" not in prompt["messages"][-1]["content"]
 
 
 def test_empty_candidate_table_keeps_prompt_bytes_unchanged() -> None:
@@ -211,6 +360,119 @@ def test_evaluation_checks_action_against_the_selected_target() -> None:
 
     assert result["status"] == "invalid"
     assert result["violations"][0]["argument"] == "action_name"
+
+
+def test_evaluation_accepts_forms_that_the_runtime_resolver_accepts() -> None:
+    """内部ラベル・引用符・表示行の丸写しを実行時と同じく有効と判定する。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "O1": WorldObjectToolRuntimeTargetDto(
+                label="O1",
+                kind="spot_graph_object",
+                display_name="東の祭壇",
+                available_interactions=("offer_wheat",),
+            )
+        }
+    )
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"interact"})
+
+    for target_label, action_name in (
+        ("O1", '"offer_wheat"'),
+        ('"東の祭壇"', '麦を捧げる → "offer_wheat"'),
+        ("O1: 東の祭壇", "offer_wheat"),
+    ):
+        result = evaluate_dynamic_argument_choice(
+            "interact",
+            {"target_label": target_label, "action_name": action_name},
+            snapshot,
+        )
+        assert result["status"] == "valid"
+        if target_label != "東の祭壇" or action_name != "offer_wheat":
+            assert result["candidate_table_status"] == "invalid"
+
+
+def test_evaluation_does_not_require_optional_or_conditional_arguments() -> None:
+    """省略可能・条件付きの対象引数を、resolver拒否として誤集計しない。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": PlayerToolRuntimeTargetDto(
+                label="P1", kind="spot_graph_player", display_name="ユノ", player_id=2
+            ),
+            "Q1": ToolRuntimeTargetDto(label="Q1", kind="quest", display_name="任務"),
+        }
+    )
+    cases = (
+        ("speak", {"channel": "say", "content": "集合しよう"}),
+        ("trade_accept", {}),
+        ("trade_decline", {}),
+        ("vote", {}),
+    )
+
+    for tool, arguments in cases:
+        snapshot = build_dynamic_argument_candidate_snapshot(context, {tool})
+        result = evaluate_dynamic_argument_choice(tool, arguments, snapshot)
+        assert result["status"] == "valid"
+
+
+def test_evaluation_checks_nested_trade_items_only_when_present() -> None:
+    """個人間取引は金だけの差出しを許し、品があれば各 item_label を照合する。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": PlayerToolRuntimeTargetDto(
+                label="P1", kind="spot_graph_player", display_name="ユノ", player_id=2
+            ),
+            "I1": InventoryToolRuntimeTargetDto(
+                label="I1", kind="inventory_item", display_name="薬草"
+            ),
+        }
+    )
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"trade_offer"})
+
+    gold_only = evaluate_dynamic_argument_choice(
+        "trade_offer",
+        {
+            "target_player_label": "ユノ",
+            "gives": {"gold": 2},
+            "asks": {"items": [{"item_label": "水", "quantity": 1}]},
+        },
+        snapshot,
+    )
+    invalid_item = evaluate_dynamic_argument_choice(
+        "trade_offer",
+        {
+            "target_player_label": "ユノ",
+            "gives": {"items": [{"item_label": "毒草", "quantity": 1}]},
+            "asks": {"gold": 1},
+        },
+        snapshot,
+    )
+
+    assert gold_only["status"] == "valid"
+    assert invalid_item["status"] == "invalid"
+    assert invalid_item["violations"][0]["argument"] == "gives.items[0].item_label"
+
+
+def test_shop_unlist_accepts_either_listing_label_or_shop_and_listing_id() -> None:
+    """出品取消は listing_label と shop_label + listing_id のどちらの経路も有効にする。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "SH1": ToolRuntimeTargetDto(label="SH1", kind="shop", display_name="雑貨店"),
+            "L1": ToolRuntimeTargetDto(
+                label="L1", kind="shop_listing", display_name="薬草の出品"
+            ),
+        }
+    )
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"shop_unlist_item"})
+
+    by_id = evaluate_dynamic_argument_choice(
+        "shop_unlist_item", {"shop_label": "SH1", "listing_id": 1}, snapshot
+    )
+    by_label = evaluate_dynamic_argument_choice(
+        "shop_unlist_item", {"listing_label": "L1"}, snapshot
+    )
+
+    assert by_id["status"] == "valid"
+    assert by_label["status"] == "valid"
 
 
 def test_evaluation_checks_every_give_entry_without_executing_current_code() -> None:
