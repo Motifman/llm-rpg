@@ -1,0 +1,33 @@
+{
+  "experiment_id": "issue_1429_candidate_table_comparison_001",
+  "description": "保存済みの同一失敗事例で、Jev の意味救済と主モデルへの動的引数候補表を比較する",
+  "source_runs_dir": "/Users/kei-minagawa/ghq/github.com/Motifman/llm-rpg/var/runs",
+  "action_cases": "var/runs/issue_1429_candidate_table_comparison_001/action_cases.json",
+  "target_cases": "var/runs/issue_1429_candidate_table_comparison_001/target_cases.json",
+  "dataset_path": "var/runs/issue_1429_candidate_table_comparison_001/dataset.json",
+  "results_path": "var/runs/issue_1429_candidate_table_comparison_001/results.json",
+  "report_path": "var/runs/issue_1429_candidate_table_comparison_001/report.json",
+  "secret_env_file": "/Users/kei-minagawa/ghq/github.com/Motifman/llm-rpg/.env",
+  "api_key_env": "OPENAI_API_KEY",
+  "trials": 1,
+  "candidate_table": {
+    "model": "openrouter/openai/gpt-4.1-mini",
+    "temperature": 0,
+    "timeout_seconds": 90,
+    "position": "immediately_before_action_instruction"
+  },
+  "jev": {
+    "model": "typesafe/jev-1.13",
+    "endpoint": "https://openrouter.ai/api/alpha/decisions",
+    "min_confidence": 0.7,
+    "timeout_seconds": 30,
+    "retry_attempts": 3
+  },
+  "fairness_notes": [
+    "同じ正解ラベルと候補集合を両方式へ使う",
+    "完全な保存済みプロンプトがある事例だけを比較母集団にする",
+    "候補表方式は保存済み主モデル request を実際に再実行する",
+    "主モデルは全事例で固定するため、元 run のモデルとは一致しない",
+    "Jev の費用は decision API 応答から取得できないため未計測として扱う"
+  ]
+}
