@@ -30,6 +30,17 @@ class TestPromptDatasetCaptureSink:
             turn_index=1,
             world_tick=1,
             phase="assess_phase",
+            dynamic_argument_candidates={
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "tool": "travel_to",
+                        "argument": "destination_label",
+                        "values": ["山道"],
+                    }
+                ],
+                "rendered": '【現在指定できる引数】\n- travel_to.destination_label: "山道"',
+            },
         )
         request_kwargs = {
             "model": "stub",
@@ -81,23 +92,18 @@ class TestPromptDatasetCaptureSink:
 
         call = _read_jsonl(tmp_path / "prompt_dataset" / "calls.jsonl")[0]
         system_prompts = {
-            row["system_prompt_id"]: row
-            for row in _read_jsonl(tmp_path / "prompt_dataset" / "system_prompts.jsonl")
+            row["system_prompt_id"]: row for row in _read_jsonl(tmp_path / "prompt_dataset" / "system_prompts.jsonl")
         }
-        toolsets = {
-            row["toolset_id"]: row
-            for row in _read_jsonl(tmp_path / "prompt_dataset" / "toolsets.jsonl")
-        }
+        toolsets = {row["toolset_id"]: row for row in _read_jsonl(tmp_path / "prompt_dataset" / "toolsets.jsonl")}
 
         restored = reconstruct_request(call, system_prompts, toolsets)
 
         assert restored["messages"] == request_kwargs["messages"]
         assert restored["tools"] == request_kwargs["tools"]
         assert call["phase"] == "assess_phase"
+        assert call["dynamic_argument_candidates"]["entries"][0]["values"] == ["山道"]
         assert "api_key" not in call["request"]["kwargs"]
-        assert call["request"]["request_hash"] == compute_request_hash(
-            call["request"]["kwargs"]
-        )
+        assert call["request"]["request_hash"] == compute_request_hash(call["request"]["kwargs"])
 
     def test_call_phase_defaults_to_one_step(self, tmp_path):
         """呼び出し区分未指定の既存経路は one_step として calls.jsonl に保存される。"""
@@ -159,7 +165,7 @@ class TestPromptDatasetCaptureSink:
                             {
                                 "function": {
                                     "name": "speak",
-                                    "arguments": "{\"content\":\"こんにちは\"}",
+                                    "arguments": '{"content":"こんにちは"}',
                                 }
                             }
                         ]
@@ -193,11 +199,7 @@ class TestPromptDatasetCaptureSink:
             run_metadata={},
         )
 
-        status = json.loads(
-            (tmp_path / "prompt_dataset" / "capture_status.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        status = json.loads((tmp_path / "prompt_dataset" / "capture_status.json").read_text(encoding="utf-8"))
 
         assert status["run_id"] == "run1"
         assert status["capture_incomplete"] is False
@@ -234,11 +236,7 @@ class TestPromptDatasetCaptureSink:
             metrics={},
         )
 
-        status = json.loads(
-            (tmp_path / "prompt_dataset" / "capture_status.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        status = json.loads((tmp_path / "prompt_dataset" / "capture_status.json").read_text(encoding="utf-8"))
 
         assert status["capture_incomplete"] is True
 

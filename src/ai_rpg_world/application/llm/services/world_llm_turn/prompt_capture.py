@@ -11,10 +11,14 @@ if TYPE_CHECKING:
 
 import hashlib
 import logging
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
+    build_dynamic_argument_candidate_snapshot,
+)
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCallContext,
     new_llm_call_id,
@@ -23,6 +27,22 @@ from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseA
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
+
+
+def _prompt_tool_names(prompt: dict[str, Any]) -> set[str]:
+    """prompt builder が返す定義形式と OpenAI payload 形式の双方から名前を読む。"""
+    names: set[str] = set()
+    for definition in prompt.get("tools", []):
+        if isinstance(definition, Mapping):
+            function = definition.get("function")
+            raw = function.get("name") if isinstance(function, Mapping) else definition.get("name")
+        else:
+            raw = getattr(definition, "name", "")
+        name = str(raw or "").strip()
+        if name:
+            names.add(name)
+    return names
+
 
 def build_prompt_capture_context(
     wiring: WorldLlmWiring,
@@ -34,6 +54,7 @@ def build_prompt_capture_context(
     attempt_index: int,
     parent_attempt_id: str | None,
     phase: str = "one_step",
+    exposed_tool_names: set[str] | None = None,
 ) -> Any | None:
     """prompt dataset 有効時に 1 LLM 呼び出しの保存文脈を作る。"""
 
@@ -44,9 +65,7 @@ def build_prompt_capture_context(
     character_name = resolve_prompt_capture_character_name(wiring, player_id)
     persona_snapshot = str(prompt.get("persona_snapshot") or "")
     persona_source = persona_snapshot or character_name
-    persona_id = "persona:sha256:" + hashlib.sha256(
-        persona_source.encode("utf-8")
-    ).hexdigest()
+    persona_id = "persona:sha256:" + hashlib.sha256(persona_source.encode("utf-8")).hexdigest()
     world_tick: int | None
     try:
         world_tick = int(wiring.runtime.current_tick())
@@ -69,6 +88,13 @@ def build_prompt_capture_context(
         provenance=getattr(sink, "_run_metadata", {}),
         reasoning_effort=reasoning_effort,
         prompt_sections=[],
+        dynamic_argument_candidates=(
+            prompt.get("dynamic_argument_candidates")
+            or build_dynamic_argument_candidate_snapshot(
+                prompt["tool_runtime_context"],
+                exposed_tool_names or _prompt_tool_names(prompt),
+            )
+        ),
     )
     return SimpleNamespace(sink=sink, context=context)
 
@@ -76,10 +102,7 @@ def build_prompt_capture_context(
 def llm_session_id(wiring: WorldLlmWiring, player_id: PlayerId) -> str:
     """同じ run・世界・player の LLM 呼び出しへ安定した会話 ID を返す。"""
 
-    raw = (
-        f"{wiring.llm_session_run_id}:w{wiring.llm_session_world_id}:"
-        f"p{player_id.value}"
-    )
+    raw = f"{wiring.llm_session_run_id}:w{wiring.llm_session_world_id}:p{player_id.value}"
     if len(raw) <= 256:
         return raw
     return "llm-rpg:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -102,15 +125,10 @@ def resolve_prompt_capture_being_id(wiring: WorldLlmWiring, player_id: PlayerId)
     resolver = getattr(wiring.runtime, "aux_being_resolver", None)
     world_id = getattr(wiring.runtime, "aux_being_default_world_id", None)
     if resolver is None or world_id is None:
-        raise RuntimeError(
-            "PROMPT_DATASET_CAPTURE_ENABLED requires aux Being resolver"
-        )
+        raise RuntimeError("PROMPT_DATASET_CAPTURE_ENABLED requires aux Being resolver")
     being_id = resolver.resolve_being_id(world_id, player_id)
     if being_id is None:
-        raise RuntimeError(
-            "PROMPT_DATASET_CAPTURE_ENABLED requires being_id for "
-            f"player_id={player_id.value}"
-        )
+        raise RuntimeError(f"PROMPT_DATASET_CAPTURE_ENABLED requires being_id for player_id={player_id.value}")
     return str(being_id.value)
 
 
@@ -152,9 +170,7 @@ def record_prompt_dataset_turn_result(
         "remediation": result.remediation,
         "was_no_op": bool(result.was_no_op),
     }
-    technical_error_detail = (result.trace_payload or {}).get(
-        "technical_error_detail"
-    )
+    technical_error_detail = (result.trace_payload or {}).get("technical_error_detail")
     if technical_error_detail is not None:
         turn_result["technical_error_detail"] = technical_error_detail
     sink.record_turn_result(

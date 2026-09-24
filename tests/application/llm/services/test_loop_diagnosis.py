@@ -150,4 +150,3 @@ class TestUnavailableJudgment:
 
         assert judgment.fallback is DiagnosisFallback.UNAVAILABLE
         assert judgment.unavailable_reason == "ANSWER_MISSING"
-

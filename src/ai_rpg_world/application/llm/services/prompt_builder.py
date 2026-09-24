@@ -773,6 +773,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         }
         result["overflow"] = overflow
         result["tool_runtime_context"] = ui_context.tool_runtime_context
+        # Phase A が、実際に API へ出す tool 集合から動的引数候補表を作り、
+        # この指示の直前へ安全に差し込むための境界を明示する。
+        result["action_instruction"] = instruction
         result["current_state_snapshot"] = current_state_text
         result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block

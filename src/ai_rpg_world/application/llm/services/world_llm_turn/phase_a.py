@@ -15,6 +15,9 @@ import uuid
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
+    inject_dynamic_argument_candidate_table,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     filter_definitions_for_escape_llm,
 )
@@ -225,6 +228,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         return run_reason_first_phase_a(
             wiring, player_id, prompt, gate_reason=reason_first_gate.reason
         )
+    prompt = inject_dynamic_argument_candidate_table(prompt, set(tool_names))
     # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
     # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
     # 全部失敗していた問題を入口で塞ぐ。
@@ -264,6 +268,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase="one_step",
+            exposed_tool_names=set(tool_names),
         )
         if prompt_capture_context is not None:
             last_llm_call_id = prompt_capture_context.context.llm_call_id
@@ -462,6 +467,11 @@ def run_reason_first_phase_a(
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase=phase,
+            exposed_tool_names={
+                str(tool.get("function", {}).get("name"))
+                for tool in tools_payload
+                if tool.get("function", {}).get("name")
+            },
         )
         if prompt_capture_context is not None:
             last_llm_call_id = prompt_capture_context.context.llm_call_id
@@ -575,6 +585,11 @@ def run_reason_first_phase_a(
     action_messages = append_reason_first_assessment(
         prompt["messages"], assessment
     )
+    prompt = dict(prompt)
+    prompt["messages"] = action_messages
+    prompt["action_instruction"] = _REASON_FIRST_ACTION_INSTRUCTION
+    prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names))
+    action_messages = prompt["messages"]
     try:
         action_tool_call = _invoke(
             action_messages,
@@ -663,10 +678,7 @@ def append_reason_first_assessment(
     expected_result = assessment.get("expected_result")
     if expected_result:
         lines.append(f"- 期待する結果: {expected_result}")
-    lines.append(
-        "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-        "inner_thought / expected_result は再生成しない。"
-    )
+    lines.append(_REASON_FIRST_ACTION_INSTRUCTION)
     suffix = "\n\n" + "\n".join(lines)
     if copied and copied[-1].get("role") == "user":
         copied[-1] = dict(copied[-1])
@@ -674,6 +686,12 @@ def append_reason_first_assessment(
         return copied
     copied.append({"role": "user", "content": suffix.lstrip()})
     return copied
+
+
+_REASON_FIRST_ACTION_INSTRUCTION = (
+    "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
+    "inner_thought / expected_result は再生成しない。"
+)
 
 def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
     if error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL":

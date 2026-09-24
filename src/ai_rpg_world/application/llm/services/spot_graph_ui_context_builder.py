@@ -1043,16 +1043,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 if with_actions
                 else ()
             )
-            available_action_labels = [
-                _format_action_name_with_condition_hints(interaction)
-                for interaction in player_actions
-                if not tuple(getattr(interaction, "blocking_hints", ()) or ())
-            ]
-            blocked_action_labels = [
-                _format_blocked_action_name_with_hints(interaction)
-                for interaction in player_actions
-                if tuple(getattr(interaction, "blocking_hints", ()) or ())
-            ]
+            (
+                action_names,
+                label_pairs,
+                available_action_labels,
+                blocked_action_labels,
+            ) = _split_interactions_for_display_and_resolution(player_actions)
             action_suffix = (
                 f" [{', '.join(available_action_labels)}]"
                 if available_action_labels
@@ -1074,6 +1070,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     kind="spot_graph_player",
                     display_name=disambiguated_name,
                     player_id=entry.entity_id,
+                    available_interactions=tuple(action_names),
+                    interaction_labels=tuple(label_pairs),
                 ),
             )
 

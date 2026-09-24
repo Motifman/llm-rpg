@@ -262,11 +262,13 @@ class _ContractRuntime:
     def build_full_prompt(
         self, player_id: PlayerId, *, action_instruction: str | None = None
     ) -> dict:
+        instruction = action_instruction or "user"
         return {
             "messages": [
                 {"role": "system", "content": "system"},
-                {"role": "user", "content": action_instruction or "user"},
+                {"role": "user", "content": instruction},
             ],
+            "action_instruction": instruction,
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
 
@@ -971,7 +973,9 @@ def test_auto_uses_payload_names_and_retries_one_no_tool_call(
     assert [call["tool_choice"] for call in client.calls] == ["auto", "auto"]
     first_names = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
     first_user = client.calls[0]["messages"][-1]["content"]
-    assert first_user.startswith("tools=" + ",".join(first_names))
+    assert first_user.endswith(
+        "tools=" + ",".join(first_names) + "\n必ずツールを呼ぶ"
+    )
     assert "必ずツールを呼ぶ" in first_user
     assert client.calls[1]["messages"][-1]["content"].endswith(
         "文章での回答は受け取れません。いま呼べるツールを必ず 1 つ呼び出してください。"
@@ -996,7 +1000,7 @@ def test_required_no_tool_call_keeps_the_existing_single_attempt(
     assert result.error_code == "NO_TOOL_CALL"
     assert len(client.calls) == 1
     assert client.calls[0]["tool_choice"] == "required"
-    assert client.calls[0]["messages"][-1]["content"] == "user"
+    assert client.calls[0]["messages"][-1]["content"].endswith("user")
 
 
 def test_reason_first_feature_flag_on_without_existing_trigger_keeps_one_step(
@@ -1503,6 +1507,21 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
         "assess_phase",
         "action_phase",
     ]
+    assess_user = client.calls[0]["messages"][-1]["content"]
+    action_user = client.calls[1]["messages"][-1]["content"]
+    assert "【現在選べる対象引数】" not in assess_user
+    assert "【現在選べる対象引数】" in action_user
+    final_instruction = (
+        "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
+        "inner_thought / expected_result は再生成しない。"
+    )
+    assert action_user.endswith(final_instruction)
+    assert action_user.index("【行動前の状況評価】") < action_user.index(
+        "【現在選べる対象引数】"
+    )
+    assert action_user.index("【現在選べる対象引数】") < action_user.index(
+        final_instruction
+    )
 
 
 @pytest.mark.parametrize("expected_result_policy", ["off", "optional"])
