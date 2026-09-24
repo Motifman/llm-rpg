@@ -88,9 +88,12 @@ def build_prompt_capture_context(
         provenance=getattr(sink, "_run_metadata", {}),
         reasoning_effort=reasoning_effort,
         prompt_sections=[],
-        dynamic_argument_candidates=build_dynamic_argument_candidate_snapshot(
-            prompt["tool_runtime_context"],
-            exposed_tool_names or _prompt_tool_names(prompt),
+        dynamic_argument_candidates=(
+            prompt.get("dynamic_argument_candidates")
+            or build_dynamic_argument_candidate_snapshot(
+                prompt["tool_runtime_context"],
+                exposed_tool_names or _prompt_tool_names(prompt),
+            )
         ),
     )
     return SimpleNamespace(sink=sink, context=context)

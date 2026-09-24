@@ -11,6 +11,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
     build_dynamic_argument_candidate_snapshot,
     evaluate_dynamic_argument_choice,
+    inject_dynamic_argument_candidate_table,
 )
 
 
@@ -129,6 +130,57 @@ def test_snapshot_separates_give_item_player_and_item_candidates() -> None:
             "values": ["ユノ"],
         },
     ]
+
+
+def test_candidate_table_is_inserted_immediately_before_action_instruction() -> None:
+    """候補表は状態本文やツール定義へ混ぜず、末尾の行動指示の直前へ置く。"""
+    instruction = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
+    context = ToolRuntimeContextDto(
+        targets={
+            "D1": DestinationToolRuntimeTargetDto(
+                label="D1",
+                kind="spot_graph_destination",
+                display_name="集会室",
+            ),
+        }
+    )
+    prompt = {
+        "messages": [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": f"【現在地と周囲】\n通信室\n\n{instruction}"},
+        ],
+        "action_instruction": instruction,
+        "tool_runtime_context": context,
+    }
+
+    result = inject_dynamic_argument_candidate_table(prompt, {"travel_to"})
+
+    user = result["messages"][-1]["content"]
+    assert user.endswith(instruction)
+    assert user.index("【現在指定できる引数】") < user.index(instruction)
+    assert '- travel_to.destination_label: "集会室"' in user
+    assert result["dynamic_argument_candidates"]["entries"] == [
+        {
+            "tool": "travel_to",
+            "argument": "destination_label",
+            "values": ["集会室"],
+        }
+    ]
+    assert "【現在指定できる引数】" not in prompt["messages"][-1]["content"]
+
+
+def test_empty_candidate_table_keeps_prompt_bytes_unchanged() -> None:
+    """動的候補がない局面では空の見出しを足さず、元の本文を完全一致で保つ。"""
+    prompt = {
+        "messages": [{"role": "user", "content": "次の行動を選ぶ。"}],
+        "action_instruction": "次の行動を選ぶ。",
+        "tool_runtime_context": ToolRuntimeContextDto.empty(),
+    }
+
+    result = inject_dynamic_argument_candidate_table(prompt, {"wait"})
+
+    assert result["messages"] == prompt["messages"]
+    assert result["dynamic_argument_candidates"]["rendered"] == ""
 
 
 def test_evaluation_checks_action_against_the_selected_target() -> None:

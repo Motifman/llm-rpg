@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -126,6 +127,42 @@ def render_dynamic_argument_candidate_table(
     return "\n".join(lines)
 
 
+def inject_dynamic_argument_candidate_table(
+    prompt: Mapping[str, Any],
+    exposed_tools: set[str],
+) -> dict[str, Any]:
+    """実送信するユーザープロンプトの行動指示直前へ動的候補表を置く。
+
+    ``prompt`` 自体は変更しない。候補が空なら本文を byte 単位で保ちつつ、
+    保存・評価用の snapshot だけを返り値へ載せる。
+    """
+    result = copy.deepcopy(dict(prompt))
+    runtime_context = result.get("tool_runtime_context")
+    if not isinstance(runtime_context, ToolRuntimeContextDto):
+        raise TypeError("prompt.tool_runtime_context must be ToolRuntimeContextDto")
+    snapshot = build_dynamic_argument_candidate_snapshot(runtime_context, exposed_tools)
+    result["dynamic_argument_candidates"] = snapshot
+    table = str(snapshot.get("rendered") or "")
+    if not table:
+        return result
+
+    instruction = str(result.get("action_instruction") or "")
+    if not instruction:
+        raise ValueError("candidate table injection requires prompt.action_instruction")
+    messages = result.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise ValueError("candidate table injection requires prompt.messages")
+    user_message = messages[-1]
+    if not isinstance(user_message, dict) or user_message.get("role") != "user":
+        raise ValueError("candidate table injection requires the last message to be user")
+    content = str(user_message.get("content") or "")
+    if not content.endswith(instruction):
+        raise ValueError("candidate table injection requires action instruction at prompt tail")
+    body = content[: -len(instruction)].rstrip()
+    user_message["content"] = f"{body}\n\n{table}\n\n{instruction}"
+    return result
+
+
 def evaluate_dynamic_argument_choice(
     tool_name: str,
     arguments: Mapping[str, Any],
@@ -220,5 +257,6 @@ def evaluate_dynamic_argument_choice(
 __all__ = [
     "build_dynamic_argument_candidate_snapshot",
     "evaluate_dynamic_argument_choice",
+    "inject_dynamic_argument_candidate_table",
     "render_dynamic_argument_candidate_table",
 ]

@@ -15,6 +15,9 @@ import uuid
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
+    inject_dynamic_argument_candidate_table,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     filter_definitions_for_escape_llm,
 )
@@ -225,6 +228,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         return run_reason_first_phase_a(
             wiring, player_id, prompt, gate_reason=reason_first_gate.reason
         )
+    prompt = inject_dynamic_argument_candidate_table(prompt, set(tool_names))
     # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
     # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
     # 全部失敗していた問題を入口で塞ぐ。
@@ -578,6 +582,7 @@ def run_reason_first_phase_a(
             ),
         )
 
+    prompt = inject_dynamic_argument_candidate_table(prompt, set(action_tool_names))
     action_messages = append_reason_first_assessment(
         prompt["messages"], assessment
     )

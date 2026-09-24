@@ -262,11 +262,13 @@ class _ContractRuntime:
     def build_full_prompt(
         self, player_id: PlayerId, *, action_instruction: str | None = None
     ) -> dict:
+        instruction = action_instruction or "user"
         return {
             "messages": [
                 {"role": "system", "content": "system"},
-                {"role": "user", "content": action_instruction or "user"},
+                {"role": "user", "content": instruction},
             ],
+            "action_instruction": instruction,
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
 
@@ -1503,6 +1505,13 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
         "assess_phase",
         "action_phase",
     ]
+    assess_user = client.calls[0]["messages"][-1]["content"]
+    action_user = client.calls[1]["messages"][-1]["content"]
+    assert "【現在指定できる引数】" not in assess_user
+    assert "【現在指定できる引数】" in action_user
+    assert action_user.index("【現在指定できる引数】") < action_user.index(
+        "利用可能なツールから"
+    )
 
 
 @pytest.mark.parametrize("expected_result_policy", ["off", "optional"])

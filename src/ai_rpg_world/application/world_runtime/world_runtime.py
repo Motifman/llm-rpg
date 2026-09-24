@@ -2878,6 +2878,7 @@ class WorldRuntime:
                 d.name for d in self.get_tool_definitions(player_id=player_id)
             ],
             "tool_runtime_context": ctx.tool_runtime_context,
+            "action_instruction": result["action_instruction"],
             # U1: このターンに発行された prediction_context_id をそのまま
             # 露出する (実際の consume は _record_action_result → ledger 経由
             # で player_id をキーに行われるため、呼び出し側がこの値を渡す
