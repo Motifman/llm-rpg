@@ -264,6 +264,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase="one_step",
+            exposed_tool_names=set(tool_names),
         )
         if prompt_capture_context is not None:
             last_llm_call_id = prompt_capture_context.context.llm_call_id
@@ -462,6 +463,11 @@ def run_reason_first_phase_a(
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase=phase,
+            exposed_tool_names={
+                str(tool.get("function", {}).get("name"))
+                for tool in tools_payload
+                if tool.get("function", {}).get("name")
+            },
         )
         if prompt_capture_context is not None:
             last_llm_call_id = prompt_capture_context.context.llm_call_id

@@ -1,0 +1,51 @@
+{
+  "experiment_id": "issue_1429_candidate_table_ab",
+  "status": "prepared_not_run",
+  "question": "本番と同じ動的引数候補表は、DeepSeek V4 Flash と Gemma 4 31B の入力形式ミスを減らすか",
+  "models": [
+    {
+      "model": "openrouter/deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "reasoning_effort": "minimal",
+      "pricing_usd_per_token": {
+        "prompt": 0.00000009,
+        "completion": 0.00000018,
+        "input_cache_read": 0.000000018
+      },
+      "pricing_source": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4-flash/endpoints"
+    },
+    {
+      "model": "openrouter/google/gemma-4-31b-it",
+      "provider": "Venice",
+      "reasoning_effort": "none",
+      "pricing_usd_per_token": {
+        "prompt": 0.00000012,
+        "completion": 0.00000036,
+        "input_cache_read": 0.00000009
+      },
+      "pricing_source": "https://openrouter.ai/api/v1/models/google/gemma-4-31b-it/endpoints"
+    }
+  ],
+  "pricing_observed_at": "2026-09-24T17:30:00+09:00",
+  "conditions": [
+    "baseline_without_candidate_table",
+    "candidate_table_immediately_before_action_instruction"
+  ],
+  "candidate_table_includes_no_match": false,
+  "initial_trials_per_condition": 1,
+  "confirmatory_trials_per_condition": 3,
+  "dataset": {
+    "failure_cases_per_model": 60,
+    "matched_valid_cases_per_model": 60,
+    "required_capture_field": "calls.jsonl.dynamic_argument_candidates",
+    "exclude_when_runtime_candidates_are_missing": true,
+    "preserve_raw_prompt_dataset": true
+  },
+  "cost_gate": {
+    "run_model_calls_before_estimate": false,
+    "estimate_after_dataset_manifest_is_fixed": true,
+    "include_baseline_collection_cost": true,
+    "include_replay_baseline_and_candidate_table": true,
+    "include_one_and_three_trial_estimates": true
+  }
+}

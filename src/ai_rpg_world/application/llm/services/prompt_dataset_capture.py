@@ -48,6 +48,7 @@ class PromptDatasetCallContext:
     provenance: dict[str, Any] | None = None
     reasoning_effort: str | None = None
     prompt_sections: list[dict[str, Any]] | None = None
+    dynamic_argument_candidates: dict[str, Any] | None = None
 
 
 def new_llm_call_id() -> str:
@@ -126,9 +127,7 @@ class PromptDatasetCaptureSink:
         failure_policy: str = "fail",
     ) -> None:
         if failure_policy not in {"fail", "warn"}:
-            raise ValueError(
-                "PROMPT_DATASET_CAPTURE_FAILURE_POLICY must be 'fail' or 'warn'"
-            )
+            raise ValueError("PROMPT_DATASET_CAPTURE_FAILURE_POLICY must be 'fail' or 'warn'")
         self.run_dir = Path(run_dir)
         self.dataset_dir = self.run_dir / "prompt_dataset"
         self.run_id = run_id
@@ -142,9 +141,7 @@ class PromptDatasetCaptureSink:
 
     def _initialize(self) -> None:
         self.dataset_dir.mkdir(parents=True, exist_ok=True)
-        (self.dataset_dir / "schema_version.txt").write_text(
-            f"{SCHEMA_VERSION}\n", encoding="utf-8"
-        )
+        (self.dataset_dir / "schema_version.txt").write_text(f"{SCHEMA_VERSION}\n", encoding="utf-8")
         run_payload = {
             "schema_version": SCHEMA_VERSION,
             "run_id": self.run_id,
@@ -251,14 +248,13 @@ class PromptDatasetCaptureSink:
             "output": _to_jsonable(output or {}),
             "metrics": _to_jsonable(metrics or {}),
             "trace_refs": {},
+            "dynamic_argument_candidates": _to_jsonable(context.dynamic_argument_candidates or {}),
         }
         with self._lock:
             for system_prompt in prepared["system_prompts"]:
                 prompt_id = system_prompt["system_prompt_id"]
                 if prompt_id not in self._system_prompt_ids_seen:
-                    self._append_jsonl(
-                        self.dataset_dir / "system_prompts.jsonl", system_prompt
-                    )
+                    self._append_jsonl(self.dataset_dir / "system_prompts.jsonl", system_prompt)
                     self._system_prompt_ids_seen.add(prompt_id)
             toolset = prepared["toolset"]
             toolset_id = toolset["toolset_id"]
@@ -298,9 +294,7 @@ class PromptDatasetCaptureSink:
                     {
                         "schema_version": SCHEMA_VERSION,
                         "system_prompt_id": prompt_id,
-                        "system_prompt_sha256": prompt_id.removeprefix(
-                            "system_prompt:sha256:"
-                        ),
+                        "system_prompt_sha256": prompt_id.removeprefix("system_prompt:sha256:"),
                         "persona_id": context.persona_id,
                         "character_name": context.character_name,
                         "player_id": context.player_id,
@@ -335,21 +329,13 @@ class PromptDatasetCaptureSink:
         request_hash = compute_request_hash(kwargs)
         client_kind = "stub" if kwargs.get("model") == "stub" else "litellm"
         request = {
-            "capture_boundary": (
-                "stub.invoke" if client_kind == "stub" else "litellm.completion_kwargs"
-            ),
+            "capture_boundary": ("stub.invoke" if client_kind == "stub" else "litellm.completion_kwargs"),
             "request_hash": request_hash,
             "kwargs": _to_jsonable(kwargs),
-            "omitted_secret_keys": ["api_key"]
-            if "api_key" in request_kwargs
-            else [],
-            "unset_parameters": [
-                key for key in _SAMPLING_PARAMETER_KEYS if key not in request_kwargs
-            ],
+            "omitted_secret_keys": ["api_key"] if "api_key" in request_kwargs else [],
+            "unset_parameters": [key for key in _SAMPLING_PARAMETER_KEYS if key not in request_kwargs],
             "rehydration": {
-                "system_prompt_id": (
-                    system_prompts[0]["system_prompt_id"] if system_prompts else None
-                ),
+                "system_prompt_id": (system_prompts[0]["system_prompt_id"] if system_prompts else None),
                 "toolset_id": toolset_id,
             },
         }
@@ -367,12 +353,8 @@ class PromptDatasetCaptureSink:
         }
         prompt = {
             "messages": prompt_messages,
-            "system_prompt_id": (
-                system_prompts[0]["system_prompt_id"] if system_prompts else None
-            ),
-            "system_prompt_sha256": (
-                system_prompts[0]["system_prompt_sha256"] if system_prompts else None
-            ),
+            "system_prompt_id": (system_prompts[0]["system_prompt_id"] if system_prompts else None),
+            "system_prompt_sha256": (system_prompts[0]["system_prompt_sha256"] if system_prompts else None),
             "user_prompt_sha256": _hash_user_messages(prompt_messages),
             "toolset_id": toolset_id,
             "sections": _to_jsonable(context.prompt_sections or []),
@@ -396,8 +378,7 @@ class PromptDatasetCaptureSink:
             if self.failure_policy == "fail":
                 raise
             _logger.warning(
-                "prompt dataset capture failed; continuing because "
-                "PROMPT_DATASET_CAPTURE_FAILURE_POLICY=warn",
+                "prompt dataset capture failed; continuing because PROMPT_DATASET_CAPTURE_FAILURE_POLICY=warn",
                 exc_info=True,
             )
 
