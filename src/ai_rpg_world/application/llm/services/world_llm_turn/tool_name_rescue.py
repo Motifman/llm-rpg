@@ -8,10 +8,15 @@
 ## 選び方は 2 段
 
 1. 型付き判断が使えるなら、そのターンに送った tool のどれを意図したかを意味で問う
-2. 判断が無い・「該当なし」・確信が閾値未満なら、文字の類似度で近い名前を選ぶ
+2. 判断が無い・「該当なし」なら、文字の類似度で近い名前を選ぶ
 
 過去 89 run の 24 件は typo より発明された名前 (``say`` / ``gather``) に寄って
 いて、先頭の単語が共通しないので 2 だけでは候補が出ない。
+
+## 閾値は置かない
+
+誤っても実行はせず、提案が外れるだけ。確率が低くても、「該当なし」以外を選べば
+その tool を提案する (design_decisions #234)。
 """
 
 from __future__ import annotations
@@ -46,12 +51,6 @@ NO_MATCH_OPTION = "__no_match__"
 
 #: trace と呼び出し側の分岐に使う質問名。
 QUESTION_NAME = "tool_name_rescue"
-
-#: 閾値の既定。profile に無いときに使う。
-#:
-#: 過去 run の 24 件では、採った正答の最低が 0.76、採らなかった誤答が 0.64 だった
-#: (#1413)。誤っても実行はせず提案が外れるだけなので、行動名より高くはしない。
-DEFAULT_MIN_CONFIDENCE: float = 0.7
 
 #: state では引数から外し、別の欄に置く。意図を示す材料として名前を付けて渡す。
 _INTENT_FIELDS: tuple[str, ...] = ("inner_thought", "expected_result")
@@ -196,17 +195,15 @@ class ToolNameJudgment:
         chosen: 判断が選んだ tool。「該当なし」や判断が無いときは None
         probabilities: 選択肢ごとの確率
         confidence: モデルが返した confidence
-        min_confidence: 採用の閾値
         accepted: 判断の選んだ tool を提案にしたか
         fallback_reason: 類似度の提案に戻した理由。``no_match`` /
-            ``below_threshold`` / ``unavailable``。採ったときは None
+            ``unavailable``。採ったときは None
         unavailable_reason: 判断を得られなかったときのエラーコード
     """
 
     chosen: str | None
     probabilities: Mapping[str, float]
     confidence: float | None
-    min_confidence: float
     accepted: bool
     fallback_reason: str | None
     latency_ms: float | None = None
@@ -245,7 +242,6 @@ class ToolNameSuggestion:
             "chosen": j.chosen,
             "probabilities": dict(j.probabilities),
             "confidence": j.confidence,
-            "min_confidence": j.min_confidence,
             "accepted": j.accepted,
             "suggested": self.tool,
             "suggestion_source": self.source,
@@ -259,17 +255,11 @@ class ToolNameSuggestion:
 class ToolNameRescue:
     """存在しない tool 名から、送った tool のどれを意図したかを意味で選ぶ。"""
 
-    def __init__(self, *, port: ITypedJudgmentPort, min_confidence: float) -> None:
-        if not isinstance(min_confidence, (int, float)):
-            raise TypeError("min_confidence must be a number")
-        if not 0.0 < float(min_confidence) <= 1.0:
-            raise ValueError("min_confidence must be in (0, 1]")
+    def __init__(self, *, port: ITypedJudgmentPort) -> None:
         self._resolver = SemanticResolver(
             backend=_ToolNameBackend(port),
-            policy=_ToolNamePolicy(float(min_confidence)),
+            policy=_AcceptAnyChoice(),
         )
-        #: 公開するのは、閾値が profile から届いたかを外から確かめるため。
-        self.min_confidence = float(min_confidence)
 
     def suggest(
         self,
@@ -315,7 +305,6 @@ class ToolNameRescue:
             chosen=result.judgment.value,
             probabilities=dict(answer.probabilities),
             confidence=answer.confidence,
-            min_confidence=self.min_confidence,
             accepted=accepted,
             fallback_reason=None if isinstance(result, Resolved) else result.reason,
             latency_ms=answer.latency_ms,
@@ -346,7 +335,6 @@ class ToolNameRescue:
                 chosen=None,
                 probabilities={},
                 confidence=None,
-                min_confidence=self.min_confidence,
                 accepted=False,
                 fallback_reason="unavailable",
                 unavailable_reason=reason,
@@ -406,24 +394,11 @@ class _ToolNameBackend:
         )
 
 
-class _ToolNamePolicy:
-    """行動名の救済と同じ採用基準。確率と、省略されていない confidence の両方を見る。"""
-
-    def __init__(self, minimum: float) -> None:
-        self._minimum = minimum
+class _AcceptAnyChoice:
+    """「該当なし」は resolver が先に落とすので、ここに届いた選択はすべて採る。"""
 
     def assess(self, judgment: Judgment[JudgmentResult]) -> Assessment:
-        answer = judgment.evidence
-        probability = answer.probabilities.get(str(answer.value))
-        accepted = (
-            probability is not None
-            and probability >= self._minimum
-            and (answer.confidence is None or answer.confidence >= self._minimum)
-        )
-        return Assessment(
-            reason="accepted" if accepted else "below_threshold",
-            thresholds={"min_probability": self._minimum, "min_confidence": self._minimum},
-        )
+        return Assessment(reason="accepted", thresholds={})
 
 
 def _state(

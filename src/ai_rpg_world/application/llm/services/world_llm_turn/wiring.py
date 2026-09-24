@@ -66,9 +66,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     wire_missing_spot_graph_tools,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
-    DEFAULT_MIN_CONFIDENCE as DEFAULT_TOOL_NAME_MIN_CONFIDENCE,
-)
-from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     ToolNameRescue,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
@@ -238,16 +235,7 @@ class WorldLlmWiring:
         else:
             self.memo_completion_hint_service = None
         if self.typed_judgment_port is not None:
-            self.tool_name_rescue = ToolNameRescue(
-                port=self.typed_judgment_port,
-                min_confidence=float(
-                    getattr(
-                        runtime_config,
-                        "typed_judgment_tool_name_min_confidence",
-                        DEFAULT_TOOL_NAME_MIN_CONFIDENCE,
-                    )
-                ),
-            )
+            self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
         # Issue #264 後続 B1: speech_say の audience resolver。
         # runtime の spot_graph_repo / player_status_repo / SoundPropagationService を
         # 集めて事前 audience 問い合わせを可能にする。これにより speech 結果
@@ -380,7 +368,7 @@ class WorldLlmWiring:
         return coerce_arguments(raw_arguments)
 
     def _build_loop_diagnosis(self) -> LoopDiagnosis | None:
-        """profile が見立てを求め、判断ポートがあるときだけ組む (#1411)。"""
+        """profile が繰り返しの理由の判定を求め、判断ポートがあるときだけ組む (#1411)。"""
         config = getattr(self.runtime, "_runtime_config", None)
         if (
             self.typed_judgment_port is None
@@ -388,10 +376,7 @@ class WorldLlmWiring:
             or not config.typed_judgment_loop_diagnosis_enabled
         ):
             return None
-        return LoopDiagnosis(
-            port=self.typed_judgment_port,
-            min_confidence=float(config.typed_judgment_loop_diagnosis_min_confidence),
-        )
+        return LoopDiagnosis(port=self.typed_judgment_port)
 
     def _build_semantic_repeat_detector(self) -> SemanticRepeatDetector | None:
         """profile が意味上の繰り返しの検出を求め、判断ポートがあるときだけ組む (#1412)。"""

@@ -573,7 +573,6 @@ class LoopWarningEmitter:
                 probabilities=dict(judgment.probabilities),
                 probability=judgment.probability,
                 confidence=judgment.confidence,
-                min_confidence=judgment.min_confidence,
                 accepted=judgment.reason is not None,
                 reason=judgment.reason.value if judgment.reason else None,
                 fallback_reason=judgment.fallback.value if judgment.fallback else None,
