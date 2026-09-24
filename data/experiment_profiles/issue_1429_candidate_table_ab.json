@@ -43,9 +43,14 @@
   },
   "cost_gate": {
     "run_model_calls_before_estimate": false,
-    "estimate_after_dataset_manifest_is_fixed": true,
+    "estimate_before_baseline_collection": true,
+    "historical_reference_runs": [
+      "station_drill_deepseek0731_deepinfra_001",
+      "station_drill_gemma31_jev_001"
+    ],
     "include_baseline_collection_cost": true,
-    "include_replay_baseline_and_candidate_table": true,
+    "replay_baseline": false,
+    "include_candidate_table_replay": true,
     "include_one_and_three_trial_estimates": true
   }
 }
