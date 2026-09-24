@@ -116,7 +116,7 @@ def _guard(
         clock=lambda: datetime(2026, 1, 1),
         trace_recorder=recorder,
         current_tick_provider=lambda: 53,
-        loop_diagnosis=LoopDiagnosis(port=port, min_confidence=0.7) if diagnose else None,
+        loop_diagnosis=LoopDiagnosis(port=port) if diagnose else None,
         location_provider=lambda pid: "祭りの広場",
         semantic_repeat_detector=SemanticRepeatDetector(
             port,

@@ -117,7 +117,7 @@ def _prompt_locations(run_dir: Path, pid: int) -> dict[int, str]:
     return locations
 
 
-def replay(scene: Scene, runs_dir: Path, port: ITypedJudgmentPort, min_confidence: float) -> dict[str, Any]:
+def replay(scene: Scene, runs_dir: Path, port: ITypedJudgmentPort) -> dict[str, Any]:
     events = _load(runs_dir / scene.run)
     locations = _prompt_locations(runs_dir / scene.run, scene.player_id)
     pid = PlayerId.create(scene.player_id)
@@ -131,7 +131,7 @@ def replay(scene: Scene, runs_dir: Path, port: ITypedJudgmentPort, min_confidenc
         clock=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
         trace_recorder=recorder,
         current_tick_provider=lambda: tick[0],
-        loop_diagnosis=LoopDiagnosis(port=port, min_confidence=min_confidence),
+        loop_diagnosis=LoopDiagnosis(port=port),
         location_provider=lambda _pid: location[0],
     )
     pending_action: dict[str, Any] | None = None
@@ -189,11 +189,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs-dir", required=True)
     parser.add_argument("--out", default="var/jev_loop_diagnosis/results.json")
-    parser.add_argument("--min-confidence", type=float, default=0.7)
     parser.add_argument("--port", choices=("jev", "stub"), default="jev")
     args = parser.parse_args(argv)
     port = _port(args.port)
-    results = [replay(s, Path(args.runs_dir), port, args.min_confidence) for s in SCENES]
+    results = [replay(s, Path(args.runs_dir), port) for s in SCENES]
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(results, ensure_ascii=False, indent=1))
     for r in results:

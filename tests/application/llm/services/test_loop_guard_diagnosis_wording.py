@@ -115,7 +115,7 @@ def _guard(
         trace_recorder=recorder,
         current_tick_provider=tick if tick is not None else _Tick(),
         loop_diagnosis=(
-            LoopDiagnosis(port=port, min_confidence=0.7) if port is not None else None
+            LoopDiagnosis(port=port) if port is not None else None
         ),
         location_provider=lambda pid: location,
     )
@@ -158,6 +158,17 @@ class TestWordingFollowsTheDiagnosedReason:
         [prose] = _warnings(buffer)
         assert "いまの居場所は「薬草の土手」" in prose
         assert not any(d in prose for d in _DIRECTIVES)
+
+    def test_a_low_probability_reason_still_selects_its_wording(self) -> None:
+        """確率 0.53・確信 0.3 で「状態の取り違え」を選んでも、観測は現在地「薬草の土手」を伝える。"""
+        buffer = DefaultObservationContextBuffer()
+        port = _FixedPort(RepeatReason.STATE_MISTAKEN.value, probability=0.53, confidence=0.3)
+        guard = _guard(port, buffer=buffer)
+
+        _travel_twice(guard)
+
+        [prose] = _warnings(buffer)
+        assert "いまの居場所は「薬草の土手」" in prose
 
     def test_waiting_still_emits_the_warning(self) -> None:
         """「待機」と見立てても、警告の観測は 1 件出る。"""
@@ -204,15 +215,14 @@ class TestFallingBackToTheCurrentWording:
         "port",
         [
             _FixedPort(NONE_APPLICABLE_OPTION),
-            _FixedPort(RepeatReason.WAITING.value, probability=0.5),
             _RaisingPort(),
         ],
-        ids=["none_applicable", "below_threshold", "unavailable"],
+        ids=["none_applicable", "unavailable"],
     )
     def test_fallback_uses_the_same_prose_as_without_diagnosis(
         self, port: ITypedJudgmentPort
     ) -> None:
-        """該当なし・閾値未満・例外のどれでも、観測の文面は見立てなしのときと一致する。"""
+        """該当なしでも例外でも、観測の文面は理由を問わないときと一致する。"""
         buffer = DefaultObservationContextBuffer()
 
         _travel_twice(_guard(port, buffer=buffer))
@@ -285,8 +295,8 @@ class TestBothDetectorsAskForTheDiagnosis:
 class TestTheTraceKeepsWhatTheJudgmentSaw:
     """TYPED_JUDGMENT に、見立てが見た state と採否が残ることを保証する。"""
 
-    def test_trace_carries_probabilities_threshold_adoption_and_state(self) -> None:
-        """採った見立ての trace は、確率・閾値・採否・渡した state を持ち、警告の trace に文面の区分が載る。"""
+    def test_trace_carries_probabilities_adoption_and_state_without_a_threshold(self) -> None:
+        """理由を採った trace は、確率・確信・採否・渡した state を持ち、閾値は持たない。警告の trace に文面の区分が載る。"""
         recorder = _Recorder()
         port = _FixedPort(RepeatReason.STATE_MISTAKEN.value, probability=0.8)
 
@@ -295,7 +305,9 @@ class TestTheTraceKeepsWhatTheJudgmentSaw:
         [event] = recorder.of(TraceEventKind.TYPED_JUDGMENT)
         assert event["pattern"] == "streak"
         assert event["probabilities"] == {"state_mistaken": 0.8}
-        assert event["min_confidence"] == 0.7
+        assert event["probability"] == 0.8
+        assert event["confidence"] == 0.9
+        assert "min_confidence" not in event
         assert event["accepted"] is True
         assert event["reason"] == "state_mistaken"
         assert event["fallback_reason"] is None
@@ -448,12 +460,10 @@ class TestTheWarningTraceTellsWhichWordingWasUsed:
     """警告の trace が、見立ての文面か今の文面かを区別できることを保証する。"""
 
     def test_a_fallback_is_traced_as_the_default_wording(self) -> None:
-        """見立てが閾値未満で今の文面に戻ったとき、LOOP_GUARD_WARNING の wording は default。"""
+        """「該当なし」で今の文面に戻ったとき、LOOP_GUARD_WARNING の wording は default。"""
         recorder = _Recorder()
 
-        _travel_twice(
-            _guard(_FixedPort(RepeatReason.WAITING.value, probability=0.5), recorder=recorder)
-        )
+        _travel_twice(_guard(_FixedPort(NONE_APPLICABLE_OPTION), recorder=recorder))
 
         [event] = recorder.of(TraceEventKind.LOOP_GUARD_WARNING)
         assert event["wording"] == "default"
@@ -484,7 +494,7 @@ class TestAFailureAroundTheDiagnosisKeepsTheWarning:
             clock=lambda: datetime(2026, 1, 1),
             trace_recorder=recorder,
             current_tick_provider=_Tick(),
-            loop_diagnosis=_ExplodingDiagnosis(port=_FixedPort("waiting"), min_confidence=0.7),
+            loop_diagnosis=_ExplodingDiagnosis(port=_FixedPort("waiting")),
             location_provider=lambda pid: "薬草の土手",
         )
 
