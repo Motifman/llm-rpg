@@ -208,10 +208,6 @@ class TestInteractionLabelsReachTheResolver:
                 interaction_labels=(("count_supplies_pretend", "物資を数える"),),
             )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#1321 前提: 対人 interaction は表示に出るのに解決側へ候補が渡っていない。運ぶと _pick_action_name の挙動が変わるので別 PR",
-    )
     def test_player_interaction_label_is_carried_to_the_target(self) -> None:
         """同席者に対して表示された操作も、target に候補と対で載る。"""
         snap = SpotGraphPlayerSnapshotDto(
@@ -222,8 +218,7 @@ class TestInteractionLabelsReachTheResolver:
             nearby_entities=(
                 SpotGraphNearbyEntityEntry(
                     entity_id=2,
-                    name="ハル",
-                    entity_type="player",
+                    display_name="ハル",
                     action_entries=(
                         SpotGraphInteractionEntry(
                             action_name="tend_to_player", display_label="介抱して起こす"
@@ -236,4 +231,5 @@ class TestInteractionLabelsReachTheResolver:
         _, targets = _build(snap)
 
         target = _only_target_of_kind(targets, "spot_graph_player")
+        assert target.available_interactions == ("tend_to_player",)
         assert dict(target.interaction_labels) == {"tend_to_player": "介抱して起こす"}
