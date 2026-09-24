@@ -12,7 +12,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
-    WorldObjectToolRuntimeTargetDto,
 )
 
 
@@ -42,7 +41,6 @@ def build_dynamic_argument_candidate_snapshot(
     モデルへ見せない基準 run でも、この snapshot は保存して再実験に使う。
     """
     targets = list(runtime_context.targets.values())
-    objects = [target for target in targets if isinstance(target, WorldObjectToolRuntimeTargetDto)]
     destinations = [target for target in targets if isinstance(target, DestinationToolRuntimeTargetDto)]
     inventory = [
         target
@@ -59,7 +57,11 @@ def build_dynamic_argument_candidate_snapshot(
     entries: list[dict[str, Any]] = []
 
     if "interact" in exposed_tools:
-        interactive = [target for target in (*objects, *players, *inventory) if target.available_interactions]
+        # interact の解決条件そのものを使う。spot graph の物体は、行為者に
+        # 伏せた操作を持てる都合で専用 subclass ではなく基底 DTO として登録
+        # される経路がある。型の列挙で絞ると、実行できる偽装作業・襲撃・
+        # 通気口などが候補表から静かに消える。
+        interactive = [target for target in targets if target.available_interactions]
         values = _names(interactive)
         if values:
             entries.append(_entry("interact", "target_label", values))

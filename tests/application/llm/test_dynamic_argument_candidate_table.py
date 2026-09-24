@@ -4,6 +4,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
+    ToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     WorldObjectToolRuntimeTargetDto,
 )
@@ -51,6 +52,36 @@ def test_snapshot_keeps_action_names_attached_to_their_target() -> None:
             "argument": "action_name",
             "target": "西の祭壇",
             "values": ["offer_herb"],
+        },
+    ]
+
+
+def test_snapshot_includes_generic_spot_graph_objects_with_interactions() -> None:
+    """spot graph の一般DTOでも操作候補があれば interact の対象と操作を保存する。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "O1": ToolRuntimeTargetDto(
+                label="O1",
+                kind="spot_graph_object",
+                display_name="気象記録簿",
+                available_interactions=("log_weather_pretend",),
+            ),
+        }
+    )
+
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"interact"})
+
+    assert snapshot["entries"] == [
+        {
+            "tool": "interact",
+            "argument": "target_label",
+            "values": ["気象記録簿"],
+        },
+        {
+            "tool": "interact",
+            "argument": "action_name",
+            "target": "気象記録簿",
+            "values": ["log_weather_pretend"],
         },
     ]
 
