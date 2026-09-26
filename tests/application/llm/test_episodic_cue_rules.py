@@ -7,8 +7,10 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services.episodic_cue_rules import (
+    MAX_CUE_VALUE_CHARS,
     MAX_EPISODIC_CUES,
     build_episodic_cues_for_tool_turn,
+    build_situation_episodic_cues,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
@@ -392,3 +394,69 @@ class TestDedupeAndCaps:
         canon = {c.to_canonical() for c in cues}
         assert "action:spot_graph_heavy_scan" in canon
         assert "outcome:failure_area_overflow" in canon
+
+
+def _stored_entity_values(*actors: object) -> list[str]:
+    values: list[str] = []
+    for actor in actors:
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="wait",
+            canonical_arguments=None,
+            runtime_context=None,
+            command_result=None,
+            observation_structured={"actor": actor},
+        )
+        values.extend(c.value for c in cues if c.axis == "entity")
+    return values
+
+
+class TestActorEntityCueKeepsDisplayName:
+    """観測 structured["actor"] の表示名から、人物ごとに別の entity cue を作る。"""
+
+    def test_japanese_name_becomes_entity_cue(self) -> None:
+        """actor が日本語名 'ノア' のとき、entity cue 'actor_ノア' が 1 件立ち、消えない。"""
+        assert _stored_entity_values("ノア") == ["actor_ノア"]
+
+    def test_ascii_name_is_lowercased_as_before(self) -> None:
+        """actor が ASCII 名 'Spot Graph-Player 1' のとき、従来の [a-z0-9_] 規則と同じ 'actor_spot_graph_player_1' になる。"""
+        assert _stored_entity_values("Spot Graph-Player 1") == ["actor_spot_graph_player_1"]
+
+    def test_name_with_digit_does_not_collapse_into_player_id_cue(self) -> None:
+        """actor 'ノア2' は 'actor_ノア2' になり、actor が player_id 2 の観測の 'actor_2' と別の cue になる。"""
+        assert _stored_entity_values("ノア2", 2) == ["actor_ノア2", "actor_2"]
+
+    def test_different_japanese_names_get_different_cues(self) -> None:
+        """別人の 'ノア' 'ノエ' 'カイ2' は、それぞれ別の entity cue になる。"""
+        assert _stored_entity_values("ノア", "ノエ", "カイ2") == ["actor_ノア", "actor_ノエ", "actor_カイ2"]
+
+    def test_surrounding_space_and_decomposed_kana_give_the_same_cue(self) -> None:
+        """前後に空白が付いた 'バド' と濁点を分解した 'バド' (NFD) は、NFC の 'バド' と同じ cue になる。"""
+        decomposed = "\u30cf\u3099\u30c8\u3099"
+        assert _stored_entity_values("バド", " バド ", decomposed) == ["actor_バド"] * 3
+
+    def test_separator_characters_in_name_are_replaced(self) -> None:
+        """actor 名に canonical の区切り ':' や cue_signature の区切り '|' が含まれても、cue value では '_' に置き換わる。"""
+        assert _stored_entity_values("ノア|カイ:2") == ["actor_ノア_カイ_2"]
+
+    def test_symbol_only_name_yields_no_entity_cue(self) -> None:
+        """actor が記号と空白だけ ('・ ・') のとき、entity cue は立たない。"""
+        assert _stored_entity_values("・ ・") == []
+
+    def test_long_japanese_name_is_truncated_and_still_stored(self) -> None:
+        """MAX_CUE_VALUE_CHARS を超える日本語名は文字数で切り詰められ、上限検査で捨てられずに cue として残る。"""
+        values = _stored_entity_values("ノ" * (MAX_CUE_VALUE_CHARS * 2))
+
+        assert values == ["actor_" + "ノ" * (MAX_CUE_VALUE_CHARS - len("actor_"))]
+
+
+class TestActorEntityCueMatchesAtRecall:
+    """想起側の局面 cue が、保存側と同じ entity cue を日本語名の actor から作る。"""
+
+    def test_situation_cue_for_japanese_actor_equals_stored_cue(self) -> None:
+        """actor 'ノア' の観測から想起側が作る entity cue は、保存側の 'entity:actor_ノア' と一致する。"""
+        observation = {"actor": "ノア"}
+
+        situation = build_situation_episodic_cues(runtime_context=None, observation_structured=observation)
+
+        entity_canon = [c.to_canonical() for c in situation if c.axis == "entity"]
+        assert entity_canon == ["entity:actor_ノア"]

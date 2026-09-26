@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +40,10 @@ if TYPE_CHECKING:
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
 _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
+# actor には表示名 (多くは日本語) が入るので、ASCII に落とすと別人が同じ cue に
+# なるか cue ごと消える。ASCII の範囲では _SAFE_SEGMENT_RE と同じ結果になり、
+# 保存済み snapshot の cue と一致する。
+_ACTOR_NAME_UNSAFE_RE = re.compile(r"\W+")
 
 # 1 episode あたりの cue 上限（索引肥大・暴走防止）
 MAX_EPISODIC_CUES = 32
@@ -637,8 +642,9 @@ def _coerce_actor_entity(raw: Any) -> str | None:
     if x is not None:
         return _sanitize_id_segment("actor", x)
     if isinstance(raw, str):
-        slug = _sanitize_tool_segment(raw)
-        if slug is None:
+        normalized = unicodedata.normalize("NFC", raw).lower()
+        slug = _ACTOR_NAME_UNSAFE_RE.sub("_", normalized).strip("_")
+        if not slug:
             return None
         return _truncate_value(f"actor_{slug}")
     return None
