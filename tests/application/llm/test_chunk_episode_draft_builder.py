@@ -361,3 +361,59 @@ class TestChunkEpisodeDraftBuilderBeingId:
         being = BeingId('being_w1_p1')
         ep = ChunkEpisodeDraftBuilder().build(inp, being_id=being)
         assert ep.being_id == being
+
+
+def _who_for_actors(*actors: object) -> tuple[str, ...]:
+    t = datetime(2026, 5, 4, 14, 0, 0, tzinfo=timezone.utc)
+    observations = tuple(
+        ObservationEntry(
+            occurred_at=t + timedelta(seconds=i),
+            output=ObservationOutput(
+                prose='誰かが動いた。',
+                structured={'actor': actor},
+                observation_category='social',
+            ),
+        )
+        for i, actor in enumerate(actors)
+    )
+    act = ActionResultEntry(
+        occurred_at=t + timedelta(minutes=1),
+        action_summary='様子を見た',
+        result_summary='見た。',
+        tool_name='wait',
+    )
+    inp = build_chunk_encoding_input(PlayerId(9), observations, (act,))
+    return ChunkEpisodeDraftBuilder().build(inp, being_id=BeingId('being-test')).who
+
+
+class TestChunkWhoKeepsActorDisplayName:
+    """観測 structured["actor"] に入る表示名から、人物ごとに別の who マーカーを作る。"""
+
+    def test_japanese_name_is_kept_in_who(self) -> None:
+        """actor が日本語名 'ノア' のとき、who は ('entity:actor:ノア',) になり空にならない。"""
+        assert _who_for_actors('ノア') == ('entity:actor:ノア',)
+
+    def test_ascii_name_is_lowercased_as_before(self) -> None:
+        """actor が 'Noah' のとき、who は従来と同じ 'entity:actor:noah' になり、保存済み snapshot の marker と一致する。"""
+        assert _who_for_actors('Noah') == ('entity:actor:noah',)
+
+    def test_name_with_digit_does_not_collapse_to_the_digit(self) -> None:
+        """actor 'ノア2' は 'entity:actor:ノア2' になり、player_id 2 の 'entity:actor:2' と別の marker になる。"""
+        assert _who_for_actors('ノア2', 2) == ('entity:actor:ノア2', 'entity:actor:2')
+
+    def test_different_japanese_names_get_different_markers(self) -> None:
+        """別人の 'ノア' と 'ノエ' と 'ノア3' は、それぞれ別の marker として who に並ぶ。"""
+        assert _who_for_actors('ノア', 'ノエ', 'ノア3') == (
+            'entity:actor:ノア',
+            'entity:actor:ノエ',
+            'entity:actor:ノア3',
+        )
+
+    def test_same_name_with_surrounding_space_or_decomposed_kana_is_one_marker(self) -> None:
+        """前後に空白が付いた 'バド' と濁点を分解した 'バド' (NFD) は、同じ 1 つの marker にまとまる。"""
+        decomposed = 'バド'
+        assert _who_for_actors('バド', ' バド ', decomposed) == ('entity:actor:バド',)
+
+    def test_separator_characters_in_name_are_replaced(self) -> None:
+        """actor 名に cue_signature の区切り '|' や ':' が含まれても、marker では '_' に置き換わる。"""
+        assert _who_for_actors('ノア|カイ:2') == ('entity:actor:ノア_カイ_2',)
