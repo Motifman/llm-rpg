@@ -171,7 +171,7 @@ def _target_entry(
         name = str(target.display_name).strip()
         if name:
             name_counts[name] = name_counts.get(name, 0) + 1
-    values: list[str] = []
+    values = []
     accepted: list[str] = []
     for target in visible:
         label = str(target.label)
