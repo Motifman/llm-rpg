@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 import uuid
 from collections.abc import Mapping
 from datetime import datetime
@@ -35,6 +36,10 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
 _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
+# 観測の actor には表示名 (多くは日本語) が入るので、人名を ASCII に落とすと
+# 別人が同じ marker になるか marker ごと消える。ASCII の範囲では _SAFE_SEGMENT_RE
+# と同じ結果になり、保存済み snapshot の marker と一致する。
+_ACTOR_NAME_UNSAFE_RE = re.compile(r"\W+")
 from ai_rpg_world.application.llm.services.episode_identity import build_episode_id
 
 
@@ -69,7 +74,8 @@ def _actor_from_structured(raw: Any) -> str | None:
         s = raw.strip()
         if not s:
             return None
-        cleaned = _SAFE_SEGMENT_RE.sub("_", s.lower()).strip("_")
+        normalized = unicodedata.normalize("NFC", s).lower()
+        cleaned = _ACTOR_NAME_UNSAFE_RE.sub("_", normalized).strip("_")
         if not cleaned:
             return None
         return f"entity:actor:{cleaned}"

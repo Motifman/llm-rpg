@@ -7,20 +7,25 @@ U2 (証拠台帳統一設計 §2 U2): cue_signature は「新しい抽出ロジ�
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_belief_evidence_cue_signature,
     build_goal_stagnation_cue_signature,
     cue_tokens,
 )
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _episode(**overrides) -> SubjectiveEpisode:
@@ -214,3 +219,16 @@ class TestGoalStagnationCueSignature:
         """空/空白のみの目的文は呼び出し側の不変条件違反として ValueError。"""
         with pytest.raises(ValueError):
             build_goal_stagnation_cue_signature('   ')
+
+
+class TestJapaneseActorReachesPlayerAxis:
+    """日本語名の相手が chunk episode の who を経て cue_signature の player: 軸に届く。"""
+
+    def test_japanese_actor_observation_adds_player_axis(self) -> None:
+        """actor 'ノア' の観測を含む chunk episode の cue_signature は 'player:entity:actor:ノア' を含む。"""
+        t = datetime(2026, 7, 1, 9, 0, tzinfo=timezone.utc)
+        obs = ObservationEntry(occurred_at=t, output=ObservationOutput(prose='ノアが近づいた。', structured={'actor': 'ノア'}, observation_category='social'))
+        act = ActionResultEntry(occurred_at=t + timedelta(minutes=1), action_summary='話しかけた', result_summary='返事があった。', tool_name='speak')
+        episode = ChunkEpisodeDraftBuilder().build(build_chunk_encoding_input(PlayerId(1), (obs,), (act,)), being_id=BeingId('being_w1_p1'))
+
+        assert build_belief_evidence_cue_signature(episode) == 'tool:speak|player:entity:actor:ノア'
