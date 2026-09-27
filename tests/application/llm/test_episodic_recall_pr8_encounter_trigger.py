@@ -298,6 +298,25 @@ class TestEncounterCuesFromRegisteredKeys:
 
         assert sorted(c.value for c in cues if c.axis == "entity") == ["actor_ノア", "actor_ノエ"]
 
+    def test_decomposed_kana_name_yields_same_cue_as_composed(self) -> None:
+        """濁点を分解した 'バド' (NFD) で登録した遭遇も、NFC の 'バド' と同じ entity cue 'actor_バド' になる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("\u30cf\u3099\u30c8\u3099"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert [c.value for c in cues if c.axis == "entity"] == ["actor_バド"]
+
+    def test_symbol_only_name_yields_no_entity_cue(self) -> None:
+        """記号と空白だけの表示名 '・ ・' の遭遇からは entity cue を作らず、同時に遭遇した場所の cue は残る。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("・ ・"), current_tick=10)
+        mem.observe(PID, EncounterKey.spot("lone_hut"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert [c.to_canonical() for c in cues] == ["place_spot:8"]
+
     def test_scenario_spot_id_yields_place_spot_cue_via_resolver(self) -> None:
         """文字列 ID 'festival_square' で登録した場所の遭遇から、resolver が返す数値 ID の place_spot cue '3' が作られる。"""
         mem = InMemoryEncounterMemory()
