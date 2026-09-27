@@ -190,7 +190,7 @@ TEMPORAL_GAP_TICKS_FOR_CLOSE      = 8     # 時間断絶 = 別 scene
 ```
 
 9 は、bucket 内に失敗した action があり、その action が `expected_result`
-か `error_code` を空でない文字列で持つときに閉じる。フラグが OFF (既定) の
+か `error_code` を、空白以外の文字を含む文字列で持つときに閉じる。フラグが OFF (既定) の
 ときは評価されず、境界の挙動は 9 が無い場合と同じになる。
 
 ### 4.4 `scene_boundary` フラグ
