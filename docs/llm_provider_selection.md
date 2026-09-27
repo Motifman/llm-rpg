@@ -16,11 +16,11 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 |---|---|---|---|
 | 1 | `tool_choice=required` が実呼び出しで通る | 必須 | 主ターンは required で呼ぶ。通らない provider は毎回 404 になり、run が止まる。`auto` へ下げると、ツールを返さない応答でエージェントが 1 回の起動を黙って失う (設計判断 #39・#96) |
 | 2 | 版を固定したモデル ID を使う | 必須 | `deepseek/deepseek-v4-flash` (0423 版) と `deepseek/deepseek-v4-flash-0731` は別物。`~deepseek/deepseek-v4-flash-latest` のような別名は中身が黙って替わり、過去 run と比べられなくなる (#39) |
-| 3 | 量子化が fp8 以上 | 必須 | fp4 はモデル品質を落とす。`quantization` が `unknown` の provider は、分かるまで使わない |
-| 4 | 共有プールの 429 が続かない | 必須 | `upstream_provider_shared_pool` の 429 は OpenRouter 利用者全体の枠の枯渇で、こちらの並列度を下げても直らない。時間帯で全滅することがある |
-| 5 | 応答が API タイムアウト (90 秒) に収まる | 必須 | 超えた呼び出しは失敗として扱われ、その tick の行動を失う |
-| 6 | 単価 (入力・キャッシュ読み込み・出力) | 比較 | 1 呼び出しあたり入力は約 9,000 トークン、出力は数百トークンなので、入力とキャッシュ読み込みの単価が費用を決める。同じモデルでも provider で 5 倍違うことがあり、run の途中で値上がりした例もある |
-| 7 | プレフィックスキャッシュが効く | 比較 | キャッシュの保持時間は provider ごとに違う。1 tick が長くなり呼び出しの間隔が空くと、キャッシュ率が下がる (Venice では、呼び出し間隔が 15 秒未満なら 0.77、60 秒を超えると 0) |
+| 3 | 共有プールの 429 が続かない | 必須 | `upstream_provider_shared_pool` の 429 は OpenRouter 利用者全体の枠の枯渇で、こちらの並列度を下げても直らない。時間帯で全滅することがある |
+| 4 | 応答が API タイムアウト (90 秒) に収まる | 必須 | 超えた呼び出しは失敗として扱われ、その tick の行動を失う |
+| 5 | 単価 (入力・キャッシュ読み込み・出力) | 比較 | 1 呼び出しあたり入力は約 9,000 トークン、出力は数百トークンなので、入力とキャッシュ読み込みの単価が費用を決める。同じモデルでも provider で 5 倍違うことがあり、run の途中で値上がりした例もある |
+| 6 | プレフィックスキャッシュが効く | 比較 | キャッシュの保持時間は provider ごとに違う。1 tick が長くなり呼び出しの間隔が空くと、キャッシュ率が下がる (Venice では、呼び出し間隔が 15 秒未満なら 0.77、60 秒を超えると 0) |
+| 7 | 量子化 (fp8 / fp4 / bf16 など) | 比較 | fp4 はモデル品質を落とすことがある。ただし候補から外す条件にはせず、選んだ provider の量子化を profile の description と run の結果に残す。`quantization` が `unknown` の provider も同じ扱いにする |
 
 補足:
 
@@ -38,13 +38,13 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
    uv run python scripts/openrouter_ping.py --list-models --model deepseek-v4
    ```
 
-2. **provider の一覧を見る**: 量子化・単価・直近の稼働率を見て候補を絞る (条件 3・6)
+2. **provider の一覧を見る**: 量子化・単価・直近の稼働率を見て候補を絞る (条件 5・7)
 
    ```bash
    uv run python scripts/openrouter_ping.py --list-providers --model openrouter/deepseek/deepseek-v4-flash-0731
    ```
 
-3. **required で直列に叩く**: run と同じ `tool_choice=required` で、5 秒おきに 12 回 (条件 1・4・5)。全部通ることを見る。run を回している最中は、同じ provider の枠を run と取り合うので、プローブは run の前に行う
+3. **required で直列に叩く**: run と同じ `tool_choice=required` で、5 秒おきに 12 回 (条件 1・3・4)。全部通ることを見る。run を回している最中は、同じ provider の枠を run と取り合うので、プローブは run の前に行う
 
    ```bash
    uv run python scripts/openrouter_ping.py --model openrouter/deepseek/deepseek-v4-flash-0731 \
@@ -52,7 +52,7 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
        --max-tokens 200 --prompt "ping ツールを呼んで"
    ```
 
-4. **1 tick だけ回す**: profile を作り、`MAX_WORLD_TICKS=1` で回す。`prompt_dataset/calls.jsonl` の `metrics` で、全呼び出しの成功・応答時間・`cached_tokens`・`cost_usd` を見る (条件 5・6・7)
+4. **1 tick だけ回す**: profile を作り、`MAX_WORLD_TICKS=1` で回す。`prompt_dataset/calls.jsonl` の `metrics` で、全呼び出しの成功・応答時間・`cached_tokens`・`cost_usd` を見る (条件 4・5・6)
 
 5. **profile の description に残す**: 選んだ理由・確かめた日付・実測値を書く。provider を替えたら、既存 profile は書き換えずに新しい profile を足す (#39。既存 profile は過去の実験条件の記録)
 
@@ -75,3 +75,10 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
     - 主ターン 161 回のうち 7 回が失敗し、その手番の行動を失った。共有プールの 429 が 3 回の再試行でも通らなかったのが 4 回、API の失敗が 3 回
     - 応答時間の中央値は 16 秒、90 パーセンタイルは 35 秒、最大は 97 秒
     - キャッシュ率は 0.60、主ターンの費用は 0.07 ドル
+
+### 2026-09-27 量子化の扱いと、0423 版 × DeepInfra
+
+- 量子化を必須の条件から外し、比較の条件に移した。fp4 でも候補から外さない
+- gemma-4-31b × Venice は fp4 だった。過去の run の要求 20 回を `required` のまま送り直し、20 回とも通った
+- deepseek-v4-flash 0423 版の DeepSeek 直営は、引き続き provider 一覧に無い。この組み合わせを固定した 7 月の run の要求をそのまま送り直すと `NotFoundError` になる
+- 0423 版 × DeepInfra (fp8、入力 0.09 / キャッシュ 0.018 / 出力 0.18 ドル / MTok) で、過去の run の要求 40 回を `required` のまま直列に送り直し、40 回とも通った
