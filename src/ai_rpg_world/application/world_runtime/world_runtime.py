@@ -2790,6 +2790,10 @@ class WorldRuntime:
                 # enable された時のみ非 None。書込みは chunk_coordinator /
                 # scheduler 側 (build_episodic_stack / 上の wiring 参照)。
                 pending_prediction_store=self._episodic_stack.pending_prediction_store,
+                encounter_memory=self._encounter_memory,
+                encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
+                    "spot", spot_str_id
+                ),
             )
         builder = DefaultPromptBuilder(
             core,

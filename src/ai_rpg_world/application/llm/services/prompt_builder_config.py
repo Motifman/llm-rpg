@@ -176,6 +176,9 @@ class EpisodicRecallConfig:
     # current_tick 取得は prompt_builder の ``current_tick_provider`` を流用。
     encounter_memory: IEncounterMemory | None = None
     encounter_recent_window_ticks: int = 5
+    # encounter の spot key はシナリオの文字列 ID なので、runtime 由来の
+    # place_spot cue (数値 spot_id) と揃えるために数値へ直す。
+    encounter_spot_id_resolver: Callable[[str], int] | None = None
     # #526 段階 2: 慣化ペナルティの sidecar store。注入時のみ動く
     # (= default off で既存挙動と同一)。retrieve 後に prompt_builder が
     # 採用された episode の last_recalled_tick を記録する。

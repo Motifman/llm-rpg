@@ -151,3 +151,50 @@ class TestPromptRegressionForViewer:
         assert len(prompt["messages"]) == 2
         assert prompt["messages"][0]["role"] == "system"
         assert prompt["messages"][1]["role"] == "user"
+
+
+class _TraceRecorderSpy:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def record(self, kind, *, tick=None, player_id=None, **payload):  # noqa: ANN001
+        self.events.append((str(kind), {"tick": tick, "player_id": player_id, **payload}))
+
+    def close(self) -> None:
+        pass
+
+
+class TestEncounterCuesReachEpisodicRecall:
+    """Issue #1445: episodic 記憶を有効にした runtime で、遭遇の記録が受動想起の situation_cues まで届く。"""
+
+    def _recall_situation_cues(self, runtime, player_id) -> list[str]:
+        from ai_rpg_world.application.trace.events import TraceEventKind
+
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
+        runtime.build_full_prompt(player_id)
+        payloads = [p for kind, p in recorder.events if kind == TraceEventKind.EPISODIC_RECALL]
+        assert payloads, "episodic_recall trace が出ていない"
+        return list(payloads[-1]["situation_cues"])
+
+    def test_met_player_and_visited_spot_become_situation_cues(self) -> None:
+        """表示名 'カイト' の人物と、いま居ない場所 entrance_hall に遭遇した記録から、entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が situation_cues に入る。"""
+        from ai_rpg_world.application.world_runtime.world_runtime import (
+            create_world_runtime,
+        )
+        from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
+            EncounterKey,
+        )
+        from tests.runtime_config_helpers import episodic_config
+
+        runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
+        rin = runtime.get_player_ids()[1]
+        tick = runtime.current_tick()
+        runtime._encounter_memory.observe(rin, EncounterKey.player("カイト"), tick)
+        runtime._encounter_memory.observe(rin, EncounterKey.spot("entrance_hall"), tick)
+        entrance_hall = runtime.id_mapper.get_int("spot", "entrance_hall")
+
+        cues = self._recall_situation_cues(runtime, rin)
+
+        assert "entity:actor_カイト" in cues
+        assert f"place_spot:{entrance_hall}" in cues

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+import unicodedata
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 _logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ if TYPE_CHECKING:
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
 _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
+# actor には表示名 (多くは日本語) が入るので、ASCII に落とすと別人が同じ cue に
+# なるか cue ごと消える。ASCII の範囲では _SAFE_SEGMENT_RE と同じ結果になり、
+# 保存済み snapshot の cue と一致する。
+_ACTOR_NAME_UNSAFE_RE = re.compile(r"\W+")
 
 # 1 episode あたりの cue 上限（索引肥大・暴走防止）
 MAX_EPISODIC_CUES = 32
@@ -129,6 +134,7 @@ def build_situation_episodic_cues(
     encounter_player_id: PlayerId | None = None,
     encounter_current_tick: int | None = None,
     encounter_recent_window_ticks: int = 5,
+    encounter_spot_id_resolver: Callable[[str], int] | None = None,
 ) -> tuple[EpisodicCue, ...]:
     """
     受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
@@ -189,6 +195,7 @@ def build_situation_episodic_cues(
                 player_id=encounter_player_id,
                 current_tick=encounter_current_tick,
                 recent_window_ticks=encounter_recent_window_ticks,
+                spot_id_resolver=encounter_spot_id_resolver,
             )
         )
     validated = _validate_and_dedupe(collected)
@@ -514,15 +521,18 @@ def _cues_from_recent_encounters(
     player_id: PlayerId,
     current_tick: int,
     recent_window_ticks: int,
+    spot_id_resolver: Callable[[str], int] | None = None,
 ) -> list[EpisodicCue]:
     """PR8 (R5): 直近 ``recent_window_ticks`` 以内に encounter した entity /
     spot / event から recall cue を立てる。
 
     EncounterKey.kind → EpisodicCue.axis のマッピング:
-      ``player`` → axis=``entity``, value=``spot_graph_player_{identifier}``
-        (= ``_cues_from_runtime_targets`` の entity 形式と整合)
-      ``spot``   → axis=``place_spot``, value=``{identifier}``
-        (= ``_cues_from_runtime_place`` の spot 形式と整合)
+      ``player`` → axis=``entity``, value=``actor_{表示名}``
+        (identifier は表示名。観測 structured の actor と同じ
+        ``_coerce_actor_entity`` を通し、同じ人物を同じ cue にする)
+      ``spot``   → axis=``place_spot``, value=``{数値 spot_id}``
+        (identifier はシナリオの文字列 ID。``spot_id_resolver`` で数値に
+        直し、``_cues_from_runtime_place`` の ``str(sid)`` と揃える)
       ``event``  → axis=``action``, value=``{identifier}``
 
     時間窓判定は ``last_seen_tick`` ベース。``current_tick - last_seen_tick``
@@ -554,19 +564,14 @@ def _cues_from_recent_encounters(
             continue
         kind = key.kind
         if kind == "player":
-            ident_int = _strict_int_str(identifier)
-            if ident_int is None:
+            value = _coerce_actor_entity(identifier)
+            if value is None:
                 continue
-            value = _sanitize_id_segment("spot_graph_player", ident_int)
             out.append(EpisodicCue(axis="entity", value=value, source=src))
         elif kind == "spot":
-            ident_int = _strict_int_str(identifier)
+            ident_int = _resolve_encounter_spot_id(identifier, spot_id_resolver)
             if ident_int is None:
                 continue
-            # int → str を経由して runtime 由来 cue (= ``_cues_from_runtime_place``
-            # の ``str(sid)``) と同じ canonical 表記に揃える。"007" のような
-            # zero-padded identifier も "7" に正規化されて、runtime cue と
-            # PR6 (R3) のスコアリング上で merge される。
             out.append(
                 EpisodicCue(
                     axis="place_spot",
@@ -584,6 +589,24 @@ def _cues_from_recent_encounters(
             out.append(EpisodicCue(axis="action", value=seg, source=src))
         # 未知 kind は (sanitize 経由でも未保証なので) skip
     return out
+
+
+def _resolve_encounter_spot_id(
+    identifier: str,
+    spot_id_resolver: Callable[[str], int] | None,
+) -> int | None:
+    if spot_id_resolver is None:
+        return _strict_int_str(identifier)
+    try:
+        resolved = spot_id_resolver(identifier)
+    except Exception:
+        _logger.warning(
+            "encounter spot_id_resolver failed (spot=%s); skipping place_spot cue",
+            identifier,
+            exc_info=True,
+        )
+        return None
+    return _strict_int(resolved)
 
 
 def _strict_int_str(raw: str) -> int | None:
@@ -637,8 +660,9 @@ def _coerce_actor_entity(raw: Any) -> str | None:
     if x is not None:
         return _sanitize_id_segment("actor", x)
     if isinstance(raw, str):
-        slug = _sanitize_tool_segment(raw)
-        if slug is None:
+        normalized = unicodedata.normalize("NFC", raw).lower()
+        slug = _ACTOR_NAME_UNSAFE_RE.sub("_", normalized).strip("_")
+        if not slug:
             return None
         return _truncate_value(f"actor_{slug}")
     return None

@@ -123,6 +123,7 @@ def run_semantic_passive_recall(
         encounter_player_id=player_id,
         encounter_current_tick=encounter_tick,
         encounter_recent_window_ticks=builder._encounter_recent_window_ticks,
+        encounter_spot_id_resolver=builder._encounter_spot_id_resolver,
     )
     now = datetime.now(timezone.utc)
     try:
