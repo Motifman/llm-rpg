@@ -23,6 +23,7 @@
 - run id: `var/runs/...` に使う名前
 - run の型: 探索 / 観察 / 比較
 - profile: `belief_goal_full` / `ablation_base` / `smoke_stub`
+- モデルと provider: 新しい profile を作るときや前回の run から日が空いたときは、[docs/llm_provider_selection.md](docs/llm_provider_selection.md) の手順で `tool_choice=required` が通るかなどを使う直前に確かめる。provider の対応状況は予告なく変わる
 - scenario: profile 既定を使うか、`SCENARIO=...` で一時上書きするか
 - tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
 - 見たい trace: 発火、効果判断に必要な値、未発火理由を確認できるか
