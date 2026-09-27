@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 _logger = logging.getLogger(__name__)
@@ -27,6 +27,8 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     # Issue #283 後続: 観測 prose の自由文 cue 抽出に使う。Protocol なので
     # 型チェック時のみ参照。runtime には依存しない (caller が None でも安全)。
     # PR8 (R5): encounter memory を recall cue 源にする。Protocol 型なので
