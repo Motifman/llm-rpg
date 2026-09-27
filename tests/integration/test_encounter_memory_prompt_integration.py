@@ -167,18 +167,7 @@ class _TraceRecorderSpy:
 class TestEncounterCuesReachEpisodicRecall:
     """Issue #1445: episodic 記憶を有効にした runtime で、遭遇の記録が受動想起の situation_cues まで届く。"""
 
-    def _recall_situation_cues(self, runtime, player_id) -> list[str]:
-        from ai_rpg_world.application.trace.events import TraceEventKind
-
-        recorder = _TraceRecorderSpy()
-        runtime.set_trace_recorder(recorder)
-        runtime.build_full_prompt(player_id)
-        payloads = [p for kind, p in recorder.events if kind == TraceEventKind.EPISODIC_RECALL]
-        assert payloads, "episodic_recall trace が出ていない"
-        return list(payloads[-1]["situation_cues"])
-
-    def test_met_player_and_visited_spot_become_situation_cues(self) -> None:
-        """表示名 'カイト' の人物と、いま居ない場所 entrance_hall に遭遇した記録から、entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が situation_cues に入る。"""
+    def _situation_cues_by_recall(self, trace_kinds) -> dict[str, list[str]]:  # noqa: ANN001
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
@@ -187,14 +176,34 @@ class TestEncounterCuesReachEpisodicRecall:
         )
         from tests.runtime_config_helpers import episodic_config
 
-        runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
+        runtime = create_world_runtime(
+            _SCENARIO_PATH, config=episodic_config(semantic_passive_top_k=3)
+        )
         rin = runtime.get_player_ids()[1]
         tick = runtime.current_tick()
         runtime._encounter_memory.observe(rin, EncounterKey.player("カイト"), tick)
         runtime._encounter_memory.observe(rin, EncounterKey.spot("entrance_hall"), tick)
-        entrance_hall = runtime.id_mapper.get_int("spot", "entrance_hall")
+        self.entrance_hall = runtime.id_mapper.get_int("spot", "entrance_hall")
+        recorder = _TraceRecorderSpy()
+        runtime.set_trace_recorder(recorder)
 
-        cues = self._recall_situation_cues(runtime, rin)
+        runtime.build_full_prompt(rin)
 
-        assert "entity:actor_カイト" in cues
-        assert f"place_spot:{entrance_hall}" in cues
+        cues: dict[str, list[str]] = {}
+        for kind, payload in recorder.events:
+            if kind in trace_kinds:
+                cues[kind] = list(payload["situation_cues"])
+        assert set(cues) == set(trace_kinds), f"trace が出ていない: {set(trace_kinds) - set(cues)}"
+        return cues
+
+    def test_met_player_and_visited_spot_become_situation_cues(self) -> None:
+        """表示名 'カイト' の人物と、いま居ない場所 entrance_hall に遭遇した記録から、episodic と semantic の両方の受動想起の situation_cues に entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が入る。"""
+        from ai_rpg_world.application.trace.events import TraceEventKind
+
+        kinds = (TraceEventKind.EPISODIC_RECALL, TraceEventKind.SEMANTIC_PASSIVE_RECALL)
+
+        cues = self._situation_cues_by_recall(kinds)
+
+        for kind in kinds:
+            assert "entity:actor_カイト" in cues[kind], kind
+            assert f"place_spot:{self.entrance_hall}" in cues[kind], kind

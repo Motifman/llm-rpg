@@ -310,7 +310,7 @@ class TestEncounterCuesFromRegisteredKeys:
         ]
 
     def test_encounter_spot_cue_equals_runtime_place_cue(self) -> None:
-        """現在地 spot_id=3 の runtime cue と 'festival_square' の遭遇 cue は同じ canonical になり、place_spot cue は 1 件にまとまる。"""
+        """'festival_square' の遭遇から作る place_spot cue は、現在地 spot_id=3 の runtime から作る place_spot cue と同じ canonical になる。"""
         from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 
         mem = InMemoryEncounterMemory()
@@ -322,9 +322,12 @@ class TestEncounterCuesFromRegisteredKeys:
             targets={},
         )
 
-        cues = _encounter_situation_cues(mem, runtime_context=rt)
+        from_encounter = _encounter_situation_cues(mem)
+        from_runtime = build_situation_episodic_cues(runtime_context=rt)
 
-        assert [c.to_canonical() for c in cues if c.axis == "place_spot"] == ["place_spot:3"]
+        assert [c.to_canonical() for c in from_encounter] == [
+            c.to_canonical() for c in from_runtime if c.axis == "place_spot"
+        ]
 
     def test_unknown_spot_id_is_skipped_and_other_cues_remain(self) -> None:
         """resolver が知らない場所 ID で例外を投げても、その場所の cue だけを落とし、ほかの遭遇の cue は残る。"""
