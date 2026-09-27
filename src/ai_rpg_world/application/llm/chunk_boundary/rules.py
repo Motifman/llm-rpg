@@ -184,7 +184,8 @@ def decide_chunk_boundary(
     5d. **誤差ゲート付き境界 (U8 部品2a、``error_gated_boundary_enabled=True`` のときのみ)**:
        bucket 内 action に「成功を予測していたのに失敗」(``expected_result`` が
        非空 かつ ``success=False``) または「error_code 付き失敗」があれば境界候補。
-       この時点で n_actions は 4 で ``MIN_ACTIONS_FOR_CLOSE`` をクリア済み。
+       この時点で n_actions は ``MIN_ACTIONS_FOR_CLOSE`` 以上
+       ``MAX_ACTIONS_FOR_CLOSE`` 未満 (いまの値で 3〜6)。
     6. **観測件数閾値** → クローズ (件数で scene 級到達と見なす)
     7. 何も該当なし → HOLD (材料は蓄積継続)
     """
