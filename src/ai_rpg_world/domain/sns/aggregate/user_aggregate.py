@@ -51,9 +51,9 @@ class UserAggregate(AggregateRoot):
         super().__init__()
         self._user_id = user_id
         self._sns_user = sns_user
-        self._follow_relationships = follow_relationships
-        self._block_relationships = block_relationships
-        self._subscribe_relationships = subscribe_relationships
+        self._follow_relationships = follow_relationships.copy()
+        self._block_relationships = block_relationships.copy()
+        self._subscribe_relationships = subscribe_relationships.copy()
     
     @classmethod
     def create_new_user(cls, user_id: UserId, user_name: str, display_name: str, bio: str) -> "UserAggregate":
@@ -82,15 +82,15 @@ class UserAggregate(AggregateRoot):
     
     @property
     def follow_relationships(self) -> list[FollowRelationShip]:
-        return self._follow_relationships
+        return self._follow_relationships.copy()
     
     @property
     def block_relationships(self) -> list[BlockRelationShip]:
-        return self._block_relationships
+        return self._block_relationships.copy()
     
     @property
     def subscribe_relationships(self) -> list[SubscribeRelationShip]:
-        return self._subscribe_relationships
+        return self._subscribe_relationships.copy()
 
     @property
     def profile(self) -> UserProfile:

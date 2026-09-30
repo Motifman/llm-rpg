@@ -34,8 +34,8 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         self._content_id: ContentId = content_id
         self._author_user_id = author_user_id
         self._content = content
-        self._likes = likes
-        self._mentions = mentions
+        self._likes = likes.copy()
+        self._mentions = mentions.copy()
         self._deleted = deleted
         self._parent_post_id = parent_post_id
         self._parent_reply_id = parent_reply_id
