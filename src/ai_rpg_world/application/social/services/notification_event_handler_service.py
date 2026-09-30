@@ -7,6 +7,7 @@ from ai_rpg_world.application.common.exceptions import ApplicationException, Sys
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.sns.entity.notification import Notification
+from ai_rpg_world.domain.sns.enum import PostVisibility
 from ai_rpg_world.domain.sns.event import (
     SnsContentLikedEvent,
     SnsPostCreatedEvent,
@@ -133,6 +134,9 @@ class NotificationEventHandlerService:
 
     def handle_post_created(self, event: SnsPostCreatedEvent) -> None:
         """ポスト作成時の通知処理"""
+        # 生成済みのイベントに宛先が残っていても、作者限定の本文を通知へ転記しない。
+        if event.content.visibility == PostVisibility.PRIVATE:
+            return
         self._logger.info(f"Processing post created event: author={event.author_user_id}, post_id={event.post_id}")
 
         def operation() -> None:
@@ -181,6 +185,8 @@ class NotificationEventHandlerService:
 
     def handle_reply_created(self, event: SnsReplyCreatedEvent) -> None:
         """リプライ作成時の通知処理"""
+        if event.content.visibility == PostVisibility.PRIVATE:
+            return
         self._logger.info(f"Processing reply created event: author={event.author_user_id}, reply_id={event.reply_id}")
 
         def operation() -> None:
