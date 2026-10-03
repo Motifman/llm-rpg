@@ -68,10 +68,13 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_EVIDENCE_ENABLED",
     "DISTANT_VIEW_TRACE_ENABLED",
     "EPISODIC_EXPLORE_RELATED_ENABLED",
+    "EXPECTATION_ARGUMENT_ENABLED",
+    "EXPECTATION_DATED_TERM_TURNS",
     "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
     "EXPECTATION_SETTLEMENT_ENABLED",
     "EXPECTATION_SETTLEMENT_MAX_OPEN",
     "EXPECTATION_SETTLEMENT_TIMELINE_TURNS",
+    "EXPECTATION_UNDATED_TERM_TURNS",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "EPISODIC_RECALL_ENABLED",
@@ -242,6 +245,13 @@ class ResolvedLlmRuntimeConfig:
             ターン数
         expectation_event_max_delivery_attempts: 予期の出来事を配り直す回数の上限。
             清算の有効化によらず、予期の出来事を配るときに使う
+        expectation_argument_enabled: 環境の tool に予期の引数 ``expectations`` を
+            付け、書かれた予期を積む (#1441)。**既定は off**。清算と、プロンプトに
+            載った信念を記録する台帳が要り、``expected_result`` とは併用できない
+        expectation_undated_term_turns: 期日の無い予期を、書いてから何ターンで
+            期限切れにするか
+        expectation_dated_term_turns: 期日のある予期の期限。期日は環境の時間で
+            書かれ、届いた出来事の時刻で清算されるので、ターン数では長めに切る
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -307,6 +317,9 @@ class ResolvedLlmRuntimeConfig:
     expectation_settlement_max_open: int
     expectation_settlement_timeline_turns: int
     expectation_event_max_delivery_attempts: int
+    expectation_argument_enabled: bool
+    expectation_undated_term_turns: int
+    expectation_dated_term_turns: int
 
     # Episodic memory
     episodic_enabled: bool
@@ -742,6 +755,22 @@ class ResolvedLlmRuntimeConfig:
             "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
             default=_DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS,
         )
+        try:
+            expectation_argument_enabled = _parse_truthy(
+                source.get("EXPECTATION_ARGUMENT_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"EXPECTATION_ARGUMENT_ENABLED: {exc}") from exc
+        expectation_undated_term_turns = _resolve_positive_int(
+            source,
+            "EXPECTATION_UNDATED_TERM_TURNS",
+            default=_DEFAULT_EXPECTATION_UNDATED_TERM_TURNS,
+        )
+        expectation_dated_term_turns = _resolve_positive_int(
+            source,
+            "EXPECTATION_DATED_TERM_TURNS",
+            default=_DEFAULT_EXPECTATION_DATED_TERM_TURNS,
+        )
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -944,6 +973,9 @@ class ResolvedLlmRuntimeConfig:
             expectation_event_max_delivery_attempts=(
                 expectation_event_max_delivery_attempts
             ),
+            expectation_argument_enabled=expectation_argument_enabled,
+            expectation_undated_term_turns=expectation_undated_term_turns,
+            expectation_dated_term_turns=expectation_dated_term_turns,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -1082,6 +1114,9 @@ class ResolvedLlmRuntimeConfig:
             expectation_event_max_delivery_attempts=(
                 _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS
             ),
+            expectation_argument_enabled=False,
+            expectation_undated_term_turns=_DEFAULT_EXPECTATION_UNDATED_TERM_TURNS,
+            expectation_dated_term_turns=_DEFAULT_EXPECTATION_DATED_TERM_TURNS,
             episodic_enabled=False,
             episodic_subjective_enabled=True,
             episodic_explore_related_enabled=False,
@@ -1186,6 +1221,8 @@ class ResolvedLlmRuntimeConfig:
                 "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
                 self.expectation_event_max_delivery_attempts,
             ),
+            ("EXPECTATION_UNDATED_TERM_TURNS", self.expectation_undated_term_turns),
+            ("EXPECTATION_DATED_TERM_TURNS", self.expectation_dated_term_turns),
         ):
             if value < 1:
                 raise ValueError(f"{key} must be 1 or greater")
@@ -1193,6 +1230,25 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 "EXPECTATION_SETTLEMENT_ENABLED=1 requires TYPED_JUDGMENT_PROVIDER "
                 "other than off (問う先が無い)"
+            )
+        if not self.expectation_argument_enabled:
+            return
+        if not self.expectation_settlement_enabled:
+            raise ValueError(
+                "EXPECTATION_ARGUMENT_ENABLED=1 requires "
+                "EXPECTATION_SETTLEMENT_ENABLED=1 (期限で閉じるのも清算なので、"
+                "積んだ予期が閉じられずに増え続ける)"
+            )
+        if not self.prediction_context_id_enabled:
+            raise ValueError(
+                "EXPECTATION_ARGUMENT_ENABLED=1 requires "
+                "PREDICTION_CONTEXT_ID_ENABLED=1 (頭にあった信念と想起を、"
+                "そのターンのプロンプトから取る)"
+            )
+        if self.expected_result_policy != "off":
+            raise ValueError(
+                "EXPECTATION_ARGUMENT_ENABLED=1 requires "
+                "LLM_EXPECTED_RESULT_POLICY=off (予測を書く欄が 2 つ並ぶ)"
             )
 
     def to_trace_dict(self) -> dict[str, Any]:
@@ -1270,6 +1326,8 @@ _DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN = 8
 #: 次のターンに当たったへ移った。数ターン遅れて届く結果まで拾える長さに置く。
 _DEFAULT_EXPECTATION_SETTLEMENT_TIMELINE_TURNS = 4
 _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS = 3
+_DEFAULT_EXPECTATION_UNDATED_TERM_TURNS = 5
+_DEFAULT_EXPECTATION_DATED_TERM_TURNS = 30
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})

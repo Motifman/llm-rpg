@@ -116,7 +116,11 @@ class PredictionContextLedger:
         return self._pending.pop(player_id.value, None)
 
     def peek(self, player_id: PlayerId) -> PredictionContext | None:
-        """消費せずに現在の pending context を覗き見る (テスト・デバッグ用)。"""
+        """消費せずに現在の pending context を覗き見る。
+
+        書かれた予期を積むとき (#1441) に、行動の記録より先に頭にあった信念と
+        想起を読むために使う。
+        """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         return self._pending.get(player_id.value)
