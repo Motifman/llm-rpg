@@ -16,7 +16,7 @@ recall ranking で boost される (``episodic_passive_recall_retrieval.py``)。
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -35,6 +35,25 @@ class IEpisodicRecallSuccessStore(Protocol):
 
     def record_hit_by_being(self, being_id: BeingId, episode_id: str) -> None:
         """指定 episode の的中回数を 1 加算する。"""
+        ...
+
+    def record_hits_received_by_being(
+        self, being_id: BeingId, episode_ids: Sequence[str], *, event_id: str
+    ) -> bool:
+        """出来事 1 件ぶんの的中を各 episode に 1 加算し、その出来事の ID を受け取り済みにする。
+
+        2 つは同じ保存の単位で書く (#1479)。受け取り済みの ID なら何も加算せずに
+        False を返す。"""
+        ...
+
+    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
+        """受け取り済みの出来事の ID を受け取った順に返す。snapshot capture 用。"""
+        ...
+
+    def replace_received_event_ids_by_being(
+        self, being_id: BeingId, event_ids: list[str]
+    ) -> None:
+        """受け取り済みの出来事の ID を置き換える。snapshot 復元用。"""
         ...
 
     def list_all_by_being(self, being_id: BeingId) -> Mapping[str, int]:
@@ -61,6 +80,7 @@ class InMemoryEpisodicRecallSuccessStore(IEpisodicRecallSuccessStore):
 
     def __init__(self) -> None:
         self._by_being: dict[BeingId, dict[str, int]] = {}
+        self._received_event_ids: dict[BeingId, list[str]] = {}
         # ワーカー thread (record_hit_by_being) とメイン thread (get / list /
         # replace) が同じ dict を触るため、公開メソッド全体を 1 つの RLock で
         # 保護する (#309 と同じ粒度・同じ理由)。
@@ -83,6 +103,48 @@ class InMemoryEpisodicRecallSuccessStore(IEpisodicRecallSuccessStore):
         with self._lock:
             inner = self._by_being.setdefault(being_id, {})
             inner[episode_id] = inner.get(episode_id, 0) + 1
+
+    def record_hits_received_by_being(
+        self, being_id: BeingId, episode_ids: Sequence[str], *, event_id: str
+    ) -> bool:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise ValueError("event_id must be a non-empty str")
+        if not all(isinstance(e, str) and e.strip() for e in episode_ids):
+            raise ValueError("episode_ids must be non-empty str")
+        with self._lock:
+            received = self._received_event_ids.setdefault(being_id, [])
+            if event_id in received:
+                return False
+            inner = self._by_being.setdefault(being_id, {})
+            for episode_id in dict.fromkeys(episode_ids):
+                inner[episode_id] = inner.get(episode_id, 0) + 1
+            if not inner:
+                del self._by_being[being_id]
+            received.append(event_id)
+            return True
+
+    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        with self._lock:
+            return list(self._received_event_ids.get(being_id, ()))
+
+    def replace_received_event_ids_by_being(
+        self, being_id: BeingId, event_ids: list[str]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(event_ids, list) or not all(
+            isinstance(e, str) and e.strip() for e in event_ids
+        ):
+            raise TypeError("event_ids must be list of non-empty str")
+        with self._lock:
+            if event_ids:
+                self._received_event_ids[being_id] = list(dict.fromkeys(event_ids))
+            else:
+                self._received_event_ids.pop(being_id, None)
 
     def list_all_by_being(self, being_id: BeingId) -> Mapping[str, int]:
         """copy で返す (= 呼出側変更で内部 state を壊さない)。"""

@@ -163,3 +163,47 @@ class TestInMemoryEpisodicRecallSuccessStoreThreadSafety:
         assert not t2.is_alive()
 
         assert store.get_hit_count_by_being(bid, "ep-shared") == per_thread * 2
+
+
+class TestRecordHitsReceived:
+    """``record_hits_received_by_being`` が役に立った回数と受け取り済みの出来事の ID を 1 回の呼び出しで書く挙動を保証する。"""
+
+    def test_first_receipt_adds_one_hit_per_episode(self) -> None:
+        """初めての出来事なら、渡したエピソードそれぞれの役に立った回数を 1 増やし、True を返す。"""
+        store = InMemoryEpisodicRecallSuccessStore()
+        being = BeingId("being-rio")
+
+        recorded = store.record_hits_received_by_being(
+            being, ("ep-1", "ep-2"), event_id="exp-1@3"
+        )
+
+        assert recorded is True
+        assert store.list_all_by_being(being) == {"ep-1": 1, "ep-2": 1}
+        assert store.list_received_event_ids_by_being(being) == ["exp-1@3"]
+
+    def test_same_event_id_twice_adds_hit_once(self) -> None:
+        """同じ出来事の ID を二度受け取っても、役に立った回数は 1 回分しか増えない。"""
+        store = InMemoryEpisodicRecallSuccessStore()
+        being = BeingId("being-rio")
+        store.record_hits_received_by_being(being, ("ep-1",), event_id="exp-1@3")
+
+        recorded = store.record_hits_received_by_being(
+            being, ("ep-1",), event_id="exp-1@3"
+        )
+
+        assert recorded is False
+        assert store.get_hit_count_by_being(being, "ep-1") == 1
+
+    def test_replace_received_event_ids_restores_receipts(self) -> None:
+        """snapshot から受け取り済みの ID を戻すと、その出来事ではもう回数が増えない。"""
+        store = InMemoryEpisodicRecallSuccessStore()
+        being = BeingId("being-rio")
+
+        store.replace_received_event_ids_by_being(being, ["exp-1@3"])
+
+        assert store.list_received_event_ids_by_being(being) == ["exp-1@3"]
+        assert (
+            store.record_hits_received_by_being(being, ("ep-1",), event_id="exp-1@3")
+            is False
+        )
+        assert store.list_all_by_being(being) == {}

@@ -107,6 +107,19 @@ def _init_schema_v1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _init_schema_v2(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE belief_evidence_received_event_by_being (
+            being_id_value TEXT NOT NULL,
+            event_id TEXT NOT NULL,
+            received_order INTEGER NOT NULL,
+            PRIMARY KEY (being_id_value, event_id)
+        );
+        """
+    )
+
+
 class SqliteBeliefEvidenceBufferStore(BeliefEvidenceBufferRepository):
     """``BeliefEvidence`` バッファを SQLite に保持する。"""
 
@@ -117,7 +130,10 @@ class SqliteBeliefEvidenceBufferStore(BeliefEvidenceBufferRepository):
         apply_migrations(
             connection,
             namespace=_SCHEMA_NAMESPACE,
-            migrations=[SqliteMigration(1, _init_schema_v1)],
+            migrations=[
+                SqliteMigration(1, _init_schema_v1),
+                SqliteMigration(2, _init_schema_v2),
+            ],
         )
 
     @classmethod
@@ -147,6 +163,91 @@ class SqliteBeliefEvidenceBufferStore(BeliefEvidenceBufferRepository):
             ),
         )
         self._conn.commit()
+
+    def append_received_by_being(
+        self, being_id: BeingId, evidence: BeliefEvidence, *, event_id: str
+    ) -> bool:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(evidence, BeliefEvidence):
+            raise TypeError("evidence must be BeliefEvidence")
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise ValueError("event_id must be a non-empty str")
+        try:
+            inserted = self._conn.execute(
+                """
+                INSERT OR IGNORE INTO belief_evidence_received_event_by_being
+                    (being_id_value, event_id, received_order)
+                VALUES (?, ?, (
+                    SELECT COALESCE(MAX(received_order), 0) + 1
+                    FROM belief_evidence_received_event_by_being
+                    WHERE being_id_value = ?
+                ))
+                """,
+                (being_id.value, event_id, being_id.value),
+            ).rowcount
+            if inserted == 0:
+                self._conn.rollback()
+                return False
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO belief_evidence_buffer_by_being
+                    (being_id_value, evidence_id, occurred_at_key, payload_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    being_id.value,
+                    evidence.evidence_id,
+                    _dt_key(evidence.occurred_at),
+                    json.dumps(_evidence_to_payload(evidence), ensure_ascii=False),
+                ),
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+        return True
+
+    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        cur = self._conn.execute(
+            """
+            SELECT event_id FROM belief_evidence_received_event_by_being
+            WHERE being_id_value = ?
+            ORDER BY received_order ASC
+            """,
+            (being_id.value,),
+        )
+        return [str(r[0]) for r in cur.fetchall()]
+
+    def replace_received_event_ids_by_being(
+        self, being_id: BeingId, event_ids: list[str]
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(event_ids, list) or not all(
+            isinstance(e, str) and e.strip() for e in event_ids
+        ):
+            raise TypeError("event_ids must be list of non-empty str")
+        try:
+            self._conn.execute(
+                "DELETE FROM belief_evidence_received_event_by_being WHERE being_id_value = ?",
+                (being_id.value,),
+            )
+            for order, event_id in enumerate(dict.fromkeys(event_ids), start=1):
+                self._conn.execute(
+                    """
+                    INSERT INTO belief_evidence_received_event_by_being
+                        (being_id_value, event_id, received_order)
+                    VALUES (?, ?, ?)
+                    """,
+                    (being_id.value, event_id, order),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
     def list_all_by_being(self, being_id: BeingId) -> list[BeliefEvidence]:
         if not isinstance(being_id, BeingId):
