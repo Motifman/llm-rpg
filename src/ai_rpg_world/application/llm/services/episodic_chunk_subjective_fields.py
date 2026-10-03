@@ -17,6 +17,9 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value
 
+from ai_rpg_world.application.being.expectation.belief_material import (
+    LIKELIHOOD_LABELS,
+)
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
@@ -65,10 +68,12 @@ TRPG リプレイ風の主観回想。250〜450 字程度で、当時の感情�
 ただし当時の感情の余韻だけは「〜だった気がする」「今でも〜と思う」のような形を許す。
 出来事の描写・行動・結果は厳格に過去形に統一する。
 
-prediction_error は「行動前の予測 (expected) と実際の結果 (observed / outcome) の
-食い違い」を日本語 1〜2 文で書く。expected が無い、または予測どおりだった場合は
-空文字列 "" にする。これは願望が叶わなかったという話ではなく、世界の応答が自分の
-見立てとどう違ったか・何を見落としていたかを簡潔に残すもの。過去形で書く。
+prediction_error は、ユーザメッセージに「## 確定して外れた予期」という節が
+あるときだけ書く。その節の予期が外れたことはもう確かめられているので、
+当たっていたと書き直したり、外れたかどうかを判断し直したりしない。
+実際には何が違ったか・何を見落としていたかを、observed / outcome に照らして
+日本語 1〜2 文で書く。この chunk に手がかりが無ければ、外れたことだけを書く。
+節が無いときは空文字列 "" にする。過去形で書く。
 （例: 「声をかければ話せると思っていたが、相手は黙って立ち去った。」）
 
 入力に無い人物・場所・アイテム・結果・成否を新たに創作しない。
@@ -109,8 +114,7 @@ _RECALL_LENGTH_INSTRUCTION_NEW = (
 _UNCONSCIOUS_CONTEXT_INSTRUCTION = """
 
 ユーザメッセージに「## いまの自分（信念と自己像）」という節があれば、そこに
-書かれた本人の信念・自己像に照らして interpreted / prediction_error /
-salience を判定すること。信念に強く合致する出来事は想定内、信念に反する
+書かれた本人の信念・自己像に照らして interpreted / salience を判定すること。信念に強く合致する出来事は想定内、信念に反する
 出来事は想定外として重みづけてよい（これは人間らしい思い込みの表現であり、
 むしろ望ましい）。ただし信念はあくまで解釈の材料であり、事実
 （ルール草案の observed / cues / what / outcome）を信念に合わせて改変しては
@@ -619,31 +623,13 @@ def _normalize_pending_resolutions(
     return tuple(verdicts)
 
 
-def _structured_prediction_error_fallback(
-    draft: SubjectiveEpisode,
-    encoding_input: ChunkEncodingInput,
-) -> str | None:
-    """LLM 不在・失敗時の保守的な prediction_error。
-
-    予測 (expected) があり、かつ chunk に構造的な失敗 (success=False の action) が
-    含まれるときだけ、最小限の乖離を残す。「成功したが予測と違う」のような意味的な
-    食い違いは LLM 判断が要るので、ここでは扱わない (= None)。誤った驚きを
-    捏造しないため、構造的に観測できる差分のみに限定する。
-    """
-    if not (isinstance(draft.expected, str) and draft.expected.strip()):
-        return None
-    if not any(not a.success for a in encoding_input.action_results):
-        return None
-    return "予測していたが、行動の一部が失敗した。"
-
-
 class EpisodicChunkSubjectiveFieldsService:
     """
     ルール草案へ interpreted / recall_text / prediction_error を付与する。
 
     interpreted / recall_text は LLM 失敗・不正 JSON 時に what / observed 由来の
-    テンプレへ落とす。prediction_error (= 予測と結果の質的乖離) は LLM が判断し、
-    LLM 値が無いときは構造的失敗のみの保守 fallback (それも無ければ None)。
+    テンプレへ落とす。prediction_error は、確定して外れた予期について何が違ったかの
+    文だけを LLM に書かせ、外れた予期が無い chunk では None にする。
     """
 
     def __init__(
@@ -708,8 +694,8 @@ class EpisodicChunkSubjectiveFieldsService:
         LLM で interpreted / recall_text / prediction_error を埋め合わせる。
 
         interpreted / recall_text は LLM 失敗・不正 JSON 時に what / observed 由来の
-        テンプレへフォールバックする。prediction_error は LLM 値が無ければ構造的
-        失敗のみの保守 fallback (それも無ければ None = 予測どおり / 予測なし)。
+        テンプレへフォールバックする。prediction_error は確定して外れた予期を
+        渡されたときだけ LLM 値を採り、それ以外は None にする (#1443)。
 
         ``actor_name`` (H-2 / 自己言及ループ): この記憶の持ち主本人の名前。
         ``hearsay_enabled`` のときだけ、抽出された heard_claims から
@@ -780,6 +766,14 @@ class EpisodicChunkSubjectiveFieldsService:
                 "## 保留中の約束（この chunk で決着したものだけ pending_resolutions に記す）",
                 "\n".join(
                     f"- [{p.pending_id}] {p.text}" for p in active_pendings
+                ),
+            ]
+        if encoding_input.settled_missed_expectations:
+            user_sections += [
+                "## 確定して外れた予期",
+                "\n".join(
+                    f"- {LIKELIHOOD_LABELS[m.likelihood]}と思っていた「{m.content}」"
+                    for m in encoding_input.settled_missed_expectations
                 ),
             ]
         user_sections += [
@@ -864,12 +858,10 @@ class EpisodicChunkSubjectiveFieldsService:
 
         interpreted = _merge_picks(llm_value=interp_llm, fallback=fallback_i)
         recall_text = _merge_picks(llm_value=recall_llm, fallback=fallback_r)
-        # prediction_error は str/None 両方ありうる (予測どおり=None)。LLM 値が
-        # 無ければ構造的差分のみの保守 fallback (失敗時 None)。
+        # 外れたかどうかは予期の清算だけが決める。外れた予期が無い chunk で
+        # LLM が書いた文は、chunk の中から判断し直した外れなので捨てる。
         prediction_error = (
-            pred_err_llm
-            if pred_err_llm is not None
-            else _structured_prediction_error_fallback(draft, encoding_input)
+            pred_err_llm if encoding_input.settled_missed_expectations else None
         )
         merged = replace(
             draft,

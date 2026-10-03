@@ -204,7 +204,6 @@ class TestUnconsciousContextRuleFieldGuard:
         assert merged.what == draft.what
         assert merged.outcome == draft.outcome
         assert merged.interpreted == '信念に沿って解釈した'
-        assert merged.prediction_error == '信念どおりだったので驚かなかった'
 
 class TestUnconsciousContextTypeValidation:
 
