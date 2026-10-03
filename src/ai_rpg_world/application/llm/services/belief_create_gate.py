@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
@@ -157,13 +157,15 @@ class BeliefCreateGate:
             for c in self._narrower.narrow(text, existing, top_k=self._top_k)
             if c.text != NO_SAME_MEANING
         )
-        base = {
-            "text": text,
-            "candidates": candidates,
-            "narrower": self._narrower.name,
-            "top_k": self._top_k,
-            "min_confidence": self._min_confidence,
-        }
+        base = BeliefCreateReview(
+            text=text,
+            candidates=candidates,
+            outcome=OUTCOME_CREATE,
+            target_key=None,
+            narrower=self._narrower.name,
+            top_k=self._top_k,
+            min_confidence=self._min_confidence,
+        )
         questions: dict[str, ChoiceQuestion] = {SHAPE_QUESTION: _shape_question()}
         if candidates:
             questions[SAME_MEANING_QUESTION] = _same_meaning_question(candidates)
@@ -178,25 +180,18 @@ class BeliefCreateGate:
                 else None
             )
         except TypedJudgmentUnavailableException as exc:
-            return BeliefCreateReview(
-                **base,
-                outcome=OUTCOME_CREATE,
-                target_key=None,
+            return replace(
+                base,
                 unavailable_reason=getattr(exc, "error_code", None) or "UNAVAILABLE",
             )
         except Exception:
             # ここから漏れると、呼び出し側は作るを適用できずに学びを落とす。
             logger.exception("belief create gate judgment failed")
-            return BeliefCreateReview(
-                **base,
-                outcome=OUTCOME_CREATE,
-                target_key=None,
-                unavailable_reason=_UNAVAILABLE_UNEXPECTED,
-            )
+            return replace(base, unavailable_reason=_UNAVAILABLE_UNEXPECTED)
 
         outcome, target_key = self._decide(shape, same, candidates)
-        return BeliefCreateReview(
-            **base,
+        return replace(
+            base,
             outcome=outcome,
             target_key=target_key,
             shape=shape.value,
