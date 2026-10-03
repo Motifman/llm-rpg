@@ -193,7 +193,6 @@ def _judge_one(
         "name": name,
         "player_id": player_id,
         "tick": move.tick,
-        "action": move.tool_name if hasattr(move, "tool_name") else None,
         "judged": settlement["judged"],
         "unavailable_reason": settlement["unavailable_reason"],
         "shape": next(
@@ -204,11 +203,20 @@ def _judge_one(
     }
 
 
-def show(results: list[dict[str, Any]]) -> list[str]:
-    """予期ごとに、頭にあったものと確率と選ばれたかを並べ、人が当否を書き込む欄を空けておく。"""
+def show(
+    results: list[dict[str, Any]],
+    labels: Sequence[tuple[str, dict[str, str]]] = (),
+) -> list[str]:
+    """予期ごとに、頭にあったものと確率と選ばれたかを並べ、当否を出所ごとの列で添える。
+
+    当否は問いの通し番号で引く。番号は ``results`` の並び (予期ごと、予期の中は問うた順)
+    だけで決まるので、``judge`` をやり直した結果に古い当否を当ててはいけない。
+    """
+    heads = [name for name, _ in labels]
     lines = [
-        "| # | 誰 / tick | 予期 | 種類 | 頭にあったもの (抜粋) | 確率 | 選んだ | 人の判断 |",
-        "|---|---|---|---|---|---|---|---|",
+        "| # | 誰 / tick | 形 | 予期 | 種類 | 頭にあったもの (抜粋) | 確率 | 選んだ | "
+        + " | ".join(heads) + (" |" if heads else ""),
+        "|" + "---|" * (8 + len(heads)),
     ]
     number = 0
     for result in results:
@@ -217,16 +225,20 @@ def show(results: list[dict[str, Any]]) -> list[str]:
             for asked in entry["asked"]:
                 number += 1
                 probability = asked["probability"]
+                cells = [table.get(str(number), "") for _, table in labels]
                 lines.append(
-                    f"| {number} | {result['name']} / {result['tick']} | {entry['content']} | "
-                    f"{asked['kind']} | {_cell(asked['text'])} | "
+                    f"| {number} | {result['name']} / {result['tick']} | {result['shape']} | "
+                    f"{entry['content']} | {asked['kind']} | {_cell(asked['text'])} | "
                     f"{'-' if probability is None else f'{probability:.2f}'} | "
-                    f"{'○' if asked['id'] in chosen else ''} |  |"
+                    f"{'○' if asked['id'] in chosen else ''} |"
+                    + "".join(f" {c} |" for c in cells)
                 )
             for omitted in entry["omitted"]:
                 lines.append(
-                    f"| - | {result['name']} / {result['tick']} | {entry['content']} | "
-                    f"{omitted['kind']} | (問わなかった: {omitted['reason']}) | - | - | - |"
+                    f"| - | {result['name']} / {result['tick']} | {result['shape']} | "
+                    f"{entry['content']} | {omitted['kind']} | "
+                    f"(問わなかった: {omitted['reason']}) | - | - |"
+                    + " - |" * len(labels)
                 )
     return lines
 
@@ -245,11 +257,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     judge_parser.add_argument("--max-questions", type=int, default=12)
     judge_parser.add_argument("--port", choices=("stub", "jev"), default="stub")
     judge_parser.add_argument("--out", type=Path, required=True)
+    judge_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="既存の判定を上書きする。当否は問いの通し番号で判定に結びつくので、上書きすると古い当否が別の問いに当たる",
+    )
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--judgments", type=Path, required=True)
+    show_parser.add_argument(
+        "--labels",
+        type=Path,
+        action="append",
+        default=[],
+        help="当否の JSON。繰り返すと出所 (labeled_by) ごとの列が並ぶ",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "judge":
+        if args.out.exists() and not args.overwrite:
+            parser.error(f"{args.out} already exists; pass --overwrite to replace it")
         results = judge(
             args.run_dir / "trace.jsonl",
             _port(args.port),
@@ -263,7 +289,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"expectations={len(results)} jev_calls={calls}")
         return 0
     results = json.loads(args.judgments.read_text(encoding="utf-8"))
-    print("\n".join(show(results)))
+    labels = []
+    for path in args.labels:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        labels.append((str(data["labeled_by"]).split(" ")[0], data["labels"]))
+    print("\n".join(show(results, labels)))
     return 0
 
 
