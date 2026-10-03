@@ -47,6 +47,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: ターンの終わりに組む状況の材料の件数。プロンプトの直近の出来事の既定 (20 件) と揃える。
+_SITUATION_RECENT_LIMIT = 20
+
 
 def _new_interaction_cooldown_store() -> Any:
     """既定の再使用間隔 store。
@@ -81,6 +84,7 @@ from ai_rpg_world.application.being.expectation.recall_credit import (
 )
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
 from ai_rpg_world.application.being.recall.selection_store import NextTurnFieldSelections
+from ai_rpg_world.application.being.recall.situation import Situation
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -118,6 +122,7 @@ from ai_rpg_world.application.llm.services.prompt_argument_contract import (
 )
 from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
     SituationRecallSources,
+    situation_from_game,
 )
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
@@ -2702,6 +2707,32 @@ class WorldRuntime:
                 else None
             ),
         )
+
+    def situation_at_turn_end(
+        self, player_id: PlayerId, being_id: BeingId
+    ) -> tuple[Situation, dict[str, int]]:
+        """#1414: 清算で欄を選ぶ問いに見せる、ターンの終わりの状況の欄と、飛ばした観測の件数。
+
+        体の帯はこの清算で決めるので入れない。いまいる場所の名前は渡さず、場所の欄は
+        観測から分かる範囲になる。場所は Jev に問わない欄で、判断の文脈として見せるだけ。
+        """
+        sources = self._situation_recall_sources()
+        if sources is None:
+            raise ValueError("situation_at_turn_end requires SITUATION_BELIEF_RECALL_ENABLED")
+        situation, skipped = situation_from_game(
+            sources,
+            player_id=player_id,
+            being_id=being_id,
+            player_name=self.get_player_name(player_id),
+            place_name=None,
+            observations=self._recent_event_store.get_recent_observations(
+                player_id, _SITUATION_RECENT_LIMIT
+            ),
+            action_results=self._recent_event_store.get_recent_action_results(
+                player_id, _SITUATION_RECENT_LIMIT
+            ),
+        )
+        return situation, dict(skipped)
 
     def field_selections_for_settlement(self) -> NextTurnFieldSelections | None:
         """#1414: 状況の欄から引く run だけ、清算に欄の問いを載せる。"""
