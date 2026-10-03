@@ -414,7 +414,6 @@ def build_episodic_stack(
     # 呼び出し側 (world_runtime.py) が両フラグの整合を取る)。
     belief_consolidation_enabled: bool = False,
     belief_consolidation_completion: IBeliefConsolidationCompletionPort | None = None,
-    # #1453: 作る直前に、いまの状況か・同じ意味の既存の信念があるかを問う。
     belief_create_gate: BeliefCreateGate | None = None,
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
     # chunk_coordinator が in_context_belief_ids / had_expected_result を計算して

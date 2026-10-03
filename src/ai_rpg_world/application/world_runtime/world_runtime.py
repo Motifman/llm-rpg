@@ -4507,8 +4507,8 @@ def _build_short_term_memory(
 def _build_belief_create_gate(config: ResolvedLlmRuntimeConfig) -> Any | None:
     """profile が求めたときだけ、信念を作る前の判断を組む (#1453)。
 
-    判断ポートは runtime_manager が組むものと別の instance になる。episodic
-    stack はその前に組まれるため。provider=jev でキーが無ければここで落ちる。
+    判断ポートは runtime_manager が組むものと別の instance になる。エピソード
+    記憶の組み立てがその前に走るため。Jev のキーが無ければここで落ちる。
     """
     if not config.belief_create_gate_enabled:
         return None
@@ -7973,7 +7973,6 @@ def create_world_runtime(
             if isinstance(_belief_consolidation_client, LiteLLMClient):
                 _belief_consolidation_completion = _belief_consolidation_client
         runtime._episodic_stack = build_episodic_stack(
-            belief_create_gate=_build_belief_create_gate(config),
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
             observation_buffer=obs_buffer,
@@ -8040,6 +8039,7 @@ def create_world_runtime(
             # 構築される。
             belief_consolidation_enabled=_belief_consolidation_enabled,
             belief_consolidation_completion=_belief_consolidation_completion,
+            belief_create_gate=_build_belief_create_gate(config),
             # U4 (予測誤差統一設計 部品3): 同期経路 (chunk_coordinator) 用。
             # 非同期経路 (scheduler) には上で個別に渡し済み。
             belief_attribution_enabled=_belief_attribution_enabled,

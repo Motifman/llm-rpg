@@ -151,25 +151,28 @@ class BeliefCreateGate:
     def review(
         self, text: str, existing: Sequence[TextCandidate]
     ) -> BeliefCreateReview:
-        # 「該当なし」と同じ文の信念は選択肢として区別できないので並べない。
-        candidates = tuple(
-            c
-            for c in self._narrower.narrow(text, existing, top_k=self._top_k)
-            if c.text != NO_SAME_MEANING
-        )
         base = BeliefCreateReview(
             text=text,
-            candidates=candidates,
+            candidates=(),
             outcome=OUTCOME_CREATE,
             target_key=None,
             narrower=self._narrower.name,
             top_k=self._top_k,
             min_confidence=self._min_confidence,
         )
-        questions: dict[str, ChoiceQuestion] = {SHAPE_QUESTION: _shape_question()}
-        if candidates:
-            questions[SAME_MEANING_QUESTION] = _same_meaning_question(candidates)
         try:
+            # 絞り込みも try に入れる。埋め込みの実装は外部 API を呼ぶので、その
+            # 失敗でも作るを通す。
+            # 「該当なし」と同じ文の信念は選択肢として区別できないので並べない。
+            candidates = tuple(
+                c
+                for c in self._narrower.narrow(text, existing, top_k=self._top_k)
+                if c.text != NO_SAME_MEANING
+            )
+            base = replace(base, candidates=candidates)
+            questions: dict[str, ChoiceQuestion] = {SHAPE_QUESTION: _shape_question()}
+            if candidates:
+                questions[SAME_MEANING_QUESTION] = _same_meaning_question(candidates)
             answers = self._port.judge({"new_belief": text}, questions)
             shape = _answer(answers, SHAPE_QUESTION, questions[SHAPE_QUESTION])
             same = (

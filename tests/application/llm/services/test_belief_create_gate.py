@@ -338,6 +338,25 @@ class TestWithoutAJudgmentCreateIsKept:
         _, questions = port.calls[0]
         assert list(questions) == [SHAPE_QUESTION]
 
+    def test_a_failing_narrower_creates(self) -> None:
+        """候補の絞り込みが例外を投げても、作るを通し UNEXPECTED_ERROR を残す。"""
+
+        class _Broken(CharBigramBm25Narrower):
+            def narrow(self, query, candidates, *, top_k):
+                raise RuntimeError("embedding api down")
+
+        gate = BeliefCreateGate(
+            judgment_port=_ScriptedPort(),
+            narrower=_Broken(),
+            top_k=3,
+            min_confidence=0.6,
+        )
+
+        review = gate.review(_NEW_TEXT, _EXISTING)
+
+        assert review.outcome == OUTCOME_CREATE
+        assert review.unavailable_reason == "UNEXPECTED_ERROR"
+
     def test_a_judged_review_has_no_unavailable_reason(self) -> None:
         """判断が得られた review の縮退理由は None で、縮退と区別できる。"""
         review = _gate(_ScriptedPort()).review(_NEW_TEXT, _EXISTING)

@@ -354,7 +354,6 @@ class ResolvedLlmRuntimeConfig:
     belief_evidence_enabled: bool = False
     belief_consolidation_enabled: bool = False
     belief_attribution_enabled: bool = False
-    # #1453: 信念を作る前に、いまの状況か・同じ意味の既存の信念があるかを問う。
     belief_create_gate_enabled: bool = False
     belief_candidate_narrower: str = CHAR_BIGRAM_BM25
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K

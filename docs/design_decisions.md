@@ -6097,9 +6097,13 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 組を置き換えた割合は閾値 0.4 で 90%、0.6 で 61% だった。30 組を K=3 / 10 でも問い、K を
 増やしても選び間違いは増えなかった。この 96 組は文字が似ている組だけなので、言い換えで
 文字が重ならない重複は測れていない。
+「いまの状況」で作らない側の誤り (残すべき信念を捨てた率) は測っていない。96 組の新しい方
+77 文のうち閾値 0.4 以上で「いまの状況」とされた 10 文を目視しただけで、採り尽くした・
+持っている・提案した、の類だった。有効にした run の trace で skip された文を読んで決め直す。
 
-**判断が得られないとき**: 例外・答えの欠け・選択肢に無い答えは `create` を通し、縮退の
-理由を `TYPED_JUDGMENT` の `unavailable_reason` に残す。置き換えた decision は
+**判断が得られないとき**: 例外 (候補の絞り込みの例外を含む)・答えの欠け・選択肢に無い
+答えは `create` を通し、縮退の理由を `TYPED_JUDGMENT` の `unavailable_reason` と decision の
+`create_gate_unavailable_reason` に残す。置き換えた decision は
 `BELIEF_CONSOLIDATION` の `decisions` に `create_gate_outcome` と
 `strengthened_belief_id` を足して残す。create のままだと、作られたと誤読する。
 

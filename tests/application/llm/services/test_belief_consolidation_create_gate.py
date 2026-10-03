@@ -269,8 +269,8 @@ class TestTheGateReplacesCreate:
         assert applied[0]["strengthened_belief_id"] == "sem-shell"
 
     def test_no_same_meaning_creates_a_new_belief(self) -> None:
-        """同じ意味が該当なしなら、新しい信念が作られる。"""
-        store, _ = _flush(
+        """同じ意味が該当なしなら新しい信念が作られ、decision に縮退の理由は付かない。"""
+        store, recorder = _flush(
             [_create()],
             _Judge({SAME_MEANING_QUESTION: NO_SAME_MEANING}),
             existing=(_belief("sem-shell", _EXISTING_TEXT),),
@@ -279,6 +279,11 @@ class TestTheGateReplacesCreate:
         assert sorted(e.text for e in _active(store)) == sorted(
             [_EXISTING_TEXT, _NEW_TEXT]
         )
+        applied = recorder.of(TraceEventKind.BELIEF_CONSOLIDATION)[0].payload[
+            "decisions"
+        ]
+        assert applied[0]["create_gate_outcome"] == "create"
+        assert "create_gate_unavailable_reason" not in applied[0]
 
     def test_without_a_gate_create_is_unchanged(self) -> None:
         """gate を渡さなければ、同じ文の信念があっても従来どおり作る。"""
@@ -298,6 +303,12 @@ class TestTheGateReplacesCreate:
         )
 
         assert len(_active(store)) == 2
+        applied = recorder.of(TraceEventKind.BELIEF_CONSOLIDATION)[0].payload[
+            "decisions"
+        ]
+        assert applied[0]["create_gate_unavailable_reason"] == (
+            "TYPED_JUDGMENT_UNAVAILABLE"
+        )
         gate_trace = recorder.of(TraceEventKind.TYPED_JUDGMENT)[0].payload
         assert gate_trace["outcome"] == "create"
         assert gate_trace["unavailable_reason"] == "TYPED_JUDGMENT_UNAVAILABLE"

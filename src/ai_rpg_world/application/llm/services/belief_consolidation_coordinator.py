@@ -448,7 +448,6 @@ class BeliefConsolidationCoordinator:
         # 畳み込む。OFF (既定) では store に一切触れず、導入前と挙動一致する。
         self._stagnation_pressure_store = stagnation_pressure_store
         self._stagnation_pressure_enabled = stagnation_pressure_enabled
-        # #1453: 作る直前に、いまの状況か・同じ意味の既存の信念があるかを問う。
         self._create_gate = create_gate
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
@@ -1180,10 +1179,14 @@ class BeliefConsolidationCoordinator:
         batch_ids: tuple[str, ...],
         now: datetime,
     ) -> tuple[str | None, dict[str, Any]]:
-        """作る前に gate へ問い、作る / 強める / 作らないを適用する (#1453)。
+        """作る前の判断に問い、作る / 強める / 作らないを適用する (#1453)。
 
-        返す decision には gate の結果を足す。強めるに置き換えたのに trace の
-        decisions が create のままだと、作られたと誤読する。
+        返す decision には判断の結果を足す。強めるに置き換えたのに trace の
+        decisions が create のままだと、作られたと誤読する。縮退した理由も足す。
+        判断して作ったのか、判断が無くて作ったのかを decision だけで分けるため。
+
+        強めるに置き換えたときの証拠は create と同じ規則で解決する (evidence_ids が
+        無ければ batch 全件)。LLM が create のつもりで書いた decision なので。
         """
         if self._create_gate is None:
             return (
@@ -1205,6 +1208,8 @@ class BeliefConsolidationCoordinator:
         )
         self._emit_create_gate_trace(being_id, review)
         reviewed = {**raw, "create_gate_outcome": review.outcome}
+        if review.unavailable_reason is not None:
+            reviewed["create_gate_unavailable_reason"] = review.unavailable_reason
         if review.outcome == OUTCOME_SKIP_CURRENT_SITUATION:
             return _SKIP_CREATE_CURRENT_SITUATION, reviewed
         if review.outcome == OUTCOME_STRENGTHEN:
