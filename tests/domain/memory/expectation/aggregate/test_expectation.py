@@ -166,7 +166,7 @@ class TestRecordCheck:
     """照合の判定を 1 件ずつ受け取り、暫定と確定のあいだを移る規則を保証する。"""
 
     def test_undetermined_checks_keep_expectation_open_without_events(self) -> None:
-        """まだ分からないが続くあいだは出来事を返さず、清算待ちのまま次の照合を受け取れる。"""
+        """まだ分からないが続くあいだは出来事を返さず、清算待ちのまま、期限を過ぎると期限切れになる。"""
         expectation = _expectation()
 
         events = _record_all(
@@ -236,8 +236,8 @@ class TestRecordCheck:
         assert isinstance(events[1], ExpectationSettled)
         assert events[1].outcome is Outcome.MISS
 
-    def test_undetermined_between_same_outcomes_prevents_settlement(self) -> None:
-        """当たった → まだ分からない → 当たった では、直前の照合と続いていないので確定しない。"""
+    def test_undetermined_between_same_outcomes_still_settles(self) -> None:
+        """当たった → まだ分からない → 当たった では、まだ分からないを飛ばして数えるので、3 回目で当たったに確定する。"""
         expectation = _expectation()
 
         events = _record_all(
@@ -247,11 +247,27 @@ class TestRecordCheck:
             Check(turn=13, verdict=HIT),
         )
 
-        assert events == [None, None, None]
-        assert _outcome_when_overdue(expectation) is Outcome.HIT
+        assert events[:2] == [None, None]
+        assert isinstance(events[2], ExpectationSettled)
+        assert events[2].outcome is Outcome.HIT
+        assert events[2].turn == 13
 
-    def test_miss_after_undetermined_reports_provisional_miss_again(self) -> None:
-        """外れた → まだ分からない → 外れた では確定せず、3 回目の外れでも暫定の出来事を返す。"""
+    def test_hit_undetermined_miss_reports_provisional_miss(self) -> None:
+        """当たった → まだ分からない → 外れた では、当否つきの直前の照合と違うので確定せず、暫定の出来事を返す。"""
+        expectation = _expectation()
+
+        events = _record_all(
+            expectation,
+            Check(turn=11, verdict=HIT),
+            Check(turn=12, verdict=UNDETERMINED),
+            Check(turn=13, verdict=MISS),
+        )
+
+        assert isinstance(events[2], ProvisionallyMissed)
+        assert _outcome_when_overdue(expectation) is Outcome.MISS
+
+    def test_miss_after_undetermined_settles_as_miss(self) -> None:
+        """外れた → まだ分からない → 外れた では、まだ分からないを飛ばして数えるので、3 回目で外れたに確定する。"""
         expectation = _expectation()
 
         events = _record_all(
@@ -261,11 +277,13 @@ class TestRecordCheck:
             Check(turn=13, verdict=MISS),
         )
 
-        assert isinstance(events[2], ProvisionallyMissed)
-        assert events[2].turn == 13
+        assert isinstance(events[0], ProvisionallyMissed)
+        assert events[1] is None
+        assert isinstance(events[2], ExpectationSettled)
+        assert events[2].outcome is Outcome.MISS
 
-    def test_undetermined_clears_provisional_outcome(self) -> None:
-        """暫定の判定は最後の照合で決まり、外れたのあとにまだ分からないが来ると、期限を過ぎたとき期限切れになる。"""
+    def test_undetermined_keeps_previous_provisional_outcome(self) -> None:
+        """まだ分からないは前の判定を打ち消さないので、外れた → まだ分からない のあと期限を過ぎると外れたで確定する。"""
         expectation = _expectation()
         _record_all(
             expectation,
@@ -273,7 +291,7 @@ class TestRecordCheck:
             Check(turn=12, verdict=UNDETERMINED),
         )
 
-        assert _outcome_when_overdue(expectation) is None
+        assert _outcome_when_overdue(expectation) is Outcome.MISS
 
     def test_hit_then_miss_reports_provisional_miss(self) -> None:
         """当たった → 外れた と変わったら、外れたターンで暫定の出来事を返す。"""
@@ -512,12 +530,26 @@ class TestExpireIfOverdue:
         assert event.outcome is Outcome.HIT
         assert event.likelihood is Likelihood.MAYBE
 
-    def test_overdue_with_last_undetermined_expires(self) -> None:
-        """期限のターンを過ぎたとき、最後の判定がまだ分からないなら期限切れになり、以後は判定を受け取らない。"""
+    def test_overdue_after_hit_then_undetermined_settles_as_hit(self) -> None:
+        """当たった → まだ分からない のあとで期限のターンを過ぎたら、期限切れにせず当たったで確定する。"""
         expectation = _expectation()
         _record_all(
             expectation,
             Check(turn=19, verdict=HIT),
+            Check(turn=EXPIRES_AT, verdict=UNDETERMINED),
+        )
+
+        event = expectation.expire_if_overdue(now_turn=EXPIRES_AT + 1)
+
+        assert isinstance(event, ExpectationSettled)
+        assert event.outcome is Outcome.HIT
+
+    def test_overdue_with_only_undetermined_expires(self) -> None:
+        """当否つきの照合が一度も無いまま期限のターンを過ぎたら期限切れになり、以後は判定を受け取らない。"""
+        expectation = _expectation()
+        _record_all(
+            expectation,
+            Check(turn=19, verdict=UNDETERMINED),
             Check(turn=EXPIRES_AT, verdict=UNDETERMINED),
         )
 

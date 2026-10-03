@@ -67,9 +67,13 @@ def _require_ids(value: object, *, name: str) -> tuple[str, ...]:
 class Expectation:
     """本人が「これから起きる」と思ったこと。
 
-    照合は 1 ターンに 1 回まで受け取る。直前の照合と同じ当否が続いたら確定する。
-    1 回の判断のぶれを信念まで届かせないため (#1436 試作 2)。暫定の判定は最後の
-    照合の当否で、別の項目としては持たない。
+    照合は 1 ターンに 1 回まで受け取る。同じ当否が 2 回続いたら確定する。1 回の
+    判断のぶれを信念まで届かせないため (#1436 試作 2)。暫定の判定は最後の当否
+    つきの照合で、別の項目としては持たない。
+
+    「まだ分からない」は新しい材料が無いという意味で、前の判定を打ち消さない。
+    続いたかを数えるときも飛ばす。清算の問いは直近の数ターンしか見せないので、
+    当たった証拠が見える範囲から外れただけでも「まだ分からない」が返りうる。
 
     判定の状態は公開しない。状態をどう移すかはこの集約が決め、外へは返す出来事
     で伝える。外で状態を読んで判断すると、規則が集約の外へ漏れる。
@@ -202,6 +206,7 @@ class Expectation:
             raise ExpectationValidationException("check must be Check")
         self._require_within_term(check.turn)
         previous = self._checks[-1] if self._checks else None
+        previous_outcome = self._last_outcome()
         if previous is not None and check.turn <= previous.turn:
             raise ExpectationCheckRuleException(
                 f"check turn ({check.turn}) must be after previous check "
@@ -219,7 +224,7 @@ class Expectation:
         outcome = check.verdict.outcome
         if outcome is None:
             return None
-        if previous is not None and previous.verdict.outcome is outcome:
+        if previous_outcome is outcome:
             return self._settle(outcome, turn=check.turn)
         if outcome is Outcome.MISS:
             return ProvisionallyMissed(
@@ -233,12 +238,12 @@ class Expectation:
     def expire_if_overdue(
         self, *, now_turn: int
     ) -> ExpectationSettled | ExpectationExpired | None:
-        """期限のターンを過ぎていれば、最後の暫定の判定で確定させる。暫定の判定が無ければ期限切れにする。"""
+        """期限のターンを過ぎていれば、暫定の判定で確定させる。当否つきの照合が無ければ期限切れにする。"""
         self._require_open()
         now = require_turn(now_turn, name="now_turn")
         if now <= self._expires_at_turn:
             return None
-        provisional = self._checks[-1].verdict.outcome if self._checks else None
+        provisional = self._last_outcome()
         if provisional is not None:
             return self._settle(provisional, turn=now)
         self._status = ExpectationStatus.EXPIRED
@@ -247,6 +252,12 @@ class Expectation:
             holder=self._holder,
             turn=now,
         )
+
+    def _last_outcome(self) -> Outcome | None:
+        for check in reversed(self._checks):
+            if check.verdict.outcome is not None:
+                return check.verdict.outcome
+        return None
 
     def _settle(self, outcome: Outcome, *, turn: int) -> ExpectationSettled:
         self._status = ExpectationStatus.SETTLED
