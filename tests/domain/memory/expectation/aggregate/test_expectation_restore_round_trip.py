@@ -35,6 +35,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import (
     ExpectationOrigin,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_snapshot import (
+    ExpectationSnapshot,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_status import (
     ExpectationStatus,
 )
@@ -129,14 +132,30 @@ def _reachable_states() -> list[_Reached]:
 _REACHABLE = _reachable_states()
 
 
-def _restore(state: _Reached, status: ExpectationStatus) -> Expectation:
-    return Expectation.restore(
+def _snapshot_of(state: _Reached, status: ExpectationStatus) -> ExpectationSnapshot:
+    return ExpectationSnapshot(
         **FORMATION,  # type: ignore[arg-type]
         shape=state.shape,
         checks=state.checks,
         status=status,
         closed_at_turn=state.closed_at_turn,
     )
+
+
+def _restore(state: _Reached, status: ExpectationStatus) -> Expectation:
+    return Expectation.restore(_snapshot_of(state, status))
+
+
+def _driven(state: _Reached) -> Expectation:
+    """``_drive`` と同じ判定の列を、もう一度集約に渡して終えたもの。"""
+    expectation = Expectation(**FORMATION)  # type: ignore[arg-type]
+    if state.shape is not None:
+        expectation.judge_shape(state.shape, turn=FORMED_AT)
+    for check in state.checks:
+        expectation.record(check)
+    if state.label.endswith("overdue"):
+        expectation.expire_if_overdue(now_turn=EXPIRES_AT + 1)
+    return expectation
 
 
 def test_reachable_states_cover_every_status() -> None:
@@ -160,3 +179,30 @@ def test_restore_rejects_reachable_state_with_other_status(state: _Reached) -> N
     for other in others:
         with pytest.raises(ExpectationValidationException):
             _restore(state, other)
+
+
+@pytest.mark.parametrize("state", _REACHABLE, ids=lambda s: s.label)
+def test_snapshot_of_driven_expectation_carries_reached_state(state: _Reached) -> None:
+    """判定を受けて移った予期の保存用の値は、移った先の状態と、終わりを告げた出来事のターンを持つ。"""
+    snapshot = _driven(state).snapshot()
+
+    assert snapshot == _snapshot_of(state, state.status)
+
+
+@pytest.mark.parametrize("state", _REACHABLE, ids=lambda s: s.label)
+def test_restore_of_snapshot_reads_back_same_snapshot(state: _Reached) -> None:
+    """判定を受けて移った予期の保存用の値を restore に渡すと、作り直した予期から同じ値を読み出せる。"""
+    snapshot = _driven(state).snapshot()
+
+    assert Expectation.restore(snapshot).snapshot() == snapshot
+
+
+def test_dismissed_snapshot_keeps_judged_turn_after_formed_turn() -> None:
+    """作ったターンより後に形の判定で外した予期は、判定したターンを終わったターンとして保存し、往復しても保つ。"""
+    expectation = Expectation(**FORMATION)  # type: ignore[arg-type]
+    expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=FORMED_AT + 2)
+
+    snapshot = Expectation.restore(expectation.snapshot()).snapshot()
+
+    assert snapshot.status is ExpectationStatus.DISMISSED
+    assert snapshot.closed_at_turn == FORMED_AT + 2

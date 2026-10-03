@@ -35,6 +35,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import (
     ExpectationOrigin,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_snapshot import (
+    ExpectationSnapshot,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_status import (
     ExpectationStatus,
 )
@@ -134,47 +137,56 @@ class Expectation:
         self._closed_at_turn: int | None = None
 
     @classmethod
-    def restore(
-        cls,
-        *,
-        expectation_id: ExpectationId,
-        holder: BeingId,
-        content: str,
-        origin: ExpectationOrigin,
-        likelihood: Likelihood,
-        formed_at_turn: int,
-        expires_at_turn: int,
-        formed_with: str | None = None,
-        due: str | None = None,
-        beliefs_in_mind: tuple[str, ...] = (),
-        episodes_in_mind: tuple[str, ...] = (),
-        shape: ShapeVerdict | None,
-        checks: tuple[Check, ...],
-        status: ExpectationStatus,
-        closed_at_turn: int | None,
-    ) -> Expectation:
+    def restore(cls, snapshot: ExpectationSnapshot) -> Expectation:
         """保存した状態から予期を作り直す。照合の記録を再生せず、状態をそのまま戻す。
 
         形の判定や期限の確認のターンは照合の記録に残らないので、再生では戻せない。
         状態が清算の規則と食い違うときは作り直さずに拒む。
         """
+        if not isinstance(snapshot, ExpectationSnapshot):
+            raise ExpectationValidationException(
+                "snapshot must be ExpectationSnapshot"
+            )
         expectation = cls(
-            expectation_id=expectation_id,
-            holder=holder,
-            content=content,
-            origin=origin,
-            likelihood=likelihood,
-            formed_at_turn=formed_at_turn,
-            expires_at_turn=expires_at_turn,
-            formed_with=formed_with,
-            due=due,
-            beliefs_in_mind=beliefs_in_mind,
-            episodes_in_mind=episodes_in_mind,
+            expectation_id=snapshot.expectation_id,
+            holder=snapshot.holder,
+            content=snapshot.content,
+            origin=snapshot.origin,
+            likelihood=snapshot.likelihood,
+            formed_at_turn=snapshot.formed_at_turn,
+            expires_at_turn=snapshot.expires_at_turn,
+            formed_with=snapshot.formed_with,
+            due=snapshot.due,
+            beliefs_in_mind=snapshot.beliefs_in_mind,
+            episodes_in_mind=snapshot.episodes_in_mind,
         )
         expectation._restore_state(
-            shape=shape, checks=checks, status=status, closed_at_turn=closed_at_turn
+            shape=snapshot.shape,
+            checks=snapshot.checks,
+            status=snapshot.status,
+            closed_at_turn=snapshot.closed_at_turn,
         )
         return expectation
+
+    def snapshot(self) -> ExpectationSnapshot:
+        """保存するための値を返す。状態を読んで判断する口ではなく、保存して ``restore`` に戻すためだけに使う。"""
+        return ExpectationSnapshot(
+            expectation_id=self._expectation_id,
+            holder=self._holder,
+            content=self._content,
+            origin=self._origin,
+            likelihood=self._likelihood,
+            formed_at_turn=self._formed_at_turn,
+            expires_at_turn=self._expires_at_turn,
+            formed_with=self._formed_with,
+            due=self._due,
+            beliefs_in_mind=self._beliefs_in_mind,
+            episodes_in_mind=self._episodes_in_mind,
+            shape=self._shape,
+            checks=tuple(self._checks),
+            status=self._status,
+            closed_at_turn=self._closed_at_turn,
+        )
 
     @property
     def expectation_id(self) -> ExpectationId:
