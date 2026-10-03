@@ -80,6 +80,7 @@ from ai_rpg_world.application.being.expectation.recall_credit import (
     ExpectationRecallCreditReceiver,
 )
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
+from ai_rpg_world.application.being.recall.selection_store import NextTurnFieldSelections
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -692,6 +693,11 @@ class WorldRuntime:
     # 先に組んだ配り手だけが古い store を指したまま分かれる。
     _expectation_store: InMemoryExpectationRepository = field(
         default_factory=InMemoryExpectationRepository, repr=False
+    )
+    # #1414: 清算で選んだ欄を次のプロンプトへ渡す。1 ターンで作り直せる一時的な
+    # 状態なので snapshot 非対象 (design_decisions D1414-3)。
+    _next_turn_field_selections: NextTurnFieldSelections = field(
+        default_factory=NextTurnFieldSelections, repr=False
     )
     # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
     _expectation_dispatcher: Any | None = field(default=None, repr=False)
@@ -2690,7 +2696,18 @@ class WorldRuntime:
             ),
             expectations=self._expectation_store,
             goal_text=self._reflect_objective_provider,
+            selections=(
+                self._next_turn_field_selections
+                if self._runtime_config_value("expectation_settlement_enabled")
+                else None
+            ),
         )
+
+    def field_selections_for_settlement(self) -> NextTurnFieldSelections | None:
+        """#1414: 状況の欄から引く run だけ、清算に欄の問いを載せる。"""
+        if not self._situation_recall_enabled():
+            return None
+        return self._next_turn_field_selections
 
     def _reflect_objective_provider(self, player_id: PlayerId) -> str | None:
         """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
