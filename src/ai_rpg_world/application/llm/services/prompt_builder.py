@@ -214,6 +214,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # PR8 (R5): encounter memory を recall cue 源にする。注入時のみ動く。
         encounter_memory_for_recall = episodic.encounter_memory
         encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
+        encounter_spot_id_resolver = episodic.encounter_spot_id_resolver
         # U10a (予測誤差統一設計 部品6・pending prediction): store が None なら
         # 機構自体が無効 (= 他の sidecar store と同じ「store の有無で判定」規約)。
         pending_prediction_store = episodic.pending_prediction_store
@@ -411,6 +412,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # PR8 (R5)
         self._encounter_memory_for_recall = encounter_memory_for_recall
         self._encounter_recent_window_ticks = encounter_recent_window_ticks
+        self._encounter_spot_id_resolver = encounter_spot_id_resolver
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)

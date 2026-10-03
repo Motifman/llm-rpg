@@ -31,9 +31,9 @@ class TestR5RecentEncounterCues:
     """R5: ``_cues_from_recent_encounters`` の挙動。"""
 
     def test_player_kind_maps_to_entity_axis(self) -> None:
-        """kind=player → axis=entity, value=spot_graph_player_{id}。"""
+        """kind=player の表示名 'Alice' は、axis=entity, value='actor_alice' の ENCOUNTER cue になる。"""
         mem = InMemoryEncounterMemory()
-        mem.observe(PID, EncounterKey.player("42"), current_tick=10)
+        mem.observe(PID, EncounterKey.player("Alice"), current_tick=10)
         cues = _cues_from_recent_encounters(
             encounter_memory=mem,
             player_id=PID,
@@ -42,7 +42,7 @@ class TestR5RecentEncounterCues:
         )
         assert len(cues) == 1
         assert cues[0].axis == "entity"
-        assert cues[0].value == "spot_graph_player_42"
+        assert cues[0].value == "actor_alice"
         assert cues[0].source == EpisodicCueSource.ENCOUNTER
 
     def test_spot_kind_maps_to_place_spot_axis(self) -> None:
@@ -127,18 +127,6 @@ class TestR5RecentEncounterCues:
         assert cues[0].axis == "place_spot"
         assert cues[0].value == "7"
 
-    def test_non_numeric_identifier_for_player_skipped(self) -> None:
-        """kind=player で identifier が int parse 不能なら skip (silent-safe)。"""
-        mem = InMemoryEncounterMemory()
-        mem.observe(PID, EncounterKey(kind="player", identifier="alice"), current_tick=10)
-        cues = _cues_from_recent_encounters(
-            encounter_memory=mem,
-            player_id=PID,
-            current_tick=10,
-            recent_window_ticks=5,
-        )
-        assert cues == []
-
     def test_future_tick_skipped(self) -> None:
         """``current_tick - last_seen_tick < 0`` (= 記録 tick の方が未来) は skip。"""
         mem = InMemoryEncounterMemory()
@@ -184,7 +172,7 @@ class TestR5IntegrationViaBuildSituationCues:
     def test_encounter_cue_appears_in_situation_cues(self) -> None:
         """encounter_memory + player_id + current_tick が揃えば cue が出る。"""
         mem = InMemoryEncounterMemory()
-        mem.observe(PID, EncounterKey.player("42"), current_tick=10)
+        mem.observe(PID, EncounterKey.player("alice"), current_tick=10)
         cues = build_situation_episodic_cues(
             runtime_context=None,
             observation_structured=None,
@@ -195,7 +183,7 @@ class TestR5IntegrationViaBuildSituationCues:
             encounter_recent_window_ticks=5,
         )
         canonicals = {c.to_canonical() for c in cues}
-        assert "entity:spot_graph_player_42" in canonicals
+        assert "entity:actor_alice" in canonicals
 
     def test_missing_encounter_args_is_noop(self) -> None:
         """encounter_memory / player_id / current_tick のどれかが None なら cue 出ない。"""
@@ -250,3 +238,132 @@ class TestR5IntegrationViaBuildSituationCues:
         assert len(place_cues) == 1
         # 重複時は先に来た runtime cue が残る (= 既存 dedupe の last-write-wins 反対)
         assert place_cues[0].source == EpisodicCueSource.RUNTIME_CONTEXT
+
+
+_SPOT_INT_IDS = {"festival_square": 3, "lone_hut": 8}
+
+
+def _resolve_spot_int_id(spot_str_id: str) -> int:
+    return _SPOT_INT_IDS[spot_str_id]
+
+
+def _encounter_situation_cues(
+    mem: InMemoryEncounterMemory,
+    *,
+    runtime_context=None,  # type: ignore[no-untyped-def]
+    observation_structured=None,  # type: ignore[no-untyped-def]
+    spot_id_resolver=_resolve_spot_int_id,  # type: ignore[no-untyped-def]
+):  # type: ignore[no-untyped-def]
+    return build_situation_episodic_cues(
+        runtime_context=runtime_context,
+        observation_structured=observation_structured,
+        encounter_memory=mem,
+        encounter_player_id=PID,
+        encounter_current_tick=10,
+        encounter_spot_id_resolver=spot_id_resolver,
+    )
+
+
+class TestEncounterCuesFromRegisteredKeys:
+    """Issue #1445: 実際の登録値 (人物は表示名、場所はシナリオの文字列 ID) から encounter cue が作られる。"""
+
+    def test_japanese_display_name_yields_entity_cue(self) -> None:
+        """表示名 'ノア' で登録した人物の遭遇から、entity cue 'actor_ノア' が ENCOUNTER source で作られる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("ノア"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        entity = [c for c in cues if c.axis == "entity"]
+        assert [(c.value, c.source) for c in entity] == [
+            ("actor_ノア", EpisodicCueSource.ENCOUNTER)
+        ]
+
+    def test_display_name_cue_equals_observed_actor_cue(self) -> None:
+        """表示名 'ノア' の遭遇から作る entity cue は、観測 structured の actor 'ノア' から作る cue と同じ canonical になり、1 件にまとまる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("ノア"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem, observation_structured={"actor": "ノア"})
+
+        assert [c.to_canonical() for c in cues if c.axis == "entity"] == ["entity:actor_ノア"]
+
+    def test_different_japanese_names_yield_different_cues(self) -> None:
+        """別人の 'ノア' と 'ノエ' の遭遇は、それぞれ別の entity cue になる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("ノア"), current_tick=10)
+        mem.observe(PID, EncounterKey.player("ノエ"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert sorted(c.value for c in cues if c.axis == "entity") == ["actor_ノア", "actor_ノエ"]
+
+    def test_decomposed_kana_name_yields_same_cue_as_composed(self) -> None:
+        """濁点を分解した 'バド' (NFD) で登録した遭遇も、NFC の 'バド' と同じ entity cue 'actor_バド' になる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("\u30cf\u3099\u30c8\u3099"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert [c.value for c in cues if c.axis == "entity"] == ["actor_バド"]
+
+    def test_symbol_only_name_yields_no_entity_cue(self) -> None:
+        """記号と空白だけの表示名 '・ ・' の遭遇からは entity cue を作らず、同時に遭遇した場所の cue は残る。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.player("・ ・"), current_tick=10)
+        mem.observe(PID, EncounterKey.spot("lone_hut"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert [c.to_canonical() for c in cues] == ["place_spot:8"]
+
+    def test_scenario_spot_id_yields_place_spot_cue_via_resolver(self) -> None:
+        """文字列 ID 'festival_square' で登録した場所の遭遇から、resolver が返す数値 ID の place_spot cue '3' が作られる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.spot("festival_square"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert [(c.axis, c.value, c.source) for c in cues] == [
+            ("place_spot", "3", EpisodicCueSource.ENCOUNTER)
+        ]
+
+    def test_encounter_spot_cue_equals_runtime_place_cue(self) -> None:
+        """'festival_square' の遭遇から作る place_spot cue は、現在地 spot_id=3 の runtime から作る place_spot cue と同じ canonical になる。"""
+        from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.spot("festival_square"), current_tick=10)
+        rt = ToolRuntimeContextDto(
+            current_spot_id=3,
+            current_sub_location_id=None,
+            current_area_ids=(),
+            targets={},
+        )
+
+        from_encounter = _encounter_situation_cues(mem)
+        from_runtime = build_situation_episodic_cues(runtime_context=rt)
+
+        assert [c.to_canonical() for c in from_encounter] == [
+            c.to_canonical() for c in from_runtime if c.axis == "place_spot"
+        ]
+
+    def test_unknown_spot_id_is_skipped_and_other_cues_remain(self) -> None:
+        """resolver が知らない場所 ID で例外を投げても、その場所の cue だけを落とし、ほかの遭遇の cue は残る。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.spot("unknown_spot"), current_tick=10)
+        mem.observe(PID, EncounterKey.spot("lone_hut"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem)
+
+        assert [c.to_canonical() for c in cues] == ["place_spot:8"]
+
+    def test_spot_id_is_parsed_as_int_when_resolver_absent(self) -> None:
+        """resolver を渡さないときは従来どおり、数値文字列の場所 ID '7' を place_spot cue '7' にし、文字列 ID は捨てる。"""
+        mem = InMemoryEncounterMemory()
+        mem.observe(PID, EncounterKey.spot("7"), current_tick=10)
+        mem.observe(PID, EncounterKey.spot("festival_square"), current_tick=10)
+
+        cues = _encounter_situation_cues(mem, spot_id_resolver=None)
+
+        assert [c.to_canonical() for c in cues] == ["place_spot:7"]
