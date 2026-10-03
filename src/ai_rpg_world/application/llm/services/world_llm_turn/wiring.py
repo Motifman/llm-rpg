@@ -400,30 +400,36 @@ class WorldLlmWiring:
         )
 
     def _build_goal_completion_hint_service(self) -> GoalCompletionHintService | None:
-        """profile が目的の hint を求め、判断ポートと goal_outcome があるときだけ組む (#1448)。
+        """profile が目的の hint を求めたときだけ組む (#1448)。
 
-        goal_outcome が tool に出ていない run で組むと、hint が存在しない申告を勧める。
+        前提が欠けたまま有効にした profile は起動前に落とす。黙って無効にすると、
+        run 後に「hint が 0 件」が閾値のせいか配線のせいか見分けられない。
+        goal_outcome が tool に出ていない run で組むと、存在しない申告を勧める。
         """
         config = getattr(self.runtime, "_runtime_config", None)
         if config is None or not config.typed_judgment_goal_hint_enabled:
             return None
+        port = self.typed_judgment_port
         goal_store = getattr(self.runtime, "_goal_journal_store", None)
         goal_outcome_offered = bool(
             getattr(self.runtime, "_goal_revision_enabled", False)
         )
-        if self.typed_judgment_port is None or goal_store is None or not goal_outcome_offered:
-            logger.warning(
-                "TYPED_JUDGMENT_GOAL_HINT_ENABLED=1 だが、判断ポート・goal store・"
-                "目的の改訂 (goal_outcome) のいずれかが無いため、目的の hint は入らない "
-                "(port=%s goal_store=%s goal_outcome=%s)",
-                self.typed_judgment_port is not None,
-                goal_store is not None,
-                goal_outcome_offered,
+        if port is None or goal_store is None or not goal_outcome_offered:
+            missing = [
+                requirement
+                for requirement, present in (
+                    ("TYPED_JUDGMENT_PROVIDER", port is not None),
+                    ("GOAL_STORE_ENABLED", goal_store is not None),
+                    ("GOAL_REVISION_ENABLED", goal_outcome_offered),
+                )
+                if not present
+            ]
+            raise ValueError(
+                "TYPED_JUDGMENT_GOAL_HINT_ENABLED requires " + ", ".join(missing)
             )
-            return None
         return GoalCompletionHintService(
             goal_store,
-            judgment_port=self.typed_judgment_port,
+            judgment_port=port,
             min_probability=float(config.typed_judgment_goal_hint_min_probability),
         )
 

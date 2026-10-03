@@ -352,12 +352,12 @@ class TestTheSessionGetsTheGoalHint:
             assert wiring.typed_judgment_port is not None
             assert wiring.goal_completion_hint_service is None
 
-    def test_enabling_without_a_port_brings_no_hint(self) -> None:
-        """provider が off なら、hint を有効にしても入らない。判断ポートが無いため。"""
-        for wiring in _session_wiring(self._config(typed_judgment_provider="off")):
-            assert wiring.goal_completion_hint_service is None
+    def test_enabling_without_a_port_fails_before_the_run(self) -> None:
+        """provider が off のまま hint を有効にすると、session を作る時点で ValueError になる。黙って無効にしない。"""
+        with pytest.raises(ValueError, match="TYPED_JUDGMENT_GOAL_HINT_ENABLED"):
+            list(_session_wiring(self._config(typed_judgment_provider="off")))
 
-    def test_enabling_without_goal_outcome_brings_no_hint(self) -> None:
-        """目的の改訂が無効で goal_outcome が tool に出ていなければ、hint は入らない。存在しない申告を勧めない。"""
-        for wiring in _session_wiring(self._config(goal_revision_enabled=False)):
-            assert wiring.goal_completion_hint_service is None
+    def test_enabling_without_goal_outcome_fails_before_the_run(self) -> None:
+        """目的の改訂が無効で goal_outcome が tool に出ていないのに hint を有効にすると、session を作る時点で ValueError になる。"""
+        with pytest.raises(ValueError, match="TYPED_JUDGMENT_GOAL_HINT_ENABLED"):
+            list(_session_wiring(self._config(goal_revision_enabled=False)))
