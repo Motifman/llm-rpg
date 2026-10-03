@@ -312,6 +312,30 @@ class Expectation:
             turn=now,
         )
 
+    def expire_early(
+        self, *, now_turn: int
+    ) -> ExpectationSettled | ExpectationExpired:
+        """清算待ちの件数の上限で外すとき、期限を前のターンに繰り上げて閉じる。
+
+        閉じ方は期限を過ぎたときと同じ規則にする。上限で外す専用の閉じ方を持つと、
+        保存して戻すときに、期限より前に閉じた理由を照合の記録から導けない。
+        """
+        self._require_open()
+        now = require_turn(now_turn, name="now_turn")
+        if now <= self._formed_at_turn:
+            raise ExpectationCheckRuleException(
+                f"now_turn ({now}) must be after formed_at_turn ({self._formed_at_turn})"
+            )
+        if self._checks and self._checks[-1].turn >= now:
+            raise ExpectationCheckRuleException(
+                f"now_turn ({now}) must be after the last check turn "
+                f"({self._checks[-1].turn})"
+            )
+        self._expires_at_turn = min(self._expires_at_turn, now - 1)
+        closed = self.expire_if_overdue(now_turn=now)
+        assert closed is not None
+        return closed
+
     def _settle(self, outcome: Outcome, *, turn: int) -> ExpectationSettled:
         self._status = ExpectationStatus.SETTLED
         self._closed_at_turn = turn
