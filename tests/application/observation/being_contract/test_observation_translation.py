@@ -105,6 +105,66 @@ class TestSubjectFromRole:
 
         assert observation.subject_is_self is True
 
+    def test_self_subject_type_without_actor_is_self(self) -> None:
+        """行為者の名前を持たず本文が本人の状態を述べる種類 (入手) は、主体が本人になる。"""
+        observation = _translate(
+            _output(
+                {"type": "item_added_to_inventory", "item_name": "貝"},
+                category="self_only",
+                prose="貝を入手しました。",
+            )
+        )
+
+        assert observation.subject_is_self is True
+        assert observation.subject_name == "ノア"
+
+    def test_self_only_about_another_party_is_not_self(self) -> None:
+        """self_only でも、取引を断った相手のように主体が他人で名前が無ければ、本人とせず「不明」にする。"""
+        observation = _translate(
+            _output(
+                {"type": "trade_declined", "role": "seller", "decliner_player_id": 4},
+                category="self_only",
+                prose="カイが取引を断りました。",
+            )
+        )
+
+        assert observation.subject_is_self is False
+        assert observation.subject_name is UNKNOWN
+
+    def test_trade_offer_has_seller_as_subject(self) -> None:
+        """取引の提案を受けた観測は、本文に現れる出品者が主体になる。"""
+        observation = _translate(
+            _output(
+                {"type": "trade_offered", "role": "recipient", "seller": "カイ"},
+                category="self_only",
+                prose="カイから「貝」の取引提案が届きました（10G）。",
+            )
+        )
+
+        assert observation.subject_is_self is False
+        assert observation.subject_name == "カイ"
+
+    def test_speaker_id_of_self_makes_subject_self(self) -> None:
+        """話者の ID が本人なら、名前が違っていても主体は本人になる。"""
+        observation = _translate(
+            _output(_speech(speaker="のあ", speaker_player_id=2), prose="のあが言った")
+        )
+
+        assert observation.subject_is_self is True
+
+    def test_actor_hidden_from_prose_is_self_when_it_is_the_observer(self) -> None:
+        """本文が行為者を伏せていても、行為者が本人なら主体は本人になる。本人は自分がしたと知っている。"""
+        observation = _translate(
+            _output(
+                {"type": "spot_public_effect_observed", "actor_name": "ノア"},
+                category="environment",
+                prose="集会室の雰囲気が変わった。",
+            )
+        )
+
+        assert observation.subject_is_self is True
+        assert observation.subject_name == "ノア"
+
     def test_actor_hidden_from_prose_is_not_revealed(self) -> None:
         """構造化データに行為者があっても本文が伏せていれば、主体の名前は「不明」になる。"""
         observation = _translate(
@@ -179,6 +239,26 @@ class TestRoute:
         assert observation.subject_name == "大型カニ"
         assert observation.subject_is_self is False
         assert observation.addressed_to_self is True
+
+    def test_being_targeted_without_harm_is_seen(self) -> None:
+        """標的が本人でも害を受けない出来事 (追跡の開始) は「見た・聞いた」のままで、自分宛てになる。"""
+        observation = _translate(
+            _output(
+                {"type": "monster_started_chasing", "monster_name": "大型カニ", "target_player_id": 2}
+            )
+        )
+
+        assert isinstance(observation.route, SeenOrHeard)
+        assert observation.addressed_to_self is True
+
+    def test_written_post_has_author_as_source(self) -> None:
+        """書き込みは「言われた・書かれていた」になり、書いた人が情報源になる。"""
+        observation = _translate(
+            _output({"type": "sns_post_created", "actor": "カイ", "content": "北に水場"})
+        )
+
+        assert isinstance(observation.route, ToldOrWritten)
+        assert observation.source == "カイ"
 
     def test_monster_attack_on_another_is_seen(self) -> None:
         """他人が標的のモンスターの攻撃は「見た・聞いた」になり、自分宛てでない。"""
@@ -297,6 +377,17 @@ class TestTime:
 
         assert observation.time == ObservedTime(display="一日目の朝 1:00", seconds=3600)
 
+    @pytest.mark.parametrize(("tick", "seconds"), [(0, 0), (None, None)])
+    def test_tick_zero_is_zero_seconds_and_missing_tick_has_no_seconds(
+        self, tick: int | None, seconds: int | None
+    ) -> None:
+        """tick 0 は 0 秒になり、tick が無ければ秒を省く。"""
+        observation = observation_from_game(
+            _output(_speech()), tick=tick, game_time_label="深夜 0:00", observer=_NOAH
+        )
+
+        assert observation.time.seconds == seconds
+
     def test_seconds_is_none_when_tick_length_is_unknown(self) -> None:
         """1 tick の長さが分からない世界では、数値を省いて表示の文だけにする。"""
         observer = Observer(
@@ -354,13 +445,33 @@ class TestActionResult:
         assert observation.place == "浜辺"
         assert observation.time == ObservedTime(display="一日目の朝 0:10", seconds=600)
 
-    def test_reschedule_flag_becomes_wants_wake(self) -> None:
-        """should_reschedule の値が、そのまま起こしてほしいかになる。"""
+    def test_successful_result_has_success(self) -> None:
+        """成功したツールの結果は、成否が成功の観測になる。"""
         observation = observation_from_action_result(
-            self._entry(should_reschedule=True), call_id="call-9", observer=_NOAH
+            self._entry(success=True), call_id="call-9", observer=_NOAH
         )
 
-        assert observation.wants_wake is True
+        assert observation.route == OwnActionResult(call_id="call-9", succeeded=True)
+
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_reschedule_flag_becomes_wants_wake(self, flag: bool) -> None:
+        """should_reschedule の値が、そのまま起こしてほしいかになる。"""
+        observation = observation_from_action_result(
+            self._entry(should_reschedule=flag), call_id="call-9", observer=_NOAH
+        )
+
+        assert observation.wants_wake is flag
+
+    def test_result_without_any_text_is_not_representable(self) -> None:
+        """結果の文も行動の要約も空なら、必須の本文が無いので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_action_result(
+                self._entry(result_summary="", action_summary=" "),
+                call_id="call-9",
+                observer=_NOAH,
+            )
+
+        assert raised.value.reason is NotRepresentableReason.EMPTY_BODY
 
     def test_result_without_time_label_is_not_representable(self) -> None:
         """時刻のラベルが無いツールの結果は、必須の時刻を埋められないので変換を拒む。"""

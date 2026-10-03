@@ -82,11 +82,31 @@ _ROUTE_BY_TYPE: Final[Mapping[str, Route]] = {
     "distant_cue_appeared": SeenOrHeard(),
 }
 
+# 標的が本人なら、出来事は自分の体に起きたことになる種類。
+_HARM_TO_TARGET_TYPES: Final = frozenset({"monster_attacked_player"})
+
+# 行為者の名前を持たず、本文が一人称で本人の状態を述べる種類。self_only でも
+# 取引の提案や拒否のように主体が他人のものがあるので、分類からは推さない。
+_SELF_SUBJECT_TYPES: Final = frozenset(
+    {
+        "action_failed",
+        "gold_earned",
+        "gold_paid",
+        "inventory_overflow",
+        "item_added_to_inventory",
+        "item_equipped",
+        "item_unequipped",
+        "level_up",
+        "player_revived_post_hoc",
+    }
+)
+
 _SUBJECT_NAME_KEYS: Final = (
     "speaker",
     "actor",
     "actor_name",
     "monster_name",
+    "seller",
     "voter_display_name",
     "initiator_display_name",
 )
@@ -113,7 +133,7 @@ def observation_from_game(
 
     targets_self = _targets_self(structured, observer)
     route = _route(kind, output.observation_category, targets_self)
-    subject_is_self, subject_name = _subject(structured, output, observer)
+    subject_is_self, subject_name = _subject(kind, structured, output.prose, observer)
     return Observation(
         body=output.prose,
         route=route,
@@ -131,12 +151,15 @@ def observation_from_action_result(
     entry: ActionResultEntry, *, call_id: str, observer: Observer
 ) -> Observation:
     """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。"""
+    body = entry.result_summary.strip() or entry.action_summary.strip()
+    if not body:
+        raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, entry.tool_name)
     if entry.game_time_label is None or not entry.game_time_label.strip():
         raise ObservationNotRepresentable(
             NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name
         )
     return Observation(
-        body=entry.result_summary.strip() or entry.action_summary,
+        body=body,
         route=OwnActionResult(call_id=call_id, succeeded=entry.success),
         time=_observed_time(
             entry.occurred_tick, entry.game_time_label, observer.seconds_per_tick
@@ -165,35 +188,38 @@ def _targets_self(structured: Mapping[str, Any], observer: Observer) -> bool | N
 def _route(
     kind: str | None, category: ObservationCategory, targets_self: bool | None
 ) -> Route:
-    if targets_self:
+    if targets_self and kind in _HARM_TO_TARGET_TYPES:
         return OwnBodyState()
     if kind is not None and kind in _ROUTE_BY_TYPE:
         return _ROUTE_BY_TYPE[kind]
     return _ROUTE_BY_CATEGORY[category]
 
 
+# 構造化データには、本文で伏せた名前 (妨害の行為者など) も入っている。本人が観測から
+# 知り得ない名前を契約に載せないよう、他人の名前は本文に現れるものだけを写す。
+# 本人が行為者かどうかは、本文が伏せていても本人には分かるので構造化データで決める。
 def _subject(
-    structured: Mapping[str, Any], output: ObservationOutput, observer: Observer
+    kind: str | None, structured: Mapping[str, Any], prose: str, observer: Observer
 ) -> tuple[bool, str | UnknownValue]:
-    name = _named_subject(structured, output.prose)
-    if structured.get("role") == "self" or (
-        output.observation_category == "self_only" and name is None
+    if (
+        structured.get("role") == "self"
+        or kind in _SELF_SUBJECT_TYPES
+        or structured.get("speaker_player_id") == observer.player_id.value
+        or observer.name in _subject_names(structured)
     ):
         return True, observer.name
+    name = next((n for n in _subject_names(structured) if n in prose), None)
     if name is None:
         return False, UNKNOWN
-    is_self = name == observer.name or structured.get("speaker_player_id") == observer.player_id.value
-    return is_self, name
+    return False, name
 
 
-# 構造化データには、本文で伏せた名前 (妨害の行為者など) も入っている。本人が観測から
-# 知り得ない名前を契約に載せないよう、本文に現れる名前だけを写す。
-def _named_subject(structured: Mapping[str, Any], prose: str) -> str | None:
-    for key in _SUBJECT_NAME_KEYS:
-        value = structured.get(key)
-        if isinstance(value, str) and value.strip() and value in prose:
-            return value
-    return None
+def _subject_names(structured: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        value
+        for key in _SUBJECT_NAME_KEYS
+        if isinstance(value := structured.get(key), str) and value.strip()
+    )
 
 
 def _source(
@@ -223,7 +249,7 @@ def _addressed_to_self(
 ) -> bool | UnknownValue:
     if targets_self is not None:
         return targets_self
-    if structured.get("channel") == "whisper":
+    if structured.get("channel") == "whisper" and structured.get("role") != "self":
         return True
     is_target = structured.get("is_target")
     if isinstance(is_target, bool):
