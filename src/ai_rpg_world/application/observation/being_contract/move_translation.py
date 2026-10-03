@@ -47,6 +47,8 @@ def environment_entry_for_player(
 
 def _pop_text(arguments: dict[str, Any], name: str) -> str | None:
     value = arguments.pop(name, None)
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be str or null, got {type(value).__name__}")
+    return value if value.strip() else None

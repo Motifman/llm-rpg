@@ -129,3 +129,80 @@ def test_seconds_per_tick_is_inferred_only_when_every_label_agrees(
     events = [_observation(i, tick, 2, label) for i, (tick, label) in enumerate(labels)]
 
     assert report.infer_seconds_per_tick(events) == expected
+
+
+def test_action_results_are_paired_with_oldest_action_of_same_tool(
+    report: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ツールの結果は、同じツール名の action のうち最も古い未対応のものの seq から呼び出しの ID を作る。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _observation(2, 1, 2, "深夜 0:05"),
+            _event(3, "action", 1, 2, tool="travel_to", arguments={}),
+            _event(4, "action", 1, 2, tool="wait", arguments={}),
+            _event(5, "action", 1, 2, tool="travel_to", arguments={}),
+            _event(6, "action_result", 1, 2, tool="wait", success=True, result_summary="待った。"),
+            _event(7, "action_result", 1, 2, tool="travel_to", success=True, result_summary="着いた。"),
+        ],
+    )
+    call_ids: list[str] = []
+    original = report.observation_from_action_result
+
+    def spy(entry: Any, *, call_id: str, observer: Any) -> Any:
+        call_ids.append(call_id)
+        return original(entry, call_id=call_id, observer=observer)
+
+    monkeypatch.setattr(report, "observation_from_action_result", spy)
+
+    report.tally_trace(trace, report.Tally())
+
+    assert call_ids == ["call-4", "call-3"]
+
+
+def test_action_result_without_same_tick_observation_uses_placeholder_label(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """同じ tick の観測が無いツールの結果は、時刻の文を仮置きして数え、仮置きの件数に入る。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _event(2, "action", 3, 2, tool="wait", arguments={}),
+            _event(3, "action_result", 3, 2, tool="wait", success=True, result_summary="待った。"),
+        ],
+    )
+    tally = report.Tally()
+
+    report.tally_trace(trace, tally)
+
+    assert tally.converted == {"OwnActionResult": 1}
+    assert tally.placeholder_labels == 1
+
+
+def test_render_markdown_reports_unknown_percentage_per_field_and_route(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """発言 1 件とツールの結果 1 件なら、自分宛てかの「不明」は全体 50%、言われた 100%、行動の結果 0% と出る。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _observation(2, 1, 2, "深夜 0:05"),
+            _event(3, "action", 1, 2, tool="wait", arguments={}),
+            _event(4, "action_result", 1, 2, tool="wait", success=True, result_summary="待った。"),
+        ],
+    )
+    tally = report.Tally()
+    report.tally_trace(trace, tally)
+
+    markdown = report.render_markdown(tally)
+
+    assert "| addressed_to_self | 50.0% | 100.0% | 0.0% |" in markdown
+    assert "| subject_name | 0.0% | 0.0% | 0.0% |" in markdown
+
+
+def test_main_returns_1_when_no_trace_is_found(report: ModuleType, tmp_path: Path) -> None:
+    """trace.jsonl が見つからない引数だけを渡すと、終了コード 1 を返す。"""
+    assert report.main([str(tmp_path / "missing")]) == 1

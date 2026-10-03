@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import copy
+import pickle
+from datetime import datetime
+
 import pytest
 
 from ai_rpg_world.being.contract import AgentMove, ContractViolation, EnvironmentEntry
@@ -43,6 +47,33 @@ class TestAgentMove:
         assert move.arguments["destination_label"] == "通信室"
         with pytest.raises(TypeError):
             move.arguments["destination_label"] = "倉庫"  # type: ignore[index]
+
+    def test_nested_argument_values_are_frozen(self) -> None:
+        """入れ子の配列と対応表も書き換えられない形で持ち、渡した側の後からの変更は届かない。"""
+        gives = [{"item_label": "貝", "count": 2}]
+        move = AgentMove(call_id="call-1", tool_name="give_item", arguments={"gives": gives})
+        gives[0]["count"] = 9
+
+        frozen = move.arguments["gives"]
+        assert isinstance(frozen, tuple)
+        assert dict(frozen[0]) == {"item_label": "貝", "count": 2}  # type: ignore[call-overload]
+        with pytest.raises(TypeError):
+            frozen[0]["count"] = 9  # type: ignore[index]
+
+    @pytest.mark.parametrize("value", [datetime(2026, 1, 1), object(), float("nan")])
+    def test_non_json_argument_value_is_rejected(self, value: object) -> None:
+        """引数の値に JSON で表せない値 (日時・任意のオブジェクト・NaN) を渡すと拒む。"""
+        with pytest.raises(ContractViolation):
+            AgentMove(call_id="call-1", tool_name="wait", arguments={"x": value})
+
+    def test_move_is_hashable_copyable_and_picklable(self) -> None:
+        """1 手はハッシュでき、複製と pickle の往復で等しいまま残る。"""
+        move = AgentMove(
+            call_id="call-1", tool_name="give_item", arguments={"gives": [{"item_label": "貝"}]}
+        )
+
+        assert hash(move) == hash(copy.deepcopy(move))
+        assert pickle.loads(pickle.dumps(move)) == move
 
     @pytest.mark.parametrize("field", ["call_id", "tool_name"])
     def test_blank_identity_is_rejected(self, field: str) -> None:

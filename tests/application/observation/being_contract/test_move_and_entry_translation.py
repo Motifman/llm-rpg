@@ -49,6 +49,11 @@ class TestAgentMoveFromToolCall:
         assert move.goal_update is None
         assert dict(move.arguments) == {}
 
+    def test_non_text_subjective_argument_is_rejected(self) -> None:
+        """主観の引数に文字列でも null でもない値が来たら、黙って捨てずに ValueError を投げる。"""
+        with pytest.raises(ValueError):
+            agent_move_from_tool_call("wait", {"inner_thought": 3}, call_id="call-1")
+
 
 def _scenario(*, objective: str | None, shared_objective: str) -> Any:
     return SimpleNamespace(

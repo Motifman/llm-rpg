@@ -14,9 +14,9 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from enum import Enum
-from typing import Final, Literal, Union
+from typing import Final, Literal, Union, get_args
 
 from ai_rpg_world.being.contract.errors import (
     ContractViolation,
@@ -70,7 +70,7 @@ class EnvironmentNotice:
 
 
 Route = Union[SeenOrHeard, ToldOrWritten, OwnBodyState, OwnActionResult, EnvironmentNotice]
-_ROUTE_TYPES: Final = (SeenOrHeard, ToldOrWritten, OwnBodyState, OwnActionResult, EnvironmentNotice)
+_ROUTE_TYPES: Final = get_args(Route)
 
 
 @dataclass(frozen=True)
@@ -95,8 +95,13 @@ class ObservedTime:
             raise ContractViolation("seconds must be a finite number or None")
 
 
+KNOWN_IF_POSSIBLE_FIELDS: Final = ("subject_name", "source", "place", "addressed_to_self")
+
+
 @dataclass(frozen=True, kw_only=True)
 class Observation:
+    """``wants_wake`` の None は助言なし、False は「起こさなくてよい」。"""
+
     body: str
     route: Route
     time: ObservedTime
@@ -129,8 +134,3 @@ class Observation:
         return tuple(
             name for name in KNOWN_IF_POSSIBLE_FIELDS if getattr(self, name) is UNKNOWN
         )
-
-
-KNOWN_IF_POSSIBLE_FIELDS: Final[tuple[str, ...]] = tuple(
-    f.name for f in fields(Observation) if "UnknownValue" in str(f.type)
-)

@@ -32,24 +32,44 @@ def _is_within(module: str, package: str) -> bool:
     return module == package or module.startswith(package + ".")
 
 
-def _imported_modules(path: Path) -> list[str]:
+def _imported_modules(path: Path, package: str) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     modules: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             modules.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            modules.append(node.module)
-            modules.extend(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = _resolve_from(node, package)
+            modules.append(base)
+            modules.extend(f"{base}.{alias.name}" for alias in node.names)
     return modules
 
 
+def _resolve_from(node: ast.ImportFrom, package: str) -> str:
+    if node.level == 0:
+        return node.module or ""
+    parts = package.split(".")
+    anchor = parts[: len(parts) - (node.level - 1)]
+    return ".".join(anchor + ([node.module] if node.module else []))
+
+
+def _package_of(path: Path, root: Path, root_package: str) -> str:
+    directories = path.relative_to(root).parent.parts
+    return ".".join([root_package, *directories])
+
+
 def _violations(
-    root: Path, *, allowed: tuple[str, ...], forbidden: tuple[str, ...]
+    root: Path,
+    *,
+    allowed: tuple[str, ...],
+    forbidden: tuple[str, ...],
+    root_package: str = "ai_rpg_world.being",
 ) -> list[str]:
     found: list[str] = []
-    for path in sorted(root.rglob("*.py")):
-        for module in _imported_modules(path):
+    paths = sorted(root.rglob("*.py"))
+    assert paths, f"no modules under {root}"
+    for path in paths:
+        for module in _imported_modules(path, _package_of(path, root, root_package)):
             if any(_is_within(module, p) for p in allowed):
                 continue
             if any(_is_within(module, p) for p in forbidden):
@@ -63,7 +83,10 @@ def _game_package_violations(root: Path) -> list[str]:
 
 def _contract_violations(root: Path) -> list[str]:
     return _violations(
-        root, allowed=("ai_rpg_world.being.contract",), forbidden=("ai_rpg_world",)
+        root,
+        allowed=("ai_rpg_world.being.contract",),
+        forbidden=("ai_rpg_world",),
+        root_package="ai_rpg_world.being.contract",
     )
 
 
@@ -124,6 +147,27 @@ def test_contract_rejects_even_temporary_exceptions(tmp_path: Path, source: str)
     (tmp_path / "module.py").write_text(source, encoding="utf-8")
 
     assert len(_contract_violations(tmp_path)) >= 1
+
+
+def test_relative_import_reaching_game_package_is_reported(tmp_path: Path) -> None:
+    """相対 import で being の外のゲームのパッケージに届くと違反として報告される。"""
+    (tmp_path / "module.py").write_text(
+        "from ..application.llm import contracts\n", encoding="utf-8"
+    )
+
+    assert _game_package_violations(tmp_path) == [
+        "module.py: ai_rpg_world.application.llm",
+        "module.py: ai_rpg_world.application.llm.contracts",
+    ]
+
+
+def test_relative_import_within_contract_passes(tmp_path: Path) -> None:
+    """契約の中の相対 import は違反にならない。"""
+    (tmp_path / "module.py").write_text(
+        "from .observation import Observation\n", encoding="utf-8"
+    )
+
+    assert _contract_violations(tmp_path) == []
 
 
 def test_similarly_named_package_is_not_mistaken_for_exception(tmp_path: Path) -> None:

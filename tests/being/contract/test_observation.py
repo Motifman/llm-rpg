@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+import dataclasses
+from typing import Any, get_args, get_type_hints
 
 import pytest
 
 from ai_rpg_world.being.contract import (
+    KNOWN_IF_POSSIBLE_FIELDS,
     UNKNOWN,
     ContractViolation,
     EnvironmentNotice,
@@ -16,6 +18,7 @@ from ai_rpg_world.being.contract import (
     OwnBodyState,
     SeenOrHeard,
     ToldOrWritten,
+    Unknown,
 )
 
 
@@ -198,3 +201,41 @@ class TestObservedTime:
         """秒に bool・文字列・非有限の数を渡すと拒む。"""
         with pytest.raises(ContractViolation):
             ObservedTime(display="朝", seconds=seconds)  # type: ignore[arg-type]
+
+
+class TestClosedContract:
+    """観測の欄が契約で閉じていて、環境が欄を足したり後から書き換えたりできないことを保証する。"""
+
+    def test_fields_are_exactly_the_contract(self) -> None:
+        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1 の 9 つだけである。"""
+        names = {f.name for f in dataclasses.fields(Observation)}
+
+        assert names == {
+            "body", "route", "time", "subject_is_self",
+            "subject_name", "source", "place", "addressed_to_self",
+            "wants_wake",
+        }
+
+    def test_unexpected_field_cannot_be_added(self) -> None:
+        """契約に無い欄を渡すと、観測の生成は TypeError で失敗する。"""
+        with pytest.raises(TypeError):
+            Observation(**_fields(mood="嬉しい"))
+
+    def test_observation_cannot_be_rewritten(self) -> None:
+        """作った観測の欄に代入すると FrozenInstanceError になる。"""
+        observation = Observation(**_fields())
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            observation.place = "洞窟"  # type: ignore[misc]
+
+    def test_known_if_possible_fields_match_annotations_that_accept_unknown(self) -> None:
+        """「分かるなら書く」の欄の一覧は、注釈が「不明」を受け付ける欄とちょうど一致する。"""
+        hints = get_type_hints(Observation)
+        accepts_unknown = tuple(
+            f.name
+            for f in dataclasses.fields(Observation)
+            if any(Unknown.UNKNOWN in get_args(arg) for arg in get_args(hints[f.name]))
+        )
+
+        assert KNOWN_IF_POSSIBLE_FIELDS == accepts_unknown
+        assert len(accepts_unknown) == 4
