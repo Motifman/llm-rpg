@@ -1714,6 +1714,7 @@ def _event_timeline_category(e: TraceEvent) -> str:
         TraceEventKind.EPISODIC_CHUNK_WRITTEN,
         TraceEventKind.EPISODIC_RECALL,
         "semantic_passive_recall",
+        TraceEventKind.SITUATION_BELIEF_RECALL,
     }:
         return "recall"
     if kind.startswith("belief_"):
@@ -2035,6 +2036,17 @@ def _format_event_body(e: TraceEvent) -> str:
         return f"semantic recall: {cand_count} candidates" + (
             f" / top_k={esc(top_k)}" if top_k is not None else ""
         ) + first_part
+    if kind == TraceEventKind.SITUATION_BELIEF_RECALL:
+        if payload.get("failed"):
+            return f"situation recall failed: {esc(short(str(payload['failed']), 90))}"
+        kept = "・".join(str(f) for f in payload.get("kept_fields") or []) or "なし"
+        reason = payload.get("degraded_reason")
+        chosen = len(payload.get("chosen") or [])
+        return (
+            f"situation recall: {chosen} chosen / {esc(payload.get('candidate_count'))} candidates"
+            f" kept={esc(kept)}"
+            + (f" <span class='dim'>(degraded: {esc(reason)})</span>" if reason else "")
+        )
     if kind == "prediction_outcome":
         outcome = (
             payload.get("outcome")

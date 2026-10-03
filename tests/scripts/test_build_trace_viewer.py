@@ -19,6 +19,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts._viewer_vendor import VendorAsset  # noqa: E402
 from scripts.build_trace_viewer import (  # noqa: E402
+    _event_timeline_category,
     _format_event_body,
     build_memo_state_timeline,
     build_position_timeline,
@@ -625,6 +626,40 @@ class TestFormatEventBody:
         speech = next(e for e in grouped[97] if e.kind == TraceEventKind.OBSERVATION)
 
         assert "[say_inline]" in _format_event_body(speech)
+
+    def test_situation_belief_recall_shows_kept_fields_and_degrade_reason(self) -> None:
+        """situation_belief_recall は、載せた件数、候補の数、残した欄、縮退の理由を 1 行で表示し、想起に分類される。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="situation_belief_recall",
+            tick=1,
+            player_id=1,
+            payload={
+                "failed": None,
+                "kept_fields": ["相手", "いま起きたこと"],
+                "degraded_reason": "no_selection",
+                "candidate_count": 4,
+                "chosen": ["b-1", "b-2"],
+            },
+        )
+        out = _format_event_body(e)
+        assert "2 chosen / 4 candidates" in out
+        assert "相手・いま起きたこと" in out
+        assert "no_selection" in out
+        assert _event_timeline_category(e) == "recall"
+
+    def test_failed_situation_belief_recall_shows_the_failure(self) -> None:
+        """失敗した situation_belief_recall は、失敗の内容を表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="situation_belief_recall",
+            tick=1,
+            player_id=1,
+            payload={"failed": "ValueError: top_k must be >= 1"},
+        )
+        assert "situation recall failed: ValueError" in _format_event_body(e)
 
     def test_semantic_passive_recall_uses_compact_summary(self) -> None:
         """semantic_passive_recall は cue 配列ではなく件数と候補本文を表示する。"""

@@ -125,6 +125,9 @@ def _in_mind_before_each_action(trace_path: Path, player_id: int) -> list[_InMin
         kind, payload = event["kind"], event.get("payload") or {}
         if kind == "semantic_passive_recall":
             beliefs = tuple(c["entry_id"] for c in payload.get("candidates", []))
+        elif kind == "situation_belief_recall":
+            # 状況の欄から引いた run (#1414) は、受動想起の代わりにこちらへ残る。
+            beliefs = tuple(payload.get("chosen") or ())
         elif kind == "episodic_recall":
             episodes = tuple(c["episode_id"] for c in payload.get("candidates", []))
         elif kind == "action":
