@@ -267,6 +267,7 @@ class BeingMemorySnapshotService:
         # 戻さないと再開した run で配り直された出来事を積み直す。
         "belief_evidence_received_event_ids",
         "recall_success_received_event_ids",
+        "recall_buffer_received_event_ids",
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測
         # (約束) の per-Being state。
         "pending_predictions",
@@ -447,6 +448,9 @@ class BeingMemorySnapshotService:
             "recall_success_received_event_ids": (
                 self._recall_success.list_received_event_ids_by_being(being_id)
             ),
+            "recall_buffer_received_event_ids": (
+                self._recall_buffer.list_received_event_ids_by_being(being_id)
+            ),
             # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の
             # 予測 (約束) の per-Being state。
             "pending_predictions": [
@@ -614,6 +618,10 @@ class BeingMemorySnapshotService:
             payload["recall_success_received_event_ids"],
             "recall_success_received_event_ids",
         )
+        recall_buffer_received = _decode_received_event_ids(
+            payload["recall_buffer_received_event_ids"],
+            "recall_buffer_received_event_ids",
+        )
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
         # デコード。
         pending_predictions = _decode_list(
@@ -713,6 +721,9 @@ class BeingMemorySnapshotService:
         )
         self._recall_success.replace_received_event_ids_by_being(
             being_id, recall_success_received
+        )
+        self._recall_buffer.replace_received_event_ids_by_being(
+            being_id, recall_buffer_received
         )
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
         # bulk overwrite。
