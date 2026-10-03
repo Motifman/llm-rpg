@@ -125,6 +125,7 @@ follow_imports = "silent"
 # src 配下は全レイヤーが対象。
 files = [
     "src/ai_rpg_world/domain",
+    "src/ai_rpg_world/being",
     "src/ai_rpg_world/application/being",
     "src/ai_rpg_world/application/common",
     "src/ai_rpg_world/application/conversation",
