@@ -11,6 +11,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from tests.memory_turn_helpers import ZERO_TURN
+
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
@@ -56,7 +58,7 @@ def _build_coord(*, returns, pending_prediction_enabled, current_tick, runtime_c
     being_id = BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))
     pending_store = InMemoryPendingPredictionStore()
     buffer_store = InMemoryBeliefEvidenceBufferStore()
-    transcriber = BeliefEvidenceTranscriber(buffer_store)
+    transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
     port = _StubPort(returns)
     subjective_service = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=pending_prediction_enabled)
     coord = EpisodicChunkCoordinator(observation_buffer=buffer, short_term_memory=sliding, action_result_store=action_store, episodic_episode_store=episode_store, chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(runtime_context_provider=runtime_context_provider), chunk_subjective_fields_service=subjective_service, belief_evidence_transcriber=transcriber, pending_prediction_store=pending_store, pending_prediction_enabled=pending_prediction_enabled, current_tick_provider=lambda : current_tick)

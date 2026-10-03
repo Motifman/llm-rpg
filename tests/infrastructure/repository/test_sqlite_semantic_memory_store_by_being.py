@@ -7,6 +7,7 @@ schema v2 (= semantic_memory_entries_by_being / semantic_cluster_signatures_by_b
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -368,6 +369,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
             contradict_evidence_ids=("c1",),
             confirmation_support_count=2,
             hearsay_support_count=1,
+            last_observed_turn=17,
         )
 
     def test_add_list_all_round_trips_exactly(
@@ -389,6 +391,30 @@ class TestSqliteSemanticFullFieldRoundtripContract:
         store.replace_all_by_being(being_id, [entry], [])
         loaded = store.list_for_being(being_id)[0]
         assert loaded == entry
+
+
+class TestSqliteSemanticLastObservedTurn:
+    """信念の last_observed_turn (#1452) が SQLite の更新経路でも保たれることを保証する。"""
+
+    def test_upsert_updates_last_observed_turn(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        """last_observed_turn=12 の信念を、同じ entry_id で 20 にして書き直すと、読み出しは 20 になる。"""
+        being_id = BeingId("being_w1_p1")
+        store.add_by_being(being_id, replace(_make_entry(), last_observed_turn=12))
+
+        store.add_by_being(being_id, replace(_make_entry(), last_observed_turn=20))
+
+        assert [e.last_observed_turn for e in store.list_for_being(being_id)] == [20]
+
+    def test_row_without_turn_reads_as_none(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        """last_observed_turn が NULL の行 (観測から作られていない信念、v8 より前の行) は None として読む。"""
+        being_id = BeingId("being_w1_p1")
+        store.add_by_being(being_id, _make_entry())
+
+        assert [e.last_observed_turn for e in store.list_for_being(being_id)] == [None]
 
 
 class TestSqliteSupersedeByBeing:

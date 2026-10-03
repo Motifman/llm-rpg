@@ -281,6 +281,51 @@ class TestBuildReport:
         assert "| 1 | 1 | 1 | 0 | 0 | 0 | 0 |" in report
         assert "| 2 | 1 | 0 | 1 | 1 | 0 | 0 |" in report
 
+    def test_counts_applied_belief_consolidation_actions(self, tmp_path: Path) -> None:
+        """信念を固めた trace の適用済みの操作を種類ごとに数え、変わり方の信念を作った件数 (explain_change) を report に出す。見送った操作は数えない (#1452)。"""
+        scenario = tmp_path / "demo.json"
+        scenario.write_text("{}", encoding="utf-8")
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as rec:
+            rec.record(
+                TraceEventKind.BELIEF_CONSOLIDATION,
+                being_id="b1",
+                decisions=[{"action": "explain_change"}, {"action": "create"}],
+                skipped_decisions=[{"reason": "explain_change_no_evidence", "decision": {"action": "explain_change"}}],
+            )
+            rec.record(
+                TraceEventKind.BELIEF_CONSOLIDATION,
+                being_id="b2",
+                decisions=[{"action": "explain_change"}],
+                skipped_decisions=[],
+            )
+
+        report = _build_report(
+            scenario_path=scenario,
+            trace_path=trace_path,
+            summary={"outcome": "ENDED", "last_tick": 2, "max_world_ticks": 30, "elapsed_sec": 0.1},
+        )
+
+        assert "## 信念を固めた操作" in report
+        assert "- explain_change: 2" in report
+        assert "- create: 1" in report
+
+    def test_omits_belief_consolidation_section_without_consolidation(self, tmp_path: Path) -> None:
+        """信念を固めた trace が無い run では、信念を固めた操作の節を出さない。"""
+        scenario = tmp_path / "demo.json"
+        scenario.write_text("{}", encoding="utf-8")
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as rec:
+            rec.record(TraceEventKind.RUN_END, outcome="ENDED")
+
+        report = _build_report(
+            scenario_path=scenario,
+            trace_path=trace_path,
+            summary={"outcome": "ENDED", "last_tick": 2, "max_world_ticks": 30, "elapsed_sec": 0.1},
+        )
+
+        assert "信念を固めた操作" not in report
+
     def test_includes_distinct_end_reason(self, tmp_path: Path) -> None:
         """世界内終了と外的停止を区別できるよう、終了理由をreportへ残す。"""
         scenario = tmp_path / "demo.json"

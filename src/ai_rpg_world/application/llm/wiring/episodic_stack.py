@@ -87,6 +87,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
         PendingPredictionRepository,
     )
+    from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+        MemoryTurnReader,
+    )
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -415,6 +418,9 @@ def build_episodic_stack(
     belief_consolidation_enabled: bool = False,
     belief_consolidation_completion: IBeliefConsolidationCompletionPort | None = None,
     belief_create_gate: BeliefCreateGate | None = None,
+    # #1452: 固着パスが作る証拠と信念に付ける記憶のターン数の読み口。
+    # 固着パスを組むときは必須。
+    memory_turn_reader: MemoryTurnReader | None = None,
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
     # chunk_coordinator が in_context_belief_ids / had_expected_result を計算して
     # belief_evidence_transcriber に渡す。非同期 scheduler 経路への配線は
@@ -533,6 +539,16 @@ def build_episodic_stack(
     semantic_memory_store: Any | None = None
     memory_link_store: Any | None = None
     belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
+    consolidation_wired = (
+        semantic_enabled
+        and belief_consolidation_enabled
+        and belief_evidence_buffer_store is not None
+    )
+    if consolidation_wired and memory_turn_reader is None:
+        raise ValueError(
+            "belief consolidation requires memory_turn_reader "
+            "(観測のターン数の無い証拠と信念を作らない)"
+        )
     if semantic_enabled:
         # 循環 import 回避のため関数内 import。
         from ai_rpg_world.application.llm.wiring._shared_builders import (
@@ -548,6 +564,7 @@ def build_episodic_stack(
             belief_evidence_buffer_store=(
                 belief_evidence_buffer_store if belief_consolidation_enabled else None
             ),
+            memory_turn_reader=memory_turn_reader if consolidation_wired else None,
             episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             subjective_episode_db_path=subjective_episode_db_path,
@@ -564,15 +581,18 @@ def build_episodic_stack(
         memory_link_store = mem_stack.mem_bundle.link_store
         # U3b: 固着パス有効時のみ coordinator を構築する。belief journal
         # (semantic_memory_store) への書き込みはここが唯一の入口になる。
-        if belief_consolidation_enabled and belief_evidence_buffer_store is not None:
+        if consolidation_wired:
             from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
                 BeliefConsolidationCoordinator,
             )
 
+            assert memory_turn_reader is not None
+            assert belief_evidence_buffer_store is not None
             belief_consolidation_coordinator = BeliefConsolidationCoordinator(
                 evidence_buffer_store=belief_evidence_buffer_store,
                 semantic_store=semantic_memory_store,
                 completion=belief_consolidation_completion,
+                memory_turn_reader=memory_turn_reader,
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
                 # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す

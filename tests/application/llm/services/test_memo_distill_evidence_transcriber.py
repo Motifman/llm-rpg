@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from tests.memory_turn_helpers import ZERO_TURN, FixedMemoryTurnReader
 
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,
@@ -49,7 +50,7 @@ class TestMemoDistillEvidenceTranscriberAnchor:
         (捏造しない。warning ログで可視化)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=None)
         assert result is None
@@ -60,7 +61,7 @@ class TestMemoDistillEvidenceTranscriberAnchor:
         anchor する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         episode_store.put_by_being(being_id, _episode('ep-old', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc)))
         episode_store.put_by_being(being_id, _episode('ep-new', occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc)))
@@ -77,9 +78,18 @@ class TestMemoDistillEvidenceTranscriberContent:
         episode_store.put_by_being(being_id, _episode('ep-1', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc)))
         return (buffer_store, episode_store, being_id)
 
+    def test_evidence_carries_current_memory_turn(self) -> None:
+        """記憶のターン数が 14 のとき memo を転記すると、証拠の observed_turn は 14 になる (#1452)。"""
+        (buffer_store, episode_store, being_id) = self._setup()
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=FixedMemoryTurnReader(14))
+
+        transcriber.record_from_memo(being_id, memo_content='拠点に資源はない', fulfillment_context=None)
+
+        assert [e.observed_turn for e in buffer_store.list_all_by_being(being_id)] == [14]
+
     def test_source_kind_is_memo_distill(self) -> None:
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=None)
         evidence = buffer_store.list_all_by_being(being_id)[0]
         assert evidence.source_kind == BeliefEvidenceSourceKind.MEMO_DISTILL
@@ -88,7 +98,7 @@ class TestMemoDistillEvidenceTranscriberContent:
         """memo は tool/spot のような固定 cue を持たないため、
         cue_signature は "self:memo" 固定。"""
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=None)
         evidence = buffer_store.list_all_by_being(being_id)[0]
         assert evidence.cue_signature == 'self:memo'
@@ -96,13 +106,13 @@ class TestMemoDistillEvidenceTranscriberContent:
 
     def test_salience_is_low(self) -> None:
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=None)
         assert buffer_store.list_all_by_being(being_id)[0].salience == 'low'
 
     def test_text_contains_memo_content(self) -> None:
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=None)
         text = buffer_store.list_all_by_being(being_id)[0].text
         assert '岩礁海岸は山方面に通じず×' in text
@@ -110,7 +120,7 @@ class TestMemoDistillEvidenceTranscriberContent:
     def test_text_includes_fulfillment_context(self) -> None:
         """fulfillment_context が渡されたら観測 / 行動の抜粋も text に含める。"""
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         context = MemoFulfillmentContext(completed_at=datetime(2026, 7, 1, tzinfo=timezone.utc), completed_at_tick=5, recent_observation_proses=('山道は行き止まりだった',), recent_action_summaries=('山方面へ移動を試みた',))
         transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=context)
         text = buffer_store.list_all_by_being(being_id)[0].text
@@ -122,7 +132,7 @@ class TestMemoDistillEvidenceTranscriberContent:
         """ノイズ (一般化不能なタスクメモ) かどうかはここで判定しない。
         discard 判定は固着パスの LLM に委ねるため、本転記器は常に積む。"""
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         result = transcriber.record_from_memo(being_id, memo_content='扉固定スイッチを押す', fulfillment_context=None)
         assert result is not None
         assert len(buffer_store.list_all_by_being(being_id)) == 1
@@ -136,7 +146,7 @@ class TestMemoDistillEvidenceTranscriberTrace:
         episode_store.put_by_being(being_id, _episode('ep-1', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc)))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 7)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 7, memory_turn_reader=ZERO_TURN)
         transcriber.record_from_memo(being_id, memo_content='岩礁海岸は山方面に通じず×', fulfillment_context=None)
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
         assert len(events) == 1
@@ -149,14 +159,14 @@ class TestMemoDistillEvidenceTranscriberTypeGuards:
 
     def test_rejects_non_repository_episode_store(self) -> None:
         with pytest.raises(TypeError):
-            MemoDistillEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), object())
+            MemoDistillEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), object(), memory_turn_reader=ZERO_TURN)
 
     def test_rejects_non_being_id(self) -> None:
-        transcriber = MemoDistillEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore())
+        transcriber = MemoDistillEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_from_memo('being-1', memo_content='x', fulfillment_context=None)
 
     def test_rejects_empty_memo_content(self) -> None:
-        transcriber = MemoDistillEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore())
+        transcriber = MemoDistillEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_from_memo(BeingId('being-1'), memo_content='   ', fulfillment_context=None)

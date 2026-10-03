@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from tests.memory_turn_helpers import ZERO_TURN, FixedMemoryTurnReader
 
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,
@@ -47,7 +48,7 @@ class TestStructuredFailureEvidenceTranscriberAnchor:
         (捏造しない。warning ログで可視化)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
         assert result is None
@@ -58,7 +59,7 @@ class TestStructuredFailureEvidenceTranscriberAnchor:
         anchor する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         episode_store.put_by_being(being_id, _episode('ep-old', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc)))
         episode_store.put_by_being(being_id, _episode('ep-new', occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc)))
@@ -75,9 +76,18 @@ class TestStructuredFailureEvidenceTranscriberContent:
         episode_store.put_by_being(being_id, _episode('ep-1', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc)))
         return (buffer_store, episode_store, being_id)
 
+    def test_evidence_carries_current_memory_turn(self) -> None:
+        """記憶のターン数が 6 のとき同じ失敗の繰り返しを転記すると、証拠の observed_turn は 6 になる (#1452)。"""
+        (buffer_store, episode_store, being_id) = self._setup()
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=FixedMemoryTurnReader(6))
+
+        transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
+
+        assert [e.observed_turn for e in buffer_store.list_all_by_being(being_id)] == [6]
+
     def test_source_kind_is_structured_failure(self) -> None:
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
         evidence = buffer_store.list_all_by_being(being_id)[0]
         assert evidence.source_kind == BeliefEvidenceSourceKind.STRUCTURED_FAILURE
@@ -86,7 +96,7 @@ class TestStructuredFailureEvidenceTranscriberContent:
         """design 通り cue_signature は "tool:<tool_name>" 固定 (U3b の
         shortlist と一致させるため spot/player は付けない)。"""
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
         evidence = buffer_store.list_all_by_being(being_id)[0]
         assert evidence.cue_signature == 'tool:spot_graph_interact'
@@ -95,7 +105,7 @@ class TestStructuredFailureEvidenceTranscriberContent:
         """件数駆動の早期 trigger は cue_signature 反復側に任せるため、
         STRUCTURED_FAILURE evidence 自体の salience は常に low。"""
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
         assert buffer_store.list_all_by_being(being_id)[0].salience == 'low'
 
@@ -111,7 +121,7 @@ class TestStructuredFailureEvidenceTranscriberContent:
         ``test_failure_evidence_speaks_agent_vocabulary.py`` が持つ。
         """
         (buffer_store, episode_store, being_id) = self._setup()
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
         text = buffer_store.list_all_by_being(being_id)[0].text
         assert 'spot_graph_interact' in text
@@ -127,7 +137,7 @@ class TestStructuredFailureEvidenceTranscriberTrace:
         episode_store.put_by_being(being_id, _episode('ep-1', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc)))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 7)
+        transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 7, memory_turn_reader=ZERO_TURN)
         transcriber.record_if_triggered(being_id, tool_name='spot_graph_interact', error_code='INTERACTION_PRECONDITION_FAILED', count=3)
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
         assert len(events) == 1
@@ -140,9 +150,9 @@ class TestStructuredFailureEvidenceTranscriberTypeGuards:
 
     def test_rejects_non_repository_episode_store(self) -> None:
         with pytest.raises(TypeError):
-            StructuredFailureEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), object())
+            StructuredFailureEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), object(), memory_turn_reader=ZERO_TURN)
 
     def test_rejects_non_being_id(self) -> None:
-        transcriber = StructuredFailureEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore())
+        transcriber = StructuredFailureEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_if_triggered('being-1', tool_name='t', error_code='E', count=1)

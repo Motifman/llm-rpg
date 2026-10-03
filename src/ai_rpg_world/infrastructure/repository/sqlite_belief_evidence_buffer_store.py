@@ -55,6 +55,7 @@ def _evidence_to_payload(evidence: BeliefEvidence) -> dict[str, Any]:
         "text": evidence.text,
         "salience": evidence.salience,
         "occurred_at": _dt_to_text(evidence.occurred_at),
+        "observed_turn": evidence.observed_turn,
         "tick": evidence.tick,
         # U4 (予測誤差統一設計): この evidence 発生ターンで in-context だった
         # belief_id 群。固着処理が strengthen/contradict の対応づけに使う。
@@ -74,6 +75,7 @@ def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
         text=str(data["text"]),
         salience=str(data["salience"]),
         occurred_at=_text_to_dt(str(data["occurred_at"])),
+        observed_turn=data["observed_turn"],
         tick=int(data["tick"]) if data.get("tick") is not None else None,
         # 旧 payload (U4 前に書かれた行) には本 key が無いので空タプルに
         # フォールバックする。attribution 機構 OFF と同じ扱いで後方互換。

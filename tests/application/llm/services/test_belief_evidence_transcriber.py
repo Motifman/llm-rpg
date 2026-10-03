@@ -12,6 +12,8 @@ import pytest
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
+from tests.memory_turn_helpers import ZERO_TURN, FixedMemoryTurnReader
+
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,
@@ -53,7 +55,7 @@ class TestBeliefEvidenceTranscriberRecordCondition:
     def test_prediction_error_None_does_record(self) -> None:
         """転記条件: prediction_error が None なら evidence を積まない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None))
         assert result is None
@@ -61,7 +63,7 @@ class TestBeliefEvidenceTranscriberRecordCondition:
 
     def test_prediction_error_non_None_records_one_evidence(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error='何もなかった'))
         assert result is not None
@@ -73,7 +75,7 @@ class TestBeliefEvidenceTranscriberRecordCondition:
 
     def test_records_are_scoped_per_being(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_a = BeingId('being-a')
         being_b = BeingId('being-b')
         transcriber.record_if_applicable(being_a, _episode(prediction_error='外れた'))
@@ -88,14 +90,14 @@ class TestBeliefEvidenceTranscriberSalience:
 
     def test_episode_low_salience_becomes_evidence_low_salience(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error='外れた', salience='low'))
         assert buffer_store.list_all_by_being(being_id)[0].salience == 'low'
 
     def test_episode_high_salience_becomes_evidence_high_salience(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error='大ダメージを受けた', salience='high'))
         assert buffer_store.list_all_by_being(being_id)[0].salience == 'high'
@@ -104,7 +106,7 @@ class TestBeliefEvidenceTranscriberTick:
 
     def test_tick_comes_from_current_tick_provider(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, current_tick_provider=lambda : 42)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, current_tick_provider=lambda : 42, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error='外れた'))
         assert buffer_store.list_all_by_being(being_id)[0].tick == 42
@@ -115,7 +117,7 @@ class TestBeliefEvidenceTranscriberTick:
         def _raising() -> int:
             raise RuntimeError('boom')
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, current_tick_provider=_raising)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, current_tick_provider=_raising, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error='外れた'))
         assert result is not None
@@ -127,7 +129,7 @@ class TestBeliefEvidenceTranscriberTrace:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        transcriber = BeliefEvidenceTranscriber(buffer_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 5)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 5, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error='想定外だった'))
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
@@ -142,7 +144,7 @@ class TestBeliefEvidenceTranscriberTrace:
     def test_trace_recorder_provider_is_safe(self) -> None:
         """trace_recorder_provider 未注入でも転記自体は成功する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error='想定外だった'))
         assert result is not None
@@ -151,7 +153,7 @@ class TestBeliefEvidenceTranscriberTrace:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        transcriber = BeliefEvidenceTranscriber(buffer_store, trace_recorder_provider=lambda : recorder)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, trace_recorder_provider=lambda : recorder, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error=None))
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
@@ -163,7 +165,7 @@ class TestBeliefEvidenceTranscriberAttribution:
     def test_prediction_error_evidence_context_belief_ids(self) -> None:
         """prediction error evidence に in context belief ids が添付される。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error='外れた'), in_context_belief_ids=('sem-1', 'sem-2'), had_expected_result=True)
         rows = buffer_store.list_all_by_being(being_id)
@@ -174,7 +176,7 @@ class TestBeliefEvidenceTranscriberAttribution:
     def test_prediction_error_none_context_belief_expected_result_confirmation(self) -> None:
         """prediction error None かつ in context belief あり かつ expected result ありなら CONFIRMATION。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None, expected='何か見つかるはず'), in_context_belief_ids=('sem-1',), had_expected_result=True)
         assert result is not None
@@ -187,7 +189,7 @@ class TestBeliefEvidenceTranscriberAttribution:
     def test_prediction_error_none_context_belief(self) -> None:
         """水増しガード: in-context belief が無いターンでは CONFIRMATION を作らない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None), in_context_belief_ids=(), had_expected_result=True)
         assert result is None
@@ -196,7 +198,7 @@ class TestBeliefEvidenceTranscriberAttribution:
     def test_prediction_error_none_expected_result(self) -> None:
         """水増しガード: 何も予測せず行動しただけのターンでは CONFIRMATION を作らない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None), in_context_belief_ids=('sem-1',), had_expected_result=False)
         assert result is None
@@ -206,7 +208,7 @@ class TestBeliefEvidenceTranscriberAttribution:
         """呼び出し側 (coordinator/scheduler) が flag OFF のとき常に空/False を
         渡す設計 (= transcriber 自身は flag を知らない) の安全性を確認する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_if_applicable(being_id, _episode(prediction_error='外れた'))
         transcriber.record_if_applicable(being_id, _episode(prediction_error=None))
@@ -233,7 +235,7 @@ class TestConfirmationRelevanceGate:
         """cue (explore/3) と一致しない belief のみなら CONFIRMATION を積まない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         provider = self._provider({'b1': (('信頼',), 'タカシは信頼できる')})
-        transcriber = BeliefEvidenceTranscriber(buffer_store, belief_axis_provider=provider)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, belief_axis_provider=provider, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None, expected='何か見つかるはず'), in_context_belief_ids=('b1',), had_expected_result=True)
         assert result is None
@@ -243,7 +245,7 @@ class TestConfirmationRelevanceGate:
         """一致する belief だけが attribution に残り、非一致は落ちる。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         provider = self._provider({'b1': (('explore',), 'この島の探索は空振りが多い'), 'b2': (('信頼',), 'タカシは信頼できる')})
-        transcriber = BeliefEvidenceTranscriber(buffer_store, belief_axis_provider=provider)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, belief_axis_provider=provider, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None, expected='何か見つかるはず'), in_context_belief_ids=('b1', 'b2'), had_expected_result=True)
         assert result is not None
@@ -256,7 +258,7 @@ class TestConfirmationRelevanceGate:
         探索行動で生き残る (over-gating で正当な CONFIRMATION を殺さない)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         provider = self._provider({'b-beach': (('浜辺', 'explore'), '浜辺では目立った発見はない')})
-        transcriber = BeliefEvidenceTranscriber(buffer_store, belief_axis_provider=provider)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, belief_axis_provider=provider, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None, expected='何か見つかるはず'), in_context_belief_ids=('b-beach',), had_expected_result=True)
         assert result is not None
@@ -265,7 +267,7 @@ class TestConfirmationRelevanceGate:
     def test_provider_None_keeps_all_beliefs_backward_compat(self) -> None:
         """provider 未注入なら従来どおり in-context belief 全件に積む。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_if_applicable(being_id, _episode(prediction_error=None, expected='何か見つかるはず'), in_context_belief_ids=('b1', 'b2'), had_expected_result=True)
         assert result is not None
@@ -298,18 +300,18 @@ class TestComputeChunkAttribution:
 class TestBeliefEvidenceTranscriberTypeGuards:
 
     def test_rejects_non_being_id(self) -> None:
-        transcriber = BeliefEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore())
+        transcriber = BeliefEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_if_applicable('being-1', _episode())
 
     def test_rejects_non_episode(self) -> None:
-        transcriber = BeliefEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore())
+        transcriber = BeliefEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_if_applicable(BeingId('being-1'), 'not-an-episode')
 
     def test_rejects_non_repository_buffer_store(self) -> None:
         with pytest.raises(TypeError):
-            BeliefEvidenceTranscriber(object())
+            BeliefEvidenceTranscriber(object(), memory_turn_reader=ZERO_TURN)
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
 
 
@@ -321,7 +323,7 @@ class TestBeliefEvidenceTranscriberPendingResolution:
 
     def test_fulfilled_records_low_support(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         ev = transcriber.record_pending_resolution(being_id, _episode(), _pending_for_resolution(), verdict='fulfilled')
         assert ev is not None
@@ -333,7 +335,7 @@ class TestBeliefEvidenceTranscriberPendingResolution:
 
     def test_broken_records_high_contradiction(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         ev = transcriber.record_pending_resolution(being_id, _episode(), _pending_for_resolution(), verdict='broken')
         assert ev.salience == 'high'
@@ -341,14 +343,14 @@ class TestBeliefEvidenceTranscriberPendingResolution:
 
     def test_cue_signature_falls_back_first_cue_without_player(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         ev = transcriber.record_pending_resolution(being_id, _episode(), _pending_for_resolution(cues=('spot:9',)), verdict='fulfilled')
         assert ev.cue_signature == 'spot:9'
 
     def test_invalid_verdict_raises(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         with pytest.raises(ValueError):
             transcriber.record_pending_resolution(BeingId('being-1'), _episode(), _pending_for_resolution(), verdict='maybe')
 
@@ -357,7 +359,7 @@ class TestBeliefEvidenceTranscriberPendingResolution:
 
         salience は verdict 由来で promise と同じ (fulfilled=low)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         plan = _pending_for_resolution(cues=('spot:3',), kind='plan', text='浜を探索すれば山頂への道が分かるはず')
         ev = transcriber.record_pending_resolution(BeingId('being-1'), _episode(), plan, verdict='fulfilled')
         assert '見込み' in ev.text
@@ -370,7 +372,7 @@ class TestBeliefEvidenceTranscriberPendingResolution:
 
         破れは salience=high (即時固着候補)。有害 belief の反証に流れるのが狙い。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         plan = _pending_for_resolution(cues=('spot:3',), kind='plan', text='浜を探索すれば山頂への道が分かるはず')
         ev = transcriber.record_pending_resolution(BeingId('being-1'), _episode(), plan, verdict='broken')
         assert '見込み' in ev.text
@@ -387,7 +389,7 @@ class TestBeliefEvidenceTranscriberGoalResolution:
     def test_achieved_records_support_evidence(self) -> None:
         """achieved は「成し遂げた」= 支持側の素材を PENDING_RESOLUTION に転記する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         now = datetime(2026, 7, 2, tzinfo=timezone.utc)
         ev = transcriber.record_goal_resolution(being_id, _goal(text='古い地図を手に入れる'), outcome='achieved', occurred_at=now)
@@ -403,7 +405,7 @@ class TestBeliefEvidenceTranscriberGoalResolution:
     def test_abandoned_records_error_evidence(self) -> None:
         """abandoned は「見切って諦めた」= 誤差側の素材を転記する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         transcriber.record_goal_resolution(being_id, _goal(text='山頂で救助を待つ'), outcome='abandoned', occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc))
         rows = buffer_store.list_all_by_being(being_id)
@@ -412,7 +414,7 @@ class TestBeliefEvidenceTranscriberGoalResolution:
 
     def test_invalid_outcome_raises(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         with pytest.raises(ValueError):
             transcriber.record_goal_resolution(BeingId('being-1'), _goal(), outcome='superseded', occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc))
 from dataclasses import dataclass as _dataclass
@@ -439,7 +441,7 @@ class TestBeliefEvidenceTranscriberHeardClaims:
 
     def test_empty_heard_claims_records_nothing(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_heard_claims(being_id, _episode(heard_claims=()))
         assert result == []
@@ -449,7 +451,7 @@ class TestBeliefEvidenceTranscriberHeardClaims:
         """話者は source_speaker、主張の対象は cue に分離される (混ぜない)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_5', start=0)])
-        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=matcher)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=matcher, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         episode = _episode(heard_claims=(HeardClaim(speaker='リオ', claim='エイダは頼りになる'),))
         transcriber.record_heard_claims(being_id, episode)
@@ -464,7 +466,7 @@ class TestBeliefEvidenceTranscriberHeardClaims:
         """他者が自分について語ったら self: 軸 (episode.player_id で判定)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_1', start=0)])
-        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=matcher)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=matcher, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         episode = _episode(player_id=1, heard_claims=(HeardClaim(speaker='リオ', claim='カイは話を聞かない'),))
         transcriber.record_heard_claims(being_id, episode)
@@ -474,10 +476,95 @@ class TestBeliefEvidenceTranscriberHeardClaims:
 
     def test_multiple_claims_all_recorded(self) -> None:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=_FakeMatcher([]))
+        transcriber = BeliefEvidenceTranscriber(buffer_store, noun_matcher=_FakeMatcher([]), memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         episode = _episode(heard_claims=(HeardClaim(speaker='リオ', claim='主張1'), HeardClaim(speaker='エイダ', claim='主張2')))
         result = transcriber.record_heard_claims(being_id, episode)
         assert len(result) == 2
         assert all(r.cue_signature == 'hearsay:unattributed' for r in result)
         assert {r.source_speaker for r in result} == {'リオ', 'エイダ'}
+
+
+class TestBeliefEvidenceTranscriberObservedTurn:
+    """転記したすべての証拠に、転記したときの記憶のターン数が残ることを保証する (#1452)。"""
+
+    @staticmethod
+    def _transcriber(buffer_store, turn: int, **kwargs) -> BeliefEvidenceTranscriber:
+        return BeliefEvidenceTranscriber(
+            buffer_store, memory_turn_reader=FixedMemoryTurnReader(turn), **kwargs
+        )
+
+    def test_prediction_error_evidence_carries_current_memory_turn(self) -> None:
+        """記憶のターン数が 12 のとき予測の外れを転記すると、証拠の observed_turn は 12 になる。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = self._transcriber(buffer_store, 12)
+
+        ev = transcriber.record_if_applicable(BeingId('being-1'), _episode(prediction_error='枯れ葉が無かった'))
+
+        assert ev is not None
+        assert ev.observed_turn == 12
+
+    def test_turn_is_read_for_the_being_that_observed(self) -> None:
+        """ターン数は観測した Being のものを読む。別の Being の歩みを証拠に付けない。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        rio, noa = BeingId('being-rio'), BeingId('being-noa')
+        transcriber = BeliefEvidenceTranscriber(
+            buffer_store,
+            memory_turn_reader=FixedMemoryTurnReader(by_being={rio: 3, noa: 40}),
+        )
+
+        ev = transcriber.record_if_applicable(noa, _episode(prediction_error='外れた'))
+
+        assert ev is not None
+        assert ev.observed_turn == 40
+
+    def test_confirmation_evidence_carries_current_memory_turn(self) -> None:
+        """予測が当たったことの証拠にも、転記したときの記憶のターン数 7 が残る。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = self._transcriber(buffer_store, 7)
+
+        ev = transcriber.record_if_applicable(
+            BeingId('being-1'), _episode(), in_context_belief_ids=('sem-1',), had_expected_result=True
+        )
+
+        assert ev is not None
+        assert ev.observed_turn == 7
+
+    def test_pending_resolution_evidence_carries_current_memory_turn(self) -> None:
+        """約束の清算の証拠にも、転記したときの記憶のターン数 21 が残る。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = self._transcriber(buffer_store, 21)
+
+        ev = transcriber.record_pending_resolution(
+            BeingId('being-1'), _episode(), _pending_for_resolution(), verdict='broken'
+        )
+
+        assert ev is not None
+        assert ev.observed_turn == 21
+
+    def test_goal_resolution_evidence_carries_current_memory_turn(self) -> None:
+        """目的の清算の証拠にも、転記したときの記憶のターン数 5 が残る。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = self._transcriber(buffer_store, 5)
+
+        ev = transcriber.record_goal_resolution(
+            BeingId('being-1'), _goal(), outcome='achieved', occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc)
+        )
+
+        assert ev is not None
+        assert ev.observed_turn == 5
+
+    def test_hearsay_evidence_carries_current_memory_turn(self) -> None:
+        """伝聞の証拠にも、聞いたときの記憶のターン数 9 が残る。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        transcriber = self._transcriber(buffer_store, 9)
+        episode = _episode(heard_claims=(HeardClaim(speaker='リオ', claim='浜の枯れ葉はもう無い'),))
+
+        rows = transcriber.record_heard_claims(BeingId('being-1'), episode)
+
+        assert [ev.observed_turn for ev in rows] == [9]
+
+    def test_memory_turn_reader_is_required(self) -> None:
+        """memory_turn_reader を渡さずに作ると TypeError になる。ターン数の無い証拠を作る経路を残さない。"""
+        with pytest.raises(TypeError):
+            BeliefEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore())  # type: ignore[call-arg]

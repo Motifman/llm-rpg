@@ -10,6 +10,8 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
+from tests.memory_turn_helpers import ZERO_TURN
+
 from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
     IBeliefConsolidationCompletionPort,
 )
@@ -132,6 +134,7 @@ def _evidence(evidence_id: str) -> BeliefEvidence:
         text="腐った貝を食べて毒に当たった",
         salience=BELIEF_EVIDENCE_SALIENCE_LOW,
         occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        observed_turn=0,
     )
 
 
@@ -180,6 +183,7 @@ def _flush(
         completion=_Completion(decisions),
         trace_recorder_provider=lambda: recorder,
         create_gate=gate,
+        memory_turn_reader=ZERO_TURN,
     )
     coordinator.flush_player(_PLAYER, _BEING)
     return store, recorder

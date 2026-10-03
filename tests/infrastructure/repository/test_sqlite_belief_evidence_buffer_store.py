@@ -35,6 +35,7 @@ def _evidence(evidence_id: str, *, tick: int | None = 10) -> BeliefEvidence:
         salience=BELIEF_EVIDENCE_SALIENCE_LOW,
         occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
         tick=tick,
+        observed_turn=0,
     )
 
 
@@ -98,6 +99,7 @@ class TestSqliteBeliefEvidenceBufferStore:
                 text="重大な想定外だった",
                 salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
                 occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                observed_turn=0,
             )
             store.append_by_being(being_id, evidence)
 
@@ -161,6 +163,7 @@ class TestSqliteBeliefEvidenceBufferStore:
                 salience=BELIEF_EVIDENCE_SALIENCE_LOW,
                 occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
                 in_context_belief_ids=("belief-1", "belief-2"),
+                observed_turn=0,
             )
             store.append_by_being(being_id, evidence)
             del store
@@ -189,6 +192,7 @@ class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
             text="全フィールドを非 default 値で埋めた証拠",
             salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
             occurred_at=datetime(2026, 7, 1, 12, 30, 45, 123456, tzinfo=timezone.utc),
+            observed_turn=17,
             tick=42,
             in_context_belief_ids=("belief-1", "belief-2"),
             source_speaker="noah",

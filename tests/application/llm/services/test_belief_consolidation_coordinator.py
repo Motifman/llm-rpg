@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
+from tests.memory_turn_helpers import ZERO_TURN
 
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
@@ -141,6 +142,7 @@ def _build_setup(
         goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
         stagnation_pressure_enabled=stagnation_pressure_enabled,
         stagnation_pressure_store=resolved_stagnation_store,
+        memory_turn_reader=ZERO_TURN,
     )
     return _Setup(
         coordinator=coordinator,
@@ -175,6 +177,7 @@ def _evidence(
         salience=salience,
         occurred_at=occurred_at or datetime(2026, 7, 1, tzinfo=timezone.utc),
         source_speaker=source_speaker,
+        observed_turn=0,
     )
 
 
@@ -1065,6 +1068,7 @@ class TestTracePayload:
             semantic_store=semantic_store,
             completion=port,
             trace_recorder_provider=lambda: recorder,
+            memory_turn_reader=ZERO_TURN,
         )
         evidence_buffer.append_by_being(being_id, _evidence("e1"))
 

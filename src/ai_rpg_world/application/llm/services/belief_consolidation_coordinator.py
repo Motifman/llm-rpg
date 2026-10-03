@@ -78,6 +78,9 @@ from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
     StagnationPressureRepository,
 )
@@ -97,6 +100,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SEMANTIC_MEMORY_STATUS_ACTIVE,
     SEMANTIC_MEMORY_STATUS_INACTIVE,
+    SEMANTIC_MEMORY_STATUS_SUPERSEDED,
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -126,6 +130,7 @@ _ACTION_STRENGTHEN = "strengthen"
 _ACTION_REVISE = "revise"
 _ACTION_CONTRADICT = "contradict"
 _ACTION_DISCARD = "discard"
+_ACTION_EXPLAIN_CHANGE = "explain_change"
 _ACTION_REFLECT = "reflect"  # P4: 目的への前進評価 (belief journal には書かない)
 # P7: reflect が返す判定の種類。停滞 / 達成 / 乖離 (目的と行動の乖離)。いずれも
 # 内省観測として本人に返すだけで、goal store の status 変更はしない (不変条件)。
@@ -151,6 +156,11 @@ _SKIP_REVISE_BELIEF_NOT_FOUND = "revise_belief_not_found"
 _SKIP_CONTRADICT_MISSING_BELIEF_ID = "contradict_missing_belief_id"
 _SKIP_CONTRADICT_BELIEF_NOT_FOUND = "contradict_belief_not_found"
 _SKIP_CONTRADICT_NO_EVIDENCE = "contradict_no_evidence"
+_SKIP_EXPLAIN_CHANGE_MISSING_BELIEF_ID = "explain_change_missing_belief_id"
+_SKIP_EXPLAIN_CHANGE_BELIEF_NOT_FOUND = "explain_change_belief_not_found"
+_SKIP_EXPLAIN_CHANGE_EMPTY_TEXT = "explain_change_empty_text"
+_SKIP_EXPLAIN_CHANGE_NO_EVIDENCE = "explain_change_no_evidence"
+_SKIP_EXPLAIN_CHANGE_CURRENT_SITUATION = "explain_change_current_situation"
 _SKIP_REFLECT_SUPPRESSED = "reflect_suppressed"
 _SKIP_UNKNOWN_ACTION = "unknown_action"
 _SKIP_NOT_A_DICT = "not_a_dict"
@@ -171,6 +181,7 @@ _SYSTEM_BELIEF_CONSOLIDATION_JSON = """あなたはある RPG キャラクター
 【入力の意味】
 - evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 "tool:explore|spot:浜辺")。text は素材の内容。
 - shortlist: 既に固着済みの belief (学び) の候補。belief_id / text / confidence / tags / 支持件数 / 反証件数を持つ。evidence と関連しそうな belief だけを渡している。
+- ターン数: 自分が何ターン目にそれを見たか。evidence の observed_turn はその素材を観測したターン、shortlist の last_observed_turn はその belief を支える観測のうち最も新しいターン (null は不明)、current_turn はいまのターン。
 
 【あなたの仕事】
 evidence 群を読み、以下のいずれかの決定を **全ての evidence が最終的にどこかの決定でカバーされるように** 宣言してください:
@@ -180,9 +191,17 @@ evidence 群を読み、以下のいずれかの決定を **全ての evidence �
 - revise: 既存 belief の文面を書き換える (belief_id / 新しい text / reason)。2 用途。(a) 反例が来て内容が間違っていたときの訂正。(b) 内容は正しいが言い方が証拠に見合っていないときの言い直し (下の【文面の強さを証拠に合わせる】参照)。
 - contradict: 既存 belief に対する反証を記録する (belief_id / 対象 evidence_ids)。訂正までは要らないが確信度を下げるべきとき。
 - discard: ノイズ・一時的なタスク情報など、学びに値しない evidence を捨てる (evidence_ids / reason)。
+- explain_change: 既存 belief (ある場所や物の状態) と食い違う evidence が来て、前の観測も今の観測も正しかったと考えられるとき、つまり前に見たときと今とで状態が変わったとき、その変わり方を説明する新しい belief を作る (belief_id = 置き換える状態の belief / text = 変わり方の命題 / evidence_ids = 食い違った evidence)。置き換えた状態の belief は以後思い出さない。
+
+【状態が変わったのか、前の学びが誤っていたのか】
+shortlist の belief と evidence が食い違ったら、last_observed_turn と observed_turn を並べて考えること。
+- 前に見たときは確かにそうで、時間がたって変わったと考えられる → explain_change。例: 「浜の枯れ葉は採り尽くされている」(last_observed_turn 12) と「浜に枯れ葉が落ちていた」(observed_turn 40) → 「浜の枯れ葉は時間がたつと戻る」
+- 前の学びがそもそも誤っていた、または言い過ぎだった → revise / contradict。前は見落としていた所や調べていなかった所にあった、は状態の変化ではなく前の学びの誤り
+explain_change を使うのは、前と今で同じ所の同じものを見て、状態が違っていたときだけ。
+変わり方の命題には、何がどう変わるかを書く。いつ変わるかが evidence から読めないときは「時間がたつと」のように書き、何ターン後かを決めつけない。
 
 【絶対のルール】
-- 命題 (create.text / revise.text) は 50 字以内、命題形式 (例: 「タカシは信頼できる」「北の洞窟は危険」)
+- 命題 (create.text / revise.text / explain_change.text) は 50 字以内、命題形式 (例: 「タカシは信頼できる」「北の洞窟は危険」)
 - 個別シーンの再話ではなく、一般化された認識を書く
 - 確信度に応じて修飾を変える: 確信 → 言い切り / 仮説 → 「〜かもしれない」
 - プレイヤー・スポット・オブジェクトは必ず固有名詞で書く。P1, OBJ3 のような短縮ラベルは絶対に使わない
@@ -208,6 +227,7 @@ decisions は次のいずれかの形の要素からなる配列:
 {"action": "revise", "belief_id": "...", "text": "<50字命題>", "reason": "..."}
 {"action": "contradict", "belief_id": "...", "evidence_ids": ["..."]}
 {"action": "discard", "evidence_ids": ["..."], "reason": "..."}
+{"action": "explain_change", "belief_id": "...", "text": "<50字命題>", "importance": <1-10>, "tags": ["..."], "evidence_ids": ["..."]}
 """
 
 # U4 (予測誤差統一設計 部品3 / attribution + CONFIRMATION): BELIEF_ATTRIBUTION_ENABLED
@@ -298,6 +318,21 @@ def _build_belief_consolidation_system_prompt(
 _logger = logging.getLogger(__name__)
 
 
+def _latest_observed_turn(
+    evidence_ids: tuple[str, ...],
+    evidence_by_id: dict[str, BeliefEvidence],
+    *,
+    since: int | None = None,
+) -> int | None:
+    """支える観測のうち最も新しいターン。``since`` より前には戻さない。"""
+    turns = [
+        evidence_by_id[eid].observed_turn for eid in evidence_ids if eid in evidence_by_id
+    ]
+    if since is not None:
+        turns.append(since)
+    return max(turns) if turns else None
+
+
 def _cue_tokens(cue_signature: str) -> tuple[str, ...]:
     # P3: shortlist 照合と CONFIRMATION ゲートで同じトークン化を使うため、
     # 実装は belief_evidence_cue_signature.cue_tokens に集約した (挙動は不変)。
@@ -313,6 +348,7 @@ class BeliefConsolidationCoordinator:
         evidence_buffer_store: BeliefEvidenceBufferRepository,
         semantic_store: SemanticMemoryRepository,
         completion: IBeliefConsolidationCompletionPort | None,
+        memory_turn_reader: MemoryTurnReader,
         turn_interval: int = DEFAULT_BELIEF_CONSOLIDATION_TURN_INTERVAL,
         batch_size: int = DEFAULT_BELIEF_CONSOLIDATION_BATCH_SIZE,
         shortlist_top_k: int = DEFAULT_BELIEF_CONSOLIDATION_SHORTLIST_TOP_K,
@@ -344,6 +380,8 @@ class BeliefConsolidationCoordinator:
             raise TypeError(
                 "completion must be IBeliefConsolidationCompletionPort or None"
             )
+        if not isinstance(memory_turn_reader, MemoryTurnReader):
+            raise TypeError("memory_turn_reader must be MemoryTurnReader")
         if turn_interval < 1:
             raise ValueError("turn_interval must be positive")
         if batch_size < 1:
@@ -420,6 +458,7 @@ class BeliefConsolidationCoordinator:
         self._evidence_buffer_store = evidence_buffer_store
         self._semantic_store = semantic_store
         self._completion = completion
+        self._memory_turn_reader = memory_turn_reader
         self._turn_interval = turn_interval
         self._batch_size = batch_size
         self._shortlist_top_k = shortlist_top_k
@@ -644,6 +683,7 @@ class BeliefConsolidationCoordinator:
             text=text,
             salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
             occurred_at=datetime.now(timezone.utc),
+            observed_turn=self._memory_turn_reader.current_turn(being_id),
             tick=self._resolve_tick(),
         )
         self._evidence_buffer_store.append_by_being(being_id, evidence)
@@ -769,7 +809,10 @@ class BeliefConsolidationCoordinator:
         batch = self._select_batch(all_evidence)
         shortlist = self._build_shortlist(being_id, batch)
         objective_text = self._resolve_objective_text(player_id)
-        messages = self._build_messages(batch, shortlist, objective_text)
+        current_turn = self._memory_turn_reader.current_turn(being_id)
+        messages = self._build_messages(
+            batch, shortlist, objective_text, current_turn=current_turn
+        )
         try:
             raw_obj = self._completion.complete_belief_consolidation_json(messages)
         except LlmApiCallException as e:
@@ -830,7 +873,9 @@ class BeliefConsolidationCoordinator:
                 dict(reason_counts),
             )
         self._evidence_buffer_store.remove_by_being(being_id, batch_ids)
-        self._emit_trace(being_id, batch, shortlist, result.applied, result.skipped)
+        self._emit_trace(
+            being_id, batch, shortlist, result.applied, result.skipped, current_turn
+        )
         return len(batch_ids)
 
     def _build_shortlist(
@@ -961,6 +1006,7 @@ class BeliefConsolidationCoordinator:
             "text": evidence.text,
             "salience": evidence.salience,
             "episode_ids": list(evidence.episode_ids),
+            "observed_turn": evidence.observed_turn,
         }
         if evidence.source_speaker is not None:
             payload["source_speaker"] = evidence.source_speaker
@@ -971,6 +1017,8 @@ class BeliefConsolidationCoordinator:
         batch: tuple[BeliefEvidence, ...],
         shortlist: tuple[SemanticMemoryEntry, ...],
         objective_text: str | None = None,
+        *,
+        current_turn: int,
     ) -> list[dict[str, Any]]:
         evidence_payload = [
             self._build_evidence_payload_entry(e) for e in batch
@@ -983,10 +1031,12 @@ class BeliefConsolidationCoordinator:
                 "tags": list(b.tags),
                 "support_count": len(b.support_evidence_ids),
                 "contradict_count": len(b.contradict_evidence_ids),
+                "last_observed_turn": b.last_observed_turn,
             }
             for b in shortlist
         ]
         user_content: dict[str, Any] = {
+            "current_turn": current_turn,
             "evidence": evidence_payload,
             "shortlist": shortlist_payload,
         }
@@ -1053,6 +1103,10 @@ class BeliefConsolidationCoordinator:
                 elif action == _ACTION_CONTRADICT:
                     skip_reason = self._apply_contradict(
                         being_id, raw, evidence_by_id, batch_ids, now
+                    )
+                elif action == _ACTION_EXPLAIN_CHANGE:
+                    skip_reason, raw = self._apply_explain_change(
+                        being_id, player_id, raw, evidence_by_id, now
                     )
                 elif action == _ACTION_DISCARD:
                     skip_reason = None  # evidence は batch drain で消える (正当な適用)
@@ -1245,21 +1299,66 @@ class BeliefConsolidationCoordinator:
         if not isinstance(text, str) or not text.strip():
             return _SKIP_CREATE_EMPTY_TEXT
         text = text.strip()[:MAX_BELIEF_TEXT_CHARS]
+        evidence_ids = self._resolve_evidence_ids(
+            raw, evidence_by_id, batch_ids, allow_batch_fallback=True
+        )
+        tags = self._build_tags(raw, evidence_ids, evidence_by_id)
+        episode_ids: list[str] = []
+        for eid in evidence_ids:
+            evidence = evidence_by_id.get(eid)
+            if evidence is not None:
+                episode_ids.extend(evidence.episode_ids)
+        entry_id = f"sem-{uuid4().hex}"
+        # P3b: founding evidence のうち CONFIRMATION 由来は confidence を半分に
+        # 数える (追認は予測誤差の学びより軽い証拠)。
+        confirmation_count = self._count_confirmation(evidence_ids, evidence_by_id)
+        # P10: 伝聞由来も同じく半分に数える (人づては直接体験より弱い証拠)。
+        hearsay_count = self._count_hearsay(evidence_ids, evidence_by_id)
+        entry = SemanticMemoryEntry(
+            entry_id=entry_id,
+            player_id=player_id,
+            being_id=being_id,
+            text=text,
+            evidence_episode_ids=tuple(sorted(set(episode_ids))),
+            # founding evidence 件数を初期 confidence に反映
+            # (support_evidence_ids を数えているので base 固定は不整合)。
+            confidence=compute_belief_confidence(
+                len(evidence_ids), 0, confirmation_count, hearsay_count
+            ),
+            created_at=now,
+            importance_score=self._resolve_importance(raw),
+            tags=tags,
+            belief_id=entry_id,
+            status=SEMANTIC_MEMORY_STATUS_ACTIVE,
+            support_evidence_ids=evidence_ids,
+            confirmation_support_count=confirmation_count,
+            hearsay_support_count=hearsay_count,
+            last_observed_turn=_latest_observed_turn(evidence_ids, evidence_by_id),
+        )
+        self._semantic_store.add_by_being(being_id, entry)
+        return None
+
+    @staticmethod
+    def _resolve_importance(raw: dict[str, Any]) -> int:
         importance = raw.get("importance", 5)
         try:
             importance = int(importance)
         except (TypeError, ValueError):
             importance = 5
-        importance = max(1, min(10, importance))
-        evidence_ids = self._resolve_evidence_ids(
-            raw, evidence_by_id, batch_ids, allow_batch_fallback=True
-        )
-        # LLM 生成タグに加えて、根拠 evidence の cue_signature 由来トークン
-        # (英語の tool token を含む) を tags に混ぜて索引を自己一貫させる。
-        # こうしないと tool 軸の cue token (例: "explore") は日本語 belief の
-        # tags/text と永久に一致せず、次回の同 cue evidence が既存 belief を
-        # shortlist に載せられないため、strengthen できず重複 create を生む
-        # (shortlist の tool 軸言語ミスマッチの構造的修復)。
+        return max(1, min(10, importance))
+
+    @staticmethod
+    def _build_tags(
+        raw: dict[str, Any],
+        evidence_ids: tuple[str, ...],
+        evidence_by_id: dict[str, BeliefEvidence],
+    ) -> tuple[str, ...]:
+        """LLM 生成タグに、根拠 evidence の cue_signature 由来トークンを混ぜる。
+
+        tool 軸の cue token (例: "explore") は日本語 belief の tags/text と一致
+        しないので、混ぜないと次回の同 cue evidence が既存 belief を shortlist に
+        載せられず、strengthen できずに重複 create を生む。
+        """
         tags: list[str] = []
         seen: set[str] = set()
 
@@ -1286,39 +1385,7 @@ class BeliefConsolidationCoordinator:
                 continue
             for token in _cue_tokens(evidence.cue_signature):
                 _add_tag(token)
-        episode_ids: list[str] = []
-        for eid in evidence_ids:
-            evidence = evidence_by_id.get(eid)
-            if evidence is not None:
-                episode_ids.extend(evidence.episode_ids)
-        entry_id = f"sem-{uuid4().hex}"
-        # P3b: founding evidence のうち CONFIRMATION 由来は confidence を半分に
-        # 数える (追認は予測誤差の学びより軽い証拠)。
-        confirmation_count = self._count_confirmation(evidence_ids, evidence_by_id)
-        # P10: 伝聞由来も同じく半分に数える (人づては直接体験より弱い証拠)。
-        hearsay_count = self._count_hearsay(evidence_ids, evidence_by_id)
-        entry = SemanticMemoryEntry(
-            entry_id=entry_id,
-            player_id=player_id,
-            being_id=being_id,
-            text=text,
-            evidence_episode_ids=tuple(sorted(set(episode_ids))),
-            # founding evidence 件数を初期 confidence に反映
-            # (support_evidence_ids を数えているので base 固定は不整合)。
-            confidence=compute_belief_confidence(
-                len(evidence_ids), 0, confirmation_count, hearsay_count
-            ),
-            created_at=now,
-            importance_score=importance,
-            tags=tuple(tags),
-            belief_id=entry_id,
-            status=SEMANTIC_MEMORY_STATUS_ACTIVE,
-            support_evidence_ids=evidence_ids,
-            confirmation_support_count=confirmation_count,
-            hearsay_support_count=hearsay_count,
-        )
-        self._semantic_store.add_by_being(being_id, entry)
-        return None
+        return tuple(tags)
 
     def _find_active_entry(
         self, being_id: BeingId, belief_id: str
@@ -1377,6 +1444,9 @@ class BeliefConsolidationCoordinator:
             confirmation_support_count=new_confirmation_count,
             hearsay_support_count=new_hearsay_count,
             created_at=now,
+            last_observed_turn=_latest_observed_turn(
+                evidence_ids, evidence_by_id, since=target.last_observed_turn
+            ),
         )
         self._semantic_store.add_by_being(being_id, updated)
         return None
@@ -1423,6 +1493,7 @@ class BeliefConsolidationCoordinator:
             contradict_evidence_ids=target.contradict_evidence_ids,
             confirmation_support_count=target.confirmation_support_count,
             hearsay_support_count=target.hearsay_support_count,
+            last_observed_turn=target.last_observed_turn,
         )
         self._semantic_store.supersede_by_being(
             being_id, old_entry_id=target.entry_id, new_entry=new_entry
@@ -1475,6 +1546,111 @@ class BeliefConsolidationCoordinator:
             )
         return None
 
+    def _apply_explain_change(
+        self,
+        being_id: BeingId,
+        player_id: int,
+        raw: dict[str, Any],
+        evidence_by_id: dict[str, BeliefEvidence],
+        now: datetime,
+    ) -> tuple[str | None, dict[str, Any]]:
+        """状態の信念を、状態の変わり方を説明する信念に置き換える (#1452)。
+
+        変わり方の信念は、前の状態を支えた観測と、食い違った今の観測の両方に
+        支えられる。状態の言い直しではないので、別の belief_id を持つ。
+
+        食い違った evidence の指定が無ければ batch 全件には倒さず見送る。何と
+        食い違って変わったと判断したのかを残せないため。
+
+        作る前の判断 (#1453) を通す。置き換える状態の信念は同じ意味の候補から
+        外す。同じ意味の変わり方の信念がすでにあればそれを強め、状態の信念は
+        superseded にする。「いまの状況」なら作らず、状態の信念も残す。
+        """
+        belief_id = raw.get("belief_id")
+        if not isinstance(belief_id, str) or not belief_id.strip():
+            return _SKIP_EXPLAIN_CHANGE_MISSING_BELIEF_ID, raw
+        text = raw.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return _SKIP_EXPLAIN_CHANGE_EMPTY_TEXT, raw
+        target = self._find_active_entry(being_id, belief_id.strip())
+        if target is None:
+            return _SKIP_EXPLAIN_CHANGE_BELIEF_NOT_FOUND, raw
+        evidence_ids = self._resolve_evidence_ids(
+            raw, evidence_by_id, (), allow_batch_fallback=False
+        )
+        if not evidence_ids:
+            return _SKIP_EXPLAIN_CHANGE_NO_EVIDENCE, raw
+        text = text.strip()[:MAX_BELIEF_TEXT_CHARS]
+        reviewed = raw
+        if self._create_gate is not None:
+            existing = [
+                TextCandidate(e.belief_id, e.text)
+                for e in self._semantic_store.list_for_being(being_id)
+                if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+                and e.belief_id != target.belief_id
+            ]
+            review = self._create_gate.review(text, existing)
+            self._emit_create_gate_trace(being_id, review)
+            reviewed = {**raw, "create_gate_outcome": review.outcome}
+            if review.unavailable_reason is not None:
+                reviewed["create_gate_unavailable_reason"] = review.unavailable_reason
+            if review.outcome == OUTCOME_SKIP_CURRENT_SITUATION:
+                return _SKIP_EXPLAIN_CHANGE_CURRENT_SITUATION, reviewed
+            if review.outcome == OUTCOME_STRENGTHEN:
+                skip_reason = self._apply_strengthen(
+                    being_id,
+                    {"belief_id": review.target_key, "evidence_ids": list(evidence_ids)},
+                    evidence_by_id,
+                    (),
+                    now,
+                )
+                if skip_reason is not None:
+                    return f"explain_change_{skip_reason}", reviewed
+                self._semantic_store.update_status_by_being(
+                    being_id, target.entry_id, SEMANTIC_MEMORY_STATUS_SUPERSEDED
+                )
+                return None, {**reviewed, "change_belief_id": review.target_key}
+
+        existing_support = set(target.support_evidence_ids)
+        newly_added = tuple(eid for eid in evidence_ids if eid not in existing_support)
+        support = tuple(sorted(existing_support | set(evidence_ids)))
+        confirmation_count = target.confirmation_support_count + self._count_confirmation(
+            newly_added, evidence_by_id
+        )
+        hearsay_count = target.hearsay_support_count + self._count_hearsay(
+            newly_added, evidence_by_id
+        )
+        episode_ids = set(target.evidence_episode_ids)
+        for eid in evidence_ids:
+            episode_ids.update(evidence_by_id[eid].episode_ids)
+        entry_id = f"sem-{uuid4().hex}"
+        change = SemanticMemoryEntry(
+            entry_id=entry_id,
+            player_id=player_id,
+            being_id=being_id,
+            text=text,
+            evidence_episode_ids=tuple(sorted(episode_ids)),
+            confidence=compute_belief_confidence(
+                len(support), 0, confirmation_count, hearsay_count
+            ),
+            created_at=now,
+            importance_score=self._resolve_importance(raw),
+            tags=self._build_tags(raw, evidence_ids, evidence_by_id),
+            belief_id=entry_id,
+            status=SEMANTIC_MEMORY_STATUS_ACTIVE,
+            supersedes=target.entry_id,
+            support_evidence_ids=support,
+            confirmation_support_count=confirmation_count,
+            hearsay_support_count=hearsay_count,
+            last_observed_turn=_latest_observed_turn(
+                evidence_ids, evidence_by_id, since=target.last_observed_turn
+            ),
+        )
+        self._semantic_store.supersede_by_being(
+            being_id, old_entry_id=target.entry_id, new_entry=change
+        )
+        return None, {**reviewed, "change_belief_id": entry_id}
+
     def _resolve_recorder(self) -> ITraceRecorder | None:
         if self._trace_recorder_provider is None:
             return None
@@ -1503,6 +1679,7 @@ class BeliefConsolidationCoordinator:
         shortlist: tuple[SemanticMemoryEntry, ...],
         decisions: list[dict[str, Any]],
         skipped_decisions: list[dict[str, Any]],
+        current_turn: int,
     ) -> None:
         recorder = self._resolve_recorder()
         if recorder is None:
@@ -1514,13 +1691,20 @@ class BeliefConsolidationCoordinator:
                 being_id=being_id.value,
                 batch_evidence_ids=[e.evidence_id for e in batch],
                 shortlist_belief_ids=[b.belief_id for b in shortlist],
+                # #1452: 固める LLM に渡した観測のターン数。状態が変わったと
+                # 判断した材料を trace から読み直せるようにする。
+                current_turn=current_turn,
+                evidence_observed_turns={e.evidence_id: e.observed_turn for e in batch},
+                shortlist_last_observed_turns={
+                    b.belief_id: b.last_observed_turn for b in shortlist
+                },
                 decisions=decisions,
                 # H3: 適用できず見送った decision を理由つきで残す。適用済みの顔で
                 # 消える学びが trace から見えるようにする。
                 skipped_decisions=skipped_decisions,
             )
         except Exception:
-            _logger.debug(
+            _logger.warning(
                 "trace recorder.record raised for BELIEF_CONSOLIDATION; skipping",
                 exc_info=True,
             )

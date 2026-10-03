@@ -667,9 +667,11 @@ class WorldRuntime:
     # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _stagnation_pressure_store: Any | None = field(default=None, repr=False)
-    # #1440: 予期と、その出来事と、Being ごとのターン数。清算の有効化によらず
-    # 持たせ、1 手ごとにターン数を進める。実験 snapshot stub
-    # (_wiring_stub_from_world_runtime) がここから拾う。
+    # #1440 / #1452: 予期と、その出来事と、Being ごとの記憶のターン数。清算の
+    # 有効化によらず、作ったときに 1 つだけ持つ。証拠と信念は観測のターン数を
+    # ここから読み、1 手ごとにターン数を進め、実験 snapshot stub
+    # (_wiring_stub_from_world_runtime) もここから拾う。あとから代入し直すと、
+    # 先に組んだ配り手だけが古い store を指したまま分かれる。
     _expectation_store: InMemoryExpectationRepository = field(
         default_factory=InMemoryExpectationRepository, repr=False
     )
@@ -7717,6 +7719,7 @@ def create_world_runtime(
                     belief_evidence_buffer_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
+                    memory_turn_reader=runtime._expectation_store,
                     belief_axis_provider=_belief_axis_lookup,
                 )
                 # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
@@ -8025,6 +8028,7 @@ def create_world_runtime(
             # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=runtime.current_tick,
+            memory_turn_reader=runtime._expectation_store,
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
             # H-2 (自己言及ループ / 横断レビュー): chunk 主観補完が抽出した
@@ -8195,6 +8199,7 @@ def create_world_runtime(
                     runtime._episodic_stack.episode_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
+                    memory_turn_reader=runtime._expectation_store,
                 )
             )
 
@@ -8219,6 +8224,7 @@ def create_world_runtime(
                 runtime._episodic_stack.episode_store,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
+                memory_turn_reader=runtime._expectation_store,
             )
 
             def _resolve_state_collapse_being_id(
@@ -8265,6 +8271,7 @@ def create_world_runtime(
                 runtime._episodic_stack.episode_store,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
+                memory_turn_reader=runtime._expectation_store,
             )
             # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
             # 作り直しても (set_trace_recorder 等) 再適用されるようにする。

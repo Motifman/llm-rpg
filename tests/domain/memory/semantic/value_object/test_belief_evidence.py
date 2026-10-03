@@ -34,6 +34,7 @@ def _evidence(**overrides) -> BeliefEvidence:
         salience=BELIEF_EVIDENCE_SALIENCE_LOW,
         occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
         tick=10,
+        observed_turn=7,
     )
     base.update(overrides)
     return BeliefEvidence(**base)
@@ -134,3 +135,40 @@ class TestBeliefEvidenceValidation:
     def test_blank_in_context_belief_id_in_tuple_raises(self) -> None:
         with pytest.raises(BeliefEvidenceValidationException):
             _evidence(in_context_belief_ids=("sem-1", "  "))
+
+
+class TestBeliefEvidenceObservedTurn:
+    """証拠が、観測したときの記憶のターン数を持つことを保証する (#1452)。"""
+
+    def test_observed_turn_is_kept_as_given(self) -> None:
+        """observed_turn に 12 を渡すと、証拠は 12 を持ち続ける。"""
+        assert _evidence(observed_turn=12).observed_turn == 12
+
+    def test_observed_turn_zero_is_accepted(self) -> None:
+        """まだ手を受け取っていない Being のターン数 0 も、観測のターン数として受け付ける。"""
+        assert _evidence(observed_turn=0).observed_turn == 0
+
+    def test_observed_turn_is_required(self) -> None:
+        """observed_turn を渡さずに作ると TypeError になる。いつ見たかの無い証拠を作らせない。"""
+        base = dict(
+            evidence_id="belief-evidence-1",
+            source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR,
+            episode_ids=("ep-1",),
+            cue_signature="tool:explore|spot:1",
+            text="探索は空振りだった",
+            salience=BELIEF_EVIDENCE_SALIENCE_LOW,
+            occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        )
+        with pytest.raises(TypeError):
+            BeliefEvidence(**base)  # type: ignore[call-arg]
+
+    def test_negative_observed_turn_raises(self) -> None:
+        """observed_turn が負なら BeliefEvidenceValidationException を投げる。"""
+        with pytest.raises(BeliefEvidenceValidationException):
+            _evidence(observed_turn=-1)
+
+    @pytest.mark.parametrize("value", [None, "3", 1.0, True])
+    def test_non_int_observed_turn_raises(self, value: object) -> None:
+        """observed_turn が int 以外 (None・文字列・小数・真偽値) なら BeliefEvidenceValidationException を投げる。"""
+        with pytest.raises(BeliefEvidenceValidationException):
+            _evidence(observed_turn=value)

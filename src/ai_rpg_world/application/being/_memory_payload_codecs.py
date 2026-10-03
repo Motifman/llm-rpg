@@ -218,6 +218,7 @@ def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
         # 以上これも往復しないと resume 後に 0 に戻り、以後の strengthen/contradict
         # で伝聞支持を直接体験として過大評価する (confidence の再膨張)。
         "hearsay_support_count": entry.hearsay_support_count,
+        "last_observed_turn": entry.last_observed_turn,
     }
 
 
@@ -267,6 +268,12 @@ def dict_to_semantic_entry(
         confirmation_support_count=int(data.get("confirmation_support_count", 0)),
         # P10: 旧 snapshot (このキー無し) は 0 に倒す (VO 既定と一致)。
         hearsay_support_count=int(data.get("hearsay_support_count", 0)),
+        # #1452: キーが無ければ観測のターン数が分からない信念として戻す。
+        last_observed_turn=(
+            int(data["last_observed_turn"])
+            if data.get("last_observed_turn") is not None
+            else None
+        ),
     )
 
 
@@ -657,6 +664,7 @@ def belief_evidence_to_dict(evidence: BeliefEvidence) -> dict[str, Any]:
         "text": evidence.text,
         "salience": evidence.salience,
         "occurred_at": _dt_to_iso(evidence.occurred_at),
+        "observed_turn": evidence.observed_turn,
         "tick": evidence.tick,
         # U4 (予測誤差統一設計 部品3): in-context だった belief_id 群。
         "in_context_belief_ids": list(evidence.in_context_belief_ids),
@@ -697,6 +705,8 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> BeliefEvidence:
             text=str(data["text"]),
             salience=str(data["salience"]),
             occurred_at=_iso_to_dt(str(data["occurred_at"])),
+            # #1452: いつ見たかを捏造しないので、キーが無い旧データは読まない。
+            observed_turn=data["observed_turn"],
             tick=int(data["tick"]) if data.get("tick") is not None else None,
             # U4: 旧データ (U4 導入前) には無いキーなので .get で空タプルに倒す
             # (= 後方互換。attribution 機構 OFF 時の evidence とも同じ形になる)。

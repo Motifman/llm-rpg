@@ -238,3 +238,26 @@ class TestBeingIdRequired:
         entry = _entry(player_id=42)
         assert entry.player_id == 42
         assert isinstance(entry.player_id, int)
+
+
+class TestLastObservedTurn:
+    """信念が、支える観測のうち最も新しいターン数を持つことを保証する (#1452)。"""
+
+    def test_last_observed_turn_defaults_to_none(self) -> None:
+        """観測から作られていない信念 (クラスタ昇格の要約など) は last_observed_turn が None になる。"""
+        assert _entry().last_observed_turn is None
+
+    def test_last_observed_turn_is_kept_as_given(self) -> None:
+        """last_observed_turn に 12 を渡すと、信念は 12 を持ち続ける。"""
+        assert _entry(last_observed_turn=12).last_observed_turn == 12
+
+    def test_negative_last_observed_turn_raises(self) -> None:
+        """last_observed_turn が負なら SemanticMemoryEntryValidationException を投げる。"""
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(last_observed_turn=-1)
+
+    @pytest.mark.parametrize("value", ["3", 1.0, True])
+    def test_non_int_last_observed_turn_raises(self, value: object) -> None:
+        """last_observed_turn が int 以外 (文字列・小数・真偽値) なら SemanticMemoryEntryValidationException を投げる。"""
+        with pytest.raises(SemanticMemoryEntryValidationException):
+            _entry(last_observed_turn=value)

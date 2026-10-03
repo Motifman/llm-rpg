@@ -209,6 +209,21 @@ def _init_memory_graph_v7_semantic_support_weights(connection: sqlite3.Connectio
     )
 
 
+def _init_memory_graph_v8_semantic_last_observed_turn(
+    connection: sqlite3.Connection,
+) -> None:
+    """#1452: 支える観測のうち最も新しいものの記憶のターン数を追加する。
+
+    観測から作られていない信念と、このカラムより前の行は NULL (不明) で読む。
+    """
+    connection.executescript(
+        """
+        ALTER TABLE semantic_memory_entries_by_being
+            ADD COLUMN last_observed_turn INTEGER;
+        """
+    )
+
+
 def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
     """リンク・セマンティック表を同一 DB に作成する。namespace はエピソード本体と独立。"""
     return apply_migrations(
@@ -222,6 +237,7 @@ def apply_memory_graph_migrations(connection: sqlite3.Connection) -> int:
             SqliteMigration(5, _init_memory_graph_v5_drop_legacy_memory_links),
             SqliteMigration(6, _init_memory_graph_v6_semantic_belief_journal),
             SqliteMigration(7, _init_memory_graph_v7_semantic_support_weights),
+            SqliteMigration(8, _init_memory_graph_v8_semantic_last_observed_turn),
         ],
     )
 
