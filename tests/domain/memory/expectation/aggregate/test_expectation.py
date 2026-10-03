@@ -193,6 +193,7 @@ class TestRecordCheck:
             None,
             ExpectationSettled(
                 expectation_id=ExpectationId("exp-1"),
+                content="箱を開けても空だろう",
                 holder=BeingId("being-rio"),
                 turn=12,
                 outcome=Outcome.HIT,
@@ -526,6 +527,7 @@ class TestExpireIfOverdue:
 
         assert event == ExpectationSettled(
             expectation_id=ExpectationId("exp-1"),
+            content="箱を開けても空だろう",
             holder=BeingId("being-rio"),
             turn=EXPIRES_AT + 1,
             outcome=Outcome.MISS,
