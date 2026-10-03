@@ -764,7 +764,6 @@ def dict_to_pending_prediction(data: dict[str, Any]) -> PendingPrediction:
         raise ValueError(f"invalid PendingPrediction payload: {exc}") from exc
 
 
-
 # ── 予期 (#1439): 状態をそのまま保存して戻す。照合の記録を流し直さない ──
 
 _EXPECTATION_EVENT_KIND_BY_TYPE: dict[type[ExpectationEvent], str] = {
@@ -777,6 +776,12 @@ _EXPECTATION_EVENT_KIND_BY_TYPE: dict[type[ExpectationEvent], str] = {
 _EXPECTATION_EVENT_TYPE_BY_KIND = {
     kind: event_type for event_type, kind in _EXPECTATION_EVENT_KIND_BY_TYPE.items()
 }
+
+
+def _str_tuple(value: Any, *, name: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise ValueError(f"{name} must be list[str], got {value!r}")
+    return tuple(value)
 
 
 def expectation_to_dict(expectation: Expectation) -> dict[str, Any]:
@@ -820,8 +825,12 @@ def dict_to_expectation(data: dict[str, Any]) -> Expectation:
                 expires_at_turn=data["expires_at_turn"],
                 formed_with=data["formed_with"],
                 due=data["due"],
-                beliefs_in_mind=tuple(data["beliefs_in_mind"]),
-                episodes_in_mind=tuple(data["episodes_in_mind"]),
+                beliefs_in_mind=_str_tuple(
+                    data["beliefs_in_mind"], name="beliefs_in_mind"
+                ),
+                episodes_in_mind=_str_tuple(
+                    data["episodes_in_mind"], name="episodes_in_mind"
+                ),
                 shape=(
                     ShapeVerdict(data["shape"]) if data["shape"] is not None else None
                 ),
@@ -876,8 +885,12 @@ def dict_to_undelivered_expectation_event(
             fields["likelihood"] = Likelihood(data["likelihood"])
         if event_type is ExpectationSettled:
             fields["outcome"] = Outcome(data["outcome"])
-            fields["beliefs_in_mind"] = tuple(data["beliefs_in_mind"])
-            fields["episodes_in_mind"] = tuple(data["episodes_in_mind"])
+            fields["beliefs_in_mind"] = _str_tuple(
+                data["beliefs_in_mind"], name="beliefs_in_mind"
+            )
+            fields["episodes_in_mind"] = _str_tuple(
+                data["episodes_in_mind"], name="episodes_in_mind"
+            )
         if event_type is ExpectationDismissed:
             fields["shape"] = ShapeVerdict(data["shape"])
         return UndeliveredExpectationEvent(

@@ -224,8 +224,8 @@ def cmd_save(args: argparse.Namespace) -> int:
     # に到達できないので、これらは常に空のまま保存される。実験 run 中の想起
     # 状態を取りこぼしていることがユーザに伝わるよう、明示的に warning を残す。
     logger.warning(
-        "recall_slot / afterglow / habituation / expectations are in-memory "
-        "sidecars and "
+        "recall_slot / afterglow / habituation / expectations (with their "
+        "undelivered events and memory turn) are in-memory sidecars and "
         "are NOT captured via this CLI. The resulting snapshot will have "
         "those layers empty."
     )

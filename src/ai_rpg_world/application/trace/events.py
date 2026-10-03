@@ -155,8 +155,9 @@ class TraceEventKind:
     # SNAPSHOT_LOAD payload:
     #   - directory: str (= --snapshot-load-dir)
     #   - restored_count: int (= 成功した Being 数)
-    #   - expectation_counts: list[{being_id, open, closed, undelivered_events,
-    #     memory_turn}] (= 復元した Being ごとの予期の件数と記憶のターン数)
+    #   - expectation_counts: list[{being_id, store_wired, open, closed,
+    #     undelivered_events, memory_turn}] (= 復元した Being ごとの予期の件数と
+    #     記憶のターン数。store_wired=False は空の代用品を数えたことを示す)
     #   - source_scenario: str | None (= snapshot 内に書かれていた元シナリオ名。
     #     現 scenario と異なる場合は cross-scenario transfer)
     # SNAPSHOT_SAVE payload:

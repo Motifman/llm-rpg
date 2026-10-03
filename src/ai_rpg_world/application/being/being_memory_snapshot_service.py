@@ -131,6 +131,9 @@ from ai_rpg_world.domain.memory.expectation.exception.expectation_exception impo
 from ai_rpg_world.domain.memory.expectation.repository.expectation_repository import (
     ExpectationRepository,
 )
+from ai_rpg_world.domain.memory.expectation.service.require_restorable import (
+    require_restorable,
+)
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
 )
@@ -629,6 +632,19 @@ class BeingMemorySnapshotService:
                 f"got {memory_turn_raw!r}"
             )
         memory_turn = memory_turn_raw[0] if memory_turn_raw else 0
+        # 予期の組の整合は、どの store にも書く前に確かめる。ほかの store を
+        # 書き換えたあとで予期だけ拒むと、半端な状態が残る。
+        try:
+            require_restorable(
+                being_id,
+                expectations=expectations,
+                undelivered_events=undelivered_expectation_events,
+                turn=memory_turn,
+            )
+        except ExpectationValidationException as exc:
+            raise BeingMemoryPayloadFormatError(
+                f"payload['expectations'] does not fit {being_id}: {exc}"
+            ) from exc
 
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
@@ -673,17 +689,12 @@ class BeingMemorySnapshotService:
         self._stagnation_pressure.replace_all_by_being(
             being_id, stagnation_pressure_count
         )
-        try:
-            self._expectation.replace_all_by_being(
-                being_id,
-                expectations=expectations,
-                undelivered_events=undelivered_expectation_events,
-                turn=memory_turn,
-            )
-        except ExpectationValidationException as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload['expectations'] does not fit {being_id}: {exc}"
-            ) from exc
+        self._expectation.replace_all_by_being(
+            being_id,
+            expectations=expectations,
+            undelivered_events=undelivered_expectation_events,
+            turn=memory_turn,
+        )
 
 
 __all__ = [

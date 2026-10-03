@@ -34,12 +34,20 @@ class ExpectationRepository(ABC):
     def save(
         self,
         expectation: Expectation,
-        events: Sequence[ExpectationEvent] = (),
+        events: Sequence[ExpectationEvent],
     ) -> None:
         """予期の状態と、その変化で返った出来事を未配信として、まとめて保存する。
 
-        出来事がこの予期のものでないとき、または同じ出来事がすでに未配信に
-        あるときは、何も保存せずに ``ExpectationValidationException`` を投げる。
+        出来事を返さなかった変化なら空で渡す。次のどれかに当たるときは、何も
+        保存せずに ``ExpectationValidationException`` を投げる。
+
+        - 出来事がこの予期のものでない
+        - 同じ出来事がすでに未配信にある
+        - 清算待ちだった予期を終わった状態で保存するのに、終わったターンの
+          終わりを告げる出来事が無い。確定の出来事を渡し忘れて失うのを防ぐ
+
+        配信済みの印を付けた出来事は覚えていないので、同じ出来事をもう一度
+        渡すと未配信として積み直す。
         """
 
     @abstractmethod
@@ -79,7 +87,7 @@ class ExpectationRepository(ABC):
     ) -> None:
         """snapshot の復元用に、予期・未配信の出来事・ターン数をまとめて置き換える (design_decisions 27)。
 
-        別の Being の予期や出来事が混じっていれば、何も変えずに
+        ``require_restorable`` に通らない組なら、何も変えずに
         ``ExpectationValidationException`` を投げる。
         """
 

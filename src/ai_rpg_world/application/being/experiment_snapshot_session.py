@@ -489,6 +489,9 @@ class ExperimentSnapshotSession:
             getattr(wiring_result, "stagnation_pressure_store", None)
             or _empty_stagnation_pressure_store()
         )
+        self._expectation_store_wired = (
+            getattr(wiring_result, "expectation_store", None) is not None
+        )
         expectation_store = (
             getattr(wiring_result, "expectation_store", None)
             or _empty_expectation_store()
@@ -579,7 +582,11 @@ class ExperimentSnapshotSession:
         return self._snapshot_dir
 
     def expectation_counts(self, being_ids: Sequence[BeingId]) -> list[dict[str, Any]]:
-        """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる、Being ごとの予期の件数。"""
+        """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる、Being ごとの予期の件数。
+
+        ``store_wired`` が False なら空の代用品を数えている。件数 0 が、本当に
+        予期が無かったのか配線が無かったのかを trace から見分けるため。
+        """
         counts: list[dict[str, Any]] = []
         for being_id in being_ids:
             expectations = self._expectation_store.list_all_by_being(being_id)
@@ -587,6 +594,7 @@ class ExperimentSnapshotSession:
             counts.append(
                 {
                     "being_id": being_id.value,
+                    "store_wired": self._expectation_store_wired,
                     "open": open_count,
                     "closed": len(expectations) - open_count,
                     "undelivered_events": len(

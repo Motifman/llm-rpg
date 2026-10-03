@@ -11,6 +11,7 @@ from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
 )
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationEvent,
+    ProvisionallyMissed,
 )
 from ai_rpg_world.domain.memory.expectation.exception.expectation_exception import (
     ExpectationEventNotFoundException,
@@ -18,6 +19,9 @@ from ai_rpg_world.domain.memory.expectation.exception.expectation_exception impo
 )
 from ai_rpg_world.domain.memory.expectation.repository.expectation_repository import (
     ExpectationRepository,
+)
+from ai_rpg_world.domain.memory.expectation.service.require_restorable import (
+    require_restorable,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
@@ -28,7 +32,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_snapshot import (
     ExpectationSnapshot,
 )
-from ai_rpg_world.domain.memory.expectation.value_object.turn import require_turn
 from ai_rpg_world.domain.memory.expectation.value_object.undelivered_expectation_event import (
     UndeliveredExpectationEvent,
 )
@@ -65,13 +68,27 @@ class InMemoryExpectationRepository(ExpectationRepository):
     def save(
         self,
         expectation: Expectation,
-        events: Sequence[ExpectationEvent] = (),
+        events: Sequence[ExpectationEvent],
     ) -> None:
         if not isinstance(expectation, Expectation):
             raise TypeError("expectation must be Expectation")
         snapshot = expectation.snapshot()
         state = self._states.get(snapshot.holder, _BeingState())
         entries = [UndeliveredExpectationEvent.of(event) for event in events]
+        previous = state.expectations.get(snapshot.expectation_id)
+        closes_now = not snapshot.status.is_open and (
+            previous is None or previous.status.is_open
+        )
+        if closes_now and not any(
+            not isinstance(entry.event, ProvisionallyMissed)
+            and entry.event.turn == snapshot.closed_at_turn
+            for entry in entries
+        ):
+            raise ExpectationValidationException(
+                f"expectation {snapshot.expectation_id} closed at turn "
+                f"{snapshot.closed_at_turn} as {snapshot.status.value}, "
+                "but the event that closed it was not given"
+            )
         for entry in entries:
             if (
                 entry.event.expectation_id != snapshot.expectation_id
@@ -142,39 +159,20 @@ class InMemoryExpectationRepository(ExpectationRepository):
         turn: int,
     ) -> None:
         _require_being_id(being_id)
-        replaced = _BeingState(turn=require_turn(turn, name="turn"))
-        for expectation in expectations:
-            if not isinstance(expectation, Expectation):
-                raise TypeError("expectations must be Expectation")
-            snapshot = expectation.snapshot()
-            if snapshot.holder != being_id:
-                raise ExpectationValidationException(
-                    f"expectation {snapshot.expectation_id} is held by "
-                    f"{snapshot.holder}, not {being_id}"
-                )
-            if snapshot.expectation_id in replaced.expectations:
-                raise ExpectationValidationException(
-                    f"expectation {snapshot.expectation_id} appears twice"
-                )
-            replaced.expectations[snapshot.expectation_id] = snapshot
-        seen: set[ExpectationEventId] = set()
-        for entry in undelivered_events:
-            if not isinstance(entry, UndeliveredExpectationEvent):
-                raise TypeError(
-                    "undelivered_events must be UndeliveredExpectationEvent"
-                )
-            if entry.event.holder != being_id:
-                raise ExpectationValidationException(
-                    f"event {entry.event_id} is held by {entry.event.holder}, "
-                    f"not {being_id}"
-                )
-            if entry.event_id in seen:
-                raise ExpectationValidationException(
-                    f"event {entry.event_id} appears twice"
-                )
-            seen.add(entry.event_id)
-            replaced.undelivered.append(entry)
-
+        require_restorable(
+            being_id,
+            expectations=expectations,
+            undelivered_events=undelivered_events,
+            turn=turn,
+        )
+        replaced = _BeingState(
+            expectations={
+                snapshot.expectation_id: snapshot
+                for snapshot in (e.snapshot() for e in expectations)
+            },
+            undelivered=list(undelivered_events),
+            turn=turn,
+        )
         self._states[being_id] = replaced
         self._drop_if_empty(being_id)
 
