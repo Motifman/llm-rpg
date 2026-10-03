@@ -286,7 +286,10 @@ class TestSettlementWiring:
     def test_grounds_reader_reads_the_episodic_stack_stores(self) -> None:
         """根拠の本文を引く口は、プロンプトの想起と同じ episodic stack の信念・エピソード・再解釈の store を読む。"""
         config = episodic_config(
-            typed_judgment_provider="stub", expectation_settlement_enabled=True
+            typed_judgment_provider="stub",
+            expectation_settlement_enabled=True,
+            semantic_search_enabled=True,
+            episodic_reinterpretation_enabled=True,
         )
         runtime = create_world_runtime(_DRILL, config=config)
         wiring = _WorldLlmWiring(
@@ -302,6 +305,11 @@ class TestSettlementWiring:
         reader = settlement._grounds_reader
         assert isinstance(reader, MemoryStoreInMindTextReader)
         stack = runtime._episodic_stack
+        assert None not in (
+            stack.semantic_memory_store,
+            stack.episode_store,
+            stack.reinterpretation_journal,
+        )
         assert reader._semantic_store is stack.semantic_memory_store
         assert reader._episode_store is stack.episode_store
         assert reader._journal_store is stack.reinterpretation_journal
