@@ -24,6 +24,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -54,8 +57,7 @@ def _settled(outcome: Outcome) -> ExpectationSettled:
         content="干潟で貝が採れる",
         outcome=outcome,
         likelihood=Likelihood.EVEN,
-        beliefs_in_mind=(),
-        episodes_in_mind=(),
+        grounds=ExpectationGrounds(),
     )
 
 

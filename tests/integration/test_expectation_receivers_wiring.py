@@ -27,6 +27,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -35,6 +38,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin impo
 )
 from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
     Likelihood,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
+    ShapeVerdict,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.application.being.expectation.support import RecordingTraceRecorder
@@ -70,6 +76,11 @@ def _save_settled_miss(runtime: Any, being: BeingId) -> None:
         expires_at_turn=10,
         beliefs_in_mind=("belief-shelf",),
         episodes_in_mind=("ep-shelf",),
+    )
+    expectation.judge_shape(
+        ShapeVerdict.SETTLEABLE,
+        turn=1,
+        grounds=ExpectationGrounds(beliefs=("belief-shelf",), episodes=("ep-shelf",)),
     )
     expectation.record(Check(turn=2, verdict=CheckVerdict.MISS))
     settled = expectation.record(Check(turn=3, verdict=CheckVerdict.MISS))

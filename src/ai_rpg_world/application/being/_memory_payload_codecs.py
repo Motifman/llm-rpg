@@ -94,6 +94,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -794,6 +797,19 @@ def _str_tuple(value: Any, *, name: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _grounds_to_dict(grounds: ExpectationGrounds) -> dict[str, list[str]]:
+    return {"beliefs": list(grounds.beliefs), "episodes": list(grounds.episodes)}
+
+
+def _dict_to_grounds(value: Any) -> ExpectationGrounds:
+    if not isinstance(value, dict):
+        raise ValueError(f"grounds must be a dict, got {value!r}")
+    return ExpectationGrounds(
+        beliefs=_str_tuple(value["beliefs"], name="grounds.beliefs"),
+        episodes=_str_tuple(value["episodes"], name="grounds.episodes"),
+    )
+
+
 def expectation_to_dict(expectation: Expectation) -> dict[str, Any]:
     snapshot = expectation.snapshot()
     return {
@@ -809,6 +825,9 @@ def expectation_to_dict(expectation: Expectation) -> dict[str, Any]:
         "beliefs_in_mind": list(snapshot.beliefs_in_mind),
         "episodes_in_mind": list(snapshot.episodes_in_mind),
         "shape": snapshot.shape.value if snapshot.shape is not None else None,
+        "grounds": (
+            None if snapshot.grounds is None else _grounds_to_dict(snapshot.grounds)
+        ),
         "checks": [
             {"turn": check.turn, "verdict": check.verdict.value}
             for check in snapshot.checks
@@ -844,6 +863,13 @@ def dict_to_expectation(data: dict[str, Any]) -> Expectation:
                 shape=(
                     ShapeVerdict(data["shape"]) if data["shape"] is not None else None
                 ),
+                # #1484 より前に保存した予期にはキーが無い。形を判定済みなら
+                # restore が根拠の欠けとして拒む。空の根拠を捏造しない。
+                grounds=(
+                    None
+                    if data.get("grounds") is None
+                    else _dict_to_grounds(data["grounds"])
+                ),
                 checks=tuple(
                     Check(turn=check["turn"], verdict=CheckVerdict(check["verdict"]))
                     for check in data["checks"]
@@ -872,8 +898,7 @@ def undelivered_expectation_event_to_dict(
     if isinstance(event, ExpectationSettled):
         data["content"] = event.content
         data["outcome"] = event.outcome.value
-        data["beliefs_in_mind"] = list(event.beliefs_in_mind)
-        data["episodes_in_mind"] = list(event.episodes_in_mind)
+        data["grounds"] = _grounds_to_dict(event.grounds)
     if isinstance(event, ExpectationDismissed):
         data["shape"] = event.shape.value
     return data
@@ -897,12 +922,12 @@ def dict_to_undelivered_expectation_event(
         if event_type is ExpectationSettled:
             fields["content"] = data["content"]
             fields["outcome"] = Outcome(data["outcome"])
-            fields["beliefs_in_mind"] = _str_tuple(
-                data["beliefs_in_mind"], name="beliefs_in_mind"
-            )
-            fields["episodes_in_mind"] = _str_tuple(
-                data["episodes_in_mind"], name="episodes_in_mind"
-            )
+            if "grounds" not in data:
+                raise ValueError(
+                    "settled expectation event has no grounds "
+                    "(saved before #1484); refusing to guess them"
+                )
+            fields["grounds"] = _dict_to_grounds(data["grounds"])
         if event_type is ExpectationDismissed:
             fields["shape"] = ShapeVerdict(data["shape"])
         return UndeliveredExpectationEvent(

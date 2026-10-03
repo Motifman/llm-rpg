@@ -12,6 +12,11 @@
 2 段に分ける。Jev を呼ぶのは ``judge`` だけで、判定は ``--out`` に保存する。
 ``count`` は保存した判定だけを読み、Jev を呼ばずに件数を数え直す。
 
+#1484 で、確定の当否は頭にあったものすべてではなく根拠にだけ返るようになった。
+``judge`` は根拠を問わない (本文を引く口を持たない) ので、いま回すと根拠は空になる。
+``count`` は #1484 より前に保存した判定を、#1443 のときと同じく頭にあったもの
+すべてを根拠として読み直す。
+
 使い方:
     uv run python scripts/expectation_belief_material_compare.py judge \\
         --run-dir ../../../var/runs/v4coop_0731_006 --starts 0,40 --turns 8 \\
@@ -53,6 +58,9 @@ from ai_rpg_world.application.being.expectation.belief_material import (  # noqa
 from ai_rpg_world.application.being.expectation.event_delivery import (  # noqa: E402
     ExpectationEventDispatcher,
     ExpectationEventReceiver,
+)
+from ai_rpg_world.application.being.expectation.grounds import (  # noqa: E402
+    InMindTextReader,
 )
 from ai_rpg_world.application.being.expectation.settlement import (  # noqa: E402
     ExpectationSettlementService,
@@ -103,6 +111,26 @@ _FALLBACK_TEXT = "予測していたが、行動の一部が失敗した。"
 class _InMind:
     beliefs: tuple[str, ...]
     episodes: tuple[str, ...]
+
+
+class _NoTexts(InMindTextReader):
+    def belief_text(self, being_id: BeingId, belief_id: str) -> str | None:
+        return None
+
+    def episode_text(self, being_id: BeingId, episode_id: str) -> str | None:
+        return None
+
+
+def _as_of_1443(raw: dict[str, Any]) -> dict[str, Any]:
+    """#1484 より前に保存した確定の出来事は、頭にあったものすべてを根拠として読む。"""
+    if raw.get("kind") != "settled" or "grounds" in raw:
+        return raw
+    converted = {k: v for k, v in raw.items() if not k.endswith("_in_mind")}
+    converted["grounds"] = {
+        "beliefs": raw["beliefs_in_mind"],
+        "episodes": raw["episodes_in_mind"],
+    }
+    return converted
 
 
 class _Collecting(ExpectationEventReceiver):
@@ -185,6 +213,9 @@ def judge_window(
         ),
         max_open=8,
         timeline_turns=timeline_turns,
+        grounds_reader=_NoTexts(),
+        max_grounds_questions=1,
+        grounds_min_probability=0.5,
         trace_recorder_provider=lambda: recorder,
     )
     formed: list[dict[str, Any]] = []
@@ -264,13 +295,13 @@ def count(windows: list[dict[str, Any]]) -> dict[str, Any]:
         }
         settled = set()
         for raw in window["events"]:
-            entry = dict_to_undelivered_expectation_event(raw)
+            entry = dict_to_undelivered_expectation_event(_as_of_1443(raw))
             event = entry.event
             beings.add(event.holder)
             receiver.receive(entry.event_id, event)
             if isinstance(event, ExpectationSettled):
                 settled.add(event.expectation_id.value)
-                if event.outcome is Outcome.HIT and not event.beliefs_in_mind:
+                if event.outcome is Outcome.HIT and not event.grounds.beliefs:
                     reasons["当たったが頭に信念が無い"] += 1
                 else:
                     reasons[f"確定 ({event.outcome.value})"] += 1

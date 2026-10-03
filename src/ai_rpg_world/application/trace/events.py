@@ -412,10 +412,22 @@ class TraceEventKind:
     #     "settlement_failed" | "no_acting_being")
     #   - unavailable_reason: str | None (= 縮退したときの error_code と文)
     #   - state: dict | None (= Jev に渡した state)
-    #   - questions: dict[str, {kind, expectation_id, content}] (= 質問の名前と対象の予期)
+    #   - questions: dict[str, {kind, expectation_id, content, ground_id}] (= 質問の
+    #     名前と対象の予期。kind は "shape" | "check" | "ground" | "scene"。ground_id は
+    #     根拠の問いが指す信念かエピソードの ID で、それ以外は None)
     #   - answers: dict[str, {value, probabilities, confidence, latency_ms, source}]
     #   - transitions: list[{expectation_id, step, verdict, event, status_after}]
     #     (step は "overdue" | "over_capacity" | "shape" | "check")
+    #   - grounds: list (#1484。形を問うた予期ごとに 1 件。形を問わないターンは空)
+    #     - expectation_id / content
+    #     - beliefs_in_mind / episodes_in_mind: list[str] (= 予期を書いたときに頭にあった ID)
+    #     - asked: list[{question, kind, id, text, probability}] (kind は "belief" |
+    #       "episode"。probability は判断が得られなかったターンでは None)
+    #     - omitted: list[{kind, id, reason}] (= 問わなかったもの。reason は
+    #       "over_limit" | "text_not_found" | "text_read_failed: <例外>")
+    #     - judged: bool (= このターンに根拠が決まったか。縮退したターンは False で、
+    #       次のターンに形と一緒に問い直す)
+    #     - beliefs / episodes: list[str] (= 根拠と判断したもの。judged が False なら空)
     EXPECTATION_SETTLEMENT = "expectation_settlement"
     # #1440: 予期の出来事 1 件を受け取る側へ配った結果。配り直すたびに 1 件増える。
     # payload:
@@ -439,9 +451,12 @@ class TraceEventKind:
     #   - outcome: str ("hit" | "miss")
     #   - likelihood: str
     #   - result: str ("appended" | "already_received" | "skipped")
-    #   - skipped_reason: str (= skipped のときだけ。例 "no_beliefs_in_mind")
+    #   - skipped_reason: str (= skipped のときだけ。例 "no_grounding_beliefs"。
+    #     #1484 より前の run では "no_beliefs_in_mind" / "no_episodes_in_mind")
     #   - belief_evidence のとき: evidence_id / source_kind / salience / belief_ids
-    #   - recall_credit のとき: episode_ids / credit ("hit_count" | "miss_stamp")
+    #     (= 根拠の信念。#1484 より前の run では頭にあった信念すべて)
+    #   - recall_credit のとき: episode_ids (= 根拠のエピソード) / credit
+    #     ("hit_count" | "miss_stamp")
     #     / stamped_recalls (= miss_stamp で書き添えた想起の件数。処理済みなら 0)
     EXPECTATION_MATERIAL = "expectation_material"
 

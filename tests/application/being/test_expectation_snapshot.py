@@ -23,6 +23,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -113,7 +116,7 @@ class TestRoundTrip:
         expired_event = expired.expire_if_overdue(now_turn=EXPIRES_AT + 2)
         dismissed = _expectation("exp-dismissed")
         dismissed_event = dismissed.judge_shape(
-            ShapeVerdict.TRUE_EITHER_WAY, turn=FORMED_AT + 1
+            ShapeVerdict.TRUE_EITHER_WAY, turn=FORMED_AT + 1, grounds=ExpectationGrounds()
         )
         store.save(expired, [expired_event])
         store.save(dismissed, [dismissed_event])
@@ -148,7 +151,7 @@ class TestRoundTrip:
     @pytest.mark.parametrize(
         "drive",
         [
-            lambda e: [e.judge_shape(ShapeVerdict.OWN_ACTION, turn=FORMED_AT)],
+            lambda e: [e.judge_shape(ShapeVerdict.OWN_ACTION, turn=FORMED_AT, grounds=ExpectationGrounds())],
             lambda e: [
                 e.record(Check(turn=11, verdict=CheckVerdict.HIT)),
                 e.record(Check(turn=12, verdict=CheckVerdict.NOT_AN_EXPECTATION)),
@@ -174,6 +177,23 @@ class TestRoundTrip:
         assert restored.list_undelivered_by_being(
             RIO
         ) == store.list_undelivered_by_being(RIO)
+
+    def test_grounds_and_settled_event_grounds_come_back(self) -> None:
+        """形と一緒に受けた根拠は、予期と未配信の確定の出来事の両方で同じ値のまま戻る。"""
+        source, store = _service()
+        expectation = _expectation("exp-1")
+        grounds = ExpectationGrounds(beliefs=("belief-1",), episodes=("episode-3",))
+        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=FORMED_AT, grounds=grounds)
+        expectation.record(Check(turn=11, verdict=CheckVerdict.HIT))
+        settled = expectation.record(Check(turn=12, verdict=CheckVerdict.HIT))
+        store.save(expectation, [settled])
+        _advance_to(store, 12)
+
+        restored, _ = _round_trip(source)
+
+        assert _snapshots(restored)[0].grounds == grounds
+        [entry] = restored.list_undelivered_by_being(RIO)
+        assert entry.event.grounds == grounds  # type: ignore[union-attr]
 
     def test_empty_store_round_trips_as_empty(self) -> None:
         """予期もターン数も無い Being は空の list で保存され、復元しても空のまま。"""
@@ -247,6 +267,36 @@ class TestRejectBrokenPayload:
         target, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="expectations"):
+            target.restore(RIO, json.dumps(payload))
+
+    def test_judged_shape_without_grounds_key_is_format_error(self) -> None:
+        """形を判定した予期に根拠のキーが無い payload (#1484 より前の保存) は、根拠を空と捏造せずに BeingMemoryPayloadFormatError で拒む。"""
+        source, store = _service()
+        expectation = _expectation("exp-1")
+        expectation.judge_shape(
+            ShapeVerdict.SETTLEABLE, turn=FORMED_AT, grounds=ExpectationGrounds()
+        )
+        store.save(expectation, [])
+        _advance_to(store, FORMED_AT)
+        payload = json.loads(source.capture(RIO))
+        del payload["expectations"][0]["grounds"]
+        target, _ = _service()
+
+        with pytest.raises(BeingMemoryPayloadFormatError, match="grounds"):
+            target.restore(RIO, json.dumps(payload))
+
+    def test_settled_event_without_grounds_key_is_format_error(self) -> None:
+        """未配信の確定の出来事に根拠のキーが無い payload は、BeingMemoryPayloadFormatError で拒む。"""
+        source, store = _service()
+        expectation = _expectation("exp-1")
+        expectation.record(Check(turn=11, verdict=CheckVerdict.HIT))
+        store.save(expectation, [expectation.record(Check(turn=12, verdict=CheckVerdict.HIT))])
+        _advance_to(store, 12)
+        payload = json.loads(source.capture(RIO))
+        del payload["expectation_undelivered_events"][0]["grounds"]
+        target, _ = _service()
+
+        with pytest.raises(BeingMemoryPayloadFormatError, match="grounds"):
             target.restore(RIO, json.dumps(payload))
 
     def test_expectation_of_other_being_is_rejected_before_any_store_is_written(

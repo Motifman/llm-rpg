@@ -1,4 +1,4 @@
-"""確定した予期を、頭にあった信念への支持・反証の材料として証拠バッファに積む受け取る側。
+"""確定した予期を、根拠の信念への支持・反証の材料として証拠バッファに積む受け取る側。
 
 信念は世界についての見立てで、持ち越される。誤って直すと損が大きいので、
 確定した判定だけを材料にする (#1436)。暫定の外れ、期限切れ、形の判定で
@@ -63,9 +63,9 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
     弱い材料にする。確からしさは文にも残し、固着の LLM がどれだけ動かすかを
     読めるようにする。
 
-    当たりは、頭に信念が無ければ材料にしない。支える相手が無い的中を積むと、
-    何もしなかっただけの当たりで信念が水増しされる。外れは、頭に信念が無く
-    ても新しく学ぶ材料として積む。
+    当たりは、根拠の信念が無ければ材料にしない。支える相手が無い的中を積むと、
+    何もしなかっただけの当たりや、関係の無い信念への支持で水増しされる。外れは、
+    根拠の信念が無くても新しく学ぶ材料として積む。
     """
 
     def __init__(
@@ -84,8 +84,8 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
     def receive(self, event_id: ExpectationEventId, event: ExpectationEvent) -> None:
         if not isinstance(event, ExpectationSettled):
             return
-        if event.outcome is Outcome.HIT and not event.beliefs_in_mind:
-            self._trace(event_id, event, result="skipped", skipped_reason="no_beliefs_in_mind")
+        if event.outcome is Outcome.HIT and not event.grounds.beliefs:
+            self._trace(event_id, event, result="skipped", skipped_reason="no_grounding_beliefs")
             return
         evidence = self._evidence(event_id, event)
         appended = self._buffer_store.append_received_by_being(
@@ -118,7 +118,7 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
             salience=BELIEF_EVIDENCE_SALIENCE_HIGH if strong else BELIEF_EVIDENCE_SALIENCE_LOW,
             occurred_at=self._now_provider(),
             observed_turn=event.turn,
-            in_context_belief_ids=event.beliefs_in_mind,
+            in_context_belief_ids=event.grounds.beliefs,
         )
 
     def _trace(

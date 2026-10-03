@@ -13,6 +13,9 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     Outcome,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -36,9 +39,10 @@ class ProvisionallyMissed:
 
 @dataclass(frozen=True)
 class ExpectationSettled:
-    """当否が確定した。頭にあった信念への支持・反証と、思い出していたエピソードの見直しに使う。
+    """当否が確定した。根拠の信念への支持・反証と、根拠のエピソードの見直しに使う。
 
-    受け取る側は予期の保存先を引かずに材料を書けるよう、予期の文も運ぶ。
+    受け取る側は予期の保存先を引かずに材料を書けるよう、予期の文も運ぶ。頭に
+    あったものではなく根拠だけを運び、返す先を根拠に絞る (#1484)。
     """
 
     expectation_id: ExpectationId
@@ -47,8 +51,7 @@ class ExpectationSettled:
     content: str
     outcome: Outcome
     likelihood: Likelihood
-    beliefs_in_mind: tuple[str, ...]
-    episodes_in_mind: tuple[str, ...]
+    grounds: ExpectationGrounds
 
 
 @dataclass(frozen=True)
