@@ -28,6 +28,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -154,7 +157,7 @@ class TestClosingRequiresItsEvent:
     @pytest.mark.parametrize(
         "close",
         [
-            lambda e: e.judge_shape(ShapeVerdict.OWN_ACTION, turn=10),
+            lambda e: e.judge_shape(ShapeVerdict.OWN_ACTION, turn=10, grounds=ExpectationGrounds()),
             lambda e: e.record(Check(turn=11, verdict=CheckVerdict.NOT_AN_EXPECTATION)),
             lambda e: e.expire_if_overdue(now_turn=21),
         ],

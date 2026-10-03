@@ -16,6 +16,7 @@ from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventDispatcher,
     ExpectationEventReceiver,
 )
+from ai_rpg_world.application.being.expectation.grounds import InMindTextReader
 from ai_rpg_world.application.being.expectation.settlement import (
     ExpectationSettlementService,
     TurnMaterial,
@@ -39,6 +40,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 )
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
@@ -80,6 +84,14 @@ class _Receiver(ExpectationEventReceiver):
         self.events.append(event)
 
 
+class _NoTexts(InMindTextReader):
+    def belief_text(self, being_id: BeingId, belief_id: str) -> str | None:
+        return None
+
+    def episode_text(self, being_id: BeingId, episode_id: str) -> str | None:
+        return None
+
+
 class _Harness:
     def __init__(
         self,
@@ -104,6 +116,9 @@ class _Harness:
             ),
             max_open=max_open,
             timeline_turns=timeline_turns,
+            grounds_reader=_NoTexts(),
+            max_grounds_questions=8,
+            grounds_min_probability=0.5,
             trace_recorder_provider=lambda: self.recorder,
         )
 
@@ -614,5 +629,5 @@ def _shaped(
         for e in repository.list_all_by_being(RIO)
         if e.expectation_id == ExpectationId(expectation_id)
     ]
-    expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=turn)
+    expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=turn, grounds=ExpectationGrounds())
     return expectation

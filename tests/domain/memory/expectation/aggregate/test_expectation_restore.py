@@ -24,6 +24,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
     Outcome,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -76,6 +79,8 @@ def _restore(**overrides: Any) -> Expectation:
         "closed_at_turn": None,
     }
     fields.update(overrides)
+    if fields["shape"] is not None:
+        fields.setdefault("grounds", ExpectationGrounds())
     return Expectation.restore(ExpectationSnapshot(**fields))
 
 
@@ -83,8 +88,12 @@ class TestRestoreOpenExpectation:
     """清算待ちの状態から作り直した予期が、保存前と同じ規則で判定を受け取り続ける挙動を保証する。"""
 
     def test_restored_hit_settles_with_next_hit(self) -> None:
-        """当たったを 1 回持つ清算待ちを作り直すと、次の当たったで確定し、頭にあった信念を出来事で運ぶ。"""
-        expectation = _restore(checks=_checks((11, HIT)))
+        """形の判定と当たったを 1 回持つ清算待ちを作り直すと、次の当たったで確定し、保存していた根拠を出来事で運ぶ。"""
+        expectation = _restore(
+            shape=ShapeVerdict.SETTLEABLE,
+            grounds=ExpectationGrounds(beliefs=("belief-1",)),
+            checks=_checks((11, HIT)),
+        )
 
         event = expectation.record(Check(turn=12, verdict=HIT))
 
@@ -95,8 +104,7 @@ class TestRestoreOpenExpectation:
             turn=12,
             outcome=Outcome.HIT,
             likelihood=Likelihood.PROBABLY,
-            beliefs_in_mind=("belief-1",),
-            episodes_in_mind=(),
+            grounds=ExpectationGrounds(beliefs=("belief-1",)),
         )
 
     def test_restored_miss_then_undetermined_settles_as_miss_when_overdue(
@@ -122,7 +130,7 @@ class TestRestoreOpenExpectation:
         expectation = _restore(shape=ShapeVerdict.SETTLEABLE)
 
         with pytest.raises(ExpectationCheckRuleException, match="shape"):
-            expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=11)
+            expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=11, grounds=ExpectationGrounds())
 
     def test_restored_settleable_shape_accepts_checks(self) -> None:
         """形の判定が「清算できる」で済んだ清算待ちを作り直すと、照合を受け取る。"""
@@ -181,7 +189,7 @@ def _record(expectation: Expectation) -> object:
 
 
 def _judge_shape(expectation: Expectation) -> object:
-    return expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=EXPIRES_AT)
+    return expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=EXPIRES_AT, grounds=ExpectationGrounds())
 
 
 def _expire(expectation: Expectation) -> object:

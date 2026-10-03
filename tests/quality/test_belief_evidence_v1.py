@@ -81,6 +81,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -230,8 +233,7 @@ def _settled(**overrides: Any) -> ExpectationSettled:
         "content": "QUALITY_MARKER_EXPECTATION: 浜辺を探せば何か見つかる",
         "outcome": Outcome.MISS,
         "likelihood": Likelihood.ALMOST_CERTAIN,
-        "beliefs_in_mind": ("belief-shore-rich",),
-        "episodes_in_mind": ("ep-shore",),
+        "grounds": ExpectationGrounds(beliefs=("belief-shore-rich",), episodes=("ep-shore",)),
     }
     fields.update(overrides)
     return ExpectationSettled(**fields)
@@ -274,7 +276,7 @@ class TestBeliefEvidenceV1:
                 content="QUALITY_MARKER_EXPECTATION: 流木なら火がつく",
                 outcome=Outcome.HIT,
                 likelihood=Likelihood.PROBABLY,
-                beliefs_in_mind=("belief-driftwood-burns",),
+                grounds=ExpectationGrounds(beliefs=("belief-driftwood-burns",)),
             ),
         )
 

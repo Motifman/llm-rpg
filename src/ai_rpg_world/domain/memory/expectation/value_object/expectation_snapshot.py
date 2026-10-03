@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.value_object.check import Check
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -44,6 +47,7 @@ class ExpectationSnapshot:
     due: str | None = None
     beliefs_in_mind: tuple[str, ...] = ()
     episodes_in_mind: tuple[str, ...] = ()
+    grounds: ExpectationGrounds | None = None
 
 
 __all__ = ["ExpectationSnapshot"]

@@ -11,6 +11,13 @@
 判断が得られないターンは、どの予期にも判定を渡さずに飛ばす (design_decisions 5)。
 期限と件数の上限で閉じるのは判断ではなくターン数で決まるので、問う前に済ませる。
 
+## 根拠は形と同じ呼び出しで問う
+
+予期を書いたターンには、頭にあった信念とエピソードごとに、その予期の材料に
+なったかも問う (#1484)。形と同じ予期を同じ state で見るので、呼び出しは増やさ
+ない。選ばれたものだけを根拠として形と一緒に予期へ渡し、確定した当否はそこに
+だけ返る。
+
 ## 状態の変化を保存してから配る
 
 集約が返した出来事は、予期と同じ保存の単位で未配信として積み (design_decisions
@@ -27,6 +34,12 @@ from typing import Any
 
 from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventDispatcher,
+)
+from ai_rpg_world.application.being.expectation.grounds import (
+    GroundsPlan,
+    InMindTextReader,
+    ground_question,
+    plan_ground_questions,
 )
 from ai_rpg_world.application.being.expectation.likelihood_labels import (
     LIKELIHOOD_LABELS,
@@ -53,6 +66,9 @@ from ai_rpg_world.domain.memory.expectation.repository.expectation_repository im
 from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
     ShapeVerdict,
@@ -98,6 +114,7 @@ class SettlementReport:
 class _Asked:
     kind: str
     expectation: Expectation | None = None
+    ground_id: str | None = None
 
 
 @dataclass
@@ -123,6 +140,9 @@ class ExpectationSettlementService:
         dispatcher: ExpectationEventDispatcher,
         max_open: int,
         timeline_turns: int,
+        grounds_reader: InMindTextReader,
+        max_grounds_questions: int,
+        grounds_min_probability: float,
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
     ) -> None:
         if not isinstance(repository, ExpectationRepository):
@@ -131,7 +151,19 @@ class ExpectationSettlementService:
             raise TypeError("judgment_port must be ITypedJudgmentPort")
         if not isinstance(dispatcher, ExpectationEventDispatcher):
             raise TypeError("dispatcher must be ExpectationEventDispatcher")
-        for name, value in (("max_open", max_open), ("timeline_turns", timeline_turns)):
+        if not isinstance(grounds_reader, InMindTextReader):
+            raise TypeError("grounds_reader must be InMindTextReader")
+        if isinstance(grounds_min_probability, bool) or not isinstance(
+            grounds_min_probability, (int, float)
+        ):
+            raise TypeError("grounds_min_probability must be a number")
+        if not 0.0 < float(grounds_min_probability) < 1.0:
+            raise ValueError("grounds_min_probability must be in (0, 1)")
+        for name, value in (
+            ("max_open", max_open),
+            ("timeline_turns", timeline_turns),
+            ("max_grounds_questions", max_grounds_questions),
+        ):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise TypeError(f"{name} must be int")
             if value < 1:
@@ -141,6 +173,9 @@ class ExpectationSettlementService:
         self._dispatcher = dispatcher
         self._max_open = max_open
         self._timeline_turns = timeline_turns
+        self._grounds_reader = grounds_reader
+        self._max_grounds_questions = max_grounds_questions
+        self._grounds_min_probability = float(grounds_min_probability)
         self._trace_recorder_provider = trace_recorder_provider
         self._timelines: dict[BeingId, deque[_Turn]] = {}
 
@@ -216,7 +251,10 @@ class ExpectationSettlementService:
             self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
             return report
 
-        asked, questions = _questions(self_name, pending=pending, new=new)
+        plan = plan_ground_questions(
+            being_id, new, reader=self._grounds_reader, limit=self._max_grounds_questions
+        )
+        asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
         state = _state(self_name, now=now, pending=pending, new=new, timeline=timeline)
         current.state = state
         try:
@@ -236,17 +274,28 @@ class ExpectationSettlementService:
                 player_id,
                 state=state,
                 asked=asked,
+                grounds=plan.trace(answers=None, judged=None),
                 unavailable_reason=f"{exc.error_code}: {exc}",
             )
             self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
             return report
 
+        probabilities = {
+            name: verdict for name, verdict in verdicts.items() if isinstance(verdict, float)
+        }
+        judged_grounds: dict[str, ExpectationGrounds] = {}
         for name, verdict in verdicts.items():
+            if isinstance(verdict, float):
+                continue
             expectation = asked[name].expectation
             assert expectation is not None
             event: ExpectationEvent | None
             if isinstance(verdict, ShapeVerdict):
-                event = expectation.judge_shape(verdict, turn=now)
+                grounds = plan.grounds_for(
+                    expectation, probabilities, self._grounds_min_probability
+                )
+                event = expectation.judge_shape(verdict, turn=now, grounds=grounds)
+                judged_grounds[expectation.expectation_id.value] = grounds
                 step = "shape"
             else:
                 event = expectation.record(Check(turn=now, verdict=verdict))
@@ -268,6 +317,7 @@ class ExpectationSettlementService:
             state=state,
             asked=asked,
             answers=answers,
+            grounds=plan.trace(answers=answers, judged=judged_grounds),
         )
         self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
         return report
@@ -331,6 +381,7 @@ class ExpectationSettlementService:
         state: Mapping[str, Any] | None = None,
         asked: Mapping[str, _Asked] | None = None,
         answers: Mapping[str, JudgmentResult] | None = None,
+        grounds: list[dict[str, Any]] | None = None,
         unavailable_reason: str | None = None,
     ) -> None:
         recorder = self._trace_recorder_provider()
@@ -353,6 +404,7 @@ class ExpectationSettlementService:
                         None if a.expectation is None else a.expectation.expectation_id.value
                     ),
                     "content": None if a.expectation is None else a.expectation.content,
+                    "ground_id": a.ground_id,
                 }
                 for name, a in (asked or {}).items()
             },
@@ -367,11 +419,16 @@ class ExpectationSettlementService:
                 for name, answer in (answers or {}).items()
             },
             transitions=[dict(t) for t in report.transitions],
+            grounds=grounds or [],
         )
 
 
 def _questions(
-    self_name: str, *, pending: Sequence[Expectation], new: Sequence[Expectation]
+    self_name: str,
+    *,
+    pending: Sequence[Expectation],
+    new: Sequence[Expectation],
+    plan: GroundsPlan,
 ) -> tuple[dict[str, _Asked], dict[str, Question]]:
     # 質問の名前は連番にする。予期の ID を名前に使うと、答えを引くためだけに ID が
     # Jev に渡る (設計原則 1)。
@@ -431,6 +488,9 @@ def _questions(
                 ),
             },
         )
+    for name, ground in plan.questions.items():
+        asked[name] = _Asked("ground", ground.expectation, ground_id=ground.ground_id)
+        questions[name] = ground_question(self_name, ground)
     asked[SCENE_QUESTION] = _Asked("scene")
     questions[SCENE_QUESTION] = NoulQuestion(
         instructions=f"いまのターンに、{self_name}のいる場面は前のターンから変わったか。",
@@ -442,15 +502,19 @@ def _questions(
 
 def _verdicts(
     asked: Mapping[str, _Asked], answers: Mapping[str, JudgmentResult]
-) -> dict[str, ShapeVerdict | CheckVerdict]:
-    """答えをすべて判定に直す。1 つでも使えなければ、どの予期にも渡さない。"""
+) -> dict[str, ShapeVerdict | CheckVerdict | float]:
+    """答えをすべて判定に直す。1 つでも使えなければ、どの予期にも渡さない。
+
+    根拠の問いは確率のまま返す。根拠の答えだけが壊れたときも形を渡さないのは、
+    形が判定済みなら根拠も判定済みという予期の決まりを保つため。
+    """
     missing = sorted(set(asked) - set(answers))
     if missing:
         raise TypedJudgmentUnavailableException(
             f"expectation settlement answers missing for {missing}",
             error_code="TYPED_JUDGMENT_ANSWER_MISSING",
         )
-    verdicts: dict[str, ShapeVerdict | CheckVerdict] = {}
+    verdicts: dict[str, ShapeVerdict | CheckVerdict | float] = {}
     for name, a in asked.items():
         value = answers[name].value
         try:
@@ -458,6 +522,8 @@ def _verdicts(
                 verdicts[name] = ShapeVerdict(value)
             elif a.kind == "check":
                 verdicts[name] = CheckVerdict(value)
+            elif a.kind == "ground":
+                verdicts[name] = _probability(value)
             else:
                 float(value)
         except (TypeError, ValueError) as exc:
@@ -467,6 +533,14 @@ def _verdicts(
                 cause=exc,
             ) from exc
     return verdicts
+
+
+def _probability(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"probability must be a number, got {value!r}")
+    if not 0.0 <= float(value) <= 1.0:
+        raise ValueError(f"probability must be in [0, 1], got {value!r}")
+    return float(value)
 
 
 def _state(

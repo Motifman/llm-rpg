@@ -17,6 +17,9 @@ from typing import Any
 from ai_rpg_world.application.being.expectation.forming import (
     ExpectationFormingService,
 )
+from ai_rpg_world.application.being.expectation.grounds import (
+    MemoryStoreInMindTextReader,
+)
 from ai_rpg_world.application.being.expectation.settlement import (
     ExpectationSettlementService,
 )
@@ -468,7 +471,23 @@ class WorldLlmWiring:
             dispatcher=self.runtime._expectation_dispatcher,
             max_open=int(config.expectation_settlement_max_open),
             timeline_turns=int(config.expectation_settlement_timeline_turns),
+            grounds_reader=self._in_mind_text_reader(),
+            max_grounds_questions=int(config.expectation_grounds_max_questions),
+            grounds_min_probability=float(config.expectation_grounds_min_probability),
             trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
+        )
+
+    def _in_mind_text_reader(self) -> MemoryStoreInMindTextReader:
+        """プロンプトの想起と同じ store から、頭にあった信念とエピソードの本文を引く (#1484)。
+
+        episodic stack が無い run では本文を引けず、根拠の問いは出ない。外した
+        理由は清算の trace の ``grounds`` に残る。
+        """
+        stack = getattr(self.runtime, "_episodic_stack", None)
+        return MemoryStoreInMindTextReader(
+            semantic_store=getattr(stack, "semantic_memory_store", None),
+            episode_store=getattr(stack, "episode_store", None),
+            journal_store=getattr(stack, "reinterpretation_journal", None),
         )
 
     def _build_expectation_forming(self) -> ExpectationFormingService | None:
