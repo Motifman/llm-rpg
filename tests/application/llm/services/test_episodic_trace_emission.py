@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.application.llm.contracts.chunk_encoding import SettledMissedExpectation
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolRuntimeContextDto
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
@@ -34,6 +35,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -185,12 +187,13 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
         return EpisodicChunkSubjectiveFieldsService(_StubPort())
 
     def test_prediction_error_id_prediction_outcome_rendered(self) -> None:
-        """prediction error が確定した瞬間に id 付きで PREDICTION OUTCOME が出る。"""
+        """確定して外れた予期について prediction error が書かれた瞬間に、id 付きで PREDICTION OUTCOME が出る。"""
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         service = self._build_service_with_prediction_error('鍵がかかっていた')
         (coord, buffer, action_store, episode_store) = self._build_coord(recorder=recorder, chunk_subjective_fields_service=service)
         pid = PlayerId(1)
+        coord.note_settled_miss(being_id, SettledMissedExpectation(event_id='exp-1@2', content='扉が開く', likelihood=Likelihood.PROBABLY))
         t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
         action_store.append(pid, action_summary='wait1', result_summary='ok', occurred_at=t0, prediction_context_id='predctx-xyz')
         coord.after_action_recorded(pid, being_id)

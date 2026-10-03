@@ -870,6 +870,7 @@ def undelivered_expectation_event_to_dict(
     if isinstance(event, (ProvisionallyMissed, ExpectationSettled)):
         data["likelihood"] = event.likelihood.value
     if isinstance(event, ExpectationSettled):
+        data["content"] = event.content
         data["outcome"] = event.outcome.value
         data["beliefs_in_mind"] = list(event.beliefs_in_mind)
         data["episodes_in_mind"] = list(event.episodes_in_mind)
@@ -894,6 +895,7 @@ def dict_to_undelivered_expectation_event(
         if event_type in (ProvisionallyMissed, ExpectationSettled):
             fields["likelihood"] = Likelihood(data["likelihood"])
         if event_type is ExpectationSettled:
+            fields["content"] = data["content"]
             fields["outcome"] = Outcome(data["outcome"])
             fields["beliefs_in_mind"] = _str_tuple(
                 data["beliefs_in_mind"], name="beliefs_in_mind"

@@ -131,6 +131,7 @@ class TestDeliverPending:
                 "outcome": "delivered",
                 "attempts": 1,
                 "receiver_count": 1,
+                "receivers": ["_BeliefMaterialReceiver"],
             }
         ]
 

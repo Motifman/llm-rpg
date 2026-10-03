@@ -146,6 +146,7 @@ class ExpectationEventDispatcher:
             "outcome": outcome,
             "attempts": attempts,
             "receiver_count": len(self._receivers),
+            "receivers": [type(r).__name__ for r in self._receivers],
         }
         if reason is not None:
             payload["reason"] = reason

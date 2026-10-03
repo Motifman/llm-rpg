@@ -20,7 +20,10 @@ from typing import Any
 import pytest
 from tests.memory_turn_helpers import ZERO_TURN
 
-from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    SettledMissedExpectation,
+    build_chunk_encoding_input,
+)
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
@@ -37,6 +40,7 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
+from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -80,36 +84,6 @@ def _build_encoding_and_draft(*, player_id: int=7) -> tuple:
     (being_id, resolver, world_id) = _provision_scheduler(player_id)
     draft = ChunkEpisodeDraftBuilder().build(enc, being_id=being_id)
     return (enc, draft, being_id, resolver, world_id)
-
-def _build_encoding_and_draft_with_attribution(*, player_id: int=7, in_context_belief_ids: tuple[str, ...]=(), expected_result: str | None=None) -> tuple:
-    """U4: attribution 計算対象の action に in_context_belief_ids /
-    expected_result を乗せた ChunkEncodingInput + draft を作る。"""
-    t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
-    act = ActionResultEntry(occurred_at=t, action_summary='待機した', result_summary='時間が進んだ', tool_name='wait', success=True, in_context_belief_ids=in_context_belief_ids, expected_result=expected_result)
-    enc = build_chunk_encoding_input(PlayerId(player_id), (), (act,))
-    (being_id, resolver, world_id) = _provision_scheduler(player_id)
-    draft = ChunkEpisodeDraftBuilder().build(enc, being_id=being_id)
-    return (enc, draft, being_id, resolver, world_id)
-
-def _build_encoding_and_draft_with_prediction_context_id(*, player_id: int=7, prediction_context_id: str | None=None, expected_result: str | None=None) -> tuple:
-    """U9a/U9b: 想起の信用割り当ての刻み対象を特定する
-    ``prediction_context_id`` を乗せた ChunkEncodingInput + draft を作る。
-
-    U9b (的中側): ``expected_result`` を渡すと「実際に予測を伴う行動が
-    あった」扱いになり、``compute_chunk_attribution`` の
-    ``had_expected_result`` ガードを満たす。
-    """
-    t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
-    act = ActionResultEntry(occurred_at=t, action_summary='待機した', result_summary='時間が進んだ', tool_name='wait', success=True, prediction_context_id=prediction_context_id, expected_result=expected_result)
-    enc = build_chunk_encoding_input(PlayerId(player_id), (), (act,))
-    (being_id, resolver, world_id) = _provision_scheduler(player_id)
-    draft = ChunkEpisodeDraftBuilder().build(enc, being_id=being_id)
-    return (enc, draft, being_id, resolver, world_id)
-
-def _seed_recall_observation(store, being_id, *, prediction_context_id: str) -> None:
-    """U9a テスト用: 刻み対象となる pending recall observation を 1 件仕込む。"""
-    from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-    store.append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, episode_id='ep-source', recalled_at=datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc), source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
 
 def _provision_scheduler(player_id: int):
     """Phase 3 Step 3e-3: 各テストで scheduler に Resolver を inject するための
@@ -184,11 +158,12 @@ class TestInlineScheduler:
 
     def test_u1_prediction_error_prediction_outcome_id_rendered(self) -> None:
         """chunk を構成する action の prediction_context_id が重複排除で乗り、
-        LLM が書いた prediction_error 文字列がそのまま payload に乗る。"""
+        確定して外れた予期について LLM が書いた prediction_error がそのまま payload に乗る。"""
         t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
         act1 = ActionResultEntry(occurred_at=t, action_summary='扉を開けた', result_summary='鍵がかかっていた', tool_name='interact', prediction_context_id='predctx-aaa')
         act2 = ActionResultEntry(occurred_at=t, action_summary='別の扉を開けた', result_summary='開いた', tool_name='interact', prediction_context_id='predctx-aaa')
-        enc = build_chunk_encoding_input(PlayerId(7), (), (act1, act2))
+        missed = SettledMissedExpectation(event_id='exp-1@3', content='扉が開く', likelihood=Likelihood.PROBABLY)
+        enc = build_chunk_encoding_input(PlayerId(7), (), (act1, act2), settled_missed_expectations=(missed,))
         (being_id, resolver, world_id) = _provision_scheduler(7)
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=being_id)
         store = InMemorySubjectiveEpisodeStore()
@@ -496,8 +471,8 @@ class TestSchedulerValidation:
 class TestInlineSchedulerBeliefEvidenceTranscription:
     """InlineEpisodicSubjectiveScheduler が完了点で transcriber を呼ぶ挙動。"""
 
-    def test_prediction_error_adds_one_evidence_record(self) -> None:
-        """prediction error ありなら evidence が 1件積まれる。"""
+    def test_prediction_error_of_chunk_adds_no_evidence(self) -> None:
+        """chunk の prediction_error は証拠にしない。予測の当否は確定した予期から積む (#1443)。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
@@ -510,9 +485,7 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '待っても何も起きなかった'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].text == '待っても何も起きなかった'
+        assert buffer_store.list_all_by_being(being_id) == []
 
     def test_prediction_error_evidence(self) -> None:
         """predictionerror なしなら evidence は積まれない。"""
@@ -531,16 +504,16 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         assert buffer_store.list_all_by_being(being_id) == []
 
     def test_transcriber_uninjected_flag_off(self) -> None:
-        """belief_evidence_transcriber=None (既定) は既存動作と完全互換。"""
+        """belief_evidence_transcriber=None (既定) でも主観補完は episode に書き戻される。"""
         (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '外れた'})
+        port = _StubPort(returns={'interpreted': '待ちくたびれた', 'recall_text': 'R'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
-        assert ep_after.prediction_error == '外れた'
+        assert ep_after.interpreted == '待ちくたびれた'
 
     def test_belief_evidence_transcriber_raises_type_error_2(self) -> None:
         """belief evidence transcriber 型違反は TypeError。"""
@@ -549,69 +522,12 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         with pytest.raises(TypeError):
             InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber='not_a_transcriber')
 
-class TestInlineSchedulerBeliefAttribution:
-    """U4 (予測誤差統一設計 部品3): 非同期経路 (Inline 実装) の attribution + CONFIRMATION。"""
-
-    def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids_2(self) -> None:
-        """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
-        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].in_context_belief_ids == ('sem-1',)
-
-    def test_belief_attribution_enabled_prediction_error_none_context_belief_expected_result_confirmation(self) -> None:
-        """belief attribution enabled で prediction error None かつ in context belief あり expected result ありなら CONFIRMATION。"""
-        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].source_kind.value == 'confirmation'
-
-    def test_belief_attribution_enabled_false_default_context_belief_ids_2(self) -> None:
-        """belief attribution enabled False 既定なら in context belief ids を添付しない。"""
-        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=False)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].in_context_belief_ids == ()
-
 class TestThreadPoolSchedulerBeliefEvidenceTranscription:
     """ThreadPoolEpisodicSubjectiveScheduler (ワーカー thread 経路) も同じ完了点で
     transcriber を呼ぶことを保証する。"""
 
-    def test_prediction_error_adds_one_evidence_record(self) -> None:
-        """prediction error ありなら evidence が 1件積まれる。"""
+    def test_prediction_error_of_chunk_adds_no_evidence(self) -> None:
+        """ワーカー経路でも chunk の prediction_error は証拠にしない (#1443)。"""
         from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
@@ -625,9 +541,7 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
         scheduler.shutdown(timeout=5.0)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].text == '見つからなかった'
+        assert buffer_store.list_all_by_being(being_id) == []
 
     def test_belief_evidence_transcriber_raises_type_error(self) -> None:
         """belief evidence transcriber 型違反は TypeError。"""
@@ -636,262 +550,6 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
         with pytest.raises(TypeError):
             ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber='not_a_transcriber')
 
-class TestThreadPoolSchedulerBeliefAttribution:
-    """U4 (予測誤差統一設計 部品3): 非同期経路 (ThreadPool 実装) の attribution。"""
-
-    def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids(self) -> None:
-        """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
-        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '見つからなかった'})
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=5.0)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].in_context_belief_ids == ('sem-1',)
-
-    def test_belief_attribution_enabled_false_default_context_belief_ids(self) -> None:
-        """belief attribution enabled False 既定なら in context belief ids を添付しない。"""
-        from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_attribution(in_context_belief_ids=('sem-1',), expected_result='何か見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '見つからなかった'})
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=False)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=5.0)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].in_context_belief_ids == ()
-
-class TestInlineSchedulerRecallPredictionOutcomeStamping:
-    """U9a (誤差駆動再解釈): InlineEpisodicSubjectiveScheduler の完了点での刻み。"""
-
-    def test_flag_prediction_error_recall_observation_2(self) -> None:
-        """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-1')
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '待っても何も起きなかった'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        obs = recall_buffer.list_pending_by_being(being_id)[0]
-        assert obs.prediction_outcome_error == '待っても何も起きなかった'
-
-    def test_flag_off_default_2(self) -> None:
-        """error_driven_reinterpretation_enabled=False (既定) は導入前と一致。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-1')
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '待っても何も起きなかった'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=False)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        obs = recall_buffer.list_pending_by_being(being_id)[0]
-        assert obs.prediction_outcome_error is None
-
-    def test_default_unwired_recall_buffer_store_completes_without_exception(self) -> None:
-        """recall_buffer_store=None (既定) は既存動作と完全互換。"""
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '外れた'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, error_driven_reinterpretation_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        ep_after = store.get_by_being(being_id, draft.episode_id)
-        assert ep_after is not None
-        assert ep_after.prediction_error == '外れた'
-
-    def test_recall_buffer_store_raises_type_error_2(self) -> None:
-        """recall buffer store 型違反は TypeError。"""
-        port = _StubPort()
-        store = InMemorySubjectiveEpisodeStore()
-        with pytest.raises(TypeError):
-            InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store='not_a_store')
-
-class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
-    """U9a (誤差駆動再解釈): ThreadPoolEpisodicSubjectiveScheduler の完了点での刻み。"""
-
-    def test_flag_prediction_error_recall_observation(self) -> None:
-        """flag ON で prediction error ありなら recall observation に誤差が刻まれる。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-async')
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '外れた'})
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=5.0)
-        obs = recall_buffer.list_pending_by_being(being_id)[0]
-        assert obs.prediction_outcome_error == '外れた'
-
-    def test_flag_off_default(self) -> None:
-        """flag OFF 既定なら誤差は刻まれない。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-async')
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '外れた'})
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=False)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=5.0)
-        obs = recall_buffer.list_pending_by_being(being_id)[0]
-        assert obs.prediction_outcome_error is None
-
-    def test_recall_buffer_store_raises_type_error(self) -> None:
-        """recall buffer store 型違反は TypeError。"""
-        port = _StubPort()
-        store = InMemorySubjectiveEpisodeStore()
-        with pytest.raises(TypeError):
-            ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store='not_a_store')
-
-class TestInlineSchedulerRecallHitBoost:
-    """U9b (想起の信用割り当て・的中側): InlineEpisodicSubjectiveScheduler の
-
-    完了点での的中側 sidecar への還流。"""
-
-    def test_flag_expected_result_count_incremented_2(self) -> None:
-        """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1', expected_result='見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-1')
-        recall_success = InMemoryEpisodicRecallSuccessStore()
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        assert recall_success.get_hit_count_by_being(being_id, 'ep-source') == 1
-
-    def test_flag_off_default_not_incremented_2(self) -> None:
-        """flag OFF 既定なら加算されない。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1', expected_result='見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-1')
-        recall_success = InMemoryEpisodicRecallSuccessStore()
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=False)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        assert recall_success.get_hit_count_by_being(being_id, 'ep-source') == 0
-
-    def test_default_unwired_recall_success_store_completes_without_exception(self) -> None:
-        """recall success store 未配線 既定なら例外を投げず完了する。"""
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-1', expected_result='見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-1')
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_hit_boost_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        ep_after = store.get_by_being(being_id, draft.episode_id)
-        assert ep_after is not None
-
-    def test_recall_success_store_raises_type_error_2(self) -> None:
-        """recall success store 型違反は TypeError。"""
-        port = _StubPort()
-        store = InMemorySubjectiveEpisodeStore()
-        with pytest.raises(TypeError):
-            InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_success_store='not_a_store')
-
-class TestThreadPoolSchedulerRecallHitBoost:
-    """U9b (想起の信用割り当て・的中側): ThreadPoolEpisodicSubjectiveScheduler の
-
-    完了点での的中側 sidecar への還流。"""
-
-    def test_flag_expected_result_count_incremented(self) -> None:
-        """flag ON で的中かつexpected resultありなら的中回数が加算される。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async', expected_result='見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-async')
-        recall_success = InMemoryEpisodicRecallSuccessStore()
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=True)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=5.0)
-        assert recall_success.get_hit_count_by_being(being_id, 'ep-source') == 1
-
-    def test_flag_off_default_not_incremented(self) -> None:
-        """flag OFF 既定なら加算されない。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-        )
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft_with_prediction_context_id(prediction_context_id='pc-async', expected_result='見つかるはず')
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        _seed_recall_observation(recall_buffer, being_id, prediction_context_id='pc-async')
-        recall_success = InMemoryEpisodicRecallSuccessStore()
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_buffer_store=recall_buffer, error_driven_reinterpretation_enabled=True, recall_success_store=recall_success, recall_hit_boost_enabled=False)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=5.0)
-        assert recall_success.get_hit_count_by_being(being_id, 'ep-source') == 0
-
-    def test_recall_success_store_raises_type_error(self) -> None:
-        """recall success store 型違反は TypeError。"""
-        port = _StubPort()
-        store = InMemorySubjectiveEpisodeStore()
-        with pytest.raises(TypeError):
-            ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, recall_success_store='not_a_store')
 _HEARD_CLAIMS_RETURN = {'interpreted': 'I', 'recall_text': 'R', 'heard_claims': [{'speaker': 'カイト', 'claim': '自分の発言'}, {'speaker': 'リオ', 'claim': '北の泉は安全だ'}]}
 
 class TestInlineSchedulerActorNamePropagation:

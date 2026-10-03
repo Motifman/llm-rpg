@@ -52,25 +52,16 @@ from ai_rpg_world.application.llm.services._pending_prediction_resolution import
 )
 from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
     prediction_context_ids_from_actions,
-    record_recall_hits_if_applicable,
-    stamp_recall_prediction_outcome_if_applicable,
 )
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
-    compute_chunk_attribution,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
-from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-    IEpisodicRecallSuccessStore,
-)
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
@@ -197,11 +188,6 @@ class InlineEpisodicSubjectiveScheduler:
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        belief_attribution_enabled: bool = False,
-        recall_buffer_store: EpisodicRecallBufferRepository | None = None,
-        error_driven_reinterpretation_enabled: bool = False,
-        recall_success_store: IEpisodicRecallSuccessStore | None = None,
-        recall_hit_boost_enabled: bool = False,
         pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
@@ -213,8 +199,6 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
-        if not isinstance(belief_attribution_enabled, bool):
-            raise TypeError("belief_attribution_enabled must be bool")
         # U2 (証拠台帳統一設計): flag OFF (= None) なら従来通り何もしない。
         if belief_evidence_transcriber is not None and not isinstance(
             belief_evidence_transcriber, BeliefEvidenceTranscriber
@@ -222,25 +206,6 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError(
                 "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
             )
-        # U9a (誤差駆動再解釈): flag OFF (= None) なら従来通り何もしない。
-        if recall_buffer_store is not None and not isinstance(
-            recall_buffer_store, EpisodicRecallBufferRepository
-        ):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
-            )
-        if not isinstance(error_driven_reinterpretation_enabled, bool):
-            raise TypeError("error_driven_reinterpretation_enabled must be bool")
-        # U9b (想起の信用割り当て・的中側): flag OFF (= None) なら従来通り
-        # 何もしない。
-        if recall_success_store is not None and not isinstance(
-            recall_success_store, IEpisodicRecallSuccessStore
-        ):
-            raise TypeError(
-                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
-            )
-        if not isinstance(recall_hit_boost_enabled, bool):
-            raise TypeError("recall_hit_boost_enabled must be bool")
         # U10a (予測誤差統一設計 部品6・pending prediction): flag OFF (= None)
         # なら従来通り何もしない。
         if pending_prediction_store is not None and not isinstance(
@@ -257,13 +222,6 @@ class InlineEpisodicSubjectiveScheduler:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
         self._belief_evidence_transcriber = belief_evidence_transcriber
-        self._belief_attribution_enabled = belief_attribution_enabled
-        self._recall_buffer_store = recall_buffer_store
-        self._error_driven_reinterpretation_enabled = (
-            error_driven_reinterpretation_enabled
-        )
-        self._recall_success_store = recall_success_store
-        self._recall_hit_boost_enabled = recall_hit_boost_enabled
         self._pending_prediction_store = pending_prediction_store
         self._pending_prediction_enabled = pending_prediction_enabled
 
@@ -271,35 +229,14 @@ class InlineEpisodicSubjectiveScheduler:
         """episode.being_id 経路で put。"""
         self._store.put_by_being(episode.being_id, episode)
 
-    def _record_belief_evidence_if_applicable(
-        self,
-        episode: SubjectiveEpisode,
-        encoding_input: ChunkEncodingInput,
-    ) -> None:
-        """U2 (証拠台帳統一設計): 非同期経路 (Inline 実装) の完了点。
+    def _record_heard_claims_if_applicable(self, episode: SubjectiveEpisode) -> None:
+        """P9 (伝聞): 非同期経路 (Inline 実装) の完了点で heard_claims を HEARSAY evidence に転記する。
 
+        予測の当否は確定した予期から積む (#1443) ので、ここでは扱わない。
         transcriber 未注入 (flag OFF) なら何もしない。
-
-        U4 (予測誤差統一設計 部品3): ``belief_attribution_enabled`` が True の
-        ときだけ ``encoding_input.action_results`` から attribution を計算する
-        (False 既定では常に空/False を渡し U4 導入前と一致させる)。
         """
         if self._belief_evidence_transcriber is None:
             return
-        in_context_belief_ids: tuple[str, ...] = ()
-        had_expected_result = False
-        if self._belief_attribution_enabled:
-            in_context_belief_ids, had_expected_result = compute_chunk_attribution(
-                encoding_input.action_results
-            )
-        self._belief_evidence_transcriber.record_if_applicable(
-            episode.being_id,
-            episode,
-            in_context_belief_ids=in_context_belief_ids,
-            had_expected_result=had_expected_result,
-        )
-        # P9 (伝聞): heard_claims を HEARSAY evidence に転記 (OFF なら episode.
-        # heard_claims が空なので no-op)。
         self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
 
     def submit(
@@ -349,43 +286,10 @@ class InlineEpisodicSubjectiveScheduler:
         # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
         # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
         # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
-        # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
         _run_sidecar_safely(
             "belief_evidence",
             merged.episode_id,
-            lambda: self._record_belief_evidence_if_applicable(
-                merged, encoding_input
-            ),
-        )
-        # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
-        # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
-        _run_sidecar_safely(
-            "recall_prediction_outcome_stamping",
-            merged.episode_id,
-            lambda: stamp_recall_prediction_outcome_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                error_driven_reinterpretation_enabled=(
-                    self._error_driven_reinterpretation_enabled
-                ),
-                being_id=merged.being_id,
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            ),
-        )
-        # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
-        # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
-        # なら no-op)。
-        _run_sidecar_safely(
-            "recall_hits",
-            merged.episode_id,
-            lambda: record_recall_hits_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                recall_success_store=self._recall_success_store,
-                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=merged.being_id,
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            ),
+            lambda: self._record_heard_claims_if_applicable(merged),
         )
         # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
         # 抽出された約束・見込みを PendingPrediction 化して per-Being
@@ -456,49 +360,12 @@ class InlineEpisodicSubjectiveScheduler:
                 },
             )
 
-    def set_recall_buffer_store(
-        self, recall_buffer_store: EpisodicRecallBufferRepository | None
-    ) -> None:
-        """U9a: recall_buffer を構築後に差し込むための setter。
-
-        wiring の都合上、scheduler は ``build_episodic_stack`` (= recall_buffer
-        を構築する箇所) より先に組み立てる必要がある (world_runtime.py 参照)。
-        コンストラクタ引数だけでは配線順序が回らないため、build_episodic_stack
-        完了後にこの setter で後から差し込む (U7 の semantic recall service
-        holder と同じ「後から差し込む」パターン)。
-        """
-        if recall_buffer_store is not None and not isinstance(
-            recall_buffer_store, EpisodicRecallBufferRepository
-        ):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
-            )
-        self._recall_buffer_store = recall_buffer_store
-
-    def set_recall_success_store(
-        self, recall_success_store: IEpisodicRecallSuccessStore | None
-    ) -> None:
-        """U9b: 的中側 sidecar を構築後に差し込むための setter。
-
-        ``set_recall_buffer_store`` と同じ「後から差し込む」パターン
-        (wiring の都合上 scheduler は build_episodic_stack より先に組み立てる
-        必要がある)。
-        """
-        if recall_success_store is not None and not isinstance(
-            recall_success_store, IEpisodicRecallSuccessStore
-        ):
-            raise TypeError(
-                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
-            )
-        self._recall_success_store = recall_success_store
-
     def set_pending_prediction_store(
         self, pending_prediction_store: PendingPredictionRepository | None
     ) -> None:
         """U10a: pending prediction store を構築後に差し込むための setter。
 
-        ``set_recall_buffer_store`` / ``set_recall_success_store`` と同じ
-        「後から差し込む」パターン。
+        scheduler は build_episodic_stack より先に組み立てるので、store は後から差し込む。
         """
         if pending_prediction_store is not None and not isinstance(
             pending_prediction_store, PendingPredictionRepository
@@ -540,11 +407,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        belief_attribution_enabled: bool = False,
-        recall_buffer_store: EpisodicRecallBufferRepository | None = None,
-        error_driven_reinterpretation_enabled: bool = False,
-        recall_success_store: IEpisodicRecallSuccessStore | None = None,
-        recall_hit_boost_enabled: bool = False,
         pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
@@ -560,8 +422,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
-        if not isinstance(belief_attribution_enabled, bool):
-            raise TypeError("belief_attribution_enabled must be bool")
         # U2 (証拠台帳統一設計): flag OFF (= None) なら従来通り何もしない。
         if belief_evidence_transcriber is not None and not isinstance(
             belief_evidence_transcriber, BeliefEvidenceTranscriber
@@ -569,25 +429,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError(
                 "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
             )
-        # U9a (誤差駆動再解釈): flag OFF (= None) なら従来通り何もしない。
-        if recall_buffer_store is not None and not isinstance(
-            recall_buffer_store, EpisodicRecallBufferRepository
-        ):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
-            )
-        if not isinstance(error_driven_reinterpretation_enabled, bool):
-            raise TypeError("error_driven_reinterpretation_enabled must be bool")
-        # U9b (想起の信用割り当て・的中側): flag OFF (= None) なら従来通り
-        # 何もしない。
-        if recall_success_store is not None and not isinstance(
-            recall_success_store, IEpisodicRecallSuccessStore
-        ):
-            raise TypeError(
-                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
-            )
-        if not isinstance(recall_hit_boost_enabled, bool):
-            raise TypeError("recall_hit_boost_enabled must be bool")
         # U10a (予測誤差統一設計 部品6・pending prediction): flag OFF (= None)
         # なら従来通り何もしない。
         if pending_prediction_store is not None and not isinstance(
@@ -605,13 +446,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
         self._belief_evidence_transcriber = belief_evidence_transcriber
-        self._belief_attribution_enabled = belief_attribution_enabled
-        self._recall_buffer_store = recall_buffer_store
-        self._error_driven_reinterpretation_enabled = (
-            error_driven_reinterpretation_enabled
-        )
-        self._recall_success_store = recall_success_store
-        self._recall_hit_boost_enabled = recall_hit_boost_enabled
         self._pending_prediction_store = pending_prediction_store
         self._pending_prediction_enabled = pending_prediction_enabled
         self._executor = ThreadPoolExecutor(
@@ -732,36 +566,14 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         """episode.being_id 経路で put。"""
         self._store.put_by_being(episode.being_id, episode)
 
-    def _record_belief_evidence_if_applicable(
-        self,
-        episode: SubjectiveEpisode,
-        encoding_input: ChunkEncodingInput,
-    ) -> None:
-        """U2 (証拠台帳統一設計): 非同期経路 (ThreadPool 実装) の完了点。
+    def _record_heard_claims_if_applicable(self, episode: SubjectiveEpisode) -> None:
+        """P9 (伝聞): 非同期経路 (ThreadPool 実装) の完了点で heard_claims を HEARSAY evidence に転記する。
 
-        ワーカー thread から呼ばれる。transcriber 未注入 (flag OFF) なら
-        何もしない。
-
-        U4 (予測誤差統一設計 部品3): ``belief_attribution_enabled`` が True の
-        ときだけ ``encoding_input.action_results`` から attribution を計算する
-        (False 既定では常に空/False を渡し U4 導入前と一致させる)。
+        予測の当否は確定した予期から積む (#1443) ので、ここでは扱わない。
+        transcriber 未注入 (flag OFF) なら何もしない。
         """
         if self._belief_evidence_transcriber is None:
             return
-        in_context_belief_ids: tuple[str, ...] = ()
-        had_expected_result = False
-        if self._belief_attribution_enabled:
-            in_context_belief_ids, had_expected_result = compute_chunk_attribution(
-                encoding_input.action_results
-            )
-        self._belief_evidence_transcriber.record_if_applicable(
-            episode.being_id,
-            episode,
-            in_context_belief_ids=in_context_belief_ids,
-            had_expected_result=had_expected_result,
-        )
-        # P9 (伝聞): heard_claims を HEARSAY evidence に転記 (OFF なら episode.
-        # heard_claims が空なので no-op)。
         self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
 
     def _worker(
@@ -805,43 +617,10 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
         # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
         # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
-        # U2: 主観補完 (prediction_error 確定) 直後、非同期経路の完了点。
         _run_sidecar_safely(
             "belief_evidence",
             merged.episode_id,
-            lambda: self._record_belief_evidence_if_applicable(
-                merged, encoding_input
-            ),
-        )
-        # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
-        # 群に prediction_error を刻む (flag OFF / store 未配線なら no-op)。
-        _run_sidecar_safely(
-            "recall_prediction_outcome_stamping",
-            merged.episode_id,
-            lambda: stamp_recall_prediction_outcome_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                error_driven_reinterpretation_enabled=(
-                    self._error_driven_reinterpretation_enabled
-                ),
-                being_id=merged.being_id,
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            ),
-        )
-        # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
-        # 当たった」を的中側 sidecar に還流する (flag OFF / store 未配線
-        # なら no-op)。
-        _run_sidecar_safely(
-            "recall_hits",
-            merged.episode_id,
-            lambda: record_recall_hits_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                recall_success_store=self._recall_success_store,
-                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=merged.being_id,
-                episode=merged,
-                chunk_actions=encoding_input.action_results,
-            ),
+            lambda: self._record_heard_claims_if_applicable(merged),
         )
         # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
         # 抽出された約束・見込みを PendingPrediction 化して per-Being
@@ -912,52 +691,12 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 },
             )
 
-    def set_recall_buffer_store(
-        self, recall_buffer_store: EpisodicRecallBufferRepository | None
-    ) -> None:
-        """U9a: recall_buffer を構築後に差し込むための setter。
-
-        wiring の都合上、scheduler は ``build_episodic_stack`` (= recall_buffer
-        を構築する箇所) より先に組み立てる必要がある (world_runtime.py 参照)。
-        コンストラクタ引数だけでは配線順序が回らないため、build_episodic_stack
-        完了後にこの setter で後から差し込む (U7 の semantic recall service
-        holder と同じ「後から差し込む」パターン)。ワーカー thread から読まれる
-        値だが、代入自体は単純な参照差し替えなので追加の同期は不要
-        (belief_evidence_transcriber 等、既存の他フィールドと同じ前提)。
-        """
-        if recall_buffer_store is not None and not isinstance(
-            recall_buffer_store, EpisodicRecallBufferRepository
-        ):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
-            )
-        self._recall_buffer_store = recall_buffer_store
-
-    def set_recall_success_store(
-        self, recall_success_store: IEpisodicRecallSuccessStore | None
-    ) -> None:
-        """U9b: 的中側 sidecar を構築後に差し込むための setter。
-
-        ``set_recall_buffer_store`` と同じ「後から差し込む」パターン。ワーカー
-        thread から読まれる値だが、代入自体は単純な参照差し替えなので追加の
-        同期は不要 (``recall_buffer_store`` 等、既存の他フィールドと同じ前提)。
-        """
-        if recall_success_store is not None and not isinstance(
-            recall_success_store, IEpisodicRecallSuccessStore
-        ):
-            raise TypeError(
-                "recall_success_store must implement IEpisodicRecallSuccessStore or None"
-            )
-        self._recall_success_store = recall_success_store
-
     def set_pending_prediction_store(
         self, pending_prediction_store: PendingPredictionRepository | None
     ) -> None:
         """U10a: pending prediction store を構築後に差し込むための setter。
 
-        ``set_recall_buffer_store`` / ``set_recall_success_store`` と同じ
-        「後から差し込む」パターン。ワーカー thread から読まれる値だが、代入
-        自体は単純な参照差し替えなので追加の同期は不要。
+        scheduler は build_episodic_stack より先に組み立てるので、store は後から差し込む。
         """
         if pending_prediction_store is not None and not isinstance(
             pending_prediction_store, PendingPredictionRepository

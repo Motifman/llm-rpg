@@ -352,6 +352,7 @@ class Expectation:
             expectation_id=self._expectation_id,
             holder=self._holder,
             turn=turn,
+            content=self._content,
             outcome=outcome,
             likelihood=self._likelihood,
             beliefs_in_mind=self._beliefs_in_mind,

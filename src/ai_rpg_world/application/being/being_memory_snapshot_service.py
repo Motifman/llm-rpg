@@ -175,6 +175,16 @@ def _decode_list(
     return out
 
 
+def _decode_received_event_ids(raw_list: list[Any], key: str) -> list[str]:
+    """受け取り済みの出来事の ID の list。空文字や str 以外は形式エラーにする。"""
+    for idx, item in enumerate(raw_list):
+        if not isinstance(item, str) or not item.strip():
+            raise BeingMemoryPayloadFormatError(
+                f"payload[{key!r}][{idx}] must be a non-empty str, got {item!r}"
+            )
+    return list(raw_list)
+
+
 class BeingMemoryPayloadSchemaError(Exception):
     """payload JSON の schema_version が本 service で読めないとき。"""
 
@@ -253,6 +263,11 @@ class BeingMemorySnapshotService:
         "recall_habituation_last_recalled",
         "belief_evidence_buffer",
         "recall_success_hit_count",
+        # #1443: 予期の出来事を受け取った記録。材料と同じ store が持つので、
+        # 戻さないと再開した run で配り直された出来事を積み直す。
+        "belief_evidence_received_event_ids",
+        "recall_success_received_event_ids",
+        "recall_buffer_received_event_ids",
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測
         # (約束) の per-Being state。
         "pending_predictions",
@@ -425,6 +440,17 @@ class BeingMemorySnapshotService:
                     being_id
                 ).items()
             ],
+            "belief_evidence_received_event_ids": (
+                self._belief_evidence_buffer.list_received_event_ids_by_being(
+                    being_id
+                )
+            ),
+            "recall_success_received_event_ids": (
+                self._recall_success.list_received_event_ids_by_being(being_id)
+            ),
+            "recall_buffer_received_event_ids": (
+                self._recall_buffer.list_received_event_ids_by_being(being_id)
+            ),
             # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の
             # 予測 (約束) の per-Being state。
             "pending_predictions": [
@@ -584,6 +610,18 @@ class BeingMemorySnapshotService:
             dict_to_episode_hit_count_pair,
             "recall_success_hit_count",
         )
+        belief_evidence_received = _decode_received_event_ids(
+            payload["belief_evidence_received_event_ids"],
+            "belief_evidence_received_event_ids",
+        )
+        recall_success_received = _decode_received_event_ids(
+            payload["recall_success_received_event_ids"],
+            "recall_success_received_event_ids",
+        )
+        recall_buffer_received = _decode_received_event_ids(
+            payload["recall_buffer_received_event_ids"],
+            "recall_buffer_received_event_ids",
+        )
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
         # デコード。
         pending_predictions = _decode_list(
@@ -677,6 +715,15 @@ class BeingMemorySnapshotService:
         # bulk overwrite。
         self._recall_success.replace_all_by_being(
             being_id, dict(recall_success_pairs)
+        )
+        self._belief_evidence_buffer.replace_received_event_ids_by_being(
+            being_id, belief_evidence_received
+        )
+        self._recall_success.replace_received_event_ids_by_being(
+            being_id, recall_success_received
+        )
+        self._recall_buffer.replace_received_event_ids_by_being(
+            being_id, recall_buffer_received
         )
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
         # bulk overwrite。

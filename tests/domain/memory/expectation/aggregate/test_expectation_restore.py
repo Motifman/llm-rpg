@@ -90,6 +90,7 @@ class TestRestoreOpenExpectation:
 
         assert event == ExpectationSettled(
             expectation_id=ExpectationId("exp-1"),
+            content="箱を開けても空だろう",
             holder=BeingId("being-rio"),
             turn=12,
             outcome=Outcome.HIT,

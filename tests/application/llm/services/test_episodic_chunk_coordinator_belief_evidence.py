@@ -1,12 +1,7 @@
-"""EpisodicChunkCoordinator の同期経路での BeliefEvidence 転記 (U2)。
+"""EpisodicChunkCoordinator が、確定して外れた予期を次に閉じる chunk の主観補完へ渡し、chunk の prediction_error を信念の材料にしない挙動を保証する (#1443)。
 
-U2 (証拠台帳統一設計 §2 U2): 同期経路 (``chunk_subjective_fields_service``
-注入時) の転記点は「chunk 主観補完 LLM が episode を merge し終えた直後」。
-本テストは ``after_action_recorded`` が chunk を close するまで実際に
-action / observation を流し込み、生成された episode の
-``prediction_error`` が非 None のとき evidence が 1 件積まれることを
-保証する。非同期経路 (scheduler) の対応テストは
-``test_episodic_subjective_completion_schedulers.py`` にある。
+同期経路 (``chunk_subjective_fields_service`` 注入時) で、``after_action_recorded``
+が chunk を close するまで実際に action / observation を流し込む。
 """
 from __future__ import annotations
 
@@ -17,6 +12,7 @@ from tests.memory_turn_helpers import ZERO_TURN
 
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
+from ai_rpg_world.application.llm.contracts.chunk_encoding import SettledMissedExpectation
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
@@ -33,6 +29,8 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
@@ -47,7 +45,7 @@ class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
     def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         return self._returns
 
-def _build_coord(*, returns: dict[str, Any], belief_evidence_transcriber=None, belief_attribution_enabled: bool=False):
+def _build_coord(*, returns: dict[str, Any], belief_evidence_transcriber=None):
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory()
     action_store = DefaultActionResultStore()
@@ -57,83 +55,118 @@ def _build_coord(*, returns: dict[str, Any], belief_evidence_transcriber=None, b
     being_id = BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))
     port = _StubPort(returns)
     subjective_service = EpisodicChunkSubjectiveFieldsService(port)
-    coord = EpisodicChunkCoordinator(observation_buffer=buffer, short_term_memory=sliding, action_result_store=action_store, episodic_episode_store=episode_store, chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(), chunk_subjective_fields_service=subjective_service, belief_evidence_transcriber=belief_evidence_transcriber, belief_attribution_enabled=belief_attribution_enabled)
+    coord = EpisodicChunkCoordinator(observation_buffer=buffer, short_term_memory=sliding, action_result_store=action_store, episodic_episode_store=episode_store, chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(), chunk_subjective_fields_service=subjective_service, belief_evidence_transcriber=belief_evidence_transcriber)
     return (coord, buffer, action_store, being_id)
 
-def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id, *, last_action_in_context_belief_ids: tuple[str, ...]=(), last_action_expected_result: str | None=None) -> None:
-    """境界を踏んで chunk を確実に close する (MIN=3 ゲート + scene_boundary)。
-
-    U4 のテスト用に、chunk 内最後の action へ ``in_context_belief_ids`` /
-    ``expected_result`` を乗せられるようにしている (既定は空/None で
-    従来テストと完全互換)。
-    """
-    t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
-    action_store.append(player_id, action_summary='wait1', result_summary='ok', occurred_at=t0)
+def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id, *, start_hour: int=12) -> None:
+    """境界を踏んで chunk を確実に close する (MIN=3 ゲート + scene_boundary)。"""
+    action_store.append(player_id, action_summary='wait1', result_summary='ok', occurred_at=datetime(2026, 5, 1, start_hour, 0, tzinfo=timezone.utc))
     coord.after_action_recorded(player_id, being_id)
-    buffer.append(player_id, ObservationEntry(occurred_at=datetime(2026, 5, 1, 12, 0, 30, tzinfo=timezone.utc), output=ObservationOutput(prose='salient event', structured={'type': 'x'}, observation_category='social', breaks_movement=True), game_time_label=None))
-    action_store.append(player_id, action_summary='wait2', result_summary='ok', occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc))
+    buffer.append(player_id, ObservationEntry(occurred_at=datetime(2026, 5, 1, start_hour, 0, 30, tzinfo=timezone.utc), output=ObservationOutput(prose='salient event', structured={'type': 'x'}, observation_category='social', breaks_movement=True), game_time_label=None))
+    action_store.append(player_id, action_summary='wait2', result_summary='ok', occurred_at=datetime(2026, 5, 1, start_hour, 1, tzinfo=timezone.utc))
     coord.after_action_recorded(player_id, being_id)
-    action_store.append(player_id, action_summary='move', result_summary='ok', occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc), scene_boundary=True, in_context_belief_ids=last_action_in_context_belief_ids, expected_result=last_action_expected_result)
+    action_store.append(player_id, action_summary='move', result_summary='ok', occurred_at=datetime(2026, 5, 1, start_hour, 2, tzinfo=timezone.utc), scene_boundary=True)
     coord.after_action_recorded(player_id, being_id)
 
-class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
-    """同期 LLM 補完経路 (chunk_subjective_fields_service 注入時) の転記。"""
+def _missed(event_id: str='exp-1@5') -> SettledMissedExpectation:
+    return SettledMissedExpectation(event_id=event_id, content='潮が引いて干潟に下りられる', likelihood=Likelihood.PROBABLY)
 
-    def test_prediction_error_adds_one_evidence_record(self) -> None:
-        """prediction error ありなら evidence が 1件積まれる。"""
+
+class TestChunkPredictionErrorIsNotBeliefMaterial:
+    """chunk の prediction_error は、確定した予期と二重に数えないよう信念の材料にしない挙動を保証する。"""
+
+    def test_prediction_error_of_chunk_adds_no_evidence(self) -> None:
+        """外れた予期について LLM が prediction_error を書いても、chunk の完了点では証拠を積まない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'}, belief_evidence_transcriber=transcriber)
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].text == '何も見つからなかった'
-
-    def test_prediction_error_evidence(self) -> None:
-        """predictionerror なしなら evidence は積まれない。"""
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, belief_evidence_transcriber=transcriber)
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '潮が満ちていて下りられなかった'}, belief_evidence_transcriber=transcriber)
+        coord.note_settled_miss(being_id, _missed())
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
         assert buffer_store.list_all_by_being(being_id) == []
 
-    def test_transcriber_uninjected_flag_off(self) -> None:
-        """belief_evidence_transcriber=None (既定) は既存動作と完全互換。"""
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '外れた'}, belief_evidence_transcriber=None)
+
+class TestSettledMissReachesNextChunk:
+    """外れたで確定した予期が、次に閉じる chunk の主観補完に 1 回だけ渡る挙動を保証する。"""
+
+    def test_noted_miss_lets_chunk_keep_llm_prediction_error(self) -> None:
+        """chunk を閉じる前に外れの確定を受け取っていれば、その chunk の prediction_error に LLM の文が残る。"""
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '潮が満ちていて下りられなかった'})
+        coord.note_settled_miss(being_id, _missed())
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+        (episode,) = coord._episodic_episode_store.list_all_by_being(being_id)
+        assert episode.prediction_error == '潮が満ちていて下りられなかった'
+
+    def test_without_noted_miss_chunk_prediction_error_is_none(self) -> None:
+        """外れの確定を受け取っていない chunk では、LLM が書いても prediction_error は None になる。"""
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '潮が満ちていて下りられなかった'})
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+        (episode,) = coord._episodic_episode_store.list_all_by_being(being_id)
+        assert episode.prediction_error is None
+
+    def test_noted_miss_is_used_by_one_chunk_only(self) -> None:
+        """一度 chunk に渡した外れは、その次の chunk には渡らない。"""
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': 'ずれ'})
+        coord.note_settled_miss(being_id, _missed())
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, start_hour=13)
+        errors = sorted((e.occurred_at, e.prediction_error) for e in coord._episodic_episode_store.list_all_by_being(being_id))
+        assert [err for _, err in errors] == ['ずれ', None]
+
+    def test_same_event_noted_twice_is_kept_once(self) -> None:
+        """同じ出来事の ID を二度受け取っても 1 件として持ち、False を返す。一度 chunk に渡したあとでも同じ。"""
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': 'ずれ'})
+        assert coord.note_settled_miss(being_id, _missed()) is True
+        assert coord.note_settled_miss(being_id, _missed()) is False
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+        assert coord.note_settled_miss(being_id, _missed()) is False
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, start_hour=13)
+        errors = sorted((e.occurred_at, e.prediction_error) for e in coord._episodic_episode_store.list_all_by_being(being_id))
+        assert [err for _, err in errors] == ['ずれ', None]
+
+
+class _NotingPort(IEpisodicChunkSubjectiveCompletionPort):
+    """最初に呼ばれたとき、主観補完の最中に別の外れの確定が届いたことにする port。"""
+
+    def __init__(self) -> None:
+        self.on_first_call = None
+
+    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        if self.on_first_call is not None:
+            self.on_first_call()
+            self.on_first_call = None
+        return {'interpreted': 'I', 'recall_text': 'R', 'prediction_error': 'ずれ'}
+
+
+class TestMissArrivingDuringCompletion:
+    """chunk が外れを受け取ったあとに届いた外れを、次の chunk のために残す挙動を保証する。"""
+
+    def test_miss_noted_while_chunk_is_completed_goes_to_next_chunk(self) -> None:
+        """主観補完の最中に届いた外れは、閉じた chunk では使われず、次の chunk のために残る。"""
+        port = _NotingPort()
+        (coord, buffer, action_store, being_id) = _build_coord(returns={})
+        coord._chunk_subjective_fields_service = EpisodicChunkSubjectiveFieldsService(port)
+        coord.note_settled_miss(being_id, _missed('exp-1@5'))
+        port.on_first_call = lambda: coord.note_settled_miss(being_id, _missed('exp-2@6'))
+
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
-class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
-    """U4 (予測誤差統一設計 部品3): 同期経路での attribution + CONFIRMATION。"""
+        assert [m.event_id for m in coord._settled_misses[being_id]] == ['exp-2@6']
 
-    def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids(self) -> None:
-        """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'}, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, last_action_in_context_belief_ids=('sem-1',), last_action_expected_result='何か見つかるはず')
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].in_context_belief_ids == ('sem-1',)
 
-    def test_belief_attribution_enabled_prediction_error_none_context_belief_expected_result_confirmation(self) -> None:
-        """belief attribution enabled で prediction error None かつ in context belief あり かつ expected result ありなら CONFIRMATION。"""
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, last_action_in_context_belief_ids=('sem-1',), last_action_expected_result='何か見つかるはず')
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].source_kind.value == 'confirmation'
-        assert rows[0].in_context_belief_ids == ('sem-1',)
+class TestChunkWrittenTrace:
+    """chunk の書き込みの trace に、その chunk に渡した外れの出来事の ID が残る挙動を保証する。"""
 
-    def test_belief_attribution_enabled_false_default_context_belief_ids(self) -> None:
-        """flag OFF (既定) では chunk_coordinator が attribution 自体を計算
-        しないため、action に in_context_belief_ids が乗っていても evidence
-        には添付されない (= U4 導入前と一致)。"""
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'}, belief_evidence_transcriber=transcriber, belief_attribution_enabled=False)
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, last_action_in_context_belief_ids=('sem-1',), last_action_expected_result='何か見つかるはず')
-        rows = buffer_store.list_all_by_being(being_id)
-        assert len(rows) == 1
-        assert rows[0].in_context_belief_ids == ()
+    def test_chunk_written_trace_lists_handed_miss_event_ids(self) -> None:
+        """外れを 1 件持って chunk を閉じると、EPISODIC_CHUNK_WRITTEN に出来事の ID が 1 件載る。"""
+        recorder = NullTraceRecorder()
+        events: list = []
+        original = recorder.record
+        recorder.record = lambda kind, **kw: events.append((kind, kw)) or original(kind, **kw)  # type: ignore[method-assign]
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'})
+        coord._trace_recorder = recorder
+        coord.note_settled_miss(being_id, _missed())
+
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+
+        (written,) = [kw for kind, kw in events if kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN]
+        assert written['settled_miss_event_ids'] == ['exp-1@5']

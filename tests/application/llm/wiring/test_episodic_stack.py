@@ -214,14 +214,12 @@ class TestRecallHitBoostOptIn:
         stack = build_episodic_stack(scenario=_stub_scenario(players=[(1, 't')]), graph=_stub_graph(spots={1: 'x'}), observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store)
         assert stack.recall_success_store is None
 
-    def test_enabled_recall_success_store_chunk_coordinator(self) -> None:
+    def test_enabled_builds_recall_success_store(self) -> None:
         """flag ON で的中側 sidecar が構築され、stack が公開する。"""
         (obs_buf, sliding, action_store) = self._io()
         stack = build_episodic_stack(scenario=_stub_scenario(players=[(1, 't')]), graph=_stub_graph(spots={1: 'x'}), observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, recall_hit_boost_enabled=True, recall_hit_boost_strength=2)
         assert stack.recall_success_store is not None
         assert stack.recall_hit_boost_strength == 2
-        assert stack.chunk_coordinator._recall_success_store is stack.recall_success_store
-        assert stack.chunk_coordinator._recall_hit_boost_enabled is True
 
     def test_enabled_passive_recall_same_store_strength_wired(self) -> None:
         """enabled なら passive recall にも 同一store と strength が配線される。"""

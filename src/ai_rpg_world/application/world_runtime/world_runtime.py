@@ -66,8 +66,18 @@ class ToolExposureConfigurationError(RuntimeError):
 
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.being.expectation.belief_material import (
+    ExpectationBeliefMaterialReceiver,
+)
+from ai_rpg_world.application.being.expectation.chunk_note import (
+    ExpectationChunkNoteReceiver,
+)
 from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventDispatcher,
+    ExpectationEventReceiver,
+)
+from ai_rpg_world.application.being.expectation.recall_credit import (
+    ExpectationRecallCreditReceiver,
 )
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
@@ -4560,6 +4570,61 @@ def _build_short_term_memory(
     )
 
 
+def _expectation_event_receivers(
+    runtime: WorldRuntime, config: ResolvedLlmRuntimeConfig
+) -> tuple[ExpectationEventReceiver, ...]:
+    """確定した予期を記憶の材料にする受け取る側を、有効な記憶の機能の分だけ並べる (#1443)。
+
+    受け取る側が書く store は episodic stack のものを使う。snapshot が拾う store と
+    別のものに書くと、再開した run で材料と受け取り済みの記録が消える。
+    """
+    stack = runtime._episodic_stack
+    if stack is None:
+        if config.expectation_settlement_enabled:
+            logger.warning(
+                "expectation settlement is enabled but the episodic stack is not "
+                "built; settled expectations reach no memory"
+            )
+        return ()
+    trace_provider = lambda: runtime._trace_recorder  # noqa: E731
+    receivers: list[ExpectationEventReceiver] = []
+    if config.belief_evidence_enabled and stack.belief_evidence_buffer_store is None:
+        logger.warning(
+            "BELIEF_EVIDENCE_ENABLED but belief_evidence_buffer_store is missing; "
+            "settled expectations do not become belief evidence"
+        )
+    if config.error_driven_reinterpretation_enabled and stack.recall_buffer_store is None:
+        logger.warning(
+            "ERROR_DRIVEN_REINTERPRETATION_ENABLED but recall_buffer_store is missing "
+            "(no reinterpretation completion); settled misses are not stamped on recalls"
+        )
+    if config.belief_evidence_enabled and stack.belief_evidence_buffer_store is not None:
+        receivers.append(
+            ExpectationBeliefMaterialReceiver(
+                stack.belief_evidence_buffer_store,
+                now_provider=lambda: datetime.now(timezone.utc),
+                trace_recorder_provider=trace_provider,
+            )
+        )
+    recall_buffer = (
+        stack.recall_buffer_store if config.error_driven_reinterpretation_enabled else None
+    )
+    if stack.recall_success_store is not None or recall_buffer is not None:
+        receivers.append(
+            ExpectationRecallCreditReceiver(
+                success_store=stack.recall_success_store,
+                recall_buffer_store=recall_buffer,
+                trace_recorder_provider=trace_provider,
+            )
+        )
+    receivers.append(
+        ExpectationChunkNoteReceiver(
+            stack.chunk_coordinator, trace_recorder_provider=trace_provider
+        )
+    )
+    return tuple(receivers)
+
+
 def _build_belief_create_gate(config: ResolvedLlmRuntimeConfig) -> Any | None:
     """profile が求めたときだけ、信念を作る前の判断を組む (#1453)。
 
@@ -6418,12 +6483,6 @@ def create_world_runtime(
     travel_stage.set_on_travel_tick_committed(
         runtime._record_committed_player_travel_tick
     )
-    runtime._expectation_dispatcher = ExpectationEventDispatcher(
-        runtime._expectation_store,
-        receivers=(),
-        max_attempts=config.expectation_event_max_delivery_attempts,
-        trace_recorder_provider=lambda: runtime._trace_recorder,
-    )
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
@@ -7705,42 +7764,11 @@ def create_world_runtime(
                     BeliefEvidenceTranscriber,
                 )
 
-                # P3 (CONFIRMATION 関連性ゲート): belief_id → (tags, text) を
-                # semantic store から遅延ルックアップする provider。CONFIRMATION
-                # 転記時 (run 中) には episodic_stack / semantic store が確定して
-                # いるので、参照を lambda で遅延評価する。store 未構築 / belief
-                # 不在なら None を返し、ゲートは安全側 (積まない) に倒れる。
-                # 注: in_context_belief_ids に流れる id は passive recall 時点の
-                # entry_id (prompt_builder が c.entry.entry_id で採る) であり、
-                # lineage の belief_id ではない。revise 済み belief は
-                # entry_id != belief_id になる (新 entry が別 entry_id を持ち
-                # belief_id だけ継ぐ) ため、必ず entry_id で照合する
-                # (belief_id で照合すると revise 済み belief が永久に一致しなくなる)。
-                def _belief_axis_lookup(being_id: Any, recalled_entry_id: Any) -> Any:
-                    stack = runtime._episodic_stack
-                    store = getattr(stack, "semantic_memory_store", None) if stack else None
-                    if store is None:
-                        return None
-                    try:
-                        entries = store.list_for_being(being_id)
-                    except Exception:
-                        logger.warning(
-                            "belief_axis_lookup: semantic_store.list_for_being "
-                            "failed; CONFIRMATION ゲートは安全側 (None) に倒れる",
-                            exc_info=True,
-                        )
-                        return None
-                    for entry in entries:
-                        if entry.entry_id == recalled_entry_id:
-                            return (tuple(entry.tags), entry.text)
-                    return None
-
                 belief_evidence_transcriber = BeliefEvidenceTranscriber(
                     belief_evidence_buffer_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
                     memory_turn_reader=runtime._expectation_store,
-                    belief_axis_provider=_belief_axis_lookup,
                 )
                 # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
                 # GoalRevisionApplier の遅延 holder をここで埋める。
@@ -7867,25 +7895,6 @@ def create_world_runtime(
                     # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
                     # None のまま (= 従来動作と完全互換)。
                     belief_evidence_transcriber=belief_evidence_transcriber,
-                    # U4: default False。attribution + CONFIRMATION の計算自体を
-                    # 行うかどうか (transcriber が None なら本来無関係だが、
-                    # 明示的に flag を伝播しておく)。
-                    belief_attribution_enabled=_belief_attribution_enabled,
-                    # U9a: default False。recall_buffer_store 自体は
-                    # build_episodic_stack がこの後で構築するため、この時点では
-                    # 未確定 (= None のまま)。build_episodic_stack 完了後に
-                    # set_recall_buffer_store で差し込む (下の「U9a: recall_buffer
-                    # を scheduler に後から差し込む」ブロックを参照)。
-                    error_driven_reinterpretation_enabled=(
-                        _error_driven_reinterpretation_enabled
-                    ),
-                    # U9b: default False。recall_success_store 自体は
-                    # build_episodic_stack がこの後で構築するため、この時点では
-                    # 未確定 (= None のまま)。build_episodic_stack 完了後に
-                    # set_recall_success_store で差し込む (下の「U9b:
-                    # recall_success_store を scheduler に後から差し込む」
-                    # ブロックを参照)。
-                    recall_hit_boost_enabled=_recall_hit_boost_enabled,
                     # U10a: default False。pending_prediction_store 自体は
                     # build_episodic_stack がこの後で構築するため、この時点
                     # では未確定 (= None のまま)。build_episodic_stack 完了後に
@@ -8106,8 +8115,7 @@ def create_world_runtime(
             belief_consolidation_enabled=_belief_consolidation_enabled,
             belief_consolidation_completion=_belief_consolidation_completion,
             belief_create_gate=_build_belief_create_gate(config),
-            # U4 (予測誤差統一設計 部品3): 同期経路 (chunk_coordinator) 用。
-            # 非同期経路 (scheduler) には上で個別に渡し済み。
+            # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
             belief_attribution_enabled=_belief_attribution_enabled,
             # P4 (reflect): 固着 LLM に目的への前進評価を足す。監査対象の目的文と
             # 内省観測 sink を provider で渡す (goal store 差し替えは P7)。
@@ -8126,20 +8134,15 @@ def create_world_runtime(
             # (P9) と同じ HEARSAY_ENABLED で連動させる (抽出だけ ON で固着側が
             # 素通しになる中途半端な状態を作らない)。
             hearsay_enabled=_hearsay_enabled,
-            # U9a (誤差駆動再解釈): 同期経路 (chunk_coordinator) 用。非同期経路
-            # (scheduler) は recall_buffer 確定後に下で set_recall_buffer_store
-            # を呼んで差し込む (scheduler 自体は build_episodic_stack より先に
-            # 構築済のため、コンストラクタでは渡せない)。
+            # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled
             ),
             # U8 (部品2a): chunk_coordinator (同期・非同期共通の境界判定) に
             # decide_chunk_boundary への flag 伝播を頼む。
             error_gated_boundary_enabled=_error_gated_encoding_enabled,
-            # U9b (想起の信用割り当て・的中側): 同期経路 (chunk_coordinator) と
-            # passive_recall 両方に的中側 sidecar を配線する。非同期経路
-            # (scheduler) は recall_success_store 確定後に下で
-            # set_recall_success_store を呼んで差し込む。
+            # U9b (想起の信用割り当て・的中側): 的中側 sidecar を作り、
+            # passive_recall の順位に使う。回数は確定した予期から足す (#1443)。
             recall_hit_boost_enabled=_recall_hit_boost_enabled,
             recall_hit_boost_strength=_recall_hit_boost_strength,
             # U10a (pending prediction): 同期経路 (chunk_coordinator) と
@@ -8159,22 +8162,10 @@ def create_world_runtime(
             subjective_episode_db_path=config.subjective_episode_db_path,
         )
 
-        # U9a: recall_buffer を scheduler に後から差し込む。
-        # subjective_scheduler は build_episodic_stack より先に構築されている
-        # ため (Pattern A の episode_store 共有と同じ理由)、recall_buffer が
-        # 確定するこの時点で set_recall_buffer_store により差し込む。
-        # ``recall_buffer_store`` は reinterpretation_completion が無いと None
-        # のまま (= 再解釈 LLM が走らず stamp しても意味が無いので同じ条件で
-        # 縮退させる)。
+        # U10a: subjective_scheduler は build_episodic_stack より先に構築されて
+        # いるため (Pattern A の episode_store 共有と同じ理由)、
+        # pending_prediction_store が確定するこの時点で差し込む。
         if subjective_scheduler is not None:
-            subjective_scheduler.set_recall_buffer_store(
-                runtime._episodic_stack.recall_buffer_store
-            )
-            # U9b: recall_success_store も同じ理由で後から差し込む。
-            subjective_scheduler.set_recall_success_store(
-                runtime._episodic_stack.recall_success_store
-            )
-            # U10a: pending_prediction_store も同じ理由で後から差し込む。
             subjective_scheduler.set_pending_prediction_store(
                 runtime._episodic_stack.pending_prediction_store
             )
@@ -8306,6 +8297,14 @@ def create_world_runtime(
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
+
+    # 受け取る側は記憶の store に書くので、episodic stack を組んだあとで配り手を作る。
+    runtime._expectation_dispatcher = ExpectationEventDispatcher(
+        runtime._expectation_store,
+        receivers=_expectation_event_receivers(runtime, config),
+        max_attempts=config.expectation_event_max_delivery_attempts,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
 
     # disabled_tools の名前が実在するかを、ここで確かめる。
     #

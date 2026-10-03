@@ -31,6 +31,27 @@ class BeliefEvidenceBufferRepository(ABC):
         """being_id keyed で evidence を 1 件追加する。"""
 
     @abstractmethod
+    def append_received_by_being(
+        self, being_id: BeingId, evidence: BeliefEvidence, *, event_id: str
+    ) -> bool:
+        """出来事から作った evidence を積み、その出来事の ID を受け取り済みにする。
+
+        2 つは同じ保存の単位で書く (#1479)。受け取り済みの ID なら何も積まずに
+        False を返す。固着が evidence を取り除いたあとも ID は残るので、配り直し
+        で同じ材料が積み直されない。
+        """
+
+    @abstractmethod
+    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
+        """受け取り済みの出来事の ID を、受け取った順に返す。snapshot の capture 用。"""
+
+    @abstractmethod
+    def replace_received_event_ids_by_being(
+        self, being_id: BeingId, event_ids: list[str]
+    ) -> None:
+        """受け取り済みの出来事の ID を ``event_ids`` で置き換える。snapshot の restore 用。"""
+
+    @abstractmethod
     def list_all_by_being(self, being_id: BeingId) -> list[BeliefEvidence]:
         """being_id keyed で全 evidence を ``occurred_at`` 昇順で返す。
 

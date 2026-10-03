@@ -36,11 +36,15 @@ class ProvisionallyMissed:
 
 @dataclass(frozen=True)
 class ExpectationSettled:
-    """当否が確定した。頭にあった信念への支持・反証と、思い出していたエピソードの見直しに使う。"""
+    """当否が確定した。頭にあった信念への支持・反証と、思い出していたエピソードの見直しに使う。
+
+    受け取る側は予期の保存先を引かずに材料を書けるよう、予期の文も運ぶ。
+    """
 
     expectation_id: ExpectationId
     holder: BeingId
     turn: int
+    content: str
     outcome: Outcome
     likelihood: Likelihood
     beliefs_in_mind: tuple[str, ...]

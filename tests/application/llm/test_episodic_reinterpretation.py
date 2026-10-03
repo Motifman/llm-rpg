@@ -80,6 +80,18 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         """常に RuntimeError。"""
         raise RuntimeError('broken')
 
+    def stamp_prediction_outcome_for_episodes_by_being(self, being_id: BeingId, episode_ids: tuple[str, ...], prediction_error: str, *, event_id: str) -> int | None:
+        """常に RuntimeError。"""
+        raise RuntimeError('broken')
+
+    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
+        """常に RuntimeError。"""
+        raise RuntimeError('broken')
+
+    def replace_received_event_ids_by_being(self, being_id: BeingId, event_ids: list[str]) -> None:
+        """常に RuntimeError。"""
+        raise RuntimeError('broken')
+
     def list_episode_ids_by_prediction_context_by_being(self, being_id: BeingId, prediction_context_id: str) -> tuple[str, ...]:
         """常に RuntimeError。"""
         raise RuntimeError('broken')
