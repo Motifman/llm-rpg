@@ -61,7 +61,7 @@ LLM エージェントが**過去の体験を主観的に思い出して**意思
             │  2. bucket に最新 action 追加              │
             │  3. decide_chunk_boundary(...)               │
             │     ├─ MIN/MAX/TEMPORAL_GAP/scene_boundary   │
-            │     └─ category_shift / salient(breaks_movement) / count │
+            │     └─ category_shift / salient(breaks_movement) / prediction_error / count │
             │  4. close 判定なら ChunkEpisodeDraftBuilder.build  │
             │     └─ draft.recall_text = テンプレ既定値 (#305) │
             │  5. episode_store.put(draft)  ← 即書き         │
@@ -184,9 +184,14 @@ TEMPORAL_GAP_TICKS_FOR_CLOSE      = 8     # 時間断絶 = 別 scene
 6. SCENE_BOUNDARY_ACTION        → クローズ (doorway effect)
 7. CATEGORY_SHIFT / STRUCTURED_KEYS_CHANGED → クローズ
 8. OBSERVATION_SALIENT (breaks_movement のみ) → クローズ
-9. OBSERVATION_COUNT_THRESHOLD (5件) → クローズ
-10. HOLD_ACCUMULATING (蓄積継続)
+9. PREDICTION_ERROR_SALIENT     → クローズ (ERROR_GATED_ENCODING_ENABLED のときだけ評価)
+10. OBSERVATION_COUNT_THRESHOLD (5件) → クローズ
+11. HOLD_ACCUMULATING (蓄積継続)
 ```
+
+9 は、bucket 内に失敗した action があり、その action が `expected_result`
+か `error_code` を、空白以外の文字を含む文字列で持つときに閉じる。フラグが OFF (既定) の
+ときは評価されず、境界の挙動は 9 が無い場合と同じになる。
 
 ### 4.4 `scene_boundary` フラグ
 
