@@ -44,12 +44,14 @@ class _ScriptedPort(ITypedJudgmentPort):
 
     def __init__(
         self,
-        answers: Mapping[str, tuple[str, float]] | None = None,
+        answers: Mapping[str, tuple[str, float | None]] | None = None,
         *,
         raises: BaseException | None = None,
+        drop: str | None = None,
     ) -> None:
         self.answers = dict(answers or {})
         self.raises = raises
+        self.drop = drop
         self.calls: list[tuple[Any, Mapping[str, Question]]] = []
 
     def judge(
@@ -63,12 +65,14 @@ class _ScriptedPort(ITypedJudgmentPort):
         out: dict[str, JudgmentResult] = {}
         for name, question in questions.items():
             assert isinstance(question, ChoiceQuestion)
+            if name == self.drop:
+                continue
             value, confidence = self.answers.get(
                 name, (next(iter(question.options)), 0.99)
             )
             out[name] = JudgmentResult(
                 value=value,
-                probabilities={value: confidence},
+                probabilities={value: confidence or 0.0},
                 confidence=confidence,
                 source=JudgmentSource.JEV,
                 latency_ms=12.0,
@@ -228,8 +232,30 @@ class TestLowConfidenceAnswersAreNotUsed:
 
         assert review.outcome == OUTCOME_CREATE
 
+    def test_a_situation_exactly_at_the_threshold_is_used(self) -> None:
+        """「いまの状況」の確信度が閾値ちょうどなら、その答えを採って作らない。"""
+        port = _ScriptedPort({SHAPE_QUESTION: (SHAPE_CURRENT_SITUATION, 0.6)})
+
+        review = _gate(port, min_confidence=0.6).review(_NEW_TEXT, _EXISTING)
+
+        assert review.outcome == OUTCOME_SKIP_CURRENT_SITUATION
+
+    def test_a_same_meaning_exactly_at_the_threshold_is_used(self) -> None:
+        """同じ意味の答えの確信度が閾値ちょうどなら、その答えを採って強める。"""
+        port = _ScriptedPort(
+            {
+                SHAPE_QUESTION: ("世界の決まり", 0.9),
+                SAME_MEANING_QUESTION: ("腐った貝は食べると毒になる", 0.6),
+            }
+        )
+
+        review = _gate(port, min_confidence=0.6).review(_NEW_TEXT, _EXISTING)
+
+        assert review.outcome == OUTCOME_STRENGTHEN
+
     def test_the_stub_port_lets_create_through(self) -> None:
-        """決定論 stub の迷った答えでは、どの判断も閾値を超えず作るを通す。"""
+        """決定論 stub は各問いの先頭 (「世界の決まり」と「該当なし」) を選ぶので、
+        作るを通す。"""
         review = _gate(DeterministicTypedJudgmentPort(), top_k=1).review(
             _NEW_TEXT, _EXISTING
         )
@@ -275,6 +301,42 @@ class TestWithoutAJudgmentCreateIsKept:
 
         assert review.outcome == OUTCOME_CREATE
         assert review.unavailable_reason == "TYPED_JUDGMENT_ANSWER_INVALID"
+
+    def test_a_shape_answer_outside_the_options_creates(self) -> None:
+        """形の答えが選択肢に無い名前なら、作るを通し ANSWER_INVALID を残す。"""
+        port = _ScriptedPort({SHAPE_QUESTION: ("天気", 0.9)})
+
+        review = _gate(port).review(_NEW_TEXT, _EXISTING)
+
+        assert review.outcome == OUTCOME_CREATE
+        assert review.unavailable_reason == "TYPED_JUDGMENT_ANSWER_INVALID"
+
+    def test_an_answer_without_confidence_creates(self) -> None:
+        """確信度の無い Choice の答えは閾値と比べられないので、作るを通す。"""
+        port = _ScriptedPort({SHAPE_QUESTION: (SHAPE_CURRENT_SITUATION, None)})
+
+        review = _gate(port).review(_NEW_TEXT, _EXISTING)
+
+        assert review.outcome == OUTCOME_CREATE
+        assert review.unavailable_reason == "TYPED_JUDGMENT_ANSWER_INVALID"
+
+    def test_a_missing_answer_creates(self) -> None:
+        """問うた同じ意味の答えが返らなければ、作るを通し ANSWER_MISSING を残す。"""
+        port = _ScriptedPort(drop=SAME_MEANING_QUESTION)
+
+        review = _gate(port).review(_NEW_TEXT, _EXISTING)
+
+        assert review.outcome == OUTCOME_CREATE
+        assert review.unavailable_reason == "TYPED_JUDGMENT_ANSWER_MISSING"
+
+    def test_a_candidate_reading_like_none_is_not_an_option(self) -> None:
+        """「該当なし」と同じ文の既存の信念は、選択肢の「該当なし」と区別できないので並べない。"""
+        port = _ScriptedPort()
+
+        _gate(port).review("該当なし", [TextCandidate("odd", "該当なし")])
+
+        _, questions = port.calls[0]
+        assert list(questions) == [SHAPE_QUESTION]
 
     def test_a_judged_review_has_no_unavailable_reason(self) -> None:
         """判断が得られた review の縮退理由は None で、縮退と区別できる。"""

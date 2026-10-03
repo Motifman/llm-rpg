@@ -156,8 +156,9 @@ def _flush(
     judge: ITypedJudgmentPort | None,
     *,
     existing: tuple[SemanticMemoryEntry, ...] = (),
+    buffer: InMemoryBeliefEvidenceBufferStore | None = None,
 ) -> tuple[InMemorySemanticMemoryStore, _Recorder]:
-    buffer = InMemoryBeliefEvidenceBufferStore()
+    buffer = buffer if buffer is not None else InMemoryBeliefEvidenceBufferStore()
     store = InMemorySemanticMemoryStore()
     for entry in existing:
         store.add_by_being(_BEING, entry)
@@ -198,13 +199,17 @@ class TestTheGateReplacesCreate:
     """作る前の判断で、作る / 強める / 作らないが journal に反映されることを保証する。"""
 
     def test_a_current_situation_is_not_written_and_is_skipped_with_a_reason(self) -> None:
-        """形がいまの状況なら信念を作らず、decision は理由つきで skipped に入る。"""
+        """形がいまの状況なら信念を作らず、decision は理由つきで skipped に入る。
+        証拠は discard と同じく batch ごと buffer から消え、次周期に問い直さない。"""
+        buffer = InMemoryBeliefEvidenceBufferStore()
         store, recorder = _flush(
             [_create("ノアとリオは干潟に向かっている")],
             _Judge({SHAPE_QUESTION: SHAPE_CURRENT_SITUATION}),
+            buffer=buffer,
         )
 
         assert _active(store) == []
+        assert buffer.list_all_by_being(_BEING) == []
         consolidation = recorder.of(TraceEventKind.BELIEF_CONSOLIDATION)[0].payload
         assert consolidation["decisions"] == []
         assert consolidation["skipped_decisions"][0]["reason"] == (
@@ -223,6 +228,30 @@ class TestTheGateReplacesCreate:
         assert [e.belief_id for e in active] == ["sem-shell"]
         assert set(active[0].support_evidence_ids) == {"old-1", "ev-1"}
         assert active[0].text == _EXISTING_TEXT
+
+    def test_a_create_without_evidence_ids_strengthens_with_the_batch(self) -> None:
+        """evidence_ids を省いた create を強めるに置き換えたら、create と同じく batch の
+        証拠をその信念に積む。"""
+        store, _ = _flush(
+            [{"action": "create", "text": _NEW_TEXT}],
+            _Judge({SAME_MEANING_QUESTION: _EXISTING_TEXT}),
+            existing=(_belief("sem-shell", _EXISTING_TEXT),),
+        )
+
+        assert set(_active(store)[0].support_evidence_ids) == {"old-1", "ev-1"}
+
+    def test_an_empty_create_does_not_ask(self) -> None:
+        """文の無い create は gate に問わず、従来どおり create_empty_text で skip する。"""
+        judge = _Judge(raises=AssertionError("must not be asked"))
+
+        store, recorder = _flush([_create("  ")], judge)
+
+        assert _active(store) == []
+        assert recorder.of(TraceEventKind.TYPED_JUDGMENT) == []
+        skipped = recorder.of(TraceEventKind.BELIEF_CONSOLIDATION)[0].payload[
+            "skipped_decisions"
+        ]
+        assert skipped[0]["reason"] == "create_empty_text"
 
     def test_the_applied_decision_shows_it_was_replaced(self) -> None:
         """強めるに置き換えた decision は、元の create と置き換え先が trace で分かる。"""

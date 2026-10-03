@@ -27,9 +27,10 @@ class TestCharBigramBm25FindsRephrasedSentences:
 
     def test_a_rephrased_sentence_is_within_the_top_k(self) -> None:
         """「腐った貝を食べると毒に当たる」に対し、「腐った貝は食べると毒になる」が
-        無関係な信念 5 件に埋もれず上位 2 件に入る。"""
+        結論の違う同じ主題の文や無関係な信念に埋もれず上位 2 件に入る。"""
         candidates = [
             TextCandidate("a", "北の洞窟は危険だ"),
+            TextCandidate("same-topic", "新鮮な貝を食べると元気になる"),
             TextCandidate("b", "エイダは枯れ葉の入手に協力的だ"),
             TextCandidate("c", "浜辺では流木が手に入る"),
             TextCandidate("target", "腐った貝は食べると毒になる"),
@@ -41,7 +42,7 @@ class TestCharBigramBm25FindsRephrasedSentences:
             "腐った貝を食べると毒に当たる", candidates, top_k=2
         )
 
-        assert _keys(ranked)[0] == "target"
+        assert "target" in _keys(ranked)
 
     def test_candidates_are_ordered_from_closest(self) -> None:
         """共有する 2 字組が多い候補ほど上に来て、score は降順に並ぶ。"""
@@ -57,17 +58,17 @@ class TestCharBigramBm25FindsRephrasedSentences:
         assert _keys(ranked) == ["near", "far"]
         assert ranked[0].score > ranked[1].score
 
-    def test_punctuation_and_spaces_do_not_change_the_order(self) -> None:
+    def test_punctuation_spaces_and_width_do_not_change_the_score(self) -> None:
         """句読点・空白・全角半角の違いだけの文は、違いの無い文と同じ score になる。"""
+        candidates = [
+            TextCandidate("x", "洞窟はinteractで調べられない"),
+            TextCandidate("y", "浜辺は安全だ"),
+        ]
         plain = CharBigramBm25Narrower().narrow(
-            "北の洞窟は危険だ",
-            [TextCandidate("x", "北の洞窟は危険だ"), TextCandidate("y", "浜辺は安全だ")],
-            top_k=2,
+            "洞窟はinteractで調べられない", candidates, top_k=2
         )
         noisy = CharBigramBm25Narrower().narrow(
-            "北の 洞窟は、危険だ。",
-            [TextCandidate("x", "北の洞窟は危険だ"), TextCandidate("y", "浜辺は安全だ")],
-            top_k=2,
+            "洞窟は　ｉｎｔｅｒａｃｔ で、調べられない。", candidates, top_k=2
         )
 
         assert plain[0].score == pytest.approx(noisy[0].score)
@@ -109,6 +110,12 @@ class TestCharBigramBm25LimitsTheCandidates:
     def test_no_candidates_returns_empty(self) -> None:
         """候補が無ければ空を返す。"""
         assert CharBigramBm25Narrower().narrow("洞窟は危険だ", [], top_k=3) == ()
+
+    def test_a_query_of_only_punctuation_returns_empty(self) -> None:
+        """記号だけの文は比べる文字が無いので、候補があっても空を返す。"""
+        assert CharBigramBm25Narrower().narrow(
+            "。、！", [TextCandidate("x", "洞窟")], top_k=3
+        ) == ()
 
     def test_a_one_character_query_is_compared_by_the_character(self) -> None:
         """1 文字の文は 2 字組を作れないので、その 1 文字で比べる。"""
