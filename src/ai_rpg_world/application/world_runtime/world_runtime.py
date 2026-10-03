@@ -79,6 +79,7 @@ from ai_rpg_world.application.being.expectation.event_delivery import (
 from ai_rpg_world.application.being.expectation.recall_credit import (
     ExpectationRecallCreditReceiver,
 )
+from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -114,6 +115,9 @@ from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractViolation,
     find_prompt_argument_contract_violations,
 )
+from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
+    SituationRecallSources,
+)
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
@@ -121,6 +125,9 @@ from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter im
 )
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
+)
+from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
+    create_text_candidate_narrower,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
@@ -2659,6 +2666,32 @@ class WorldRuntime:
                 exc_info=True,
             )
 
+    def _runtime_config_value(self, name: str) -> Any:
+        if self._runtime_config is None:
+            raise ValueError(f"runtime config is required to read {name}")
+        return getattr(self._runtime_config, name)
+
+    def _situation_recall_enabled(self) -> bool:
+        return bool(getattr(self._runtime_config, "situation_belief_recall_enabled", False))
+
+    def _situation_recall_sources(self) -> SituationRecallSources | None:
+        """#1414: 有効なのに信念の store が無ければ、何も引かないまま動き出さないよう止める。"""
+        if not self._situation_recall_enabled():
+            return None
+        stack = self._episodic_stack
+        if stack is None or stack.semantic_memory_store is None:
+            raise ValueError("SITUATION_BELIEF_RECALL_ENABLED requires the semantic memory store")
+        return SituationRecallSources(
+            recall=SituationBeliefRecall(
+                stack.semantic_memory_store,
+                create_text_candidate_narrower(
+                    self._runtime_config_value("situation_belief_recall_narrower")
+                ),
+            ),
+            expectations=self._expectation_store,
+            goal_text=self._reflect_objective_provider,
+        )
+
     def _reflect_objective_provider(self, player_id: PlayerId) -> str | None:
         """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
 
@@ -2831,6 +2864,7 @@ class WorldRuntime:
                 memory_link_service=self._episodic_stack.link_service,
                 semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
                 semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
+                situation_recall=self._situation_recall_sources(),
                 recall_buffer_store=self._episodic_stack.recall_buffer_store,
                 reinterpretation_journal_store=self._episodic_stack.reinterpretation_journal,
                 turn_index_provider=(
@@ -2861,6 +2895,8 @@ class WorldRuntime:
                     "spot", spot_str_id
                 ),
             )
+        if self._episodic_stack is None and self._situation_recall_enabled():
+            raise ValueError("SITUATION_BELIEF_RECALL_ENABLED requires the episodic stack")
         builder = DefaultPromptBuilder(
             core,
             sections=sections,
