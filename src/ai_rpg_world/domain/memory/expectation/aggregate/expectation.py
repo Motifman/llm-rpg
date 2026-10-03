@@ -68,8 +68,11 @@ class Expectation:
     """本人が「これから起きる」と思ったこと。
 
     照合は 1 ターンに 1 回まで受け取る。直前の照合と同じ当否が続いたら確定する。
-    1 回の判断のぶれを信念まで届かせないため (#1436 試作 2)。確定の当否は
-    確定させた照合の当否なので、別の項目としては持たない。
+    1 回の判断のぶれを信念まで届かせないため (#1436 試作 2)。暫定の判定は最後の
+    照合の当否で、別の項目としては持たない。
+
+    判定の状態は公開しない。状態をどう移すかはこの集約が決め、外へは返す出来事
+    で伝える。外で状態を読んで判断すると、規則が集約の外へ漏れる。
     """
 
     def __init__(
@@ -166,31 +169,6 @@ class Expectation:
     def episodes_in_mind(self) -> tuple[str, ...]:
         return self._episodes_in_mind
 
-    @property
-    def shape(self) -> ShapeVerdict | None:
-        return self._shape
-
-    @property
-    def checks(self) -> tuple[Check, ...]:
-        return tuple(self._checks)
-
-    @property
-    def status(self) -> ExpectationStatus:
-        return self._status
-
-    @property
-    def provisional_outcome(self) -> Outcome | None:
-        """清算待ちのあいだの暫定の判定。最後の照合の当否で、別の項目としては持たない。"""
-        if not self._status.is_open or not self._checks:
-            return None
-        return self._checks[-1].verdict.outcome
-
-    @property
-    def settled_outcome(self) -> Outcome | None:
-        if self._status is not ExpectationStatus.SETTLED:
-            return None
-        return self._checks[-1].verdict.outcome
-
     def judge_shape(
         self, shape: ShapeVerdict, *, turn: int
     ) -> ExpectationDismissed | None:
@@ -260,7 +238,7 @@ class Expectation:
         now = require_turn(now_turn, name="now_turn")
         if now <= self._expires_at_turn:
             return None
-        provisional = self.provisional_outcome
+        provisional = self._checks[-1].verdict.outcome if self._checks else None
         if provisional is not None:
             return self._settle(provisional, turn=now)
         self._status = ExpectationStatus.EXPIRED
@@ -278,6 +256,8 @@ class Expectation:
             turn=turn,
             outcome=outcome,
             likelihood=self._likelihood,
+            beliefs_in_mind=self._beliefs_in_mind,
+            episodes_in_mind=self._episodes_in_mind,
         )
 
     def _require_open(self) -> None:
