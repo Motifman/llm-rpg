@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_persistence_service import BeingPersistenceService
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
@@ -30,6 +29,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import SqliteBeingRepository
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)

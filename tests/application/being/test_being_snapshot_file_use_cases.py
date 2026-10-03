@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
 from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case import (
@@ -31,6 +30,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 

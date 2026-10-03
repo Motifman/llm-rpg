@@ -10,7 +10,6 @@ import json
 
 import pytest
 
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being._memory_payload_codecs import (
     afterglow_entry_to_dict,
     dict_to_afterglow_entry,
@@ -21,6 +20,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
 )
 from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource
 from ai_rpg_world.application.llm.services.episodic_recall_slot_store import RecallSlotEntry
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 
 
 class TestRecallSlotEntryCodec:

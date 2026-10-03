@@ -6,6 +6,9 @@ import json
 from typing import Any
 
 import pytest
+from tests.application.being.test_being_memory_snapshot_coverage import (
+    _make_service,
+)
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemoryPayloadFormatError,
@@ -37,9 +40,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
 )
 from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
     InMemoryExpectationRepository,
-)
-from tests.application.being.test_being_memory_snapshot_coverage import (
-    _make_service,
 )
 
 RIO = BeingId("being-rio")

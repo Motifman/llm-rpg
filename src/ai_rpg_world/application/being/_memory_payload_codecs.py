@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     )
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
     EpisodeAction,
 )
@@ -74,7 +75,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
     Expectation,
 )

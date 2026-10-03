@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     CURRENT_PAYLOAD_SCHEMA_VERSION,
     BeingMemoryPayloadFormatError,
@@ -41,6 +40,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
