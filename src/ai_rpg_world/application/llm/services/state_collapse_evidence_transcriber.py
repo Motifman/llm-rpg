@@ -43,6 +43,9 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
@@ -70,6 +73,7 @@ class StateCollapseEvidenceTranscriber:
         *,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
+        memory_turn_reader: MemoryTurnReader,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -88,7 +92,10 @@ class StateCollapseEvidenceTranscriber:
         self._buffer_store = buffer_store
         self._episode_store = episode_store
         self._trace_recorder_provider = trace_recorder_provider
+        if not isinstance(memory_turn_reader, MemoryTurnReader):
+            raise TypeError("memory_turn_reader must be MemoryTurnReader")
         self._current_tick_provider = current_tick_provider
+        self._memory_turn_reader = memory_turn_reader
         # dedup 状態: 「現在進行中か」を being_id.value の集合で追跡する。
         # down / hunger max は独立の遷移なので別々の集合を持つ。
         self._down_being_ids: set[str] = set()
@@ -167,6 +174,7 @@ class StateCollapseEvidenceTranscriber:
             text=text,
             salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
             occurred_at=anchor_episode.occurred_at,
+            observed_turn=self._memory_turn_reader.current_turn(being_id),
             tick=self._resolve_tick(),
         )
         # dedup 状態は evidence を積んだ後に確定させる (episode 未 anchor で

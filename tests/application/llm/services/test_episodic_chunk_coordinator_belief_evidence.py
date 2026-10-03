@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from tests.memory_turn_helpers import ZERO_TURN
+
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
@@ -80,7 +82,7 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
     def test_prediction_error_adds_one_evidence_record(self) -> None:
         """prediction error ありなら evidence が 1件積まれる。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'}, belief_evidence_transcriber=transcriber)
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
         rows = buffer_store.list_all_by_being(being_id)
@@ -90,7 +92,7 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
     def test_prediction_error_evidence(self) -> None:
         """predictionerror なしなら evidence は積まれない。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, belief_evidence_transcriber=transcriber)
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
         assert buffer_store.list_all_by_being(being_id) == []
@@ -106,7 +108,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
     def test_belief_attribution_enabled_prediction_error_evidence_context_belief_ids(self) -> None:
         """belief attribution enabled で prediction error evidence に in context belief ids が添付される。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'}, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, last_action_in_context_belief_ids=('sem-1',), last_action_expected_result='何か見つかるはず')
         rows = buffer_store.list_all_by_being(being_id)
@@ -116,7 +118,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
     def test_belief_attribution_enabled_prediction_error_none_context_belief_expected_result_confirmation(self) -> None:
         """belief attribution enabled で prediction error None かつ in context belief あり かつ expected result ありなら CONFIRMATION。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, last_action_in_context_belief_ids=('sem-1',), last_action_expected_result='何か見つかるはず')
         rows = buffer_store.list_all_by_being(being_id)
@@ -129,7 +131,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
         しないため、action に in_context_belief_ids が乗っていても evidence
         には添付されない (= U4 導入前と一致)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'}, belief_evidence_transcriber=transcriber, belief_attribution_enabled=False)
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, last_action_in_context_belief_ids=('sem-1',), last_action_expected_result='何か見つかるはず')
         rows = buffer_store.list_all_by_being(being_id)

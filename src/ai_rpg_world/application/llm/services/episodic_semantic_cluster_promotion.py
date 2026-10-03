@@ -42,6 +42,9 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
@@ -202,6 +205,18 @@ class EpisodicSemanticClusterPromotionService:
     # U3b: 注入時のみ FAMILIARITY 転用モード (store 直書きをやめ、evidence buffer
     # に emit する / recall_count ゲートを外す)。未注入 (default) は従来挙動。
     belief_evidence_buffer_store: BeliefEvidenceBufferRepository | None = None
+    # #1452: FAMILIARITY 証拠に、クラスタを見つけたときの記憶のターン数を付ける。
+    # buffer を渡すなら必須。
+    memory_turn_reader: MemoryTurnReader | None = None
+
+    def __post_init__(self) -> None:
+        if self.belief_evidence_buffer_store is not None and not isinstance(
+            self.memory_turn_reader, MemoryTurnReader
+        ):
+            raise TypeError(
+                "memory_turn_reader must be MemoryTurnReader when "
+                "belief_evidence_buffer_store is given"
+            )
 
     def _register_signature(self, being_id: BeingId, sig: str) -> bool:
         """being_id 経路で signature 登録する。"""
@@ -305,6 +320,7 @@ class EpisodicSemanticClusterPromotionService:
         """
         if self.belief_evidence_buffer_store is None:
             return
+        assert self.memory_turn_reader is not None
         ordered = sorted(cluster_episodes, key=lambda e: e.occurred_at)
         representative = ordered[0]
         evidence = BeliefEvidence(
@@ -315,6 +331,7 @@ class EpisodicSemanticClusterPromotionService:
             text=_deterministic_gist(ordered),
             salience=BELIEF_EVIDENCE_SALIENCE_LOW,
             occurred_at=now,
+            observed_turn=self.memory_turn_reader.current_turn(being_id),
         )
         self.belief_evidence_buffer_store.append_by_being(being_id, evidence)
 

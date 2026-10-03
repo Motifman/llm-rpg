@@ -661,6 +661,9 @@ class WorldRuntime:
     # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _stagnation_pressure_store: Any | None = field(default=None, repr=False)
+    # #1452: 記憶のターン数の数え手 (予期の保存先)。証拠と信念の観測のターン数を
+    # ここから読む。snapshot (experiment_snapshot_session) もここから拾う。
+    _expectation_store: Any | None = field(default=None, repr=False)
     # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする
     # 一発ラッチ。transient (session 内制御信号) なので snapshot 非対象。
     _stagnation_reasoning_latch: Any | None = field(default=None, repr=False)
@@ -7622,6 +7625,13 @@ def create_world_runtime(
         # semantic_memory_store で後から埋める (下の「U7: 無意識コンテキスト用
         # semantic recall service を確定させる」ブロックを参照)。
         _unconscious_context_semantic_recall_holder: list[Any] = [None]
+        # #1452: 記憶のターン数の数え手。証拠と信念に観測のターン数を付ける側は
+        # ここから読む。1 手ごとに進める配線は予期の清算 (#1440) が入れる。
+        from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
+            InMemoryExpectationRepository,
+        )
+
+        runtime._expectation_store = InMemoryExpectationRepository()
         belief_evidence_buffer_store = None
         belief_evidence_transcriber = None
         if (
@@ -7675,6 +7685,7 @@ def create_world_runtime(
                     belief_evidence_buffer_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
+                    memory_turn_reader=runtime._expectation_store,
                     belief_axis_provider=_belief_axis_lookup,
                 )
                 # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
@@ -7983,6 +7994,7 @@ def create_world_runtime(
             # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=runtime.current_tick,
+            memory_turn_reader=runtime._expectation_store,
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
             # H-2 (自己言及ループ / 横断レビュー): chunk 主観補完が抽出した
@@ -8153,6 +8165,7 @@ def create_world_runtime(
                     runtime._episodic_stack.episode_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
+                    memory_turn_reader=runtime._expectation_store,
                 )
             )
 
@@ -8177,6 +8190,7 @@ def create_world_runtime(
                 runtime._episodic_stack.episode_store,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
+                memory_turn_reader=runtime._expectation_store,
             )
 
             def _resolve_state_collapse_being_id(
@@ -8223,6 +8237,7 @@ def create_world_runtime(
                 runtime._episodic_stack.episode_store,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
+                memory_turn_reader=runtime._expectation_store,
             )
             # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
             # 作り直しても (set_trace_recorder 等) 再適用されるようにする。

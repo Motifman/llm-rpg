@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Sequence
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -12,6 +12,9 @@ from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationEvent,
 )
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
@@ -20,7 +23,7 @@ from ai_rpg_world.domain.memory.expectation.value_object.undelivered_expectation
 )
 
 
-class ExpectationRepository(ABC):
+class ExpectationRepository(MemoryTurnReader):
     """予期の状態と、その変化で返った出来事を、同じ保存の単位で持つ。
 
     確定は取り消せず信念を直す処理につながるので、予期だけ保存されて出来事が

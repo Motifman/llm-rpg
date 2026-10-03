@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from tests.memory_turn_helpers import ZERO_TURN
+
 from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
     resolve_pending_predictions_if_applicable,
 )
@@ -61,7 +63,7 @@ class TestResolutionTranscription:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイト',))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []
@@ -77,7 +79,7 @@ class TestResolutionTranscription:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'broken')])
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         ev = buffer.list_all_by_being(_BEING)[0]
@@ -90,7 +92,7 @@ class TestResolutionTranscription:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('ghost', 'fulfilled')])
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert buffer.list_all_by_being(_BEING) == []
@@ -100,7 +102,7 @@ class TestResolutionTranscription:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         episode = _episode([PendingResolutionVerdict('p1', 'broken')])
@@ -113,7 +115,7 @@ class TestResolutionTranscription:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('spot:3',), kind='plan'))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         episode = _episode([PendingResolutionVerdict('p1', 'broken')])
@@ -132,7 +134,7 @@ class TestResolutionTranscription:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイト',))
@@ -150,7 +152,7 @@ class TestExpiry:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('old', tick_from=1, tick_to=5))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode()
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []
@@ -230,7 +232,7 @@ class TestCopresenceGate:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=())
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         remaining = store.list_all_by_being(_BEING)
@@ -262,7 +264,7 @@ class TestCopresenceGate:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ',))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []
@@ -275,7 +277,7 @@ class TestCopresenceGate:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'broken')], who=())
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []
@@ -288,7 +290,7 @@ class TestCopresenceGate:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('spot:12',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=())
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []
@@ -316,7 +318,7 @@ class TestCopresenceGate:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ', 'player:ノア')))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ', 'ノア'))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []
@@ -354,7 +356,7 @@ class TestCopresenceGateWithCoPresent:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:ノア',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('エイダ',), co_present=('ノア',))
@@ -391,7 +393,7 @@ class TestCopresenceGateWithCoPresent:
         store = InMemoryPendingPredictionStore()
         store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ', 'player:ノア')))
         buffer = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer)
+        transcriber = BeliefEvidenceTranscriber(buffer, memory_turn_reader=ZERO_TURN)
         episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ',), co_present=('ノア',))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
         assert store.list_all_by_being(_BEING) == []

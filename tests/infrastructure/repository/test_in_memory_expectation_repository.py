@@ -18,6 +18,9 @@ from ai_rpg_world.domain.memory.expectation.exception.expectation_exception impo
     ExpectationEventNotFoundException,
     ExpectationValidationException,
 )
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
@@ -193,6 +196,17 @@ class TestMemoryTurn:
         repo.advance_turn(RIO)
 
         assert repo.current_turn(NOA) == 0
+
+    def test_turn_can_be_read_through_memory_turn_reader(self) -> None:
+        """予期の保存先は MemoryTurnReader として渡せ、その口から進めたあとのターン数が読める。"""
+        repo = InMemoryExpectationRepository()
+        repo.advance_turn(RIO)
+        repo.advance_turn(RIO)
+
+        reader: MemoryTurnReader = repo
+
+        assert isinstance(reader, MemoryTurnReader)
+        assert reader.current_turn(RIO) == 2
 
 
 class TestUndeliveredEvents:

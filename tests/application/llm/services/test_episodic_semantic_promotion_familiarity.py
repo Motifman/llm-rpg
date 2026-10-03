@@ -9,7 +9,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
 from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
+from tests.memory_turn_helpers import ZERO_TURN, FixedMemoryTurnReader
 
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     MIN_RECALL_COUNT,
@@ -41,12 +43,12 @@ def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9, being_i
     resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
     return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
 
-def _build_triangle_cluster(*, recall_count: int, belief_evidence_buffer_store=None) -> tuple[EpisodicSemanticClusterPromotionService, object, int]:
+def _build_triangle_cluster(*, recall_count: int, belief_evidence_buffer_store=None, memory_turn_reader=ZERO_TURN) -> tuple[EpisodicSemanticClusterPromotionService, object, int]:
     store = InMemorySubjectiveEpisodeStore()
     links = InMemoryMemoryLinkStore()
     setup = make_semantic_being_setup()
     being_id = setup.provision(1)
-    promo = EpisodicSemanticClusterPromotionService(episode_store=store, link_store=links, semantic_store=setup.semantic_store, belief_evidence_buffer_store=belief_evidence_buffer_store)
+    promo = EpisodicSemanticClusterPromotionService(episode_store=store, link_store=links, semantic_store=setup.semantic_store, belief_evidence_buffer_store=belief_evidence_buffer_store, memory_turn_reader=memory_turn_reader)
     for (i, eid) in enumerate(['x', 'y', 'z']):
         ep = _ep(episode_id=eid, player_id=1, recall_count=recall_count, interpreted=f't{i}')
         store.put_by_being(being_id, ep)
@@ -93,6 +95,28 @@ class TestFamiliarityModeEnabled:
         (promo, setup, being_id) = _build_triangle_cluster(recall_count=0, belief_evidence_buffer_store=buffer_store)
         promo.on_after_tool_turn(1, being_id)
         assert len(buffer_store.list_all_by_being(being_id)) == 1
+
+    def test_familiarity_evidence_carries_current_memory_turn(self) -> None:
+        """記憶のターン数が 30 のときにクラスタを見つけると、FAMILIARITY 証拠の observed_turn は 30 になる (#1452)。"""
+        buffer_store = InMemoryBeliefEvidenceBufferStore()
+        (promo, _setup, being_id) = _build_triangle_cluster(
+            recall_count=MIN_RECALL_COUNT,
+            belief_evidence_buffer_store=buffer_store,
+            memory_turn_reader=FixedMemoryTurnReader(30),
+        )
+
+        promo.on_after_tool_turn(1, being_id)
+
+        assert [e.observed_turn for e in buffer_store.list_all_by_being(being_id)] == [30]
+
+    def test_buffer_without_memory_turn_reader_is_rejected(self) -> None:
+        """buffer を渡して memory_turn_reader を渡さないと、作る時点で TypeError を投げる。ターン数の無い証拠を積む構成で起動させない。"""
+        with pytest.raises(TypeError):
+            _build_triangle_cluster(
+                recall_count=MIN_RECALL_COUNT,
+                belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
+                memory_turn_reader=None,
+            )
 
     def test_same_cluster_signature_is_not_emitted_twice(self) -> None:
         """同一クラスタは cluster_signature 登録で重複 emit を防ぐ (直書きモードと同じ規約)。"""

@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from tests.memory_turn_helpers import ZERO_TURN, FixedMemoryTurnReader
 
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,
@@ -55,7 +56,7 @@ class TestStateCollapseEvidenceTranscriberAnchor:
         (捏造しない。warning ログで可視化)。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         being_id = BeingId('being-1')
         result = transcriber.record_down_evidence(being_id)
         assert result is None
@@ -63,9 +64,18 @@ class TestStateCollapseEvidenceTranscriberAnchor:
 
 class TestStateCollapseEvidenceTranscriberDownTransition:
 
+    def test_down_evidence_carries_current_memory_turn(self) -> None:
+        """記憶のターン数が 33 のとき倒れたことを転記すると、証拠の observed_turn は 33 になる (#1452)。"""
+        (buffer_store, episode_store, being_id) = _setup()
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=FixedMemoryTurnReader(33))
+
+        transcriber.record_down_evidence(being_id)
+
+        assert [e.observed_turn for e in buffer_store.list_all_by_being(being_id)] == [33]
+
     def test_down_evidence_is_high_salience_state_collapse(self) -> None:
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         result = transcriber.record_down_evidence(being_id)
         assert result is not None
         evidence = buffer_store.list_all_by_being(being_id)[0]
@@ -76,7 +86,7 @@ class TestStateCollapseEvidenceTranscriberDownTransition:
     def test_text_states_fact_without_lesson_or_instruction(self) -> None:
         """text は「戦闘不能になった」という事実の記述のみ。教訓・指示語を含めない。"""
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_down_evidence(being_id)
         text = buffer_store.list_all_by_being(being_id)[0].text
         assert '戦闘不能' in text
@@ -87,7 +97,7 @@ class TestStateCollapseEvidenceTranscriberDownTransition:
         """down 状態が続いている間 (clear_down_state を呼ぶまで) は
         record_down_evidence を再度呼んでも重複しない。"""
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         first = transcriber.record_down_evidence(being_id)
         second = transcriber.record_down_evidence(being_id)
         assert first is not None
@@ -97,7 +107,7 @@ class TestStateCollapseEvidenceTranscriberDownTransition:
     def test_after_clear_down_state_a_new_down_records_new_evidence(self) -> None:
         """復帰 (clear_down_state) 後に再度 down したら新しい evidence が積まれる。"""
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_down_evidence(being_id)
         transcriber.clear_down_state(being_id)
         second = transcriber.record_down_evidence(being_id)
@@ -107,14 +117,14 @@ class TestStateCollapseEvidenceTranscriberDownTransition:
     def test_clear_down_state_without_prior_record_is_noop(self) -> None:
         """record 前に clear を呼んでも例外にならない (冪等)。"""
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.clear_down_state(being_id)
 
 class TestStateCollapseEvidenceTranscriberHungerMaxTransition:
 
     def test_hunger_max_evidence_is_high_salience_state_collapse(self) -> None:
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         result = transcriber.record_hunger_max_evidence(being_id)
         assert result is not None
         evidence = buffer_store.list_all_by_being(being_id)[0]
@@ -125,7 +135,7 @@ class TestStateCollapseEvidenceTranscriberHungerMaxTransition:
 
     def test_second_call_while_still_at_max_is_skipped(self) -> None:
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         first = transcriber.record_hunger_max_evidence(being_id)
         second = transcriber.record_hunger_max_evidence(being_id)
         assert first is not None
@@ -134,7 +144,7 @@ class TestStateCollapseEvidenceTranscriberHungerMaxTransition:
 
     def test_after_clear_hunger_max_state_a_new_max_records_new_evidence(self) -> None:
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_hunger_max_evidence(being_id)
         transcriber.clear_hunger_max_state(being_id)
         second = transcriber.record_hunger_max_evidence(being_id)
@@ -147,7 +157,7 @@ class TestStateCollapseEvidenceTranscriberIndependentDedupTracking:
         """down の dedup 状態と hunger max の dedup 状態は独立している
         (片方を clear してももう片方は影響を受けない)。"""
         (buffer_store, episode_store, being_id) = _setup()
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_down_evidence(being_id)
         transcriber.record_hunger_max_evidence(being_id)
         transcriber.clear_down_state(being_id)
@@ -164,7 +174,7 @@ class TestStateCollapseEvidenceTranscriberIndependentDedupTracking:
         being_b = BeingId('being-b')
         for bid in (being_a, being_b):
             episode_store.put_by_being(bid, _episode(f'ep-{bid.value}', occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), being_id=bid))
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         transcriber.record_down_evidence(being_a)
         result_b = transcriber.record_down_evidence(being_b)
         assert result_b is not None
@@ -175,7 +185,7 @@ class TestStateCollapseEvidenceTranscriberTrace:
         (buffer_store, episode_store, being_id) = _setup()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 7)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 7, memory_turn_reader=ZERO_TURN)
         transcriber.record_down_evidence(being_id)
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
         assert len(events) == 1
@@ -188,7 +198,7 @@ class TestStateCollapseEvidenceTranscriberTrace:
         (buffer_store, episode_store, being_id) = _setup()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 9)
+        transcriber = StateCollapseEvidenceTranscriber(buffer_store, episode_store, trace_recorder_provider=lambda : recorder, current_tick_provider=lambda : 9, memory_turn_reader=ZERO_TURN)
         transcriber.record_hunger_max_evidence(being_id)
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE]
         assert len(events) == 1
@@ -198,14 +208,14 @@ class TestStateCollapseEvidenceTranscriberTypeGuards:
 
     def test_rejects_non_repository_episode_store(self) -> None:
         with pytest.raises(TypeError):
-            StateCollapseEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), object())
+            StateCollapseEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), object(), memory_turn_reader=ZERO_TURN)
 
     def test_rejects_non_being_id_for_down(self) -> None:
-        transcriber = StateCollapseEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore())
+        transcriber = StateCollapseEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_down_evidence('being-1')
 
     def test_rejects_non_being_id_for_hunger_max(self) -> None:
-        transcriber = StateCollapseEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore())
+        transcriber = StateCollapseEvidenceTranscriber(InMemoryBeliefEvidenceBufferStore(), InMemorySubjectiveEpisodeStore(), memory_turn_reader=ZERO_TURN)
         with pytest.raises(TypeError):
             transcriber.record_hunger_max_evidence('being-1')

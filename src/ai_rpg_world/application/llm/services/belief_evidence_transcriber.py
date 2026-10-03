@@ -61,6 +61,9 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GOAL_STATUS_ABANDONED,
     GOAL_STATUS_ACHIEVED,
@@ -143,6 +146,7 @@ class BeliefEvidenceTranscriber:
         *,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
+        memory_turn_reader: MemoryTurnReader,
         belief_axis_provider: Callable[[BeingId, str], tuple[tuple[str, ...], str] | None] | None = None,
         noun_matcher: object | None = None,
     ) -> None:
@@ -162,7 +166,10 @@ class BeliefEvidenceTranscriber:
             raise TypeError("belief_axis_provider must be callable or None")
         self._buffer_store = buffer_store
         self._trace_recorder_provider = trace_recorder_provider
+        if not isinstance(memory_turn_reader, MemoryTurnReader):
+            raise TypeError("memory_turn_reader must be MemoryTurnReader")
         self._current_tick_provider = current_tick_provider
+        self._memory_turn_reader = memory_turn_reader
         # P3 (CONFIRMATION 関連性ゲート): belief_id → (tags, text) を返す
         # ルックアップ。注入されているときだけ、CONFIRMATION は「そのターンの
         # 行動 context (cue) と軸一致する in-context belief」に絞って支持を積む。
@@ -223,6 +230,7 @@ class BeliefEvidenceTranscriber:
                 # 導入前 (BELIEF_EVIDENCE_SALIENCE_LOW 固定) と一致する。
                 salience=episode.salience,
                 occurred_at=episode.occurred_at,
+                observed_turn=self._memory_turn_reader.current_turn(being_id),
                 tick=self._resolve_tick(),
                 in_context_belief_ids=in_context_belief_ids,
             )
@@ -253,6 +261,7 @@ class BeliefEvidenceTranscriber:
                 # PREDICTION_ERROR 側 (chunk 補完 LLM の判定) にのみ許す。
                 salience=BELIEF_EVIDENCE_SALIENCE_LOW,
                 occurred_at=episode.occurred_at,
+                observed_turn=self._memory_turn_reader.current_turn(being_id),
                 tick=self._resolve_tick(),
                 # ゲート後の (関連する) belief だけを attribution に残す。
                 in_context_belief_ids=confirmed_belief_ids,
@@ -356,6 +365,7 @@ class BeliefEvidenceTranscriber:
                 else BELIEF_EVIDENCE_SALIENCE_HIGH
             ),
             occurred_at=episode.occurred_at,
+            observed_turn=self._memory_turn_reader.current_turn(being_id),
             tick=self._resolve_tick(),
         )
         self._buffer_store.append_by_being(being_id, evidence)
@@ -412,6 +422,7 @@ class BeliefEvidenceTranscriber:
             text=text,
             salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
             occurred_at=occurred_at,
+            observed_turn=self._memory_turn_reader.current_turn(being_id),
             tick=self._resolve_tick(),
         )
         self._buffer_store.append_by_being(being_id, evidence)
@@ -458,6 +469,7 @@ class BeliefEvidenceTranscriber:
                 text=claim.claim,
                 salience=BELIEF_EVIDENCE_SALIENCE_LOW,
                 occurred_at=episode.occurred_at,
+                observed_turn=self._memory_turn_reader.current_turn(being_id),
                 tick=self._resolve_tick(),
                 source_speaker=claim.speaker,
             )

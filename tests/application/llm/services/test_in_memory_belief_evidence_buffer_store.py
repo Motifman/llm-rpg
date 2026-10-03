@@ -27,6 +27,7 @@ def _evidence(evidence_id: str, occurred_at: datetime) -> BeliefEvidence:
         text="探索は空振りだった",
         salience=BELIEF_EVIDENCE_SALIENCE_LOW,
         occurred_at=occurred_at,
+        observed_turn=0,
     )
 
 
@@ -182,6 +183,7 @@ class TestInMemoryBeliefEvidenceFullFieldRoundtripContract:
             tick=42,
             in_context_belief_ids=("belief-1", "belief-2"),
             source_speaker="noah",
+            observed_turn=0,
         )
 
     def test_append_list_all_round_trips_exactly(self) -> None:
