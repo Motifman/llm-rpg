@@ -1,0 +1,87 @@
+"""予期と、その出来事と、記憶のターン数を Being ごとに持つ保存先の interface。"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
+    Expectation,
+)
+from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
+    ExpectationEvent,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
+    ExpectationEventId,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.undelivered_expectation_event import (
+    UndeliveredExpectationEvent,
+)
+
+
+class ExpectationRepository(ABC):
+    """予期の状態と、その変化で返った出来事を、同じ保存の単位で持つ。
+
+    確定は取り消せず信念を直す処理につながるので、予期だけ保存されて出来事が
+    失われる形にしない。出来事は未配信として積み、配信できたら印を付ける。
+
+    記憶のターン数も同じ保存先で持つ。予期は世界の tick ではなく本人の歩みで
+    時刻を持つので、予期と同じ時計を同じ単位で保存して戻す。
+    """
+
+    @abstractmethod
+    def save(
+        self,
+        expectation: Expectation,
+        events: Sequence[ExpectationEvent] = (),
+    ) -> None:
+        """予期の状態と、その変化で返った出来事を未配信として、まとめて保存する。
+
+        出来事がこの予期のものでないとき、または同じ出来事がすでに未配信に
+        あるときは、何も保存せずに ``ExpectationValidationException`` を投げる。
+        """
+
+    @abstractmethod
+    def list_open_by_being(self, being_id: BeingId) -> list[Expectation]:
+        """清算待ちの予期を、保存した順に返す。"""
+
+    @abstractmethod
+    def list_all_by_being(self, being_id: BeingId) -> list[Expectation]:
+        """終わった予期も含めて、保存した順に返す。snapshot の capture 用。"""
+
+    @abstractmethod
+    def list_undelivered_by_being(
+        self, being_id: BeingId
+    ) -> list[UndeliveredExpectationEvent]:
+        """まだ配信済みの印が付いていない出来事を、保存した順に返す。"""
+
+    @abstractmethod
+    def mark_delivered(self, being_id: BeingId, event_id: ExpectationEventId) -> None:
+        """出来事に配信済みの印を付ける。未配信に無いときは ``ExpectationEventNotFoundException``。"""
+
+    @abstractmethod
+    def current_turn(self, being_id: BeingId) -> int:
+        """記憶のターン数。まだ手を受け取っていなければ 0。"""
+
+    @abstractmethod
+    def advance_turn(self, being_id: BeingId) -> int:
+        """エージェントの 1 手を受け取ったときに呼び、ターン数を 1 進めて、進めたあとの値を返す。"""
+
+    @abstractmethod
+    def replace_all_by_being(
+        self,
+        being_id: BeingId,
+        *,
+        expectations: Sequence[Expectation],
+        undelivered_events: Sequence[UndeliveredExpectationEvent],
+        turn: int,
+    ) -> None:
+        """snapshot の復元用に、予期・未配信の出来事・ターン数をまとめて置き換える (design_decisions 27)。
+
+        別の Being の予期や出来事が混じっていれば、何も変えずに
+        ``ExpectationValidationException`` を投げる。
+        """
+
+
+__all__ = ["ExpectationRepository"]
