@@ -1361,7 +1361,7 @@ _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS = 3
 #: (#1436 の試し)。予期 1 件分の信念とエピソードは並べ切れ、1 ターンの問いが数十件に
 #: 膨らまない値に置く。過去 run の 64 手を組み直した試し (#1484) では最大 7 件だった。
 _DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS = 12
-#: 同じ試しの清算できる予期で、0.5 では選んだ 19 件のうち根拠でないものは 1 件、0.4 では 33 件中 5 件。
+#: 同じ試しの清算できる予期で、人の当否では 0.5 で選んだ 19 件のうち根拠でないものは 2 件、0.4 では 33 件中 11 件。
 #: 取りこぼしより、関係の無い信念に材料を積むほうが悪循環の入口になるので 0.5 に置く。
 _DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY = 0.5
 _DEFAULT_EXPECTATION_UNDATED_TERM_TURNS = 5
