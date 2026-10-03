@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ai_rpg_world.application.being.recall.body_band import BodyBand
 from ai_rpg_world.application.being.recall.situation import Situation
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -33,6 +34,8 @@ class AgentHoldings:
 
     goal: str | None = None
     inner_thought: str | None = None
+    #: 清算で Jev が丸めた体の帯。生の本文の前に文として足す (design_decisions D1414-4)。
+    body_band: BodyBand | None = None
     #: 古い順。新しいものから ``UNRESOLVED_LIMIT`` 件を欄に入れる。
     open_expectations: tuple[str, ...] = ()
 
@@ -55,15 +58,20 @@ def assemble_situation(
     return Situation(
         place=tuple(places[:1]),
         counterpart=_unique(counterparts)[:COUNTERPART_LIMIT],
-        own_state=tuple(
-            o.body for o in observations if isinstance(o.route, OwnBodyState)
-        )[:OWN_STATE_LIMIT],
+        own_state=_band(holdings.body_band)
+        + tuple(o.body for o in observations if isinstance(o.route, OwnBodyState))[
+            :OWN_STATE_LIMIT
+        ],
         intent=_present(holdings.goal, holdings.inner_thought),
         happening=tuple(
             o.body for o in observations if not isinstance(o.route, OwnBodyState)
         )[:HAPPENING_LIMIT],
         unresolved=_present(*reversed(holdings.open_expectations))[:UNRESOLVED_LIMIT],
     )
+
+
+def _band(band: BodyBand | None) -> tuple[str, ...]:
+    return () if band is None else (band.sentence(),)
 
 
 def _unique(texts: list[str]) -> tuple[str, ...]:

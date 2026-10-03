@@ -21,6 +21,7 @@ from ai_rpg_world.application.being.expectation.settlement import (
     ExpectationSettlementService,
     TurnMaterial,
 )
+from ai_rpg_world.application.being.recall.body_band import BODY_BAND_QUESTION, BodyBand
 from ai_rpg_world.application.being.recall.selection_store import NextTurnFieldSelections
 from ai_rpg_world.application.being.recall.situation import (
     DEGRADED_ANSWER_MISSING,
@@ -53,6 +54,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository imp
 
 RIO = BeingId("being-rio")
 FIELD_NAMES = {field_question_name(f) for f in SELECTABLE_FIELDS}
+RECALL_NAMES = FIELD_NAMES | {BODY_BAND_QUESTION}
 
 
 def _fields(keep: set[SituationField]) -> dict[str, str]:
@@ -123,6 +125,12 @@ class _Harness:
         self.repository.advance_turn(RIO)
         return self.service.settle_turn(RIO, self_name="リオ", material=TurnMaterial())
 
+    def band(self) -> Any:
+        assert self.selections is not None
+        return self.selections.band_for_prompt(
+            RIO, current_turn=self.repository.current_turn(RIO)
+        )
+
     def selection(self) -> Any:
         assert self.selections is not None
         return self.selections.for_prompt(RIO, current_turn=self.repository.current_turn(RIO))
@@ -135,14 +143,14 @@ class TestFieldsAreAskedEveryTurn:
     """欄の問いが、予期の有無にかかわらず毎ターン 1 回の呼び出しに載ることを保証する。"""
 
     def test_turn_without_expectations_asks_only_the_field_questions(self) -> None:
-        """予期が 1 件も無いターンにも Jev を 1 回呼び、欄の問いだけを並べて、選択を次のプロンプトへ渡す。"""
+        """予期が 1 件も無いターンにも Jev を 1 回呼び、欄と体の帯の問いだけを並べて、選択を次のプロンプトへ渡す。"""
         port = ScriptedJudgmentPort(_fields({SituationField.HAPPENING}))
         harness = _Harness(port)
 
         report = harness.turn()
 
         assert len(port.calls) == 1
-        assert set(port.calls[0][1]) == FIELD_NAMES
+        assert set(port.calls[0][1]) == RECALL_NAMES
         assert report.skipped_reason == SKIPPED_NOTHING_TO_JUDGE
         assert harness.selection().kept == frozenset({SituationField.HAPPENING})
         assert harness.settlement()["field_selection"]["kept_fields"] == ["いま起きたこと"]
@@ -255,7 +263,7 @@ class TestFieldAnswersAreReadApartFromExpectations:
         harness.turn()
 
         answers = harness.settlement()["answers"]
-        assert set(answers) == FIELD_NAMES
+        assert set(answers) == RECALL_NAMES
         assert answers[field_question_name(SituationField.INTENT)]["value"] == KEEP
 
     def test_unavailable_judgment_with_expectations_degrades_both(self) -> None:
@@ -273,6 +281,8 @@ class TestFieldAnswersAreReadApartFromExpectations:
 
         assert report.skipped_reason == SKIPPED_JUDGMENT_UNAVAILABLE
         assert harness.selection().degraded_reason == DEGRADED_JUDGMENT_UNAVAILABLE
+        assert harness.band().band is None
+        assert harness.band().degraded_reason == DEGRADED_JUDGMENT_UNAVAILABLE
 
     def test_second_settlement_of_the_same_turn_keeps_the_first_selection(self) -> None:
         """同じターンを 2 回清算しようとすると例外になるが、1 回目に選んだ欄は上書きせずに残す。"""
@@ -303,3 +313,41 @@ class TestFieldAnswersAreReadApartFromExpectations:
         assert harness.settlement()["field_selection"]["degraded_reason"] == (
             SKIPPED_SETTLEMENT_FAILED
         )
+        assert harness.band().degraded_reason == SKIPPED_SETTLEMENT_FAILED
+        assert harness.settlement()["field_selection"]["body_band"]["band"] is None
+
+
+class TestBodyBand:
+    """自分の体の帯が、欄と同じ呼び出しで問われ、欄とは分けて読まれることを保証する。"""
+
+    def test_band_is_read_and_handed_to_the_next_prompt(self) -> None:
+        """帯の答えを読み、欄の選択と一緒に次のプロンプトへ渡し、清算の trace にも残す。"""
+        harness = _Harness(ScriptedJudgmentPort({BODY_BAND_QUESTION: "危機", **_fields(set())}))
+
+        harness.turn()
+
+        assert harness.band().band is BodyBand.CRISIS
+        assert harness.settlement()["field_selection"]["body_band"]["band"] == "危機"
+
+    def test_missing_band_answer_keeps_the_field_selection(self) -> None:
+        """帯の答えが欠けても欄の選択は採り、帯だけを付けない。"""
+        port = _DroppingPort(_fields({SituationField.INTENT}), drop=BODY_BAND_QUESTION)
+        harness = _Harness(port)
+
+        harness.turn()
+
+        assert harness.selection().kept == frozenset({SituationField.INTENT})
+        assert harness.band().band is None
+        assert harness.band().degraded_reason == DEGRADED_ANSWER_MISSING
+
+    def test_unavailable_judgment_leaves_no_band(self) -> None:
+        """Jev が答えなければ帯も付けず、理由を持つ。"""
+        port = ScriptedJudgmentPort(
+            TypedJudgmentUnavailableException("timed out", error_code="TYPED_JUDGMENT_TIMEOUT")
+        )
+        harness = _Harness(port)
+
+        harness.turn()
+
+        assert harness.band().band is None
+        assert harness.band().degraded_reason == DEGRADED_JUDGMENT_UNAVAILABLE

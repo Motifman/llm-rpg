@@ -51,6 +51,12 @@ from ai_rpg_world.application.being.expectation.grounds import (
 from ai_rpg_world.application.being.expectation.likelihood_labels import (
     LIKELIHOOD_LABELS,
 )
+from ai_rpg_world.application.being.recall.body_band import (
+    BODY_BAND_QUESTION,
+    BodyBandReading,
+    body_band_from_answers,
+    body_band_question,
+)
 from ai_rpg_world.application.being.recall.selection_store import (
     NextTurnFieldSelections,
 )
@@ -229,12 +235,12 @@ class ExpectationSettlementService:
         except Exception as exc:
             # 2 回目の清算は配線の誤り。1 回目に選んだ欄はそのターンの正しい選択なので残す。
             if not current.already_settled:
+                detail = f"{type(exc).__name__}: {exc}"
                 self._choose_fields(
                     being_id,
                     current,
-                    FieldSelection.degraded(
-                        SKIPPED_SETTLEMENT_FAILED, f"{type(exc).__name__}: {exc}"
-                    ),
+                    FieldSelection.degraded(SKIPPED_SETTLEMENT_FAILED, detail),
+                    BodyBandReading.degraded(SKIPPED_SETTLEMENT_FAILED, detail),
                 )
             report = SettlementReport(
                 turn=current.turn,
@@ -309,16 +315,23 @@ class ExpectationSettlementService:
         )
         asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
         if self._field_selections is not None:
-            questions.update(field_selection_questions(self_name))
+            questions.update(_recall_questions(self_name))
         state = _state(self_name, now=now, pending=pending, new=new, timeline=timeline)
         current.state = state
         try:
             answers = self._port.judge(state, questions)
         except TypedJudgmentUnavailableException as exc:
-            self._choose_fields(being_id, current, FieldSelection.unavailable(exc))
+            self._choose_fields(
+                being_id, current, FieldSelection.unavailable(exc), BodyBandReading.unavailable(exc)
+            )
             return self._unavailable(being_id, current, asked, plan, exc, tick, player_id)
         # 欄の答えは予期の判定より先に、別に読む。予期の答えが崩れても欄の選択は残す。
-        self._choose_fields(being_id, current, field_selection_from_answers(answers))
+        self._choose_fields(
+            being_id,
+            current,
+            field_selection_from_answers(answers),
+            body_band_from_answers(answers),
+        )
         try:
             verdicts = _verdicts(asked, answers)
         except TypedJudgmentUnavailableException as exc:
@@ -402,20 +415,36 @@ class ExpectationSettlementService:
     ) -> tuple[Mapping[str, JudgmentResult] | None, str | None]:
         """欄だけを問う。戻り値は (答え, 答えが得られなかった理由) で、trace に載せる。"""
         try:
-            answers = self._port.judge(state, field_selection_questions(self_name))
+            answers = self._port.judge(state, _recall_questions(self_name))
         except TypedJudgmentUnavailableException as exc:
-            self._choose_fields(being_id, current, FieldSelection.unavailable(exc))
+            self._choose_fields(
+                being_id, current, FieldSelection.unavailable(exc), BodyBandReading.unavailable(exc)
+            )
             return None, f"{exc.error_code}: {exc}"
-        self._choose_fields(being_id, current, field_selection_from_answers(answers))
+        self._choose_fields(
+            being_id,
+            current,
+            field_selection_from_answers(answers),
+            body_band_from_answers(answers),
+        )
         return answers, None
 
     def _choose_fields(
-        self, being_id: BeingId, current: _Turn, selection: FieldSelection
+        self,
+        being_id: BeingId,
+        current: _Turn,
+        selection: FieldSelection,
+        band: BodyBandReading,
     ) -> None:
         if self._field_selections is None:
             return
-        self._field_selections.put(being_id, settled_turn=current.turn, selection=selection)
-        current.field_selection = selection.to_trace_payload()
+        self._field_selections.put(
+            being_id, settled_turn=current.turn, selection=selection, band=band
+        )
+        current.field_selection = {
+            **selection.to_trace_payload(),
+            "body_band": band.to_trace_payload(),
+        }
 
     def _close_by_turn_count(
         self, being_id: BeingId, current: _Turn
@@ -595,6 +624,13 @@ def _questions(
         false_means="同じ場所で同じ出来事が続いている",
     )
     return asked, questions
+
+
+def _recall_questions(self_name: str) -> dict[str, Question]:
+    """次のターンの想起のための問い。残す欄と、自分の体の帯 (#1414)。"""
+    questions: dict[str, Question] = dict(field_selection_questions(self_name))
+    questions[BODY_BAND_QUESTION] = body_band_question(self_name)
+    return questions
 
 
 def _verdicts(

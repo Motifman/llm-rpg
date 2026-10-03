@@ -9,6 +9,7 @@ from typing import Any
 from tests.application.being.expectation.support import RecordingTraceRecorder
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
+from ai_rpg_world.application.being.recall.body_band import BodyBand, BodyBandReading
 from ai_rpg_world.application.being.recall.selection_store import (
     DEGRADED_SETTLEMENT_DISABLED,
     DEGRADED_STALE_SELECTION,
@@ -269,6 +270,33 @@ class TestRecallOutput:
         payload = env.trace()
         assert payload["kept_fields"] == ["いま起きたこと"]
         assert payload["degraded_reason"] is None
+
+    def test_settled_body_band_goes_into_the_own_state_field(self) -> None:
+        """清算がいまのターン番号で丸めた体の帯は、自分の状態の欄に文として入り、trace にも残る。"""
+        selections = NextTurnFieldSelections()
+        env = _Env(selections=selections)
+        selections.put(
+            BEING,
+            settled_turn=0,
+            selection=FieldSelection(kept=frozenset({SituationField.OWN_STATE})),
+            band=BodyBandReading(BodyBand.CRISIS),
+        )
+
+        env.run([_seen("潮が満ちてきた", 1)])
+
+        payload = env.trace()
+        assert payload["situation"]["自分の状態"] == ["体の状態は危機"]
+        assert payload["body_band"]["band"] == "危機"
+
+    def test_without_settlement_no_band_is_added(self) -> None:
+        """清算を切った run では帯を付けず、清算が無いことを理由に持つ。"""
+        env = _Env()
+
+        env.run([_seen("潮が満ちてきた", 1)])
+
+        payload = env.trace()
+        assert payload["situation"]["自分の状態"] == []
+        assert payload["body_band"]["degraded_reason"] == DEGRADED_SETTLEMENT_DISABLED
 
     def test_selection_of_an_earlier_turn_is_not_reused(self) -> None:
         """清算したターンよりターン番号が進んでいれば、その選択を使わず、古いことを理由に全部の欄で引く。"""
