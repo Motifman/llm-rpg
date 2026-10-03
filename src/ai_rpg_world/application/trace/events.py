@@ -399,6 +399,20 @@ class TraceEventKind:
     #   - receiver_count: int
     #   - reason: str (= failed / gave_up のときだけ。例外の型と文)
     EXPECTATION_EVENT_DELIVERY = "expectation_event_delivery"
+    # #1443: 確定した予期 1 件を、受け取る側が記憶の材料にした結果。受け取る側
+    # ごと、受け取るたびに 1 件。確定以外の出来事では残さない。
+    # payload:
+    #   - being_id: str
+    #   - event_id: str
+    #   - expectation_id: str
+    #   - receiver: str ("belief_evidence" | "recall_credit" | "chunk_note")
+    #   - outcome: str ("hit" | "miss")
+    #   - likelihood: str
+    #   - result: str ("appended" | "already_received" | "skipped")
+    #   - skipped_reason: str (= skipped のときだけ。例 "no_beliefs_in_mind")
+    #   - belief_evidence のとき: evidence_id / source_kind / salience / belief_ids
+    #   - recall_credit のとき: episode_ids / credit ("hit_count" | "miss_stamp")
+    EXPECTATION_MATERIAL = "expectation_material"
 
 
 @dataclass(frozen=True)
