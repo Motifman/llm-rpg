@@ -151,8 +151,11 @@ class BeliefCreateGate:
     def review(
         self, text: str, existing: Sequence[TextCandidate]
     ) -> BeliefCreateReview:
-        candidates = _distinct_texts(
-            self._narrower.narrow(text, existing, top_k=self._top_k)
+        # 「該当なし」と同じ文の信念は選択肢として区別できないので並べない。
+        candidates = tuple(
+            c
+            for c in self._narrower.narrow(text, existing, top_k=self._top_k)
+            if c.text != NO_SAME_MEANING
         )
         base = {
             "text": text,
@@ -237,6 +240,8 @@ def _same_meaning_question(candidates: tuple[RankedCandidate, ...]) -> ChoiceQue
     options: dict[str, str | None] = {
         NO_SAME_MEANING: "どの既存の信念とも主張が違う",
     }
+    # 選択肢の名前は文そのもの。同じ文の信念は 1 つの選択肢にまとまり、
+    # _decide は上位の方を強める。
     for candidate in candidates:
         options[candidate.text] = "この既存の信念と主張が同じ"
     return ChoiceQuestion(
@@ -247,21 +252,6 @@ def _same_meaning_question(candidates: tuple[RankedCandidate, ...]) -> ChoiceQue
         ),
         options=options,
     )
-
-
-def _distinct_texts(
-    ranked: tuple[RankedCandidate, ...],
-) -> tuple[RankedCandidate, ...]:
-    # 選択肢は文そのものを名前にするので、同じ文は 1 つにまとめる。「該当なし」と
-    # 同じ文の信念は選択肢として区別できないので並べない。
-    seen = {NO_SAME_MEANING}
-    out: list[RankedCandidate] = []
-    for candidate in ranked:
-        if candidate.text in seen:
-            continue
-        seen.add(candidate.text)
-        out.append(candidate)
-    return tuple(out)
 
 
 def _answer(
