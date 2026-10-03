@@ -7,7 +7,8 @@
 後: 同じ手の ``expected_result`` を予期として積み、実 Jev で清算し (#1440)、
 確定した出来事を本番の受け取る側 (``ExpectationBeliefMaterialReceiver``) に
 通して積んだもの。頭にあった信念とエピソードは、その手の直前の
-``semantic_passive_recall`` / ``episodic_recall`` の候補から組み直す。
+``semantic_passive_recall`` (状況の欄から引いた run では ``situation_belief_recall``) /
+``episodic_recall`` の候補から組み直す。
 
 2 段に分ける。Jev を呼ぶのは ``judge`` だけで、判定は ``--out`` に保存する。
 ``count`` は保存した判定だけを読み、Jev を呼ばずに件数を数え直す。
