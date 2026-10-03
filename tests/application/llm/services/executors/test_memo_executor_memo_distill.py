@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from tests.application.llm._memo_being_test_helpers import make_memo_being_setup
+from tests.memory_turn_helpers import ZERO_TURN
 
 from ai_rpg_world.application.llm.services.executors.memo_executor import MemoToolExecutor
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
@@ -36,7 +37,7 @@ def _make_executor_with_transcriber(*, inject_transcriber: bool):
     buffer_store = InMemoryBeliefEvidenceBufferStore()
     episode_store = InMemorySubjectiveEpisodeStore()
     episode_store.put_by_being(being_id, _episode('ep-1'))
-    transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+    transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
     executor = MemoToolExecutor(setup.memo_store, memo_distill_transcriber=transcriber if inject_transcriber else None)
     return (executor, memo_id, buffer_store, being_id, setup)
 
@@ -74,7 +75,7 @@ class TestMemoExecutorMemoDistillIntegration:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
         episode_store.put_by_being(being_id, _episode('ep-1'))
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         executor = MemoToolExecutor(setup.memo_store)
         executor.set_memo_distill_transcriber(transcriber)
         handlers = executor.get_handlers()
@@ -92,7 +93,7 @@ class TestMemoExecutorMemoDistillIntegration:
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         episode_store = InMemorySubjectiveEpisodeStore()
         episode_store.put_by_being(being_id, _episode('ep-1'))
-        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
+        transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
         executor = MemoToolExecutor(setup.memo_store, memo_distill_transcriber=transcriber)
         handlers = executor.get_handlers()
         acting = setup.acting_for(1)

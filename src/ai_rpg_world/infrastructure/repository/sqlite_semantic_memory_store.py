@@ -117,6 +117,11 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                     contradict_evidence_ids=tuple(str(x) for x in raw_contradict),
                     confirmation_support_count=confirmation_count,
                     hearsay_support_count=hearsay_count,
+                    last_observed_turn=(
+                        int(row["last_observed_turn"])
+                        if row["last_observed_turn"] is not None
+                        else None
+                    ),
                 )
             )
         return out
@@ -214,8 +219,9 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                         confidence, created_at, importance_score, tags_json, player_id,
                         belief_id, status, supersedes,
                         support_evidence_ids_json, contradict_evidence_ids_json,
-                        confirmation_support_count, hearsay_support_count
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        confirmation_support_count, hearsay_support_count,
+                        last_observed_turn
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         entry.entry_id,
@@ -234,6 +240,7 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                         contradict_json,
                         int(entry.confirmation_support_count),
                         int(entry.hearsay_support_count),
+                        entry.last_observed_turn,
                     ),
                 )
             for sig in cluster_signatures:
@@ -325,8 +332,9 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 confidence, created_at, importance_score, tags_json, player_id,
                 belief_id, status, supersedes,
                 support_evidence_ids_json, contradict_evidence_ids_json,
-                confirmation_support_count, hearsay_support_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confirmation_support_count, hearsay_support_count,
+                last_observed_turn
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(being_id_value, entry_id) DO UPDATE SET
                 text = excluded.text,
                 evidence_episode_ids_json = excluded.evidence_episode_ids_json,
@@ -341,7 +349,8 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 support_evidence_ids_json = excluded.support_evidence_ids_json,
                 contradict_evidence_ids_json = excluded.contradict_evidence_ids_json,
                 confirmation_support_count = excluded.confirmation_support_count,
-                hearsay_support_count = excluded.hearsay_support_count
+                hearsay_support_count = excluded.hearsay_support_count,
+                last_observed_turn = excluded.last_observed_turn
             """,
             (
                 entry.entry_id,
@@ -360,6 +369,7 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 contradict_json,
                 int(entry.confirmation_support_count),
                 int(entry.hearsay_support_count),
+                entry.last_observed_turn,
             ),
         )
 

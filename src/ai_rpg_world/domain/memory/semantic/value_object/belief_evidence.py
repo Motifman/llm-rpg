@@ -46,6 +46,9 @@ class BeliefEvidence:
     text: str
     salience: str
     occurred_at: datetime
+    # 観測したときの記憶のターン数 (#1452)。世界の tick ではなく本人の歩みで
+    # 数える。有効期限は持たない。Being は見た時点でいつまで続くかを知らない。
+    observed_turn: int
     tick: int | None = None
     # U4 (予測誤差統一設計 部品3): この evidence が発生したターンで【関連する
     # 学び】として in-context だった belief_id 群。attribution ledger を
@@ -125,6 +128,17 @@ class BeliefEvidence:
                 "occurred_at must be datetime",
                 field="occurred_at",
                 value=self.occurred_at,
+            )
+
+        if (
+            not isinstance(self.observed_turn, int)
+            or isinstance(self.observed_turn, bool)
+            or self.observed_turn < 0
+        ):
+            raise BeliefEvidenceValidationException(
+                "observed_turn must be int >= 0",
+                field="observed_turn",
+                value=self.observed_turn,
             )
 
         if self.tick is not None and not isinstance(self.tick, int):

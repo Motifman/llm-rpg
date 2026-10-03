@@ -368,6 +368,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
             contradict_evidence_ids=("c1",),
             confirmation_support_count=2,
             hearsay_support_count=1,
+            last_observed_turn=17,
         )
 
     def test_add_list_all_round_trips_exactly(

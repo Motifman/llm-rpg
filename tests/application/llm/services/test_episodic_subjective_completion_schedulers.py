@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
+from tests.memory_turn_helpers import ZERO_TURN
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
@@ -505,7 +506,7 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '待っても何も起きなかった'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -523,7 +524,7 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -561,7 +562,7 @@ class TestInlineSchedulerBeliefAttribution:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -579,7 +580,7 @@ class TestInlineSchedulerBeliefAttribution:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -597,7 +598,7 @@ class TestInlineSchedulerBeliefAttribution:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '何も見つからなかった'})
         scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=False)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -619,7 +620,7 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '見つからなかった'})
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -648,7 +649,7 @@ class TestThreadPoolSchedulerBeliefAttribution:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '見つからなかった'})
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=True)
         scheduler.submit(draft, persona_text='', encoding_input=enc)
@@ -667,7 +668,7 @@ class TestThreadPoolSchedulerBeliefAttribution:
         store = InMemorySubjectiveEpisodeStore()
         store.put_by_being(being_id, draft)
         buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store)
+        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
         port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '見つからなかった'})
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber=transcriber, belief_attribution_enabled=False)
         scheduler.submit(draft, persona_text='', encoding_input=enc)

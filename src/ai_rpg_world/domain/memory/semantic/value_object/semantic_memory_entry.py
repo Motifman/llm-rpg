@@ -82,6 +82,10 @@ class SemanticMemoryEntry:
     # source 種別が異なる排他的な部分集合なので、両者の合計が支持総数を
     # 超えてはならない (0 <= confirmation + hearsay <= len(support_evidence_ids))。
     hearsay_support_count: int = 0
+    # 支える観測のうち最も新しいものの記憶のターン数 (#1452)。反する観測と
+    # 並べて、前に見たときと今とで状態が変わったかを固める LLM に読ませる。
+    # 観測から作られていない信念 (クラスタ昇格の要約) は None。
+    last_observed_turn: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.entry_id, str) or not self.entry_id.strip():
@@ -215,6 +219,17 @@ class SemanticMemoryEntry:
                 "<= len(support_evidence_ids)",
                 field="hearsay_support_count",
                 value=self.hearsay_support_count,
+            )
+
+        if self.last_observed_turn is not None and (
+            not isinstance(self.last_observed_turn, int)
+            or isinstance(self.last_observed_turn, bool)
+            or self.last_observed_turn < 0
+        ):
+            raise SemanticMemoryEntryValidationException(
+                "last_observed_turn must be int >= 0 or None",
+                field="last_observed_turn",
+                value=self.last_observed_turn,
             )
 
 

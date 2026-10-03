@@ -36,6 +36,7 @@ import os
 import subprocess
 import sys
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -593,8 +594,8 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
-    # #1439 (予期): 予期を作る処理 (#1440) が runtime に ``_expectation_store``
-    # を持たせたら拾う。まだ無いあいだは None = 空 in-memory fallback。
+    # #1439 (予期) / #1452: runtime が持つ記憶のターン数の数え手を拾う。
+    # episodic が OFF の run では None = 空 in-memory fallback。
     expectation_store = getattr(runtime, "_expectation_store", None)
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
@@ -1137,8 +1138,13 @@ def _build_report(
     memo_hints: list[Any] = []
     position_changes: list[Any] = []
     llm_calls: list[Any] = []
+    consolidation_actions: Counter[str] = Counter()
     by_player: dict[int, dict[str, int]] = {}
     for e in events:
+        if e.kind == TraceEventKind.BELIEF_CONSOLIDATION:
+            for decision in e.payload.get("decisions") or ():
+                if isinstance(decision, dict):
+                    consolidation_actions[str(decision.get("action"))] += 1
         if e.kind == TraceEventKind.ACTION:
             actions.append(e)
         elif e.kind == TraceEventKind.ACTION_RESULT:
@@ -1226,6 +1232,16 @@ def _build_report(
     lines.append(f"- memo_hint: {len(memo_hints)}")
     lines.append(f"- position_change: {len(position_changes)}")
     lines.append("")
+    if consolidation_actions:
+        lines.append("## 信念を固めた操作")
+        lines.append("")
+        lines.append(
+            "適用した操作の件数。explain_change は状態の信念を変わり方の信念に置き換えた件数。"
+        )
+        lines.append("")
+        for action, count in sorted(consolidation_actions.items()):
+            lines.append(f"- {action}: {count}")
+        lines.append("")
     if by_player:
         lines.append("## プレイヤー別集計")
         lines.append("")

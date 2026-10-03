@@ -31,6 +31,7 @@ import re
 from datetime import datetime, timezone
 
 import pytest
+from tests.memory_turn_helpers import ZERO_TURN
 
 from ai_rpg_world.application.llm.services.failure_repeat_phrasing import (
     _REPEATED_FAILURE_PHRASING,
@@ -61,7 +62,7 @@ def _transcribe(error_code: str, *, tool_name: str='interact', count: int=3) -> 
     episode_store = InMemorySubjectiveEpisodeStore()
     being_id = BeingId('being_w1_p1')
     episode_store.put_by_being(being_id, _episode(datetime.now(timezone.utc)))
-    transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
+    transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store, memory_turn_reader=ZERO_TURN)
     evidence = transcriber.record_if_triggered(being_id, tool_name=tool_name, error_code=error_code, count=count)
     assert evidence is not None, 'episode があるのに証拠が積まれていません'
     return evidence.text

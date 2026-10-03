@@ -158,7 +158,7 @@ class TestRestoreRoundTrip:
         )
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        evidence = BeliefEvidence(evidence_id='belief-evidence-1', source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR, episode_ids=('ep-1',), cue_signature='tool:explore|spot:3', text='探索は空振りだった', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7)
+        evidence = BeliefEvidence(evidence_id='belief-evidence-1', source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR, episode_ids=('ep-1',), cue_signature='tool:explore|spot:3', text='探索は空振りだった', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7, observed_turn=0)
         src_stores['belief_evidence'].append_by_being(being, evidence)
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
@@ -281,7 +281,7 @@ class TestRestoreRoundTrip:
         )
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        evidence = BeliefEvidence(evidence_id='belief-evidence-attr-1', source_kind=BeliefEvidenceSourceKind.CONFIRMATION, episode_ids=('ep-1',), cue_signature='tool:explore|spot:3', text='予測が当たった: 何か見つかるはず', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7, in_context_belief_ids=('sem-belief-1', 'sem-belief-2'))
+        evidence = BeliefEvidence(evidence_id='belief-evidence-attr-1', source_kind=BeliefEvidenceSourceKind.CONFIRMATION, episode_ids=('ep-1',), cue_signature='tool:explore|spot:3', text='予測が当たった: 何か見つかるはず', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7, in_context_belief_ids=('sem-belief-1', 'sem-belief-2'), observed_turn=0)
         src_stores['belief_evidence'].append_by_being(being, evidence)
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
@@ -294,7 +294,7 @@ class TestRestoreRoundTrip:
         """U4 導入前 (キー自体が無い) payload を decode しても例外にならず
         空タプルになる (旧データとの後方互換)。"""
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_belief_evidence
-        data = {'evidence_id': 'belief-evidence-legacy-1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '何もなかった', 'salience': 'low', 'occurred_at': _NOW.isoformat(), 'tick': 3}
+        data = {'evidence_id': 'belief-evidence-legacy-1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '何もなかった', 'salience': 'low', 'occurred_at': _NOW.isoformat(), 'observed_turn': 0, 'tick': 3}
         evidence = dict_to_belief_evidence(data)
         assert evidence.in_context_belief_ids == ()
 
@@ -311,7 +311,7 @@ class TestRestoreRoundTrip:
         )
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        evidence = BeliefEvidence(evidence_id='belief-evidence-hearsay-1', source_kind=BeliefEvidenceSourceKind.HEARSAY, episode_ids=('ep-1',), cue_signature='player:spot_graph_player_5', text='エイダは頼りになる', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, tick=7, source_speaker='リオ')
+        evidence = BeliefEvidence(evidence_id='belief-evidence-hearsay-1', source_kind=BeliefEvidenceSourceKind.HEARSAY, episode_ids=('ep-1',), cue_signature='player:spot_graph_player_5', text='エイダは頼りになる', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, observed_turn=0, tick=7, source_speaker='リオ')
         src_stores['belief_evidence'].append_by_being(being, evidence)
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
@@ -321,10 +321,37 @@ class TestRestoreRoundTrip:
         assert restored[0].source_kind == BeliefEvidenceSourceKind.HEARSAY
         assert restored[0].source_speaker == 'リオ'
 
+    def test_belief_evidence_observed_turn_round_trip(self) -> None:
+        """証拠の観測のターン数 (#1452) が capture → restore を経て同じ値で戻る。"""
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        evidence = BeliefEvidence(evidence_id='belief-evidence-turn-1', source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR, episode_ids=('ep-1',), cue_signature='tool:explore', text='浜に枯れ葉が落ちていた', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, observed_turn=40)
+        src_stores['belief_evidence'].append_by_being(being, evidence)
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, payload_json)
+
+        assert [e.observed_turn for e in dst_stores['belief_evidence'].list_all_by_being(being)] == [40]
+
+    def test_belief_evidence_without_observed_turn_is_rejected(self) -> None:
+        """観測のターン数を持たない証拠の payload (#1452 より前の snapshot) は読み込まず、例外で止める。いつ見たかを捏造しない。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import dict_to_belief_evidence
+        data = {'evidence_id': 'belief-evidence-legacy-3', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '何もなかった', 'salience': 'low', 'occurred_at': _NOW.isoformat(), 'tick': 3}
+        with pytest.raises((KeyError, ValueError)):
+            dict_to_belief_evidence(data)
+
     def test_belief_evidence_source_speaker_legacy_data_none(self) -> None:
         """P9 導入前 (キー自体が無い) payload を decode しても例外にならず None。"""
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_belief_evidence
-        data = {'evidence_id': 'belief-evidence-legacy-2', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '何もなかった', 'salience': 'low', 'occurred_at': _NOW.isoformat(), 'tick': 3}
+        data = {'evidence_id': 'belief-evidence-legacy-2', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '何もなかった', 'salience': 'low', 'occurred_at': _NOW.isoformat(), 'observed_turn': 0, 'tick': 3}
         evidence = dict_to_belief_evidence(data)
         assert evidence.source_speaker is None
 

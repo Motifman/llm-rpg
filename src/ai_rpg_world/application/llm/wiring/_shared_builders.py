@@ -71,6 +71,7 @@ def build_episodic_memory_stack(
     semantic_gist_service: Any | None = None,
     semantic_persona_resolver: Any | None = None,
     belief_evidence_buffer_store: Any | None = None,
+    memory_turn_reader: Any | None = None,
     episodic_promotion_force_full_scan: bool = False,
     episodic_promotion_expansion_hops: int = 4,
     subjective_episode_db_path: str | None = None,
@@ -114,6 +115,7 @@ def build_episodic_memory_stack(
         gist_service=semantic_gist_service,
         persona_resolver=semantic_persona_resolver,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
+        memory_turn_reader=memory_turn_reader,
         force_full_scan=episodic_promotion_force_full_scan,
         expansion_hops=episodic_promotion_expansion_hops,
     )

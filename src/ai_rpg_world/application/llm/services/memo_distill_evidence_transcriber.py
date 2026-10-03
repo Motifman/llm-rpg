@@ -31,6 +31,9 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
+from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
 )
@@ -70,6 +73,7 @@ class MemoDistillEvidenceTranscriber:
         *,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
+        memory_turn_reader: MemoryTurnReader,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -88,7 +92,10 @@ class MemoDistillEvidenceTranscriber:
         self._buffer_store = buffer_store
         self._episode_store = episode_store
         self._trace_recorder_provider = trace_recorder_provider
+        if not isinstance(memory_turn_reader, MemoryTurnReader):
+            raise TypeError("memory_turn_reader must be MemoryTurnReader")
         self._current_tick_provider = current_tick_provider
+        self._memory_turn_reader = memory_turn_reader
 
     def record_from_memo(
         self,
@@ -137,6 +144,7 @@ class MemoDistillEvidenceTranscriber:
             # なので常に low。
             salience=BELIEF_EVIDENCE_SALIENCE_LOW,
             occurred_at=anchor_episode.occurred_at,
+            observed_turn=self._memory_turn_reader.current_turn(being_id),
             tick=self._resolve_tick(),
         )
         self._buffer_store.append_by_being(being_id, evidence)
