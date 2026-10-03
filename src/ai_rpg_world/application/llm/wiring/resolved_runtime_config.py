@@ -152,11 +152,17 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
 
-#: 同じ意味を問う候補の件数。
+#: 同じ意味を問う候補の件数。過去の snapshot の似た組 96 組で、相方が文字の
+#: 2 字組の BM25 の上位に入った割合は K=3 で 96%、K=5 で 100%。30 組を K=3 / 5 / 10
+#: で Jev に問い、K を増やしても選び間違いは増えなかった
+#: (scripts/jev_belief_create_gate_measure.py)。
 _DEFAULT_BELIEF_CANDIDATE_TOP_K = 5
 
-#: 形と同じ意味の答えを採る確信度の閾値。
-_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE = 0.6
+#: 形と同じ意味の答えを採る確信度の閾値。同じ 96 組 (K=5) で、強めに置き換えた
+#: 先が違う主張だった例は確信度によらず 0 件で、閾値 0.4 で同じ主張の組の 90%、
+#: 0.6 で 61% を強めに置き換えた。0.4 で「いまの状況」と判定された文は、採り
+#: 尽くした・持っている・提案した、の類だった。run の trace で決め直す。
+_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE = 0.4
 
 #: profile / runtime_config に書かせない秘密。値そのものは env からだけ読む。
 #: profile は run の記録として ``experiment.config.source.json`` に残るため、
