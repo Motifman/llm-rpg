@@ -32,6 +32,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
     Outcome,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -198,8 +201,7 @@ class TestRecordCheck:
                 turn=12,
                 outcome=Outcome.HIT,
                 likelihood=Likelihood.PROBABLY,
-                beliefs_in_mind=("belief-1",),
-                episodes_in_mind=("episode-9",),
+                grounds=ExpectationGrounds(),
             ),
         ]
         _assert_closed(expectation)
@@ -433,7 +435,7 @@ class TestJudgeShape:
         """形の判定が どう転んでも当たる / 本人の行動 / 予期ではない なら、清算に回さず外した出来事を返し、以後は照合を受け取らない。"""
         expectation = _expectation()
 
-        event = expectation.judge_shape(shape, turn=10)
+        event = expectation.judge_shape(shape, turn=10, grounds=ExpectationGrounds())
 
         assert event == ExpectationDismissed(
             expectation_id=ExpectationId("exp-1"),
@@ -447,7 +449,7 @@ class TestJudgeShape:
         """形の判定が清算できる予期なら出来事を返さず、清算待ちのまま照合を受け取る。"""
         expectation = _expectation()
 
-        event = expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10)
+        event = expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10, grounds=ExpectationGrounds())
 
         assert event is None
         assert isinstance(
@@ -457,10 +459,10 @@ class TestJudgeShape:
     def test_second_shape_judgment_raises_and_keeps_expectation_open(self) -> None:
         """形の判定を 2 回渡すと ExpectationCheckRuleException を投げ、2 回目の「本人の行動」では外されない。"""
         expectation = _expectation()
-        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10)
+        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10, grounds=ExpectationGrounds())
 
         with pytest.raises(ExpectationCheckRuleException, match="shape"):
-            expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=10)
+            expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=10, grounds=ExpectationGrounds())
 
         assert expectation.record(Check(turn=11, verdict=HIT)) is None
 
@@ -474,7 +476,7 @@ class TestJudgeShape:
         with pytest.raises(
             ExpectationCheckRuleException, match="before the first check"
         ):
-            expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=11)
+            expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=11, grounds=ExpectationGrounds())
 
         assert isinstance(
             expectation.record(Check(turn=12, verdict=HIT)), ExpectationSettled
@@ -485,14 +487,14 @@ class TestJudgeShape:
         expectation = _expectation()
 
         with pytest.raises(ExpectationCheckRuleException, match="expires_at_turn"):
-            expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=EXPIRES_AT + 1)
+            expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=EXPIRES_AT + 1, grounds=ExpectationGrounds())
 
     def test_shape_judgment_before_formed_turn_raises(self) -> None:
         """作ったターンより前の形の判定を渡すと ExpectationCheckRuleException を投げる。"""
         expectation = _expectation(formed_at_turn=10)
 
         with pytest.raises(ExpectationCheckRuleException, match="formed_at_turn"):
-            expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=9)
+            expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=9, grounds=ExpectationGrounds())
 
     @pytest.mark.parametrize(
         "shape, turn",
@@ -506,7 +508,7 @@ class TestJudgeShape:
         expectation = _expectation()
 
         with pytest.raises(ExpectationValidationException):
-            expectation.judge_shape(shape, turn=turn)
+            expectation.judge_shape(shape, turn=turn, grounds=ExpectationGrounds())
 
         assert expectation.record(Check(turn=11, verdict=HIT)) is None
 
@@ -532,8 +534,7 @@ class TestExpireIfOverdue:
             turn=EXPIRES_AT + 1,
             outcome=Outcome.MISS,
             likelihood=Likelihood.PROBABLY,
-            beliefs_in_mind=("belief-1",),
-            episodes_in_mind=(),
+            grounds=ExpectationGrounds(),
         )
         _assert_closed(expectation)
 
@@ -611,7 +612,7 @@ class TestAwaitsShape:
     def test_settleable_shape_stops_awaiting(self) -> None:
         """清算できる形と判定された予期は、もう形の判定を待たない。"""
         expectation = _expectation()
-        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10)
+        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10, grounds=ExpectationGrounds())
 
         assert expectation.awaits_shape is False
 
@@ -704,7 +705,7 @@ def _settled() -> Expectation:
 
 def _dismissed() -> Expectation:
     expectation = _expectation()
-    expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=10)
+    expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=10, grounds=ExpectationGrounds())
     return expectation
 
 
@@ -725,7 +726,7 @@ def _record(expectation: Expectation) -> object:
 
 
 def _judge_shape(expectation: Expectation) -> object:
-    return expectation.judge_shape(ShapeVerdict.TRUE_EITHER_WAY, turn=15)
+    return expectation.judge_shape(ShapeVerdict.TRUE_EITHER_WAY, turn=15, grounds=ExpectationGrounds())
 
 
 def _expire(expectation: Expectation) -> object:

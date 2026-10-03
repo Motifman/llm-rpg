@@ -1,4 +1,4 @@
-"""確定した予期の当否を、それを持ったときに思い出していたエピソードへ返す挙動を保証する。
+"""確定した予期の当否を、その根拠のエピソードへ返す挙動を保証する。
 
 当たったなら役に立った回数を 1 増やし、外れたなら想起の記録にずれを書き添える。
 """
@@ -35,6 +35,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -54,8 +57,7 @@ def _settled(**overrides: Any) -> ExpectationSettled:
         "content": "干潟で貝が採れる",
         "outcome": Outcome.HIT,
         "likelihood": Likelihood.PROBABLY,
-        "beliefs_in_mind": (),
-        "episodes_in_mind": ("ep-shore", "ep-tide"),
+        "grounds": ExpectationGrounds(episodes=("ep-shore", "ep-tide")),
     }
     fields.update(overrides)
     return ExpectationSettled(**fields)
@@ -98,10 +100,10 @@ class _Harness:
 
 
 class TestSettledHit:
-    """当たったで確定したとき、思い出していたエピソードの役に立った回数が増える挙動を保証する。"""
+    """当たったで確定したとき、根拠のエピソードの役に立った回数が増える挙動を保証する。"""
 
-    def test_settled_hit_adds_one_to_each_episode_in_mind(self) -> None:
-        """当たったで確定すると、思い出していたエピソードそれぞれの役に立った回数が 1 増え、想起には何も書かない。"""
+    def test_settled_hit_adds_one_to_each_grounding_episode(self) -> None:
+        """当たったで確定すると、根拠のエピソードそれぞれの役に立った回数が 1 増え、想起には何も書かない。"""
         harness = _Harness()
         harness.recall.append_by_being(RIO, _recall("r-1", "ep-shore"))
 
@@ -141,10 +143,10 @@ class TestSettledHit:
 
 
 class TestSettledMiss:
-    """外れたで確定したとき、思い出していたエピソードの想起にずれを書き添える挙動を保証する。"""
+    """外れたで確定したとき、根拠のエピソードの想起にずれを書き添える挙動を保証する。"""
 
     def test_settled_miss_stamps_recalls_and_keeps_hit_counts(self) -> None:
-        """外れたで確定すると、思い出していたエピソードの想起にずれの文を書き、役に立った回数は増やさない。"""
+        """外れたで確定すると、根拠のエピソードの想起にずれの文を書き、役に立った回数は増やさない。"""
         harness = _Harness()
         harness.recall.append_by_being(RIO, _recall("r-1", "ep-shore"))
         harness.recall.append_by_being(RIO, _recall("r-2", "ep-elsewhere"))
@@ -184,17 +186,17 @@ class TestSettledMiss:
 class TestNothingToCredit:
     """返す先が無いとき、確定以外の出来事のときは何も書かない挙動を保証する。"""
 
-    def test_no_episodes_in_mind_is_skipped_with_reason(self) -> None:
-        """思い出していたエピソードが無ければ何も書かず、理由を trace に残す。"""
+    def test_no_grounding_episodes_is_skipped_with_reason(self) -> None:
+        """根拠のエピソードが無ければ何も書かず、理由を trace に残す。"""
         harness = _Harness()
 
-        harness.receiver.receive(EVENT_ID, _settled(episodes_in_mind=()))
+        harness.receiver.receive(EVENT_ID, _settled(grounds=ExpectationGrounds()))
 
         assert harness.success.list_all_by_being(RIO) == {}
         assert harness.success.list_received_event_ids_by_being(RIO) == []
         (trace,) = harness.traces()
         assert trace["result"] == "skipped"
-        assert trace["skipped_reason"] == "no_episodes_in_mind"
+        assert trace["skipped_reason"] == "no_grounding_episodes"
 
     def test_non_settled_events_write_nothing(self) -> None:
         """暫定の外れと期限切れは、回数も想起も変えず、trace も残さない。"""

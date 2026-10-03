@@ -66,3 +66,35 @@ class TestUnusableSettingsFailBeforeTheRun:
         """上限に 0 を書くと ValueError を投げる。"""
         with pytest.raises(ValueError, match=key):
             _config(**_ON, **{key: "0"})
+
+
+class TestTheProfileChoosesTheGroundsQuestions:
+    """予期の根拠の問いの上限と確率の閾値が profile から入り、組めない値を起動前に落とすことを保証する (#1484)。"""
+
+    def test_grounds_settings_default_and_reach_run_start(self) -> None:
+        """何も書かなければ問いの上限は 1 以上、閾値は 0 より大きく 1 未満になり、書いた値は run_start の記録に出る。"""
+        default = _config()
+        config = _config(
+            **_ON,
+            EXPECTATION_GROUNDS_MAX_QUESTIONS="6",
+            EXPECTATION_GROUNDS_MIN_PROBABILITY="0.7",
+        )
+
+        assert default.expectation_grounds_max_questions >= 1
+        assert 0.0 < default.expectation_grounds_min_probability < 1.0
+        trace = config.to_trace_dict()
+        assert trace["expectation_grounds_max_questions"] == 6
+        assert trace["expectation_grounds_min_probability"] == 0.7
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("EXPECTATION_GROUNDS_MAX_QUESTIONS", "0"),
+            ("EXPECTATION_GROUNDS_MIN_PROBABILITY", "1"),
+            ("EXPECTATION_GROUNDS_MIN_PROBABILITY", "0"),
+        ],
+    )
+    def test_unusable_grounds_setting_fails(self, key: str, value: str) -> None:
+        """問いの上限 0、閾値 1 (どの確率も超えられない)、閾値 0 は ValueError を投げる。"""
+        with pytest.raises(ValueError, match=key):
+            _config(**_ON, **{key: value})

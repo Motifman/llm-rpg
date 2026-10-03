@@ -1,4 +1,4 @@
-"""確定した予期の出来事を、頭にあった信念への支持・反証の材料として証拠バッファに積む挙動を保証する。"""
+"""確定した予期の出来事を、根拠の信念への支持・反証の材料として証拠バッファに積む挙動を保証する。"""
 
 from __future__ import annotations
 
@@ -30,6 +30,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
     ExpectationEventId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -60,8 +63,7 @@ def _settled(**overrides: Any) -> ExpectationSettled:
         "content": "干潟で貝が採れる",
         "outcome": Outcome.MISS,
         "likelihood": Likelihood.PROBABLY,
-        "beliefs_in_mind": ("belief-tide",),
-        "episodes_in_mind": ("ep-shore",),
+        "grounds": ExpectationGrounds(beliefs=("belief-tide",), episodes=("ep-shore",)),
     }
     fields.update(overrides)
     return ExpectationSettled(**fields)
@@ -90,13 +92,13 @@ class _Harness:
 
 
 class TestSettledOutcomeBecomesMaterial:
-    """当否の確定が、頭にあった信念へ向けた支持・反証の材料になる挙動を保証する。"""
+    """当否の確定が、根拠の信念へ向けた支持・反証の材料になる挙動を保証する。"""
 
-    def test_settled_hit_supports_beliefs_in_mind(self) -> None:
-        """当たったで確定した予期は、頭にあった信念を指す CONFIRMATION の材料として 1 件積まれる。"""
+    def test_settled_hit_supports_grounding_beliefs(self) -> None:
+        """当たったで確定した予期は、根拠の信念を指す CONFIRMATION の材料として 1 件積まれる。"""
         harness = _Harness()
 
-        harness.receive(_settled(outcome=Outcome.HIT, beliefs_in_mind=("b-1", "b-2")))
+        harness.receive(_settled(outcome=Outcome.HIT, grounds=ExpectationGrounds(beliefs=("b-1", "b-2"))))
 
         (material,) = harness.materials()
         assert material.source_kind is BeliefEvidenceSourceKind.CONFIRMATION
@@ -104,8 +106,8 @@ class TestSettledOutcomeBecomesMaterial:
         assert material.text == "たぶんと思っていた予期「干潟で貝が採れる」は当たった。"
         assert material.salience == BELIEF_EVIDENCE_SALIENCE_LOW
 
-    def test_settled_miss_contradicts_beliefs_in_mind(self) -> None:
-        """外れたで確定した予期は、頭にあった信念を指す PREDICTION_ERROR の材料として 1 件積まれる。"""
+    def test_settled_miss_contradicts_grounding_beliefs(self) -> None:
+        """外れたで確定した予期は、根拠の信念を指す PREDICTION_ERROR の材料として 1 件積まれる。"""
         harness = _Harness()
 
         harness.receive(_settled(outcome=Outcome.MISS))
@@ -128,25 +130,25 @@ class TestSettledOutcomeBecomesMaterial:
         assert material.cue_signature == "expectation:miss"
         assert material.occurred_at == NOW
 
-    def test_settled_miss_without_beliefs_in_mind_is_still_material(self) -> None:
-        """頭に信念が無くても、外れの確定は新しく学ぶ材料として積まれ、指す信念は空になる。"""
+    def test_settled_miss_without_grounding_beliefs_is_still_material(self) -> None:
+        """根拠の信念が無くても、外れの確定は新しく学ぶ材料として積まれ、指す信念は空になる。"""
         harness = _Harness()
 
-        harness.receive(_settled(beliefs_in_mind=()))
+        harness.receive(_settled(grounds=ExpectationGrounds()))
 
         (material,) = harness.materials()
         assert material.in_context_belief_ids == ()
 
-    def test_settled_hit_without_beliefs_in_mind_is_not_material(self) -> None:
-        """頭に信念が無いときの当たりは、支える相手が無いので材料にせず、理由を trace に残す。"""
+    def test_settled_hit_without_grounding_beliefs_is_not_material(self) -> None:
+        """根拠の信念が無いときの当たりは、支える相手が無いので材料にせず、理由を trace に残す。"""
         harness = _Harness()
 
-        harness.receive(_settled(outcome=Outcome.HIT, beliefs_in_mind=()))
+        harness.receive(_settled(outcome=Outcome.HIT, grounds=ExpectationGrounds()))
 
         assert harness.materials() == []
         (trace,) = harness.traces()
         assert trace["result"] == "skipped"
-        assert trace["skipped_reason"] == "no_beliefs_in_mind"
+        assert trace["skipped_reason"] == "no_grounding_beliefs"
 
 
 class TestLikelihoodSetsStrength:

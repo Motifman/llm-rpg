@@ -29,6 +29,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
     Outcome,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -132,6 +135,7 @@ class Expectation:
         )
 
         self._shape: ShapeVerdict | None = None
+        self._grounds: ExpectationGrounds | None = None
         self._checks: list[Check] = []
         self._status = ExpectationStatus.OPEN
         self._closed_at_turn: int | None = None
@@ -162,6 +166,7 @@ class Expectation:
         )
         expectation._restore_state(
             shape=snapshot.shape,
+            grounds=snapshot.grounds,
             checks=snapshot.checks,
             status=snapshot.status,
             closed_at_turn=snapshot.closed_at_turn,
@@ -183,6 +188,7 @@ class Expectation:
             beliefs_in_mind=self._beliefs_in_mind,
             episodes_in_mind=self._episodes_in_mind,
             shape=self._shape,
+            grounds=self._grounds,
             checks=tuple(self._checks),
             status=self._status,
             closed_at_turn=self._closed_at_turn,
@@ -242,11 +248,18 @@ class Expectation:
         return self._status.is_open and self._shape is None and not self._checks
 
     def judge_shape(
-        self, shape: ShapeVerdict, *, turn: int
+        self, shape: ShapeVerdict, *, turn: int, grounds: ExpectationGrounds
     ) -> ExpectationDismissed | None:
+        """形と根拠を一緒に受け取る。
+
+        根拠は形と同じ問いで得るので、形が判定済みなら根拠も判定済みになる。
+        確定の出来事が「根拠を判断していない」のか「根拠が無い」のかを区別せずに
+        済む。
+        """
         self._require_open()
         if not isinstance(shape, ShapeVerdict):
             raise ExpectationValidationException("shape must be ShapeVerdict")
+        grounds = self._require_grounds_in_mind(grounds)
         self._require_within_term(require_turn(turn, name="turn"))
         if self._shape is not None:
             raise ExpectationCheckRuleException(
@@ -258,6 +271,7 @@ class Expectation:
             )
 
         self._shape = shape
+        self._grounds = grounds
         if shape.is_settleable:
             return None
         self._status = ExpectationStatus.DISMISSED
@@ -355,14 +369,28 @@ class Expectation:
             content=self._content,
             outcome=outcome,
             likelihood=self._likelihood,
-            beliefs_in_mind=self._beliefs_in_mind,
-            episodes_in_mind=self._episodes_in_mind,
+            # 形を判定せずに照合だけで確定した予期は、根拠を判断していない。
+            # 頭にあったものすべてに倒すと、関係の無い信念に当否が積まれる。
+            grounds=self._grounds or ExpectationGrounds(),
         )
+
+    def _require_grounds_in_mind(self, grounds: object) -> ExpectationGrounds:
+        if not isinstance(grounds, ExpectationGrounds):
+            raise ExpectationValidationException("grounds must be ExpectationGrounds")
+        outside = [b for b in grounds.beliefs if b not in self._beliefs_in_mind] + [
+            e for e in grounds.episodes if e not in self._episodes_in_mind
+        ]
+        if outside:
+            raise ExpectationValidationException(
+                f"grounds must be chosen from what was in mind: {outside}"
+            )
+        return grounds
 
     def _restore_state(
         self,
         *,
         shape: object,
+        grounds: object,
         checks: object,
         status: object,
         closed_at_turn: object,
@@ -371,6 +399,13 @@ class Expectation:
             raise ExpectationValidationException("status must be ExpectationStatus")
         if shape is not None and not isinstance(shape, ShapeVerdict):
             raise ExpectationValidationException("shape must be ShapeVerdict or None")
+        if (shape is None) != (grounds is None):
+            raise ExpectationValidationException(
+                "grounds must be set exactly when shape is judged "
+                f"(shape={shape}, grounds={grounds})"
+            )
+        if grounds is not None:
+            grounds = self._require_grounds_in_mind(grounds)
         if not isinstance(checks, tuple) or not all(
             isinstance(check, Check) for check in checks
         ):
@@ -414,6 +449,7 @@ class Expectation:
         self._require_closed_turn_fits(status, closed, ended=ended, checks=checks)
 
         self._shape = shape
+        self._grounds = grounds
         self._checks = list(checks)
         self._status = status
         self._closed_at_turn = closed

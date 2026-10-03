@@ -8,6 +8,9 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.being.expectation.grounds import (
+    MemoryStoreInMindTextReader,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -45,6 +48,7 @@ from tests.application.being.expectation.support import (
     RecordingTraceRecorder,
     ScriptedJudgmentPort,
 )
+from tests.runtime_config_helpers import episodic_config
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -253,6 +257,54 @@ class TestSettlementWiring:
         assert settlement is not None
         assert (settlement._max_open, settlement._timeline_turns) == (5, 2)
         assert runtime._expectation_dispatcher._max_attempts == 7
+
+    def test_profile_grounds_settings_reach_the_settlement(self) -> None:
+        """profile に書いた根拠の問いの上限と確率の閾値が、組まれた清算の service に届く。"""
+        config = ResolvedLlmRuntimeConfig.for_tests(
+            typed_judgment_provider="stub",
+            expectation_settlement_enabled=True,
+            expectation_grounds_max_questions=3,
+            expectation_grounds_min_probability=0.7,
+        )
+        runtime = create_world_runtime(_DRILL, config=config)
+
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
+            typed_judgment_port=ScriptedJudgmentPort(),
+        )
+
+        settlement = wiring.expectation_settlement
+        assert settlement is not None
+        assert (settlement._max_grounds_questions, settlement._grounds_min_probability) == (
+            3,
+            0.7,
+        )
+
+    def test_grounds_reader_reads_the_episodic_stack_stores(self) -> None:
+        """根拠の本文を引く口は、プロンプトの想起と同じ episodic stack の信念・エピソード・再解釈の store を読む。"""
+        config = episodic_config(
+            typed_judgment_provider="stub", expectation_settlement_enabled=True
+        )
+        runtime = create_world_runtime(_DRILL, config=config)
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
+            typed_judgment_port=ScriptedJudgmentPort(),
+        )
+
+        settlement = wiring.expectation_settlement
+        assert settlement is not None
+        reader = settlement._grounds_reader
+        assert isinstance(reader, MemoryStoreInMindTextReader)
+        stack = runtime._episodic_stack
+        assert reader._semantic_store is stack.semantic_memory_store
+        assert reader._episode_store is stack.episode_store
+        assert reader._journal_store is stack.reinterpretation_journal
 
     def test_settlement_dispatcher_and_turn_share_one_store(self) -> None:
         """清算・配り手・1 手ごとのターン数・snapshot が拾う store は、runtime の予期の store 1 つを指す。手を打つと、その 1 つのターン数だけが進む。"""

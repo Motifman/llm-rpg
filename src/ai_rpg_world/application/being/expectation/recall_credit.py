@@ -1,4 +1,4 @@
-"""確定した予期の当否を、それを持ったときに思い出していたエピソードへ返す受け取る側。
+"""確定した予期の当否を、その根拠のエピソードへ返す受け取る側。
 
 当たったなら、そのエピソードは思い出す価値があったとして役に立った回数を 1 増やす。
 外れたなら、そのエピソードの想起にずれを書き添え、再解釈が「思い出したのに
@@ -36,7 +36,7 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id im
 
 
 class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
-    """``ExpectationSettled`` の当否を ``episodes_in_mind`` へ返す。
+    """``ExpectationSettled`` の当否を根拠のエピソードへ返す。
 
     役に立った回数の記録先と想起の記録先は、それぞれの記憶の機能が有効なときだけ
     渡される。無い側に届いた確定は、書かずに理由を trace に残す。
@@ -64,8 +64,8 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
     def receive(self, event_id: ExpectationEventId, event: ExpectationEvent) -> None:
         if not isinstance(event, ExpectationSettled):
             return
-        if not event.episodes_in_mind:
-            self._trace(event_id, event, result="skipped", skipped_reason="no_episodes_in_mind")
+        if not event.grounds.episodes:
+            self._trace(event_id, event, result="skipped", skipped_reason="no_grounding_episodes")
             return
         if event.outcome is Outcome.HIT:
             self._credit_hit(event_id, event)
@@ -77,7 +77,7 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
             self._trace(event_id, event, result="skipped", skipped_reason="recall_success_store_unwired")
             return
         recorded = self._success_store.record_hits_received_by_being(
-            event.holder, event.episodes_in_mind, event_id=event_id.value
+            event.holder, event.grounds.episodes, event_id=event_id.value
         )
         self._trace(
             event_id,
@@ -92,7 +92,7 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
             return
         stamped = self._recall_buffer_store.stamp_prediction_outcome_for_episodes_by_being(
             event.holder,
-            event.episodes_in_mind,
+            event.grounds.episodes,
             settled_expectation_text(event),
             event_id=event_id.value,
         )
@@ -131,7 +131,7 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
             payload["skipped_reason"] = skipped_reason
         if credit is not None:
             payload["credit"] = credit
-            payload["episode_ids"] = list(event.episodes_in_mind)
+            payload["episode_ids"] = list(event.grounds.episodes)
         if stamped_recalls is not None:
             payload["stamped_recalls"] = stamped_recalls
         recorder.record(TraceEventKind.EXPECTATION_MATERIAL, **payload)

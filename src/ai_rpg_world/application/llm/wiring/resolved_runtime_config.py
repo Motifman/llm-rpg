@@ -71,6 +71,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "EXPECTATION_ARGUMENT_ENABLED",
     "EXPECTATION_DATED_TERM_TURNS",
     "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
+    "EXPECTATION_GROUNDS_MAX_QUESTIONS",
+    "EXPECTATION_GROUNDS_MIN_PROBABILITY",
     "EXPECTATION_SETTLEMENT_ENABLED",
     "EXPECTATION_SETTLEMENT_MAX_OPEN",
     "EXPECTATION_SETTLEMENT_TIMELINE_TURNS",
@@ -245,6 +247,10 @@ class ResolvedLlmRuntimeConfig:
             ターン数
         expectation_event_max_delivery_attempts: 予期の出来事を配り直す回数の上限。
             清算の有効化によらず、予期の出来事を配るときに使う
+        expectation_grounds_max_questions: 予期を書いたターンの清算の呼び出しに
+            並べる、根拠の問い (頭にあった信念とエピソードごとの問い) の上限 (#1484)
+        expectation_grounds_min_probability: 根拠として採る確率の閾値。これを
+            超えたものだけを根拠にする
         expectation_argument_enabled: 環境の tool に予期の引数 ``expectations`` を
             付け、書かれた予期を積む (#1441)。**既定は off**。清算と、プロンプトに
             載った信念を記録する台帳が要り、``expected_result`` とは併用できない
@@ -317,6 +323,8 @@ class ResolvedLlmRuntimeConfig:
     expectation_settlement_max_open: int
     expectation_settlement_timeline_turns: int
     expectation_event_max_delivery_attempts: int
+    expectation_grounds_max_questions: int
+    expectation_grounds_min_probability: float
     expectation_argument_enabled: bool
     expectation_undated_term_turns: int
     expectation_dated_term_turns: int
@@ -755,6 +763,16 @@ class ResolvedLlmRuntimeConfig:
             "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
             default=_DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS,
         )
+        expectation_grounds_max_questions = _resolve_positive_int(
+            source,
+            "EXPECTATION_GROUNDS_MAX_QUESTIONS",
+            default=_DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS,
+        )
+        expectation_grounds_min_probability = _resolve_ratio_with_default(
+            source,
+            "EXPECTATION_GROUNDS_MIN_PROBABILITY",
+            default=_DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY,
+        )
         try:
             expectation_argument_enabled = _parse_truthy(
                 source.get("EXPECTATION_ARGUMENT_ENABLED"), default=False
@@ -973,6 +991,8 @@ class ResolvedLlmRuntimeConfig:
             expectation_event_max_delivery_attempts=(
                 expectation_event_max_delivery_attempts
             ),
+            expectation_grounds_max_questions=expectation_grounds_max_questions,
+            expectation_grounds_min_probability=expectation_grounds_min_probability,
             expectation_argument_enabled=expectation_argument_enabled,
             expectation_undated_term_turns=expectation_undated_term_turns,
             expectation_dated_term_turns=expectation_dated_term_turns,
@@ -1114,6 +1134,10 @@ class ResolvedLlmRuntimeConfig:
             expectation_event_max_delivery_attempts=(
                 _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS
             ),
+            expectation_grounds_max_questions=_DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS,
+            expectation_grounds_min_probability=(
+                _DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY
+            ),
             expectation_argument_enabled=False,
             expectation_undated_term_turns=_DEFAULT_EXPECTATION_UNDATED_TERM_TURNS,
             expectation_dated_term_turns=_DEFAULT_EXPECTATION_DATED_TERM_TURNS,
@@ -1223,9 +1247,16 @@ class ResolvedLlmRuntimeConfig:
             ),
             ("EXPECTATION_UNDATED_TERM_TURNS", self.expectation_undated_term_turns),
             ("EXPECTATION_DATED_TERM_TURNS", self.expectation_dated_term_turns),
+            (
+                "EXPECTATION_GROUNDS_MAX_QUESTIONS",
+                self.expectation_grounds_max_questions,
+            ),
         ):
             if value < 1:
                 raise ValueError(f"{key} must be 1 or greater")
+        # 閾値を超えたものだけを根拠にするので、1 ではどの確率も根拠にならない。
+        if not 0.0 < self.expectation_grounds_min_probability < 1.0:
+            raise ValueError("EXPECTATION_GROUNDS_MIN_PROBABILITY must be in (0, 1)")
         if self.expectation_settlement_enabled and self.typed_judgment_provider == "off":
             raise ValueError(
                 "EXPECTATION_SETTLEMENT_ENABLED=1 requires TYPED_JUDGMENT_PROVIDER "
@@ -1326,6 +1357,11 @@ _DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN = 8
 #: 次のターンに当たったへ移った。数ターン遅れて届く結果まで拾える長さに置く。
 _DEFAULT_EXPECTATION_SETTLEMENT_TIMELINE_TURNS = 4
 _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS = 3
+#: 根拠の問いの上限の暫定値。頭に載る信念は最大 3 件で、1 ターンに書く予期は平均
+#: 3 件ほど (#1436 の試し)。予期 1 件分の信念とエピソードは並べ切れ、1 ターンの
+#: 問いが数十件に膨らまない値に置く。実 Jev の試し (#1484) で決め直す。
+_DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS = 12
+_DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY = 0.5
 _DEFAULT_EXPECTATION_UNDATED_TERM_TURNS = 5
 _DEFAULT_EXPECTATION_DATED_TERM_TURNS = 30
 

@@ -29,6 +29,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -86,7 +89,7 @@ def _drive(
     expectation = Expectation(**FORMATION)  # type: ignore[arg-type]
     closing: ExpectationEvent | None = None
     if shape is not None:
-        closing = expectation.judge_shape(shape, turn=FORMED_AT)
+        closing = expectation.judge_shape(shape, turn=FORMED_AT, grounds=ExpectationGrounds())
     accepted: list[Check] = []
     for offset, verdict in enumerate(verdicts, start=1):
         if closing is not None and type(closing) in _STATUS_BY_EVENT:
@@ -136,6 +139,7 @@ def _snapshot_of(state: _Reached, status: ExpectationStatus) -> ExpectationSnaps
     return ExpectationSnapshot(
         **FORMATION,  # type: ignore[arg-type]
         shape=state.shape,
+        grounds=None if state.shape is None else ExpectationGrounds(),
         checks=state.checks,
         status=status,
         closed_at_turn=state.closed_at_turn,
@@ -150,7 +154,7 @@ def _driven(state: _Reached) -> Expectation:
     """``_drive`` と同じ判定の列を、もう一度集約に渡して終えたもの。"""
     expectation = Expectation(**FORMATION)  # type: ignore[arg-type]
     if state.shape is not None:
-        expectation.judge_shape(state.shape, turn=FORMED_AT)
+        expectation.judge_shape(state.shape, turn=FORMED_AT, grounds=ExpectationGrounds())
     for check in state.checks:
         expectation.record(check)
     if state.label.endswith("overdue"):
@@ -200,7 +204,7 @@ def test_restore_of_snapshot_reads_back_same_snapshot(state: _Reached) -> None:
 def test_dismissed_snapshot_keeps_judged_turn_after_formed_turn() -> None:
     """作ったターンより後に形の判定で外した予期は、判定したターンを終わったターンとして保存し、往復しても保つ。"""
     expectation = Expectation(**FORMATION)  # type: ignore[arg-type]
-    expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=FORMED_AT + 2)
+    expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=FORMED_AT + 2, grounds=ExpectationGrounds())
 
     snapshot = Expectation.restore(expectation.snapshot()).snapshot()
 
