@@ -292,3 +292,36 @@ class TestTheSemanticRepeatSettingsComeFromTheProfile:
         assert config.typed_judgment_semantic_repeat_enabled is False
         assert config.typed_judgment_semantic_repeat_min_probability == 0.8
         assert config.typed_judgment_semantic_repeat_window == 4
+
+
+class TestTheGoalHintSettingsComeFromTheProfile:
+    """目的の達成 hint (#1448) の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
+
+    def test_the_goal_hint_is_off_by_default_even_with_jev(self) -> None:
+        """何も書かなければ無効。provider を jev にしても入らない。閾値の既定は 0.7。"""
+        config = _config(TYPED_JUDGMENT_PROVIDER="jev")
+
+        assert config.typed_judgment_goal_hint_enabled is False
+        assert config.typed_judgment_goal_hint_min_probability == 0.7
+
+    def test_a_profile_can_turn_the_goal_hint_on_and_move_its_threshold(self) -> None:
+        """有効化と閾値は profile の値が解決済み設定に載る。"""
+        config = _config(
+            TYPED_JUDGMENT_GOAL_HINT_ENABLED="1",
+            TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY="0.9",
+        )
+
+        assert config.typed_judgment_goal_hint_enabled is True
+        assert config.typed_judgment_goal_hint_min_probability == 0.9
+
+    def test_a_goal_hint_threshold_outside_the_unit_interval_is_rejected(self) -> None:
+        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
+        with pytest.raises(ValueError, match="must be in"):
+            _config(TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY="1.5")
+
+    def test_the_test_defaults_keep_the_goal_hint_off(self) -> None:
+        """テスト用の既定設定でも hint は無効で、閾値は profile の既定と同じ。"""
+        config = ResolvedLlmRuntimeConfig.for_tests()
+
+        assert config.typed_judgment_goal_hint_enabled is False
+        assert config.typed_judgment_goal_hint_min_probability == 0.7

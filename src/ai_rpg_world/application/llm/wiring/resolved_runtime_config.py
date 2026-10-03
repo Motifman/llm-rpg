@@ -132,6 +132,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_API_KEY_ENV",
     "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
     "TYPED_JUDGMENT_ENDPOINT",
+    "TYPED_JUDGMENT_GOAL_HINT_ENABLED",
+    "TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY",
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
     "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
@@ -204,6 +206,10 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_semantic_repeat_min_probability: 繰り返しと見なす確率の閾値。
             警告が待機へ押すのを避けるため高めに置く
         typed_judgment_semantic_repeat_window: 判断に渡す直近の行動の件数
+        typed_judgment_goal_hint_enabled: 行動の結果のあと、未達成の目的が達成
+            されたかを問い、可能性が高ければ hint を添える (#1448)。**既定は off**。
+            目的の改訂 (goal_outcome) が無い run では入らない
+        typed_judgment_goal_hint_min_probability: 目的の hint を出す確率の閾値
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -263,6 +269,8 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_semantic_repeat_enabled: bool
     typed_judgment_semantic_repeat_min_probability: float
     typed_judgment_semantic_repeat_window: int
+    typed_judgment_goal_hint_enabled: bool
+    typed_judgment_goal_hint_min_probability: float
 
     # Episodic memory
     episodic_enabled: bool
@@ -656,6 +664,17 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
             default=_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW,
         )
+        try:
+            typed_judgment_goal_hint_enabled = _parse_truthy(
+                source.get("TYPED_JUDGMENT_GOAL_HINT_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"TYPED_JUDGMENT_GOAL_HINT_ENABLED: {exc}") from exc
+        typed_judgment_goal_hint_min_probability = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY",
+            default=_DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY,
+        )
         if typed_judgment_semantic_repeat_window < 2:
             raise ValueError(
                 "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater"
@@ -835,6 +854,10 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_semantic_repeat_min_probability
             ),
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
+            typed_judgment_goal_hint_enabled=typed_judgment_goal_hint_enabled,
+            typed_judgment_goal_hint_min_probability=(
+                typed_judgment_goal_hint_min_probability
+            ),
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -956,6 +979,10 @@ class ResolvedLlmRuntimeConfig:
             ),
             typed_judgment_semantic_repeat_window=(
                 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
+            ),
+            typed_judgment_goal_hint_enabled=False,
+            typed_judgment_goal_hint_min_probability=(
+                _DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
@@ -1082,6 +1109,8 @@ _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 #: 0.86 以上だった。警告が待機へ押すのを避けるため、非繰り返しの最大から離して置く。
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY = 0.8
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW = 4
+
+_DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY = 0.7
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
