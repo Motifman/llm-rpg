@@ -3,13 +3,20 @@
 過去 run の想起の場面を組み直し、実 Jev に「次のターンの想起で残す欄」と「体の帯」を問い、
 状況の欄で引いた 3 件 (新) と、いまの cue で選んだ 3 件 (旧) を並べた。
 
+> **このページの数字は、欄ごとに「残す / 捨てる」を問う 5 問の形 (#1490 の形) で出したもの。**
+> 結果は `results_five_questions.json`。この結果を受けて、欄の問いを 1 問の確率の上位を採る形に変え
+> (#1494)、欄の値を Jev に見せ、メモ・記憶の道具の応答を「いま起きたこと」に入れないようにした (#1495)。
+> いまの `scripts/situation_recall_probe.py` は新しい形で問う。新しい形で回し直した結果は、回し直したあとで
+> このページに足す。
+
 - 素材: `var/runs/v4coop_reasonfirst_003` (4 人、プロンプト 639 回)
 - 場面: 人ごとに、連続 10 回のプロンプトを 1 窓。信念が 10 件以上ある場面のうち、体の危険を表す語が
   観測に多く出る窓を選んだ。計 40 場面
 - Jev: 本番の清算と同じ state と問い (残す欄 5 問 + 体の帯 1 問) で、1 場面 1 回。同じ場面を 3 回問うて、
   計 120 回
 - 引く側: 本番と同じ `SituationBeliefRecall` (2 字組の BM25) を手元で回した
-- 再現: `uv run python scripts/situation_recall_probe.py --run-dir <run> --out results.json`
+- 再現: 5 問の形は、#1493 を出した時点の `scripts/situation_recall_probe.py` (このページと同じコミット) で
+  `--run-dir <run> --out results_five_questions.json`。いまの probe は新しい形で問う
 
 ## 結果
 

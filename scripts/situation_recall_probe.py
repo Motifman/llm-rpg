@@ -55,8 +55,10 @@ from ai_rpg_world.application.being.recall.body_band import (  # noqa: E402
     body_band_from_answers,
 )
 from ai_rpg_world.application.being.recall.situation import (  # noqa: E402
+    DEFAULT_FIELDS_TO_KEEP,
     SELECTABLE_FIELDS,
     FieldSelection,
+    Situation,
     SituationField,
     field_selection_from_answers,
 )
@@ -185,7 +187,9 @@ def _scenes(trace_path: Path) -> dict[int, list[Scene]]:
                 arguments = dict(pending_action["payload"].get("arguments") or {})
                 tool = str(payload.get("tool") or pending_action["payload"].get("tool"))
                 shown = ", ".join(f"{k}={arguments[k]}" for k in _ARGUMENT_KEYS if arguments.get(k))
-                result = str(payload.get("result_summary") or "")
+                # 2026-07-27 (4a1e69be3) より前のコードは、内心を道具の結果の文に付け足していた。
+                # いまのコードと同じ材料にするため外す。
+                result = str(payload.get("result_summary") or "").split("\n【心の声】")[0]
                 actions.append(
                     ActionResultEntry(
                         occurred_at=_at(event),
@@ -271,11 +275,17 @@ def _window(scenes: list[Scene], size: int, counts: list[int]) -> list[Scene]:
     return scenes[best : best + size]
 
 
-def _ask(port: ITypedJudgmentPort, scene: Scene) -> tuple[FieldSelection, BodyBandReading, dict[str, Any]]:
+def _ask(
+    port: ITypedJudgmentPort, scene: Scene, *, keep: int
+) -> tuple[FieldSelection, BodyBandReading, dict[str, Any]]:
+    """本番の清算と同じく、帯を入れない状況の欄の値を「いまの状況」として見せて問う (D1414-5)。"""
     turns = [
         _Turn(turn=i + 1, material=material) for i, material in enumerate(scene.timeline)
     ] or [_Turn(turn=1, material=TurnMaterial())]
-    state = _state(scene.name, now=turns[-1].turn, pending=[], new=[], timeline=turns)
+    shown = _situation(scene, BodyBandReading.degraded("probe_turn_end"))
+    state = _state(
+        scene.name, now=turns[-1].turn, pending=[], new=[], timeline=turns, situation=shown
+    )
     started = datetime.now()
     try:
         answers = port.judge(state, _recall_questions(scene.name))
@@ -286,7 +296,7 @@ def _ask(port: ITypedJudgmentPort, scene: Scene) -> tuple[FieldSelection, BodyBa
             {"error": f"{exc.error_code}: {exc}", "seconds": (datetime.now() - started).total_seconds()},
         )
     return (
-        field_selection_from_answers(answers),
+        field_selection_from_answers(answers, keep=keep),
         body_band_from_answers(answers),
         {
             "seconds": (datetime.now() - started).total_seconds(),
@@ -295,9 +305,11 @@ def _ask(port: ITypedJudgmentPort, scene: Scene) -> tuple[FieldSelection, BodyBa
     )
 
 
-def _recall(
-    scene: Scene, store: InMemorySemanticMemoryStore, selection: FieldSelection, band: BodyBandReading
-) -> dict[str, Any]:
+def _situation(scene: Scene, band: BodyBandReading) -> Situation:
+    return _situation_and_skipped(scene, band)[0]
+
+
+def _situation_and_skipped(scene: Scene, band: BodyBandReading) -> tuple[Situation, Any]:
     observer = Observer(
         player_id=PlayerId(scene.player_id),
         name=scene.name,
@@ -309,7 +321,13 @@ def _recall(
         inner_thought=scene.actions[0].inner_thought if scene.actions else None,
         body_band=band.band,
     )
-    situation = assemble_situation(contract, holdings)
+    return assemble_situation(contract, holdings), skipped
+
+
+def _recall(
+    scene: Scene, store: InMemorySemanticMemoryStore, selection: FieldSelection, band: BodyBandReading
+) -> dict[str, Any]:
+    situation, skipped = _situation_and_skipped(scene, band)
     result = SituationBeliefRecall(store, CharBigramBm25Narrower()).retrieve(
         BeingId(f"being_w1_p{scene.player_id}"), situation, selection, top_k=_TOP_K
     )
@@ -332,7 +350,9 @@ def _consecutive_jaccard(sequence: list[list[str]]) -> list[float]:
     ]
 
 
-def probe(run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int) -> dict[str, Any]:
+def probe(
+    run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int, keep: int
+) -> dict[str, Any]:
     all_scenes = _scenes(run_dir / "trace.jsonl")
     first_seen = _first_seen(run_dir / "trace.jsonl")
     texts: dict[str, str] = {}
@@ -369,7 +389,7 @@ def probe(run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int)
                 "runs": [],
             }
             for repeat in range(repeats):
-                selection, band, meta = _ask(port, scene)
+                selection, band, meta = _ask(port, scene, keep=keep)
                 recalled = _recall(scene, store, selection, band)
                 run = {
                     "kept_fields": [f.value for f in SituationField if f in selection.kept],
@@ -389,7 +409,15 @@ def probe(run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int)
                 row["runs"].append(run)
             rows.append(row)
         players.append({"player_id": pid, "name": all_scenes[pid][0].name if all_scenes[pid] else "", "scenes": rows})
-    return {"run_dir": str(run_dir), "window": window, "repeats": repeats, "players": players, "texts": texts}
+    return {
+        "run_dir": str(run_dir),
+        "question_form": "one_question_top_k",
+        "keep": keep,
+        "window": window,
+        "repeats": repeats,
+        "players": players,
+        "texts": texts,
+    }
 
 
 def summarize(result: dict[str, Any]) -> dict[str, Any]:
@@ -499,6 +527,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--port", choices=("jev", "stub"), default="jev")
     parser.add_argument("--window", type=int, default=10)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--keep", type=int, default=DEFAULT_FIELDS_TO_KEEP)
     parser.add_argument(
         "--summarize-only",
         action="store_true",
@@ -508,7 +537,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.summarize_only:
         result = json.loads(args.out.read_text("utf-8"))
     else:
-        result = probe(args.run_dir, _port(args.port), window=args.window, repeats=args.repeats)
+        result = probe(
+            args.run_dir, _port(args.port), window=args.window, repeats=args.repeats, keep=args.keep
+        )
     result["summary"] = summarize(result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
