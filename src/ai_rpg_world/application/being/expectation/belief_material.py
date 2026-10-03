@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventReceiver,
@@ -136,7 +137,7 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
         recorder = self._trace_recorder_provider()
         if recorder is None:
             return
-        payload: dict[str, object] = {
+        payload: dict[str, Any] = {
             "being_id": event.holder.value,
             "event_id": event_id.value,
             "expectation_id": event.expectation_id.value,

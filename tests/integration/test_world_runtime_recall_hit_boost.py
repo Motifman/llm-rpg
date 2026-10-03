@@ -2,11 +2,9 @@
 
 的中側 sidecar (recall_success_store) の配線を end-to-end で確認する。
 
-``RECALL_HIT_BOOST_ENABLED`` フラグが ``create_world_runtime`` を通して
-同期経路 (``EpisodicChunkCoordinator``)、非同期経路
-(``ThreadPoolEpisodicSubjectiveScheduler``)、passive_recall retrieval
-service の 3 箇所に届くことを固定する (U9a の
-``test_world_runtime_error_driven_reinterpretation.py`` と同粒度)。
+``RECALL_HIT_BOOST_ENABLED`` フラグが ``create_world_runtime`` を通して、
+確定した予期を想起へ返す受け取る側 (#1443) と passive_recall retrieval
+service の 2 箇所に届くことを固定する。
 
 LLM は呼ばない (stub client)。flag は default OFF (共通規約 §0) なので
 各テストで明示的に ON にする。
@@ -38,11 +36,25 @@ def _common_memory_config(**overrides):
     )
 
 
+def _recall_credit_receiver(runtime):
+    """確定した予期を想起へ返す受け取る側。登録されていなければ None (#1443)。"""
+    from ai_rpg_world.application.being.expectation.recall_credit import (
+        ExpectationRecallCreditReceiver,
+    )
+
+    found = [
+        r
+        for r in runtime._expectation_dispatcher._receivers
+        if isinstance(r, ExpectationRecallCreditReceiver)
+    ]
+    return found[0] if found else None
+
+
 class TestWorldRuntimeRecallHitBoostWiring:
     def test_flag_chunk_coordinator_passive_recall(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """flag ON で chunk coordinator と passive recall に届く。"""
+        """flag ON で、確定した予期を想起へ返す受け取る側と passive recall に届く。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_common_memory_config(recall_hit_boost_enabled=True),
@@ -53,9 +65,10 @@ class TestWorldRuntimeRecallHitBoostWiring:
         # 的中側 sidecar が構築されている。
         assert stack.recall_success_store is not None
 
-        # 同期経路 (chunk_coordinator) に store + flag が届いている。
-        assert stack.chunk_coordinator._recall_success_store is stack.recall_success_store
-        assert stack.chunk_coordinator._recall_hit_boost_enabled is True
+        # 確定した予期を想起へ返す受け取る側に同一 store が届いている。
+        receiver = _recall_credit_receiver(runtime)
+        assert receiver is not None
+        assert receiver._success_store is stack.recall_success_store
 
         # passive_recall retrieval にも同一 store + strength が届いている。
         assert (
@@ -72,16 +85,14 @@ class TestWorldRuntimeRecallHitBoostWiring:
         assert stack is not None
 
         assert stack.recall_success_store is None
-        assert stack.chunk_coordinator._recall_success_store is None
-        assert stack.chunk_coordinator._recall_hit_boost_enabled is False
+        assert _recall_credit_receiver(runtime) is None
         assert stack.passive_recall._recall_success_store is None
 
     def test_recall_success_store_exists_without_targets_when_reinterpretation_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """LLM_EPISODIC_REINTERPRETATION_ENABLED が無いと recall_buffer 自体が
-        組まれないため、的中側 store は構築されても record_hit 対象の
-        recall observation が無く安全に縮退する (本 flag 単独では実害無し)。
+        組まれないため、受け取る側は的中の回数だけを書き、外れの書き添え先は持たない。
         """
         runtime = create_world_runtime(
             _SCENARIO_PATH,
@@ -93,6 +104,7 @@ class TestWorldRuntimeRecallHitBoostWiring:
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.reinterpretation_coordinator is None
-        # recall_buffer 自体が組まれないため chunk_coordinator の
-        # recall_buffer_store は None (U9a と同じ縮退)。
-        assert stack.chunk_coordinator._recall_buffer_store is None
+        # recall_buffer 自体が組まれないため、受け取る側は的中の回数だけを書く。
+        receiver = _recall_credit_receiver(runtime)
+        assert receiver is not None
+        assert receiver._recall_buffer_store is None

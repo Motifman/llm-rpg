@@ -716,20 +716,7 @@ def build_episodic_stack(
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
         belief_evidence_transcriber=belief_evidence_transcriber,
-        belief_attribution_enabled=belief_attribution_enabled,
-        # U9a (誤差駆動再解釈): ``prompt_recall_buffer`` を使う (= prompt_builder が
-        # 実際に想起 observation を append する先と同じ store)。completion が
-        # 無く prompt_recall_buffer が None のときは、そもそも observation が
-        # 積まれないため stamp 対象も無い。raw ``recall_buffer`` を渡すと
-        # 「積まれない store に stamp を試みる」無駄な経路になるので避ける。
-        recall_buffer_store=prompt_recall_buffer,
-        error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
         error_gated_boundary_enabled=error_gated_boundary_enabled,
-        # U9b: 同期経路 (chunk_coordinator) 用。recall_buffer_store は
-        # prompt_recall_buffer (U9a と同じ「実際に observation が積まれる
-        # store」) を共有する。
-        recall_success_store=recall_success_store,
-        recall_hit_boost_enabled=recall_hit_boost_enabled,
         # U10a (pending prediction): 同期経路用。非同期経路 (scheduler) は
         # pending_prediction_store 確定後に呼び出し側 (world_runtime.py) が
         # set_pending_prediction_store で差し込む。

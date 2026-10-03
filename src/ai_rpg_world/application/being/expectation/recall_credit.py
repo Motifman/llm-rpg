@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.being.expectation.belief_material import (
     settled_expectation_text,
@@ -35,18 +36,26 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id im
 
 
 class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
-    """``ExpectationSettled`` の当否を ``episodes_in_mind`` へ返す。"""
+    """``ExpectationSettled`` の当否を ``episodes_in_mind`` へ返す。
+
+    役に立った回数の記録先と想起の記録先は、それぞれの記憶の機能が有効なときだけ
+    渡される。無い側に届いた確定は、書かずに理由を trace に残す。
+    """
 
     def __init__(
         self,
         *,
-        success_store: IEpisodicRecallSuccessStore,
-        recall_buffer_store: EpisodicRecallBufferRepository,
+        success_store: IEpisodicRecallSuccessStore | None,
+        recall_buffer_store: EpisodicRecallBufferRepository | None,
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
     ) -> None:
-        if not isinstance(success_store, IEpisodicRecallSuccessStore):
+        if success_store is not None and not isinstance(
+            success_store, IEpisodicRecallSuccessStore
+        ):
             raise TypeError("success_store must implement IEpisodicRecallSuccessStore")
-        if not isinstance(recall_buffer_store, EpisodicRecallBufferRepository):
+        if recall_buffer_store is not None and not isinstance(
+            recall_buffer_store, EpisodicRecallBufferRepository
+        ):
             raise TypeError("recall_buffer_store must be EpisodicRecallBufferRepository")
         self._success_store = success_store
         self._recall_buffer_store = recall_buffer_store
@@ -59,11 +68,17 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
             self._trace(event_id, event, result="skipped", skipped_reason="no_episodes_in_mind")
             return
         if event.outcome is Outcome.HIT:
+            if self._success_store is None:
+                self._trace(event_id, event, result="skipped", skipped_reason="recall_success_store_unwired")
+                return
             credit = "hit_count"
             applied = self._success_store.record_hits_received_by_being(
                 event.holder, event.episodes_in_mind, event_id=event_id.value
             )
         else:
+            if self._recall_buffer_store is None:
+                self._trace(event_id, event, result="skipped", skipped_reason="recall_buffer_unwired")
+                return
             credit = "miss_stamp"
             applied = self._recall_buffer_store.stamp_prediction_outcome_for_episodes_by_being(
                 event.holder,
@@ -90,7 +105,7 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
         recorder = self._trace_recorder_provider()
         if recorder is None:
             return
-        payload: dict[str, object] = {
+        payload: dict[str, Any] = {
             "being_id": event.holder.value,
             "event_id": event_id.value,
             "expectation_id": event.expectation_id.value,

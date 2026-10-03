@@ -1,5 +1,8 @@
 """Quality-check シナリオ ``belief_evidence_v1``: 学習の素材が観測可能になったか。
 
+#1443 から、予測の当否の材料は chunk の ``prediction_error`` ではなく確定した
+予期から積む。dump は、確定した予期 1 件ごとに積んだ材料と trace を写す。
+
 U2 (証拠台帳統一設計 §2 U2) の DoD: 「質感シナリオ pytest を 1 本以上」
 (LLM を呼ばず prompt / 構造を点検するテスト)。U2 は prompt を一切変えない
 (semantic の想起挙動は不変) ため、`tests/quality/test_prediction_v1.py`
@@ -29,6 +32,9 @@ from ai_rpg_world.application.being.being_attachment_resolver import (
 )
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
+)
+from ai_rpg_world.application.being.expectation.belief_material import (
+    ExpectationBeliefMaterialReceiver,
 )
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
@@ -65,6 +71,22 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
     DefaultObservationContextBuffer,
 )
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
+    ExpectationSettled,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
+    Outcome,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
+    ExpectationEventId,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
+    ExpectationId,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
+    Likelihood,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -106,7 +128,7 @@ def _capture_trace(recorder: NullTraceRecorder) -> list:
 
 
 def _dump_belief_evidence(events: list, evidences: list) -> Path:
-    """BELIEF_EVIDENCE trace payload + buffer 内容を人が読める形で書き出す。"""
+    """EXPECTATION_MATERIAL trace payload + buffer 内容を人が読める形で書き出す。"""
     _DUMP_DIR.mkdir(parents=True, exist_ok=True)
     path = _DUMP_DIR / "belief_evidence_v1.trace.txt"
     parts: list[str] = []
@@ -115,7 +137,7 @@ def _dump_belief_evidence(events: list, evidences: list) -> Path:
         "# このファイルは tests/quality/test_belief_evidence_v1.py から\n"
         "# 再生成される。手で編集しないこと。\n\n"
     )
-    parts.append("=== BELIEF_EVIDENCE trace events ===\n")
+    parts.append("=== EXPECTATION_MATERIAL trace events ===\n")
     for i, ev in enumerate(events):
         parts.append(f"--- event[{i}] tick={ev.tick} ---\n")
         for key, value in ev.payload.items():
@@ -200,13 +222,28 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being
     coord.after_action_recorded(player_id, being_id)
 
 
+def _settled(**overrides: Any) -> ExpectationSettled:
+    fields: dict[str, Any] = {
+        "expectation_id": ExpectationId("exp-shore"),
+        "holder": BeingId("being-quality"),
+        "turn": 6,
+        "content": "QUALITY_MARKER_EXPECTATION: 浜辺を探せば何か見つかる",
+        "outcome": Outcome.MISS,
+        "likelihood": Likelihood.ALMOST_CERTAIN,
+        "beliefs_in_mind": ("belief-shore-rich",),
+        "episodes_in_mind": ("ep-shore",),
+    }
+    fields.update(overrides)
+    return ExpectationSettled(**fields)
+
+
 @pytest.mark.quality
 class TestBeliefEvidenceV1:
-    """chunk 主観補完で prediction_error が確定した瞬間の evidence 転記を
-    dump し、構造を人が確認できるようにする。LLM は呼ばない (スタブ port)。"""
+    """chunk の prediction_error は材料にならず、確定した予期が材料になる構造を
+    dump し、人が確認できるようにする (#1443)。LLM は呼ばない (スタブ port)。"""
 
     def test_prediction_error_dump(self) -> None:
-        """prediction error の転記構造を dump する。"""
+        """chunk を閉じても証拠は積まれず、確定した外れと当たりがそれぞれ 1 件の材料になる構造を dump する。"""
         buffer_store = InMemoryBeliefEvidenceBufferStore()
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
@@ -219,23 +256,39 @@ class TestBeliefEvidenceV1:
         coord, buffer, action_store, being_id = _build_coord(
             transcriber=transcriber, recorder=recorder
         )
-
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+        assert buffer_store.list_all_by_being(being_id) == []
 
-        belief_events = [
-            e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE
+        receiver = ExpectationBeliefMaterialReceiver(
+            buffer_store,
+            now_provider=lambda: datetime(2026, 7, 5, 9, 3, tzinfo=timezone.utc),
+            trace_recorder_provider=lambda: recorder,
+        )
+        quality_being = BeingId("being-quality")
+        receiver.receive(ExpectationEventId("exp-shore@6"), _settled())
+        receiver.receive(
+            ExpectationEventId("exp-fire@7"),
+            _settled(
+                expectation_id=ExpectationId("exp-fire"),
+                turn=7,
+                content="QUALITY_MARKER_EXPECTATION: 流木なら火がつく",
+                outcome=Outcome.HIT,
+                likelihood=Likelihood.PROBABLY,
+                beliefs_in_mind=("belief-driftwood-burns",),
+            ),
+        )
+
+        material_events = [
+            e for e in captured if e.kind == TraceEventKind.EXPECTATION_MATERIAL
         ]
-        evidences = buffer_store.list_all_by_being(being_id)
-        dump_path = _dump_belief_evidence(belief_events, evidences)
+        evidences = buffer_store.list_all_by_being(quality_being)
+        dump_path = _dump_belief_evidence(material_events, evidences)
 
         # runtime regression 検知のための最小限の sanity assert。
-        # 質感の判断 (cue_signature の妥当性・文言の質) は dump を人が読む。
+        # 質感の判断 (文言・強さの妥当性) は dump を人が読む。
         assert dump_path.exists()
-        assert len(evidences) == 1
-        evidence = evidences[0]
-        assert evidence.source_kind.value == "prediction_error"
-        assert evidence.cue_signature.startswith("tool:explore")
-        assert "QUALITY_MARKER_PREDICTION_ERROR" in evidence.text
-        assert evidence.tick == 12
-        assert len(belief_events) == 1
-        assert belief_events[0].payload["being_id"] == being_id.value
+        assert {(e.source_kind.value, e.salience) for e in evidences} == {
+            ("prediction_error", "high"),
+            ("confirmation", "low"),
+        }
+        assert [t.payload["result"] for t in material_events] == ["appended", "appended"]

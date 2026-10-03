@@ -17,6 +17,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_location import (
     EpisodeLocation,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import HeardClaim
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
@@ -61,7 +62,7 @@ class TestMemoryTurnReaderWiring:
         readers = {
             "consolidation": stack.belief_consolidation_coordinator._memory_turn_reader,
             "promotion": stack.episodic_semantic_promotion.memory_turn_reader,
-            "prediction_error": stack.chunk_coordinator._belief_evidence_transcriber._memory_turn_reader,
+            "hearsay": stack.chunk_coordinator._belief_evidence_transcriber._memory_turn_reader,
             "memo_distill": runtime._memo_distill_transcriber._memory_turn_reader,
             "structured_failure": runtime._structured_failure_transcriber._memory_turn_reader,
         }
@@ -71,7 +72,7 @@ class TestMemoryTurnReaderWiring:
         }
 
     def test_evidence_takes_turn_advanced_on_the_runtime_counter(self) -> None:
-        """runtime の数え手でターン数を 3 進めると、そのあと転記した予測の外れの証拠は observed_turn=3 を持つ。"""
+        """runtime の数え手でターン数を 3 進めると、そのあと転記した伝聞の証拠は observed_turn=3 を持つ。"""
         runtime = _runtime()
         being_id = BeingId("being_w1_p1")
         for _ in range(3):
@@ -92,13 +93,13 @@ class TestMemoryTurnReaderWiring:
             observed="o",
             expected="枯れ葉が無いはず",
             outcome="ok",
-            prediction_error="枯れ葉が戻っていた",
+            prediction_error=None,
             felt=None,
             interpreted=None,
             cues=(),
+            heard_claims=(HeardClaim(speaker="リオ", claim="枯れ葉が戻っていた"),),
         )
 
-        evidence = transcriber.record_if_applicable(being_id, episode)
+        (evidence,) = transcriber.record_heard_claims(being_id, episode)
 
-        assert evidence is not None
         assert evidence.observed_turn == 3

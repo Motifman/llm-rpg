@@ -19,9 +19,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
         BeliefEvidenceTranscriber,
     )
-    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-        IEpisodicRecallSuccessStore,
-    )
 
 _logger = logging.getLogger(__name__)
 
@@ -29,7 +26,10 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
     decide_chunk_boundary,
     summarize_observation_boundary_hints,
 )
-from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    SettledMissedExpectation,
+    build_chunk_encoding_input,
+)
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -40,10 +40,6 @@ from ai_rpg_world.application.llm.services._pending_prediction_recording import 
 )
 from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
     resolve_pending_predictions_if_applicable,
-)
-from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
-    record_recall_hits_if_applicable,
-    stamp_recall_prediction_outcome_if_applicable,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
@@ -62,9 +58,6 @@ from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
@@ -124,12 +117,7 @@ class EpisodicChunkCoordinator:
         current_tick_provider: Callable[[], int | None] | None = None,
         subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
         belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        belief_attribution_enabled: bool = False,
-        recall_buffer_store: EpisodicRecallBufferRepository | None = None,
-        error_driven_reinterpretation_enabled: bool = False,
         error_gated_boundary_enabled: bool = False,
-        recall_success_store: IEpisodicRecallSuccessStore | None = None,
-        recall_hit_boost_enabled: bool = False,
         pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
@@ -200,33 +188,8 @@ class EpisodicChunkCoordinator:
                 raise TypeError(
                     "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
                 )
-        if not isinstance(belief_attribution_enabled, bool):
-            raise TypeError("belief_attribution_enabled must be bool")
-        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default None = flag OFF
-        # 相当): flag OFF なら従来通り何もしない (「配線と有効化の分離」規約)。
-        if recall_buffer_store is not None and not isinstance(
-            recall_buffer_store, EpisodicRecallBufferRepository
-        ):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository or None"
-            )
-        if not isinstance(error_driven_reinterpretation_enabled, bool):
-            raise TypeError("error_driven_reinterpretation_enabled must be bool")
         if not isinstance(error_gated_boundary_enabled, bool):
             raise TypeError("error_gated_boundary_enabled must be bool")
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default None = flag
-        # OFF 相当): flag OFF なら従来通り何もしない (「配線と有効化の分離」)。
-        if recall_success_store is not None:
-            from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-                IEpisodicRecallSuccessStore as _IERSS,
-            )
-
-            if not isinstance(recall_success_store, _IERSS):
-                raise TypeError(
-                    "recall_success_store must implement IEpisodicRecallSuccessStore or None"
-                )
-        if not isinstance(recall_hit_boost_enabled, bool):
-            raise TypeError("recall_hit_boost_enabled must be bool")
         # U10a (予測誤差統一設計 部品6・pending prediction / default None =
         # flag OFF 相当): flag OFF なら従来通り何もしない (「配線と有効化の
         # 分離」)。
@@ -242,20 +205,9 @@ class EpisodicChunkCoordinator:
         # だけ decide_chunk_boundary に誤差ゲート境界条項を評価させる。False
         # (既定) では境界挙動は U8 導入前と完全一致する。
         self._error_gated_boundary_enabled = error_gated_boundary_enabled
-        self._recall_buffer_store = recall_buffer_store
-        self._error_driven_reinterpretation_enabled = (
-            error_driven_reinterpretation_enabled
-        )
-        self._recall_success_store = recall_success_store
-        self._recall_hit_boost_enabled = recall_hit_boost_enabled
         self._pending_prediction_store = pending_prediction_store
         self._pending_prediction_enabled = pending_prediction_enabled
         self._belief_evidence_transcriber = belief_evidence_transcriber
-        # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
-        # in_context_belief_ids / had_expected_result を実際に計算して transcriber
-        # へ渡す。False (既定) では常に空/False を渡すため、transcriber の挙動は
-        # U4 導入前 (U2/U3 のみ) と完全に一致する。
-        self._belief_attribution_enabled = belief_attribution_enabled
 
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
@@ -273,6 +225,11 @@ class EpisodicChunkCoordinator:
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: dict[int, list[ActionResultEntry]] = {}
+        # 外れたで確定した予期を、次に閉じる chunk の主観補完に渡すまで持つ (#1443)。
+        # 開いている chunk と同じく run の中だけで持つ。受け取り済みの ID も同じ
+        # 寿命で持ち、配り直しで同じ外れを別の chunk に二度渡さない。
+        self._settled_misses: dict[BeingId, list[SettledMissedExpectation]] = {}
+        self._received_miss_event_ids: set[str] = set()
         # 長走時の保険: decide_chunk_boundary が「もう少し溜めよう」を返し続
         # けた場合、bucket が際限なく肥える silent failure を防ぐためのハード
         # キャップ。境界判定の閾値を上回る規模になったら強制的に chunk を
@@ -284,51 +241,35 @@ class EpisodicChunkCoordinator:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
+    def note_settled_miss(
+        self, being_id: BeingId, missed: SettledMissedExpectation
+    ) -> bool:
+        """外れたで確定した予期を、次に閉じる chunk の主観補完へ渡すために持つ。
+
+        受け取り済みの出来事の ID なら持たずに False を返す。
+        """
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
+        if not isinstance(missed, SettledMissedExpectation):
+            raise TypeError("missed must be SettledMissedExpectation")
+        if missed.event_id in self._received_miss_event_ids:
+            return False
+        self._received_miss_event_ids.add(missed.event_id)
+        self._settled_misses.setdefault(being_id, []).append(missed)
+        return True
+
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode_store への put を episode.being_id 経路で発行する。"""
         self._episodic_episode_store.put_by_being(episode.being_id, episode)
 
-    def _record_belief_evidence_if_applicable(
-        self,
-        episode: SubjectiveEpisode,
-        chunk_actions: tuple[ActionResultEntry, ...] = (),
-    ) -> None:
-        """U2 (証拠台帳統一設計): 同期 LLM 補完直後に prediction_error を
-        evidence 化する。transcriber 未注入 (flag OFF) なら何もしない。
+    def _record_heard_claims_if_applicable(self, episode: SubjectiveEpisode) -> None:
+        """P9 (伝聞): 同期 LLM 補完直後に heard_claims を HEARSAY evidence に転記する。
 
-        episode.being_id が未 provision 等で store に書けない状況では evidence も
-        積まない。``_put_episode`` が同じ episode を silent skip する
-        状況と揃える (= episode 自体が保存されないのに evidence だけ
-        別 being に残る、という不整合を避ける)。
-
-        U4 (予測誤差統一設計 部品3): ``belief_attribution_enabled`` が True の
-        ときだけ ``chunk_actions`` (= ``encoding_input.action_results``) から
-        in_context_belief_ids / had_expected_result を計算して transcriber に
-        渡す。False (既定) では常に空/False を渡すため PREDICTION_ERROR evidence
-        への attribution 添付も CONFIRMATION の生成も起きない (= U4 導入前と
-        一致)。
+        予測の当否は確定した予期から積む (#1443) ので、ここでは扱わない。
+        transcriber 未注入 (flag OFF) なら何もしない。
         """
         if self._belief_evidence_transcriber is None:
             return
-        in_context_belief_ids: tuple[str, ...] = ()
-        had_expected_result = False
-        if self._belief_attribution_enabled:
-            from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-                compute_chunk_attribution,
-            )
-
-            in_context_belief_ids, had_expected_result = compute_chunk_attribution(
-                chunk_actions
-            )
-        self._belief_evidence_transcriber.record_if_applicable(
-            episode.being_id,
-            episode,
-            in_context_belief_ids=in_context_belief_ids,
-            had_expected_result=had_expected_result,
-        )
-        # P9 (伝聞): 抽出された heard_claims を HEARSAY evidence に転記する。
-        # HEARSAY_ENABLED OFF のときは episode.heard_claims が常に空なので no-op
-        # (= 導入前と一致)。フラグは chunk 補完側だけが知っていればよい。
         self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
 
     def _record_pending_prediction_if_applicable(
@@ -587,6 +528,7 @@ class EpisodicChunkCoordinator:
             # U10b: 窓が開いた約束を補完プロンプトに載せて「果たされたか」を
             # 判定させる。flag OFF / 該当なしのときは空 (= 導入前と一致)。
             active_pending_predictions=self._active_pending_predictions_for(being_id),
+            settled_missed_expectations=tuple(self._settled_misses.get(being_id, ())),
         )
         hints = summarize_observation_boundary_hints(encoding_input.observations)
         decision = decide_chunk_boundary(
@@ -643,36 +585,7 @@ class EpisodicChunkCoordinator:
                 episode=episode,
                 chunk_actions=encoding_input.action_results,
             )
-            # U2 (証拠台帳統一設計): 同期経路の「chunk 主観補完の完了点」は
-            # ここ (merge 直後)。episode.prediction_error が確定した直後に
-            # 転記する。非同期経路の対応箇所は
-            # episodic_subjective_completion_schedulers.py。
-            self._record_belief_evidence_if_applicable(
-                episode, encoding_input.action_results
-            )
-            # U9a (誤差駆動再解釈): 同期経路の完了点 (= 上の merge 直後) で
-            # in-context recall observation 群に prediction_error を刻む。
-            # flag OFF / store 未配線なら no-op (導入前と完全に一致)。
-            stamp_recall_prediction_outcome_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                error_driven_reinterpretation_enabled=(
-                    self._error_driven_reinterpretation_enabled
-                ),
-                being_id=episode.being_id,
-                episode=episode,
-                chunk_actions=encoding_input.action_results,
-            )
-            # U9b (想起の信用割り当て・的中側): 同じ完了点で「思い出したから
-            # 当たった」を的中側 sidecar に還流する。flag OFF / store 未配線
-            # なら no-op (導入前と完全に一致)。
-            record_recall_hits_if_applicable(
-                recall_buffer_store=self._recall_buffer_store,
-                recall_success_store=self._recall_success_store,
-                recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=episode.being_id,
-                episode=episode,
-                chunk_actions=encoding_input.action_results,
-            )
+            self._record_heard_claims_if_applicable(episode)
             # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
             # 抽出された約束・見込みを PendingPrediction 化して per-Being
             # store に積む。flag OFF / 抽出なし / store 未配線なら no-op
@@ -733,3 +646,9 @@ class EpisodicChunkCoordinator:
             observation_count=len(obs_slice_sorted),
         )
         self._chunk_actions[key] = []
+        handed = encoding_input.settled_missed_expectations
+        remaining = self._settled_misses.get(being_id, [])[len(handed):]
+        if remaining:
+            self._settled_misses[being_id] = remaining
+        else:
+            self._settled_misses.pop(being_id, None)

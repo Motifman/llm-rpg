@@ -2,11 +2,8 @@
 配線を end-to-end で確認する。
 
 ``BELIEF_ATTRIBUTION_ENABLED`` フラグが ``create_world_runtime`` を通して
-同期経路 (``EpisodicChunkCoordinator``) と固着 coordinator
-(``BeliefConsolidationCoordinator``) の両方に届くことを固定する。
-``ThreadPoolEpisodicSubjectiveScheduler`` などへの配線がキーワード文字列
-一致依存なので、将来リファクタで配線が取りこぼされたときに構造的に検出
-できる安全網 (U1 の ``test_world_runtime_prediction_context_id.py`` と同粒度)。
+固着 coordinator (``BeliefConsolidationCoordinator``) に届くことを固定する。
+CONFIRMATION の材料は確定した予期から積む (#1443) ので、chunk 側には届けない。
 
 LLM は呼ばない (stub client)。flag は default OFF (共通規約 §0) なので
 各テストで明示的に ON にする。
@@ -41,16 +38,13 @@ class TestWorldRuntimeBeliefAttributionWiring:
     def test_flag_chunk_coordinator_attribution(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """flagON で chunkcoordinator と固着 coordinator に attribution が届く。"""
+        """flag ON で固着 coordinator の system prompt に CONFIRMATION 節が載る。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_common_memory_config(belief_attribution_enabled=True),
         )
         stack = runtime._episodic_stack
         assert stack is not None
-
-        # 同期経路 (chunk_coordinator) に flag が届いている。
-        assert stack.chunk_coordinator._belief_attribution_enabled is True
 
         # 固着 coordinator が構築され、CONFIRMATION 節が system prompt に載る
         # (= attribution flag が coordinator まで届いた証拠)。
@@ -65,8 +59,6 @@ class TestWorldRuntimeBeliefAttributionWiring:
         runtime = create_world_runtime(_SCENARIO_PATH, config=_common_memory_config())
         stack = runtime._episodic_stack
         assert stack is not None
-
-        assert stack.chunk_coordinator._belief_attribution_enabled is False
 
         coordinator = stack.belief_consolidation_coordinator
         assert coordinator is not None

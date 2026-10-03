@@ -197,3 +197,38 @@ class TestNothingToCredit:
         assert harness.success.list_all_by_being(RIO) == {}
         assert harness.stamps() == {"r-1": None}
         assert harness.traces() == []
+
+
+class TestPartiallyWiredStores:
+    """記録先が片方しか有効でない構成で、書けない側は理由を trace に残して何もしない挙動を保証する。"""
+
+    def test_hit_without_success_store_is_skipped(self) -> None:
+        """役に立った回数の記録先が無ければ、当たりは書かずに理由を残す。"""
+        recall = InMemoryEpisodicRecallBufferStore()
+        recorder = RecordingTraceRecorder()
+        receiver = ExpectationRecallCreditReceiver(
+            success_store=None,
+            recall_buffer_store=recall,
+            trace_recorder_provider=lambda: recorder,
+        )
+
+        receiver.receive(EVENT_ID, _settled())
+
+        (trace,) = recorder.payloads(TraceEventKind.EXPECTATION_MATERIAL)
+        assert (trace["result"], trace["skipped_reason"]) == ("skipped", "recall_success_store_unwired")
+
+    def test_miss_without_recall_buffer_is_skipped(self) -> None:
+        """想起の記録先が無ければ、外れは書き添えずに理由を残す。"""
+        success = InMemoryEpisodicRecallSuccessStore()
+        recorder = RecordingTraceRecorder()
+        receiver = ExpectationRecallCreditReceiver(
+            success_store=success,
+            recall_buffer_store=None,
+            trace_recorder_provider=lambda: recorder,
+        )
+
+        receiver.receive(EVENT_ID, _settled(outcome=Outcome.MISS))
+
+        assert success.list_all_by_being(RIO) == {}
+        (trace,) = recorder.payloads(TraceEventKind.EXPECTATION_MATERIAL)
+        assert (trace["result"], trace["skipped_reason"]) == ("skipped", "recall_buffer_unwired")
