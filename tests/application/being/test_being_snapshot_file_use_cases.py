@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
 from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case import (
@@ -56,7 +57,7 @@ def _make_environment():
     recall = InMemoryEpisodicRecallBufferStore()
     journal = InMemoryEpisodicReinterpretationJournalStore()
     episode = InMemorySubjectiveEpisodeStore()
-    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
+    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=InMemoryExpectationRepository())
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
     restore = RestoreBeingSnapshotFromFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)

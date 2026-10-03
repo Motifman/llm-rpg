@@ -74,6 +74,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_belief_evidence,
     dict_to_episode_hit_count_pair,
     dict_to_episode_tick_pair,
+    dict_to_expectation,
     dict_to_goal_entry,
     dict_to_memo_entry,
     dict_to_memory_link,
@@ -83,8 +84,10 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
+    dict_to_undelivered_expectation_event,
     episode_hit_count_pair_to_dict,
     episode_tick_pair_to_dict,
+    expectation_to_dict,
     goal_entry_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
@@ -94,6 +97,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     reinterpretation_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
+    undelivered_expectation_event_to_dict,
 )
 from ai_rpg_world.application.llm.services.afterglow_store import IAfterglowStore
 from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
@@ -120,6 +124,12 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
 )
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
+)
+from ai_rpg_world.domain.memory.expectation.exception.expectation_exception import (
+    ExpectationValidationException,
+)
+from ai_rpg_world.domain.memory.expectation.repository.expectation_repository import (
+    ExpectationRepository,
 )
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
@@ -248,6 +258,11 @@ class BeingMemorySnapshotService:
         # P-U2 (停滞感 store): 停滞感カウンタの per-Being state。scalar な
         # ため list 1 要素 (0 なら空 list) で運ぶ (他 key と同じ list 規約に揃える)。
         "stagnation_pressure_count",
+        # #1439: 予期は状態をそのまま保存して戻す。未配信の出来事と記憶の
+        # ターン数も同じ store が持つので、3 key を同じ単位で書き戻す。
+        "expectations",
+        "expectation_undelivered_events",
+        "memory_turn",
     })
 
     def __init__(
@@ -267,6 +282,7 @@ class BeingMemorySnapshotService:
         pending_prediction_store: PendingPredictionRepository,
         goal_journal_store: GoalJournalRepository,
         stagnation_pressure_store: StagnationPressureRepository,
+        expectation_store: ExpectationRepository,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -323,6 +339,8 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "stagnation_pressure_store must be StagnationPressureRepository"
             )
+        if not isinstance(expectation_store, ExpectationRepository):
+            raise TypeError("expectation_store must be ExpectationRepository")
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
@@ -337,6 +355,7 @@ class BeingMemorySnapshotService:
         self._pending_prediction = pending_prediction_store
         self._goal_journal = goal_journal_store
         self._stagnation_pressure = stagnation_pressure_store
+        self._expectation = expectation_store
 
     def capture(self, being_id: BeingId) -> str:
         """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -423,6 +442,16 @@ class BeingMemorySnapshotService:
         payload["stagnation_pressure_count"] = (
             [stagnation_pressure_count] if stagnation_pressure_count else []
         )
+        payload["expectations"] = [
+            expectation_to_dict(e)
+            for e in self._expectation.list_all_by_being(being_id)
+        ]
+        payload["expectation_undelivered_events"] = [
+            undelivered_expectation_event_to_dict(u)
+            for u in self._expectation.list_undelivered_by_being(being_id)
+        ]
+        memory_turn = self._expectation.current_turn(being_id)
+        payload["memory_turn"] = [memory_turn] if memory_turn else []
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
         # 足したが capture() の dict 生成を忘れた状態を即時に止める。
@@ -582,6 +611,25 @@ class BeingMemorySnapshotService:
                 f"payload['stagnation_pressure_count'][0] is malformed: {exc!r}"
             ) from exc
 
+        expectations = _decode_list(
+            payload["expectations"], dict_to_expectation, "expectations"
+        )
+        undelivered_expectation_events = _decode_list(
+            payload["expectation_undelivered_events"],
+            dict_to_undelivered_expectation_event,
+            "expectation_undelivered_events",
+        )
+        memory_turn_raw = payload["memory_turn"]
+        if len(memory_turn_raw) > 1 or not all(
+            isinstance(v, int) and not isinstance(v, bool) and v > 0
+            for v in memory_turn_raw
+        ):
+            raise BeingMemoryPayloadFormatError(
+                "payload['memory_turn'] must be [] or [positive int], "
+                f"got {memory_turn_raw!r}"
+            )
+        memory_turn = memory_turn_raw[0] if memory_turn_raw else 0
+
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
         # 参照するが、本 service は参照整合性まで保証しない (= 各 store 独立)。
@@ -625,6 +673,17 @@ class BeingMemorySnapshotService:
         self._stagnation_pressure.replace_all_by_being(
             being_id, stagnation_pressure_count
         )
+        try:
+            self._expectation.replace_all_by_being(
+                being_id,
+                expectations=expectations,
+                undelivered_events=undelivered_expectation_events,
+                turn=memory_turn,
+            )
+        except ExpectationValidationException as exc:
+            raise BeingMemoryPayloadFormatError(
+                f"payload['expectations'] does not fit {being_id}: {exc}"
+            ) from exc
 
 
 __all__ = [

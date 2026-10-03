@@ -214,6 +214,9 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
+        from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
+            InMemoryExpectationRepository,
+        )
 
         repo = InMemoryBeingRepository()
         # episodic_stack 側の attribute 名は EpisodicStack dataclass (実体) と
@@ -240,6 +243,7 @@ class TestExpectedPayloadKeysCoverage:
             _episodic_stack=episodic_stack,
             _goal_journal_store=InMemoryGoalJournalStore(),
             _stagnation_pressure_store=InMemoryStagnationPressureStore(),
+            _expectation_store=InMemoryExpectationRepository(),
         )
 
     def _fallback_logs(

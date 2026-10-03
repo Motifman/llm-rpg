@@ -43,7 +43,7 @@ class TestValidateSnapshotPayloadCoverage:
         """両集合が空でも例外を投げない (= minimal wiring セーフ)。"""
         _validate_snapshot_payload_coverage(emitted_keys=set(), expected_keys=set())
 
-def _make_service():
+def _make_service(expectation_store=None):
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
     from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
@@ -68,7 +68,8 @@ def _make_service():
         InMemoryStagnationPressureStore,
     )
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
+    from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
+    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=expectation_store or InMemoryExpectationRepository())
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -111,7 +112,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
         service = _make_service()
-        payload_without_new_key = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': []}
+        payload_without_new_key = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': []}
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId('being-test'), json.dumps(payload_without_new_key))
         assert 'fictional_new_store' in str(exc_info.value)
@@ -127,7 +128,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadFormatError
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         service = _make_service()
-        broken_payload = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'belief_evidence_buffer': [{'evidence_id': 'e1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '探索は空振りだった', 'salience': 'medium', 'occurred_at': '2026-07-05T09:00:00+00:00', 'tick': 7}]}
+        broken_payload = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'belief_evidence_buffer': [{'evidence_id': 'e1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '探索は空振りだった', 'salience': 'medium', 'occurred_at': '2026-07-05T09:00:00+00:00', 'tick': 7}]}
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId('being-test'), json.dumps(broken_payload))
         assert 'belief_evidence_buffer' in str(exc_info.value)

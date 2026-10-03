@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_persistence_service import BeingPersistenceService
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
@@ -54,7 +55,7 @@ def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dic
     recall = InMemoryEpisodicRecallBufferStore()
     journal = InMemoryEpisodicReinterpretationJournalStore()
     episode = InMemorySubjectiveEpisodeStore()
-    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
+    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=InMemoryExpectationRepository())
     svc = BeingPersistenceService(being_repository=being_repo, memory_snapshot_service=snapshot_svc)
     return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'recall': recall, 'journal': journal, 'episode': episode})
 
@@ -167,7 +168,7 @@ class TestConstructorTypeGuards:
         recall = InMemoryEpisodicRecallBufferStore()
         journal = InMemoryEpisodicReinterpretationJournalStore()
         episode = InMemorySubjectiveEpisodeStore()
-        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
+        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=InMemoryExpectationRepository())
         with pytest.raises(TypeError, match='being_repository'):
             BeingPersistenceService(being_repository='bad', memory_snapshot_service=snap_svc)
 

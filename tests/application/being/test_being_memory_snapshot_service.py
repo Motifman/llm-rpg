@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     CURRENT_PAYLOAD_SCHEMA_VERSION,
     BeingMemoryPayloadFormatError,
@@ -73,7 +74,7 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     pending_prediction = InMemoryPendingPredictionStore()
     goal_journal = InMemoryGoalJournalStore()
     stagnation_pressure = InMemoryStagnationPressureStore()
-    svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=belief_evidence, recall_success_store=success, pending_prediction_store=pending_prediction, goal_journal_store=goal_journal, stagnation_pressure_store=stagnation_pressure)
+    svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=belief_evidence, recall_success_store=success, pending_prediction_store=pending_prediction, goal_journal_store=goal_journal, stagnation_pressure_store=stagnation_pressure, expectation_store=InMemoryExpectationRepository())
     return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'recall': recall, 'journal': journal, 'episode': episode, 'belief_evidence': belief_evidence, 'success': success, 'pending_prediction': pending_prediction, 'goal_journal': goal_journal, 'stagnation_pressure': stagnation_pressure})
 
 def _populate(stores: dict[str, object], being_id: BeingId) -> None:
@@ -388,21 +389,21 @@ class TestRestoreValidation:
     def test_memo_element_id_missing_raises_format_error(self) -> None:
         """list 要素内の dict key 欠落は KeyError ではなく FormatError に wrap される。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [{'content': 'no id'}], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [{'content': 'no id'}], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='memo'):
             svc.restore(BeingId('ada'), bad)
 
     def test_unknown_enum_value_raises_format_error(self) -> None:
         """memory_link の link_type が未知値なら FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [{'link_id': 'x', 'player_id': 1, 'episode_id_a': 'a', 'episode_id_b': 'b', 'link_type': 'UNKNOWN_TYPE', 'strength': 0.5, 'co_activation_count': 1, 'created_at': '2026-06-14T12:00:00+00:00', 'last_activated_at': '2026-06-14T12:00:00+00:00', 'decay_rate': 0.001}], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [{'link_id': 'x', 'player_id': 1, 'episode_id_a': 'a', 'episode_id_b': 'b', 'link_type': 'UNKNOWN_TYPE', 'strength': 0.5, 'co_activation_count': 1, 'created_at': '2026-06-14T12:00:00+00:00', 'last_activated_at': '2026-06-14T12:00:00+00:00', 'decay_rate': 0.001}], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='memory_links'):
             svc.restore(BeingId('ada'), bad)
 
     def test_required_key_list_raises_format_error(self) -> None:
         """required key の値が list でないと FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': 'not-list', 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': 'not-list', 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'pending_predictions': [], 'goal_journal': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='must be list'):
             svc.restore(BeingId('ada'), bad)
 
@@ -430,7 +431,7 @@ class TestConstructor:
             InMemoryStagnationPressureStore,
         )
         with pytest.raises(TypeError, match='memo_store'):
-            BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore())
+            BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=InMemoryExpectationRepository())
 
     def test_stagnation_pressure_store_raises_type_error(self) -> None:
         """P-U2: stagnation_pressure_store が StagnationPressureRepository で
@@ -451,4 +452,4 @@ class TestConstructor:
             InMemoryPendingPredictionStore,
         )
         with pytest.raises(TypeError, match='stagnation_pressure_store'):
-            BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store='bad')
+            BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store='bad', expectation_store=InMemoryExpectationRepository())

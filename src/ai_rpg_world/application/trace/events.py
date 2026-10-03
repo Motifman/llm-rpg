@@ -155,6 +155,8 @@ class TraceEventKind:
     # SNAPSHOT_LOAD payload:
     #   - directory: str (= --snapshot-load-dir)
     #   - restored_count: int (= 成功した Being 数)
+    #   - expectation_counts: list[{being_id, open, closed, undelivered_events,
+    #     memory_turn}] (= 復元した Being ごとの予期の件数と記憶のターン数)
     #   - source_scenario: str | None (= snapshot 内に書かれていた元シナリオ名。
     #     現 scenario と異なる場合は cross-scenario transfer)
     # SNAPSHOT_SAVE payload:
@@ -162,6 +164,7 @@ class TraceEventKind:
     #   - succeeded_count: int
     #   - failed_count: int
     #   - failures: list[{being_id, error}]
+    #   - expectation_counts: SNAPSHOT_LOAD と同じ形。保存できた Being ごと
     SNAPSHOT_LOAD = "snapshot_load"
     SNAPSHOT_SAVE = "snapshot_save"
     # Phase 9-1 (Issue #470): WorldStateSnapshot (= scenario 全体の world state)
