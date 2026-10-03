@@ -119,6 +119,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     GOAL_OUTCOME_ACHIEVED,
     assess_situation_definition,
     strip_reason_first_action_subjective_schema,
+    with_expectations_schema,
     with_expected_result_schema,
     with_goal_outcome_schema,
     with_goal_update_schema,
@@ -1672,7 +1673,9 @@ class WorldRuntime:
         """
         spot = [
             self._with_goal_update_if_enabled(
-                self._with_expected_result_if_enabled(defn)
+                self._with_expectations_if_enabled(
+                    self._with_expected_result_if_enabled(defn)
+                )
             )
             for defn, _ in get_spot_graph_specs()
         ]
@@ -1801,6 +1804,21 @@ class WorldRuntime:
         return with_expected_result_schema(
             definition, required=self._expected_result_policy == "required"
         )
+
+    def _with_expectations_if_enabled(
+        self, definition: ToolDefinitionDto
+    ) -> ToolDefinitionDto:
+        """予期の引数が有効なら、環境の tool に ``expectations`` を足す (#1441)。
+
+        付けるのは環境の tool だけ。記憶の tool と ``assess_situation`` は
+        エージェントの側で考えるための tool で、行動の結果を待つものではない。
+        run 全体で同じ定義を出すので、ターンをまたいで変わらない。
+        """
+        if not bool(
+            getattr(self._runtime_config, "expectation_argument_enabled", False)
+        ):
+            return definition
+        return with_expectations_schema(definition)
 
     def _with_goal_update_if_enabled(
         self, definition: ToolDefinitionDto
@@ -4694,6 +4712,7 @@ def create_world_runtime(
         participant_names=participants,
         enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
         expected_result_policy=config.expected_result_policy,
+        expectation_argument_enabled=config.expectation_argument_enabled,
         has_goal=_has_goal,
     )
 
@@ -4769,6 +4788,7 @@ def create_world_runtime(
                     participant_names=other_names,
                     enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
                     expected_result_policy=config.expected_result_policy,
+                    expectation_argument_enabled=config.expectation_argument_enabled,
                     has_goal=_has_goal,
                 )
             )

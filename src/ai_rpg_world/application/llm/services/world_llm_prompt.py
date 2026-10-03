@@ -216,6 +216,22 @@ def _expected_result_rule_line(
     return ""
 
 
+def _expectations_rule_line(enabled: bool) -> str:
+    """予期の引数を書かせる行動ルール行 (#1441)。無効なら空文字で、prompt は変わらない。
+
+    2 段階ターンでも同じ行にする。予期は行動を選んだあとの 2 段目に書くので、
+    どちらのターンでも「行動の tool」に書くことになる。
+    """
+    if not enabled:
+        return ""
+    return (
+        "- 行動の tool では `expectations` に、この行動のあとに起きると思うことを、"
+        "いつ頃か・どのくらい確かかを添えて書く"
+        "（他の人がどうするか、世界がどうなるか。自分がこれから何をするかではない。"
+        "思いつかなければ空でよい。後で実際に起きたことと照らし合わせる）。"
+    )
+
+
 def build_world_system_prompt(
     *,
     world_title: str,
@@ -226,6 +242,7 @@ def build_world_system_prompt(
     expected_result_policy: str = "off",
     tool_schema_mode: str = "legacy",
     has_goal: bool = True,
+    expectation_argument_enabled: bool = False,
 ) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
 
@@ -245,6 +262,10 @@ def build_world_system_prompt(
     expected_result_policy:
         ``"off"`` (既定) なら予測関連の行動ルールは増えず prompt 不変。``"optional"`` /
         ``"required"`` のとき、expected_result を書く指示行を 行動ルール に追加する (#526 v0)。
+
+    expectation_argument_enabled:
+        ``True`` のとき、予期の引数 ``expectations`` を書く指示行を 行動ルール に
+        追加する (#1441)。``expected_result`` とは設定で併用させない。
 
     tool_schema_mode:
         ``"legacy"`` (既定) なら従来通り各行動 tool が ``inner_thought`` を受け取る。
@@ -273,7 +294,7 @@ def build_world_system_prompt(
     # 付けず、prompt を従来と完全一致させる (prefix cache 不変)。
     expected_result_rule = _expected_result_rule_line(
         expected_result_policy, tool_schema_mode=tool_schema_mode
-    )
+    ) or _expectations_rule_line(expectation_argument_enabled)
     expected_result_rule_block = (
         f"\n{expected_result_rule}" if expected_result_rule else ""
     )

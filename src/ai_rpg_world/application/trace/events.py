@@ -373,6 +373,26 @@ class TraceEventKind:
     # top-level player_id: aggregate が PlayerStatusAggregate のときだけ best-effort で
     # 入る (= どの player の grace 登録/解除・効果適用が失われたかの per-agent 分析用)。
     SIDE_HANDLER_FAILED = "side_handler_failed"
+    # #1441: 環境の tool の呼び出し 1 件に書かれた予期を積んだ結果。予期の引数が
+    # 有効な run で、予期の引数を持つ tool を呼んだ手ごとに 1 件。0 件でも残す。
+    # payload:
+    #   - being_id: str | None
+    #   - turn: int | None (= 本人のターン数。予期の作られたターン)
+    #   - tool: str
+    #   - argument_present: bool (= 引数そのものがあったか。空の配列なら True)
+    #   - formed_count: int
+    #   - formed: list[{expectation_id, what, when, likelihood}]
+    #   - rejected: list[{index, reason, raw}] (= 積まなかった予期。index は配列の
+    #     中の位置で、引数ごと配列でなければ None。reason は "not_a_list" |
+    #     "not_an_object" | "missing_what" | "invalid_when" | "invalid_likelihood")
+    #   - context_found: bool (= そのターンのプロンプトの信念と想起を台帳から引けたか。
+    #     False なら下の 2 つは「0 件だった」ではなく「分からない」)
+    #   - beliefs_in_mind / episodes_in_mind: list[str] (= そのターンのプロンプトに
+    #     載った信念と、想起したエピソード)
+    #   - skipped_reason: str | None ("no_acting_being" | "forming_failed")
+    #   - error: str | None (= forming_failed のときの例外の型と文。保存の途中で
+    #     失敗したら、formed にはそれまでに保存し終えた予期が載る)
+    EXPECTATION_FORMED = "expectation_formed"
     # #1440: 予期の清算を試みたターン 1 件。Jev を呼ばなかったターンも残す。
     # 判断が見たものは判断の trace に残すので、Jev に渡した state もそのまま載せる。
     # payload:

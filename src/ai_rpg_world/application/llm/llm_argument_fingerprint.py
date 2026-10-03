@@ -19,6 +19,7 @@ NARRATIVE_ARG_FIELDS: frozenset[str] = frozenset({
     "reason",             # spot_graph_wait など
     "intention",          # world-action tool の主観入力 (目的)
     "expected_result",    # world-action tool の主観入力 (行動前の予測)
+    "expectations",       # 環境の tool の予期 (#1441)
     "emotion_hint",       # world-action tool の主観入力 (主要感情)
 })
 

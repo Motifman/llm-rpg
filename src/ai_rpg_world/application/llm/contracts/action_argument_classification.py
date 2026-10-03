@@ -40,6 +40,8 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "content": ActionArgumentDisplayKind.FREE_TEXT,
     # travel_to.destination_label: 現在状態に出た場所名と完全一致が必要。
     "destination_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # expectations: 予期は清算と「前回の予測と実際」(#1442) で扱い、呼び出し行には出さない。
+    "expectations": ActionArgumentDisplayKind.OMIT,
     # expected_result: 直後の [予測: ...] 行に同じ値を表示済み。
     "expected_result": ActionArgumentDisplayKind.OMIT,
     # give_item.gives: item_label / target_player_label を持つ配列を JSON のまま渡す。
