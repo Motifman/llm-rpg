@@ -101,9 +101,16 @@ const cls = (l) => (l === "?" ? "q" : l);
 const shapeText = { settleable: "清算できる", own_action: "本人の行動", not_an_expectation: "予期ではない", true_either_way: "どう転んでも当たる" };
 
 const STORE_KEY = "issue1484-grounds-reviews";
-const reviews = (() => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}"); } catch (_) { return {}; } })();
+let storeBroken = false;
+const reviews = (() => {
+  let raw = null;
+  try { raw = localStorage.getItem(STORE_KEY); } catch (_) { return {}; }
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch (_) { storeBroken = true; return {}; }
+})();
 const db = true;
-let canWrite = true;
+// 壊れた保存を空として扱うと、次の保存で上書きして消してしまう。
+let canWrite = !storeBroken;
 let focusN = null;
 const writing = new Set();
 
@@ -215,6 +222,7 @@ function setFocus(n) {
 async function decide(it, value) {
   if (!db || !canWrite || writing.has(it.n)) return;
   const body = { label: value, agreed: value === it.l, claude: it.l, jev: it.p, chosen: it.c };
+  const before = reviews[it.n];
   writing.add(it.n);
   reviews[it.n] = body;
   render();
@@ -223,9 +231,11 @@ async function decide(it, value) {
   if (next) setFocus(next.n);
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(reviews));
-    setStatus("このブラウザに保存しました。終わったら Claude に「見終わった」と伝えてください。");
+    setStatus("このブラウザに保存しました。");
   } catch (e) {
-    setStatus("このブラウザに保存できませんでした。もう一度押してください。", true);
+    if (before) reviews[it.n] = before; else delete reviews[it.n];
+    render();
+    setStatus(`#${it.n} をこのブラウザに保存できませんでした。もう一度押してください。`, true);
   } finally {
     writing.delete(it.n);
   }
@@ -238,7 +248,7 @@ function setStatus(text, warn) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.closest("input")) return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, button")) return;
   const vis = visibleItems();
   if (!vis.length) return;
   const idx = vis.findIndex((x) => x.n === focusN);
@@ -260,6 +270,6 @@ render();
 const firstVisible = visibleItems()[0];
 if (firstVisible) setFocus(firstVisible.n);
 
-setStatus(Object.keys(reviews).length ? "前回の続きから。押すたびにこのブラウザに保存します。" : "押すたびにこのブラウザに保存します。");
+setStatus(storeBroken ? "このブラウザの保存が読めないので、上書きしないよう表示だけにしています。" : Object.keys(reviews).length ? "前回の続きから。押すたびにこのブラウザに保存します。" : "押すたびにこのブラウザに保存します。", storeBroken);
 </script>
 </body></html>
