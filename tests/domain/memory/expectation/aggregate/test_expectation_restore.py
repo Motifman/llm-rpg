@@ -30,6 +30,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import (
     ExpectationOrigin,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_snapshot import (
+    ExpectationSnapshot,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_status import (
     ExpectationStatus,
 )
@@ -73,7 +76,7 @@ def _restore(**overrides: Any) -> Expectation:
         "closed_at_turn": None,
     }
     fields.update(overrides)
-    return Expectation.restore(**fields)
+    return Expectation.restore(ExpectationSnapshot(**fields))
 
 
 class TestRestoreOpenExpectation:

@@ -3,6 +3,7 @@
 from ai_rpg_world.domain.common.exception import (
     BusinessRuleException,
     DomainException,
+    NotFoundException,
     StateException,
     ValidationException,
 )
@@ -38,9 +39,18 @@ class ExpectationAlreadyClosedException(
     error_code = "EXPECTATION.ALREADY_CLOSED"
 
 
+class ExpectationEventNotFoundException(
+    ExpectationDomainException, NotFoundException
+):
+    """未配信に無い出来事に、配信済みの印を付けようとしたときの例外。"""
+
+    error_code = "EXPECTATION.EVENT_NOT_FOUND"
+
+
 __all__ = [
     "ExpectationAlreadyClosedException",
     "ExpectationCheckRuleException",
     "ExpectationDomainException",
+    "ExpectationEventNotFoundException",
     "ExpectationValidationException",
 ]

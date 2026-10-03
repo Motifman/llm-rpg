@@ -214,6 +214,9 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
+        from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
+            InMemoryExpectationRepository,
+        )
 
         repo = InMemoryBeingRepository()
         # episodic_stack 側の attribute 名は EpisodicStack dataclass (実体) と
@@ -240,6 +243,7 @@ class TestExpectedPayloadKeysCoverage:
             _episodic_stack=episodic_stack,
             _goal_journal_store=InMemoryGoalJournalStore(),
             _stagnation_pressure_store=InMemoryStagnationPressureStore(),
+            _expectation_store=InMemoryExpectationRepository(),
         )
 
     def _fallback_logs(
@@ -396,3 +400,33 @@ class TestSnapshotArgs:
         assert captured["snapshot_load_dir"] is None
         # --snapshot-save-dir 指定時は事前に mkdir される。
         assert save_dir.exists()
+
+
+class TestSnapshotTraceCarriesExpectationCounts:
+    """smoke_stub で保存と再開を通しで回し、SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に Being ごとの予期の件数が載ることを保証する。"""
+
+    @staticmethod
+    def _events(trace_path: Path, kind: str) -> list[dict]:
+        import json
+
+        lines = trace_path.read_text(encoding="utf-8").splitlines()
+        return [e for e in map(json.loads, lines) if e["kind"] == kind]
+
+    def test_save_and_load_traces_carry_expectation_counts(self, tmp_path: Path) -> None:
+        """保存した Being と復元した Being ごとに、配線の有無・清算待ち・終わった予期・未配信の出来事・記憶のターン数が trace に載る。予期を作る処理がまだ無いので、空の代用品として store_wired=False で 0 件になる。"""
+        from scripts.run_scenario_experiment import main
+
+        common = ["--profile", "smoke_stub", "--max-world-ticks", "2", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
+        snapshots = tmp_path / "snapshots"
+        assert main([*common, "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]) == 0
+        assert main([*common, "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]) == 0
+
+        (saved,) = self._events(tmp_path / "first" / "trace.jsonl", "snapshot_save")
+        (loaded,) = self._events(tmp_path / "second" / "trace.jsonl", "snapshot_load")
+
+        empty = {"store_wired": False, "open": 0, "closed": 0, "undelivered_events": 0, "memory_turn": 0}
+        for event, ids_key in ((saved, "succeeded_being_ids"), (loaded, "restored_being_ids")):
+            counts = event["payload"]["expectation_counts"]
+            assert [c["being_id"] for c in counts] == event["payload"][ids_key]
+            assert len(counts) > 0
+            assert all({k: v for k, v in c.items() if k != "being_id"} == empty for c in counts)

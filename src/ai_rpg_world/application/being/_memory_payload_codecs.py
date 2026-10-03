@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     )
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
     EpisodeAction,
 )
@@ -73,6 +74,46 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
+)
+from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
+    Expectation,
+)
+from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
+    ExpectationDismissed,
+    ExpectationEvent,
+    ExpectationExpired,
+    ExpectationSettled,
+    ExpectationVoided,
+    ProvisionallyMissed,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.check import Check
+from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
+    CheckVerdict,
+    Outcome,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
+    ExpectationEventId,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
+    ExpectationId,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import (
+    ExpectationOrigin,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_snapshot import (
+    ExpectationSnapshot,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_status import (
+    ExpectationStatus,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
+    Likelihood,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
+    ShapeVerdict,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.undelivered_expectation_event import (
+    UndeliveredExpectationEvent,
 )
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
@@ -721,3 +762,140 @@ def dict_to_pending_prediction(data: dict[str, Any]) -> PendingPrediction:
         )
     except PendingPredictionValidationException as exc:
         raise ValueError(f"invalid PendingPrediction payload: {exc}") from exc
+
+
+# ── 予期 (#1439): 状態をそのまま保存して戻す。照合の記録を流し直さない ──
+
+_EXPECTATION_EVENT_KIND_BY_TYPE: dict[type[ExpectationEvent], str] = {
+    ProvisionallyMissed: "provisionally_missed",
+    ExpectationSettled: "settled",
+    ExpectationDismissed: "dismissed",
+    ExpectationVoided: "voided",
+    ExpectationExpired: "expired",
+}
+_EXPECTATION_EVENT_TYPE_BY_KIND = {
+    kind: event_type for event_type, kind in _EXPECTATION_EVENT_KIND_BY_TYPE.items()
+}
+
+
+def _str_tuple(value: Any, *, name: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise ValueError(f"{name} must be list[str], got {value!r}")
+    return tuple(value)
+
+
+def expectation_to_dict(expectation: Expectation) -> dict[str, Any]:
+    snapshot = expectation.snapshot()
+    return {
+        "expectation_id": snapshot.expectation_id.value,
+        "holder": snapshot.holder.value,
+        "content": snapshot.content,
+        "origin": snapshot.origin.value,
+        "likelihood": snapshot.likelihood.value,
+        "formed_at_turn": snapshot.formed_at_turn,
+        "expires_at_turn": snapshot.expires_at_turn,
+        "formed_with": snapshot.formed_with,
+        "due": snapshot.due,
+        "beliefs_in_mind": list(snapshot.beliefs_in_mind),
+        "episodes_in_mind": list(snapshot.episodes_in_mind),
+        "shape": snapshot.shape.value if snapshot.shape is not None else None,
+        "checks": [
+            {"turn": check.turn, "verdict": check.verdict.value}
+            for check in snapshot.checks
+        ],
+        "status": snapshot.status.value,
+        "closed_at_turn": snapshot.closed_at_turn,
+    }
+
+
+def dict_to_expectation(data: dict[str, Any]) -> Expectation:
+    """dict → Expectation。``Expectation.restore`` を通し、清算の規則と食い違う状態は拒む。
+
+    ``dict_to_belief_evidence`` と同じ理由で、ドメイン例外を ``ValueError`` に翻訳する。
+    """
+    try:
+        return Expectation.restore(
+            ExpectationSnapshot(
+                expectation_id=ExpectationId(data["expectation_id"]),
+                holder=BeingId(data["holder"]),
+                content=data["content"],
+                origin=ExpectationOrigin(data["origin"]),
+                likelihood=Likelihood(data["likelihood"]),
+                formed_at_turn=data["formed_at_turn"],
+                expires_at_turn=data["expires_at_turn"],
+                formed_with=data["formed_with"],
+                due=data["due"],
+                beliefs_in_mind=_str_tuple(
+                    data["beliefs_in_mind"], name="beliefs_in_mind"
+                ),
+                episodes_in_mind=_str_tuple(
+                    data["episodes_in_mind"], name="episodes_in_mind"
+                ),
+                shape=(
+                    ShapeVerdict(data["shape"]) if data["shape"] is not None else None
+                ),
+                checks=tuple(
+                    Check(turn=check["turn"], verdict=CheckVerdict(check["verdict"]))
+                    for check in data["checks"]
+                ),
+                status=ExpectationStatus(data["status"]),
+                closed_at_turn=data["closed_at_turn"],
+            )
+        )
+    except DomainException as exc:
+        raise ValueError(f"invalid Expectation payload: {exc}") from exc
+
+
+def undelivered_expectation_event_to_dict(
+    entry: UndeliveredExpectationEvent,
+) -> dict[str, Any]:
+    event = entry.event
+    data: dict[str, Any] = {
+        "event_id": entry.event_id.value,
+        "kind": _EXPECTATION_EVENT_KIND_BY_TYPE[type(event)],
+        "expectation_id": event.expectation_id.value,
+        "holder": event.holder.value,
+        "turn": event.turn,
+    }
+    if isinstance(event, (ProvisionallyMissed, ExpectationSettled)):
+        data["likelihood"] = event.likelihood.value
+    if isinstance(event, ExpectationSettled):
+        data["outcome"] = event.outcome.value
+        data["beliefs_in_mind"] = list(event.beliefs_in_mind)
+        data["episodes_in_mind"] = list(event.episodes_in_mind)
+    if isinstance(event, ExpectationDismissed):
+        data["shape"] = event.shape.value
+    return data
+
+
+def dict_to_undelivered_expectation_event(
+    data: dict[str, Any],
+) -> UndeliveredExpectationEvent:
+    """dict → UndeliveredExpectationEvent。知らない ``kind`` とドメイン例外は ``ValueError`` にする。"""
+    event_type = _EXPECTATION_EVENT_TYPE_BY_KIND.get(data["kind"])
+    if event_type is None:
+        raise ValueError(f"unknown expectation event kind: {data['kind']!r}")
+    try:
+        fields: dict[str, Any] = {
+            "expectation_id": ExpectationId(data["expectation_id"]),
+            "holder": BeingId(data["holder"]),
+            "turn": data["turn"],
+        }
+        if event_type in (ProvisionallyMissed, ExpectationSettled):
+            fields["likelihood"] = Likelihood(data["likelihood"])
+        if event_type is ExpectationSettled:
+            fields["outcome"] = Outcome(data["outcome"])
+            fields["beliefs_in_mind"] = _str_tuple(
+                data["beliefs_in_mind"], name="beliefs_in_mind"
+            )
+            fields["episodes_in_mind"] = _str_tuple(
+                data["episodes_in_mind"], name="episodes_in_mind"
+            )
+        if event_type is ExpectationDismissed:
+            fields["shape"] = ShapeVerdict(data["shape"])
+        return UndeliveredExpectationEvent(
+            event_id=ExpectationEventId(data["event_id"]),
+            event=event_type(**fields),
+        )
+    except DomainException as exc:
+        raise ValueError(f"invalid expectation event payload: {exc}") from exc
