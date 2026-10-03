@@ -18,6 +18,13 @@
 ない。選ばれたものだけを根拠として形と一緒に予期へ渡し、確定した当否はそこに
 だけ返る。
 
+## 次のターンの想起で残す欄も同じ呼び出しで問う
+
+想起はプロンプトを組むとき (行動の前)、清算はターンの終わり (行動の後) に行う。
+材料が同じなので、次のターンの想起で残す欄 (#1414) も同じ呼び出しで問う。欄を
+選ぶために、予期が 1 件も無いターンにも呼ぶ。欄の答えは予期の判定とは分けて読み、
+欄の答えが崩れても予期の判定は縮退させない。
+
 ## 状態の変化を保存してから配る
 
 集約が返した出来事は、予期と同じ保存の単位で未配信として積み (design_decisions
@@ -43,6 +50,14 @@ from ai_rpg_world.application.being.expectation.grounds import (
 )
 from ai_rpg_world.application.being.expectation.likelihood_labels import (
     LIKELIHOOD_LABELS,
+)
+from ai_rpg_world.application.being.recall.selection_store import (
+    NextTurnFieldSelections,
+)
+from ai_rpg_world.application.being.recall.situation import (
+    FieldSelection,
+    field_selection_from_answers,
+    field_selection_questions,
 )
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,
@@ -123,6 +138,8 @@ class _Turn:
     material: TurnMaterial
     transitions: list[dict[str, Any]] = field(default_factory=list)
     state: dict[str, Any] | None = None
+    field_selection: dict[str, Any] | None = None
+    already_settled: bool = False
 
 
 class ExpectationSettlementService:
@@ -144,7 +161,9 @@ class ExpectationSettlementService:
         max_grounds_questions: int,
         grounds_min_probability: float,
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
+        field_selections: NextTurnFieldSelections | None = None,
     ) -> None:
+        """``field_selections`` を渡すと、次のターンの想起で残す欄も毎ターン問う。"""
         if not isinstance(repository, ExpectationRepository):
             raise TypeError("repository must be ExpectationRepository")
         if not isinstance(judgment_port, ITypedJudgmentPort):
@@ -176,6 +195,11 @@ class ExpectationSettlementService:
         self._grounds_reader = grounds_reader
         self._max_grounds_questions = max_grounds_questions
         self._grounds_min_probability = float(grounds_min_probability)
+        if field_selections is not None and not isinstance(
+            field_selections, NextTurnFieldSelections
+        ):
+            raise TypeError("field_selections must be NextTurnFieldSelections or None")
+        self._field_selections = field_selections
         self._trace_recorder_provider = trace_recorder_provider
         self._timelines: dict[BeingId, deque[_Turn]] = {}
 
@@ -203,6 +227,15 @@ class ExpectationSettlementService:
         try:
             return self._settle(being_id, self_name, current, tick, player_id)
         except Exception as exc:
+            # 2 回目の清算は配線の誤り。1 回目に選んだ欄はそのターンの正しい選択なので残す。
+            if not current.already_settled:
+                self._choose_fields(
+                    being_id,
+                    current,
+                    FieldSelection.degraded(
+                        SKIPPED_SETTLEMENT_FAILED, f"{type(exc).__name__}: {exc}"
+                    ),
+                )
             report = SettlementReport(
                 turn=current.turn,
                 judged=False,
@@ -216,6 +249,7 @@ class ExpectationSettlementService:
                 player_id,
                 state=current.state,
                 unavailable_reason=f"{type(exc).__name__}: {exc}",
+                field_selection=current.field_selection,
             )
             self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
             raise
@@ -233,6 +267,7 @@ class ExpectationSettlementService:
             being_id, deque(maxlen=self._timeline_turns)
         )
         if timeline and timeline[-1].turn >= now:
+            current.already_settled = True
             raise ValueError(
                 f"turn {now} of {being_id} has already been settled; "
                 "advance_turn must be called once per move"
@@ -241,30 +276,19 @@ class ExpectationSettlementService:
 
         pending, new = self._close_by_turn_count(being_id, current)
         if not pending and not new:
+            state = None
+            field_answers: Mapping[str, JudgmentResult] | None = None
+            unavailable_reason: str | None = None
+            if self._field_selections is not None:
+                state = _state(self_name, now=now, pending=[], new=[], timeline=timeline)
+                current.state = state
+                field_answers, unavailable_reason = self._ask_fields_only(
+                    being_id, self_name, current, state
+                )
             report = SettlementReport(
                 turn=now,
                 judged=False,
                 skipped_reason=SKIPPED_NOTHING_TO_JUDGE,
-                transitions=tuple(current.transitions),
-            )
-            self._trace(being_id, report, tick, player_id)
-            self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
-            return report
-
-        plan = plan_ground_questions(
-            being_id, new, reader=self._grounds_reader, limit=self._max_grounds_questions
-        )
-        asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
-        state = _state(self_name, now=now, pending=pending, new=new, timeline=timeline)
-        current.state = state
-        try:
-            answers = self._port.judge(state, questions)
-            verdicts = _verdicts(asked, answers)
-        except TypedJudgmentUnavailableException as exc:
-            report = SettlementReport(
-                turn=now,
-                judged=False,
-                skipped_reason=SKIPPED_JUDGMENT_UNAVAILABLE,
                 transitions=tuple(current.transitions),
             )
             self._trace(
@@ -273,12 +297,32 @@ class ExpectationSettlementService:
                 tick,
                 player_id,
                 state=state,
-                asked=asked,
-                grounds=plan.trace(answers=None, judged=None),
-                unavailable_reason=f"{exc.error_code}: {exc}",
+                answers=field_answers,
+                unavailable_reason=unavailable_reason,
+                field_selection=current.field_selection,
             )
             self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
             return report
+
+        plan = plan_ground_questions(
+            being_id, new, reader=self._grounds_reader, limit=self._max_grounds_questions
+        )
+        asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
+        if self._field_selections is not None:
+            questions.update(field_selection_questions(self_name))
+        state = _state(self_name, now=now, pending=pending, new=new, timeline=timeline)
+        current.state = state
+        try:
+            answers = self._port.judge(state, questions)
+        except TypedJudgmentUnavailableException as exc:
+            self._choose_fields(being_id, current, FieldSelection.unavailable(exc))
+            return self._unavailable(being_id, current, asked, plan, exc, tick, player_id)
+        # 欄の答えは予期の判定より先に、別に読む。予期の答えが崩れても欄の選択は残す。
+        self._choose_fields(being_id, current, field_selection_from_answers(answers))
+        try:
+            verdicts = _verdicts(asked, answers)
+        except TypedJudgmentUnavailableException as exc:
+            return self._unavailable(being_id, current, asked, plan, exc, tick, player_id)
 
         probabilities = {
             name: verdict for name, verdict in verdicts.items() if isinstance(verdict, float)
@@ -318,9 +362,60 @@ class ExpectationSettlementService:
             asked=asked,
             answers=answers,
             grounds=plan.trace(answers=answers, judged=judged_grounds),
+            field_selection=current.field_selection,
         )
         self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
         return report
+
+    def _unavailable(
+        self,
+        being_id: BeingId,
+        current: _Turn,
+        asked: Mapping[str, _Asked],
+        plan: GroundsPlan,
+        exc: TypedJudgmentUnavailableException,
+        tick: int | None,
+        player_id: int | None,
+    ) -> SettlementReport:
+        report = SettlementReport(
+            turn=current.turn,
+            judged=False,
+            skipped_reason=SKIPPED_JUDGMENT_UNAVAILABLE,
+            transitions=tuple(current.transitions),
+        )
+        self._trace(
+            being_id,
+            report,
+            tick,
+            player_id,
+            state=current.state,
+            asked=asked,
+            grounds=plan.trace(answers=None, judged=None),
+            unavailable_reason=f"{exc.error_code}: {exc}",
+            field_selection=current.field_selection,
+        )
+        self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
+        return report
+
+    def _ask_fields_only(
+        self, being_id: BeingId, self_name: str, current: _Turn, state: dict[str, Any]
+    ) -> tuple[Mapping[str, JudgmentResult] | None, str | None]:
+        """欄だけを問う。戻り値は (答え, 答えが得られなかった理由) で、trace に載せる。"""
+        try:
+            answers = self._port.judge(state, field_selection_questions(self_name))
+        except TypedJudgmentUnavailableException as exc:
+            self._choose_fields(being_id, current, FieldSelection.unavailable(exc))
+            return None, f"{exc.error_code}: {exc}"
+        self._choose_fields(being_id, current, field_selection_from_answers(answers))
+        return answers, None
+
+    def _choose_fields(
+        self, being_id: BeingId, current: _Turn, selection: FieldSelection
+    ) -> None:
+        if self._field_selections is None:
+            return
+        self._field_selections.put(being_id, settled_turn=current.turn, selection=selection)
+        current.field_selection = selection.to_trace_payload()
 
     def _close_by_turn_count(
         self, being_id: BeingId, current: _Turn
@@ -383,6 +478,7 @@ class ExpectationSettlementService:
         answers: Mapping[str, JudgmentResult] | None = None,
         grounds: list[dict[str, Any]] | None = None,
         unavailable_reason: str | None = None,
+        field_selection: dict[str, Any] | None = None,
     ) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
@@ -420,6 +516,7 @@ class ExpectationSettlementService:
             },
             transitions=[dict(t) for t in report.transitions],
             grounds=grounds or [],
+            field_selection=field_selection,
         )
 
 

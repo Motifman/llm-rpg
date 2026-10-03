@@ -9,6 +9,12 @@ from typing import Any
 from tests.application.being.expectation.support import RecordingTraceRecorder
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
+from ai_rpg_world.application.being.recall.selection_store import (
+    DEGRADED_SETTLEMENT_DISABLED,
+    DEGRADED_STALE_SELECTION,
+    NextTurnFieldSelections,
+)
+from ai_rpg_world.application.being.recall.situation import FieldSelection, SituationField
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
@@ -64,7 +70,12 @@ class _Builder:
 
 
 class _Env:
-    def __init__(self, *beliefs: tuple[str, str], goal: str | None = None) -> None:
+    def __init__(
+        self,
+        *beliefs: tuple[str, str],
+        goal: str | None = None,
+        selections: NextTurnFieldSelections | None = None,
+    ) -> None:
         self.recorder = RecordingTraceRecorder()
         self.store = InMemorySemanticMemoryStore()
         for entry_id, text in beliefs:
@@ -86,6 +97,7 @@ class _Env:
             recall=SituationBeliefRecall(self.store, CharBigramBm25Narrower()),
             expectations=self.expectations,
             goal_text=lambda _pid: self.goal,
+            selections=selections,
         )
 
     def expect(self, content: str) -> None:
@@ -225,14 +237,14 @@ class TestRecallOutput:
         assert ids == ("b-1", "b-2")
         assert text == "- 満ちてきた水は冷たい\n- 潮が満ちてきたら高台へ行く"
 
-    def test_trace_says_selection_is_missing_and_every_field_but_place_was_kept(self) -> None:
-        """欄の選択はまだ繋いでいないので、選択が無いことを縮退の理由に持ち、場所以外の 5 つの欄を残す (場所は 2 本の検索の片方で必ず使う)。"""
+    def test_without_settlement_the_trace_says_so_and_every_field_but_place_was_kept(self) -> None:
+        """選択の保存先が無い (清算を切った) run では、清算が無いことを縮退の理由に持ち、場所以外の 5 つの欄を残す (場所は 2 本の検索の片方で必ず使う)。"""
         env = _Env()
 
         env.run([_seen("潮が満ちてきた", 1)])
 
         payload = env.trace()
-        assert payload["degraded_reason"] == DEGRADED_NO_SELECTION
+        assert payload["degraded_reason"] == DEGRADED_SETTLEMENT_DISABLED
         assert payload["kept_fields"] == [
             "相手", "自分の状態", "やろうとしていること", "いま起きたこと", "未解決のこと"
         ]
@@ -240,6 +252,38 @@ class TestRecallOutput:
         assert payload["failed"] is None
         assert payload["being_id"] == BEING.value
         assert payload["top_k"] == 3
+
+    def test_selection_settled_at_the_current_turn_chooses_the_fields(self) -> None:
+        """清算がいまのターン番号で選んだ欄があれば、その欄で引き、縮退の理由は無い。"""
+        selections = NextTurnFieldSelections()
+        env = _Env(selections=selections)
+        env.expectations.advance_turn(BEING)
+        selections.put(
+            BEING,
+            settled_turn=1,
+            selection=FieldSelection(kept=frozenset({SituationField.HAPPENING})),
+        )
+
+        env.run([_seen("潮が満ちてきた", 1)])
+
+        payload = env.trace()
+        assert payload["kept_fields"] == ["いま起きたこと"]
+        assert payload["degraded_reason"] is None
+
+    def test_selection_of_an_earlier_turn_is_not_reused(self) -> None:
+        """清算したターンよりターン番号が進んでいれば、その選択を使わず、古いことを理由に全部の欄で引く。"""
+        selections = NextTurnFieldSelections()
+        env = _Env(selections=selections)
+        selections.put(
+            BEING,
+            settled_turn=0,
+            selection=FieldSelection(kept=frozenset({SituationField.HAPPENING})),
+        )
+        env.expectations.advance_turn(BEING)
+
+        env.run([_seen("潮が満ちてきた", 1)])
+
+        assert env.trace()["degraded_reason"] == DEGRADED_STALE_SELECTION
 
     def test_without_recorder_the_beliefs_are_returned_without_warning(self, caplog: Any) -> None:
         """trace の記録先が無ければ、記録の失敗として扱わずに、引いた信念を返す。"""
@@ -315,6 +359,11 @@ class TestSources:
             "expectations": env.expectations,
             "goal_text": env.sources.goal_text,
         }
-        for name, bad in (("recall", object()), ("expectations", object()), ("goal_text", "目的")):
+        for name, bad in (
+            ("recall", object()),
+            ("expectations", object()),
+            ("goal_text", "目的"),
+            ("selections", object()),
+        ):
             with pytest.raises(TypeError, match=name):
                 SituationRecallSources(**{**good, name: bad})

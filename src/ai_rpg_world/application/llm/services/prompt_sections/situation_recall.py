@@ -4,8 +4,8 @@
 組み立てる。契約に写せない観測 (ループ警告、目的の振り返り、時刻の無い観測など) は
 飛ばし、飛ばした理由を trace に数で残す。
 
-どの欄を残すかの Jev の判断は、清算の呼び出しに同乗させる後続の PR で繋ぐ。それまでは
-選択が無いことを理由に全部の欄で引き、そう trace に残す。
+どの欄を残すかは、直前のターンの終わりの清算で Jev が選んだもの (design_decisions
+D1414-3) を使う。選択が無い、古い、清算を切っている run では、理由をつけて全部の欄で引く。
 """
 
 from __future__ import annotations
@@ -17,6 +17,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
+from ai_rpg_world.application.being.recall.selection_store import (
+    DEGRADED_NO_SELECTION,
+    DEGRADED_SETTLEMENT_DISABLED,
+    NextTurnFieldSelections,
+)
 from ai_rpg_world.application.being.recall.situation import FieldSelection, SituationField
 from ai_rpg_world.application.being.recall.situation_assembly import (
     AgentHoldings,
@@ -41,18 +46,21 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
 
-DEGRADED_NO_SELECTION = "no_selection"
 #: 契約の欄の検査に通らなかった観測。1 件のためにそのターンの想起全体を落とさない。
 SKIPPED_CONTRACT_VIOLATION = "contract_violation"
 
 
 @dataclass(frozen=True)
 class SituationRecallSources:
-    """状況の欄から引くときに要るもの。``goal_text`` は読み取りだけで、目的を書き込まない。"""
+    """状況の欄から引くときに要るもの。``goal_text`` は読み取りだけで、目的を書き込まない。
+
+    ``selections`` が None なのは、清算を切っていて欄が選ばれない run。
+    """
 
     recall: SituationBeliefRecall
     expectations: ExpectationRepository
     goal_text: Callable[[PlayerId], str | None]
+    selections: NextTurnFieldSelections | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.recall, SituationBeliefRecall):
@@ -61,6 +69,19 @@ class SituationRecallSources:
             raise TypeError("expectations must be ExpectationRepository")
         if not callable(self.goal_text):
             raise TypeError("goal_text must be callable")
+        if self.selections is not None and not isinstance(
+            self.selections, NextTurnFieldSelections
+        ):
+            raise TypeError("selections must be NextTurnFieldSelections or None")
+
+    def selection_for(self, being_id: BeingId) -> FieldSelection:
+        if self.selections is None:
+            return FieldSelection.degraded(
+                DEGRADED_SETTLEMENT_DISABLED, "expectation settlement is disabled in this run"
+            )
+        return self.selections.for_prompt(
+            being_id, current_turn=self.expectations.current_turn(being_id)
+        )
 
 
 def run_situation_belief_recall(
@@ -123,9 +144,7 @@ def _recall(
         ),
     )
     situation = assemble_situation(contract_observations, holdings)
-    selection = FieldSelection.degraded(
-        DEGRADED_NO_SELECTION, "field selection is not wired to the settlement yet"
-    )
+    selection = sources.selection_for(being_id)
     result = sources.recall.retrieve(
         being_id, situation, selection, top_k=builder._semantic_passive_top_k
     )
