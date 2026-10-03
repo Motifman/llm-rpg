@@ -91,6 +91,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId  # noqa: 
 
 _ARGUMENT_KEYS = ("target_label", "action_name", "destination_label", "item_label", "content")
 _DANGER = re.compile(r"攻撃|怪我|血|痛|危|倒れ|瀕死|HP|空腹|飢|毒|噛|襲")
+#: 体に関わる信念の語。危機・注意の場面で、こうした信念が載ったかを数える。
+_BODY_BELIEF = re.compile(r"食|空腹|HP|怪我|治療|貝|焼|体力|回復|飢|水")
 _RECENT = 20
 _TIMELINE_TURNS = 3
 _TOP_K = 3
@@ -324,6 +326,12 @@ def _same_three_rate(sequence: list[list[str]]) -> tuple[int, int]:
     return sum(1 for a, b in pairs if set(a) == set(b) and a), len(pairs)
 
 
+def _consecutive_jaccard(sequence: list[list[str]]) -> list[float]:
+    return [
+        len(set(a) & set(b)) / len(set(a) | set(b)) for a, b in pairwise(sequence) if a or b
+    ]
+
+
 def probe(run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int) -> dict[str, Any]:
     all_scenes = _scenes(run_dir / "trace.jsonl")
     first_seen = _first_seen(run_dir / "trace.jsonl")
@@ -387,16 +395,29 @@ def probe(run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int)
 def summarize(result: dict[str, Any]) -> dict[str, Any]:
     scenes = [s for p in result["players"] for s in p["scenes"]]
     runs = [r for s in scenes for r in s["runs"]]
-    same: dict[str, list[int]] = {"old": [0, 0], "all_fields": [0, 0], "selected": [0, 0]}
+    pickers: dict[str, Any] = {
+        "old": lambda s: s["old"],
+        "all_fields": lambda s: s["all_fields"],
+        "selected": lambda s: s["runs"][0]["chosen"],
+        **{
+            f"without_{f.value}": (lambda s, name=f.value: s["leave_one_out"][name])
+            for f in SELECTABLE_FIELDS
+        },
+    }
+    same: dict[str, list[int]] = {key: [0, 0] for key in pickers}
+    jaccard: dict[str, list[float]] = {key: [] for key in pickers}
     for player in result["players"]:
-        for key, picker in (
-            ("old", lambda s: s["old"]),
-            ("all_fields", lambda s: s["all_fields"]),
-            ("selected", lambda s: s["runs"][0]["chosen"]),
-        ):
-            hit, total = _same_three_rate([picker(s) for s in player["scenes"]])
+        for key, picker in pickers.items():
+            sequence = [picker(s) for s in player["scenes"]]
+            hit, total = _same_three_rate(sequence)
             same[key][0] += hit
             same[key][1] += total
+            jaccard[key].extend(_consecutive_jaccard(sequence))
+    texts = result["texts"]
+    risky = [s for s in scenes if s["runs"][0]["band"]["band"] in ("危機", "注意")]
+
+    def _body(ids: list[str]) -> int:
+        return sum(1 for i in ids if _BODY_BELIEF.search(texts.get(i, "")))
     keep = {f.value: 0 for f in SELECTABLE_FIELDS}
     for r in runs:
         for f in r["kept_fields"]:
@@ -420,6 +441,15 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
             sum(r.get("state_chars", 0) for r in runs) / max(1, len(runs))
         ),
         "same_three_in_a_row": {k: f"{v[0]}/{v[1]}" for k, v in same.items()},
+        "consecutive_jaccard": {
+            k: round(sum(v) / len(v), 2) if v else None for k, v in jaccard.items()
+        },
+        "body_beliefs_in_risky_scenes": {
+            "scenes": len(risky),
+            "slots": len(risky) * _TOP_K,
+            "old": _body([i for s in risky for i in s["old"]]),
+            "selected": _body([i for s in risky for i in s["runs"][0]["chosen"]]),
+        },
         "overlap_with_old": {
             "selected_mean": round(
                 sum(len(set(s["old"]) & set(s["runs"][0]["chosen"])) for s in scenes) / len(scenes), 2
@@ -469,8 +499,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--port", choices=("jev", "stub"), default="jev")
     parser.add_argument("--window", type=int, default=10)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument(
+        "--summarize-only",
+        action="store_true",
+        help="--out の既存の結果から集計だけをやり直す。Jev は呼ばない",
+    )
     args = parser.parse_args(argv)
-    result = probe(args.run_dir, _port(args.port), window=args.window, repeats=args.repeats)
+    if args.summarize_only:
+        result = json.loads(args.out.read_text("utf-8"))
+    else:
+        result = probe(args.run_dir, _port(args.port), window=args.window, repeats=args.repeats)
     result["summary"] = summarize(result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
