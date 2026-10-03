@@ -10,6 +10,7 @@ from ai_rpg_world.application.being.expectation.forming import (
     ExpectationFormingInterrupted,
 )
 from ai_rpg_world.application.being.expectation.settlement import TurnMaterial
+from ai_rpg_world.application.being.recall.situation import Situation
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
 )
@@ -25,6 +26,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
     Expectation,
 )
@@ -212,6 +214,11 @@ def settle_expectations_after_turn(wiring: WorldLlmWiring, player_id: PlayerId) 
             runtime._recent_event_store.open_turn_entries(player_id),
             self_name=self_name,
         )
+        situation, situation_note = (
+            _situation_at_turn_end(runtime, player_id, acting.being_id)
+            if settlement.asks_fields
+            else (None, None)
+        )
         handed_over = True
         settlement.settle_turn(
             acting.being_id,
@@ -219,6 +226,8 @@ def settle_expectations_after_turn(wiring: WorldLlmWiring, player_id: PlayerId) 
             material=material,
             tick=tick,
             player_id=player_id.value,
+            situation=situation,
+            situation_note=situation_note,
         )
     except Exception as exc:
         logger.exception("expectation settlement failed for player=%s", player_id.value)
@@ -231,6 +240,18 @@ def settle_expectations_after_turn(wiring: WorldLlmWiring, player_id: PlayerId) 
                 "settlement_failed",
                 f"{type(exc).__name__}: {exc}",
             )
+
+
+def _situation_at_turn_end(
+    runtime: Any, player_id: PlayerId, being_id: BeingId
+) -> tuple[Situation | None, dict[str, Any]]:
+    """組めなくても清算は止めない。欄の値を見せずに問い、理由を清算の trace に残す。"""
+    try:
+        situation, skipped = runtime.situation_at_turn_end(player_id, being_id)
+    except Exception as exc:
+        logger.exception("situation at turn end failed for player=%s", player_id.value)
+        return None, {"unavailable": f"{type(exc).__name__}: {exc}"}
+    return situation, {"skipped_observations": skipped}
 
 
 def _trace_skipped(

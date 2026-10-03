@@ -1,4 +1,4 @@
-"""状況の欄 (Situation) と、欄を残すか捨てるかの選び方 (FieldSelection) が、想起の問い合わせ文とマスクを決める挙動を保証する。"""
+"""状況の欄 (Situation) と、選択肢ごとの確率の上位を残す欄の選び方 (FieldSelection) が、想起の問い合わせ文とマスクを決める挙動を保証する。"""
 
 from __future__ import annotations
 
@@ -10,13 +10,11 @@ from ai_rpg_world.application.being.recall.situation import (
     DEGRADED_ANSWER_INVALID,
     DEGRADED_ANSWER_MISSING,
     DEGRADED_JUDGMENT_UNAVAILABLE,
-    DROP,
-    KEEP,
+    RECALL_FIELDS_QUESTION,
     FieldSelection,
     RecallMask,
     Situation,
     SituationField,
-    field_question_name,
     field_selection_from_answers,
     field_selection_questions,
 )
@@ -46,12 +44,6 @@ def _situation() -> Situation:
         happening=("大型のカニに挟まれた",),
         unresolved=("トムが麦束を焼いてくれる",),
     )
-
-
-def _answers(choices: dict[SituationField, str]) -> dict:
-    questions = field_selection_questions("アリス")
-    script = {field_question_name(field): value for field, value in choices.items()}
-    return dict(DeterministicTypedJudgmentPort(script).judge({}, questions))
 
 
 class TestSituation:
@@ -103,73 +95,125 @@ class TestRecallMask:
 class TestFieldSelectionQuestions:
     """欄の選び方を Jev に問う質問の形を保証する。"""
 
-    def test_asks_each_field_except_place_under_its_own_name(self) -> None:
-        """場所を除く 5 つの欄に 1 問ずつ、欄ごとの名前で、その欄を残すかを「残す」「捨てる」の選択肢で問う。"""
+    def test_asks_one_question_with_every_field_except_place_as_options(self) -> None:
+        """場所を除く 5 つの欄を選択肢にした 1 問だけを、本人の名前を添えて問う。欄どうしを比べさせるため。"""
         questions = field_selection_questions("アリス")
 
-        assert list(questions) == [field_question_name(f) for f in ASKED]
-        for field in ASKED:
-            question = questions[field_question_name(field)]
-            assert isinstance(question, ChoiceQuestion)
-            assert set(question.options) == {KEEP, DROP}
-            assert question.instructions.startswith(f"「{field.value}」の欄を手がかりに残すか。")
-            assert "アリス" in question.instructions
+        assert list(questions) == [RECALL_FIELDS_QUESTION]
+        question = questions[RECALL_FIELDS_QUESTION]
+        assert isinstance(question, ChoiceQuestion)
+        assert list(question.options) == [f.value for f in ASKED]
+        assert "アリス" in question.instructions
+
+
+def _ranked(probabilities: dict[SituationField, float]) -> dict:
+    answers = dict(
+        DeterministicTypedJudgmentPort().judge({}, field_selection_questions("アリス"))
+    )
+    answers[RECALL_FIELDS_QUESTION] = replace(
+        answers[RECALL_FIELDS_QUESTION],
+        probabilities={f.value: probabilities.get(f, 0.0) for f in ASKED},
+    )
+    return answers
 
 
 class TestFieldSelectionFromAnswers:
-    """Jev の答えから残す欄を決め、判断が得られないときは全部の欄に縮退する挙動を保証する。"""
+    """選択肢ごとの確率の上位を残し、判断が得られないときは全部の欄に縮退する挙動を保証する。"""
 
-    def test_keeps_only_fields_answered_keep(self) -> None:
-        """全部の問いに答えがそろえば、「残す」を選んだ欄だけを残し、縮退の理由は無い。"""
-        choices = {f: DROP for f in ASKED}
-        choices[SituationField.OWN_STATE] = KEEP
-        choices[SituationField.HAPPENING] = KEEP
-
-        selection = field_selection_from_answers(_answers(choices))
-
-        assert selection.kept == frozenset(
-            {SituationField.OWN_STATE, SituationField.HAPPENING}
+    def test_keeps_the_top_two_fields_by_probability(self) -> None:
+        """確率の上位 2 つの欄だけを残し、縮退の理由は無い。確率の大きさは問わない (閾値を持たない)。"""
+        answers = _ranked(
+            {
+                SituationField.COUNTERPART: 0.10,
+                SituationField.OWN_STATE: 0.31,
+                SituationField.INTENT: 0.12,
+                SituationField.HAPPENING: 0.30,
+                SituationField.UNRESOLVED: 0.17,
+            }
         )
-        assert selection.degraded_reason is None
-
-    def test_keeps_source_and_probabilities_of_each_answer_for_trace(self) -> None:
-        """答えがそろえば、欄ごとの答えと確率と出所を trace に載せる。"""
-        choices = {f: DROP for f in ASKED}
-        choices[SituationField.INTENT] = KEEP
-
-        payload = field_selection_from_answers(_answers(choices)).to_trace_payload()
-
-        assert payload["kept_fields"] == ["やろうとしていること"]
-        judgments = {j["field"]: j for j in payload["judgments"]}
-        assert set(judgments) == {f.value for f in ASKED}
-        assert judgments["やろうとしていること"]["value"] == KEEP
-        assert judgments["やろうとしていること"]["source"] == "stub"
-        assert set(judgments["やろうとしていること"]["probabilities"]) == {KEEP, DROP}
-
-    def test_degrades_to_all_fields_when_answers_are_missing(self) -> None:
-        """答えが欠けていれば、場所以外の全部の欄を残し、欠けた問いをすべて詳しい理由に持つ。"""
-        answers = _answers({f: DROP for f in ASKED})
-        del answers[field_question_name(SituationField.COUNTERPART)]
-        del answers[field_question_name(SituationField.UNRESOLVED)]
 
         selection = field_selection_from_answers(answers)
 
-        assert selection.kept == frozenset(ASKED)
-        assert selection.degraded_reason == DEGRADED_ANSWER_MISSING
-        assert field_question_name(SituationField.COUNTERPART) in selection.degraded_detail
-        assert field_question_name(SituationField.UNRESOLVED) in selection.degraded_detail
+        assert selection.kept == frozenset({SituationField.OWN_STATE, SituationField.HAPPENING})
+        assert selection.degraded_reason is None
 
-    def test_degrades_to_all_fields_when_an_answer_is_not_an_option(self) -> None:
-        """選択肢に無い答えが 1 つでもあれば、ほかの答えを採らずに全部の欄を残す縮退になる。"""
-        answers = _answers({f: DROP for f in ASKED})
-        name = field_question_name(SituationField.INTENT)
-        answers[name] = replace(answers[name], value="たぶん")
+    def test_keep_sets_how_many_fields_remain(self) -> None:
+        """残す数に 1 を渡すと、いちばん確率の高い欄だけを残す。"""
+        answers = _ranked({SituationField.INTENT: 0.4, SituationField.HAPPENING: 0.3})
+
+        selection = field_selection_from_answers(answers, keep=1)
+
+        assert selection.kept == frozenset({SituationField.INTENT})
+
+    def test_ties_are_broken_by_field_order(self) -> None:
+        """同じ確率の欄は、欄の決まった順で先のものを残す。答えが毎回同じ欄に決まるようにするため。"""
+        answers = _ranked({f: 0.2 for f in ASKED})
+
+        selection = field_selection_from_answers(answers)
+
+        assert selection.kept == frozenset({SituationField.COUNTERPART, SituationField.OWN_STATE})
+
+    @pytest.mark.parametrize("keep", [0, 6, True])
+    def test_rejects_keep_outside_one_to_five(self, keep: int) -> None:
+        """残す数が 1〜5 の整数でなければ ValueError を投げる。"""
+        with pytest.raises(ValueError):
+            field_selection_from_answers(_ranked({}), keep=keep)
+
+    def test_records_each_field_probability_and_whether_it_was_kept(self) -> None:
+        """欄ごとの確率と、残したかどうかと、出所を trace に載せる。"""
+        answers = _ranked({SituationField.INTENT: 0.5, SituationField.HAPPENING: 0.3})
+
+        payload = field_selection_from_answers(answers).to_trace_payload()
+
+        assert [j["field"] for j in payload["judgments"]] == [f.value for f in ASKED]
+        judgments = {j["field"]: j for j in payload["judgments"]}
+        assert judgments["やろうとしていること"] == {
+            "field": "やろうとしていること",
+            "probability": 0.5,
+            "kept": True,
+            "source": "stub",
+        }
+        assert judgments["相手"]["kept"] is False
+
+    @pytest.mark.parametrize("broken", [None, float("nan")])
+    def test_degrades_to_all_fields_when_a_probability_is_not_a_number(self, broken: object) -> None:
+        """確率が数でないか NaN の欄があれば、並べずに全部の欄を残す縮退になる。NaN で上位が静かに変わらないように。"""
+        answers = _ranked({SituationField.INTENT: 0.5})
+        probabilities = dict(answers[RECALL_FIELDS_QUESTION].probabilities)
+        probabilities["相手"] = broken
+        answers[RECALL_FIELDS_QUESTION] = replace(
+            answers[RECALL_FIELDS_QUESTION], probabilities=probabilities
+        )
 
         selection = field_selection_from_answers(answers)
 
         assert selection.kept == frozenset(ASKED)
         assert selection.degraded_reason == DEGRADED_ANSWER_INVALID
-        assert "たぶん" in selection.degraded_detail
+
+    def test_degrades_to_all_fields_when_the_answer_is_missing(self) -> None:
+        """答えが欠けていれば、場所以外の全部の欄を残し、欠けたことを理由に持つ。"""
+        answers = _ranked({})
+        del answers[RECALL_FIELDS_QUESTION]
+
+        selection = field_selection_from_answers(answers)
+
+        assert selection.kept == frozenset(ASKED)
+        assert selection.degraded_reason == DEGRADED_ANSWER_MISSING
+
+    def test_degrades_to_all_fields_when_a_probability_is_missing(self) -> None:
+        """確率が欠けた欄があれば、ほかの欄の確率を使わずに全部の欄を残す縮退になる。"""
+        answers = _ranked({SituationField.INTENT: 0.5})
+        probabilities = dict(answers[RECALL_FIELDS_QUESTION].probabilities)
+        del probabilities["相手"]
+        answers[RECALL_FIELDS_QUESTION] = replace(
+            answers[RECALL_FIELDS_QUESTION], probabilities=probabilities
+        )
+
+        selection = field_selection_from_answers(answers)
+
+        assert selection.kept == frozenset(ASKED)
+        assert selection.degraded_reason == DEGRADED_ANSWER_INVALID
+        assert "相手" in selection.degraded_detail
 
     def test_unavailable_judgment_degrades_with_error_code(self) -> None:
         """Jev が答えなかったときの例外は、全部の欄を残す縮退に変わり、エラーコードを詳しい理由に持つ。"""

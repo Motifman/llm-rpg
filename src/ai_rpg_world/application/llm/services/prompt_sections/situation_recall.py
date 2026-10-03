@@ -17,13 +17,17 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
-from ai_rpg_world.application.being.recall.body_band import BodyBandReading
+from ai_rpg_world.application.being.recall.body_band import BodyBand, BodyBandReading
 from ai_rpg_world.application.being.recall.selection_store import (
     DEGRADED_NO_SELECTION,
     DEGRADED_SETTLEMENT_DISABLED,
     NextTurnFieldSelections,
 )
-from ai_rpg_world.application.being.recall.situation import FieldSelection, SituationField
+from ai_rpg_world.application.being.recall.situation import (
+    FieldSelection,
+    Situation,
+    SituationField,
+)
 from ai_rpg_world.application.being.recall.situation_assembly import (
     AgentHoldings,
     assemble_situation,
@@ -142,20 +146,17 @@ def _recall(
     observations: Sequence[ObservationEntry],
     action_results: Sequence[ActionResultEntry],
 ) -> tuple[dict[str, Any], str, tuple[str, ...]]:
-    observer = Observer(
-        player_id=player_id, name=player_name, place_name=place_name, seconds_per_tick=None
-    )
-    contract_observations, skipped = _to_contract(observations, action_results, observer)
     band = sources.band_for(being_id)
-    holdings = AgentHoldings(
-        goal=sources.goal_text(player_id),
+    situation, skipped = situation_from_game(
+        sources,
+        player_id=player_id,
+        being_id=being_id,
+        player_name=player_name,
+        place_name=place_name,
+        observations=observations,
+        action_results=action_results,
         body_band=band.band,
-        inner_thought=action_results[0].inner_thought if action_results else None,
-        open_expectations=tuple(
-            e.content for e in sources.expectations.list_open_by_being(being_id)
-        ),
     )
-    situation = assemble_situation(contract_observations, holdings)
     selection = sources.selection_for(being_id)
     result = sources.recall.retrieve(
         being_id, situation, selection, top_k=builder._semantic_passive_top_k
@@ -175,6 +176,36 @@ def _recall(
     )
     text = "\n".join(f"- {e.text.strip()}" for e in shown)
     return payload, text, tuple(e.entry_id for e in shown)
+
+
+def situation_from_game(
+    sources: SituationRecallSources,
+    *,
+    player_id: PlayerId,
+    being_id: BeingId,
+    player_name: str,
+    place_name: str | None,
+    observations: Sequence[ObservationEntry],
+    action_results: Sequence[ActionResultEntry],
+    body_band: BodyBand | None = None,
+) -> tuple[Situation, Counter[str]]:
+    """ゲームの観測と行動結果 (新しい順) から欄を組む。プロンプトと清算の両方が使う。
+
+    戻り値の 2 つ目は、契約に写せずに飛ばした観測の理由ごとの件数。
+    """
+    observer = Observer(
+        player_id=player_id, name=player_name, place_name=place_name, seconds_per_tick=None
+    )
+    contract_observations, skipped = _to_contract(observations, action_results, observer)
+    holdings = AgentHoldings(
+        goal=sources.goal_text(player_id),
+        body_band=body_band,
+        inner_thought=action_results[0].inner_thought if action_results else None,
+        open_expectations=tuple(
+            e.content for e in sources.expectations.list_open_by_being(being_id)
+        ),
+    )
+    return assemble_situation(contract_observations, holdings), skipped
 
 
 def _record(
@@ -262,4 +293,5 @@ __all__ = [
     "SKIPPED_CONTRACT_VIOLATION",
     "SituationRecallSources",
     "run_situation_belief_recall",
+    "situation_from_game",
 ]
