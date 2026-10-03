@@ -57,6 +57,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
         BeliefConsolidationCoordinator,
     )
+    from ai_rpg_world.application.llm.services.belief_create_gate import (
+        BeliefCreateGate,
+    )
     from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
         IEpisodicRecallHabituationStore,
     )
@@ -411,6 +414,7 @@ def build_episodic_stack(
     # 呼び出し側 (world_runtime.py) が両フラグの整合を取る)。
     belief_consolidation_enabled: bool = False,
     belief_consolidation_completion: IBeliefConsolidationCompletionPort | None = None,
+    belief_create_gate: BeliefCreateGate | None = None,
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
     # chunk_coordinator が in_context_belief_ids / had_expected_result を計算して
     # belief_evidence_transcriber に渡す。非同期 scheduler 経路への配線は
@@ -588,6 +592,7 @@ def build_episodic_stack(
                 # P10: ON のときだけ固着 prompt に伝聞節を足し、shortlist に話者
                 # belief を載せる (OFF = pre-P10 と byte / 挙動一致)。
                 hearsay_enabled=hearsay_enabled,
+                create_gate=belief_create_gate,
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
