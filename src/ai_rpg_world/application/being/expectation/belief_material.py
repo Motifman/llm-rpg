@@ -15,6 +15,9 @@ from typing import Any
 from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventReceiver,
 )
+from ai_rpg_world.application.being.expectation.likelihood_labels import (
+    LIKELIHOOD_LABELS,
+)
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationEvent,
@@ -42,14 +45,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
 )
 
 logger = logging.getLogger(__name__)
-
-LIKELIHOOD_LABELS: dict[Likelihood, str] = {
-    Likelihood.ALMOST_CERTAIN: "ほぼ確実",
-    Likelihood.PROBABLY: "たぶん",
-    Likelihood.EVEN: "半々",
-    Likelihood.MAYBE: "もしかしたら",
-}
-
 
 def settled_expectation_text(event: ExpectationSettled) -> str:
     verdict = "当たった" if event.outcome is Outcome.HIT else "外れた"
@@ -158,6 +153,5 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
 
 __all__ = [
     "ExpectationBeliefMaterialReceiver",
-    "LIKELIHOOD_LABELS",
     "settled_expectation_text",
 ]

@@ -17,7 +17,7 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value
 
-from ai_rpg_world.application.being.expectation.belief_material import (
+from ai_rpg_world.application.being.expectation.likelihood_labels import (
     LIKELIHOOD_LABELS,
 )
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
