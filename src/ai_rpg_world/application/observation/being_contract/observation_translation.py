@@ -8,6 +8,11 @@ from enum import Enum
 from typing import Any, Final
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_ASSESS_SITUATION,
+    TOOL_NAME_PREFIX_MEMO,
+    TOOL_NAME_PREFIX_MEMORY,
+)
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
     ObservationOutput,
@@ -56,6 +61,12 @@ class Observer:
 # エージェント側の自己監視で、どちらも環境から届く観測ではない。経路の 5 つの
 # どれにも当たらないので、選択肢を足さずに変換を拒む。
 _BEING_INNER_RECORD_TYPES: Final = frozenset({"goal_reflect", "goal_revision"})
+
+# メモ・記憶・状況評価の道具は、Being が自分の記録を読み書きするもので、環境に働きかけない。
+# 結果の文 (「メモを追加しました（ID: …）」など) を自分の行動の結果として写すと、記憶の
+# 側が環境で起きたことと取り違える (#1414 の確かめ方で、いま起きたことに混ざっていた)。
+_AGENT_SIDE_TOOL_PREFIXES: Final = (TOOL_NAME_PREFIX_MEMO, TOOL_NAME_PREFIX_MEMORY)
+_AGENT_SIDE_TOOLS: Final = frozenset({TOOL_NAME_ASSESS_SITUATION})
 
 _ROUTE_BY_CATEGORY: Final[Mapping[ObservationCategory, Route]] = {
     "self_only": OwnBodyState(),
@@ -151,6 +162,10 @@ def observation_from_action_result(
     entry: ActionResultEntry, *, call_id: str, observer: Observer
 ) -> Observation:
     """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。"""
+    if _is_agent_side_tool(entry.tool_name):
+        raise ObservationNotRepresentable(
+            NotRepresentableReason.BEING_INNER_RECORD, entry.tool_name
+        )
     body = entry.result_summary.strip() or entry.action_summary.strip()
     if not body:
         raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, entry.tool_name)
@@ -171,6 +186,12 @@ def observation_from_action_result(
         addressed_to_self=True,
         wants_wake=entry.should_reschedule,
     )
+
+
+def _is_agent_side_tool(tool_name: str | None) -> bool:
+    if tool_name is None:
+        return False
+    return tool_name in _AGENT_SIDE_TOOLS or tool_name.startswith(_AGENT_SIDE_TOOL_PREFIXES)
 
 
 def _kind(structured: Mapping[str, Any]) -> str | None:

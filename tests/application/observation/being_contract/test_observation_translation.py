@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+import ai_rpg_world.application.llm.services.tool_catalog as tool_catalog
+from ai_rpg_world.application.llm import tool_constants
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolDefinitionDto
+from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    assess_situation_definition,
+)
 from ai_rpg_world.application.observation.being_contract import (
     NotRepresentableReason,
     ObservationNotRepresentable,
@@ -489,3 +497,85 @@ class TestActionResult:
         )
 
         assert observation.body == "通信室へ移動しようとした"
+
+
+class TestAgentSideToolResult:
+    """メモ・記憶・状況評価のようなエージェント側の道具の結果を、環境の観測として写さない規則を保証する。"""
+
+    def _entry(self, tool_name: str | None, *, result_summary: str = "メモを追加しました（ID: ccd325…）。") -> ActionResultEntry:
+        return ActionResultEntry(
+            occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            action_summary=f"{tool_name}()",
+            result_summary=result_summary,
+            success=True,
+            tool_name=tool_name,
+            game_time_label="一日目の朝 0:10",
+        )
+
+    def test_every_catalogued_tool_is_rejected_exactly_when_it_is_not_a_world_action(self) -> None:
+        """道具のカタログの全道具について、環境に働きかける道具 (world_action) だけを写し、それ以外 (メモ・記憶・状況評価) を拒む。道具を足せば自動でこの検査の対象になる。"""
+        definitions = _catalogued_tool_definitions()
+        assert len(definitions) > 50, "カタログの走査が道具を拾えていない"
+
+        for name, category in definitions.items():
+            entry = self._entry(name, result_summary="何かが起きた。")
+            if category is ToolCategory.WORLD_ACTION:
+                observation = observation_from_action_result(entry, call_id="c", observer=_NOAH)
+                assert isinstance(observation.route, OwnActionResult), name
+            else:
+                with pytest.raises(ObservationNotRepresentable) as raised:
+                    observation_from_action_result(entry, call_id="c", observer=_NOAH)
+                assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD, name
+                assert raised.value.kind == name
+
+    def test_every_tool_name_constant_is_in_the_catalogue(self) -> None:
+        """道具の名前の定数はすべてカタログに分類がある。カタログに無い道具は、写すか拒むかが決まらないので、分類を足させる。"""
+        names = {
+            value
+            for key, value in vars(tool_constants).items()
+            if key.startswith("TOOL_NAME_")
+            and not key.startswith("TOOL_NAME_PREFIX")
+            and isinstance(value, str)
+        }
+
+        assert names <= set(_catalogued_tool_definitions())
+
+    def test_agent_side_check_comes_before_the_empty_body_check(self) -> None:
+        """エージェント側の道具の結果は、本文が空でも、空だからではなく Being 自身の記録として拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_action_result(
+                self._entry("memo_done", result_summary=""), call_id="c", observer=_NOAH
+            )
+
+        assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD
+
+    @pytest.mark.parametrize("tool_name", ["interact", "speak", "wait", "world_inspect_item"])
+    def test_environment_tool_result_is_still_representable(self, tool_name: str) -> None:
+        """環境の道具の結果は、これまでどおり本文を持つ自分の行動の結果として写す。"""
+        observation = observation_from_action_result(
+            self._entry(tool_name, result_summary="箱を開けた。"), call_id="c", observer=_NOAH
+        )
+
+        assert isinstance(observation.route, OwnActionResult)
+        assert observation.body == "箱を開けた。"
+
+    def test_result_without_tool_name_is_still_representable(self) -> None:
+        """道具の名前が無い結果 (古い snapshot から戻したものなど) は、見分けられないので写す。"""
+        observation = observation_from_action_result(
+            self._entry(None, result_summary="箱を開けた。"), call_id="c", observer=_NOAH
+        )
+
+        assert isinstance(observation.route, OwnActionResult)
+
+
+def _catalogued_tool_definitions() -> dict[str, ToolCategory]:
+    """道具のカタログのモジュールにある定義と、関数で作る assess_situation の分類を集める。"""
+    found: dict[str, ToolCategory] = {}
+    for module_info in pkgutil.iter_modules(tool_catalog.__path__):
+        module = importlib.import_module(f"{tool_catalog.__name__}.{module_info.name}")
+        for value in vars(module).values():
+            if isinstance(value, ToolDefinitionDto):
+                found[value.name] = value.category
+    assess = assess_situation_definition(expected_result_policy="off")
+    found[assess.name] = assess.category
+    return found

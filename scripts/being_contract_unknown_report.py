@@ -175,10 +175,13 @@ def tally_trace(trace_path: Path, tally: Tally) -> None:
                 game_time_label=label,
                 occurred_tick=tick,
             )
-            tally.add(
-                observation_from_action_result(entry, call_id=call_id, observer=who),
-                f"tool:{payload.get('tool')}",
-            )
+            try:
+                tally.add(
+                    observation_from_action_result(entry, call_id=call_id, observer=who),
+                    f"tool:{payload.get('tool')}",
+                )
+            except ObservationNotRepresentable as refused:
+                tally.not_representable[f"{refused.reason.value}: {refused.kind}"] += 1
 
 
 def _pair_call_id(queue: deque[tuple[int, str]], tool: str) -> str | None:
@@ -219,7 +222,7 @@ def render_markdown(tally: Tally) -> str:
         f"時刻の数値 (秒) を埋められた観測: {_percent(tally.seconds_available, total)}",
         f"時刻の文を仮置きしたツールの結果 (同じ tick の観測が trace に無い): {tally.placeholder_labels} 件",
         "",
-        "経路に写せなかった観測:",
+        "経路に写せなかった観測と道具の結果:",
     ]
     lines += [f"- {k}: {v} 件" for k, v in tally.not_representable.most_common()] or ["- なし"]
     lines += ["", "組み直せずに数えなかったもの:"]
