@@ -4580,9 +4580,24 @@ def _expectation_event_receivers(
     """
     stack = runtime._episodic_stack
     if stack is None:
+        if config.expectation_settlement_enabled:
+            logger.warning(
+                "expectation settlement is enabled but the episodic stack is not "
+                "built; settled expectations reach no memory"
+            )
         return ()
     trace_provider = lambda: runtime._trace_recorder  # noqa: E731
     receivers: list[ExpectationEventReceiver] = []
+    if config.belief_evidence_enabled and stack.belief_evidence_buffer_store is None:
+        logger.warning(
+            "BELIEF_EVIDENCE_ENABLED but belief_evidence_buffer_store is missing; "
+            "settled expectations do not become belief evidence"
+        )
+    if config.error_driven_reinterpretation_enabled and stack.recall_buffer_store is None:
+        logger.warning(
+            "ERROR_DRIVEN_REINTERPRETATION_ENABLED but recall_buffer_store is missing "
+            "(no reinterpretation completion); settled misses are not stamped on recalls"
+        )
     if config.belief_evidence_enabled and stack.belief_evidence_buffer_store is not None:
         receivers.append(
             ExpectationBeliefMaterialReceiver(
@@ -8283,12 +8298,6 @@ def create_world_runtime(
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
 
-    # disabled_tools の名前が実在するかを、ここで確かめる。
-    #
-    # 判定自体は get_tool_definitions が持っているが、それを待つと
-    # presentation 層の起動時検査まで遅れる。**シナリオの書き間違いは
-    # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
-    # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
     # 受け取る側は記憶の store に書くので、episodic stack を組んだあとで配り手を作る。
     runtime._expectation_dispatcher = ExpectationEventDispatcher(
         runtime._expectation_store,
@@ -8296,6 +8305,13 @@ def create_world_runtime(
         max_attempts=config.expectation_event_max_delivery_attempts,
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
+
+    # disabled_tools の名前が実在するかを、ここで確かめる。
+    #
+    # 判定自体は get_tool_definitions が持っているが、それを待つと
+    # presentation 層の起動時検査まで遅れる。**シナリオの書き間違いは
+    # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
+    # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()

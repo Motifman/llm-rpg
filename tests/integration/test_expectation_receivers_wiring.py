@@ -167,6 +167,63 @@ class TestRecallBufferNeedsErrorDrivenReinterpretation:
         assert [type(r) for r in receivers] == [ExpectationChunkNoteReceiver]
 
 
+class TestUnregisteredReceiversAreLogged:
+    """記憶の機能が有効なのに受け取る側を登録できない構成を、起動時の warning で見せる挙動を保証する。"""
+
+    def test_belief_evidence_on_without_buffer_warns(self, caplog: Any) -> None:
+        """BELIEF_EVIDENCE_ENABLED なのに証拠バッファが無ければ、信念の受け取る側を登録できないことを warning に出す。"""
+        import logging
+        from types import SimpleNamespace
+
+        from ai_rpg_world.application.world_runtime.world_runtime import (
+            _expectation_event_receivers,
+        )
+
+        stack = SimpleNamespace(
+            belief_evidence_buffer_store=None,
+            recall_success_store=None,
+            recall_buffer_store=None,
+            chunk_coordinator=_Sink(),
+        )
+        runtime = SimpleNamespace(_episodic_stack=stack, _trace_recorder=None)
+
+        with caplog.at_level(logging.WARNING):
+            _expectation_event_receivers(
+                runtime,
+                episodic_config(
+                    belief_evidence_enabled=True,
+                    error_driven_reinterpretation_enabled=True,
+                ),
+            )
+
+        messages = " ".join(r.getMessage() for r in caplog.records)
+        assert "belief_evidence_buffer_store" in messages
+        assert "recall_buffer_store" in messages
+
+    def test_no_episodic_stack_warns(self, caplog: Any) -> None:
+        """清算が有効なのに episodic stack が無い構成では、確定した予期がどの記憶にも届かないことを warning に出す。"""
+        import logging
+        from types import SimpleNamespace
+
+        from ai_rpg_world.application.world_runtime.world_runtime import (
+            _expectation_event_receivers,
+        )
+
+        runtime = SimpleNamespace(_episodic_stack=None, _trace_recorder=None)
+
+        with caplog.at_level(logging.WARNING):
+            receivers = _expectation_event_receivers(
+                runtime,
+                episodic_config(
+                    expectation_settlement_enabled=True,
+                    typed_judgment_provider="stub",
+                ),
+            )
+
+        assert receivers == ()
+        assert "episodic stack" in " ".join(r.getMessage() for r in caplog.records)
+
+
 class _Sink:
     def note_settled_miss(self, being_id: Any, missed: Any) -> bool:
         return True

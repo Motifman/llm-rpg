@@ -68,29 +68,41 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
             self._trace(event_id, event, result="skipped", skipped_reason="no_episodes_in_mind")
             return
         if event.outcome is Outcome.HIT:
-            if self._success_store is None:
-                self._trace(event_id, event, result="skipped", skipped_reason="recall_success_store_unwired")
-                return
-            credit = "hit_count"
-            applied = self._success_store.record_hits_received_by_being(
-                event.holder, event.episodes_in_mind, event_id=event_id.value
-            )
+            self._credit_hit(event_id, event)
         else:
-            if self._recall_buffer_store is None:
-                self._trace(event_id, event, result="skipped", skipped_reason="recall_buffer_unwired")
-                return
-            credit = "miss_stamp"
-            applied = self._recall_buffer_store.stamp_prediction_outcome_for_episodes_by_being(
-                event.holder,
-                event.episodes_in_mind,
-                settled_expectation_text(event),
-                event_id=event_id.value,
-            )
+            self._stamp_miss(event_id, event)
+
+    def _credit_hit(self, event_id: ExpectationEventId, event: ExpectationSettled) -> None:
+        if self._success_store is None:
+            self._trace(event_id, event, result="skipped", skipped_reason="recall_success_store_unwired")
+            return
+        recorded = self._success_store.record_hits_received_by_being(
+            event.holder, event.episodes_in_mind, event_id=event_id.value
+        )
         self._trace(
             event_id,
             event,
-            result="appended" if applied else "already_received",
-            credit=credit,
+            result="appended" if recorded else "already_received",
+            credit="hit_count",
+        )
+
+    def _stamp_miss(self, event_id: ExpectationEventId, event: ExpectationSettled) -> None:
+        if self._recall_buffer_store is None:
+            self._trace(event_id, event, result="skipped", skipped_reason="recall_buffer_unwired")
+            return
+        stamped = self._recall_buffer_store.stamp_prediction_outcome_for_episodes_by_being(
+            event.holder,
+            event.episodes_in_mind,
+            settled_expectation_text(event),
+            event_id=event_id.value,
+        )
+        # 想起が再解釈で処理済みなら 0 件になる。受け取り済みと区別して件数を残す。
+        self._trace(
+            event_id,
+            event,
+            result="already_received" if stamped is None else "appended",
+            credit="miss_stamp",
+            stamped_recalls=stamped,
         )
 
     def _trace(
@@ -101,6 +113,7 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
         result: str,
         credit: str | None = None,
         skipped_reason: str | None = None,
+        stamped_recalls: int | None = None,
     ) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
@@ -119,6 +132,8 @@ class ExpectationRecallCreditReceiver(ExpectationEventReceiver):
         if credit is not None:
             payload["credit"] = credit
             payload["episode_ids"] = list(event.episodes_in_mind)
+        if stamped_recalls is not None:
+            payload["stamped_recalls"] = stamped_recalls
         recorder.record(TraceEventKind.EXPECTATION_MATERIAL, **payload)
 
 

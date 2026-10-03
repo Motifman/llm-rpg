@@ -111,13 +111,14 @@ class EpisodicRecallBufferRepository(ABC):
         prediction_error: str,
         *,
         event_id: str,
-    ) -> bool:
+    ) -> int | None:
         """確定して外れた予期のずれを、それを持ったときに思い出していた episode
 
         の pending observation 群に刻み、その出来事の ID を受け取り済みにする (#1443)。
 
-        2 つは同じ保存の単位で書く (#1479)。受け取り済みの ID なら何も刻まずに
-        False を返す。既に刻まれた observation は上書きしない。
+        2 つは同じ保存の単位で書く (#1479)。刻んだ observation の件数を返す。
+        想起が再解釈で処理済みなら 0 件になりうる。受け取り済みの ID なら何も
+        刻まずに None を返す。既に刻まれた observation は上書きしない。
         """
 
     @abstractmethod

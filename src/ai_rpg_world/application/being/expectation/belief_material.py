@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -44,14 +43,16 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
     BeliefEvidenceSourceKind,
 )
 
-logger = logging.getLogger(__name__)
+
+def expectation_outcome_text(
+    content: str, likelihood: Likelihood, outcome: Outcome
+) -> str:
+    verdict = "当たった" if outcome is Outcome.HIT else "外れた"
+    return f"{LIKELIHOOD_LABELS[likelihood]}と思っていた予期「{content}」は{verdict}。"
+
 
 def settled_expectation_text(event: ExpectationSettled) -> str:
-    verdict = "当たった" if event.outcome is Outcome.HIT else "外れた"
-    return (
-        f"{LIKELIHOOD_LABELS[event.likelihood]}と思っていた予期"
-        f"「{event.content}」は{verdict}。"
-    )
+    return expectation_outcome_text(event.content, event.likelihood, event.outcome)
 
 
 class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
@@ -153,5 +154,6 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
 
 __all__ = [
     "ExpectationBeliefMaterialReceiver",
+    "expectation_outcome_text",
     "settled_expectation_text",
 ]

@@ -17,6 +17,9 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value
 
+from ai_rpg_world.application.being.expectation.belief_material import (
+    expectation_outcome_text,
+)
 from ai_rpg_world.application.being.expectation.likelihood_labels import (
     LIKELIHOOD_LABELS,
 )
@@ -39,6 +42,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
     PendingResolutionVerdict,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import Outcome
 
 _SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を埋める助手です。
 入力はルールが組み立てたエピソード草案・人物像・ソース事実のみです。
@@ -629,7 +633,8 @@ class EpisodicChunkSubjectiveFieldsService:
 
     interpreted / recall_text は LLM 失敗・不正 JSON 時に what / observed 由来の
     テンプレへ落とす。prediction_error は、確定して外れた予期について何が違ったかの
-    文だけを LLM に書かせ、外れた予期が無い chunk では None にする。
+    文だけを LLM に書かせ、外れた予期が無い chunk では None にする。LLM が書けな
+    かったときは、外れたこと自体を予期の文から書く。
     """
 
     def __init__(
@@ -860,9 +865,14 @@ class EpisodicChunkSubjectiveFieldsService:
         recall_text = _merge_picks(llm_value=recall_llm, fallback=fallback_r)
         # 外れたかどうかは予期の清算だけが決める。外れた予期が無い chunk で
         # LLM が書いた文は、chunk の中から判断し直した外れなので捨てる。
-        prediction_error = (
-            pred_err_llm if encoding_input.settled_missed_expectations else None
-        )
+        missed = encoding_input.settled_missed_expectations
+        prediction_error = pred_err_llm if missed else None
+        if missed and prediction_error is None:
+            # 外れは確定しているので、LLM が書けなかったときも外れたこと自体は残す。
+            prediction_error = " ".join(
+                expectation_outcome_text(m.content, m.likelihood, Outcome.MISS)
+                for m in missed
+            )
         merged = replace(
             draft,
             interpreted=interpreted,

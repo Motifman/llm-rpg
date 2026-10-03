@@ -185,21 +185,45 @@ class TestPredictionErrorCompletion:
         merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.prediction_error is None
 
-    def test_failed_action_with_as_expected_answer_keeps_prediction_error_empty(self) -> None:
-        """失敗した行動があっても、LLM が空と答えた chunk の prediction_error は既定の文で埋めず None のまま。"""
-        enc = self._encoding_with_expected(success=False, missed=self._missed())
+    def test_failed_action_without_settled_miss_keeps_prediction_error_none(self) -> None:
+        """失敗した行動があっても、確定して外れた予期が渡されない chunk の prediction_error は既定の文で埋めず None のまま。"""
+        enc = self._encoding_with_expected(success=False)
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'prediction_error': ''}))
+
         merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+
         assert merged.prediction_error is None
 
-    def test_llm_failure_with_failed_action_leaves_prediction_error_none(self) -> None:
-        """LLM が失敗し、失敗した行動と外れた予期があっても、既定の文を作らず None にする。"""
+    def test_llm_failure_without_settled_miss_leaves_prediction_error_none(self) -> None:
+        """LLM が失敗し、失敗した行動があっても、外れた予期が渡されていなければ None にする。"""
+        enc = self._encoding_with_expected(success=False)
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort(LlmApiCallException('down', error_code='LLM_API_CALL_FAILED')))
+
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+
+        assert merged.prediction_error is None
+
+    def test_settled_miss_without_llm_text_records_the_miss_itself(self) -> None:
+        """外れた予期を渡したのに LLM が空を返したら、外れたこと自体を確からしさ付きの文で残し、外れを chunk から落とさない。"""
+        enc = self._encoding_with_expected(missed=self._missed())
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'prediction_error': ''}))
+
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+
+        assert merged.prediction_error == 'ほぼ確実と思っていた予期「ノアが返事をする」は外れた。'
+
+    def test_settled_miss_with_llm_failure_records_the_miss_itself(self) -> None:
+        """外れた予期を渡したのに LLM が失敗したときも、外れたこと自体を文で残す。"""
         enc = self._encoding_with_expected(success=False, missed=self._missed())
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort(LlmApiCallException('down', error_code='LLM_API_CALL_FAILED')))
+
         merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
-        assert merged.prediction_error is None
+
+        assert merged.prediction_error == 'ほぼ確実と思っていた予期「ノアが返事をする」は外れた。'
 
     def test_settled_misses_are_listed_in_user_prompt(self) -> None:
         """確定して外れた予期は、確からしさを添えてユーザメッセージの専用の節に並ぶ。"""

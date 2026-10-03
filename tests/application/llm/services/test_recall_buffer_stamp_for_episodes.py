@@ -69,7 +69,7 @@ class TestStampForEpisodes:
     def test_stamps_pending_recalls_of_episodes_in_mind_only(
         self, make_store: Callable[[], EpisodicRecallBufferRepository]
     ) -> None:
-        """思い出していたエピソードの、まだ書き添えの無い想起だけにずれを書き、True を返す。"""
+        """思い出していたエピソードの、まだ書き添えの無い想起だけにずれを書き、書いた想起の件数を返す。"""
         store = make_store()
         store.append_by_being(BEING, _recall("r-1", "ep-shore"))
         store.append_by_being(BEING, _recall("r-2", "ep-other"))
@@ -79,14 +79,14 @@ class TestStampForEpisodes:
             BEING, ("ep-shore",), MISS, event_id="exp-1@5"
         )
 
-        assert stamped is True
+        assert stamped == 1
         assert _errors(store) == {"r-1": MISS, "r-2": None, "r-3": "前のずれ"}
         assert store.list_received_event_ids_by_being(BEING) == ["exp-1@5"]
 
     def test_same_event_id_twice_does_not_stamp_later_recalls(
         self, make_store: Callable[[], EpisodicRecallBufferRepository]
     ) -> None:
-        """同じ出来事の ID を二度受け取ると、間に増えた想起には書き添えず、False を返す。"""
+        """同じ出来事の ID を二度受け取ると、間に増えた想起には書き添えず、None を返す。"""
         store = make_store()
         store.append_by_being(BEING, _recall("r-1", "ep-shore"))
         store.stamp_prediction_outcome_for_episodes_by_being(
@@ -98,7 +98,7 @@ class TestStampForEpisodes:
             BEING, ("ep-shore",), MISS, event_id="exp-1@5"
         )
 
-        assert stamped is False
+        assert stamped is None
         assert _errors(store)["r-4"] is None
 
     def test_replace_received_event_ids_restores_receipts(
@@ -115,6 +115,19 @@ class TestStampForEpisodes:
             store.stamp_prediction_outcome_for_episodes_by_being(
                 BEING, ("ep-shore",), MISS, event_id="exp-1@5"
             )
-            is False
+            is None
         )
         assert _errors(store)["r-1"] is None
+
+    def test_no_pending_recall_returns_zero_and_still_records_receipt(
+        self, make_store: Callable[[], EpisodicRecallBufferRepository]
+    ) -> None:
+        """書き添える想起が残っていなければ 0 を返し、出来事の ID は受け取り済みにする。"""
+        store = make_store()
+
+        stamped = store.stamp_prediction_outcome_for_episodes_by_being(
+            BEING, ("ep-shore",), MISS, event_id="exp-1@5"
+        )
+
+        assert stamped == 0
+        assert store.list_received_event_ids_by_being(BEING) == ["exp-1@5"]

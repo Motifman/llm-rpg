@@ -157,7 +157,28 @@ class TestSettledMiss:
         }
         assert harness.success.list_all_by_being(RIO) == {}
         (trace,) = harness.traces()
-        assert trace["credit"] == "miss_stamp"
+        assert (trace["credit"], trace["stamped_recalls"]) == ("miss_stamp", 1)
+
+    def test_miss_without_pending_recall_is_traced_as_nothing_stamped(self) -> None:
+        """外れの確定が届いたとき、書き添える想起が残っていなければ、0 件だったことを trace に残す。"""
+        harness = _Harness()
+
+        harness.receiver.receive(EVENT_ID, _settled(outcome=Outcome.MISS))
+
+        (trace,) = harness.traces()
+        assert (trace["result"], trace["stamped_recalls"]) == ("appended", 0)
+
+    def test_same_miss_twice_is_traced_as_already_received(self) -> None:
+        """同じ外れの出来事を二度受け取ると、2 回目は書き添えず、受け取り済みとして trace に残る。"""
+        harness = _Harness()
+        harness.recall.append_by_being(RIO, _recall("r-1", "ep-shore"))
+        harness.receiver.receive(EVENT_ID, _settled(outcome=Outcome.MISS))
+        harness.recall.append_by_being(RIO, _recall("r-2", "ep-shore"))
+
+        harness.receiver.receive(EVENT_ID, _settled(outcome=Outcome.MISS))
+
+        assert harness.stamps()["r-2"] is None
+        assert [t["result"] for t in harness.traces()] == ["appended", "already_received"]
 
 
 class TestNothingToCredit:

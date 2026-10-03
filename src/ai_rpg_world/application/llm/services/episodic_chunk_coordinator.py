@@ -359,6 +359,7 @@ class EpisodicChunkCoordinator:
         boundary_reason: str,
         action_count: int,
         observation_count: int,
+        settled_miss_event_ids: list[str],
     ) -> None:
         """``EPISODIC_CHUNK_WRITTEN`` を trace に記録する (失敗は握りつぶす)。"""
         recorder = self._resolve_trace_recorder()
@@ -393,6 +394,7 @@ class EpisodicChunkCoordinator:
                 recall_text_snippet=recall_text[:120],
                 action_count=action_count,
                 observation_count=observation_count,
+                settled_miss_event_ids=settled_miss_event_ids,
             )
         except Exception:
             # trace 失敗で chunk 書き込みパスを止めない方針を維持しつつ、
@@ -644,6 +646,9 @@ class EpisodicChunkCoordinator:
             boundary_reason=decision.reason.value,
             action_count=len(chunk_actions_sorted),
             observation_count=len(obs_slice_sorted),
+            settled_miss_event_ids=[
+                m.event_id for m in encoding_input.settled_missed_expectations
+            ],
         )
         self._chunk_actions[key] = []
         handed = encoding_input.settled_missed_expectations

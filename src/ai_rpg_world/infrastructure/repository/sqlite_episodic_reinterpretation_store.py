@@ -595,7 +595,7 @@ class SqliteEpisodicReinterpretationStore(
         prediction_error: str,
         *,
         event_id: str,
-    ) -> bool:
+    ) -> int | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(prediction_error, str) or not prediction_error.strip():
@@ -618,7 +618,7 @@ class SqliteEpisodicReinterpretationStore(
             ).rowcount
             if inserted == 0:
                 self._conn.rollback()
-                return False
+                return None
             rows = self._conn.execute(
                 """
                 SELECT recall_id, payload_json
@@ -627,6 +627,7 @@ class SqliteEpisodicReinterpretationStore(
                 """,
                 (being_id.value,),
             ).fetchall()
+            stamped = 0
             for recall_id, payload_raw in rows:
                 data = json.loads(str(payload_raw))
                 if (
@@ -635,6 +636,7 @@ class SqliteEpisodicReinterpretationStore(
                 ):
                     continue
                 data["prediction_outcome_error"] = prediction_error
+                stamped += 1
                 self._conn.execute(
                     """
                     UPDATE episodic_recall_observations_by_being
@@ -647,7 +649,7 @@ class SqliteEpisodicReinterpretationStore(
         except Exception:
             self._conn.rollback()
             raise
-        return True
+        return stamped
 
     def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
         if not isinstance(being_id, BeingId):

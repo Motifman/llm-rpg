@@ -29,6 +29,7 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
@@ -121,3 +122,51 @@ class TestSettledMissReachesNextChunk:
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id, start_hour=13)
         errors = sorted((e.occurred_at, e.prediction_error) for e in coord._episodic_episode_store.list_all_by_being(being_id))
         assert [err for _, err in errors] == ['ずれ', None]
+
+
+class _NotingPort(IEpisodicChunkSubjectiveCompletionPort):
+    """最初に呼ばれたとき、主観補完の最中に別の外れの確定が届いたことにする port。"""
+
+    def __init__(self) -> None:
+        self.on_first_call = None
+
+    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        if self.on_first_call is not None:
+            self.on_first_call()
+            self.on_first_call = None
+        return {'interpreted': 'I', 'recall_text': 'R', 'prediction_error': 'ずれ'}
+
+
+class TestMissArrivingDuringCompletion:
+    """chunk が外れを受け取ったあとに届いた外れを、次の chunk のために残す挙動を保証する。"""
+
+    def test_miss_noted_while_chunk_is_completed_goes_to_next_chunk(self) -> None:
+        """主観補完の最中に届いた外れは、閉じた chunk では使われず、次の chunk のために残る。"""
+        port = _NotingPort()
+        (coord, buffer, action_store, being_id) = _build_coord(returns={})
+        coord._chunk_subjective_fields_service = EpisodicChunkSubjectiveFieldsService(port)
+        coord.note_settled_miss(being_id, _missed('exp-1@5'))
+        port.on_first_call = lambda: coord.note_settled_miss(being_id, _missed('exp-2@6'))
+
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+
+        assert [m.event_id for m in coord._settled_misses[being_id]] == ['exp-2@6']
+
+
+class TestChunkWrittenTrace:
+    """chunk の書き込みの trace に、その chunk に渡した外れの出来事の ID が残る挙動を保証する。"""
+
+    def test_chunk_written_trace_lists_handed_miss_event_ids(self) -> None:
+        """外れを 1 件持って chunk を閉じると、EPISODIC_CHUNK_WRITTEN に出来事の ID が 1 件載る。"""
+        recorder = NullTraceRecorder()
+        events: list = []
+        original = recorder.record
+        recorder.record = lambda kind, **kw: events.append((kind, kw)) or original(kind, **kw)  # type: ignore[method-assign]
+        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'})
+        coord._trace_recorder = recorder
+        coord.note_settled_miss(being_id, _missed())
+
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
+
+        (written,) = [kw for kind, kw in events if kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN]
+        assert written['settled_miss_event_ids'] == ['exp-1@5']

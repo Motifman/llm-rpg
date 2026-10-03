@@ -74,7 +74,9 @@ class TraceEventKind:
     # EPISODIC_CHUNK_WRITTEN: ``EpisodicChunkCoordinator`` が境界を閉じて
     # SubjectiveEpisode を 1 件 store に書いた瞬間。
     # payload: episode_id / boundary_reason / cues (canonical list) /
-    # recall_text_snippet / action_count / observation_count
+    # recall_text_snippet / action_count / observation_count /
+    # settled_miss_event_ids (= この chunk の主観補完に渡した、外れたで確定した
+    # 予期の出来事の ID。#1443)
     EPISODIC_CHUNK_WRITTEN = "episodic_chunk_written"
     # EPISODIC_RECALL: ``DefaultPromptBuilder._run_passive_recall`` が
     # passive recall を実行した瞬間。
@@ -417,6 +419,7 @@ class TraceEventKind:
     #     (no_receivers は受け取る側が 1 つも無く、配信済みの印だけ付けたもの)
     #   - attempts: int (= この run で配ろうとした回数。再開すると 0 から数え直す)
     #   - receiver_count: int
+    #   - receivers: list[str] (= 登録された受け取る側の型名。#1443)
     #   - reason: str (= failed / gave_up のときだけ。例外の型と文)
     EXPECTATION_EVENT_DELIVERY = "expectation_event_delivery"
     # #1443: 確定した予期 1 件を、受け取る側が記憶の材料にした結果。受け取る側
@@ -432,6 +435,7 @@ class TraceEventKind:
     #   - skipped_reason: str (= skipped のときだけ。例 "no_beliefs_in_mind")
     #   - belief_evidence のとき: evidence_id / source_kind / salience / belief_ids
     #   - recall_credit のとき: episode_ids / credit ("hit_count" | "miss_stamp")
+    #     / stamped_recalls (= miss_stamp で書き添えた想起の件数。処理済みなら 0)
     EXPECTATION_MATERIAL = "expectation_material"
 
 

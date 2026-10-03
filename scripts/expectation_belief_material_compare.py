@@ -36,6 +36,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.jev_expectation_settlement_demo import (  # noqa: E402
+    _material,
+    _moves,
+    _port,
+    _Recorder,
+)
+
 from ai_rpg_world.application.being._memory_payload_codecs import (  # noqa: E402
     dict_to_undelivered_expectation_event,
     undelivered_expectation_event_to_dict,
@@ -86,12 +93,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.undelivered_expectation
 )
 from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (  # noqa: E402
     InMemoryExpectationRepository,
-)
-from scripts.jev_expectation_settlement_demo import (  # noqa: E402
-    _material,
-    _moves,
-    _port,
-    _Recorder,
 )
 
 _PREDICTION_KINDS = ("prediction_error", "confirmation")

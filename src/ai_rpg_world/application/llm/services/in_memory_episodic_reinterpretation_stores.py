@@ -54,10 +54,10 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
 
     def __init__(self) -> None:
         self._pending: dict[BeingId, list[EpisodicRecallObservation]] = defaultdict(list)
+        self._received_event_ids: dict[BeingId, list[str]] = {}
         # ワーカー thread (stamp_prediction_outcome_by_being 等) とメイン
         # thread (append / peek / mark_processed) が同じ dict / list を触るため、
         # 公開メソッド全体を 1 つの RLock で保護する (#309 と同じ粒度・同じ理由)。
-        self._received_event_ids: dict[BeingId, list[str]] = {}
         self._lock = threading.RLock()
 
     def append_by_being(
@@ -169,7 +169,7 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
         prediction_error: str,
         *,
         event_id: str,
-    ) -> bool:
+    ) -> int | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if not isinstance(prediction_error, str) or not prediction_error.strip():
@@ -180,15 +180,17 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
         with self._lock:
             received = self._received_event_ids.setdefault(being_id, [])
             if event_id in received:
-                return False
-            self._pending[being_id] = [
-                replace(row, prediction_outcome_error=prediction_error)
-                if row.episode_id in targets and row.prediction_outcome_error is None
-                else row
-                for row in self._pending.get(being_id, [])
-            ]
+                return None
+            stamped = 0
+            updated: list[EpisodicRecallObservation] = []
+            for row in self._pending.get(being_id, []):
+                if row.episode_id in targets and row.prediction_outcome_error is None:
+                    row = replace(row, prediction_outcome_error=prediction_error)
+                    stamped += 1
+                updated.append(row)
+            self._pending[being_id] = updated
             received.append(event_id)
-            return True
+            return stamped
 
     def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
         if not isinstance(being_id, BeingId):
