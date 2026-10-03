@@ -97,6 +97,29 @@ def test_not_representable_observations_are_counted_by_reason(
     assert dict(tally.not_representable) == {"being_inner_record: goal_reflect": 1}
 
 
+def test_memo_tool_result_is_counted_as_not_representable(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """メモ機能の結果は、止まらずに、Being 自身の記録として写せなかった件数に数え、そのあとの道具の結果は数え続ける。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _observation(2, 1, 2, "深夜 0:05"),
+            _event(3, "action", 1, 2, tool="memo_add", arguments={}),
+            _event(4, "action_result", 1, 2, tool="memo_add", success=True, result_summary="メモを追加しました。"),
+            _event(5, "action", 1, 2, tool="travel_to", arguments={}),
+            _event(6, "action_result", 1, 2, tool="travel_to", success=True, result_summary="着いた。"),
+        ],
+    )
+    tally = report.Tally()
+
+    report.tally_trace(trace, tally)
+
+    assert dict(tally.not_representable) == {"being_inner_record: memo_add": 1}
+    assert tally.converted["OwnActionResult"] == 1
+
+
 def test_action_result_without_matching_action_is_skipped(
     report: ModuleType, tmp_path: Path
 ) -> None:
@@ -177,7 +200,7 @@ def test_action_result_without_same_tick_observation_uses_placeholder_label(
 
     report.tally_trace(trace, tally)
 
-    assert tally.converted == {"OwnActionResult": 1}
+    assert tally.converted["OwnActionResult"] == 1
     assert tally.placeholder_labels == 1
 
 
