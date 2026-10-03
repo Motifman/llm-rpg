@@ -70,11 +70,13 @@ class _RecordingPort(ITypedJudgmentPort):
         *,
         raises: bool = False,
         drop_answers: bool = False,
+        value_override: Any = None,
     ) -> None:
         self.calls: list[tuple[Any, Mapping[str, Question]]] = []
         self._by_text = dict(probabilities_by_text or {})
         self._raises = raises
         self._drop_answers = drop_answers
+        self._value_override = value_override
 
     def judge(
         self,
@@ -97,7 +99,7 @@ class _RecordingPort(ITypedJudgmentPort):
                     probability = value
                     break
             answers[name] = JudgmentResult(
-                value=probability,
+                value=probability if self._value_override is None else self._value_override,
                 probabilities={},
                 confidence=None,
                 source=JudgmentSource.JEV,
@@ -273,6 +275,17 @@ class TestNoHintWithoutAJudgment:
         assert detection.hints == ()
         assert detection.judgments == ()
         assert detection.unavailable_reason == "TYPED_JUDGMENT_ANSWER_MISSING"
+
+
+    def test_a_non_numeric_answer_is_not_read_as_a_probability(self) -> None:
+        """答えが確率として読めない値なら、判断なしとして理由を残す。"""
+        port = _RecordingPort(value_override="high")
+        service, _ = _service([_goal("g1", "斧を手に入れる")], port)
+
+        detection = service.detect(_BEING, "倉庫で斧を拾った", "斧を手に入れた")
+
+        assert detection.hints == ()
+        assert detection.unavailable_reason == "TYPED_JUDGMENT_ANSWER_INVALID"
 
 
 class TestTheThresholdIsValidated:

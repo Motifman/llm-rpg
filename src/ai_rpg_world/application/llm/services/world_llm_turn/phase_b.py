@@ -249,6 +249,9 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
             result,
             message="行動は失敗したため、進行中の移動はそのまま継続している。 " + result.message,
         )
+    # 目的の判断には memo の hint を混ぜない。混ぜると、行動の結果でなく別の hint を
+    # 材料に達成を判断する。
+    message_before_hints = result.message
     # PR 5 (#227): memo 完了 hint で result.message を augment する。
     # memo_* ツール自身の実行直後は hint を出さない (冗長 / 自己参照ループ
     # 防止)。本家経路 (LlmAgentOrchestrator._maybe_augment_with_memo_hint)
@@ -307,6 +310,7 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
         player_id=player_id,
         name=name,
         arguments=arguments,
+        judged_message=message_before_hints,
         tools_payload=phase_a.tools_payload,
         trace_recorder=trace_recorder,
         current_tick=current_tick,
@@ -398,6 +402,7 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
     record_prompt_dataset_turn_result(wiring, phase_a, result)
     return result
 
+
 def _augment_with_goal_hint(
     wiring: WorldLlmWiring,
     result: LlmCommandResultDto,
@@ -405,18 +410,23 @@ def _augment_with_goal_hint(
     player_id: PlayerId,
     name: str,
     arguments: dict[str, Any],
+    judged_message: str,
     tools_payload: Any,
     trace_recorder: Any | None,
     current_tick: int | None,
 ) -> LlmCommandResultDto:
     """未達成の目的が達成されたかもしれなければ、結果の文に hint を添える (#1448)。
 
-    提示した定義に goal_outcome が無い tool (memo など) と、行動と同時に目的を
-    清算・言い直した行動では問わない。前者は世界に作用しないので目的を進めず、
-    後者は本人がもう決めている。
+    失敗した行動、提示した定義に goal_outcome が無い tool (memo など)、行動と同時に
+    目的を清算・言い直した行動では問わない。前の 2 つは目的を進めず、最後は本人が
+    もう決めている。
     """
     service = wiring.goal_completion_hint_service
-    if service is None or not _offered_with_goal_outcome(tools_payload, name):
+    if (
+        service is None
+        or not result.success
+        or not _offered_with_goal_outcome(tools_payload, name)
+    ):
         return result
     goal_update = arguments.get(GOAL_UPDATE_FIELD_NAME)
     if arguments.get(GOAL_OUTCOME_FIELD_NAME) in (
@@ -426,16 +436,22 @@ def _augment_with_goal_hint(
         return result
     try:
         acting = wiring.runtime._acting_being_for(player_id)
-        if acting is None:
-            return result
+    except Exception:
+        logger.exception("goal hint: acting being resolution failed")
+        return result
+    if acting is None:
+        return result
+    try:
         detection = service.detect(
             acting.being_id,
             format_action_summary_for_display(name, arguments),
-            result.message,
+            judged_message,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("goal_completion_hint_service.detect failed")
-        return result
+        detection = GoalHintDetection(
+            unavailable_reason=f"UNEXPECTED:{type(exc).__name__}"
+        )
     _record_goal_completion_judgments(
         detection,
         trace_recorder=trace_recorder,

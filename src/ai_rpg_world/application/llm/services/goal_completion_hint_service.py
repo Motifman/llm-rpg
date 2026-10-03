@@ -116,7 +116,11 @@ class GoalCompletionHintService:
         action_summary: str,
         result_summary: str,
     ) -> GoalHintDetection:
-        """未達成の目的のうち、達成した可能性が閾値以上のものの hint を返す。"""
+        """未達成の目的のうち、達成した可能性が閾値以上のものの hint を返す。
+
+        1 件でも答えが得られなければ、全体を判断なしとして扱う。目的を 1 回の
+        呼び出しで問うので、欠けた答えは同じ呼び出しの他の答えの信頼も損なう。
+        """
         goals = [
             goal
             for goal in self._goal_store.list_all_by_being(being_id)
@@ -128,7 +132,7 @@ class GoalCompletionHintService:
             return self._by_judgment(goals, action_summary, result_summary)
         except TypedJudgmentUnavailableException as exc:
             return GoalHintDetection(
-                unavailable_reason=getattr(exc, "error_code", "UNAVAILABLE")
+                unavailable_reason=exc.error_code
             )
 
     def _by_judgment(
@@ -164,7 +168,14 @@ class GoalCompletionHintService:
                     f"goal completion answer missing for {key!r}",
                     error_code="TYPED_JUDGMENT_ANSWER_MISSING",
                 )
-            probability = float(answer.value)
+            try:
+                probability = float(answer.value)
+            except (TypeError, ValueError) as exc:
+                raise TypedJudgmentUnavailableException(
+                    f"goal completion answer is not a probability for {key!r}",
+                    error_code="TYPED_JUDGMENT_ANSWER_INVALID",
+                    cause=exc,
+                ) from exc
             accepted = probability >= self.min_probability
             judgments.append(
                 GoalCompletionJudgment(

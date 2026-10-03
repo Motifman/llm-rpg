@@ -33,6 +33,9 @@ from ai_rpg_world.application.llm.services.goal_completion_hint_service import (
     GoalCompletionHintService,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    MemoCompletionHintService,
+)
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
@@ -50,10 +53,18 @@ _GOAL_HINT = f"[hint] 目的「{_GOAL_TEXT}」は達成したかもしれない�
 class _FixedPort(ITypedJudgmentPort):
     """どの質問にも同じ確率を返す。問われた回数を数える。"""
 
-    def __init__(self, probability: float = 0.9, *, raises: bool = False) -> None:
+    def __init__(
+        self,
+        probability: float = 0.9,
+        *,
+        raises: bool = False,
+        raises_unexpected: bool = False,
+    ) -> None:
         self.calls: list[Mapping[str, Question]] = []
+        self.states: list[Any] = []
         self._probability = probability
         self._raises = raises
+        self._raises_unexpected = raises_unexpected
 
     def judge(
         self,
@@ -61,6 +72,9 @@ class _FixedPort(ITypedJudgmentPort):
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         self.calls.append(questions)
+        self.states.append(state)
+        if self._raises_unexpected:
+            raise RuntimeError("port bug")
         if self._raises:
             raise TypedJudgmentUnavailableException(
                 "down", error_code="TYPED_JUDGMENT_TIMEOUT"
@@ -109,8 +123,9 @@ def _session(
     port: ITypedJudgmentPort | None,
     *,
     goal_hint_enabled: bool = True,
+    goal_texts: Sequence[str] = (_GOAL_TEXT,),
 ) -> tuple[Any, Any, str, _CapturingRecorder]:
-    """自分で立てた目的を 1 件持つ session を組み、判断ポートを ``port`` に差し替える。"""
+    """自分で立てた目的を持つ session を組み、判断ポートを ``port`` に差し替える。"""
     state = _create_session(
         monkeypatch,
         tmp_path,
@@ -119,19 +134,20 @@ def _session(
     runtime = state.runtime
     player_id = runtime.get_player_ids()[0]
     being_id = runtime._acting_being_for(player_id).being_id
-    runtime._goal_journal_store.add_by_being(
-        being_id,
-        GoalEntry(
-            goal_id="goal-self-1",
-            player_id=int(player_id.value),
-            text=_GOAL_TEXT,
-            status=GOAL_STATUS_ACTIVE,
-            locked=False,
-            origin=GOAL_ORIGIN_SELF,
-            created_tick=0,
-            created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        ),
-    )
+    for index, text in enumerate(goal_texts, start=1):
+        runtime._goal_journal_store.add_by_being(
+            being_id,
+            GoalEntry(
+                goal_id=f"goal-self-{index}",
+                player_id=int(player_id.value),
+                text=text,
+                status=GOAL_STATUS_ACTIVE,
+                locked=False,
+                origin=GOAL_ORIGIN_SELF,
+                created_tick=0,
+                created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+            ),
+        )
     if port is not None:
         state.llm_wiring.goal_completion_hint_service = GoalCompletionHintService(
             runtime._goal_journal_store, judgment_port=port, min_probability=0.7
@@ -189,21 +205,54 @@ class TestTheHintReachesTheResult:
         assert len(port.calls) == 1
         assert "[hint] 目的" not in result.message
 
-    def test_the_hinted_goal_stays_active(
+    def test_the_goal_store_is_left_as_it_was(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """hint を出しても、目的は active のまま残る。清算するのは本人。"""
-        state, player_id, being_id, _ = _session(
-            monkeypatch, tmp_path, _FixedPort(0.99)
+        """hint を出しても、目的の store は前後で同じ (状態・文・件数とも)。清算するのは本人。"""
+        state, player_id, _, _ = _session(monkeypatch, tmp_path, _FixedPort(0.99))
+        store = state.runtime._goal_journal_store
+        being = state.runtime._acting_being_for(player_id).being_id
+        before = store.list_all_by_being(being)
+
+        result = _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+
+        assert _GOAL_HINT in result.message
+        assert store.list_all_by_being(being) == before
+
+    def test_every_likely_goal_gets_its_own_hint(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """目的が 2 件とも閾値以上なら、Jev は 1 回だけ呼ばれ、2 件の hint が結果の文に付き、判断の trace も 2 件残る。"""
+        port = _FixedPort(0.9)
+        state, player_id, _, recorder = _session(
+            monkeypatch, tmp_path, port, goal_texts=(_GOAL_TEXT, "書庫で休む")
         )
 
-        _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+        result = _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
 
-        goals = state.runtime._goal_journal_store.list_all_by_being(
-            state.runtime._acting_being_for(player_id).being_id
+        assert len(port.calls) == 1
+        assert _GOAL_HINT in result.message
+        assert "[hint] 目的「書庫で休む」は達成したかもしれない。" in result.message
+        assert len(recorder.goal_judgments()) == 2
+
+    def test_the_judgment_sees_the_result_without_the_memo_hint(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """memo の hint も付く行動では、Jev に渡す結果の文に memo の hint は入らず、結果の文は memo、目的の順に hint が並ぶ。"""
+        port = _FixedPort(0.9)
+        state, player_id, _, _ = _session(monkeypatch, tmp_path, port)
+        state.llm_wiring.memo_completion_hint_service = MemoCompletionHintService(
+            memo_store=state.runtime._todo_store
         )
-        (goal,) = [goal for goal in goals if goal.goal_id == "goal-self-1"]
-        assert goal.status == GOAL_STATUS_ACTIVE
+        _act(state, player_id, "memo_add", {"content": "閲覧室へ移動する"})
+
+        result = _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+
+        (judged_state,) = port.states
+        assert "[hint]" not in judged_state["result"]
+        memo_at = result.message.index("[hint] memo")
+        goal_at = result.message.index(_GOAL_HINT)
+        assert memo_at < goal_at
 
 
 class TestTheJudgmentIsTraced:
@@ -245,14 +294,30 @@ class TestTheJudgmentIsTraced:
         assert judgment["accepted"] is False
         assert judgment["probability"] is None
 
+    def test_an_unexpected_error_gives_no_hint_and_traces_its_type(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """判断の途中で想定外の例外が出ても、行動は壊れず hint を出さず、例外の型を理由に trace に残す。"""
+        state, player_id, _, recorder = _session(
+            monkeypatch, tmp_path, _FixedPort(raises_unexpected=True)
+        )
+
+        result = _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+
+        assert result.success is True
+        assert "[hint] 目的" not in result.message
+        (judgment,) = recorder.goal_judgments()
+        assert judgment["unavailable_reason"] == "UNEXPECTED:RuntimeError"
+
 
 class TestWhenNotToAsk:
     """問う意味の無い行動では Jev を呼ばないことを保証する。"""
 
+    @pytest.mark.parametrize("outcome", ["achieved", "abandoned"])
     def test_an_action_that_settles_the_goal_is_not_asked(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outcome: str
     ) -> None:
-        """行動と同時に goal_outcome を書いたなら、本人が清算しているので問わない。"""
+        """行動と同時に goal_outcome (achieved / abandoned) を書いたなら、本人が清算しているので問わない。"""
         port = _FixedPort(0.9)
         state, player_id, _, _ = _session(monkeypatch, tmp_path, port)
 
@@ -260,7 +325,7 @@ class TestWhenNotToAsk:
             state,
             player_id,
             "travel_to",
-            {"destination_label": "閲覧室", "goal_outcome": "achieved"},
+            {"destination_label": "閲覧室", "goal_outcome": outcome},
         )
 
         assert port.calls == []
@@ -282,6 +347,34 @@ class TestWhenNotToAsk:
 
         assert port.calls == []
 
+    def test_a_blank_goal_update_is_still_asked(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """goal_update が空白だけなら目的は言い直されないので、問う。"""
+        port = _FixedPort(0.9)
+        state, player_id, _, _ = _session(monkeypatch, tmp_path, port)
+
+        _act(
+            state,
+            player_id,
+            "travel_to",
+            {"destination_label": "閲覧室", "goal_update": "  "},
+        )
+
+        assert len(port.calls) == 1
+
+    def test_a_failed_action_is_not_asked(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """行動が失敗したなら、目的は進んでいないので問わない。"""
+        port = _FixedPort(0.9)
+        state, player_id, _, _ = _session(monkeypatch, tmp_path, port)
+
+        result = _act(state, player_id, "travel_to", {"destination_label": "存在しない部屋"})
+
+        assert result.success is False
+        assert port.calls == []
+
     def test_a_memo_tool_is_not_asked(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -289,8 +382,9 @@ class TestWhenNotToAsk:
         port = _FixedPort(0.9)
         state, player_id, _, _ = _session(monkeypatch, tmp_path, port)
 
-        _act(state, player_id, "memo_add", {"content": "閲覧室へ行く"})
+        result = _act(state, player_id, "memo_add", {"content": "閲覧室へ行く"})
 
+        assert result.success is True
         assert port.calls == []
 
 
