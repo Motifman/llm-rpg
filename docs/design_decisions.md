@@ -1204,6 +1204,15 @@ PR #898。
 [llm_provider_selection.md](llm_provider_selection.md) にまとめ、この節の provider の
 記述はその時点の記録として読む。
 
+**追記 (2026-10-03)**: DeepSeek 直営は 0731 版の provider 一覧から消えた。それでも
+`only: ["DeepSeek"]` で 0731 版を指定すると、`required` の呼び出しは通る。応答の
+`model` は `deepseek/deepseek-v4.1-flash` で、要求した版とは別のモデルが答えていた。
+0423 版を指定しても同じだった。上の「対応した瞬間に失敗する」プローブは、この
+差し替えを「公式が `required` に対応した」と読んで失敗した。公式の 0731 版がもう
+無いので、プローブが問う対象が無くなった。プローブは削除し、Cloudflare 固定を
+見直す理由にはしない。provider を固定しても、要求した版が答えるとは限らない。
+確かめるときは応答の `model` も見る ([llm_provider_selection.md](llm_provider_selection.md))。
+
 ## 40. `CALL_MEETING.trigger` は宣言値を実行まで運び、未知値へ縮退しない
 
 `CALL_MEETING` の `parameters.trigger` は、会議状態と観測に残る招集理由である。

@@ -26,6 +26,7 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 
 - `supported_parameters` に `tool_choice` があっても、`required` が通るとは限らない。provider の宣言であって、値ごとの動作保証ではない。条件 1 は必ず実呼び出しで見る
 - DeepSeek の思考 (thinking) と `required` は両立しないことがある。思考を入れる run では、条件 1 を思考ありの設定で確かめる (#96)
+- provider を固定しても、要求した版が答えるとは限らない。provider 一覧に無い組み合わせを指定すると、404 にならず別のモデルが答えることがある。呼び出しが通ったかだけでなく、応答の `model` が要求した ID と一致するかを見る
 - 思考トークンは出力トークンの上限に数えられる。上限を小さくしたプローブでは、思考で上限に達してツールが返らないことがある。プローブの `--max-tokens` は 200 以上にする
 
 ## 確かめ方
@@ -44,7 +45,7 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
    uv run python scripts/openrouter_ping.py --list-providers --model openrouter/deepseek/deepseek-v4-flash-0731
    ```
 
-3. **required で直列に叩く**: run と同じ `tool_choice=required` で、5 秒おきに 12 回 (条件 1・3・4)。全部通ることを見る。run を回している最中は、同じ provider の枠を run と取り合うので、プローブは run の前に行う
+3. **required で直列に叩く**: run と同じ `tool_choice=required` で、5 秒おきに 12 回 (条件 1・3・4)。全部通り、出力の `model` が要求した ID と一致することを見る。run を回している最中は、同じ provider の枠を run と取り合うので、プローブは run の前に行う
 
    ```bash
    uv run python scripts/openrouter_ping.py --model openrouter/deepseek/deepseek-v4-flash-0731 \
@@ -82,3 +83,9 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 - gemma-4-31b × Venice は fp4 だった。過去の run の要求 20 回を `required` のまま送り直し、20 回とも通った
 - deepseek-v4-flash 0423 版の DeepSeek 直営は、引き続き provider 一覧に無い。この組み合わせを固定した 7 月の run の要求をそのまま送り直すと `NotFoundError` になる
 - 0423 版 × DeepInfra (fp8、入力 0.09 / キャッシュ 0.018 / 出力 0.18 ドル / MTok) で、過去の run の要求 40 回を `required` のまま直列に送り直し、40 回とも通った
+
+### 2026-10-03 DeepSeek 直営の差し替え
+
+- DeepSeek 直営は、0731 版の provider 一覧 (28 件) に無い。Cloudflare は残っている
+- それでも `only: ["DeepSeek"]` で 0731 版を `required` 付きで呼ぶと通る。応答の `model` は `deepseek/deepseek-v4.1-flash` だった。同じ要求を Cloudflare に固定すると、`model` は `deepseek/deepseek-v4-flash-0731` だった
+- 0423 版 (`deepseek/deepseek-v4-flash`) を DeepSeek 直営に固定しても、応答の `model` は `deepseek/deepseek-v4.1-flash` だった。2026-09-27 の時点では `NotFoundError` で止まっていた。`OPENROUTER_PROVIDER` が `DeepSeek` で 0423 版を指す profile (`belief_goal_full` / `ablation_base` など 8 件) は、止まらずに別のモデルで動く
