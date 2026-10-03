@@ -373,6 +373,32 @@ class TraceEventKind:
     # top-level player_id: aggregate が PlayerStatusAggregate のときだけ best-effort で
     # 入る (= どの player の grace 登録/解除・効果適用が失われたかの per-agent 分析用)。
     SIDE_HANDLER_FAILED = "side_handler_failed"
+    # #1440: 予期の清算を試みたターン 1 件。Jev を呼ばなかったターンも残す。
+    # 判断が見たものは判断の trace に残すので、Jev に渡した state もそのまま載せる。
+    # payload:
+    #   - being_id: str
+    #   - turn: int (= 本人のターン数)
+    #   - judged: bool (= Jev を呼んだか)
+    #   - skipped_reason: str | None ("nothing_to_judge" | "judgment_unavailable" |
+    #     "settlement_failed" | "no_acting_being")
+    #   - unavailable_reason: str | None (= 縮退したときの error_code と文)
+    #   - state: dict | None (= Jev に渡した state)
+    #   - questions: dict[str, {kind, expectation_id, content}] (= 質問の名前と対象の予期)
+    #   - answers: dict[str, {value, probabilities, confidence, latency_ms, source}]
+    #   - transitions: list[{expectation_id, step, verdict, event, status_after}]
+    #     (step は "overdue" | "over_capacity" | "shape" | "check")
+    EXPECTATION_SETTLEMENT = "expectation_settlement"
+    # #1440: 予期の出来事 1 件を受け取る側へ配った結果。配り直すたびに 1 件増える。
+    # payload:
+    #   - being_id: str
+    #   - event_id: str (= 「予期の ID@ターン」。配り直しても同じ)
+    #   - event_type: str
+    #   - outcome: str ("delivered" | "no_receivers" | "failed" | "gave_up")
+    #     (no_receivers は受け取る側が 1 つも無く、配信済みの印だけ付けたもの)
+    #   - attempts: int (= この run で配ろうとした回数。再開すると 0 から数え直す)
+    #   - receiver_count: int
+    #   - reason: str (= failed / gave_up のときだけ。例外の型と文)
+    EXPECTATION_EVENT_DELIVERY = "expectation_event_delivery"
 
 
 @dataclass(frozen=True)

@@ -593,8 +593,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
-    # #1439 (予期): 予期を作る処理 (#1440) が runtime に ``_expectation_store``
-    # を持たせたら拾う。まだ無いあいだは None = 空 in-memory fallback。
+    # #1440 (予期): runtime は清算の有効化によらず予期の store を持つ。
     expectation_store = getattr(runtime, "_expectation_store", None)
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
@@ -763,6 +762,8 @@ def _drive_scenario(
                         for (b, src, cur) in restore_report.cross_scenario_transfers
                     ],
                 )
+                # #1440: 前の run で配れなかった予期の出来事を、最初のターンより先に配り直す。
+                runtime.redeliver_expectation_events(restore_report.restored)
 
                 # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
                 # world.json が無ければ no-op = 後方互換)。world snapshot は

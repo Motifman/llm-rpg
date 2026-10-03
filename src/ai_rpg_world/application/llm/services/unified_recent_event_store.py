@@ -127,6 +127,14 @@ class UnifiedRecentEventStore:
         """現在のターン窓に残る観測と行動を、件数で切らず時系列順に返す。"""
         return self.get_timeline(player_id)
 
+    def open_turn_entries(
+        self, player_id: PlayerId
+    ) -> list[UnifiedRecentEventEntry]:
+        """前回の自分のターンを閉じたあとに届いた観測と行動を、届いた順に返す。"""
+        key = self._key(player_id)
+        entries = self._entries.get(key, [])
+        return list(entries[sum(self._completed_turn_sizes.get(key, [])) :])
+
     def close_turn(self, player_id: PlayerId) -> None:
         """open bucket を閉じる。保持数の政策は短期記憶実装が決める。"""
         key = self._key(player_id)

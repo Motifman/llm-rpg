@@ -184,3 +184,17 @@ def test_short_term_memory_implementation_must_accept_turn_completion() -> None:
 
     with pytest.raises(TypeError, match="abstract class"):
         _IncompleteShortTermMemory()
+
+
+def test_open_turn_entries_return_only_what_arrived_after_the_last_closed_turn() -> None:
+    """前のターンを閉じたあとに届いた観測と行動だけを、届いた順に返し、閉じたターンの分は含めない。"""
+    store = UnifiedRecentEventStore()
+    store.append_observation(_PLAYER, _observation(1, "閉じたターンの観測"))
+    store.close_turn(_PLAYER)
+    store.append_action_result(_PLAYER, _action(3, "いまのターンの行動"))
+    store.append_observation(_PLAYER, _observation(2, "いまのターンの観測"))
+
+    entries = store.open_turn_entries(_PLAYER)
+
+    assert [entry.kind for entry in entries] == ["action_result", "observation"]
+    assert store.open_turn_entries(PlayerId(8)) == []

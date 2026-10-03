@@ -599,6 +599,35 @@ class TestExpireIfOverdue:
             expectation.expire_if_overdue(now_turn=-1)
 
 
+class TestAwaitsShape:
+    """形の判定を待っているかを、形の判定と照合の有無から答える挙動を保証する。"""
+
+    def test_new_expectation_awaits_shape(self) -> None:
+        """作ったばかりで形も照合も受けていない予期は、形の判定を待っている。"""
+        assert _expectation().awaits_shape is True
+
+    def test_settleable_shape_stops_awaiting(self) -> None:
+        """清算できる形と判定された予期は、もう形の判定を待たない。"""
+        expectation = _expectation()
+        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10)
+
+        assert expectation.awaits_shape is False
+
+    def test_check_without_shape_stops_awaiting(self) -> None:
+        """形を判定されないまま照合を受けた予期は、形の判定を受け取れないので待たない。"""
+        expectation = _expectation()
+        expectation.record(Check(turn=11, verdict=UNDETERMINED))
+
+        assert expectation.awaits_shape is False
+
+    def test_closed_expectation_does_not_await(self) -> None:
+        """閉じた予期は形の判定を待たない。"""
+        expectation = _expectation()
+        expectation.expire_if_overdue(now_turn=EXPIRES_AT + 1)
+
+        assert expectation.awaits_shape is False
+
+
 class TestExpireEarly:
     """清算待ちの件数の上限で外すとき、期限をいまの前のターンに繰り上げ、期限を過ぎたときと同じ規則で閉じる挙動を保証する。"""
 

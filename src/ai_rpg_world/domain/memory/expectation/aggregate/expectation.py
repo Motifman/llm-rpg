@@ -232,6 +232,15 @@ class Expectation:
     def episodes_in_mind(self) -> tuple[str, ...]:
         return self._episodes_in_mind
 
+    @property
+    def awaits_shape(self) -> bool:
+        """清算待ちで、形の判定も照合もまだ受けていない。
+
+        形の判定は最初の照合より前にしか受け取れない。予期を書いたターンに判定を
+        得られなかった予期にも、次のターンに形を問えるよう外から分かるようにする。
+        """
+        return self._status.is_open and self._shape is None and not self._checks
+
     def judge_shape(
         self, shape: ShapeVerdict, *, turn: int
     ) -> ExpectationDismissed | None:

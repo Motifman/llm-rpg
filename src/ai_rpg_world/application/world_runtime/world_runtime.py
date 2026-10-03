@@ -66,6 +66,9 @@ class ToolExposureConfigurationError(RuntimeError):
 
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.being.expectation.event_delivery import (
+    ExpectationEventDispatcher,
+)
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -334,6 +337,9 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import Scen
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
+    InMemoryExpectationRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
@@ -661,6 +667,14 @@ class WorldRuntime:
     # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _stagnation_pressure_store: Any | None = field(default=None, repr=False)
+    # #1440: 予期と、その出来事と、Being ごとのターン数。清算の有効化によらず
+    # 持たせ、1 手ごとにターン数を進める。実験 snapshot stub
+    # (_wiring_stub_from_world_runtime) がここから拾う。
+    _expectation_store: InMemoryExpectationRepository = field(
+        default_factory=InMemoryExpectationRepository, repr=False
+    )
+    # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
+    _expectation_dispatcher: Any | None = field(default=None, repr=False)
     # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする
     # 一発ラッチ。transient (session 内制御信号) なので snapshot 非対象。
     _stagnation_reasoning_latch: Any | None = field(default=None, repr=False)
@@ -2144,6 +2158,28 @@ class WorldRuntime:
     def aux_being_default_world_id(self) -> Any:
         """Phase 3 Step 3a-3: aux Being の default WorldId 公開アクセサ。"""
         return getattr(self, "_aux_being_default_world_id", None)
+
+    def advance_memory_turn(self, player_id: PlayerId) -> int | None:
+        """エージェントの 1 手を受け取ったときに、Being のターン数を 1 進める (#1440)。
+
+        Being に結びつかないプレイヤーなら進めずに None を返す。
+        """
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return None
+        return self._expectation_store.advance_turn(acting.being_id)
+
+    def redeliver_expectation_events(self, being_ids: Iterable[BeingId]) -> None:
+        """再開した直後に、snapshot から戻った未配信の予期の出来事を配り直す (#1440)。"""
+        if self._expectation_dispatcher is None:
+            raise RuntimeError(
+                "expectation dispatcher is not wired; build the runtime with "
+                "create_world_runtime"
+            )
+        for being_id in being_ids:
+            self._expectation_dispatcher.deliver_pending(
+                being_id, tick=self.current_tick()
+            )
 
     def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
         self._wire_auxiliary_tool_stack()
@@ -6359,6 +6395,12 @@ def create_world_runtime(
     )
     travel_stage.set_on_travel_tick_committed(
         runtime._record_committed_player_travel_tick
+    )
+    runtime._expectation_dispatcher = ExpectationEventDispatcher(
+        runtime._expectation_store,
+        receivers=(),
+        max_attempts=config.expectation_event_max_delivery_attempts,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
     )
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
     scenario_event_stage.set_message_callback(
