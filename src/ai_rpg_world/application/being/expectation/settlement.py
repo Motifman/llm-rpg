@@ -61,7 +61,11 @@ from ai_rpg_world.application.being.recall.selection_store import (
     NextTurnFieldSelections,
 )
 from ai_rpg_world.application.being.recall.situation import (
+    DEFAULT_FIELDS_TO_KEEP,
+    SELECTABLE_FIELDS,
     FieldSelection,
+    Situation,
+    SituationField,
     field_selection_from_answers,
     field_selection_questions,
 )
@@ -146,6 +150,8 @@ class _Turn:
     state: dict[str, Any] | None = None
     field_selection: dict[str, Any] | None = None
     already_settled: bool = False
+    situation: Situation | None = None
+    situation_note: dict[str, Any] = field(default_factory=dict)
 
 
 class ExpectationSettlementService:
@@ -168,6 +174,7 @@ class ExpectationSettlementService:
         grounds_min_probability: float,
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
         field_selections: NextTurnFieldSelections | None = None,
+        fields_to_keep: int = DEFAULT_FIELDS_TO_KEEP,
     ) -> None:
         """``field_selections`` を渡すと、次のターンの想起で残す欄も毎ターン問う。"""
         if not isinstance(repository, ExpectationRepository):
@@ -206,8 +213,18 @@ class ExpectationSettlementService:
         ):
             raise TypeError("field_selections must be NextTurnFieldSelections or None")
         self._field_selections = field_selections
+        if isinstance(fields_to_keep, bool) or not isinstance(fields_to_keep, int):
+            raise TypeError("fields_to_keep must be int")
+        if not 1 <= fields_to_keep <= len(SELECTABLE_FIELDS):
+            raise ValueError(f"fields_to_keep must be between 1 and {len(SELECTABLE_FIELDS)}")
+        self._fields_to_keep = fields_to_keep
         self._trace_recorder_provider = trace_recorder_provider
         self._timelines: dict[BeingId, deque[_Turn]] = {}
+
+    @property
+    def asks_fields(self) -> bool:
+        """次のターンの想起で残す欄を問うか。問うなら、呼び出し側はいまの状況を渡す。"""
+        return self._field_selections is not None
 
     def settle_turn(
         self,
@@ -217,6 +234,8 @@ class ExpectationSettlementService:
         material: TurnMaterial,
         tick: int | None = None,
         player_id: int | None = None,
+        situation: Situation | None = None,
+        situation_note: Mapping[str, Any] | None = None,
     ) -> SettlementReport:
         """いまのターン数で清算し、保存のあとで未配信の出来事を配る。
 
@@ -229,7 +248,14 @@ class ExpectationSettlementService:
         """
         if not isinstance(material, TurnMaterial):
             raise TypeError("material must be TurnMaterial")
-        current = _Turn(turn=self._repository.current_turn(being_id), material=material)
+        if situation is not None and not isinstance(situation, Situation):
+            raise TypeError("situation must be Situation or None")
+        current = _Turn(
+            turn=self._repository.current_turn(being_id),
+            material=material,
+            situation=situation,
+            situation_note=dict(situation_note or {}),
+        )
         try:
             return self._settle(being_id, self_name, current, tick, player_id)
         except Exception as exc:
@@ -286,7 +312,14 @@ class ExpectationSettlementService:
             field_answers: Mapping[str, JudgmentResult] | None = None
             unavailable_reason: str | None = None
             if self._field_selections is not None:
-                state = _state(self_name, now=now, pending=[], new=[], timeline=timeline)
+                state = _state(
+                    self_name,
+                    now=now,
+                    pending=[],
+                    new=[],
+                    timeline=timeline,
+                    situation=current.situation,
+                )
                 current.state = state
                 field_answers, unavailable_reason = self._ask_fields_only(
                     being_id, self_name, current, state
@@ -316,7 +349,14 @@ class ExpectationSettlementService:
         asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
         if self._field_selections is not None:
             questions.update(_recall_questions(self_name))
-        state = _state(self_name, now=now, pending=pending, new=new, timeline=timeline)
+        state = _state(
+            self_name,
+            now=now,
+            pending=pending,
+            new=new,
+            timeline=timeline,
+            situation=current.situation if self._field_selections is not None else None,
+        )
         current.state = state
         try:
             answers = self._port.judge(state, questions)
@@ -329,7 +369,7 @@ class ExpectationSettlementService:
         self._choose_fields(
             being_id,
             current,
-            field_selection_from_answers(answers),
+            field_selection_from_answers(answers, keep=self._fields_to_keep),
             body_band_from_answers(answers),
         )
         try:
@@ -424,7 +464,7 @@ class ExpectationSettlementService:
         self._choose_fields(
             being_id,
             current,
-            field_selection_from_answers(answers),
+            field_selection_from_answers(answers, keep=self._fields_to_keep),
             body_band_from_answers(answers),
         )
         return answers, None
@@ -443,6 +483,10 @@ class ExpectationSettlementService:
         )
         current.field_selection = {
             **selection.to_trace_payload(),
+            "keep": self._fields_to_keep,
+            # 値を見せずに選んだ選択は、trace の上でふつうの選択と見分けられるようにする。
+            "situation_shown": current.situation is not None,
+            "situation_note": current.situation_note,
             "body_band": band.to_trace_payload(),
         }
 
@@ -683,10 +727,11 @@ def _state(
     pending: Sequence[Expectation],
     new: Sequence[Expectation],
     timeline: Sequence[_Turn],
+    situation: Situation | None = None,
 ) -> dict[str, Any]:
     # ターンも「ターン3」の文にする。整数をそのまま載せると、ID と同じ扱いで
     # 数として読まれうる (設計原則 1)。差の計算は Jev に任せない。
-    return {
+    state: dict[str, Any] = {
         "本人の名前": self_name,
         "いまのターン": f"ターン{now}",
         "清算待ちの予期": [_listed(e) for e in pending],
@@ -700,6 +745,10 @@ def _state(
             for t in timeline
         ],
     }
+    if situation is not None:
+        # 欄を選ぶ問いが欄の中身を見られるように、組み立てた欄の値をそのまま見せる (#1414)。
+        state["いまの状況"] = {f.value: list(situation.texts(f)) for f in SituationField}
+    return state
 
 
 def _listed(expectation: Expectation) -> dict[str, str]:

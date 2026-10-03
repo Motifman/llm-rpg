@@ -19,6 +19,7 @@ Jev が答えないか、答えが欠けたか選択肢に無い答えが返っ�
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -30,8 +31,9 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     TypedJudgmentUnavailableException,
 )
 
-KEEP = "残す"
-DROP = "捨てる"
+RECALL_FIELDS_QUESTION = "recall_fields"
+#: 残す欄の数の既定。profile の SITUATION_FIELDS_TO_KEEP で変える。
+DEFAULT_FIELDS_TO_KEEP = 2
 
 
 class SituationField(Enum):
@@ -101,18 +103,18 @@ DEGRADED_JUDGMENT_UNAVAILABLE = "judgment_unavailable"
 
 @dataclass(frozen=True)
 class FieldJudgment:
-    """欄ごとの答え。閾値を持たないので、どの程度の確信で残したかを trace で読めるようにする。"""
+    """欄ごとの確率と、上位に入って残したか。閾値を持たないので、確率を trace で読めるようにする。"""
 
     field: SituationField
-    value: str
-    probabilities: Mapping[str, float]
+    probability: float
+    kept: bool
     source: str
 
     def to_trace_payload(self) -> dict[str, Any]:
         return {
             "field": self.field.value,
-            "value": self.value,
-            "probabilities": dict(self.probabilities),
+            "probability": self.probability,
+            "kept": self.kept,
             "source": self.source,
         }
 
@@ -162,68 +164,104 @@ class FieldSelection:
 
 
 def field_selection_questions(self_name: str) -> dict[str, ChoiceQuestion]:
-    """場所以外の欄に 1 問ずつ。並びは ``SELECTABLE_FIELDS`` と同じ。"""
+    """場所以外の 5 つの欄を選択肢にした 1 問。選択肢ごとの確率で欄を並べる。
+
+    欄ごとに「残す / 捨てる」を問うと、どの欄も残す側に寄った (#1414 の確かめ方)。
+    1 問にして欄どうしを比べさせる。
+    """
     return {
-        field_question_name(field): ChoiceQuestion(
+        RECALL_FIELDS_QUESTION: ChoiceQuestion(
             instructions=(
-                f"「{field.value}」の欄を手がかりに残すか。"
-                f"{self_name}が次のターンに思い出す学びを、いまの状況の欄で引く。"
-                "体が危ないなら自分の状態といま起きたこと、探索したいならやろうとしていること、"
-                "相手が誰かを知りたいなら相手、のように、次の判断に効く記憶を引く欄だけを残す。"
+                f"{self_name}が次のターンに思い出す学びを、いまの状況のどの欄を手がかりに"
+                "引くか。次の判断にいちばん効く記憶を引ける欄を選ぶ。欄の値は state の"
+                "「いまの状況」にある。値の無い欄は手がかりにならない。ただし自分の状態の"
+                "欄にはまだ体の帯が入っていないので、体が危ないかは出来事の時系列から読み、"
+                "危ないなら自分の状態を選ぶ。探索したいならやろうとしていること、"
+                "相手が誰かを知りたいなら相手、のように選ぶ。"
             ),
-            options={
-                KEEP: f"「{field.value}」は、次の判断に効く記憶を引く手がかりになる",
-                DROP: f"「{field.value}」で引くと、次の判断に効かない記憶が混ざる",
-            },
+            options={field.value: _FIELD_MEANINGS[field] for field in SELECTABLE_FIELDS},
         )
-        for field in SELECTABLE_FIELDS
     }
 
 
-def field_selection_from_answers(answers: Mapping[str, JudgmentResult]) -> FieldSelection:
-    """答えが欠けたか選択肢に無ければ全部の欄に縮退する。一部の欄だけを採らない。"""
-    names = {field_question_name(field): field for field in SELECTABLE_FIELDS}
-    missing = sorted(set(names) - set(answers))
-    if missing:
-        return FieldSelection.degraded(DEGRADED_ANSWER_MISSING, f"missing: {missing}")
-    judgments: list[FieldJudgment] = []
-    for name, field in names.items():
-        answer = answers[name]
-        if answer.value not in (KEEP, DROP):
-            return FieldSelection.degraded(
-                DEGRADED_ANSWER_INVALID, f"{name}={answer.value!r}"
-            )
-        judgments.append(
-            FieldJudgment(
-                field=field,
-                value=answer.value,
-                probabilities=dict(answer.probabilities),
-                source=answer.source.value,
-            )
-        )
-    return FieldSelection(
-        kept=frozenset(j.field for j in judgments if j.value == KEEP),
-        judgments=tuple(judgments),
+def _is_probability(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
     )
 
 
-def field_question_name(field: SituationField) -> str:
-    return f"recall_field_{field.name.lower()}"
+_FIELD_MEANINGS: dict[SituationField, str] = {
+    SituationField.COUNTERPART: "相手。いま関わっている人や生き物の名前",
+    SituationField.OWN_STATE: "自分の状態。自分の体の具合",
+    SituationField.INTENT: "やろうとしていること。目的と直前の内心",
+    SituationField.HAPPENING: "いま起きたこと。直近の出来事と自分の行動の結果",
+    SituationField.UNRESOLVED: "未解決のこと。まだ当たり外れが決まっていない予期",
+}
+
+
+def field_selection_from_answers(
+    answers: Mapping[str, JudgmentResult], *, keep: int = DEFAULT_FIELDS_TO_KEEP
+) -> FieldSelection:
+    """選択肢ごとの確率の上位 ``keep`` 個の欄を残す。閾値は持たない (design_decisions 234)。
+
+    答えが欠けたか、確率が全部の選択肢にそろっていなければ、全部の欄に縮退する。
+    同じ確率なら欄の決まった順で先のものを採る。
+    """
+    if isinstance(keep, bool) or not isinstance(keep, int) or not 1 <= keep <= len(
+        SELECTABLE_FIELDS
+    ):
+        raise ValueError(f"keep must be between 1 and {len(SELECTABLE_FIELDS)}")
+    answer = answers.get(RECALL_FIELDS_QUESTION)
+    if answer is None:
+        return FieldSelection.degraded(
+            DEGRADED_ANSWER_MISSING, f"missing: {RECALL_FIELDS_QUESTION}"
+        )
+    missing = [f.value for f in SELECTABLE_FIELDS if f.value not in answer.probabilities]
+    if missing:
+        return FieldSelection.degraded(
+            DEGRADED_ANSWER_INVALID, f"probabilities missing for {missing}"
+        )
+    broken = [
+        f.value for f in SELECTABLE_FIELDS if not _is_probability(answer.probabilities[f.value])
+    ]
+    if broken:
+        # NaN が混ざると並びが決まらず、上位が静かに変わる。
+        return FieldSelection.degraded(
+            DEGRADED_ANSWER_INVALID, f"probabilities are not finite numbers for {broken}"
+        )
+    ranked = sorted(
+        SELECTABLE_FIELDS,
+        key=lambda f: (-float(answer.probabilities[f.value]), SELECTABLE_FIELDS.index(f)),
+    )
+    kept = frozenset(ranked[:keep])
+    return FieldSelection(
+        kept=kept,
+        judgments=tuple(
+            FieldJudgment(
+                field=f,
+                probability=float(answer.probabilities[f.value]),
+                kept=f in kept,
+                source=answer.source.value,
+            )
+            for f in SELECTABLE_FIELDS
+        ),
+    )
 
 
 __all__ = [
     "DEGRADED_ANSWER_INVALID",
     "DEGRADED_ANSWER_MISSING",
     "DEGRADED_JUDGMENT_UNAVAILABLE",
-    "DROP",
-    "KEEP",
+    "DEFAULT_FIELDS_TO_KEEP",
+    "RECALL_FIELDS_QUESTION",
     "FieldJudgment",
     "FieldSelection",
     "RecallMask",
     "SELECTABLE_FIELDS",
     "Situation",
     "SituationField",
-    "field_question_name",
     "field_selection_from_answers",
     "field_selection_questions",
 ]
