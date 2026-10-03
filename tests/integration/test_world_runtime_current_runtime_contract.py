@@ -312,6 +312,9 @@ class _ContractRuntime:
     def current_tick(self) -> int:
         return 7
 
+    def advance_memory_turn(self, player_id: PlayerId) -> None:
+        return None
+
     def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
         return None
 

@@ -14,6 +14,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai_rpg_world.application.being.expectation.settlement import (
+    ExpectationSettlementService,
+)
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
 )
@@ -148,6 +151,10 @@ class WorldLlmWiring:
     #: 存在しない tool 名から意図した tool を意味で選ぶ口 (#1413)。
     #: typed_judgment_port から __post_init__ で組む。None なら文字の類似度だけで提案する。
     tool_name_rescue: ToolNameRescue | None = field(default=None, init=False)
+    #: ターンの終わりに予期を清算する口 (#1440)。profile が求めなければ None。
+    expectation_settlement: ExpectationSettlementService | None = field(
+        default=None, init=False
+    )
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
@@ -238,6 +245,7 @@ class WorldLlmWiring:
         else:
             self.memo_completion_hint_service = None
         self.goal_completion_hint_service = self._build_goal_completion_hint_service()
+        self.expectation_settlement = self._build_expectation_settlement()
         if self.typed_judgment_port is not None:
             self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
         # Issue #264 後続 B1: speech_say の audience resolver。
@@ -431,6 +439,28 @@ class WorldLlmWiring:
             goal_store,
             judgment_port=port,
             min_probability=float(config.typed_judgment_goal_hint_min_probability),
+        )
+
+    def _build_expectation_settlement(self) -> ExpectationSettlementService | None:
+        """profile が予期の清算を求めたときだけ組む (#1440)。
+
+        判断ポートが無いまま有効にした profile は起動前に落とす。黙って無効にすると、
+        清算の trace が 0 件の run を「予期が無かった」と読み違える。
+        """
+        config = getattr(self.runtime, "_runtime_config", None)
+        if config is None or not config.expectation_settlement_enabled:
+            return None
+        if self.typed_judgment_port is None:
+            raise ValueError(
+                "EXPECTATION_SETTLEMENT_ENABLED requires TYPED_JUDGMENT_PROVIDER"
+            )
+        return ExpectationSettlementService(
+            self.runtime._expectation_store,
+            judgment_port=self.typed_judgment_port,
+            dispatcher=self.runtime._expectation_dispatcher,
+            max_open=int(config.expectation_settlement_max_open),
+            timeline_turns=int(config.expectation_settlement_timeline_turns),
+            trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
         )
 
     def _time_label(self) -> str:

@@ -599,6 +599,101 @@ class TestExpireIfOverdue:
             expectation.expire_if_overdue(now_turn=-1)
 
 
+class TestAwaitsShape:
+    """形の判定を待っているかを、形の判定と照合の有無から答える挙動を保証する。"""
+
+    def test_new_expectation_awaits_shape(self) -> None:
+        """作ったばかりで形も照合も受けていない予期は、形の判定を待っている。"""
+        assert _expectation().awaits_shape is True
+
+    def test_settleable_shape_stops_awaiting(self) -> None:
+        """清算できる形と判定された予期は、もう形の判定を待たない。"""
+        expectation = _expectation()
+        expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=10)
+
+        assert expectation.awaits_shape is False
+
+    def test_check_without_shape_stops_awaiting(self) -> None:
+        """形を判定されないまま照合を受けた予期は、形の判定を受け取れないので待たない。"""
+        expectation = _expectation()
+        expectation.record(Check(turn=11, verdict=UNDETERMINED))
+
+        assert expectation.awaits_shape is False
+
+    def test_closed_expectation_does_not_await(self) -> None:
+        """閉じた予期は形の判定を待たない。"""
+        expectation = _expectation()
+        expectation.expire_if_overdue(now_turn=EXPIRES_AT + 1)
+
+        assert expectation.awaits_shape is False
+
+
+class TestExpireEarly:
+    """清算待ちの件数の上限で外すとき、期限をいまの前のターンに繰り上げ、期限を過ぎたときと同じ規則で閉じる挙動を保証する。"""
+
+    def test_without_outcome_expires_at_now(self) -> None:
+        """当否つきの照合が無い予期を繰り上げて閉じると、いまのターンで期限切れになり、以後は判定を受け取らない。"""
+        expectation = _expectation()
+        expectation.record(Check(turn=11, verdict=UNDETERMINED))
+
+        event = expectation.expire_early(now_turn=13)
+
+        assert event == ExpectationExpired(
+            expectation_id=ExpectationId("exp-1"),
+            holder=BeingId("being-rio"),
+            turn=13,
+        )
+        _assert_closed(expectation)
+
+    def test_with_provisional_hit_settles_as_hit(self) -> None:
+        """暫定で当たっていた予期を繰り上げて閉じると、期限を過ぎたときと同じく当たったで確定する。"""
+        expectation = _expectation()
+        expectation.record(Check(turn=11, verdict=HIT))
+
+        event = expectation.expire_early(now_turn=12)
+
+        assert isinstance(event, ExpectationSettled)
+        assert (event.outcome, event.turn) == (Outcome.HIT, 12)
+
+    def test_snapshot_after_early_expiry_restores_as_closed(self) -> None:
+        """繰り上げて閉じた予期の保存用の値は、復元の検査に通り、閉じたまま戻る。"""
+        expectation = _expectation()
+        expectation.expire_early(now_turn=12)
+
+        restored = Expectation.restore(expectation.snapshot())
+
+        assert restored.snapshot() == expectation.snapshot()
+        _assert_closed(restored)
+
+    def test_at_formed_turn_raises_and_stays_open(self) -> None:
+        """作ったターンのうちに繰り上げようとすると ExpectationCheckRuleException を投げ、清算待ちのまま残る。"""
+        expectation = _expectation()
+
+        with pytest.raises(ExpectationCheckRuleException):
+            expectation.expire_early(now_turn=10)
+
+        assert expectation.expire_if_overdue(now_turn=EXPIRES_AT) is None
+
+    def test_after_check_in_same_turn_raises_and_stays_open(self) -> None:
+        """いまのターンにすでに照合を受けた予期を繰り上げようとすると ExpectationCheckRuleException を投げ、清算待ちのまま残る。"""
+        expectation = _expectation()
+        expectation.record(Check(turn=12, verdict=UNDETERMINED))
+
+        with pytest.raises(ExpectationCheckRuleException):
+            expectation.expire_early(now_turn=12)
+
+        assert expectation.expire_if_overdue(now_turn=EXPIRES_AT) is None
+
+    def test_already_overdue_closes_by_original_deadline(self) -> None:
+        """期限をすでに過ぎている予期は、期限を変えずに期限を過ぎたときと同じ出来事で閉じる。"""
+        expectation = _expectation()
+
+        event = expectation.expire_early(now_turn=EXPIRES_AT + 3)
+
+        assert isinstance(event, ExpectationExpired)
+        assert expectation.snapshot().expires_at_turn == EXPIRES_AT
+
+
 def _settled() -> Expectation:
     expectation = _expectation()
     _record_all(expectation, Check(turn=11, verdict=HIT), Check(turn=12, verdict=HIT))
@@ -635,7 +730,11 @@ def _expire(expectation: Expectation) -> object:
     return expectation.expire_if_overdue(now_turn=99)
 
 
-_OPERATIONS = [_record, _judge_shape, _expire]
+def _expire_early(expectation: Expectation) -> object:
+    return expectation.expire_early(now_turn=15)
+
+
+_OPERATIONS = [_record, _judge_shape, _expire, _expire_early]
 
 
 class TestClosedExpectation:

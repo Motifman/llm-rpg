@@ -21,6 +21,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -413,7 +414,7 @@ class TestSnapshotTraceCarriesExpectationCounts:
         return [e for e in map(json.loads, lines) if e["kind"] == kind]
 
     def test_save_and_load_traces_carry_expectation_counts(self, tmp_path: Path) -> None:
-        """保存した Being と復元した Being ごとに、配線の有無・清算待ち・終わった予期・未配信の出来事・記憶のターン数が trace に載る。予期を作る処理がまだ無いので、空の代用品として store_wired=False で 0 件になる。"""
+        """保存した Being と復元した Being ごとに、runtime の予期の store を数えた件数 (store_wired=True) が載り、1 手ごとに進んだ記憶のターン数が再開のあとも同じ値で戻る。予期を積む入口 (#1441) がまだ無いので予期と出来事は 0 件。"""
         from scripts.run_scenario_experiment import main
 
         common = ["--profile", "smoke_stub", "--max-world-ticks", "2", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
@@ -424,9 +425,46 @@ class TestSnapshotTraceCarriesExpectationCounts:
         (saved,) = self._events(tmp_path / "first" / "trace.jsonl", "snapshot_save")
         (loaded,) = self._events(tmp_path / "second" / "trace.jsonl", "snapshot_load")
 
-        empty = {"store_wired": False, "open": 0, "closed": 0, "undelivered_events": 0, "memory_turn": 0}
+        empty = {"store_wired": True, "open": 0, "closed": 0, "undelivered_events": 0}
+        turns: list[dict[str, int]] = []
         for event, ids_key in ((saved, "succeeded_being_ids"), (loaded, "restored_being_ids")):
             counts = event["payload"]["expectation_counts"]
             assert [c["being_id"] for c in counts] == event["payload"][ids_key]
             assert len(counts) > 0
-            assert all({k: v for k, v in c.items() if k != "being_id"} == empty for c in counts)
+            assert all(
+                {k: v for k, v in c.items() if k not in ("being_id", "memory_turn")} == empty
+                for c in counts
+            )
+            turns.append({c["being_id"]: c["memory_turn"] for c in counts})
+        assert turns[0] == turns[1]
+        assert any(turn > 0 for turn in turns[0].values())
+
+    def test_resumed_run_redelivers_restored_beings_before_first_turn(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """snapshot から再開した run は、復元した Being すべてについて、最初のターンより前に未配信の予期の出来事を配り直す。"""
+        from scripts.run_scenario_experiment import main
+
+        from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
+
+        common = ["--profile", "smoke_stub", "--max-world-ticks", "2", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
+        snapshots = tmp_path / "snapshots"
+        assert main([*common, "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]) == 0
+        calls: list[tuple[list[str], int]] = []
+        original = WorldRuntime.redeliver_expectation_events
+
+        def _record(self: WorldRuntime, being_ids: Any) -> None:
+            ids = [b.value for b in being_ids]
+            turns = [self._expectation_store.current_turn(b) for b in being_ids]
+            calls.append((ids, sum(turns)))
+            original(self, being_ids)
+
+        monkeypatch.setattr(WorldRuntime, "redeliver_expectation_events", _record)
+
+        assert main([*common, "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]) == 0
+
+        (loaded,) = self._events(tmp_path / "second" / "trace.jsonl", "snapshot_load")
+        ((ids, turns_at_call),) = calls
+        assert ids == loaded["payload"]["restored_being_ids"]
+        restored_turns = sum(c["memory_turn"] for c in loaded["payload"]["expectation_counts"])
+        assert turns_at_call == restored_turns

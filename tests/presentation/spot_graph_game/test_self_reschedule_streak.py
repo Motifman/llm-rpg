@@ -50,6 +50,7 @@ def _make_trigger(max_streak: int = 5) -> _WorldLlmTurnTrigger:
     class _DummyWiring:
         runtime = _DummyRuntime()
         short_term_memory = DefaultSlidingWindowMemory()
+        expectation_settlement = None
 
     return _WorldLlmTurnTrigger(
         wiring=_DummyWiring(),
