@@ -11,7 +11,6 @@ from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
 )
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationEvent,
-    ProvisionallyMissed,
 )
 from ai_rpg_world.domain.memory.expectation.exception.expectation_exception import (
     ExpectationEventNotFoundException,
@@ -80,9 +79,7 @@ class InMemoryExpectationRepository(ExpectationRepository):
             previous is None or previous.status.is_open
         )
         if closes_now and not any(
-            not isinstance(entry.event, ProvisionallyMissed)
-            and entry.event.turn == snapshot.closed_at_turn
-            for entry in entries
+            entry.event.turn == snapshot.closed_at_turn for entry in entries
         ):
             raise ExpectationValidationException(
                 f"expectation {snapshot.expectation_id} closed at turn "
