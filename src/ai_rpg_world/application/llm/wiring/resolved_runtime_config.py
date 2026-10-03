@@ -1110,7 +1110,11 @@ _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY = 0.8
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW = 4
 
-_DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY = 0.7
+#: 過去 run の行動と結果に本人の目的を当てた 23 件で測った
+#: (scripts/jev_goal_completion_hint_demo.py)。達成していない 14 件の最大は 0.18 で、
+#: 達成した 9 件は 0.9 / 0.9 / 0.82 / 0.68 と 0.35 以下に割れた。0.7 では明らかな
+#: 達成 (渡す目的で 2 件とも渡せた、0.68) を落とすので、未達の最大から離して 0.5 に置く。
+_DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY = 0.5
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})

@@ -298,11 +298,11 @@ class TestTheGoalHintSettingsComeFromTheProfile:
     """目的の達成 hint (#1448) の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
 
     def test_the_goal_hint_is_off_by_default_even_with_jev(self) -> None:
-        """何も書かなければ無効。provider を jev にしても入らない。閾値の既定は 0.7。"""
+        """何も書かなければ無効。provider を jev にしても入らない。閾値の既定は 0.5。"""
         config = _config(TYPED_JUDGMENT_PROVIDER="jev")
 
         assert config.typed_judgment_goal_hint_enabled is False
-        assert config.typed_judgment_goal_hint_min_probability == 0.7
+        assert config.typed_judgment_goal_hint_min_probability == 0.5
 
     def test_a_profile_can_turn_the_goal_hint_on_and_move_its_threshold(self) -> None:
         """有効化と閾値は profile の値が解決済み設定に載る。"""
@@ -324,4 +324,4 @@ class TestTheGoalHintSettingsComeFromTheProfile:
         config = ResolvedLlmRuntimeConfig.for_tests()
 
         assert config.typed_judgment_goal_hint_enabled is False
-        assert config.typed_judgment_goal_hint_min_probability == 0.7
+        assert config.typed_judgment_goal_hint_min_probability == 0.5

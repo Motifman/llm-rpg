@@ -41,8 +41,6 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GoalEntry,
 )
 
-DEFAULT_MIN_PROBABILITY = 0.7
-
 #: trace と呼び出し側の分岐に使う質問名。
 QUESTION_NAME = "goal_achieved"
 
@@ -97,7 +95,7 @@ class GoalCompletionHintService:
         goal_store: GoalJournalRepository,
         *,
         judgment_port: ITypedJudgmentPort,
-        min_probability: float = DEFAULT_MIN_PROBABILITY,
+        min_probability: float,
     ) -> None:
         if not isinstance(goal_store, GoalJournalRepository):
             raise TypeError("goal_store must be GoalJournalRepository")
@@ -188,7 +186,6 @@ def _state(action_summary: str, result_summary: str) -> Mapping[str, Any]:
 
 
 __all__ = [
-    "DEFAULT_MIN_PROBABILITY",
     "GoalCompletionHint",
     "GoalCompletionHintService",
     "GoalCompletionJudgment",
