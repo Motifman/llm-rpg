@@ -15,7 +15,7 @@
 - Jev: 本番の清算と同じ state と問い (残す欄 5 問 + 体の帯 1 問) で、1 場面 1 回。同じ場面を 3 回問うて、
   計 120 回
 - 引く側: 本番と同じ `SituationBeliefRecall` (2 字組の BM25) を手元で回した
-- 再現: 5 問の形は、#1493 を出した時点の `scripts/situation_recall_probe.py` (このページと同じコミット) で
+- 再現: 5 問の形は、コミット 482c437c の `scripts/situation_recall_probe.py` で
   `--run-dir <run> --out results_five_questions.json`。いまの probe は新しい形で問う
 
 ## 結果
