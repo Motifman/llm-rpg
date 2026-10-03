@@ -59,14 +59,17 @@ def _require_optional_text(value: object, *, name: str) -> str | None:
 def _require_ids(value: object, *, name: str) -> tuple[str, ...]:
     if not isinstance(value, tuple):
         raise ExpectationValidationException(f"{name} must be tuple[str, ...]")
-    return tuple(_require_text(item, name=name) for item in value)
+    return tuple(
+        _require_text(item, name=f"{name}[{index}]") for index, item in enumerate(value)
+    )
 
 
 class Expectation:
     """本人が「これから起きる」と思ったこと。
 
-    照合は 1 ターンに 1 回まで受け取る。同じ当否が 2 ターン続いたら確定する。
-    1 回の判断のぶれを信念まで届かせないため (#1436 試作 2)。
+    照合は 1 ターンに 1 回まで受け取る。直前の照合と同じ当否が続いたら確定する。
+    1 回の判断のぶれを信念まで届かせないため (#1436 試作 2)。確定の当否は
+    確定させた照合の当否なので、別の項目としては持たない。
     """
 
     def __init__(
@@ -118,7 +121,6 @@ class Expectation:
         self._shape: ShapeVerdict | None = None
         self._checks: list[Check] = []
         self._status = ExpectationStatus.OPEN
-        self._settled_outcome: Outcome | None = None
 
     @property
     def expectation_id(self) -> ExpectationId:
@@ -185,7 +187,9 @@ class Expectation:
 
     @property
     def settled_outcome(self) -> Outcome | None:
-        return self._settled_outcome
+        if self._status is not ExpectationStatus.SETTLED:
+            return None
+        return self._checks[-1].verdict.outcome
 
     def judge_shape(
         self, shape: ShapeVerdict, *, turn: int
@@ -193,10 +197,14 @@ class Expectation:
         self._require_open()
         if not isinstance(shape, ShapeVerdict):
             raise ExpectationValidationException("shape must be ShapeVerdict")
-        self._require_not_before_formed(require_turn(turn, name="turn"))
+        self._require_within_term(require_turn(turn, name="turn"))
         if self._shape is not None:
             raise ExpectationCheckRuleException(
                 f"shape has already been judged as {self._shape.value}"
+            )
+        if self._checks:
+            raise ExpectationCheckRuleException(
+                "shape must be judged before the first check"
             )
 
         self._shape = shape
@@ -214,12 +222,7 @@ class Expectation:
         self._require_open()
         if not isinstance(check, Check):
             raise ExpectationValidationException("check must be Check")
-        self._require_not_before_formed(check.turn)
-        if check.turn > self._expires_at_turn:
-            raise ExpectationCheckRuleException(
-                f"check turn ({check.turn}) is past expires_at_turn "
-                f"({self._expires_at_turn}); expire_if_overdue first"
-            )
+        self._require_within_term(check.turn)
         previous = self._checks[-1] if self._checks else None
         if previous is not None and check.turn <= previous.turn:
             raise ExpectationCheckRuleException(
@@ -269,7 +272,6 @@ class Expectation:
 
     def _settle(self, outcome: Outcome, *, turn: int) -> ExpectationSettled:
         self._status = ExpectationStatus.SETTLED
-        self._settled_outcome = outcome
         return ExpectationSettled(
             expectation_id=self._expectation_id,
             holder=self._holder,
@@ -284,11 +286,16 @@ class Expectation:
                 f"expectation {self._expectation_id} is already {self._status.value}"
             )
 
-    def _require_not_before_formed(self, turn: int) -> None:
+    def _require_within_term(self, turn: int) -> None:
         if turn < self._formed_at_turn:
             raise ExpectationCheckRuleException(
                 f"turn ({turn}) must not be before formed_at_turn "
                 f"({self._formed_at_turn})"
+            )
+        if turn > self._expires_at_turn:
+            raise ExpectationCheckRuleException(
+                f"turn ({turn}) is past expires_at_turn "
+                f"({self._expires_at_turn}); expire_if_overdue first"
             )
 
 

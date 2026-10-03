@@ -17,6 +17,15 @@ from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import (
+    ExpectationOrigin,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_status import (
+    ExpectationStatus,
+)
+from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
+    Likelihood,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
     ShapeVerdict,
 )
@@ -70,3 +79,28 @@ class TestVerdicts:
     def test_only_settleable_shape_is_settleable(self) -> None:
         """形の判定のうち、清算に回せるのは「清算できる予期」だけである。"""
         assert [s for s in ShapeVerdict if s.is_settleable] == [ShapeVerdict.SETTLEABLE]
+
+
+class TestEnumValues:
+    """保存される enum の文字列値が、後続の保存で読み戻せるよう固定されていることを保証する。"""
+
+    @pytest.mark.parametrize(
+        "enum_type, values",
+        [
+            (Likelihood, ["almost_certain", "probably", "even", "maybe"]),
+            (ExpectationOrigin, ["with_action", "promise_or_outlook", "from_belief"]),
+            (
+                ShapeVerdict,
+                ["settleable", "true_either_way", "own_action", "not_an_expectation"],
+            ),
+            (CheckVerdict, ["hit", "miss", "undetermined", "not_an_expectation"]),
+            (Outcome, ["hit", "miss"]),
+            (
+                ExpectationStatus,
+                ["open", "settled", "dismissed", "voided", "expired"],
+            ),
+        ],
+    )
+    def test_enum_values_are_fixed(self, enum_type: Any, values: list[str]) -> None:
+        """各 enum のメンバーの値は、決めた文字列の並びと一致する。"""
+        assert [member.value for member in enum_type] == values
