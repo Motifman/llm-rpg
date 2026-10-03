@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.application.being.recall.body_band import BodyBand
 from ai_rpg_world.application.being.recall.situation import SituationField
 from ai_rpg_world.application.being.recall.situation_assembly import (
     AgentHoldings,
@@ -121,6 +122,22 @@ class TestOwnStateAndHappening:
 
         assert situation.own_state == ("お腹が空いてきた",)
         assert situation.happening == ("潮が満ちてきた",)
+
+    def test_body_band_sentence_comes_before_the_raw_body_states(self) -> None:
+        """体の帯があれば、帯の文を自分の状態の欄の先頭に足し、生の本文も残す。"""
+        observations = [_obs("お腹が空いてきた", route=OwnBodyState())]
+
+        situation = assemble_situation(observations, AgentHoldings(body_band=BodyBand.CAUTION))
+
+        assert situation.own_state == ("体の状態は注意", "お腹が空いてきた")
+
+    def test_without_band_only_the_raw_body_states_are_used(self) -> None:
+        """体の帯が無ければ、帯の文を作らずに生の本文だけを使う。"""
+        observations = [_obs("お腹が空いてきた", route=OwnBodyState())]
+
+        situation = assemble_situation(observations, NO_HOLDINGS)
+
+        assert situation.own_state == ("お腹が空いてきた",)
 
     def test_happening_takes_the_newest_three_including_own_action_results(self) -> None:
         """いま起きたことは、自分の行動の結果を含めて新しい順に 3 件までを取る。"""

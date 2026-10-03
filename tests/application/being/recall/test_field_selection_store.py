@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.application.being.recall.body_band import BodyBand, BodyBandReading
 from ai_rpg_world.application.being.recall.selection_store import (
+    DEGRADED_BAND_NOT_READ,
     DEGRADED_NO_SELECTION,
     DEGRADED_STALE_SELECTION,
     NextTurnFieldSelections,
@@ -62,3 +64,34 @@ class TestSelectionForTheNextPrompt:
         store.put(ALICE, settled_turn=4, selection=INTENT_ONLY)
 
         assert store.for_prompt(ALICE, current_turn=4) == INTENT_ONLY
+
+
+class TestBodyBandForTheNextPrompt:
+    """体の帯が、欄の選択と同じターン番号の決まりで渡されることを保証する。"""
+
+    def test_band_settled_at_the_current_turn_is_used(self) -> None:
+        """ターン 3 で清算した帯は、ターン番号が 3 のままプロンプトを組むときに渡される。"""
+        store = NextTurnFieldSelections()
+        store.put(ALICE, settled_turn=3, selection=INTENT_ONLY, band=BodyBandReading(BodyBand.CRISIS))
+
+        assert store.band_for_prompt(ALICE, current_turn=3).band is BodyBand.CRISIS
+
+    def test_band_of_another_turn_is_not_used(self) -> None:
+        """ターン番号が違えば帯を付けず、古いことを理由に持つ。"""
+        store = NextTurnFieldSelections()
+        store.put(ALICE, settled_turn=3, selection=INTENT_ONLY, band=BodyBandReading(BodyBand.CRISIS))
+
+        reading = store.band_for_prompt(ALICE, current_turn=4)
+
+        assert reading.band is None
+        assert reading.degraded_reason == DEGRADED_STALE_SELECTION
+
+    def test_missing_band_is_not_invented(self) -> None:
+        """清算が帯を読まなかった (渡さなかった) ときは、帯を付けない。"""
+        store = NextTurnFieldSelections()
+        store.put(ALICE, settled_turn=3, selection=INTENT_ONLY)
+
+        assert store.band_for_prompt(ALICE, current_turn=3).degraded_reason == (
+            DEGRADED_BAND_NOT_READ
+        )
+        assert store.band_for_prompt(BOB, current_turn=3).degraded_reason == DEGRADED_NO_SELECTION

@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
+from ai_rpg_world.application.being.recall.body_band import BodyBandReading
 from ai_rpg_world.application.being.recall.selection_store import (
     DEGRADED_NO_SELECTION,
     DEGRADED_SETTLEMENT_DISABLED,
@@ -73,6 +74,15 @@ class SituationRecallSources:
             self.selections, NextTurnFieldSelections
         ):
             raise TypeError("selections must be NextTurnFieldSelections or None")
+
+    def band_for(self, being_id: BeingId) -> BodyBandReading:
+        if self.selections is None:
+            return BodyBandReading.degraded(
+                DEGRADED_SETTLEMENT_DISABLED, "expectation settlement is disabled in this run"
+            )
+        return self.selections.band_for_prompt(
+            being_id, current_turn=self.expectations.current_turn(being_id)
+        )
 
     def selection_for(self, being_id: BeingId) -> FieldSelection:
         if self.selections is None:
@@ -136,8 +146,10 @@ def _recall(
         player_id=player_id, name=player_name, place_name=place_name, seconds_per_tick=None
     )
     contract_observations, skipped = _to_contract(observations, action_results, observer)
+    band = sources.band_for(being_id)
     holdings = AgentHoldings(
         goal=sources.goal_text(player_id),
+        body_band=band.band,
         inner_thought=action_results[0].inner_thought if action_results else None,
         open_expectations=tuple(
             e.content for e in sources.expectations.list_open_by_being(being_id)
@@ -151,6 +163,7 @@ def _recall(
     payload = {
         "situation": {f.value: list(situation.texts(f)) for f in SituationField},
         "skipped_observations": dict(skipped),
+        "body_band": band.to_trace_payload(),
         "top_k": builder._semantic_passive_top_k,
         "failed": None,
         **result.to_trace_payload(),

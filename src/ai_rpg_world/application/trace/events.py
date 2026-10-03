@@ -125,8 +125,9 @@ class TraceEventKind:
     SEMANTIC_PASSIVE_RECALL = "semantic_passive_recall"
     # #1414: 【関連する学び】を状況の欄から引いた結果。SITUATION_BELIEF_RECALL_ENABLED の
     # run では SEMANTIC_PASSIVE_RECALL の代わりに prompt build ごとに 1 件記録する。
-    # payload: being_id / situation (欄 → 値) / skipped_observations (契約に写せず
-    # 飛ばした理由 → 件数) / top_k / failed / kept_fields / degraded_reason /
+    # payload: being_id / situation (欄 → 値) / body_band (清算で丸めた体の帯) /
+    # skipped_observations (契約に写せず飛ばした理由 → 件数) / top_k / failed /
+    # kept_fields / degraded_reason /
     # degraded_detail / judgments[] / narrower / candidate_count / masks[].fields /
     # .query / .hits[] / .duplicates / chosen[]。失敗したときは failed だけを持つ
     SITUATION_BELIEF_RECALL = "situation_belief_recall"

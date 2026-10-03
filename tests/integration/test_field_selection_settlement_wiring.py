@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ai_rpg_world.application.being.recall.body_band import BODY_BAND_QUESTION
 from ai_rpg_world.application.being.recall.situation import (
     DROP,
     KEEP,
@@ -91,7 +92,9 @@ class TestSelectionFlowsFromSettlementToTheNextPrompt:
         _move(wiring)
 
         assert len(port.calls) == 1
-        assert set(port.calls[0][1]) == {field_question_name(f) for f in SELECTABLE_FIELDS}
+        assert set(port.calls[0][1]) == {
+            field_question_name(f) for f in SELECTABLE_FIELDS
+        } | {BODY_BAND_QUESTION}
 
     def test_without_settlement_the_prompt_says_settlement_is_disabled(self) -> None:
         """清算を切った run では欄が選ばれず、清算が無いことを縮退の理由に持って全部の欄で引く。最初のターンの no_selection とは分けて数えられる。"""
