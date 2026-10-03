@@ -1,0 +1,2538 @@
+[
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 2,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick2",
+    "content": "漂着物の中から、何か使える道具や素材が見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 3,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick3",
+    "content": "流木の山から流木が手に入る可能性が高い。狼煙に必要な素材の一つを確保できるだろう。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 6,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick6",
+    "content": "拠点に戻り、あらためて周囲の状況や、山頂へ向かう手がかりがないか確認できるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "63ffe6ce-ce31-5c0b-8dbf-5a1ba5d1d699"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "63ffe6ce-ce31-5c0b-8dbf-5a1ba5d1d699",
+      "text": "夜の浜辺で、船倉は皆が漁り尽くしたと知り、別の手がかりを探して漂着物を調べた。海藻を払うと火打ち石が一つ顔を出し、波が運んできたものらしい。その後、乾いた流木も一本拾い上げた。これで火打ち石と流木が揃い、狼煙を焚く準備が少しずつ進んでいると",
+      "probability": 0.26
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 7,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick7",
+    "content": "骨のナイフがないため、釣竿の作成はできないという結果になるだろう。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "63ffe6ce-ce31-5c0b-8dbf-5a1ba5d1d699"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "63ffe6ce-ce31-5c0b-8dbf-5a1ba5d1d699",
+      "text": "夜の浜辺で、船倉は皆が漁り尽くしたと知り、別の手がかりを探して漂着物を調べた。海藻を払うと火打ち石が一つ顔を出し、波が運んできたものらしい。その後、乾いた流木も一本拾い上げた。これで火打ち石と流木が揃い、狼煙を焚く準備が少しずつ進んでいると",
+      "probability": 0.06
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 102,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "own_action",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick102",
+    "content": "ノアが流木を探している間、見張り台で待機しながら状況の変化やノアの戻りを待つ。",
+    "beliefs_in_mind": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-8b5702be584845218c65cd4f1552bb17",
+     "sem-0359dde27810404380a5242a6598df33"
+    ],
+    "episodes_in_mind": [
+     "2e405610-ae2a-52b6-888a-971eb2ed3224",
+     "17630f7f-5ab4-53fe-a0de-52f3bafd9a96",
+     "71a74475-c357-51a8-8244-7334643d04a7",
+     "3848700a-e77e-5802-acfa-1295b99ef80c"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-9344ec7572954e59bc2d6e75364bf598",
+      "text": "狼煙台は山頂にあり、点火には流木3本が必要である",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-8b5702be584845218c65cd4f1552bb17",
+      "text": "救助日は3日目と4日目のみで、それまでに山頂に居る必要がある",
+      "probability": 0.26
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-0359dde27810404380a5242a6598df33",
+      "text": "救助されるには狼煙台の火と自分が山頂に同時に必要である",
+      "probability": 0.05
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "2e405610-ae2a-52b6-888a-971eb2ed3224",
+      "text": "皆に声をかけて、火打ち石と流木は確保できたけど枯れ葉が不足していること、山頂への道の確認が必要だと伝えた。カイが枯れ葉を探していると言ってきたので、拠点に戻って状況を整理しようと移動を始めた。途中でリオの声も聞こえた。拠点に戻ったら、山頂へ",
+      "probability": 0.07
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "17630f7f-5ab4-53fe-a0de-52f3bafd9a96",
+      "text": "森の入口に着いたとき、私は枯れ葉か山頂への手がかりが落ちていないかと地面をじっくり見渡した。けれども、目立ったものは何も見つからなかった。正直、この場所は手がかりが少ないという自分の見立ては当たっていた。その代わり、すぐ近くの椰子の木の下に",
+      "probability": 0.04
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "71a74475-c357-51a8-8244-7334643d04a7",
+      "text": "見晴らしの岩に登って海を見渡した。沖の航路がはっきり見え、潮の流れに漂う漂流物の筋が目に入った。どうやら船はこの島の沖を3日目と4日目にだけ通るらしい。それ以外の日は素通りだ。つまり、狼煙を上げるならその瞬間を逃してはいけない。私はそのこと",
+      "probability": 0.58
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "3848700a-e77e-5802-acfa-1295b99ef80c",
+      "text": "山頂の狼煙台に着いたとき、流木が1本しかないことに気づいた。3本必要だというのに。皆に呼びかけたが、声は誰にも届かなかった。静かな山頂に、私の声だけが虚しく響いた。手がかりを求めてメモを残し、崖の見張り台へ向かうことにした。そこなら船が見え",
+      "probability": 0.4
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "71a74475-c357-51a8-8244-7334643d04a7"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 104,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick104",
+    "content": "ノアが流木を持って戻ってくるか、あるいは夜明け前の海の様子に変化がないかを観測できる。深夜の海風が続いているだろう。",
+    "beliefs_in_mind": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-8b5702be584845218c65cd4f1552bb17",
+     "sem-0359dde27810404380a5242a6598df33"
+    ],
+    "episodes_in_mind": [
+     "17630f7f-5ab4-53fe-a0de-52f3bafd9a96",
+     "71a74475-c357-51a8-8244-7334643d04a7",
+     "3848700a-e77e-5802-acfa-1295b99ef80c",
+     "daba7e5e-e4b4-5214-822b-02f1d295f461"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-9344ec7572954e59bc2d6e75364bf598",
+      "text": "狼煙台は山頂にあり、点火には流木3本が必要である",
+      "probability": 0.41
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-8b5702be584845218c65cd4f1552bb17",
+      "text": "救助日は3日目と4日目のみで、それまでに山頂に居る必要がある",
+      "probability": 0.31
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-0359dde27810404380a5242a6598df33",
+      "text": "救助されるには狼煙台の火と自分が山頂に同時に必要である",
+      "probability": 0.24
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "17630f7f-5ab4-53fe-a0de-52f3bafd9a96",
+      "text": "森の入口に着いたとき、私は枯れ葉か山頂への手がかりが落ちていないかと地面をじっくり見渡した。けれども、目立ったものは何も見つからなかった。正直、この場所は手がかりが少ないという自分の見立ては当たっていた。その代わり、すぐ近くの椰子の木の下に",
+      "probability": 0.08
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "71a74475-c357-51a8-8244-7334643d04a7",
+      "text": "見晴らしの岩に登って海を見渡した。沖の航路がはっきり見え、潮の流れに漂う漂流物の筋が目に入った。どうやら船はこの島の沖を3日目と4日目にだけ通るらしい。それ以外の日は素通りだ。つまり、狼煙を上げるならその瞬間を逃してはいけない。私はそのこと",
+      "probability": 0.66
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "3848700a-e77e-5802-acfa-1295b99ef80c",
+      "text": "山頂の狼煙台に着いたとき、流木が1本しかないことに気づいた。3本必要だというのに。皆に呼びかけたが、声は誰にも届かなかった。静かな山頂に、私の声だけが虚しく響いた。手がかりを求めてメモを残し、崖の見張り台へ向かうことにした。そこなら船が見え",
+      "probability": 0.45
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "daba7e5e-e4b4-5214-822b-02f1d295f461",
+      "text": "山頂の狼煙台に着いて、火を灯そうとした。でも、流木が足りないと言われた。3本必要だというのに、私は1本しか持っていなかった。風が強くなってきて、黒い雲も広がっていた。早く合図を出さなければと思ったけれど、どうにもならなかった。メモに状況を書",
+      "probability": 0.39
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "71a74475-c357-51a8-8244-7334643d04a7"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 105,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "own_action",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick105",
+    "content": "山頂へ移動し、狼煙台の状態を確認しながらノアの帰りを待つことになる。",
+    "beliefs_in_mind": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-8b5702be584845218c65cd4f1552bb17",
+     "sem-0359dde27810404380a5242a6598df33"
+    ],
+    "episodes_in_mind": [
+     "17630f7f-5ab4-53fe-a0de-52f3bafd9a96",
+     "71a74475-c357-51a8-8244-7334643d04a7",
+     "3848700a-e77e-5802-acfa-1295b99ef80c",
+     "daba7e5e-e4b4-5214-822b-02f1d295f461"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-9344ec7572954e59bc2d6e75364bf598",
+      "text": "狼煙台は山頂にあり、点火には流木3本が必要である",
+      "probability": 0.3
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-8b5702be584845218c65cd4f1552bb17",
+      "text": "救助日は3日目と4日目のみで、それまでに山頂に居る必要がある",
+      "probability": 0.56
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-0359dde27810404380a5242a6598df33",
+      "text": "救助されるには狼煙台の火と自分が山頂に同時に必要である",
+      "probability": 0.26
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "17630f7f-5ab4-53fe-a0de-52f3bafd9a96",
+      "text": "森の入口に着いたとき、私は枯れ葉か山頂への手がかりが落ちていないかと地面をじっくり見渡した。けれども、目立ったものは何も見つからなかった。正直、この場所は手がかりが少ないという自分の見立ては当たっていた。その代わり、すぐ近くの椰子の木の下に",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "71a74475-c357-51a8-8244-7334643d04a7",
+      "text": "見晴らしの岩に登って海を見渡した。沖の航路がはっきり見え、潮の流れに漂う漂流物の筋が目に入った。どうやら船はこの島の沖を3日目と4日目にだけ通るらしい。それ以外の日は素通りだ。つまり、狼煙を上げるならその瞬間を逃してはいけない。私はそのこと",
+      "probability": 0.47
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "3848700a-e77e-5802-acfa-1295b99ef80c",
+      "text": "山頂の狼煙台に着いたとき、流木が1本しかないことに気づいた。3本必要だというのに。皆に呼びかけたが、声は誰にも届かなかった。静かな山頂に、私の声だけが虚しく響いた。手がかりを求めてメモを残し、崖の見張り台へ向かうことにした。そこなら船が見え",
+      "probability": 0.21
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "daba7e5e-e4b4-5214-822b-02f1d295f461",
+      "text": "山頂の狼煙台に着いて、火を灯そうとした。でも、流木が足りないと言われた。3本必要だというのに、私は1本しか持っていなかった。風が強くなってきて、黒い雲も広がっていた。早く合図を出さなければと思ったけれど、どうにもならなかった。メモに状況を書",
+      "probability": 0.26
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-8b5702be584845218c65cd4f1552bb17"
+    ],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 107,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick107",
+    "content": "流木が足りないため、点火はできないと確認できるはずだ。",
+    "beliefs_in_mind": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-0359dde27810404380a5242a6598df33",
+     "sem-81e0a48b8ff6446c869bc67848dd1300"
+    ],
+    "episodes_in_mind": [
+     "71a74475-c357-51a8-8244-7334643d04a7",
+     "3848700a-e77e-5802-acfa-1295b99ef80c",
+     "daba7e5e-e4b4-5214-822b-02f1d295f461",
+     "2bdd6dd5-6c68-588b-b944-8dc527467d9c"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-9344ec7572954e59bc2d6e75364bf598",
+      "text": "狼煙台は山頂にあり、点火には流木3本が必要である",
+      "probability": 0.57
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-0359dde27810404380a5242a6598df33",
+      "text": "救助されるには狼煙台の火と自分が山頂に同時に必要である",
+      "probability": 0.15
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-81e0a48b8ff6446c869bc67848dd1300",
+      "text": "狼煙台に火を灯すには流木が3本必要だ",
+      "probability": 0.8
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "71a74475-c357-51a8-8244-7334643d04a7",
+      "text": "見晴らしの岩に登って海を見渡した。沖の航路がはっきり見え、潮の流れに漂う漂流物の筋が目に入った。どうやら船はこの島の沖を3日目と4日目にだけ通るらしい。それ以外の日は素通りだ。つまり、狼煙を上げるならその瞬間を逃してはいけない。私はそのこと",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "3848700a-e77e-5802-acfa-1295b99ef80c",
+      "text": "山頂の狼煙台に着いたとき、流木が1本しかないことに気づいた。3本必要だというのに。皆に呼びかけたが、声は誰にも届かなかった。静かな山頂に、私の声だけが虚しく響いた。手がかりを求めてメモを残し、崖の見張り台へ向かうことにした。そこなら船が見え",
+      "probability": 0.71
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "daba7e5e-e4b4-5214-822b-02f1d295f461",
+      "text": "山頂の狼煙台に着いて、火を灯そうとした。でも、流木が足りないと言われた。3本必要だというのに、私は1本しか持っていなかった。風が強くなってきて、黒い雲も広がっていた。早く合図を出さなければと思ったけれど、どうにもならなかった。メモに状況を書",
+      "probability": 0.85
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "2bdd6dd5-6c68-588b-b944-8dc527467d9c",
+      "text": "深夜の暗がりの中で、森の奥から鋭い鳥の鳴き声が響いてきた。あの声が何を告げていたのかは分からないが、夜の山には思っていたより多くの生き物がいるのだと感じた。私は洞窟ではなく崖沿いの山道を選んだ。山頂へ近づくにはあの道が最短のはずだと思ったか",
+      "probability": 0.04
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-81e0a48b8ff6446c869bc67848dd1300"
+    ],
+    "episodes": [
+     "3848700a-e77e-5802-acfa-1295b99ef80c",
+     "daba7e5e-e4b4-5214-822b-02f1d295f461"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 110,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick110",
+    "content": "流木が足りないため点火できないことを再確認する。あるいはリオが何か持っているか分かるかもしれない。",
+    "beliefs_in_mind": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-0359dde27810404380a5242a6598df33",
+     "sem-81e0a48b8ff6446c869bc67848dd1300"
+    ],
+    "episodes_in_mind": [
+     "daba7e5e-e4b4-5214-822b-02f1d295f461",
+     "2bdd6dd5-6c68-588b-b944-8dc527467d9c",
+     "2e405610-ae2a-52b6-888a-971eb2ed3224"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-9344ec7572954e59bc2d6e75364bf598",
+      "text": "狼煙台は山頂にあり、点火には流木3本が必要である",
+      "probability": 0.72
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-0359dde27810404380a5242a6598df33",
+      "text": "救助されるには狼煙台の火と自分が山頂に同時に必要である",
+      "probability": 0.2
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-81e0a48b8ff6446c869bc67848dd1300",
+      "text": "狼煙台に火を灯すには流木が3本必要だ",
+      "probability": 0.85
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "daba7e5e-e4b4-5214-822b-02f1d295f461",
+      "text": "山頂の狼煙台に着いて、火を灯そうとした。でも、流木が足りないと言われた。3本必要だというのに、私は1本しか持っていなかった。風が強くなってきて、黒い雲も広がっていた。早く合図を出さなければと思ったけれど、どうにもならなかった。メモに状況を書",
+      "probability": 0.82
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "2bdd6dd5-6c68-588b-b944-8dc527467d9c",
+      "text": "深夜の暗がりの中で、森の奥から鋭い鳥の鳴き声が響いてきた。あの声が何を告げていたのかは分からないが、夜の山には思っていたより多くの生き物がいるのだと感じた。私は洞窟ではなく崖沿いの山道を選んだ。山頂へ近づくにはあの道が最短のはずだと思ったか",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "2e405610-ae2a-52b6-888a-971eb2ed3224",
+      "text": "皆に声をかけて、火打ち石と流木は確保できたけど枯れ葉が不足していること、山頂への道の確認が必要だと伝えた。カイが枯れ葉を探していると言ってきたので、拠点に戻って状況を整理しようと移動を始めた。途中でリオの声も聞こえた。拠点に戻ったら、山頂へ",
+      "probability": 0.33
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-81e0a48b8ff6446c869bc67848dd1300"
+    ],
+    "episodes": [
+     "daba7e5e-e4b4-5214-822b-02f1d295f461"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "エイダ",
+  "player_id": 1,
+  "tick": 111,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p1-tick111",
+    "content": "リオが流木を何本持っているかを確認し、点火に必要な流木3本が揃うかどうかを把握できる。",
+    "beliefs_in_mind": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-0359dde27810404380a5242a6598df33",
+     "sem-81e0a48b8ff6446c869bc67848dd1300"
+    ],
+    "episodes_in_mind": [
+     "daba7e5e-e4b4-5214-822b-02f1d295f461",
+     "2bdd6dd5-6c68-588b-b944-8dc527467d9c",
+     "2e405610-ae2a-52b6-888a-971eb2ed3224",
+     "032e8e52-b561-53fd-8caa-eba18037d2c5"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-9344ec7572954e59bc2d6e75364bf598",
+      "text": "狼煙台は山頂にあり、点火には流木3本が必要である",
+      "probability": 0.66
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-0359dde27810404380a5242a6598df33",
+      "text": "救助されるには狼煙台の火と自分が山頂に同時に必要である",
+      "probability": 0.22
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-81e0a48b8ff6446c869bc67848dd1300",
+      "text": "狼煙台に火を灯すには流木が3本必要だ",
+      "probability": 0.87
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "daba7e5e-e4b4-5214-822b-02f1d295f461",
+      "text": "山頂の狼煙台に着いて、火を灯そうとした。でも、流木が足りないと言われた。3本必要だというのに、私は1本しか持っていなかった。風が強くなってきて、黒い雲も広がっていた。早く合図を出さなければと思ったけれど、どうにもならなかった。メモに状況を書",
+      "probability": 0.47
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "2bdd6dd5-6c68-588b-b944-8dc527467d9c",
+      "text": "深夜の暗がりの中で、森の奥から鋭い鳥の鳴き声が響いてきた。あの声が何を告げていたのかは分からないが、夜の山には思っていたより多くの生き物がいるのだと感じた。私は洞窟ではなく崖沿いの山道を選んだ。山頂へ近づくにはあの道が最短のはずだと思ったか",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "2e405610-ae2a-52b6-888a-971eb2ed3224",
+      "text": "皆に声をかけて、火打ち石と流木は確保できたけど枯れ葉が不足していること、山頂への道の確認が必要だと伝えた。カイが枯れ葉を探していると言ってきたので、拠点に戻って状況を整理しようと移動を始めた。途中でリオの声も聞こえた。拠点に戻ったら、山頂へ",
+      "probability": 0.26
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "032e8e52-b561-53fd-8caa-eba18037d2c5",
+      "text": "ノアが流木を探しに行った後、私は山頂へ向かって歩き出した。夜明け前の暗い山道を進みながら、狼煙台の前に立つと、手元にはまだ枯れ葉と火打ち石があるだけだった。流木が1本見つかっているが、それでは足りない。点火を試みたが、システムに拒否された。",
+      "probability": 0.44
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-9344ec7572954e59bc2d6e75364bf598",
+     "sem-81e0a48b8ff6446c869bc67848dd1300"
+    ],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 1,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick1",
+    "content": "船倉の中に道具や資材が残っているかもしれない。火打ち石や食料のような役立つ物が見つかる可能性がある。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 3,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick3",
+    "content": "流木を拾えて、狼煙の材料になるだろう。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 4,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick4",
+    "content": "この漂着物は調べ尽くされたとのことなので、何も見つからないだろう。別の場所を探す必要がある。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 6,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick6",
+    "content": "流木の山からまだ拾える流木が見つかるかもしれない。時間が経てば波が新しく運んでくる可能性がある。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0",
+      "text": "船倉を調べたら、工具箱の中から骨のナイフと丸めた蔓のロープが見つかった。これは助かった。しかし、流木を拾おうとしたら「もう拾ってしまった」と拒否され、漂着物も調べ尽くされていた。エイダが火打ち石を見つけたと言っていたので、何か残っていないか",
+      "probability": 0.45
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 7,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick7",
+    "content": "拠点に着いて、周囲の状況や仲間の様子、枯れ葉や山頂への道に関する手がかりを確認できるだろう。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0",
+      "text": "船倉を調べたら、工具箱の中から骨のナイフと丸めた蔓のロープが見つかった。これは助かった。しかし、流木を拾おうとしたら「もう拾ってしまった」と拒否され、漂着物も調べ尽くされていた。エイダが火打ち石を見つけたと言っていたので、何か残っていないか",
+      "probability": 0.23
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 8,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick8",
+    "content": "流木と蔓のロープを使って釣竿を削り出せるかもしれない。水源があれば魚を釣って食料を確保できるだろう。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0",
+      "text": "船倉を調べたら、工具箱の中から骨のナイフと丸めた蔓のロープが見つかった。これは助かった。しかし、流木を拾おうとしたら「もう拾ってしまった」と拒否され、漂着物も調べ尽くされていた。エイダが火打ち石を見つけたと言っていたので、何か残っていないか",
+      "probability": 0.49
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 9,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick9",
+    "content": "流木と蔓のロープを使って釣竿を削り出せる。食料確保の手段ができるはずだ。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0",
+      "text": "船倉を調べたら、工具箱の中から骨のナイフと丸めた蔓のロープが見つかった。これは助かった。しかし、流木を拾おうとしたら「もう拾ってしまった」と拒否され、漂着物も調べ尽くされていた。エイダが火打ち石を見つけたと言っていたので、何か残っていないか",
+      "probability": 0.54
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "9fea6ec9-e0d9-5b4c-84c7-0ee76b2256e0"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 104,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick104",
+    "content": "山道に戻って流木を探せるだろう。エイダの言う通り山道の下に流木が落ちていれば、狼煙に必要な分を確保できる。",
+    "beliefs_in_mind": [
+     "sem-f66082708e90420b96a3f7cffd6f76f4",
+     "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+     "sem-364ce2e22ec94ccfb426ba22cba3326c"
+    ],
+    "episodes_in_mind": [
+     "f2b31442-9101-5141-b383-416034243564",
+     "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+     "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+     "98e28b05-4886-56fb-a46f-365f34835c87"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-f66082708e90420b96a3f7cffd6f76f4",
+      "text": "エイダは川を遡れば山頂に近づけるかもしれないと言う。",
+      "probability": 0.08
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+      "text": "救助には山頂の狼煙台で火を上げ、同時に自分も山頂に居る必要がある",
+      "probability": 0.22
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-364ce2e22ec94ccfb426ba22cba3326c",
+      "text": "エイダは狼煙に枯れ葉が必要だと言う。",
+      "probability": 0.1
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "f2b31442-9101-5141-b383-416034243564",
+      "text": "枯れ葉が必要だった。獣道の脇に積もっているのが見えたので手を伸ばしたが、「もう集めた」と言われた。本当かどうか確かめたくて、もう一度試したけれど、同じ答えだった。風がまた運んでくるのを待つしかないらしい。エイダが言っていた通り、ここではもう",
+      "probability": 0.11
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+      "text": "森の入口を探しても、目立った手がかりは落ちていなかった。枯れ葉も山頂への道の痕跡も見当たらず、ただ静かな木々が並んでいるだけだった。それでも、地面に落ちていた椰子の実を二つ拾えたのは救いだ。空腹が少し紛れる。エイダは森の広場で枯れ葉と道を探",
+      "probability": 0.1
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+      "text": "丸太に手をかけて釣竿を削り出そうとしたが、どうやら竿になる流木が必要らしく、作業はできなかった。食料を確保したい気持ちが先走っていたのかもしれない。エイダは森へ枯れ葉を探しに行くと言い、カイは食料の様子を尋ねてきた。拠点に戻って周囲を見回し",
+      "probability": 0.43
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "98e28b05-4886-56fb-a46f-365f34835c87",
+      "text": "深夜の浜はもう流木も漂着物も尽きていた。エイダとカイに枯れ葉と山頂への道が必要だと言い、俺は川沿いの内陸へ向かうと宣言した。リオのことは干潟で貝を採っていると遠くから声が聞こえたから、とりあえず彼のことは信じることにした。一度流木の山に手を",
+      "probability": 0.51
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "98e28b05-4886-56fb-a46f-365f34835c87"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 105,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick105",
+    "content": "山道で流木が見つかり、狼煙に必要な3本のうち何本かを確保できるかもしれない。",
+    "beliefs_in_mind": [
+     "sem-5d8058fc0e5845e79b30182aee041a36",
+     "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+     "sem-f66082708e90420b96a3f7cffd6f76f4"
+    ],
+    "episodes_in_mind": [
+     "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+     "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+     "98e28b05-4886-56fb-a46f-365f34835c87",
+     "73f6783c-5545-503d-84e3-0cbbf4e82bf2"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-5d8058fc0e5845e79b30182aee041a36",
+      "text": "山頂への道筋は小川・川上流・山麓・森では見つからず、まだ不明である。",
+      "probability": 0.2
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+      "text": "救助には山頂の狼煙台で火を上げ、同時に自分も山頂に居る必要がある",
+      "probability": 0.2
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-f66082708e90420b96a3f7cffd6f76f4",
+      "text": "エイダは川を遡れば山頂に近づけるかもしれないと言う。",
+      "probability": 0.1
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+      "text": "森の入口を探しても、目立った手がかりは落ちていなかった。枯れ葉も山頂への道の痕跡も見当たらず、ただ静かな木々が並んでいるだけだった。それでも、地面に落ちていた椰子の実を二つ拾えたのは救いだ。空腹が少し紛れる。エイダは森の広場で枯れ葉と道を探",
+      "probability": 0.1
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+      "text": "丸太に手をかけて釣竿を削り出そうとしたが、どうやら竿になる流木が必要らしく、作業はできなかった。食料を確保したい気持ちが先走っていたのかもしれない。エイダは森へ枯れ葉を探しに行くと言い、カイは食料の様子を尋ねてきた。拠点に戻って周囲を見回し",
+      "probability": 0.48
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "98e28b05-4886-56fb-a46f-365f34835c87",
+      "text": "深夜の浜はもう流木も漂着物も尽きていた。エイダとカイに枯れ葉と山頂への道が必要だと言い、俺は川沿いの内陸へ向かうと宣言した。リオのことは干潟で貝を採っていると遠くから声が聞こえたから、とりあえず彼のことは信じることにした。一度流木の山に手を",
+      "probability": 0.41
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "73f6783c-5545-503d-84e3-0cbbf4e82bf2",
+      "text": "西の茂みに手を伸ばすと、東と同じように野いちごが二つ、掌に落ちてきた。食料が少し増えた安心感はあった。だが先へ進もうと小川に着いたとき、空腹はもう我慢の限界に近かった。岩棚から直接魚を捕まえようと身を乗り出したが、その手は空を切った。釣竿が",
+      "probability": 0.05
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 106,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick106",
+    "content": "山道を丹念に探せば、エイダが言っていた流木か、あるいは狼煙に使える枯れ葉が見つかるかもしれない。",
+    "beliefs_in_mind": [
+     "sem-5d8058fc0e5845e79b30182aee041a36",
+     "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+     "sem-f66082708e90420b96a3f7cffd6f76f4"
+    ],
+    "episodes_in_mind": [
+     "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+     "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+     "98e28b05-4886-56fb-a46f-365f34835c87",
+     "73f6783c-5545-503d-84e3-0cbbf4e82bf2"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-5d8058fc0e5845e79b30182aee041a36",
+      "text": "山頂への道筋は小川・川上流・山麓・森では見つからず、まだ不明である。",
+      "probability": 0.14
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+      "text": "救助には山頂の狼煙台で火を上げ、同時に自分も山頂に居る必要がある",
+      "probability": 0.2
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-f66082708e90420b96a3f7cffd6f76f4",
+      "text": "エイダは川を遡れば山頂に近づけるかもしれないと言う。",
+      "probability": 0.13
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+      "text": "森の入口を探しても、目立った手がかりは落ちていなかった。枯れ葉も山頂への道の痕跡も見当たらず、ただ静かな木々が並んでいるだけだった。それでも、地面に落ちていた椰子の実を二つ拾えたのは救いだ。空腹が少し紛れる。エイダは森の広場で枯れ葉と道を探",
+      "probability": 0.69
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+      "text": "丸太に手をかけて釣竿を削り出そうとしたが、どうやら竿になる流木が必要らしく、作業はできなかった。食料を確保したい気持ちが先走っていたのかもしれない。エイダは森へ枯れ葉を探しに行くと言い、カイは食料の様子を尋ねてきた。拠点に戻って周囲を見回し",
+      "probability": 0.81
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "98e28b05-4886-56fb-a46f-365f34835c87",
+      "text": "深夜の浜はもう流木も漂着物も尽きていた。エイダとカイに枯れ葉と山頂への道が必要だと言い、俺は川沿いの内陸へ向かうと宣言した。リオのことは干潟で貝を採っていると遠くから声が聞こえたから、とりあえず彼のことは信じることにした。一度流木の山に手を",
+      "probability": 0.77
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "73f6783c-5545-503d-84e3-0cbbf4e82bf2",
+      "text": "西の茂みに手を伸ばすと、東と同じように野いちごが二つ、掌に落ちてきた。食料が少し増えた安心感はあった。だが先へ進もうと小川に着いたとき、空腹はもう我慢の限界に近かった。岩棚から直接魚を捕まえようと身を乗り出したが、その手は空を切った。釣竿が",
+      "probability": 0.08
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "3d7d9171-8162-5d29-8a75-f1ce2c854e5b",
+     "8e1b02f5-1da2-5b4e-91a9-e3305bcf3019",
+     "98e28b05-4886-56fb-a46f-365f34835c87"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 110,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick110",
+    "content": "山頂に着き、狼煙台やエイダの状態、流木の配置を確認できる。",
+    "beliefs_in_mind": [
+     "sem-5d8058fc0e5845e79b30182aee041a36",
+     "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+     "sem-f66082708e90420b96a3f7cffd6f76f4"
+    ],
+    "episodes_in_mind": [
+     "98e28b05-4886-56fb-a46f-365f34835c87",
+     "73f6783c-5545-503d-84e3-0cbbf4e82bf2",
+     "45e8fb83-397d-5ecd-9fb1-7e031ec01da1"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-5d8058fc0e5845e79b30182aee041a36",
+      "text": "山頂への道筋は小川・川上流・山麓・森では見つからず、まだ不明である。",
+      "probability": 0.11
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+      "text": "救助には山頂の狼煙台で火を上げ、同時に自分も山頂に居る必要がある",
+      "probability": 0.28
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-f66082708e90420b96a3f7cffd6f76f4",
+      "text": "エイダは川を遡れば山頂に近づけるかもしれないと言う。",
+      "probability": 0.17
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "98e28b05-4886-56fb-a46f-365f34835c87",
+      "text": "深夜の浜はもう流木も漂着物も尽きていた。エイダとカイに枯れ葉と山頂への道が必要だと言い、俺は川沿いの内陸へ向かうと宣言した。リオのことは干潟で貝を採っていると遠くから声が聞こえたから、とりあえず彼のことは信じることにした。一度流木の山に手を",
+      "probability": 0.41
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "73f6783c-5545-503d-84e3-0cbbf4e82bf2",
+      "text": "西の茂みに手を伸ばすと、東と同じように野いちごが二つ、掌に落ちてきた。食料が少し増えた安心感はあった。だが先へ進もうと小川に着いたとき、空腹はもう我慢の限界に近かった。岩棚から直接魚を捕まえようと身を乗り出したが、その手は空を切った。釣竿が",
+      "probability": 0.04
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "45e8fb83-397d-5ecd-9fb1-7e031ec01da1",
+      "text": "川の上流まで来たが、目立った発見はなかった。山頂への道や枯れ葉が落ちているかと思ったが、何も掴めなかった。空腹が危険域まで上がっていたので、椰子の実を食べて凌いだ。動けるうちに食料を確保しないと、山頂まで持たないと思った。その後、水源の高地",
+      "probability": 0.33
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 112,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick112",
+    "content": "狼煙台の細部を調べれば、点火に必要な燃料や道具、あるいは枯れ葉や流木の配置が確認できるかもしれない。",
+    "beliefs_in_mind": [
+     "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+     "sem-f66082708e90420b96a3f7cffd6f76f4",
+     "sem-364ce2e22ec94ccfb426ba22cba3326c"
+    ],
+    "episodes_in_mind": [
+     "73f6783c-5545-503d-84e3-0cbbf4e82bf2",
+     "45e8fb83-397d-5ecd-9fb1-7e031ec01da1",
+     "7d332e88-fa53-5ac3-af41-88fb8b69fce7"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+      "text": "救助には山頂の狼煙台で火を上げ、同時に自分も山頂に居る必要がある",
+      "probability": 0.28
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-f66082708e90420b96a3f7cffd6f76f4",
+      "text": "エイダは川を遡れば山頂に近づけるかもしれないと言う。",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-364ce2e22ec94ccfb426ba22cba3326c",
+      "text": "エイダは狼煙に枯れ葉が必要だと言う。",
+      "probability": 0.14
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "73f6783c-5545-503d-84e3-0cbbf4e82bf2",
+      "text": "西の茂みに手を伸ばすと、東と同じように野いちごが二つ、掌に落ちてきた。食料が少し増えた安心感はあった。だが先へ進もうと小川に着いたとき、空腹はもう我慢の限界に近かった。岩棚から直接魚を捕まえようと身を乗り出したが、その手は空を切った。釣竿が",
+      "probability": 0.04
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "45e8fb83-397d-5ecd-9fb1-7e031ec01da1",
+      "text": "川の上流まで来たが、目立った発見はなかった。山頂への道や枯れ葉が落ちているかと思ったが、何も掴めなかった。空腹が危険域まで上がっていたので、椰子の実を食べて凌いだ。動けるうちに食料を確保しないと、山頂まで持たないと思った。その後、水源の高地",
+      "probability": 0.2
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "7d332e88-fa53-5ac3-af41-88fb8b69fce7",
+      "text": "深夜の見張り台で、エイダが沖の航路を示してくれた。船がこの島を通るのは3日目と4日目だけだと言う。その瞬間に狼煙が上がっていなければ、船は素通りしてしまうらしい。狼煙台は山頂にあり、点火には流木が3本必要だが、エイダは1本しか持っていなかっ",
+      "probability": 0.44
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "ノア",
+  "player_id": 2,
+  "tick": 118,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "own_action",
+  "grounds": [
+   {
+    "expectation_id": "p2-tick118",
+    "content": "現在の状況を整理して、流木をどう調達するか最優先の行動を決める。",
+    "beliefs_in_mind": [
+     "sem-3bfcb3cec20a4d9bb179fedac5d040b0",
+     "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+     "sem-f66082708e90420b96a3f7cffd6f76f4"
+    ],
+    "episodes_in_mind": [
+     "7d332e88-fa53-5ac3-af41-88fb8b69fce7",
+     "27707a21-e7e7-5eb6-9fd8-95e1389c5af6"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-3bfcb3cec20a4d9bb179fedac5d040b0",
+      "text": "狼煙台は山頂にあり、点火には流木が3本必要だ。",
+      "probability": 0.76
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-ed6f310e4e0246d5a71700fbf8b4fcad",
+      "text": "救助には山頂の狼煙台で火を上げ、同時に自分も山頂に居る必要がある",
+      "probability": 0.21
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-f66082708e90420b96a3f7cffd6f76f4",
+      "text": "エイダは川を遡れば山頂に近づけるかもしれないと言う。",
+      "probability": 0.05
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "7d332e88-fa53-5ac3-af41-88fb8b69fce7",
+      "text": "深夜の見張り台で、エイダが沖の航路を示してくれた。船がこの島を通るのは3日目と4日目だけだと言う。その瞬間に狼煙が上がっていなければ、船は素通りしてしまうらしい。狼煙台は山頂にあり、点火には流木が3本必要だが、エイダは1本しか持っていなかっ",
+      "probability": 0.27
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "27707a21-e7e7-5eb6-9fd8-95e1389c5af6",
+      "text": "夜明け前の暗がりで、エイダに流木の話を切り出した。俺はもう1本も持っていなかった。エイダには1本がある。狼煙には3本必要だ。足りない分をどうするか、俺が山道に戻って探すしかなかった。エイダには見張りを頼んだ。船が通るのは3日目と4日目だけだ",
+      "probability": 0.5
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-3bfcb3cec20a4d9bb179fedac5d040b0"
+    ],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 1,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick1",
+    "content": "船倉の中から道具や資材になる物が見つかるだろう。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 2,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick2",
+    "content": "漂着物の中から道具や食料になる物が発見できるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 3,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick3",
+    "content": "流木の山から流木が拾えるはずだ。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 4,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick4",
+    "content": "干潟に着き、他の採れる物や山頂への道の手がかりが見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 5,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick5",
+    "content": "岩棚から貝が採れて食料を確保できるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "f44ca8e3-ab06-5d44-bc74-b42712350bd2"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "f44ca8e3-ab06-5d44-bc74-b42712350bd2",
+      "text": "夜が更けて、波の音だけが聞こえる浜辺に立っていた。明日に備えて何か道具や食料を確保しておきたくて、難破船の船倉を探しに行ったが、もう漁り尽くされていた。仕方なく漂着物を調べても、やはり調べ尽くされていて、手ぶらで流木の山に向かうと、ちょうど",
+      "probability": 0.33
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 7,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick7",
+    "content": "もういくつか貝が採れて、食料の余裕ができる。ただしカニにまた襲われるかもしれない。",
+    "beliefs_in_mind": [
+     "sem-3ac0611453d24c159a81a95b1ee60ace"
+    ],
+    "episodes_in_mind": [
+     "f44ca8e3-ab06-5d44-bc74-b42712350bd2"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-3ac0611453d24c159a81a95b1ee60ace",
+      "text": "船倉の道具や漂着物は既に調べ尽くされ、頼れるものは何も残っていない",
+      "probability": 0.11
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "f44ca8e3-ab06-5d44-bc74-b42712350bd2",
+      "text": "夜が更けて、波の音だけが聞こえる浜辺に立っていた。明日に備えて何か道具や食料を確保しておきたくて、難破船の船倉を探しに行ったが、もう漁り尽くされていた。仕方なく漂着物を調べても、やはり調べ尽くされていて、手ぶらで流木の山に向かうと、ちょうど",
+      "probability": 0.29
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 8,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick8",
+    "content": "隠し入江に移動できる。カニから離れて山頂への道や枯れ葉の手がかりが見つかるかもしれない。",
+    "beliefs_in_mind": [
+     "sem-3ac0611453d24c159a81a95b1ee60ace"
+    ],
+    "episodes_in_mind": [
+     "f44ca8e3-ab06-5d44-bc74-b42712350bd2"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-3ac0611453d24c159a81a95b1ee60ace",
+      "text": "船倉の道具や漂着物は既に調べ尽くされ、頼れるものは何も残っていない",
+      "probability": 0.11
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "f44ca8e3-ab06-5d44-bc74-b42712350bd2",
+      "text": "夜が更けて、波の音だけが聞こえる浜辺に立っていた。明日に備えて何か道具や食料を確保しておきたくて、難破船の船倉を探しに行ったが、もう漁り尽くされていた。仕方なく漂着物を調べても、やはり調べ尽くされていて、手ぶらで流木の山に向かうと、ちょうど",
+      "probability": 0.17
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 103,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick103",
+    "content": "山頂に着き、狼煙台とその状態・火を焚くための条件が確認できる。",
+    "beliefs_in_mind": [
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c",
+     "sem-995f896652c843eda28cc2405f707d2e"
+    ],
+    "episodes_in_mind": [
+     "54423041-2646-5fda-8d41-f284d1cc33e2",
+     "10310d5f-4770-5ad6-8cc7-d3292d260be1",
+     "00def9f6-dd03-53f6-a631-8ee2b29aa958",
+     "3b05a95c-8e44-50a0-814b-609ea7c87587"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.13
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-995f896652c843eda28cc2405f707d2e",
+      "text": "廃屋の探索からは狼煙や山頂への手がかりは得られない",
+      "probability": 0.33
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "54423041-2646-5fda-8d41-f284d1cc33e2",
+      "text": "廃屋の周りをぐるりと見回したが、目立ったものは何もなかった。枯れ葉の下や石の隙間も確かめたが、山頂への道を示すものは見つからなかった。それでも、手には火打ち石と枯れ葉がある。山頂への道も分かっている。あとはただ山頂に上がるだけだと思った。移",
+      "probability": 0.31
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "10310d5f-4770-5ad6-8cc7-d3292d260be1",
+      "text": "廃屋はもう調べ尽くしたと思って、湿地奥の小屋へと向かった。夜のまま残るよりは、何か残っていそうな小屋を目指すべきだと考えたからだ。だが、小屋に着いて緩んだ床板を見つけ、剥がそうとしたとき、床板は固く釘付けされていて刃物がなければ動かなかった",
+      "probability": 0.09
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "00def9f6-dd03-53f6-a631-8ee2b29aa958",
+      "text": "干潟で貝を剥いていたら、あの大型カニがまた襲ってきて、体をえぐられた。10ダメージ……これで何度目だ。このまま採り続けても体力を削られるだけだと思って、隠し入江まで逃げてきた。カイも心配して声をかけてきたが、果たして食料がどうとか、そんな話",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "3b05a95c-8e44-50a0-814b-609ea7c87587",
+      "text": "廃屋の探索からは何も得られないという思い込みがあったけれど、錆びた標識に『観測……所』と読める文字を見つけた。30年も経った代物で、誰が立てたのかも分からない。でも、この小道に観測所の痕跡があるということは、山頂への道や狼煙の手がかりがまだ",
+      "probability": 0.35
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 105,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick105",
+    "content": "狼煙台に火を灯そうとするが、一人では点火できないことが確認できる。",
+    "beliefs_in_mind": [
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c",
+     "sem-995f896652c843eda28cc2405f707d2e"
+    ],
+    "episodes_in_mind": [
+     "00def9f6-dd03-53f6-a631-8ee2b29aa958",
+     "3b05a95c-8e44-50a0-814b-609ea7c87587",
+     "76abd741-a02c-50e7-a428-b4c6006c0958"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.05
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-995f896652c843eda28cc2405f707d2e",
+      "text": "廃屋の探索からは狼煙や山頂への手がかりは得られない",
+      "probability": 0.08
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "00def9f6-dd03-53f6-a631-8ee2b29aa958",
+      "text": "干潟で貝を剥いていたら、あの大型カニがまた襲ってきて、体をえぐられた。10ダメージ……これで何度目だ。このまま採り続けても体力を削られるだけだと思って、隠し入江まで逃げてきた。カイも心配して声をかけてきたが、果たして食料がどうとか、そんな話",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "3b05a95c-8e44-50a0-814b-609ea7c87587",
+      "text": "廃屋の探索からは何も得られないという思い込みがあったけれど、錆びた標識に『観測……所』と読める文字を見つけた。30年も経った代物で、誰が立てたのかも分からない。でも、この小道に観測所の痕跡があるということは、山頂への道や狼煙の手がかりがまだ",
+      "probability": 0.15
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "76abd741-a02c-50e7-a428-b4c6006c0958",
+      "text": "小屋の床板は刃物がなければ開けられない。あの場所に居ても山頂への手がかりは出てこないだろう。夜は暗いし寒いし、一人で走り回っても無駄に消耗するだけだ。私は慎重に、まずは拠点へ戻って仲間と合流する方を選んだ。火の準備と枯れ葉・流木の状況を確認",
+      "probability": 0.19
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 106,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick106",
+    "content": "狼煙台に火を灯すには流木と誰かの協力が要ることが、改めて確認できる。",
+    "beliefs_in_mind": [
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c",
+     "sem-d4f0f98a0fc24a6888809dbda6a3bb82"
+    ],
+    "episodes_in_mind": [
+     "3b05a95c-8e44-50a0-814b-609ea7c87587",
+     "76abd741-a02c-50e7-a428-b4c6006c0958",
+     "a68a6813-e2fb-5859-8cc2-15646f080511"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.07
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-d4f0f98a0fc24a6888809dbda6a3bb82",
+      "text": "廃屋の探索からは狼煙や山頂への手がかりは得られない",
+      "probability": 0.09
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "3b05a95c-8e44-50a0-814b-609ea7c87587",
+      "text": "廃屋の探索からは何も得られないという思い込みがあったけれど、錆びた標識に『観測……所』と読める文字を見つけた。30年も経った代物で、誰が立てたのかも分からない。でも、この小道に観測所の痕跡があるということは、山頂への道や狼煙の手がかりがまだ",
+      "probability": 0.2
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "76abd741-a02c-50e7-a428-b4c6006c0958",
+      "text": "小屋の床板は刃物がなければ開けられない。あの場所に居ても山頂への手がかりは出てこないだろう。夜は暗いし寒いし、一人で走り回っても無駄に消耗するだけだ。私は慎重に、まずは拠点へ戻って仲間と合流する方を選んだ。火の準備と枯れ葉・流木の状況を確認",
+      "probability": 0.35
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "a68a6813-e2fb-5859-8cc2-15646f080511",
+      "text": "あの廃屋は、机も写真も梁の下も、全部が過去の匂いを放っていた。引き出しからは湿気で膨らんだ業務日誌の前半を引っ張り出したが、署名は擦れて読めなかった。写真には若い男たちと年配の人物が並んでいて、撮影日は30年以上前のように見えた。そして梁の",
+      "probability": 0.07
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 107,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick107",
+    "content": "状況を整理し、狼煙点火に必要な流木と協力の条件を再確認する。エイダが流木を持っているか、どう協力すればいいかが見えてくるはず。",
+    "beliefs_in_mind": [
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c",
+     "sem-d4f0f98a0fc24a6888809dbda6a3bb82"
+    ],
+    "episodes_in_mind": [
+     "76abd741-a02c-50e7-a428-b4c6006c0958",
+     "a68a6813-e2fb-5859-8cc2-15646f080511",
+     "ab47a72a-7f3f-5c64-8867-136f2ddd27a3"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.07
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-d4f0f98a0fc24a6888809dbda6a3bb82",
+      "text": "廃屋の探索からは狼煙や山頂への手がかりは得られない",
+      "probability": 0.09
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "76abd741-a02c-50e7-a428-b4c6006c0958",
+      "text": "小屋の床板は刃物がなければ開けられない。あの場所に居ても山頂への手がかりは出てこないだろう。夜は暗いし寒いし、一人で走り回っても無駄に消耗するだけだ。私は慎重に、まずは拠点へ戻って仲間と合流する方を選んだ。火の準備と枯れ葉・流木の状況を確認",
+      "probability": 0.29
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "a68a6813-e2fb-5859-8cc2-15646f080511",
+      "text": "あの廃屋は、机も写真も梁の下も、全部が過去の匂いを放っていた。引き出しからは湿気で膨らんだ業務日誌の前半を引っ張り出したが、署名は擦れて読めなかった。写真には若い男たちと年配の人物が並んでいて、撮影日は30年以上前のように見えた。そして梁の",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+      "text": "深夜の山道を登り、狼煙台にたどり着いた。火打ち石と枯れ葉は持っているのに、火を灯そうとすると拒否された。流木が3本必要だという。一人ではどうにもならない。遠くからノアとエイダの声が聞こえた。ノアはエイダに「流木3本、俺が残り2本を見つけて山",
+      "probability": 0.51
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "ab47a72a-7f3f-5c64-8867-136f2ddd27a3"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 110,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick110",
+    "content": "エイダの所持品と状況を確認し、流木の受け渡しや協力の条件が整理できる。",
+    "beliefs_in_mind": [
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c",
+     "sem-d4f0f98a0fc24a6888809dbda6a3bb82"
+    ],
+    "episodes_in_mind": [
+     "76abd741-a02c-50e7-a428-b4c6006c0958",
+     "a68a6813-e2fb-5859-8cc2-15646f080511",
+     "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+     "10310d5f-4770-5ad6-8cc7-d3292d260be1"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.09
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-d4f0f98a0fc24a6888809dbda6a3bb82",
+      "text": "廃屋の探索からは狼煙や山頂への手がかりは得られない",
+      "probability": 0.09
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "76abd741-a02c-50e7-a428-b4c6006c0958",
+      "text": "小屋の床板は刃物がなければ開けられない。あの場所に居ても山頂への手がかりは出てこないだろう。夜は暗いし寒いし、一人で走り回っても無駄に消耗するだけだ。私は慎重に、まずは拠点へ戻って仲間と合流する方を選んだ。火の準備と枯れ葉・流木の状況を確認",
+      "probability": 0.4
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "a68a6813-e2fb-5859-8cc2-15646f080511",
+      "text": "あの廃屋は、机も写真も梁の下も、全部が過去の匂いを放っていた。引き出しからは湿気で膨らんだ業務日誌の前半を引っ張り出したが、署名は擦れて読めなかった。写真には若い男たちと年配の人物が並んでいて、撮影日は30年以上前のように見えた。そして梁の",
+      "probability": 0.04
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+      "text": "深夜の山道を登り、狼煙台にたどり着いた。火打ち石と枯れ葉は持っているのに、火を灯そうとすると拒否された。流木が3本必要だという。一人ではどうにもならない。遠くからノアとエイダの声が聞こえた。ノアはエイダに「流木3本、俺が残り2本を見つけて山",
+      "probability": 0.4
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "10310d5f-4770-5ad6-8cc7-d3292d260be1",
+      "text": "廃屋はもう調べ尽くしたと思って、湿地奥の小屋へと向かった。夜のまま残るよりは、何か残っていそうな小屋を目指すべきだと考えたからだ。だが、小屋に着いて緩んだ床板を見つけ、剥がそうとしたとき、床板は固く釘付けされていて刃物がなければ動かなかった",
+      "probability": 0.05
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 111,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick111",
+    "content": "流木が足りなければ拒否される。エイダの所持と合わせる必要がある。",
+    "beliefs_in_mind": [
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c",
+     "sem-d41748d278f94a9d9240456bc22598ae"
+    ],
+    "episodes_in_mind": [
+     "76abd741-a02c-50e7-a428-b4c6006c0958",
+     "a68a6813-e2fb-5859-8cc2-15646f080511",
+     "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+     "10310d5f-4770-5ad6-8cc7-d3292d260be1"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-d41748d278f94a9d9240456bc22598ae",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.04
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "76abd741-a02c-50e7-a428-b4c6006c0958",
+      "text": "小屋の床板は刃物がなければ開けられない。あの場所に居ても山頂への手がかりは出てこないだろう。夜は暗いし寒いし、一人で走り回っても無駄に消耗するだけだ。私は慎重に、まずは拠点へ戻って仲間と合流する方を選んだ。火の準備と枯れ葉・流木の状況を確認",
+      "probability": 0.27
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "a68a6813-e2fb-5859-8cc2-15646f080511",
+      "text": "あの廃屋は、机も写真も梁の下も、全部が過去の匂いを放っていた。引き出しからは湿気で膨らんだ業務日誌の前半を引っ張り出したが、署名は擦れて読めなかった。写真には若い男たちと年配の人物が並んでいて、撮影日は30年以上前のように見えた。そして梁の",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+      "text": "深夜の山道を登り、狼煙台にたどり着いた。火打ち石と枯れ葉は持っているのに、火を灯そうとすると拒否された。流木が3本必要だという。一人ではどうにもならない。遠くからノアとエイダの声が聞こえた。ノアはエイダに「流木3本、俺が残り2本を見つけて山",
+      "probability": 0.33
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "10310d5f-4770-5ad6-8cc7-d3292d260be1",
+      "text": "廃屋はもう調べ尽くしたと思って、湿地奥の小屋へと向かった。夜のまま残るよりは、何か残っていそうな小屋を目指すべきだと考えたからだ。だが、小屋に着いて緩んだ床板を見つけ、剥がそうとしたとき、床板は固く釘付けされていて刃物がなければ動かなかった",
+      "probability": 0.03
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 112,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick112",
+    "content": "流木が足りないので拒否される。必要な流木の数を改めて確認できる。",
+    "beliefs_in_mind": [
+     "sem-e09da5c0027845cbb4f30889a30cb301",
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c"
+    ],
+    "episodes_in_mind": [
+     "76abd741-a02c-50e7-a428-b4c6006c0958",
+     "a68a6813-e2fb-5859-8cc2-15646f080511",
+     "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+     "10310d5f-4770-5ad6-8cc7-d3292d260be1"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-e09da5c0027845cbb4f30889a30cb301",
+      "text": "狼煙台に火を灯すには流木が3本必要で、一人では点火できない",
+      "probability": 0.6
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "76abd741-a02c-50e7-a428-b4c6006c0958",
+      "text": "小屋の床板は刃物がなければ開けられない。あの場所に居ても山頂への手がかりは出てこないだろう。夜は暗いし寒いし、一人で走り回っても無駄に消耗するだけだ。私は慎重に、まずは拠点へ戻って仲間と合流する方を選んだ。火の準備と枯れ葉・流木の状況を確認",
+      "probability": 0.38
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "a68a6813-e2fb-5859-8cc2-15646f080511",
+      "text": "あの廃屋は、机も写真も梁の下も、全部が過去の匂いを放っていた。引き出しからは湿気で膨らんだ業務日誌の前半を引っ張り出したが、署名は擦れて読めなかった。写真には若い男たちと年配の人物が並んでいて、撮影日は30年以上前のように見えた。そして梁の",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "ab47a72a-7f3f-5c64-8867-136f2ddd27a3",
+      "text": "深夜の山道を登り、狼煙台にたどり着いた。火打ち石と枯れ葉は持っているのに、火を灯そうとすると拒否された。流木が3本必要だという。一人ではどうにもならない。遠くからノアとエイダの声が聞こえた。ノアはエイダに「流木3本、俺が残り2本を見つけて山",
+      "probability": 0.37
+     },
+     {
+      "question": "ground_episode_3",
+      "kind": "episode",
+      "id": "10310d5f-4770-5ad6-8cc7-d3292d260be1",
+      "text": "廃屋はもう調べ尽くしたと思って、湿地奥の小屋へと向かった。夜のまま残るよりは、何か残っていそうな小屋を目指すべきだと考えたからだ。だが、小屋に着いて緩んだ床板を見つけ、剥がそうとしたとき、床板は固く釘付けされていて刃物がなければ動かなかった",
+      "probability": 0.03
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-e09da5c0027845cbb4f30889a30cb301"
+    ],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "リオ",
+  "player_id": 3,
+  "tick": 118,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "not_an_expectation",
+  "grounds": [
+   {
+    "expectation_id": "p3-tick118",
+    "content": "現状を整理する。狼煙点火には流木3本。エイダ1本、俺は0本。残り2本をどこかで確保するか、ノアが流木を持ってないか確認すべきだ。",
+    "beliefs_in_mind": [
+     "sem-e09da5c0027845cbb4f30889a30cb301",
+     "sem-a71abcddab5d4ba6a16fde9842966f2c",
+     "sem-a6834bbcf75a4fcaa2830084c105428c"
+    ],
+    "episodes_in_mind": [
+     "3d9bc41c-6cb4-55fb-ab84-a99e76161d27"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-e09da5c0027845cbb4f30889a30cb301",
+      "text": "狼煙台に火を灯すには流木が3本必要で、一人では点火できない",
+      "probability": 0.71
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-a71abcddab5d4ba6a16fde9842966f2c",
+      "text": "干潟で貝を採るのは大型カニの襲撃が危険だ",
+      "probability": 0.03
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-a6834bbcf75a4fcaa2830084c105428c",
+      "text": "山頂への道は川沿いの本道の他に南東から回り込む登り口がある",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "3d9bc41c-6cb4-55fb-ab84-a99e76161d27",
+      "text": "干潟へ向かう道すがら、大型カニに襲われた。甲殻が硬くて鈍重な動きなのに、挟まれると痛い。浜はもう漁り尽くされていたから、干潟なら何か採れると思っていたのに、ここにもカニがいた。岩棚からは貝を三つ剥がし取れた。空腹はまだマシだったけど、夜明け",
+      "probability": 0.03
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [
+     "sem-e09da5c0027845cbb4f30889a30cb301"
+    ],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 1,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick1",
+    "content": "濡れた工具箱の残骸から、何か使える道具や素材が見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 2,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick2",
+    "content": "波が運んだ漂着物の中から、火打ち石や道具など何か使える物が見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 3,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick3",
+    "content": "流木の山から流木を集められそうだ。狼煙と焚き火の燃料になる。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 5,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick5",
+    "content": "この浜周辺を探索して、枯れ葉や山頂への道筋など、狼煙に必要な手がかりが見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [],
+    "asked": [],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 6,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick6",
+    "content": "同じ場所にいるエイダやノアと状況を共有し、枯れ葉がどこにあるか、山頂への道がどこかについて話ができるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "df7a09ef-a4dd-5e3a-beb1-2f95f22f797c"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "df7a09ef-a4dd-5e3a-beb1-2f95f22f797c",
+      "text": "船倉に何か使える道具が残っていないか探しに行ったが、もうすでに漁り尽くされた後だった。他の人たちも同じように探していたのだろう。浜に打ち上げられた漂着物を探すと、砂に半分埋もれた乾いた流木を見つけた。火を起こす材料にはなるが、それ以上のもの",
+      "probability": 0.5
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 7,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick7",
+    "content": "濡れた工具箱の残骸から、何か使える道具や素材が見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "df7a09ef-a4dd-5e3a-beb1-2f95f22f797c"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "df7a09ef-a4dd-5e3a-beb1-2f95f22f797c",
+      "text": "船倉に何か使える道具が残っていないか探しに行ったが、もうすでに漁り尽くされた後だった。他の人たちも同じように探していたのだろう。浜に打ち上げられた漂着物を探すと、砂に半分埋もれた乾いた流木を見つけた。火を起こす材料にはなるが、それ以上のもの",
+      "probability": 0.41
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 8,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick8",
+    "content": "干潟に着いて、リオの状況を確認できる。干潟周辺から川や山頂への道筋に関する手がかりが見つかるかもしれない。",
+    "beliefs_in_mind": [],
+    "episodes_in_mind": [
+     "df7a09ef-a4dd-5e3a-beb1-2f95f22f797c"
+    ],
+    "asked": [
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "df7a09ef-a4dd-5e3a-beb1-2f95f22f797c",
+      "text": "船倉に何か使える道具が残っていないか探しに行ったが、もうすでに漁り尽くされた後だった。他の人たちも同じように探していたのだろう。浜に打ち上げられた漂着物を探すと、砂に半分埋もれた乾いた流木を見つけた。火を起こす材料にはなるが、それ以上のもの",
+      "probability": 0.11
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 125,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick125",
+    "content": "鋭い石で蔓を削ってロープを追加で得られるかもしれない。ナイフが無くても石なら代用できるかも。",
+    "beliefs_in_mind": [
+     "sem-ab3453176e5b470796e5a41132f1d49c",
+     "sem-77635e5ec740486fa103731dc2be3ced",
+     "sem-32906cabc0f74964b0b7c8f7b9975597"
+    ],
+    "episodes_in_mind": [
+     "6baba231-7844-5727-99cc-e2d1014acfb9",
+     "bb171f96-5fc8-5163-81c2-b71b1a9b6281"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-ab3453176e5b470796e5a41132f1d49c",
+      "text": "流木と火打ち石は狼煙の準備に必要だ",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-77635e5ec740486fa103731dc2be3ced",
+      "text": "沼地には手がかりが無く、蔓はナイフ無しでは切れないことがある",
+      "probability": 0.47
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-32906cabc0f74964b0b7c8f7b9975597",
+      "text": "リオは思い通りに動かない",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "6baba231-7844-5727-99cc-e2d1014acfb9",
+      "text": "沼地に足を踏み入れたが、枯れ葉も祖父の痕跡も見つからなかった。夜の闇の中、湿った空気と鳥の鳴き声だけが耳に残っていた。リオは一瞬だけ顔を見せて森へ消えてしまい、頼りにできないなと痛感した。蔓の茂みに手をかけたが、太くてナイフがないと切れない",
+      "probability": 0.57
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "bb171f96-5fc8-5163-81c2-b71b1a9b6281",
+      "text": "沼地へ向かう道すがら、枯れ葉か祖父の研究施設の痕跡が見つかればいいと思っていた。深い夜の闇の中、湿地の匂いと湿った空気だけが広がっていて、手がかりは何もなかった。リオが一瞬顔を見せて、また森へ消えていった。あの鳥の鋭い鳴き声が、何かが動いて",
+      "probability": 0.07
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "6baba231-7844-5727-99cc-e2d1014acfb9"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 131,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick131",
+    "content": "沼地に新しい手がかりや狼煙の材料が見つかるかもしれないが、これまで何度も空振りなので、むしろ周囲の状況や仲間の気配を確認できるかも。",
+    "beliefs_in_mind": [
+     "sem-ab3453176e5b470796e5a41132f1d49c",
+     "sem-77635e5ec740486fa103731dc2be3ced",
+     "sem-32906cabc0f74964b0b7c8f7b9975597"
+    ],
+    "episodes_in_mind": [
+     "bb171f96-5fc8-5163-81c2-b71b1a9b6281",
+     "e7080e55-2832-574c-9ee6-50c783dd675e"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-ab3453176e5b470796e5a41132f1d49c",
+      "text": "流木と火打ち石は狼煙の準備に必要だ",
+      "probability": 0.23
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-77635e5ec740486fa103731dc2be3ced",
+      "text": "沼地には手がかりが無く、蔓はナイフ無しでは切れないことがある",
+      "probability": 0.18
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-32906cabc0f74964b0b7c8f7b9975597",
+      "text": "リオは思い通りに動かない",
+      "probability": 0.07
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "bb171f96-5fc8-5163-81c2-b71b1a9b6281",
+      "text": "沼地へ向かう道すがら、枯れ葉か祖父の研究施設の痕跡が見つかればいいと思っていた。深い夜の闇の中、湿地の匂いと湿った空気だけが広がっていて、手がかりは何もなかった。リオが一瞬顔を見せて、また森へ消えていった。あの鳥の鋭い鳴き声が、何かが動いて",
+      "probability": 0.61
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "e7080e55-2832-574c-9ee6-50c783dd675e",
+      "text": "板切れに伝言を残そうとしたが、何を書くかを指定していなかったせいで拒否されてしまった。仲間が読めるようにと思ったのに、肝心の文章が思い浮かばなかった。仕方なく拠点の周りを探したが、特に収穫はなかった。枯れ葉もリオも見つからず、山頂への道の手",
+      "probability": 0.35
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": [
+     "bb171f96-5fc8-5163-81c2-b71b1a9b6281"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 132,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick132",
+    "content": "蔓の茂みを詳しく調べて、何かナイフ代わりになるものや手がかりがないか確認する。",
+    "beliefs_in_mind": [
+     "sem-ab3453176e5b470796e5a41132f1d49c",
+     "sem-77635e5ec740486fa103731dc2be3ced",
+     "sem-32906cabc0f74964b0b7c8f7b9975597"
+    ],
+    "episodes_in_mind": [
+     "bb171f96-5fc8-5163-81c2-b71b1a9b6281",
+     "e7080e55-2832-574c-9ee6-50c783dd675e",
+     "dcebc773-1d01-562f-8056-9659531a1691"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-ab3453176e5b470796e5a41132f1d49c",
+      "text": "流木と火打ち石は狼煙の準備に必要だ",
+      "probability": 0.08
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-77635e5ec740486fa103731dc2be3ced",
+      "text": "沼地には手がかりが無く、蔓はナイフ無しでは切れないことがある",
+      "probability": 0.17
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-32906cabc0f74964b0b7c8f7b9975597",
+      "text": "リオは思い通りに動かない",
+      "probability": 0.06
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "bb171f96-5fc8-5163-81c2-b71b1a9b6281",
+      "text": "沼地へ向かう道すがら、枯れ葉か祖父の研究施設の痕跡が見つかればいいと思っていた。深い夜の闇の中、湿地の匂いと湿った空気だけが広がっていて、手がかりは何もなかった。リオが一瞬顔を見せて、また森へ消えていった。あの鳥の鋭い鳴き声が、何かが動いて",
+      "probability": 0.25
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "e7080e55-2832-574c-9ee6-50c783dd675e",
+      "text": "板切れに伝言を残そうとしたが、何を書くかを指定していなかったせいで拒否されてしまった。仲間が読めるようにと思ったのに、肝心の文章が思い浮かばなかった。仕方なく拠点の周りを探したが、特に収穫はなかった。枯れ葉もリオも見つからず、山頂への道の手",
+      "probability": 0.17
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "dcebc773-1d01-562f-8056-9659531a1691",
+      "text": "岩礁海岸に着いて、まず周りを見回してみたけど、目立った手がかりは見つからなかった。枯れ葉も山頂への道も、何もなし。でも、鋭い石が露出した岩を見つけて、刃に使えそうな石片を拾い上げた。切ったり武器に使えるかもしれない。せっかくだから沖に釣りに",
+      "probability": 0.16
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ },
+ {
+  "name": "カイ",
+  "player_id": 4,
+  "tick": 133,
+  "action": null,
+  "judged": true,
+  "unavailable_reason": null,
+  "shape": "settleable",
+  "grounds": [
+   {
+    "expectation_id": "p4-tick133",
+    "content": "沼地から拠点へ安全に移動し、大蛇の攻撃範囲から離れられる。",
+    "beliefs_in_mind": [
+     "sem-ab3453176e5b470796e5a41132f1d49c",
+     "sem-77635e5ec740486fa103731dc2be3ced",
+     "sem-32906cabc0f74964b0b7c8f7b9975597"
+    ],
+    "episodes_in_mind": [
+     "e7080e55-2832-574c-9ee6-50c783dd675e",
+     "dcebc773-1d01-562f-8056-9659531a1691",
+     "0c27b59b-bfc0-51b4-b0d0-dbc315a9f90a"
+    ],
+    "asked": [
+     {
+      "question": "ground_belief_0",
+      "kind": "belief",
+      "id": "sem-ab3453176e5b470796e5a41132f1d49c",
+      "text": "流木と火打ち石は狼煙の準備に必要だ",
+      "probability": 0.05
+     },
+     {
+      "question": "ground_belief_1",
+      "kind": "belief",
+      "id": "sem-77635e5ec740486fa103731dc2be3ced",
+      "text": "沼地には手がかりが無く、蔓はナイフ無しでは切れないことがある",
+      "probability": 0.12
+     },
+     {
+      "question": "ground_belief_2",
+      "kind": "belief",
+      "id": "sem-32906cabc0f74964b0b7c8f7b9975597",
+      "text": "リオは思い通りに動かない",
+      "probability": 0.07
+     },
+     {
+      "question": "ground_episode_0",
+      "kind": "episode",
+      "id": "e7080e55-2832-574c-9ee6-50c783dd675e",
+      "text": "板切れに伝言を残そうとしたが、何を書くかを指定していなかったせいで拒否されてしまった。仲間が読めるようにと思ったのに、肝心の文章が思い浮かばなかった。仕方なく拠点の周りを探したが、特に収穫はなかった。枯れ葉もリオも見つからず、山頂への道の手",
+      "probability": 0.08
+     },
+     {
+      "question": "ground_episode_1",
+      "kind": "episode",
+      "id": "dcebc773-1d01-562f-8056-9659531a1691",
+      "text": "岩礁海岸に着いて、まず周りを見回してみたけど、目立った手がかりは見つからなかった。枯れ葉も山頂への道も、何もなし。でも、鋭い石が露出した岩を見つけて、刃に使えそうな石片を拾い上げた。切ったり武器に使えるかもしれない。せっかくだから沖に釣りに",
+      "probability": 0.04
+     },
+     {
+      "question": "ground_episode_2",
+      "kind": "episode",
+      "id": "0c27b59b-bfc0-51b4-b0d0-dbc315a9f90a",
+      "text": "深夜、空腹がじわじわと迫る中で、板切れに伝言を残そうとした。誰も拠点に居ないから、後から来た仲間が読めるように状況を共有しておきたかった。でも、書き込む前に何を書くかを指定するのを忘れてしまって、板切れは何も受け付けてくれなかった。肝心の伝",
+      "probability": 0.06
+     }
+    ],
+    "omitted": [],
+    "judged": true,
+    "beliefs": [],
+    "episodes": []
+   }
+  ]
+ }
+]

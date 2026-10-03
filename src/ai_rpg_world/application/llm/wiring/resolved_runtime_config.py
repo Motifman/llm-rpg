@@ -1357,10 +1357,12 @@ _DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN = 8
 #: 次のターンに当たったへ移った。数ターン遅れて届く結果まで拾える長さに置く。
 _DEFAULT_EXPECTATION_SETTLEMENT_TIMELINE_TURNS = 4
 _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS = 3
-#: 根拠の問いの上限の暫定値。頭に載る信念は最大 3 件で、1 ターンに書く予期は平均
-#: 3 件ほど (#1436 の試し)。予期 1 件分の信念とエピソードは並べ切れ、1 ターンの
-#: 問いが数十件に膨らまない値に置く。実 Jev の試し (#1484) で決め直す。
+#: 根拠の問いの上限。頭に載る信念は最大 3 件で、1 ターンに書く予期は平均 3 件ほど
+#: (#1436 の試し)。予期 1 件分の信念とエピソードは並べ切れ、1 ターンの問いが数十件に
+#: 膨らまない値に置く。過去 run の 64 手を組み直した試し (#1484) では最大 7 件だった。
 _DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS = 12
+#: 同じ試しで、0.5 では選んだ 23 件のうち根拠でないものは 1 件、0.4 では 39 件中 5 件。
+#: 取りこぼしより、関係の無い信念に材料を積むほうが悪循環の入口になるので 0.5 に置く。
 _DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY = 0.5
 _DEFAULT_EXPECTATION_UNDATED_TERM_TURNS = 5
 _DEFAULT_EXPECTATION_DATED_TERM_TURNS = 30

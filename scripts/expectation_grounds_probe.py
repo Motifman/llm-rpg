@@ -204,8 +204,10 @@ def _judge_one(
     }
 
 
-def show(results: list[dict[str, Any]]) -> list[str]:
-    """予期ごとに、頭にあったものと確率と選ばれたかを並べ、人が当否を書き込む欄を空けておく。"""
+def show(
+    results: list[dict[str, Any]], labels: dict[str, str] | None = None
+) -> list[str]:
+    """予期ごとに、頭にあったものと確率と選ばれたかを並べる。当否が無ければ書き込む欄を空けておく。"""
     lines = [
         "| # | 誰 / tick | 予期 | 種類 | 頭にあったもの (抜粋) | 確率 | 選んだ | 人の判断 |",
         "|---|---|---|---|---|---|---|---|",
@@ -221,7 +223,8 @@ def show(results: list[dict[str, Any]]) -> list[str]:
                     f"| {number} | {result['name']} / {result['tick']} | {entry['content']} | "
                     f"{asked['kind']} | {_cell(asked['text'])} | "
                     f"{'-' if probability is None else f'{probability:.2f}'} | "
-                    f"{'○' if asked['id'] in chosen else ''} |  |"
+                    f"{'○' if asked['id'] in chosen else ''} | "
+                    f"{(labels or {}).get(str(number), '')} |"
                 )
             for omitted in entry["omitted"]:
                 lines.append(
@@ -247,6 +250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     judge_parser.add_argument("--out", type=Path, required=True)
     show_parser = sub.add_parser("show")
     show_parser.add_argument("--judgments", type=Path, required=True)
+    show_parser.add_argument("--labels", type=Path, default=None)
     args = parser.parse_args(argv)
 
     if args.command == "judge":
@@ -263,7 +267,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"expectations={len(results)} jev_calls={calls}")
         return 0
     results = json.loads(args.judgments.read_text(encoding="utf-8"))
-    print("\n".join(show(results)))
+    labels = (
+        None
+        if args.labels is None
+        else json.loads(args.labels.read_text(encoding="utf-8"))["labels"]
+    )
+    print("\n".join(show(results, labels)))
     return 0
 
 
