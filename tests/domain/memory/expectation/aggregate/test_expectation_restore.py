@@ -229,7 +229,7 @@ _INCONSISTENT_STATES = {
     "checks_continue_after_settlement": {
         "checks": _checks((11, HIT), (12, HIT), (13, MISS)),
         "status": SETTLED,
-        "closed_at_turn": 12,
+        "closed_at_turn": 13,
     },
     "settled_by_expiry_before_overdue": {
         "checks": _checks((11, HIT)),
@@ -247,9 +247,9 @@ _INCONSISTENT_STATES = {
         "closed_at_turn": 12,
     },
     "checks_continue_after_void": {
-        "checks": _checks((11, VOID), (12, HIT)),
+        "checks": _checks((11, VOID), (12, VOID)),
         "status": VOIDED,
-        "closed_at_turn": 11,
+        "closed_at_turn": 12,
     },
     "dismissed_without_shape": {"status": DISMISSED, "closed_at_turn": FORMED_AT},
     "dismissed_with_settleable_shape": {
