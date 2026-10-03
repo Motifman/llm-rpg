@@ -20,6 +20,12 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
     action_history_projection,
     format_action_summary_for_display,
 )
+from ai_rpg_world.application.llm.services.goal_completion_hint_service import (
+    QUESTION_NAME as GOAL_ACHIEVED_QUESTION,
+)
+from ai_rpg_world.application.llm.services.goal_completion_hint_service import (
+    GoalHintDetection,
+)
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     QUESTION_NAME as MEMO_COMPLETED_QUESTION,
 )
@@ -28,6 +34,12 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    GOAL_OUTCOME_ABANDONED,
+    GOAL_OUTCOME_ACHIEVED,
+    GOAL_OUTCOME_FIELD_NAME,
+    GOAL_UPDATE_FIELD_NAME,
 )
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     command_post_commit_result,
@@ -289,6 +301,16 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
                             logger.exception("trace_recorder.record(memo_hint) failed")
         except Exception:
             logger.exception("memo_completion_hint_service.detect failed")
+    result = _augment_with_goal_hint(
+        wiring,
+        result,
+        player_id=player_id,
+        name=name,
+        arguments=arguments,
+        tools_payload=phase_a.tools_payload,
+        trace_recorder=trace_recorder,
+        current_tick=current_tick,
+    )
     skip_duplicate_action_log = result.success and name in (
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
         TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -375,6 +397,123 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
         emit_action_failed_observation(wiring, player_id, name, arguments, result)
     record_prompt_dataset_turn_result(wiring, phase_a, result)
     return result
+
+def _augment_with_goal_hint(
+    wiring: WorldLlmWiring,
+    result: LlmCommandResultDto,
+    *,
+    player_id: PlayerId,
+    name: str,
+    arguments: dict[str, Any],
+    tools_payload: Any,
+    trace_recorder: Any | None,
+    current_tick: int | None,
+) -> LlmCommandResultDto:
+    """未達成の目的が達成されたかもしれなければ、結果の文に hint を添える (#1448)。
+
+    提示した定義に goal_outcome が無い tool (memo など) と、行動と同時に目的を
+    清算・言い直した行動では問わない。前者は世界に作用しないので目的を進めず、
+    後者は本人がもう決めている。
+    """
+    service = wiring.goal_completion_hint_service
+    if service is None or not _offered_with_goal_outcome(tools_payload, name):
+        return result
+    goal_update = arguments.get(GOAL_UPDATE_FIELD_NAME)
+    if arguments.get(GOAL_OUTCOME_FIELD_NAME) in (
+        GOAL_OUTCOME_ACHIEVED,
+        GOAL_OUTCOME_ABANDONED,
+    ) or (isinstance(goal_update, str) and goal_update.strip()):
+        return result
+    try:
+        acting = wiring.runtime._acting_being_for(player_id)
+        if acting is None:
+            return result
+        detection = service.detect(
+            acting.being_id,
+            format_action_summary_for_display(name, arguments),
+            result.message,
+        )
+    except Exception:
+        logger.exception("goal_completion_hint_service.detect failed")
+        return result
+    _record_goal_completion_judgments(
+        detection,
+        trace_recorder=trace_recorder,
+        current_tick=current_tick,
+        player_id=player_id,
+        being_id=str(acting.being_id.value),
+        tool_name=name,
+    )
+    if not detection.hints:
+        return result
+    return dataclass_replace(
+        result,
+        message=result.message + "".join(hint.to_hint_text() for hint in detection.hints),
+    )
+
+
+def _offered_with_goal_outcome(tools_payload: Any, name: str) -> bool:
+    for tool in tools_payload or ():
+        function = tool.get("function") if isinstance(tool, dict) else None
+        if not isinstance(function, dict) or function.get("name") != name:
+            continue
+        parameters = function.get("parameters")
+        properties = parameters.get("properties") if isinstance(parameters, dict) else None
+        return isinstance(properties, dict) and GOAL_OUTCOME_FIELD_NAME in properties
+    return False
+
+
+def _record_goal_completion_judgments(
+    detection: GoalHintDetection,
+    *,
+    trace_recorder: Any | None,
+    current_tick: int | None,
+    player_id: PlayerId,
+    being_id: str,
+    tool_name: str,
+) -> None:
+    """目的の達成の判断を trace に残す。
+
+    ``goal_id`` と ``being_id`` は ``GOAL_RESOLUTION`` と同じ鍵で、hint のあとに
+    本人が申告したかを突き合わせるために載せる。
+    """
+    if trace_recorder is None:
+        return
+    common = {
+        "tick": current_tick,
+        "player_id": int(player_id.value),
+        "being_id": being_id,
+        "question": GOAL_ACHIEVED_QUESTION,
+        "tool_name": tool_name,
+    }
+    try:
+        for judgment in detection.judgments:
+            trace_recorder.record(
+                TraceEventKind.TYPED_JUDGMENT,
+                **common,
+                goal_id=judgment.goal_id,
+                probability=round(judgment.probability, 4),
+                min_confidence=judgment.min_probability,
+                accepted=judgment.accepted,
+                latency_ms=judgment.latency_ms,
+                source=judgment.source,
+                unavailable_reason=None,
+            )
+        if detection.unavailable_reason is not None:
+            trace_recorder.record(
+                TraceEventKind.TYPED_JUDGMENT,
+                **common,
+                goal_id=None,
+                probability=None,
+                min_confidence=None,
+                accepted=False,
+                latency_ms=None,
+                source=None,
+                unavailable_reason=detection.unavailable_reason,
+            )
+    except Exception:
+        logger.exception("trace_recorder.record(typed_judgment goal) failed")
+
 
 def _record_memo_completion_judgments(
     detection: MemoHintDetection,
