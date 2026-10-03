@@ -341,6 +341,18 @@ class TestRestoreRoundTrip:
 
         assert [e.observed_turn for e in dst_stores['belief_evidence'].list_all_by_being(being)] == [40]
 
+    def test_semantic_last_observed_turn_round_trip(self) -> None:
+        """信念の last_observed_turn (#1452) が capture → restore を経て同じ値で戻る。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['semantic'].add_by_being(being, SemanticMemoryEntry(entry_id='se-turn', player_id=1, being_id=being, text='浜の枯れ葉は時間がたつと戻る', evidence_episode_ids=('ep-1',), confidence=0.6, created_at=_NOW, last_observed_turn=40))
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, payload_json)
+
+        assert [e.last_observed_turn for e in dst_stores['semantic'].list_for_being(being)] == [40]
+
     def test_belief_evidence_without_observed_turn_is_rejected(self) -> None:
         """観測のターン数を持たない証拠の payload (#1452 より前の snapshot) は読み込まず、例外で止める。いつ見たかを捏造しない。"""
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_belief_evidence

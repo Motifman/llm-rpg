@@ -375,6 +375,17 @@ class TestExplainChange:
         assert change.contradict_evidence_ids == ()
         assert change.last_observed_turn == 40
 
+    def test_change_belief_never_moves_turn_back(self) -> None:
+        """状態の信念が turn 50 まで支えられ、食い違った観測が turn 40 なら、変わり方の信念の last_observed_turn は 50 のまま戻らない。"""
+        s = _setup([_explain_change()])
+        s.semantic_store.add_by_being(_BEING, _belief(last_observed_turn=50))
+        s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
+
+        s.coordinator.flush_player(_PLAYER, _BEING)
+
+        [change] = _active(s.semantic_store)
+        assert change.last_observed_turn == 50
+
     def test_change_belief_keeps_text_importance_and_tags_from_decision(self) -> None:
         """変わり方の信念は、LLM が書いた文と importance と tags を持つ。"""
         s = _setup([_explain_change(importance=8, tags=["枯れ葉"])])
@@ -496,6 +507,22 @@ class TestExplainChangeThroughCreateGate:
         assert active.belief_id == "sem-regrows"
         assert set(active.support_evidence_ids) == {"e-x", "e-now"}
         assert active.last_observed_turn == 40
+
+
+    def test_strengthen_target_missing_keeps_state_belief_and_tells_why(self) -> None:
+        """作る前の判断が強める先に存在しない信念を返したら、何も強めず、状態の信念は active のまま残り、explain_change 由来と分かる理由で見送られる。"""
+        gate = _FakeGate(OUTCOME_STRENGTHEN, target_key="sem-missing")
+        s = _setup([_explain_change()], create_gate=gate)
+        s.semantic_store.add_by_being(_BEING, _belief())
+        s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
+
+        s.coordinator.flush_player(_PLAYER, _BEING)
+
+        assert [e.text for e in _active(s.semantic_store)] == [_DEPLETED]
+        [trace] = [e for e in s.recorder.events if e.kind == TraceEventKind.BELIEF_CONSOLIDATION]
+        assert [d["reason"] for d in trace.payload["skipped_decisions"]] == [
+            "explain_change_strengthen_belief_not_found"
+        ]
 
 
 class TestConsolidationTraceShowsTurnsAndActions:

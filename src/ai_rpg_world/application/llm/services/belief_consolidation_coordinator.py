@@ -1605,7 +1605,7 @@ class BeliefConsolidationCoordinator:
                     now,
                 )
                 if skip_reason is not None:
-                    return skip_reason, reviewed
+                    return f"explain_change_{skip_reason}", reviewed
                 self._semantic_store.update_status_by_being(
                     being_id, target.entry_id, SEMANTIC_MEMORY_STATUS_SUPERSEDED
                 )
@@ -1704,7 +1704,7 @@ class BeliefConsolidationCoordinator:
                 skipped_decisions=skipped_decisions,
             )
         except Exception:
-            _logger.debug(
+            _logger.warning(
                 "trace recorder.record raised for BELIEF_CONSOLIDATION; skipping",
                 exc_info=True,
             )

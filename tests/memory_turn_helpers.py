@@ -14,11 +14,11 @@ class FixedMemoryTurnReader(MemoryTurnReader):
     """Being ごとの値を渡せば Being ごとに、渡さなければ全員に ``turn`` を返す。"""
 
     def __init__(self, turn: int = 0, *, by_being: Mapping[BeingId, int] | None = None) -> None:
-        self.turn = turn
+        self._turn = turn
         self._by_being = dict(by_being or {})
 
     def current_turn(self, being_id: BeingId) -> int:
-        return self._by_being.get(being_id, self.turn)
+        return self._by_being.get(being_id, self._turn)
 
 
 ZERO_TURN = FixedMemoryTurnReader(0)

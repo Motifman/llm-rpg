@@ -231,7 +231,7 @@ class BeliefEvidenceTranscriber:
                 salience=episode.salience,
                 occurred_at=episode.occurred_at,
                 observed_turn=self._memory_turn_reader.current_turn(being_id),
-            tick=self._resolve_tick(),
+                tick=self._resolve_tick(),
                 in_context_belief_ids=in_context_belief_ids,
             )
             self._buffer_store.append_by_being(being_id, evidence)
@@ -262,7 +262,7 @@ class BeliefEvidenceTranscriber:
                 salience=BELIEF_EVIDENCE_SALIENCE_LOW,
                 occurred_at=episode.occurred_at,
                 observed_turn=self._memory_turn_reader.current_turn(being_id),
-            tick=self._resolve_tick(),
+                tick=self._resolve_tick(),
                 # ゲート後の (関連する) belief だけを attribution に残す。
                 in_context_belief_ids=confirmed_belief_ids,
             )
@@ -470,7 +470,7 @@ class BeliefEvidenceTranscriber:
                 salience=BELIEF_EVIDENCE_SALIENCE_LOW,
                 occurred_at=episode.occurred_at,
                 observed_turn=self._memory_turn_reader.current_turn(being_id),
-            tick=self._resolve_tick(),
+                tick=self._resolve_tick(),
                 source_speaker=claim.speaker,
             )
             self._buffer_store.append_by_being(being_id, evidence)
