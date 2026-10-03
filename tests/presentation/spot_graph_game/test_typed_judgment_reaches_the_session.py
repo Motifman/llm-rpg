@@ -316,3 +316,48 @@ class TestTheLoopGuardGetsTheSemanticRepeatDetector:
             ResolvedLlmRuntimeConfig.for_tests(typed_judgment_semantic_repeat_enabled=True)
         ):
             assert wiring.tool_call_loop_guard.semantic_repeat_detector is None
+
+
+class TestTheSessionGetsTheGoalHint:
+    """目的の達成 hint (#1448) が、判断ポートと goal_outcome のある session にだけ届くことを保証する。"""
+
+    @staticmethod
+    def _config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
+        # goal store は episodic stack と一緒に組まれる。
+        values: dict[str, Any] = {
+            "typed_judgment_provider": "stub",
+            "typed_judgment_goal_hint_enabled": True,
+            "episodic_enabled": True,
+            "goal_store_enabled": True,
+            "goal_revision_enabled": True,
+        }
+        values.update(overrides)
+        return ResolvedLlmRuntimeConfig.for_tests(**values)
+
+    def test_the_hint_arrives_with_the_profile_threshold(self) -> None:
+        """判断ポートと goal_outcome があり hint を有効にした profile では、同じポートと profile の閾値で組まれる。"""
+        for wiring in _session_wiring(
+            self._config(typed_judgment_goal_hint_min_probability=0.85)
+        ):
+            service = wiring.goal_completion_hint_service
+            assert service is not None
+            assert service.judgment_port is wiring.typed_judgment_port
+            assert service.min_probability == 0.85
+
+    def test_judgment_alone_does_not_bring_the_hint(self) -> None:
+        """provider だけを入れた profile では、判断ポートは載るが hint は入らない (既定 off)。"""
+        for wiring in _session_wiring(
+            self._config(typed_judgment_goal_hint_enabled=False)
+        ):
+            assert wiring.typed_judgment_port is not None
+            assert wiring.goal_completion_hint_service is None
+
+    def test_enabling_without_a_port_brings_no_hint(self) -> None:
+        """provider が off なら、hint を有効にしても入らない。判断ポートが無いため。"""
+        for wiring in _session_wiring(self._config(typed_judgment_provider="off")):
+            assert wiring.goal_completion_hint_service is None
+
+    def test_enabling_without_goal_outcome_brings_no_hint(self) -> None:
+        """目的の改訂が無効で goal_outcome が tool に出ていなければ、hint は入らない。存在しない申告を勧めない。"""
+        for wiring in _session_wiring(self._config(goal_revision_enabled=False)):
+            assert wiring.goal_completion_hint_service is None
