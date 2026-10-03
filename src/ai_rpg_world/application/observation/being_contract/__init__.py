@@ -5,6 +5,7 @@ from ai_rpg_world.application.observation.being_contract.move_translation import
     environment_entry_for_player,
 )
 from ai_rpg_world.application.observation.being_contract.observation_translation import (
+    NotRepresentableReason,
     ObservationNotRepresentable,
     Observer,
     observation_from_action_result,
@@ -12,6 +13,7 @@ from ai_rpg_world.application.observation.being_contract.observation_translation
 )
 
 __all__ = [
+    "NotRepresentableReason",
     "ObservationNotRepresentable",
     "Observer",
     "agent_move_from_tool_call",

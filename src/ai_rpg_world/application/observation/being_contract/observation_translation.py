@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Final
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
@@ -26,8 +27,19 @@ from ai_rpg_world.being.contract import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+class NotRepresentableReason(Enum):
+    BEING_INNER_RECORD = "being_inner_record"
+    EMPTY_BODY = "empty_body"
+    MISSING_TIME_LABEL = "missing_time_label"
+
+
 class ObservationNotRepresentable(ValueError):
     """ゲームの観測を契約の観測に写せない。"""
+
+    def __init__(self, reason: NotRepresentableReason, kind: str | None) -> None:
+        super().__init__(f"{reason.value}: {kind}")
+        self.reason = reason
+        self.kind = kind
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -89,8 +101,15 @@ def observation_from_game(
 ) -> Observation:
     structured = output.structured
     kind = _kind(structured)
-    if kind in _BEING_INNER_RECORD_TYPES or structured.get("loop_guard") is True:
-        raise ObservationNotRepresentable(f"being inner record: {kind or 'loop_guard'}")
+    if structured.get("loop_guard") is True:
+        raise ObservationNotRepresentable(NotRepresentableReason.BEING_INNER_RECORD, "loop_guard")
+    if kind in _BEING_INNER_RECORD_TYPES:
+        raise ObservationNotRepresentable(NotRepresentableReason.BEING_INNER_RECORD, kind)
+    # 同じ出来事の目撃文が別に届くとき、ゲームは重複する汎用文を空にして送る。
+    if not output.prose.strip():
+        raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, kind)
+    if game_time_label is None or not game_time_label.strip():
+        raise ObservationNotRepresentable(NotRepresentableReason.MISSING_TIME_LABEL, kind)
 
     targets_self = _targets_self(structured, observer)
     route = _route(kind, output.observation_category, targets_self)
@@ -98,11 +117,11 @@ def observation_from_game(
     return Observation(
         body=output.prose,
         route=route,
-        time=_observed_time(tick, game_time_label, observer),
+        time=_observed_time(tick, game_time_label, observer.seconds_per_tick),
         subject_is_self=subject_is_self,
         subject_name=subject_name,
         source=_source(route, subject_name, observer),
-        place=_place(structured, route, observer),
+        place=_place(structured, route, output.prose, observer),
         addressed_to_self=_addressed_to_self(structured, route, targets_self),
         wants_wake=output.schedules_turn,
     )
@@ -112,10 +131,16 @@ def observation_from_action_result(
     entry: ActionResultEntry, *, call_id: str, observer: Observer
 ) -> Observation:
     """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。"""
+    if entry.game_time_label is None or not entry.game_time_label.strip():
+        raise ObservationNotRepresentable(
+            NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name
+        )
     return Observation(
         body=entry.result_summary.strip() or entry.action_summary,
         route=OwnActionResult(call_id=call_id, succeeded=entry.success),
-        time=_observed_time(entry.occurred_tick, entry.game_time_label, observer),
+        time=_observed_time(
+            entry.occurred_tick, entry.game_time_label, observer.seconds_per_tick
+        ),
         subject_is_self=True,
         subject_name=observer.name,
         source=observer.name,
@@ -150,22 +175,23 @@ def _route(
 def _subject(
     structured: Mapping[str, Any], output: ObservationOutput, observer: Observer
 ) -> tuple[bool, str | UnknownValue]:
+    name = _named_subject(structured, output.prose)
     if structured.get("role") == "self" or (
-        output.observation_category == "self_only" and _named_subject(structured) is None
+        output.observation_category == "self_only" and name is None
     ):
         return True, observer.name
-    speaker_id = structured.get("speaker_player_id")
-    name = _named_subject(structured)
     if name is None:
         return False, UNKNOWN
-    is_self = name == observer.name or speaker_id == observer.player_id.value
+    is_self = name == observer.name or structured.get("speaker_player_id") == observer.player_id.value
     return is_self, name
 
 
-def _named_subject(structured: Mapping[str, Any]) -> str | None:
+# 構造化データには、本文で伏せた名前 (妨害の行為者など) も入っている。本人が観測から
+# 知り得ない名前を契約に載せないよう、本文に現れる名前だけを写す。
+def _named_subject(structured: Mapping[str, Any], prose: str) -> str | None:
     for key in _SUBJECT_NAME_KEYS:
         value = structured.get(key)
-        if isinstance(value, str) and value.strip():
+        if isinstance(value, str) and value.strip() and value in prose:
             return value
     return None
 
@@ -181,13 +207,13 @@ def _source(
 
 
 def _place(
-    structured: Mapping[str, Any], route: Route, observer: Observer
+    structured: Mapping[str, Any], route: Route, prose: str, observer: Observer
 ) -> str | UnknownValue:
     for key in ("source_adjacent_spot_name", "spot_name"):
         value = structured.get(key)
-        if isinstance(value, str) and value.strip():
+        if isinstance(value, str) and value.strip() and value in prose:
             return value
-    if isinstance(route, EnvironmentNotice):
+    if structured.get("source_adjacent_spot_name") or isinstance(route, EnvironmentNotice):
         return UNKNOWN
     return _known(observer.place_name)
 
@@ -208,13 +234,11 @@ def _addressed_to_self(
 
 
 def _observed_time(
-    tick: int | None, game_time_label: str | None, observer: Observer
+    tick: int | None, game_time_label: str, seconds_per_tick: float | None
 ) -> ObservedTime:
-    if game_time_label is None or not game_time_label.strip():
-        raise ObservationNotRepresentable("game_time_label is required for the time field")
     seconds = (
-        tick * observer.seconds_per_tick
-        if tick is not None and observer.seconds_per_tick is not None
+        tick * seconds_per_tick
+        if tick is not None and seconds_per_tick is not None
         else None
     )
     return ObservedTime(display=game_time_label, seconds=seconds)

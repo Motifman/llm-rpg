@@ -9,6 +9,7 @@ import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.being_contract import (
+    NotRepresentableReason,
     ObservationNotRepresentable,
     Observer,
     observation_from_action_result,
@@ -42,8 +43,11 @@ def _output(
     *,
     category: ObservationCategory = "social",
     schedules_turn: bool = False,
-    prose: str = "何かが起きた。",
+    prose: str | None = None,
 ) -> ObservationOutput:
+    """``prose`` を省くと、構造化データの文字列をすべて含む本文にする (名前を伏せない観測)。"""
+    if prose is None:
+        prose = "、".join(v for v in structured.values() if isinstance(v, str)) + "。"
     return ObservationOutput(
         prose=prose,
         structured=structured,
@@ -75,13 +79,15 @@ class TestSubjectFromRole:
 
     def test_speech_of_another_player_has_speaker_as_subject_and_source(self) -> None:
         """role が other の発言は、主体が本人でなく、主体の名前と情報源に話者名が入り、経路は「言われた」になる。"""
-        observation = _translate(_output(_speech(), schedules_turn=True))
+        observation = _translate(
+            _output(_speech(), schedules_turn=True, prose="カイが言った: 「水場は北だ」")
+        )
 
         assert observation.subject_is_self is False
         assert observation.subject_name == "カイ"
         assert observation.source == "カイ"
         assert isinstance(observation.route, ToldOrWritten)
-        assert observation.body == "何かが起きた。"
+        assert observation.body == "カイが言った: 「水場は北だ」"
 
     def test_self_role_makes_subject_self(self) -> None:
         """role が self の観測は、主体が本人になり、主体の名前に本人の名前が入る。"""
@@ -98,6 +104,19 @@ class TestSubjectFromRole:
         observation = _translate(_output({"type": "spot_explored", "actor": "ノア"}))
 
         assert observation.subject_is_self is True
+
+    def test_actor_hidden_from_prose_is_not_revealed(self) -> None:
+        """構造化データに行為者があっても本文が伏せていれば、主体の名前は「不明」になる。"""
+        observation = _translate(
+            _output(
+                {"type": "spot_public_effect_observed", "actor_name": "クゼ"},
+                category="environment",
+                prose="集会室の雰囲気が変わった。",
+            )
+        )
+
+        assert observation.subject_name is UNKNOWN
+        assert observation.subject_is_self is False
 
     def test_environment_event_without_actor_has_unknown_subject(self) -> None:
         """行為者を持たない環境の出来事は、主体が本人でなく、主体の名前が「不明」になる。"""
@@ -184,8 +203,17 @@ class TestRoute:
         self, structured: dict[str, Any]
     ) -> None:
         """目的の振り返り・改訂とループ警告は、環境からの観測ではないので変換を拒む。"""
-        with pytest.raises(ObservationNotRepresentable):
+        with pytest.raises(ObservationNotRepresentable) as raised:
             _translate(_output(structured, category="self_only"))
+
+        assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD
+
+    def test_blank_prose_is_not_representable(self) -> None:
+        """目撃文との重複を避けて本文を空にした観測は、必須の本文が無いので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            _translate(_output({"type": "player_downed", "actor": "モリ"}, prose=""))
+
+        assert raised.value.reason is NotRepresentableReason.EMPTY_BODY
 
 
 class TestKnownIfPossibleFields:
@@ -232,6 +260,17 @@ class TestKnownIfPossibleFields:
 
         assert observation.place == "岩場"
 
+    def test_adjacent_place_hidden_from_prose_is_unknown(self) -> None:
+        """隣の場所から聞こえた発言でも、本文がその場所を書いていなければ場所は「不明」になる。"""
+        observation = _translate(
+            _output(
+                _speech(source_adjacent_spot_name="岩場"),
+                prose="どこからかカイの声が聞こえた: 「水場は北だ」",
+            )
+        )
+
+        assert observation.place is UNKNOWN
+
     def test_entered_spot_uses_the_spot_name(self) -> None:
         """誰かが入ってきた観測は、入った場所を場所にする。"""
         observation = _translate(
@@ -268,10 +307,12 @@ class TestTime:
 
     def test_missing_time_label_is_rejected(self) -> None:
         """時刻のラベルが無い観測は、必須の時刻を埋められないので変換を拒む。"""
-        with pytest.raises(ObservationNotRepresentable):
+        with pytest.raises(ObservationNotRepresentable) as raised:
             observation_from_game(
                 _output(_speech()), tick=12, game_time_label=None, observer=_NOAH
             )
+
+        assert raised.value.reason is NotRepresentableReason.MISSING_TIME_LABEL
 
 
 class TestActionResult:
@@ -320,6 +361,15 @@ class TestActionResult:
         )
 
         assert observation.wants_wake is True
+
+    def test_result_without_time_label_is_not_representable(self) -> None:
+        """時刻のラベルが無いツールの結果は、必須の時刻を埋められないので変換を拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_action_result(
+                self._entry(game_time_label=None), call_id="call-9", observer=_NOAH
+            )
+
+        assert raised.value.reason is NotRepresentableReason.MISSING_TIME_LABEL
 
     def test_blank_result_summary_falls_back_to_action_summary(self) -> None:
         """結果の文が空なら、行動の要約を本文にする。"""

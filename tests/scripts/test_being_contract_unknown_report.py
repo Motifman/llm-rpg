@@ -1,0 +1,131 @@
+"""``scripts/being_contract_unknown_report.py`` が trace から観測を組み直し、「不明」の欄を経路ごとに数えることを保証する。"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
+
+_SCRIPT = Path(__file__).resolve().parents[2] / "scripts/being_contract_unknown_report.py"
+
+
+@pytest.fixture(scope="module")
+def report() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("being_contract_unknown_report", _SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _event(seq: int, kind: str, tick: int, player_id: int, **payload: Any) -> dict[str, Any]:
+    return {"seq": seq, "kind": kind, "tick": tick, "player_id": player_id, "payload": payload}
+
+
+def _observation(seq: int, tick: int, player_id: int, label: str, **fields: Any) -> dict[str, Any]:
+    payload = {
+        "prose": "カイが言った: 「水場は北だ」",
+        "structured": {"type": "player_spoke", "speaker": "カイ", "channel": "say", "role": "other"},
+        "observation_category": "social",
+        "schedules_turn": True,
+        "game_time_label": label,
+    }
+    payload.update(fields)
+    return _event(seq, "observation", tick, player_id, **payload)
+
+
+def _write_trace(tmp_path: Path, events: list[dict[str, Any]]) -> Path:
+    trace = tmp_path / "trace.jsonl"
+    trace.write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in events), encoding="utf-8")
+    return trace
+
+
+def _spawn(seq: int, player_id: int, name: str, spot: str) -> dict[str, Any]:
+    return _event(seq, "position_change", 0, player_id, player_name=name, spot_name=spot)
+
+
+def test_counts_unknown_fields_per_route_and_pairs_action_results(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """発言とツールの結果を組み直し、発言の「自分宛てか」だけが「不明」として数えられる。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _observation(2, 1, 2, "深夜 0:05"),
+            _event(3, "action", 1, 2, tool="travel_to", arguments={}),
+            _event(4, "action_result", 1, 2, tool="travel_to", success=False, result_summary="進めない。"),
+        ],
+    )
+    tally = report.Tally()
+
+    report.tally_trace(trace, tally)
+
+    assert tally.converted == {"ToldOrWritten": 1, "OwnActionResult": 1}
+    assert dict(tally.unknown) == {("addressed_to_self", "ToldOrWritten"): 1}
+    assert tally.seconds_available == 2
+    assert not tally.skipped
+
+
+def test_not_representable_observations_are_counted_by_reason(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """目的の振り返りは変換されず、理由と種類つきで写せなかった観測に数えられる。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _observation(
+                2, 1, 2, "深夜 0:05",
+                prose="狼煙の準備が進んでいない。",
+                structured={"type": "goal_reflect", "verdict": "stalled"},
+                observation_category="self_only",
+            ),
+        ],
+    )
+    tally = report.Tally()
+
+    report.tally_trace(trace, tally)
+
+    assert sum(tally.converted.values()) == 0
+    assert dict(tally.not_representable) == {"being_inner_record: goal_reflect": 1}
+
+
+def test_action_result_without_matching_action_is_skipped(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """対応する action が無いツールの結果は、呼び出しの ID を作れないので数えずに理由を残す。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _event(2, "action_result", 1, 2, tool="travel_to", success=True, result_summary="着いた。"),
+        ],
+    )
+    tally = report.Tally()
+
+    report.tally_trace(trace, tally)
+
+    assert dict(tally.skipped) == {"action_result: 対応する action が無い": 1}
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected"),
+    [
+        ([(1, "深夜 0:05"), (12, "深夜 1:00")], 300),
+        ([(1, "深夜 0:05"), (12, "深夜 2:00")], None),
+    ],
+)
+def test_seconds_per_tick_is_inferred_only_when_every_label_agrees(
+    report: ModuleType, labels: list[tuple[int, str]], expected: float | None
+) -> None:
+    """時刻ラベルの時計がすべて 1 つの秒数で説明できるときだけ、その秒数を返す。"""
+    events = [_observation(i, tick, 2, label) for i, (tick, label) in enumerate(labels)]
+
+    assert report.infer_seconds_per_tick(events) == expected
