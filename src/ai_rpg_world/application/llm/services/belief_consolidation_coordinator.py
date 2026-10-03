@@ -58,6 +58,12 @@ from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port imp
 from ai_rpg_world.application.llm.services.belief_confidence import (
     compute_belief_confidence,
 )
+from ai_rpg_world.application.llm.services.belief_create_gate import (
+    OUTCOME_SKIP_CURRENT_SITUATION,
+    OUTCOME_STRENGTHEN,
+    BeliefCreateGate,
+    BeliefCreateReview,
+)
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     belief_matches_cue_tokens as _shared_belief_matches_cue_tokens,
 )
@@ -66,6 +72,9 @@ from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import 
 )
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     cue_tokens as _shared_cue_tokens,
+)
+from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
+    TextCandidate,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -132,6 +141,7 @@ _REFLECT_VERDICTS = frozenset(
 # journal に触れなかった」を意味する。trace payload と warning に載せて、学びの
 # 消失がどの観測面からも見えるようにする (silent failure の構造的解消)。
 _SKIP_CREATE_EMPTY_TEXT = "create_empty_text"
+_SKIP_CREATE_CURRENT_SITUATION = "create_current_situation"
 _SKIP_STRENGTHEN_MISSING_BELIEF_ID = "strengthen_missing_belief_id"
 _SKIP_STRENGTHEN_BELIEF_NOT_FOUND = "strengthen_belief_not_found"
 _SKIP_STRENGTHEN_NO_EVIDENCE = "strengthen_no_evidence"
@@ -320,6 +330,7 @@ class BeliefConsolidationCoordinator:
         goal_stagnation_evidence_enabled: bool = False,
         stagnation_pressure_store: StagnationPressureRepository | None = None,
         stagnation_pressure_enabled: bool = False,
+        create_gate: BeliefCreateGate | None = None,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -391,6 +402,8 @@ class BeliefConsolidationCoordinator:
             )
         if not isinstance(stagnation_pressure_enabled, bool):
             raise TypeError("stagnation_pressure_enabled must be bool")
+        if create_gate is not None and not isinstance(create_gate, BeliefCreateGate):
+            raise TypeError("create_gate must be BeliefCreateGate or None")
         # P-U2 (停滞感 store): stagnation_pressure も goal_stagnation_evidence と
         # 同じ理由で reflect 発火に依存する。goal_reflect が OFF だと verdict 自体が
         # 生まれず「flag を立てたのに何も起きない」静かな失敗になるため弾く。
@@ -435,6 +448,7 @@ class BeliefConsolidationCoordinator:
         # 畳み込む。OFF (既定) では store に一切触れず、導入前と挙動一致する。
         self._stagnation_pressure_store = stagnation_pressure_store
         self._stagnation_pressure_enabled = stagnation_pressure_enabled
+        self._create_gate = create_gate
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
@@ -1027,7 +1041,7 @@ class BeliefConsolidationCoordinator:
             action = raw.get("action")
             try:
                 if action == _ACTION_CREATE:
-                    skip_reason = self._apply_create(
+                    skip_reason, raw = self._apply_reviewed_create(
                         being_id, player_id, raw, evidence_by_id, batch_ids, now
                     )
                 elif action == _ACTION_STRENGTHEN:
@@ -1155,6 +1169,68 @@ class BeliefConsolidationCoordinator:
         if allow_batch_fallback:
             return batch_ids
         return ()
+
+    def _apply_reviewed_create(
+        self,
+        being_id: BeingId,
+        player_id: int,
+        raw: dict[str, Any],
+        evidence_by_id: dict[str, BeliefEvidence],
+        batch_ids: tuple[str, ...],
+        now: datetime,
+    ) -> tuple[str | None, dict[str, Any]]:
+        """作る前の判断に問い、作る / 強める / 作らないを適用する (#1453)。
+
+        返す decision には判断の結果を足す。強めるに置き換えたのに trace の
+        decisions が create のままだと、作られたと誤読する。縮退した理由も足す。
+        判断して作ったのか、判断が無くて作ったのかを decision だけで分けるため。
+
+        強めるに置き換えたときの証拠は create と同じ規則で解決する (evidence_ids が
+        無ければ batch 全件)。LLM が create のつもりで書いた decision なので。
+        """
+        if self._create_gate is None:
+            return (
+                self._apply_create(
+                    being_id, player_id, raw, evidence_by_id, batch_ids, now
+                ),
+                raw,
+            )
+        text = raw.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return _SKIP_CREATE_EMPTY_TEXT, raw
+        existing = [
+            TextCandidate(e.belief_id, e.text)
+            for e in self._semantic_store.list_for_being(being_id)
+            if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        ]
+        review = self._create_gate.review(
+            text.strip()[:MAX_BELIEF_TEXT_CHARS], existing
+        )
+        self._emit_create_gate_trace(being_id, review)
+        reviewed = {**raw, "create_gate_outcome": review.outcome}
+        if review.unavailable_reason is not None:
+            reviewed["create_gate_unavailable_reason"] = review.unavailable_reason
+        if review.outcome == OUTCOME_SKIP_CURRENT_SITUATION:
+            return _SKIP_CREATE_CURRENT_SITUATION, reviewed
+        if review.outcome == OUTCOME_STRENGTHEN:
+            evidence_ids = self._resolve_evidence_ids(
+                raw, evidence_by_id, batch_ids, allow_batch_fallback=True
+            )
+            reviewed["strengthened_belief_id"] = review.target_key
+            return (
+                self._apply_strengthen(
+                    being_id,
+                    {"belief_id": review.target_key, "evidence_ids": list(evidence_ids)},
+                    evidence_by_id,
+                    batch_ids,
+                    now,
+                ),
+                reviewed,
+            )
+        return (
+            self._apply_create(being_id, player_id, raw, evidence_by_id, batch_ids, now),
+            reviewed,
+        )
 
     def _apply_create(
         self,
@@ -1446,6 +1522,26 @@ class BeliefConsolidationCoordinator:
         except Exception:
             _logger.debug(
                 "trace recorder.record raised for BELIEF_CONSOLIDATION; skipping",
+                exc_info=True,
+            )
+
+    def _emit_create_gate_trace(
+        self, being_id: BeingId, review: BeliefCreateReview
+    ) -> None:
+        recorder = self._resolve_recorder()
+        if recorder is None:
+            return
+        try:
+            recorder.record(
+                TraceEventKind.TYPED_JUDGMENT,
+                tick=self._resolve_tick(),
+                being_id=being_id.value,
+                question="belief_create_gate",
+                **review.as_trace_payload(),
+            )
+        except Exception:
+            _logger.warning(
+                "trace recorder.record raised for belief create gate; skipping",
                 exc_info=True,
             )
 
