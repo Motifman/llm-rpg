@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationDismissed,
@@ -128,6 +131,50 @@ class Expectation:
         self._shape: ShapeVerdict | None = None
         self._checks: list[Check] = []
         self._status = ExpectationStatus.OPEN
+        self._closed_at_turn: int | None = None
+
+    @classmethod
+    def restore(
+        cls,
+        *,
+        expectation_id: ExpectationId,
+        holder: BeingId,
+        content: str,
+        origin: ExpectationOrigin,
+        likelihood: Likelihood,
+        formed_at_turn: int,
+        expires_at_turn: int,
+        formed_with: str | None = None,
+        due: str | None = None,
+        beliefs_in_mind: tuple[str, ...] = (),
+        episodes_in_mind: tuple[str, ...] = (),
+        shape: ShapeVerdict | None,
+        checks: tuple[Check, ...],
+        status: ExpectationStatus,
+        closed_at_turn: int | None,
+    ) -> Expectation:
+        """保存した状態から予期を作り直す。照合の記録を再生せず、状態をそのまま戻す。
+
+        形の判定や期限の確認のターンは照合の記録に残らないので、再生では戻せない。
+        状態が清算の規則と食い違うときは作り直さずに拒む。
+        """
+        expectation = cls(
+            expectation_id=expectation_id,
+            holder=holder,
+            content=content,
+            origin=origin,
+            likelihood=likelihood,
+            formed_at_turn=formed_at_turn,
+            expires_at_turn=expires_at_turn,
+            formed_with=formed_with,
+            due=due,
+            beliefs_in_mind=beliefs_in_mind,
+            episodes_in_mind=episodes_in_mind,
+        )
+        expectation._restore_state(
+            shape=shape, checks=checks, status=status, closed_at_turn=closed_at_turn
+        )
+        return expectation
 
     @property
     def expectation_id(self) -> ExpectationId:
@@ -193,6 +240,7 @@ class Expectation:
         if shape.is_settleable:
             return None
         self._status = ExpectationStatus.DISMISSED
+        self._closed_at_turn = turn
         return ExpectationDismissed(
             expectation_id=self._expectation_id,
             holder=self._holder,
@@ -206,7 +254,6 @@ class Expectation:
             raise ExpectationValidationException("check must be Check")
         self._require_within_term(check.turn)
         previous = self._checks[-1] if self._checks else None
-        previous_outcome = self._last_outcome()
         if previous is not None and check.turn <= previous.turn:
             raise ExpectationCheckRuleException(
                 f"check turn ({check.turn}) must be after previous check "
@@ -214,19 +261,18 @@ class Expectation:
             )
 
         self._checks.append(check)
-        if check.verdict is CheckVerdict.NOT_AN_EXPECTATION:
+        ending = _first_ending(self._checks)
+        if ending is not None and ending.outcome is None:
             self._status = ExpectationStatus.VOIDED
+            self._closed_at_turn = check.turn
             return ExpectationVoided(
                 expectation_id=self._expectation_id,
                 holder=self._holder,
                 turn=check.turn,
             )
-        outcome = check.verdict.outcome
-        if outcome is None:
-            return None
-        if previous_outcome is outcome:
-            return self._settle(outcome, turn=check.turn)
-        if outcome is Outcome.MISS:
+        if ending is not None and ending.outcome is not None:
+            return self._settle(ending.outcome, turn=check.turn)
+        if check.verdict is CheckVerdict.MISS:
             return ProvisionallyMissed(
                 expectation_id=self._expectation_id,
                 holder=self._holder,
@@ -243,24 +289,20 @@ class Expectation:
         now = require_turn(now_turn, name="now_turn")
         if now <= self._expires_at_turn:
             return None
-        provisional = self._last_outcome()
+        provisional = _last_outcome(self._checks)
         if provisional is not None:
             return self._settle(provisional, turn=now)
         self._status = ExpectationStatus.EXPIRED
+        self._closed_at_turn = now
         return ExpectationExpired(
             expectation_id=self._expectation_id,
             holder=self._holder,
             turn=now,
         )
 
-    def _last_outcome(self) -> Outcome | None:
-        for check in reversed(self._checks):
-            if check.verdict.outcome is not None:
-                return check.verdict.outcome
-        return None
-
     def _settle(self, outcome: Outcome, *, turn: int) -> ExpectationSettled:
         self._status = ExpectationStatus.SETTLED
+        self._closed_at_turn = turn
         return ExpectationSettled(
             expectation_id=self._expectation_id,
             holder=self._holder,
@@ -270,6 +312,84 @@ class Expectation:
             beliefs_in_mind=self._beliefs_in_mind,
             episodes_in_mind=self._episodes_in_mind,
         )
+
+    def _restore_state(
+        self,
+        *,
+        shape: object,
+        checks: object,
+        status: object,
+        closed_at_turn: object,
+    ) -> None:
+        if not isinstance(status, ExpectationStatus):
+            raise ExpectationValidationException("status must be ExpectationStatus")
+        if shape is not None and not isinstance(shape, ShapeVerdict):
+            raise ExpectationValidationException("shape must be ShapeVerdict or None")
+        if not isinstance(checks, tuple) or not all(
+            isinstance(check, Check) for check in checks
+        ):
+            raise ExpectationValidationException("checks must be tuple[Check, ...]")
+        for index, check in enumerate(checks):
+            if not self._formed_at_turn <= check.turn <= self._expires_at_turn:
+                raise ExpectationValidationException(
+                    f"check turn ({check.turn}) is outside formed_at_turn "
+                    f"({self._formed_at_turn}) .. expires_at_turn ({self._expires_at_turn})"
+                )
+            if index > 0 and check.turn <= checks[index - 1].turn:
+                raise ExpectationValidationException(
+                    "check turns must be strictly increasing"
+                )
+        closed = (
+            None
+            if closed_at_turn is None
+            else require_turn(closed_at_turn, name="closed_at_turn")
+        )
+        if status.is_open != (closed is None):
+            raise ExpectationValidationException(
+                f"closed_at_turn must be set exactly when status is not open "
+                f"(status={status.value}, closed_at_turn={closed})"
+            )
+
+        ended = _first_ending(checks)
+        if ended is not None and ended.index != len(checks) - 1:
+            raise ExpectationValidationException(
+                "checks must not continue after the expectation ended"
+            )
+        dismissed_by_shape = shape is not None and not shape.is_settleable
+        if dismissed_by_shape != (status is ExpectationStatus.DISMISSED):
+            raise ExpectationValidationException(
+                f"status {status.value} contradicts shape "
+                f"{None if shape is None else shape.value}"
+            )
+        last_outcome = _last_outcome(checks)
+        overdue = closed is not None and closed > self._expires_at_turn
+        last_turn = checks[-1].turn if checks else None
+
+        if status is ExpectationStatus.OPEN:
+            consistent = ended is None
+        elif status is ExpectationStatus.SETTLED:
+            if ended is not None:
+                consistent = ended.outcome is not None and closed == last_turn
+            else:
+                consistent = last_outcome is not None and overdue
+        elif status is ExpectationStatus.VOIDED:
+            consistent = (
+                ended is not None and ended.outcome is None and closed == last_turn
+            )
+        elif status is ExpectationStatus.DISMISSED:
+            consistent = not checks and not overdue
+        else:
+            consistent = ended is None and last_outcome is None and overdue
+        if not consistent:
+            raise ExpectationValidationException(
+                f"status {status.value} at turn {closed} contradicts checks "
+                f"{[(c.turn, c.verdict.value) for c in checks]}"
+            )
+
+        self._shape = shape
+        self._checks = list(checks)
+        self._status = status
+        self._closed_at_turn = closed
 
     def _require_open(self) -> None:
         if not self._status.is_open:
@@ -288,6 +408,37 @@ class Expectation:
                 f"turn ({turn}) is past expires_at_turn "
                 f"({self._expires_at_turn}); expire_if_overdue first"
             )
+
+
+@dataclass(frozen=True)
+class _Ending:
+    """照合の記録の中で予期が終わった位置。``outcome`` が None なら、予期になっていないとして外れた。"""
+
+    index: int
+    outcome: Outcome | None
+
+
+def _first_ending(checks: Sequence[Check]) -> _Ending | None:
+    """照合だけで予期が終わる最初の位置。同じ当否が、まだ分からないを飛ばして 2 回続くか、予期になっていないと判定されたところ。"""
+    last_outcome: Outcome | None = None
+    for index, check in enumerate(checks):
+        if check.verdict is CheckVerdict.NOT_AN_EXPECTATION:
+            return _Ending(index, outcome=None)
+        outcome = check.verdict.outcome
+        if outcome is None:
+            continue
+        if outcome is last_outcome:
+            return _Ending(index, outcome=outcome)
+        last_outcome = outcome
+    return None
+
+
+def _last_outcome(checks: Sequence[Check]) -> Outcome | None:
+    """暫定の判定。最後の当否つきの照合の当否。"""
+    for check in reversed(checks):
+        if check.verdict.outcome is not None:
+            return check.verdict.outcome
+    return None
 
 
 __all__ = ["Expectation"]
