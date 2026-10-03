@@ -355,41 +355,46 @@ class Expectation:
             raise ExpectationValidationException(
                 "checks must not continue after the expectation ended"
             )
-        dismissed_by_shape = shape is not None and not shape.is_settleable
-        if dismissed_by_shape != (status is ExpectationStatus.DISMISSED):
+        implied = _implied_status(shape, checks, closed=closed)
+        if status is not implied:
             raise ExpectationValidationException(
-                f"status {status.value} contradicts shape "
-                f"{None if shape is None else shape.value}"
+                f"status {status.value} contradicts shape and checks, "
+                f"which imply {implied.value}"
             )
-        last_outcome = _last_outcome(checks)
-        overdue = closed is not None and closed > self._expires_at_turn
-        last_turn = checks[-1].turn if checks else None
-
-        if status is ExpectationStatus.OPEN:
-            consistent = ended is None
-        elif status is ExpectationStatus.SETTLED:
-            if ended is not None:
-                consistent = ended.outcome is not None and closed == last_turn
-            else:
-                consistent = last_outcome is not None and overdue
-        elif status is ExpectationStatus.VOIDED:
-            consistent = (
-                ended is not None and ended.outcome is None and closed == last_turn
-            )
-        elif status is ExpectationStatus.DISMISSED:
-            consistent = not checks and not overdue
-        else:
-            consistent = ended is None and last_outcome is None and overdue
-        if not consistent:
+        if status is ExpectationStatus.DISMISSED and checks:
             raise ExpectationValidationException(
-                f"status {status.value} at turn {closed} contradicts checks "
-                f"{[(c.turn, c.verdict.value) for c in checks]}"
+                "dismissed expectation must not have checks"
             )
+        self._require_closed_turn_fits(status, closed, ended=ended, checks=checks)
 
         self._shape = shape
         self._checks = list(checks)
         self._status = status
         self._closed_at_turn = closed
+
+    def _require_closed_turn_fits(
+        self,
+        status: ExpectationStatus,
+        closed: int | None,
+        *,
+        ended: _Ending | None,
+        checks: tuple[Check, ...],
+    ) -> None:
+        if closed is None:
+            return
+        if status is ExpectationStatus.DISMISSED:
+            fits = self._formed_at_turn <= closed <= self._expires_at_turn
+        elif ended is not None:
+            fits = closed == checks[-1].turn
+        else:
+            fits = closed > self._expires_at_turn
+        if not fits:
+            raise ExpectationValidationException(
+                f"{status.value} expectation cannot be closed at turn {closed} "
+                f"(formed_at_turn={self._formed_at_turn}, "
+                f"expires_at_turn={self._expires_at_turn}, "
+                f"checks={[(c.turn, c.verdict.value) for c in checks]})"
+            )
 
     def _require_open(self) -> None:
         if not self._status.is_open:
@@ -431,6 +436,24 @@ def _first_ending(checks: Sequence[Check]) -> _Ending | None:
             return _Ending(index, outcome=outcome)
         last_outcome = outcome
     return None
+
+
+def _implied_status(
+    shape: ShapeVerdict | None, checks: Sequence[Check], *, closed: int | None
+) -> ExpectationStatus:
+    """形の判定と照合の記録と、終わったかどうかから導ける状態。"""
+    if shape is not None and not shape.is_settleable:
+        return ExpectationStatus.DISMISSED
+    ended = _first_ending(checks)
+    if ended is not None:
+        if ended.outcome is None:
+            return ExpectationStatus.VOIDED
+        return ExpectationStatus.SETTLED
+    if closed is None:
+        return ExpectationStatus.OPEN
+    if _last_outcome(checks) is not None:
+        return ExpectationStatus.SETTLED
+    return ExpectationStatus.EXPIRED
 
 
 def _last_outcome(checks: Sequence[Check]) -> Outcome | None:

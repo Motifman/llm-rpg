@@ -114,13 +114,19 @@ class TestRestoreOpenExpectation:
             expectation.record(Check(turn=15, verdict=HIT))
 
     def test_restored_settleable_shape_rejects_second_shape_judgment(self) -> None:
-        """形の判定が「清算できる」で済んだ清算待ちを作り直すと、2 回目の形の判定を拒み、照合は受け取る。"""
+        """形の判定が「清算できる」で済んだ清算待ちを作り直すと、2 回目の形の判定を ExpectationCheckRuleException で拒む。"""
         expectation = _restore(shape=ShapeVerdict.SETTLEABLE)
 
         with pytest.raises(ExpectationCheckRuleException, match="shape"):
             expectation.judge_shape(ShapeVerdict.OWN_ACTION, turn=11)
 
-        assert expectation.record(Check(turn=11, verdict=HIT)) is None
+    def test_restored_settleable_shape_accepts_checks(self) -> None:
+        """形の判定が「清算できる」で済んだ清算待ちを作り直すと、照合を受け取る。"""
+        expectation = _restore(shape=ShapeVerdict.SETTLEABLE)
+
+        event = expectation.record(Check(turn=11, verdict=MISS))
+
+        assert event is not None
 
     def test_restored_keeps_formation_fields(self) -> None:
         """作り直した予期は、予期の文・期日・持ったときの行動・頭にあった信念とエピソードを保持する。"""
@@ -195,85 +201,122 @@ class TestRestoreClosedExpectation:
             operate(expectation)
 
 
+def _case(match: str, **state: Any) -> Any:
+    return pytest.param(state, match)
+
+
 _INCONSISTENT_STATES = {
-    "status_not_enum": {"status": "open"},
-    "shape_not_enum": {"shape": "settleable"},
-    "checks_not_tuple": {"checks": [Check(turn=11, verdict=HIT)]},
-    "check_not_check": {"checks": ("hit",)},
-    "check_before_formed_turn": {"checks": _checks((FORMED_AT - 1, HIT))},
-    "check_after_expiry_turn": {"checks": _checks((EXPIRES_AT + 1, HIT))},
-    "checks_not_increasing": {"checks": _checks((12, HIT), (12, MISS))},
-    "negative_closed_at_turn": {
-        "checks": _checks((11, VOID)),
-        "status": VOIDED,
-        "closed_at_turn": -1,
-    },
-    "open_with_closed_at_turn": {"closed_at_turn": 15},
-    "closed_without_closed_at_turn": {
-        "checks": _checks((11, HIT), (12, HIT)),
-        "status": SETTLED,
-    },
-    "open_already_settled": {"checks": _checks((11, HIT), (12, UNDETERMINED), (13, HIT))},
-    "open_with_not_an_expectation": {"checks": _checks((11, VOID))},
-    "open_with_unsettleable_shape": {"shape": ShapeVerdict.TRUE_EITHER_WAY},
-    "settled_without_outcome": {
-        "checks": _checks((11, UNDETERMINED)),
-        "status": SETTLED,
-        "closed_at_turn": EXPIRES_AT + 1,
-    },
-    "settled_by_two_hits_at_other_turn": {
-        "checks": _checks((11, HIT), (12, HIT)),
-        "status": SETTLED,
-        "closed_at_turn": 15,
-    },
-    "checks_continue_after_settlement": {
-        "checks": _checks((11, HIT), (12, HIT), (13, MISS)),
-        "status": SETTLED,
-        "closed_at_turn": 13,
-    },
-    "settled_by_expiry_before_overdue": {
-        "checks": _checks((11, HIT)),
-        "status": SETTLED,
-        "closed_at_turn": EXPIRES_AT,
-    },
-    "voided_without_not_an_expectation": {
-        "checks": _checks((11, HIT)),
-        "status": VOIDED,
-        "closed_at_turn": 11,
-    },
-    "voided_at_other_turn": {
-        "checks": _checks((11, VOID)),
-        "status": VOIDED,
-        "closed_at_turn": 12,
-    },
-    "checks_continue_after_void": {
-        "checks": _checks((11, VOID), (12, VOID)),
-        "status": VOIDED,
-        "closed_at_turn": 12,
-    },
-    "dismissed_without_shape": {"status": DISMISSED, "closed_at_turn": FORMED_AT},
-    "dismissed_with_settleable_shape": {
-        "shape": ShapeVerdict.SETTLEABLE,
-        "status": DISMISSED,
-        "closed_at_turn": FORMED_AT,
-    },
-    "dismissed_with_checks": {
-        "shape": ShapeVerdict.OWN_ACTION,
-        "checks": _checks((11, UNDETERMINED)),
-        "status": DISMISSED,
-        "closed_at_turn": FORMED_AT,
-    },
-    "dismissed_after_expiry_turn": {
-        "shape": ShapeVerdict.OWN_ACTION,
-        "status": DISMISSED,
-        "closed_at_turn": EXPIRES_AT + 1,
-    },
-    "expired_with_outcome": {
-        "checks": _checks((11, HIT), (12, UNDETERMINED)),
-        "status": EXPIRED,
-        "closed_at_turn": EXPIRES_AT + 1,
-    },
-    "expired_before_overdue": {"status": EXPIRED, "closed_at_turn": EXPIRES_AT},
+    "status_not_enum": _case("status must be", status="open"),
+    "shape_not_enum": _case("shape must be", shape="settleable"),
+    "checks_not_tuple": _case("checks must be", checks=[Check(turn=11, verdict=HIT)]),
+    "check_not_check": _case("checks must be", checks=("hit",)),
+    "check_before_formed_turn": _case("outside", checks=_checks((FORMED_AT - 1, HIT))),
+    "check_after_expiry_turn": _case("outside", checks=_checks((EXPIRES_AT + 1, HIT))),
+    "checks_not_increasing": _case(
+        "strictly increasing", checks=_checks((12, HIT), (12, MISS))
+    ),
+    "negative_closed_at_turn": _case(
+        ">= 0", checks=_checks((11, VOID)), status=VOIDED, closed_at_turn=-1
+    ),
+    "open_with_closed_at_turn": _case("must be set exactly", closed_at_turn=15),
+    "closed_without_closed_at_turn": _case(
+        "must be set exactly", checks=_checks((11, HIT), (12, HIT)), status=SETTLED
+    ),
+    "open_already_settled": _case(
+        "contradicts", checks=_checks((11, HIT), (12, UNDETERMINED), (13, HIT))
+    ),
+    "open_with_not_an_expectation": _case("contradicts", checks=_checks((11, VOID))),
+    "open_with_unsettleable_shape": _case(
+        "contradicts", shape=ShapeVerdict.TRUE_EITHER_WAY
+    ),
+    "settled_without_outcome": _case(
+        "contradicts",
+        checks=_checks((11, UNDETERMINED)),
+        status=SETTLED,
+        closed_at_turn=EXPIRES_AT + 1,
+    ),
+    "settled_with_not_an_expectation": _case(
+        "contradicts", checks=_checks((11, VOID)), status=SETTLED, closed_at_turn=11
+    ),
+    "settled_by_two_hits_at_other_turn": _case(
+        "closed at turn",
+        checks=_checks((11, HIT), (12, HIT)),
+        status=SETTLED,
+        closed_at_turn=15,
+    ),
+    "checks_continue_after_settlement": _case(
+        "must not continue",
+        checks=_checks((11, HIT), (12, HIT), (13, MISS)),
+        status=SETTLED,
+        closed_at_turn=13,
+    ),
+    "settled_by_expiry_before_overdue": _case(
+        "closed at turn",
+        checks=_checks((11, HIT)),
+        status=SETTLED,
+        closed_at_turn=EXPIRES_AT,
+    ),
+    "voided_without_not_an_expectation": _case(
+        "contradicts", checks=_checks((11, HIT)), status=VOIDED, closed_at_turn=11
+    ),
+    "voided_with_settlement": _case(
+        "contradicts",
+        checks=_checks((11, HIT), (12, HIT)),
+        status=VOIDED,
+        closed_at_turn=12,
+    ),
+    "voided_at_other_turn": _case(
+        "closed at turn", checks=_checks((11, VOID)), status=VOIDED, closed_at_turn=12
+    ),
+    "checks_continue_after_void": _case(
+        "must not continue",
+        checks=_checks((11, VOID), (12, VOID)),
+        status=VOIDED,
+        closed_at_turn=12,
+    ),
+    "dismissed_without_shape": _case(
+        "contradicts", status=DISMISSED, closed_at_turn=FORMED_AT
+    ),
+    "dismissed_with_settleable_shape": _case(
+        "contradicts",
+        shape=ShapeVerdict.SETTLEABLE,
+        status=DISMISSED,
+        closed_at_turn=FORMED_AT,
+    ),
+    "dismissed_with_checks": _case(
+        "must not have checks",
+        shape=ShapeVerdict.OWN_ACTION,
+        checks=_checks((11, UNDETERMINED)),
+        status=DISMISSED,
+        closed_at_turn=FORMED_AT,
+    ),
+    "dismissed_before_formed_turn": _case(
+        "closed at turn",
+        shape=ShapeVerdict.OWN_ACTION,
+        status=DISMISSED,
+        closed_at_turn=FORMED_AT - 1,
+    ),
+    "dismissed_after_expiry_turn": _case(
+        "closed at turn",
+        shape=ShapeVerdict.OWN_ACTION,
+        status=DISMISSED,
+        closed_at_turn=EXPIRES_AT + 1,
+    ),
+    "expired_with_outcome": _case(
+        "contradicts",
+        checks=_checks((11, HIT), (12, UNDETERMINED)),
+        status=EXPIRED,
+        closed_at_turn=EXPIRES_AT + 1,
+    ),
+    "expired_with_not_an_expectation": _case(
+        "contradicts",
+        checks=_checks((11, VOID)),
+        status=EXPIRED,
+        closed_at_turn=EXPIRES_AT + 1,
+    ),
+    "expired_before_overdue": _case(
+        "closed at turn", status=EXPIRED, closed_at_turn=EXPIRES_AT
+    ),
 }
 
 
@@ -281,13 +324,13 @@ class TestRestoreRejectsInconsistentState:
     """保存した状態が清算の規則と食い違うとき、作り直さずに拒む挙動を保証する。"""
 
     @pytest.mark.parametrize(
-        "state", _INCONSISTENT_STATES.values(), ids=_INCONSISTENT_STATES.keys()
+        "state, match", _INCONSISTENT_STATES.values(), ids=_INCONSISTENT_STATES.keys()
     )
     def test_inconsistent_state_raises_validation_exception(
-        self, state: dict[str, Any]
+        self, state: dict[str, Any], match: str
     ) -> None:
-        """型の違う項目、期間の外や順序の崩れた照合、終わり方と照合の記録・形・終わったターンが規則と食い違う状態を渡すと ExpectationValidationException を投げる。"""
-        with pytest.raises(ExpectationValidationException):
+        """型の違う項目、期間の外や順序の崩れた照合、照合の記録と形から導ける終わり方と食い違う状態、終わり方に合わない終わったターンを渡すと、その食い違いを示す ExpectationValidationException を投げる。"""
+        with pytest.raises(ExpectationValidationException, match=match):
             _restore(**state)
 
     def test_invalid_formation_field_raises_validation_exception(self) -> None:

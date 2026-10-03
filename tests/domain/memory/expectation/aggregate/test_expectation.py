@@ -304,6 +304,22 @@ class TestRecordCheck:
         assert isinstance(events[1], ProvisionallyMissed)
         assert events[1].turn == 12
 
+    def test_alternating_outcomes_report_provisional_miss_on_each_miss(self) -> None:
+        """外れた → 当たった → 外れた と交互に続くあいだは確定せず、外れるたびに暫定の出来事を返す。"""
+        expectation = _expectation()
+
+        events = _record_all(
+            expectation,
+            Check(turn=11, verdict=MISS),
+            Check(turn=12, verdict=HIT),
+            Check(turn=13, verdict=MISS),
+        )
+
+        assert isinstance(events[0], ProvisionallyMissed)
+        assert events[1] is None
+        assert isinstance(events[2], ProvisionallyMissed)
+        assert events[2].turn == 13
+
     def test_not_an_expectation_check_voids_without_settlement(self) -> None:
         """照合で予期になっていないと判定されたら、確定させずに外した出来事を返し、以後は判定を受け取らない。"""
         expectation = _expectation()
