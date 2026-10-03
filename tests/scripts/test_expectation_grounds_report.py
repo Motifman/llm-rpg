@@ -31,6 +31,7 @@ from tests.application.being.expectation.test_expectation_grounds_settlement imp
     EPISODES,
     RIO,
     _Harness,
+    _recall,
 )
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts/expectation_grounds_report.py"
@@ -78,6 +79,26 @@ def test_counts_in_mind_chosen_and_material_per_belief_and_episode(report: Modul
     assert (flat["in_mind"], flat["chosen"], flat["material"]) == (2, 0, 0)
     bread = _row(rows, "episode:ep-bread")
     assert (bread["chosen"], bread["hit_count"], bread["miss_stamp"]) == (1, 1, 0)
+
+
+def test_miss_stamp_is_counted_for_grounding_episode(report: ModuleType) -> None:
+    """根拠のエピソードの想起に外れを書き添えたとき、そのエピソードの外れの書き添えが 1 件と並び、当たりの回数は 0 のまま。"""
+    harness = _Harness(
+        ScriptedJudgmentPort(
+            {"ground_episode_1": 0.9}, {"check_0": "miss"}, {"check_0": "miss"}
+        )
+    )
+    harness.recalls.append_by_being(RIO, _recall("r-bread", "ep-bread"))
+    harness.form("exp-1")
+    harness.settle_formed_turn()
+    harness.turn()
+    harness.turn()
+
+    rows = report.rows(report.count(_trace(harness)))
+
+    bread = _row(rows, "episode:ep-bread")
+    assert (bread["chosen"], bread["hit_count"], bread["miss_stamp"]) == (1, 0, 1)
+    assert bread["material"] is None
 
 
 def test_unavailable_turn_is_counted_apart_from_in_mind(report: ModuleType) -> None:

@@ -11,7 +11,8 @@
 
 予期は頭にあったものを ID でしか持たない。問いには本文が要るので、形を問う
 ターンに記憶の保存先から引く。プロンプトに載せた時点から再解釈で書き換わって
-いれば、書き換わったあとの本文で問う。
+いれば、書き換わったあとの本文で問う。信念は状態を見ずに ID で引くので、
+そのあいだに置き換えられた信念も、置き換えられる前の本文で問う。
 """
 
 from __future__ import annotations
@@ -63,8 +64,12 @@ class InMindTextReader(ABC):
         raise NotImplementedError
 
 
+class InMindStoreUnwired(LookupError):
+    """本文を引く保存先が配線されていない。ID が見つからないのと区別して trace に残す。"""
+
+
 class MemoryStoreInMindTextReader(InMindTextReader):
-    """記憶の保存先から本文を引く。保存先が無い記憶は本文が無いものとして扱う。
+    """記憶の保存先から本文を引く。保存先が無ければ ``InMindStoreUnwired`` を投げる。
 
     エピソードは、プロンプトの想起と同じく、有効な再解釈があればその文を使う。
     """
@@ -82,7 +87,7 @@ class MemoryStoreInMindTextReader(InMindTextReader):
 
     def belief_text(self, being_id: BeingId, belief_id: str) -> str | None:
         if self._semantic_store is None:
-            return None
+            raise InMindStoreUnwired("semantic store is not wired")
         for entry in self._semantic_store.list_for_being(being_id):
             if entry.entry_id == belief_id:
                 return _text_or_none(entry.text)
@@ -90,7 +95,7 @@ class MemoryStoreInMindTextReader(InMindTextReader):
 
     def episode_text(self, being_id: BeingId, episode_id: str) -> str | None:
         if self._episode_store is None:
-            return None
+            raise InMindStoreUnwired("episode store is not wired")
         episode = self._episode_store.get_by_being(being_id, episode_id)
         if episode is None:
             return None
@@ -201,8 +206,10 @@ def plan_ground_questions(
     counters = {BELIEF: 0, EPISODE: 0}
     for expectation in new:
         omitted = plan.omitted.setdefault(expectation.expectation_id.value, [])
-        items = [(BELIEF, b) for b in expectation.beliefs_in_mind] + [
-            (EPISODE, e) for e in expectation.episodes_in_mind
+        # 台帳は ID の重複を除かない。同じものを 2 度問うと、両方選ばれたときに
+        # 根拠が重複して形の判定まで止まる。
+        items = [(BELIEF, b) for b in dict.fromkeys(expectation.beliefs_in_mind)] + [
+            (EPISODE, e) for e in dict.fromkeys(expectation.episodes_in_mind)
         ]
         for kind, ground_id in items:
             if len(plan.questions) >= limit:
@@ -274,6 +281,7 @@ def ground_question(self_name: str, question: GroundQuestion) -> NoulQuestion:
 __all__ = [
     "GroundQuestion",
     "GroundsPlan",
+    "InMindStoreUnwired",
     "InMindTextReader",
     "MemoryStoreInMindTextReader",
     "ground_question",

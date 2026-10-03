@@ -11,6 +11,7 @@ import pytest
 from ai_rpg_world.application.being.expectation.grounds import (
     MemoryStoreInMindTextReader,
 )
+from ai_rpg_world.application.being.expectation.settlement import TurnMaterial
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -33,6 +34,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
 )
+from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
+    ExpectationGrounds,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
@@ -41,6 +45,9 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin impo
 )
 from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
     Likelihood,
+)
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
+    SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
@@ -313,6 +320,60 @@ class TestSettlementWiring:
         assert reader._semantic_store is stack.semantic_memory_store
         assert reader._episode_store is stack.episode_store
         assert reader._journal_store is stack.reinterpretation_journal
+
+    def test_belief_in_the_runtime_store_is_asked_as_ground(self) -> None:
+        """runtime の信念の store にある信念が頭にあった予期は、組まれた清算の呼び出しで、その本文つきの根拠の問いを受ける。"""
+        config = episodic_config(
+            typed_judgment_provider="stub",
+            expectation_settlement_enabled=True,
+            semantic_search_enabled=True,
+        )
+        runtime = create_world_runtime(_DRILL, config=config)
+        port = ScriptedJudgmentPort({"ground_belief_0": 0.9})
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
+            typed_judgment_port=port,
+        )
+        being = _being(runtime)
+        runtime._episodic_stack.semantic_memory_store.add_by_being(
+            being,
+            SemanticMemoryEntry(
+                entry_id="sem-drill",
+                player_id=_ME.value,
+                being_id=being,
+                text="訓練の集合は駅前の広場で行う",
+                evidence_episode_ids=(),
+                confidence=0.6,
+                created_at=datetime(2026, 10, 4, tzinfo=timezone.utc),
+            ),
+        )
+        store = runtime._expectation_store
+        store.advance_turn(being)
+        store.save(
+            Expectation(
+                expectation_id=ExpectationId("exp-1"),
+                holder=being,
+                content="広場に皆が集まる",
+                origin=ExpectationOrigin.WITH_ACTION,
+                likelihood=Likelihood.PROBABLY,
+                formed_at_turn=1,
+                expires_at_turn=11,
+                beliefs_in_mind=("sem-drill",),
+            ),
+            [],
+        )
+        settlement = wiring.expectation_settlement
+        assert settlement is not None
+
+        settlement.settle_turn(being, self_name="リオ", material=TurnMaterial())
+
+        _, questions = port.calls[0]
+        assert "訓練の集合は駅前の広場で行う" in questions["ground_belief_0"].instructions
+        (expectation,) = store.list_all_by_being(being)
+        assert expectation.snapshot().grounds == ExpectationGrounds(beliefs=("sem-drill",))
 
     def test_settlement_dispatcher_and_turn_share_one_store(self) -> None:
         """清算・配り手・1 手ごとのターン数・snapshot が拾う store は、runtime の予期の store 1 つを指す。手を打つと、その 1 つのターン数だけが進む。"""

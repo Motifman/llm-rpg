@@ -371,7 +371,7 @@ class Expectation:
             likelihood=self._likelihood,
             # 形を判定せずに照合だけで確定した予期は、根拠を判断していない。
             # 頭にあったものすべてに倒すと、関係の無い信念に当否が積まれる。
-            grounds=self._grounds or ExpectationGrounds(),
+            grounds=ExpectationGrounds() if self._grounds is None else self._grounds,
         )
 
     def _require_grounds_in_mind(self, grounds: object) -> ExpectationGrounds:

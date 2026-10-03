@@ -36,6 +36,7 @@ class GroundsCounts:
     chosen: Counter[tuple[str, str]] = field(default_factory=Counter)
     material: Counter[tuple[str, str]] = field(default_factory=Counter)
     unjudged: int = 0
+    omitted: Counter[str] = field(default_factory=Counter)
 
 
 def count(events: Iterable[dict[str, Any]]) -> GroundsCounts:
@@ -48,6 +49,7 @@ def count(events: Iterable[dict[str, Any]]) -> GroundsCounts:
                 if not entry["judged"]:
                     counts.unjudged += 1
                     continue
+                counts.omitted.update(o["reason"] for o in entry["omitted"])
                 for kind, ids, chosen in (
                     ("belief", entry["beliefs_in_mind"], entry["beliefs"]),
                     ("episode", entry["episodes_in_mind"], entry["episodes"]),
@@ -76,7 +78,7 @@ def rows(counts: GroundsCounts) -> list[dict[str, Any]]:
             "id": key,
             "in_mind": counts.in_mind[(being, key)],
             "chosen": counts.chosen[(being, key)],
-            "material": counts.material[(being, key)],
+            "material": counts.material[(being, key)] if key.startswith("belief:") else None,
             "hit_count": counts.material[(being, f"{key}:hit_count")],
             "miss_stamp": counts.material[(being, f"{key}:miss_stamp")],
         }
@@ -101,11 +103,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         counts = count(_events(run_dir))
         print(f"# {run_dir}")
         print(f"根拠が決まらなかった予期 (縮退): {counts.unjudged}")
+        print(f"問わずに外したもの: {dict(counts.omitted)}")
         print("being_id\tid\t頭に載った\t根拠に選ばれた\t材料(信念)\t当たりの回数\t外れの書き添え")
         for r in rows(counts):
             print(
                 f"{r['being_id']}\t{r['id']}\t{r['in_mind']}\t{r['chosen']}\t"
-                f"{r['material']}\t{r['hit_count']}\t{r['miss_stamp']}"
+                f"{'-' if r['material'] is None else r['material']}\t"
+                f"{r['hit_count']}\t{r['miss_stamp']}"
             )
     return 0
 

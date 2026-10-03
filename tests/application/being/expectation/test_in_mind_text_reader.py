@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from ai_rpg_world.application.being.expectation.grounds import (
+    InMindStoreUnwired,
     MemoryStoreInMindTextReader,
 )
 from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
@@ -98,15 +101,22 @@ class TestBeliefText:
 
         assert reader.belief_text(RIO, "sem-1") == "トムは頼めば麦束を焼いてくれる"
 
-    def test_unknown_belief_and_missing_store_return_none(self) -> None:
-        """見つからない信念と、信念の store が無いときは None を返す。"""
+    def test_unknown_belief_returns_none(self) -> None:
+        """見つからない信念は None を返す。"""
         reader, _, _, _ = _reader()
+
+        assert reader.belief_text(RIO, "sem-unknown") is None
+
+    def test_missing_store_raises_instead_of_reporting_not_found(self) -> None:
+        """信念やエピソードの store が無いときは、ID が見つからないのと区別できるよう InMindStoreUnwired を投げる。"""
         no_store = MemoryStoreInMindTextReader(
             semantic_store=None, episode_store=None, journal_store=None
         )
 
-        assert reader.belief_text(RIO, "sem-unknown") is None
-        assert no_store.belief_text(RIO, "sem-1") is None
+        with pytest.raises(InMindStoreUnwired, match="semantic"):
+            no_store.belief_text(RIO, "sem-1")
+        with pytest.raises(InMindStoreUnwired, match="episode"):
+            no_store.episode_text(RIO, "ep-1")
 
 
 class TestEpisodeText:
@@ -133,8 +143,15 @@ class TestEpisodeText:
 
         assert reader.episode_text(RIO, "ep-1") == "トムが焼きたての麦束を分けてくれた"
 
-    def test_recall_text_then_what_without_reinterpretation(self) -> None:
-        """再解釈が無ければ想起文を、想起文も無ければ出来事の要約を返す。"""
+    def test_recall_text_is_preferred_over_what_without_reinterpretation(self) -> None:
+        """再解釈が無ければ、出来事の要約ではなく想起文を返す。"""
+        reader, _, episodes, _ = _reader()
+        episodes.put_by_being(RIO, _episode("ep-1", recall_text="浜でトムに麦束をもらった"))
+
+        assert reader.episode_text(RIO, "ep-1") == "浜でトムに麦束をもらった"
+
+    def test_what_is_used_when_recall_text_is_missing(self) -> None:
+        """再解釈も想起文も無ければ、出来事の要約を返す。"""
         reader, _, episodes, _ = _reader()
         episodes.put_by_being(RIO, _episode("ep-1", recall_text=None))
 

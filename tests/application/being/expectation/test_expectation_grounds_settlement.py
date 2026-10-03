@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
+import pytest
 from tests.application.being.expectation.support import (
     RecordingTraceRecorder,
     ScriptedJudgmentPort,
@@ -93,6 +95,20 @@ class _Texts(InMindTextReader):
 
     def episode_text(self, being_id: BeingId, episode_id: str) -> str | None:
         return self._episodes.get(episode_id)
+
+
+class _ReplacingAnswerPort(ScriptedJudgmentPort):
+    """迷った答えのうち 1 つの値を、変換を通さずにそのまま差し替えて返す。"""
+
+    def __init__(self, name: str, value: Any) -> None:
+        super().__init__()
+        self._name = name
+        self._value = value
+
+    def judge(self, state: Any, questions: Any) -> Any:
+        answers = dict(super().judge(state, questions))
+        answers[self._name] = replace(answers[self._name], value=self._value)
+        return answers
 
 
 class _Harness:
@@ -324,6 +340,20 @@ class TestOutcomeReachesOnlyGrounds:
         (material,) = harness.evidence.list_all_by_being(RIO)
         assert material.in_context_belief_ids == ("belief-tom",)
 
+    def test_miss_contradicts_only_grounding_belief(self) -> None:
+        """外れの材料が指す信念は、根拠と判断した信念だけで、いつも頭にあった信念を含まない。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({"ground_belief_1": 0.9}, *SETTLEABLE_MISS_MISS)
+        )
+        harness.form()
+        harness.settle_formed_turn()
+
+        harness.turn()
+        harness.turn()
+
+        (material,) = harness.evidence.list_all_by_being(RIO)
+        assert material.in_context_belief_ids == ("belief-tom",)
+
     def test_hit_credits_only_grounding_episode(self) -> None:
         """当たりで役に立った回数が増えるのは、根拠と判断したエピソードだけ。"""
         harness = _Harness(
@@ -397,6 +427,7 @@ class TestJudgmentUnavailable:
         assert harness.grounds() is None
         (entry,) = harness.grounds_trace()
         assert (entry["judged"], entry["beliefs"], entry["episodes"]) == (False, [], [])
+        assert len(entry["asked"]) == 4
         assert all(a["probability"] is None for a in entry["asked"])
         settlement = harness.recorder.payloads(TraceEventKind.EXPECTATION_SETTLEMENT)[0]
         assert "timeout" in settlement["unavailable_reason"]
@@ -412,6 +443,27 @@ class TestJudgmentUnavailable:
         settlement = harness.recorder.payloads(TraceEventKind.EXPECTATION_SETTLEMENT)[0]
         assert settlement["skipped_reason"] == "judgment_unavailable"
         assert "ground_belief_0" in settlement["unavailable_reason"]
+
+    @pytest.mark.parametrize("value", [-0.1, True, "0.9"])
+    def test_out_of_range_or_non_number_answer_degrades_whole_turn(self, value: Any) -> None:
+        """根拠の問いの答えが負の数・真偽値・文字列でも、そのターンは形も根拠も渡さない。"""
+        harness = _Harness(_ReplacingAnswerPort("ground_belief_0", value))
+        harness.form()
+
+        harness.settle_formed_turn()
+
+        assert harness.grounds() is None
+
+    @pytest.mark.parametrize("value", [0.0, 1.0])
+    def test_boundary_probabilities_are_usable(self, value: float) -> None:
+        """確率 0 と 1 はそのまま使え、1 は根拠になり 0 はならない。"""
+        harness = _Harness(ScriptedJudgmentPort({"ground_belief_0": value}))
+        harness.form()
+
+        harness.settle_formed_turn()
+
+        expected = ("belief-flat",) if value == 1.0 else ()
+        assert harness.grounds() == ExpectationGrounds(beliefs=expected)
 
     def test_grounds_are_asked_again_with_shape_on_next_turn(self) -> None:
         """判断が得られなかった予期は、次のターンに形と一緒に根拠をもう一度問われ、そこで根拠が決まる。"""
@@ -449,9 +501,9 @@ class TestQuestionLimit:
         assert entry["omitted"] == [
             {"kind": "episode", "id": "ep-bread", "reason": "over_limit"}
         ]
-        grounds = harness.grounds()
-        assert grounds is not None
-        assert "ep-bread" not in grounds.episodes
+        assert harness.grounds() == ExpectationGrounds(
+            beliefs=("belief-flat", "belief-tom"), episodes=("ep-crab",)
+        )
 
     def test_limit_counts_questions_across_expectations_of_the_turn(self) -> None:
         """同じターンに 2 件の予期があるとき、上限は 2 件の予期の問いを合わせて数え、後の予期の問いから外す。"""
@@ -477,6 +529,33 @@ class TestQuestionLimit:
         first, second = harness.grounds_trace()
         assert (len(first["asked"]), len(first["omitted"])) == (4, 0)
         assert (len(second["asked"]), len(second["omitted"])) == (1, 3)
+
+
+class TestDuplicatedInMind:
+    """頭にあった ID が重複していても、同じものを 2 度問わない挙動を保証する。"""
+
+    def test_duplicated_ids_are_asked_once_and_settlement_continues(self) -> None:
+        """同じ信念の ID が 2 回並んでいても問いは 1 件で、根拠に選ばれても清算は止まらない。"""
+        harness = _Harness(ScriptedJudgmentPort({"ground_belief_0": 0.9}))
+        harness.repository.advance_turn(RIO)
+        harness.repository.save(
+            Expectation(
+                expectation_id=ExpectationId("exp-1"),
+                holder=RIO,
+                content="トムが麦束を焼いてくれる",
+                origin=ExpectationOrigin.WITH_ACTION,
+                likelihood=Likelihood.PROBABLY,
+                formed_at_turn=1,
+                expires_at_turn=11,
+                beliefs_in_mind=("belief-tom", "belief-tom"),
+            ),
+            [],
+        )
+
+        harness.settle_formed_turn()
+
+        assert list(_ground_questions(harness.port)) == ["ground_belief_0"]
+        assert harness.grounds() == ExpectationGrounds(beliefs=("belief-tom",))
 
 
 class TestUnreadableText:
