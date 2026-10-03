@@ -224,7 +224,7 @@ def _to_contract(
                 )
             )
         except ObservationNotRepresentable as exc:
-            skipped[exc.reason.value] += 1
+            skipped[_skip_key(exc)] += 1
         except ContractViolation:
             skipped[SKIPPED_CONTRACT_VIOLATION] += 1
     for result in action_results:
@@ -238,12 +238,17 @@ def _to_contract(
                 )
             )
         except ObservationNotRepresentable as exc:
-            skipped[exc.reason.value] += 1
+            skipped[_skip_key(exc)] += 1
         except ContractViolation:
             skipped[SKIPPED_CONTRACT_VIOLATION] += 1
     # timestamp で比べる。タイムゾーンの有無が混ざった datetime どうしは比べられない。
     dated.sort(key=lambda pair: pair[0].timestamp(), reverse=True)
     return [observation for _, observation in dated], skipped
+
+
+def _skip_key(exc: ObservationNotRepresentable) -> str:
+    """理由に種類 (観測の種類か道具の名前) を添える。拒んだもの・漏れたものを trace で読めるように。"""
+    return exc.reason.value if exc.kind is None else f"{exc.reason.value}: {exc.kind}"
 
 
 def _current_tick(builder: DefaultPromptBuilder) -> int | None:

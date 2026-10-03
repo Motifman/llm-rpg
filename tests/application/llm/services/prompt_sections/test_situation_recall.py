@@ -185,7 +185,7 @@ class TestSituationFromGame:
         assert env.trace()["situation"]["場所"] == ["干潟"]
 
     def test_unrepresentable_observations_are_skipped_and_counted_by_reason(self) -> None:
-        """契約に写せない観測は欄に入れず、飛ばした理由ごとの件数を trace に残す。"""
+        """契約に写せない観測は欄に入れず、飛ばした理由ごとの件数を、種類が分かれば種類を添えて trace に残す。"""
         env = _Env()
         loop_warning = _seen("同じ手を繰り返している", 1, loop_guard=True)
         untimed = ObservationEntry(
@@ -197,9 +197,26 @@ class TestSituationFromGame:
         payload = env.trace()
         assert payload["situation"]["いま起きたこと"] == ["鳥が鳴いた"]
         assert payload["skipped_observations"] == {
-            "being_inner_record": 1,
+            "being_inner_record: loop_guard": 1,
             "missing_time_label": 1,
         }
+
+    def test_memo_tool_results_stay_out_of_what_happened(self) -> None:
+        """メモ機能の結果は、いま起きたことに入れず、Being 自身の記録として道具の名前を添えて飛ばした件数に数える。"""
+        env = _Env()
+        memo = ActionResultEntry(
+            occurred_at=T0 + timedelta(minutes=2),
+            action_summary="memo_add()",
+            result_summary="メモを追加しました（ID: ccd325…）。",
+            tool_name="memo_add",
+            game_time_label=LABEL,
+        )
+
+        env.run([_seen("潮が満ちてきた", 1)], [memo])
+
+        payload = env.trace()
+        assert payload["situation"]["いま起きたこと"] == ["潮が満ちてきた"]
+        assert payload["skipped_observations"] == {"being_inner_record: memo_add": 1}
 
     def test_goal_inner_thought_and_open_expectations_fill_intent_and_unresolved(self) -> None:
         """目的と直前の内心はやろうとしていることに、清算待ちの予期は未解決のことに入る。"""
