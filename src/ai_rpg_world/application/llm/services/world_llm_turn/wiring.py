@@ -14,6 +14,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai_rpg_world.application.being.expectation.forming import (
+    ExpectationFormingService,
+)
 from ai_rpg_world.application.being.expectation.settlement import (
     ExpectationSettlementService,
 )
@@ -155,6 +158,10 @@ class WorldLlmWiring:
     expectation_settlement: ExpectationSettlementService | None = field(
         default=None, init=False
     )
+    #: 行動に書かれた予期を積む口 (#1441)。profile が求めなければ None。
+    expectation_forming: ExpectationFormingService | None = field(
+        default=None, init=False
+    )
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
@@ -246,6 +253,7 @@ class WorldLlmWiring:
             self.memo_completion_hint_service = None
         self.goal_completion_hint_service = self._build_goal_completion_hint_service()
         self.expectation_settlement = self._build_expectation_settlement()
+        self.expectation_forming = self._build_expectation_forming()
         if self.typed_judgment_port is not None:
             self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
         # Issue #264 後続 B1: speech_say の audience resolver。
@@ -461,6 +469,17 @@ class WorldLlmWiring:
             max_open=int(config.expectation_settlement_max_open),
             timeline_turns=int(config.expectation_settlement_timeline_turns),
             trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
+        )
+
+    def _build_expectation_forming(self) -> ExpectationFormingService | None:
+        """profile が予期の引数を求めたときだけ組む (#1441)。"""
+        config = getattr(self.runtime, "_runtime_config", None)
+        if config is None or not config.expectation_argument_enabled:
+            return None
+        return ExpectationFormingService(
+            self.runtime._expectation_store,
+            undated_term_turns=int(config.expectation_undated_term_turns),
+            dated_term_turns=int(config.expectation_dated_term_turns),
         )
 
     def _time_label(self) -> str:

@@ -28,6 +28,9 @@ from typing import Any
 from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventDispatcher,
 )
+from ai_rpg_world.application.being.expectation.likelihood_labels import (
+    LIKELIHOOD_LABELS,
+)
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,
     ITypedJudgmentPort,
@@ -51,9 +54,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
 )
-from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
-    Likelihood,
-)
 from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
     ShapeVerdict,
 )
@@ -62,13 +62,6 @@ SCENE_QUESTION = "scene_changed"
 SKIPPED_NOTHING_TO_JUDGE = "nothing_to_judge"
 SKIPPED_JUDGMENT_UNAVAILABLE = "judgment_unavailable"
 SKIPPED_SETTLEMENT_FAILED = "settlement_failed"
-
-_LIKELIHOOD_LABELS: Mapping[Likelihood, str] = {
-    Likelihood.ALMOST_CERTAIN: "ほぼ確実",
-    Likelihood.PROBABLY: "たぶん",
-    Likelihood.EVEN: "半々",
-    Likelihood.MAYBE: "もしかしたら",
-}
 
 
 @dataclass(frozen=True)
@@ -506,7 +499,7 @@ def _listed(expectation: Expectation) -> dict[str, str]:
     return {
         "書いたターン": f"ターン{expectation.formed_at_turn}",
         "いつ頃": _due(expectation),
-        "確からしさ": _LIKELIHOOD_LABELS[expectation.likelihood],
+        "確からしさ": LIKELIHOOD_LABELS[expectation.likelihood],
         "予期": expectation.content,
     }
 
