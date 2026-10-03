@@ -254,6 +254,22 @@ class TestSettlementWiring:
         assert (settlement._max_open, settlement._timeline_turns) == (5, 2)
         assert runtime._expectation_dispatcher._max_attempts == 7
 
+    def test_settlement_dispatcher_and_turn_share_one_store(self) -> None:
+        """清算・配り手・1 手ごとのターン数・snapshot が拾う store は、runtime の予期の store 1 つを指す。手を打つと、その 1 つのターン数だけが進む。"""
+        from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
+
+        runtime, wiring, _ = _game()
+        store = runtime._expectation_store
+        settlement = wiring.expectation_settlement
+        assert settlement is not None
+
+        _move(wiring)
+
+        assert settlement._repository is store
+        assert runtime._expectation_dispatcher._repository is store
+        assert _wiring_stub_from_world_runtime(runtime).expectation_store is store
+        assert store.current_turn(_being(runtime)) == 1
+
     def test_snapshot_stub_picks_up_the_runtime_store(self) -> None:
         """実験の snapshot が拾う配線は runtime の予期の store そのものを指し、空の代用品に落ちない (store_wired が真になる)。"""
         from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
