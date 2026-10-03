@@ -360,22 +360,25 @@ def probe(run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int)
                 ],
                 "runs": [],
             }
-            for _ in range(repeats):
+            for repeat in range(repeats):
                 selection, band, meta = _ask(port, scene)
                 recalled = _recall(scene, store, selection, band)
-                row["runs"].append(
-                    {
-                        "kept_fields": [f.value for f in SituationField if f in selection.kept],
-                        "degraded_reason": selection.degraded_reason,
-                        "judgments": [j.to_trace_payload() for j in selection.judgments],
-                        "band": band.to_trace_payload(),
-                        "situation": recalled["situation"],
-                        "skipped": recalled["skipped"],
-                        "chosen": recalled["chosen"],
-                        "masks": recalled["payload"]["masks"],
-                        **meta,
-                    }
-                )
+                run = {
+                    "kept_fields": [f.value for f in SituationField if f in selection.kept],
+                    "degraded_reason": selection.degraded_reason,
+                    "judgments": [j.to_trace_payload() for j in selection.judgments],
+                    "band": band.to_trace_payload(),
+                    "chosen": recalled["chosen"],
+                    **meta,
+                }
+                if repeat == 0:
+                    # 欄の値と問い合わせ文は回ごとに変わらないので、1 回目にだけ残して結果を軽くする。
+                    run.update(
+                        situation=recalled["situation"],
+                        skipped=recalled["skipped"],
+                        masks=recalled["payload"]["masks"],
+                    )
+                row["runs"].append(run)
             rows.append(row)
         players.append({"player_id": pid, "name": all_scenes[pid][0].name if all_scenes[pid] else "", "scenes": rows})
     return {"run_dir": str(run_dir), "window": window, "repeats": repeats, "players": players, "texts": texts}
@@ -470,7 +473,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = probe(args.run_dir, _port(args.port), window=args.window, repeats=args.repeats)
     result["summary"] = summarize(result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), "utf-8")
+    args.out.write_text(
+        json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str), "utf-8"
+    )
     print(json.dumps(result["summary"], ensure_ascii=False, indent=1))
     return 0
 
