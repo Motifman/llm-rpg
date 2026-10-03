@@ -50,13 +50,21 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
+    CHAR_BIGRAM_BM25,
+    SUPPORTED_TEXT_CANDIDATE_NARROWERS,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
 )
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_ATTRIBUTION_ENABLED",
+    "BELIEF_CANDIDATE_NARROWER",
+    "BELIEF_CANDIDATE_TOP_K",
     "BELIEF_CONSOLIDATION_ENABLED",
+    "BELIEF_CREATE_GATE_ENABLED",
+    "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
     "BELIEF_EVIDENCE_ENABLED",
     "DISTANT_VIEW_TRACE_ENABLED",
     "EPISODIC_EXPLORE_RELATED_ENABLED",
@@ -143,6 +151,18 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
+
+#: 同じ意味を問う候補の件数。過去の snapshot の似た組 96 組で、相方が文字の
+#: 2 字組の BM25 の上位に入った割合は K=3 で 96%、K=5 で 100%。30 組を K=3 / 5 / 10
+#: で Jev に問い、K を増やしても選び間違いは増えなかった
+#: (scripts/jev_belief_create_gate_measure.py)。
+_DEFAULT_BELIEF_CANDIDATE_TOP_K = 5
+
+#: 形と同じ意味の答えを採る確信度の閾値。同じ 96 組 (K=5) で、強めに置き換えた
+#: 先が違う主張だった例は確信度によらず 0 件で、閾値 0.4 で同じ主張の組の 90%、
+#: 0.6 で 61% を強めに置き換えた。0.4 で「いまの状況」と判定された文は、採り
+#: 尽くした・持っている・提案した、の類だった。run の trace で決め直す。
+_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE = 0.4
 
 #: profile / runtime_config に書かせない秘密。値そのものは env からだけ読む。
 #: profile は run の記録として ``experiment.config.source.json`` に残るため、
@@ -334,6 +354,10 @@ class ResolvedLlmRuntimeConfig:
     belief_evidence_enabled: bool = False
     belief_consolidation_enabled: bool = False
     belief_attribution_enabled: bool = False
+    belief_create_gate_enabled: bool = False
+    belief_candidate_narrower: str = CHAR_BIGRAM_BM25
+    belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
+    belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
     salience_structured_failure_enabled: bool = False
     memo_distill_enabled: bool = False
     unconscious_context_enabled: bool = False
@@ -424,6 +448,7 @@ class ResolvedLlmRuntimeConfig:
                 f"{self.prompt_dataset_capture_failure_policy!r} is not recognized. "
                 "valid: ['fail', 'warn']"
             )
+        self._validate_belief_create_gate()
         if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
             raise ValueError(
                 "STAGNATION_REASONING_ENABLED=1 requires "
@@ -732,6 +757,23 @@ class ResolvedLlmRuntimeConfig:
         belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
         belief_consolidation_enabled = resolve_belief_consolidation_enabled(env=source)
         belief_attribution_enabled = resolve_belief_attribution_enabled(env=source)
+        try:
+            belief_create_gate_enabled = _parse_truthy(
+                source.get("BELIEF_CREATE_GATE_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"BELIEF_CREATE_GATE_ENABLED: {exc}") from exc
+        belief_candidate_narrower = (
+            _strip_or_none(source.get("BELIEF_CANDIDATE_NARROWER")) or CHAR_BIGRAM_BM25
+        )
+        belief_candidate_top_k = _resolve_positive_int(
+            source, "BELIEF_CANDIDATE_TOP_K", default=_DEFAULT_BELIEF_CANDIDATE_TOP_K
+        )
+        belief_create_gate_min_confidence = _resolve_ratio_with_default(
+            source,
+            "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
+            default=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
+        )
         salience_structured_failure_enabled = (
             resolve_salience_structured_failure_enabled(env=source)
         )
@@ -861,6 +903,10 @@ class ResolvedLlmRuntimeConfig:
             belief_evidence_enabled=belief_evidence_enabled,
             belief_consolidation_enabled=belief_consolidation_enabled,
             belief_attribution_enabled=belief_attribution_enabled,
+            belief_create_gate_enabled=belief_create_gate_enabled,
+            belief_candidate_narrower=belief_candidate_narrower,
+            belief_candidate_top_k=belief_candidate_top_k,
+            belief_create_gate_min_confidence=belief_create_gate_min_confidence,
             salience_structured_failure_enabled=salience_structured_failure_enabled,
             memo_distill_enabled=memo_distill_enabled,
             unconscious_context_enabled=unconscious_context_enabled,
@@ -983,6 +1029,10 @@ class ResolvedLlmRuntimeConfig:
             belief_evidence_enabled=False,
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,
+            belief_create_gate_enabled=False,
+            belief_candidate_narrower=CHAR_BIGRAM_BM25,
+            belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
+            belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
             salience_structured_failure_enabled=False,
             memo_distill_enabled=True,
             unconscious_context_enabled=False,
@@ -1021,6 +1071,30 @@ class ResolvedLlmRuntimeConfig:
     # ──────────────────────────────────────────────────────────────
     # Observability
     # ──────────────────────────────────────────────────────────────
+
+    def _validate_belief_create_gate(self) -> None:
+        if self.belief_candidate_narrower not in SUPPORTED_TEXT_CANDIDATE_NARROWERS:
+            raise ValueError(
+                f"belief_candidate_narrower={self.belief_candidate_narrower!r} is not "
+                f"recognized. valid: {sorted(SUPPORTED_TEXT_CANDIDATE_NARROWERS)}"
+            )
+        if self.belief_candidate_top_k < 1:
+            raise ValueError("BELIEF_CANDIDATE_TOP_K must be 1 or greater")
+        if not 0.0 < self.belief_create_gate_min_confidence <= 1.0:
+            raise ValueError("BELIEF_CREATE_GATE_MIN_CONFIDENCE must be in (0, 1]")
+        if not self.belief_create_gate_enabled:
+            return
+        if not (self.belief_consolidation_enabled and self.episodic_enabled):
+            raise ValueError(
+                "BELIEF_CREATE_GATE_ENABLED=1 requires BELIEF_CONSOLIDATION_ENABLED=1 "
+                "and LLM_EPISODIC_ENABLED=1 (信念を固める処理が組まれないと gate が"
+                "呼ばれない)"
+            )
+        if self.typed_judgment_provider == "off":
+            raise ValueError(
+                "BELIEF_CREATE_GATE_ENABLED=1 requires TYPED_JUDGMENT_PROVIDER "
+                "other than off (問う先が無い)"
+            )
 
     def to_trace_dict(self) -> dict[str, Any]:
         """run_start trace payload 用の dict 表現 (PR 3/6 で entrypoint が利用)。
