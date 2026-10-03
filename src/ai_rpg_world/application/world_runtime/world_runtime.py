@@ -4504,6 +4504,35 @@ def _build_short_term_memory(
     )
 
 
+def _build_belief_create_gate(config: ResolvedLlmRuntimeConfig) -> Any | None:
+    """profile が求めたときだけ、信念を作る前の判断を組む (#1453)。
+
+    判断ポートは runtime_manager が組むものと別の instance になる。episodic
+    stack はその前に組まれるため。provider=jev でキーが無ければここで落ちる。
+    """
+    if not config.belief_create_gate_enabled:
+        return None
+    from ai_rpg_world.application.llm.services.belief_create_gate import (
+        BeliefCreateGate,
+    )
+    from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
+        create_text_candidate_narrower,
+    )
+    from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
+        create_typed_judgment_port_from_config,
+    )
+
+    port = create_typed_judgment_port_from_config(config)
+    # config の不変条件が provider=off を弾いている。届いたら解決経路が割れている。
+    assert port is not None
+    return BeliefCreateGate(
+        judgment_port=port,
+        narrower=create_text_candidate_narrower(config.belief_candidate_narrower),
+        top_k=config.belief_candidate_top_k,
+        min_confidence=config.belief_create_gate_min_confidence,
+    )
+
+
 def _build_persona_resolver(
     *,
     scenario: Any,
@@ -7944,6 +7973,7 @@ def create_world_runtime(
             if isinstance(_belief_consolidation_client, LiteLLMClient):
                 _belief_consolidation_completion = _belief_consolidation_client
         runtime._episodic_stack = build_episodic_stack(
+            belief_create_gate=_build_belief_create_gate(config),
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
             observation_buffer=obs_buffer,
