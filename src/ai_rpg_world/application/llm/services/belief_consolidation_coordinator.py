@@ -293,13 +293,32 @@ source_kind が "hearsay" の evidence は、自分で確かめたことでは�
 一件で自分の体験を覆さないでください。"""
 
 
+# #1509: 外れた予期の材料に付く時系列の読み方。予期の清算が無効な run では時系列が
+# 付かないので、ON のときだけ足す。関係の無い出来事を除く判断は規則にせず、ここで
+# LLM に任せる。言い切りの抑えは既存の確信度の指示 (支持の数) だけでは効かなかった。
+_WHAT_HAPPENED_ANCHOR = "- ターン数: 自分が何ターン目にそれを見たか。"
+_WHAT_HAPPENED_MEANING = (
+    "- what_happened: 予期が外れた evidence にだけ付く。予期を書いたターンから外れが"
+    "確定したターンまでに、本人がした行動とその結果、見聞きしたことを順に並べた文。\n"
+)
+_WHAT_HAPPENED_INSTRUCTION = """
+
+【外れた予期から学ぶ】
+evidence に what_happened があるときは、予期と実際に起きたことを比べ、なぜ外れたかをそこから読み取って学びにすること。
+- what_happened には、その期間に起きた別の出来事も混ざっている。学ぶのは、その予期が外れた理由に関わることだけ。予期と関係の無い出来事から belief を作らない
+- 外れた理由が書かれている (「もう誰かが持ち去っていた」のように、行動の結果や他の人の言葉が理由を告げている) ときは、その理由を命題にする。例: 「雨が続くと北の橋は流されて渡れない」
+- 理由が書かれておらず、探したが見つからなかった、相手が答えなかった、というだけのときは、1 回の観測で「無い」「しない」と言い切らない。「〜かもしれない」に留めるか、学ぶことが無ければ discard する
+- 「操作」や英字の名前、操作のやり直しを促す案内 (「〜を使う」「修正のヒント」) は、世界の出来事ではなくゲームの仕組みの言葉。belief には書かない。書くのは、世界の場所・物・人について分かったことだけ"""
+
+
 def _build_belief_consolidation_system_prompt(
     *,
     attribution_enabled: bool,
     goal_reflect_enabled: bool = False,
     hearsay_enabled: bool = False,
+    expectation_what_happened_enabled: bool = False,
 ) -> str:
-    """CONFIRMATION 節 / reflect 節 / 伝聞節を条件付きで足した system prompt を組む。
+    """CONFIRMATION 節 / reflect 節 / 伝聞節 / 外れた予期の節を条件付きで足した system prompt を組む。
 
     全 flag OFF のときは ``_SYSTEM_BELIEF_CONSOLIDATION_JSON`` をそのまま返す
     (= 既定 prompt が byte 不変であることをここで保証する)。
@@ -312,6 +331,12 @@ def _build_belief_consolidation_system_prompt(
         prompt = prompt + _REFLECT_INSTRUCTION
     if hearsay_enabled:
         prompt = prompt + _HEARSAY_INSTRUCTION
+    if expectation_what_happened_enabled:
+        assert _WHAT_HAPPENED_ANCHOR in prompt
+        prompt = prompt.replace(
+            _WHAT_HAPPENED_ANCHOR, _WHAT_HAPPENED_MEANING + _WHAT_HAPPENED_ANCHOR
+        )
+        prompt = prompt + _WHAT_HAPPENED_INSTRUCTION
     return prompt
 
 
@@ -360,6 +385,7 @@ class BeliefConsolidationCoordinator:
         belief_attribution_enabled: bool = False,
         goal_reflect_enabled: bool = False,
         hearsay_enabled: bool = False,
+        expectation_what_happened_enabled: bool = False,
         objective_text_provider: Callable[[PlayerId], str | None] | None = None,
         reflect_observation_sink: Callable[[PlayerId, str, str], None] | None = None,
         stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
@@ -400,6 +426,8 @@ class BeliefConsolidationCoordinator:
             raise TypeError("goal_reflect_enabled must be bool")
         if not isinstance(hearsay_enabled, bool):
             raise TypeError("hearsay_enabled must be bool")
+        if not isinstance(expectation_what_happened_enabled, bool):
+            raise TypeError("expectation_what_happened_enabled must be bool")
         if not isinstance(goal_stagnation_evidence_enabled, bool):
             raise TypeError("goal_stagnation_evidence_enabled must be bool")
         if objective_text_provider is not None and not callable(objective_text_provider):
@@ -492,6 +520,7 @@ class BeliefConsolidationCoordinator:
             attribution_enabled=belief_attribution_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
             hearsay_enabled=hearsay_enabled,
+            expectation_what_happened_enabled=expectation_what_happened_enabled,
         )
         self._turn_counts: dict[int, int] = defaultdict(int)
         # P4/P7: 同一 being への内省観測の乱発防止 cap。最後に観測を出した turn
@@ -1010,6 +1039,8 @@ class BeliefConsolidationCoordinator:
         }
         if evidence.source_speaker is not None:
             payload["source_speaker"] = evidence.source_speaker
+        if evidence.what_happened:
+            payload["what_happened"] = list(evidence.what_happened)
         return payload
 
     def _build_messages(
