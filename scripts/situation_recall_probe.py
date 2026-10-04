@@ -9,7 +9,9 @@
 そのまま使う。
 
 ``--narrowers`` に絞り込みの手法を複数渡すと、同じ場面を手法ごとに引き、手法どうしで上位 3 件が
-重なる数も数える (#1498)。手法を足したら、その名前を並べて比べる。人名と地名は、trace に出た
+重なる数も数える (#1498)。手法を足したら、その名前を並べて比べる。1 回の想起にかかった時間、API の
+埋め込みが 2 字組へ縮退した場面、API の使用量 (トークンと課金) も手法ごとに残す (#1454)。
+API の埋め込みを選ぶと実際に API を呼ぶ。キーは環境変数から読む。人名と地名は、trace に出た
 プレイヤー名と場所の名前を使う。形態素解析の 2 手法と比べた結果は、コミット ef0c3a06 で再現する
 (``docs/experiments/issue_1498_narrower_comparison/README.md``)。
 
@@ -34,7 +36,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import statistics
 import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -61,6 +65,10 @@ from ai_rpg_world.application.being.recall.situation_assembly import (  # noqa: 
     assemble_situation,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry  # noqa: E402
+from ai_rpg_world.application.llm.services.embedding_narrowing import (  # noqa: E402
+    EmbeddingNarrower,
+    FallbackNarrower,
+)
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (  # noqa: E402
     InMemorySemanticMemoryStore,
 )
@@ -70,6 +78,7 @@ from ai_rpg_world.application.llm.services.prompt_sections.situation_recall impo
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (  # noqa: E402
     CHAR_BIGRAM_BM25,
     SUPPORTED_TEXT_CANDIDATE_NARROWERS,
+    ITextCandidateNarrower,
     create_text_candidate_narrower,
 )
 from ai_rpg_world.application.observation.being_contract import Observer  # noqa: E402
@@ -304,10 +313,29 @@ def _consecutive_jaccard(sequence: list[list[str]]) -> list[float]:
     ]
 
 
+def _api_usage(narrower: ITextCandidateNarrower) -> dict[str, Any] | None:
+    """API の埋め込みなら、使ったトークンと課金 (OpenRouter の応答の usage) を返す。"""
+    inner = narrower.primary if isinstance(narrower, FallbackNarrower) else narrower
+    usage = getattr(inner.embedder, "usage", None) if isinstance(inner, EmbeddingNarrower) else None
+    if usage is None:
+        return None
+    return {
+        "requests": usage.requests,
+        "failures": usage.failures,
+        "prompt_tokens": usage.prompt_tokens,
+        "cost_usd": usage.cost,
+    }
+
+
 def probe(run_dir: Path, *, window: int, narrowers: Sequence[str]) -> dict[str, Any]:
     all_scenes = _scenes(run_dir / "trace.jsonl")
     first_seen = _first_seen(run_dir / "trace.jsonl")
-    recalls_by_name = {name: create_text_candidate_narrower(name) for name in narrowers}
+    recalls_by_name: dict[str, ITextCandidateNarrower] = {}
+    load_seconds: dict[str, float] = {}
+    for name in narrowers:
+        started = time.perf_counter()
+        recalls_by_name[name] = create_text_candidate_narrower(name)
+        load_seconds[name] = round(time.perf_counter() - started, 3)
     texts: dict[str, str] = {}
     players = []
     for pid in sorted(all_scenes):
@@ -319,10 +347,14 @@ def probe(run_dir: Path, *, window: int, narrowers: Sequence[str]) -> dict[str, 
             store = _store_at(entries, scene.at)
             situation, skipped = _situation(scene)
             being = BeingId(f"being_w1_p{pid}")
-            results = {
-                name: SituationBeliefRecall(store, narrower).retrieve(being, situation, top_k=_TOP_K)
-                for name, narrower in recalls_by_name.items()
-            }
+            results = {}
+            latency_ms = {}
+            for name, narrower in recalls_by_name.items():
+                started = time.perf_counter()
+                results[name] = SituationBeliefRecall(store, narrower).retrieve(
+                    being, situation, top_k=_TOP_K
+                )
+                latency_ms[name] = round((time.perf_counter() - started) * 1000, 2)
             first = results[narrowers[0]]
             rows.append(
                 {
@@ -336,6 +368,11 @@ def probe(run_dir: Path, *, window: int, narrowers: Sequence[str]) -> dict[str, 
                     "query": first.query,
                     "old": scene.old_ids,
                     "new": {name: [e.entry_id for e in r.chosen] for name, r in results.items()},
+                    "scores": {name: [round(h.score, 4) for h in r.hits] for name, r in results.items()},
+                    "latency_ms": latency_ms,
+                    "fallback": {
+                        name: r.fallback_reason for name, r in results.items() if r.fallback_reason
+                    },
                 }
             )
         players.append(
@@ -346,6 +383,10 @@ def probe(run_dir: Path, *, window: int, narrowers: Sequence[str]) -> dict[str, 
         "form": "plain_one_query",
         "window": window,
         "narrowers": list(narrowers),
+        "load_seconds": load_seconds,
+        "api_usage": {
+            name: usage for name, n in recalls_by_name.items() if (usage := _api_usage(n)) is not None
+        },
         "person_names": sorted({p["name"] for p in players if p["name"]}),
         "place_names": sorted(_place_names(run_dir / "trace.jsonl")),
         "players": players,
@@ -423,7 +464,28 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         },
         "person_name_recall": _name_recall(result, result["person_names"], exclude_own=True),
         "place_name_recall": _name_recall(result, result["place_names"], exclude_own=False),
+        "latency_ms": _latency(result),
+        "fallbacks": {
+            name: sum(1 for s in scenes if name in s.get("fallback", {})) for name in result["narrowers"]
+        },
+        "load_seconds": result["load_seconds"],
+        "api_usage": result["api_usage"],
     }
+
+
+def _latency(result: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """1 回の想起にかかった時間。人ごとの最初の想起は信念のベクトルをまとめて作るので分けて数える。"""
+    out: dict[str, dict[str, float]] = {}
+    for name in result["narrowers"]:
+        first = [p["scenes"][0]["latency_ms"][name] for p in result["players"] if p["scenes"]]
+        rest = [s["latency_ms"][name] for p in result["players"] for s in p["scenes"][1:]]
+        out[name] = {
+            "first_per_person_mean": round(statistics.mean(first), 1) if first else 0.0,
+            "rest_median": round(statistics.median(rest), 1) if rest else 0.0,
+            "rest_p90": round(sorted(rest)[int(len(rest) * 0.9) - 1], 1) if rest else 0.0,
+            "rest_max": round(max(rest), 1) if rest else 0.0,
+        }
+    return out
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -451,6 +513,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str), "utf-8"
     )
     print(json.dumps(result["summary"], ensure_ascii=False, indent=1))
+    for name, count in result["summary"]["fallbacks"].items():
+        if count:
+            # 縮退した場面の結果は 2 字組のものなので、その手法の数字として読まない。
+            print(f"warning: {name} fell back in {count} scenes", file=sys.stderr)
     for key in ("person_name_recall", "place_name_recall"):
         if result["summary"][key]["pairs"] == 0:
             # 名前が trace から取れなかったのか、本当に 0 組なのかは、この集計では分けられない。

@@ -35,6 +35,14 @@ class TestTheProfileChoosesSituationRecall:
         assert trace["situation_belief_recall_enabled"] is True
         assert trace["situation_belief_recall_narrower"] == "char_bigram_bm25"
 
+    @pytest.mark.parametrize("name", ["qwen3_embedding_8b_openrouter", "ruri_v3_30m", "ruri_v3_310m"])
+    def test_embedding_narrowers_can_be_chosen_by_name(self, name: str) -> None:
+        """埋め込みの手法 (#1454) の名前を書くと、想起と信念の判定の両方で、その名前が解決済み設定に載る。"""
+        config = _config(SITUATION_BELIEF_RECALL_NARROWER=name, BELIEF_CANDIDATE_NARROWER=name)
+
+        assert config.situation_belief_recall_narrower == name
+        assert config.belief_candidate_narrower == name
+
 
 class TestUnusableSettingsFailBeforeTheRun:
     """組めない設定を run の前に ValueError で落とすことを保証する。"""

@@ -12,22 +12,32 @@ tags と cue を使わない。tags には tool 名や spot 番号が混ざっ�
 
 ## 手法は差し替える
 
-``ITextCandidateNarrower`` の実装として差し替える。最初の実装は文字の 2 字組の
-BM25 で、形態素解析・辞書・外部 API が要らない。言い換えに弱いので、相方を
-取りこぼす割合が高ければ埋め込みの実装を足す。手法と K は profile で選ぶ
-(design_decisions #28)。頭に載る信念の選び方 (#1414) の 1 段目でも使う。
+``ITextCandidateNarrower`` の実装として差し替える。既定は文字の 2 字組の
+BM25 で、形態素解析・辞書・外部 API が要らない。言い換えと長い問い合わせ文に
+弱いので、埋め込みの実装 (``embedding_narrowing``、#1454) を足して比べている。
+手法と K は profile で選ぶ (design_decisions #28)。頭に載る信念の選び方 (#1414)
+の 1 段目でも使う。
 """
 
 from __future__ import annotations
 
+import logging
 import math
+import os
 import unicodedata
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 CHAR_BIGRAM_BM25 = "char_bigram_bm25"
+QWEN3_EMBEDDING_8B_OPENROUTER = "qwen3_embedding_8b_openrouter"
+RURI_V3_30M = "ruri_v3_30m"
+RURI_V3_70M = "ruri_v3_70m"
+RURI_V3_130M = "ruri_v3_130m"
+RURI_V3_310M = "ruri_v3_310m"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,6 +55,19 @@ class RankedCandidate:
     key: str
     text: str
     score: float
+
+
+@dataclass(frozen=True)
+class NarrowingOutcome:
+    """絞り込んだ候補と、実際に使った手法。
+
+    ``fallback_reason`` は、選んだ手法が使えず別の手法で絞り直したときの理由。
+    trace に残し、どの手法の結果が頭に載ったかを run の後から分けられるようにする。
+    """
+
+    hits: tuple[RankedCandidate, ...]
+    narrower: str
+    fallback_reason: str | None = None
 
 
 class ITextCandidateNarrower(ABC):
@@ -66,6 +89,14 @@ class ITextCandidateNarrower(ABC):
             ValueError: ``top_k`` が 1 未満
         """
         raise NotImplementedError
+
+    def narrow_with_outcome(
+        self, query: str, candidates: Sequence[TextCandidate], *, top_k: int
+    ) -> NarrowingOutcome:
+        """``narrow`` と同じ候補を、実際に使った手法の名前と一緒に返す。縮退する実装が上書きする。"""
+        return NarrowingOutcome(
+            hits=tuple(self.narrow(query, candidates, top_k=top_k)), narrower=self.name
+        )
 
 
 class CharBigramBm25Narrower(ITextCandidateNarrower):
@@ -142,30 +173,107 @@ def _char_bigrams(text: str) -> list[str]:
     return bigrams or pieces
 
 
-_NARROWERS = {CHAR_BIGRAM_BM25: CharBigramBm25Narrower}
+#: 埋め込みの置き値。OpenAI 互換の無認証 endpoint 向けにキー欄へ置く値で、キーではない。
+_PLACEHOLDER_KEY = "EMPTY"
+_OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
+#: この repo では OpenRouter のキーがここに入っている。名前と実体がずれるので、使ったら警告に残す。
+_FALLBACK_KEY_ENV = "OPENAI_API_KEY"
+#: OpenRouter のキーの接頭辞。代わりの変数に本物の OpenAI のキーがある環境で、それを OpenRouter に送らない。
+_OPENROUTER_KEY_PREFIX = "sk-or-"
 
-SUPPORTED_TEXT_CANDIDATE_NARROWERS = frozenset(_NARROWERS)
+#: Ruri v3 の大きさごとのモデル。どれを使うかは docs/experiments/issue_1454_embedding_comparison で比べた。
+_RURI_V3_MODELS = {
+    RURI_V3_30M: "cl-nagoya/ruri-v3-30m",
+    RURI_V3_70M: "cl-nagoya/ruri-v3-70m",
+    RURI_V3_130M: "cl-nagoya/ruri-v3-130m",
+    RURI_V3_310M: "cl-nagoya/ruri-v3-310m",
+}
+
+SUPPORTED_TEXT_CANDIDATE_NARROWERS = frozenset(
+    {CHAR_BIGRAM_BM25, QWEN3_EMBEDDING_8B_OPENROUTER, *_RURI_V3_MODELS}
+)
 
 
-def create_text_candidate_narrower(name: str) -> ITextCandidateNarrower:
+def create_text_candidate_narrower(
+    name: str, *, env: Mapping[str, str] | None = None
+) -> ITextCandidateNarrower:
     """profile の名前から絞り込みの実装を組む。
 
+    埋め込みの手法は、キーとモデルをここで確かめる。最初の想起まで遅らせると、
+    組めないまま毎ターン縮退するか失敗し続けて run が最後まで走る。
+
+    Args:
+        name: profile に書いた手法の名前
+        env: API のキーを読む環境。省略時は ``os.environ``。``.env`` は読まない
+
     Raises:
-        ValueError: 知らない名前
+        ValueError: 知らない名前か、API の手法なのに使えるキーが無い
+        RuntimeError: 手元の埋め込みの依存 (``embedding-local``) が入っていない
     """
-    factory = _NARROWERS.get(name)
-    if factory is None:
-        raise ValueError(
-            f"unknown text candidate narrower: {name!r}. "
-            f"valid: {sorted(SUPPORTED_TEXT_CANDIDATE_NARROWERS)}"
+    # 埋め込みの部品 (infrastructure) は組むときだけ import する。名前の一覧は設定の検証が
+    # 起動前に使うので、ここで import すると依存の重い部品まで読み込み、循環もする。
+    if name == CHAR_BIGRAM_BM25:
+        return CharBigramBm25Narrower()
+    if name == QWEN3_EMBEDDING_8B_OPENROUTER:
+        return _openrouter_qwen3(os.environ if env is None else env)
+    if name in _RURI_V3_MODELS:
+        from ai_rpg_world.application.llm.services.embedding_narrowing import EmbeddingNarrower
+        from ai_rpg_world.infrastructure.llm.ruri_embedder import RuriEmbedder
+
+        return EmbeddingNarrower(
+            name=name, embedder=RuriEmbedder(model_name=_RURI_V3_MODELS[name])
         )
-    return factory()
+    raise ValueError(
+        f"unknown text candidate narrower: {name!r}. "
+        f"valid: {sorted(SUPPORTED_TEXT_CANDIDATE_NARROWERS)}"
+    )
+
+
+def _openrouter_qwen3(env: Mapping[str, str]) -> ITextCandidateNarrower:
+    from ai_rpg_world.application.llm.services.embedding_narrowing import (
+        EmbeddingNarrower,
+        FallbackNarrower,
+    )
+    from ai_rpg_world.infrastructure.llm.openrouter_embedder import OpenRouterEmbedder
+
+    return FallbackNarrower(
+        primary=EmbeddingNarrower(
+            name=QWEN3_EMBEDDING_8B_OPENROUTER,
+            embedder=OpenRouterEmbedder(api_key=_openrouter_key(env)),
+        ),
+        fallback=CharBigramBm25Narrower(),
+    )
+
+
+def _openrouter_key(env: Mapping[str, str]) -> str:
+    named = (env.get(_OPENROUTER_KEY_ENV) or "").strip()
+    if named and named != _PLACEHOLDER_KEY:
+        return named
+    fallback = (env.get(_FALLBACK_KEY_ENV) or "").strip()
+    if fallback.startswith(_OPENROUTER_KEY_PREFIX):
+        logger.warning(
+            "embedding key was not in %s; using %s, which holds the OpenRouter key in this repository",
+            _OPENROUTER_KEY_ENV,
+            _FALLBACK_KEY_ENV,
+        )
+        return fallback
+    raise ValueError(
+        f"{QWEN3_EMBEDDING_8B_OPENROUTER} needs an OpenRouter key in {_OPENROUTER_KEY_ENV} "
+        f"(or an OpenRouter key starting with {_OPENROUTER_KEY_PREFIX!r} in {_FALLBACK_KEY_ENV}); "
+        f"{_PLACEHOLDER_KEY!r} is not a key"
+    )
 
 
 __all__ = [
     "CHAR_BIGRAM_BM25",
+    "QWEN3_EMBEDDING_8B_OPENROUTER",
+    "RURI_V3_130M",
+    "RURI_V3_30M",
+    "RURI_V3_310M",
+    "RURI_V3_70M",
     "CharBigramBm25Narrower",
     "ITextCandidateNarrower",
+    "NarrowingOutcome",
     "RankedCandidate",
     "SUPPORTED_TEXT_CANDIDATE_NARROWERS",
     "TextCandidate",

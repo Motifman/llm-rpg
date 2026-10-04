@@ -12,6 +12,7 @@ from typing import Any
 from ai_rpg_world.application.being.recall.situation import Situation
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     ITextCandidateNarrower,
+    NarrowingOutcome,
     RankedCandidate,
     TextCandidate,
 )
@@ -27,7 +28,12 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 
 @dataclass(frozen=True)
 class SituationBeliefRecallResult:
+    """``narrower`` は実際に候補を絞った手法。選んだ手法が使えず縮退したときは
+    ``requested_narrower`` と違う名前になり、``fallback_reason`` に理由が入る。"""
+
+    requested_narrower: str
     narrower: str
+    fallback_reason: str | None
     query: str
     hits: tuple[RankedCandidate, ...]
     chosen: tuple[SemanticMemoryEntry, ...]
@@ -36,7 +42,9 @@ class SituationBeliefRecallResult:
     def to_trace_payload(self) -> dict[str, Any]:
         """候補の数があれば、何も載らなかったときに信念が無かったのか一致しなかったのかを分けられる。"""
         return {
+            "requested_narrower": self.requested_narrower,
             "narrower": self.narrower,
+            "fallback_reason": self.fallback_reason,
             "query": self.query,
             "candidate_count": self.candidate_count,
             "hits": [
@@ -58,6 +66,11 @@ class SituationBeliefRecall:
         self._store = store
         self._narrower = narrower
 
+    @property
+    def narrower_name(self) -> str:
+        """profile で選んだ手法の名前。引くのに失敗したときも trace に残すために使う。"""
+        return self._narrower.name
+
     def retrieve(
         self, being_id: BeingId, situation: Situation, *, top_k: int
     ) -> SituationBeliefRecallResult:
@@ -76,14 +89,21 @@ class SituationBeliefRecall:
         query = situation.query()
         candidates = [TextCandidate(key, entry.text) for key, entry in active.items()]
         # 値の無い状況は手法に渡さない。埋め込みの手法は空の文にも何かを返しうる。
-        hits = self._narrower.narrow(query, candidates, top_k=top_k) if query else ()
+        outcome = (
+            self._narrower.narrow_with_outcome(query, candidates, top_k=top_k)
+            if query
+            else NarrowingOutcome(hits=(), narrower=self._narrower.name)
+        )
+        hits = outcome.hits
         unknown = [hit.key for hit in hits if hit.key not in active]
         if unknown:
             raise ValueError(
                 f"narrower {self._narrower.name} returned unknown keys {unknown!r}"
             )
         return SituationBeliefRecallResult(
-            narrower=self._narrower.name,
+            requested_narrower=self._narrower.name,
+            narrower=outcome.narrower,
+            fallback_reason=outcome.fallback_reason,
             query=query,
             hits=tuple(hits),
             chosen=tuple(active[hit.key] for hit in hits),
