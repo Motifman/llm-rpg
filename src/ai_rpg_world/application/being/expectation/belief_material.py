@@ -43,6 +43,10 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
     BeliefEvidenceSourceKind,
 )
 
+# 実 run の外れ 30 件では、書いてから確定するまでの時系列は最長 1193 字だった
+# (#1509)。ふだんは切らず、時系列が長くなったときだけ信念をまとめる入力を抑える。
+MAX_WHAT_HAPPENED_CHARS = 1500
+
 
 def expectation_outcome_text(
     content: str, likelihood: Likelihood, outcome: Outcome
@@ -66,6 +70,10 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
     当たりは、根拠の信念が無ければ材料にしない。支える相手が無い的中を積むと、
     何もしなかっただけの当たりや、関係の無い信念への支持で水増しされる。外れは、
     根拠の信念が無くても新しく学ぶ材料として積む。
+
+    外れには、予期を書いてから確定するまでに起きたことを付ける (#1509)。外れの
+    理由はそこにしか無い。先頭から ``max_what_happened_chars`` 字に収まる行まで
+    を残す。予期を書いたターンの行動の結果が先頭に来るので、後ろを切る。
     """
 
     def __init__(
@@ -74,9 +82,17 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
         *,
         now_provider: Callable[[], datetime],
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
+        max_what_happened_chars: int,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError("buffer_store must be BeliefEvidenceBufferRepository")
+        if isinstance(max_what_happened_chars, bool) or not isinstance(
+            max_what_happened_chars, int
+        ):
+            raise TypeError("max_what_happened_chars must be int")
+        if max_what_happened_chars < 1:
+            raise ValueError("max_what_happened_chars must be 1 or greater")
+        self._max_what_happened_chars = max_what_happened_chars
         self._buffer_store = buffer_store
         self._now_provider = now_provider
         self._trace_recorder_provider = trace_recorder_provider
@@ -87,7 +103,12 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
         if event.outcome is Outcome.HIT and not event.grounds.beliefs:
             self._trace(event_id, event, result="skipped", skipped_reason="no_grounding_beliefs")
             return
-        evidence = self._evidence(event_id, event)
+        what_happened, truncated = (
+            _capped(event.what_happened, self._max_what_happened_chars)
+            if event.outcome is Outcome.MISS
+            else ((), False)
+        )
+        evidence = self._evidence(event_id, event, what_happened)
         appended = self._buffer_store.append_received_by_being(
             event.holder, evidence, event_id=event_id.value
         )
@@ -96,10 +117,17 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
             event,
             result="appended" if appended else "already_received",
             evidence=evidence,
+            what_happened_truncated=truncated,
+            what_happened_total_lines=(
+                len(event.what_happened) if event.outcome is Outcome.MISS else 0
+            ),
         )
 
     def _evidence(
-        self, event_id: ExpectationEventId, event: ExpectationSettled
+        self,
+        event_id: ExpectationEventId,
+        event: ExpectationSettled,
+        what_happened: tuple[str, ...],
     ) -> BeliefEvidence:
         miss = event.outcome is Outcome.MISS
         strong = miss and event.likelihood is Likelihood.ALMOST_CERTAIN
@@ -119,6 +147,7 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
             occurred_at=self._now_provider(),
             observed_turn=event.turn,
             in_context_belief_ids=event.grounds.beliefs,
+            what_happened=what_happened,
         )
 
     def _trace(
@@ -129,6 +158,8 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
         result: str,
         evidence: BeliefEvidence | None = None,
         skipped_reason: str | None = None,
+        what_happened_truncated: bool = False,
+        what_happened_total_lines: int = 0,
     ) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
@@ -149,10 +180,28 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
             payload["source_kind"] = evidence.source_kind.value
             payload["salience"] = evidence.salience
             payload["belief_ids"] = list(evidence.in_context_belief_ids)
+            payload["what_happened_lines"] = len(evidence.what_happened)
+            payload["what_happened_truncated"] = what_happened_truncated
+            payload["what_happened_total_lines"] = what_happened_total_lines
         recorder.record(TraceEventKind.EXPECTATION_MATERIAL, **payload)
 
 
+def _capped(lines: tuple[str, ...], limit: int) -> tuple[tuple[str, ...], bool]:
+    kept: list[str] = []
+    used = 0
+    for line in lines:
+        if used + len(line) > limit:
+            head = line[:limit].strip()
+            if not kept and head:
+                kept.append(head)
+            return tuple(kept), True
+        kept.append(line)
+        used += len(line)
+    return tuple(kept), False
+
+
 __all__ = [
+    "MAX_WHAT_HAPPENED_CHARS",
     "ExpectationBeliefMaterialReceiver",
     "expectation_outcome_text",
     "settled_expectation_text",

@@ -364,6 +364,36 @@ class TestRestoreRoundTrip:
 
         assert [e.observed_turn for e in dst_stores['belief_evidence'].list_all_by_being(being)] == [40]
 
+    def test_belief_evidence_what_happened_round_trip(self) -> None:
+        """外れの材料が持つ時系列 (#1509) が capture → restore を経て同じ並びで戻る。"""
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+            BELIEF_EVIDENCE_SALIENCE_LOW,
+            BeliefEvidence,
+        )
+        from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+            BeliefEvidenceSourceKind,
+        )
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        lines = ('浜に流木は無かった', 'ノア「波が運んでくる」')
+        evidence = BeliefEvidence(evidence_id='belief-evidence-miss-1', source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR, episode_ids=('exp-1',), cue_signature='expectation:miss', text='たぶんと思っていた予期「流木を入手できる」は外れた。', salience=BELIEF_EVIDENCE_SALIENCE_LOW, occurred_at=_NOW, observed_turn=5, what_happened=lines)
+        src_stores['belief_evidence'].append_by_being(being, evidence)
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, payload_json)
+
+        assert [e.what_happened for e in dst_stores['belief_evidence'].list_all_by_being(being)] == [lines]
+
+    def test_belief_evidence_without_what_happened_key_decodes_empty(self) -> None:
+        """#1509 より前の (キーが無い) 証拠の payload は、例外にせず時系列の無い材料として読む。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import dict_to_belief_evidence
+        data = {'evidence_id': 'belief-evidence-legacy-4', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'expectation:miss', 'text': '外れた', 'salience': 'low', 'occurred_at': _NOW.isoformat(), 'observed_turn': 0}
+
+        evidence = dict_to_belief_evidence(data)
+
+        assert evidence.what_happened == ()
+
     def test_semantic_last_observed_turn_round_trip(self) -> None:
         """信念の last_observed_turn (#1452) が capture → restore を経て同じ値で戻る。"""
         (src_svc, src_stores) = _make_service()

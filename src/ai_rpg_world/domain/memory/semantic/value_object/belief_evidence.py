@@ -63,6 +63,9 @@ class BeliefEvidence:
     # evidence では None。固着パスが「話者について知っていることを踏まえて信じるか
     # 捨てるか」を判断する材料になる (P10)。
     source_speaker: str | None = None
+    # 外れた予期の材料だけが持つ、予期を書いてから確定するまでに本人が見聞きした
+    # 文 (#1509)。外れの理由は予期の文からは読めない。観測の文だけで、ID は載せない。
+    what_happened: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.evidence_id, str) or not self.evidence_id.strip():
@@ -170,6 +173,20 @@ class BeliefEvidence:
                     value=self.source_speaker,
                 )
             object.__setattr__(self, "source_speaker", self.source_speaker.strip())
+
+        if not isinstance(self.what_happened, tuple):
+            raise BeliefEvidenceValidationException(
+                "what_happened must be tuple[str, ...]",
+                field="what_happened",
+                value=self.what_happened,
+            )
+        for idx, line in enumerate(self.what_happened):
+            if not isinstance(line, str) or not line.strip():
+                raise BeliefEvidenceValidationException(
+                    f"what_happened[{idx}] must be non-empty str",
+                    field="what_happened",
+                    index=idx,
+                )
 
 
 __all__ = [

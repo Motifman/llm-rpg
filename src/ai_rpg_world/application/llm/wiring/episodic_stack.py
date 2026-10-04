@@ -450,6 +450,8 @@ def build_episodic_stack(
     # confidence を半分に数える。OFF なら伝聞 evidence 自体が生成されないので
     # (P9 の HEARSAY_ENABLED が同時に OFF)、節も話者強制も死んだ経路になる。
     hearsay_enabled: bool = False,
+    # #1509: 外れた予期の材料が持つ時系列の読み方を固着 LLM に足す。
+    expectation_what_happened_enabled: bool = False,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
     # True のとき chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻み、reinterpretation_coordinator が誤差専用
@@ -612,6 +614,7 @@ def build_episodic_stack(
                 # P10: ON のときだけ固着 prompt に伝聞節を足し、shortlist に話者
                 # belief を載せる (OFF = pre-P10 と byte / 挙動一致)。
                 hearsay_enabled=hearsay_enabled,
+                expectation_what_happened_enabled=expectation_what_happened_enabled,
                 create_gate=belief_create_gate,
             )
     elif episode_store is None:

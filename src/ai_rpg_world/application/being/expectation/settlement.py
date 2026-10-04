@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ai_rpg_world.application.being.expectation.event_delivery import (
@@ -59,6 +59,7 @@ from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
 )
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationEvent,
+    ExpectationSettled,
 )
 from ai_rpg_world.domain.memory.expectation.repository.expectation_repository import (
     ExpectationRepository,
@@ -66,6 +67,7 @@ from ai_rpg_world.domain.memory.expectation.repository.expectation_repository im
 from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     CheckVerdict,
+    Outcome,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_grounds import (
     ExpectationGrounds,
@@ -360,16 +362,31 @@ class ExpectationSettlementService:
         step: str,
         verdict: ShapeVerdict | CheckVerdict | None = None,
     ) -> None:
+        if isinstance(event, ExpectationSettled) and event.outcome is Outcome.MISS:
+            event = replace(
+                event,
+                what_happened=_what_happened(
+                    self._timelines.get(expectation.holder, ()),
+                    since=expectation.formed_at_turn,
+                    until=current.turn,
+                ),
+            )
         self._repository.save(expectation, [] if event is None else [event])
-        current.transitions.append(
-            {
-                "expectation_id": expectation.expectation_id.value,
-                "step": step,
-                "verdict": None if verdict is None else verdict.value,
-                "event": None if event is None else type(event).__name__,
-                "status_after": expectation.snapshot().status.value,
-            }
-        )
+        transition: dict[str, Any] = {
+            "expectation_id": expectation.expectation_id.value,
+            "step": step,
+            "verdict": None if verdict is None else verdict.value,
+            "event": None if event is None else type(event).__name__,
+            "status_after": expectation.snapshot().status.value,
+        }
+        if isinstance(event, ExpectationSettled) and event.outcome is Outcome.MISS:
+            # 時系列は直近の数ターンしか持たず、再開直後は空になる。外れの材料が理由を
+            # 持たなかったことを、書いたターンと時系列の最初のターンで読めるようにする。
+            timeline = self._timelines.get(expectation.holder, ())
+            transition["what_happened_lines"] = len(event.what_happened)
+            transition["formed_at_turn"] = expectation.formed_at_turn
+            transition["timeline_from_turn"] = timeline[0].turn if timeline else None
+        current.transitions.append(transition)
 
     def _trace(
         self,
@@ -567,6 +584,21 @@ def _state(
             for t in timeline
         ],
     }
+
+
+def _what_happened(
+    timeline: Sequence[_Turn], *, since: int, until: int
+) -> tuple[str, ...]:
+    # 時系列は直近の数ターン分しか持たないので、書いたターンが落ちていれば残りだけになる。
+    lines: list[str] = []
+    for t in timeline:
+        if since <= t.turn <= until:
+            lines.extend(
+                text
+                for text in (*t.material.actions, *t.material.speeches)
+                if text.strip()
+            )
+    return tuple(lines)
 
 
 def _listed(expectation: Expectation) -> dict[str, str]:

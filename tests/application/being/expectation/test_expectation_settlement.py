@@ -631,3 +631,118 @@ def _shaped(
     ]
     expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=turn, grounds=ExpectationGrounds())
     return expectation
+
+
+class TestMissCarriesWhatHappened:
+    """外れで確定した出来事が、予期を書いたターンから確定したターンまでの時系列を運ぶ挙動を保証する (#1509)。"""
+
+    def _form_after_a_quiet_turn(self, harness: _Harness) -> None:
+        harness.turn(TurnMaterial(actions=("書く前の出来事",)))
+        harness.repository.advance_turn(RIO)
+        harness.form("exp-1", "流木を入手できる")
+        harness.service.settle_turn(
+            RIO,
+            self_name="リオ",
+            material=TurnMaterial(actions=("リオ: 流木を拾う → もう拾ってしまった",), speeches=("カイ「流木は?」",)),
+        )
+
+    def test_settled_miss_carries_timeline_from_formed_turn_to_settled_turn(self) -> None:
+        """外れで確定した出来事は、書いたターンから確定したターンまでの行動と発言を、ターン順・行動が先の並びで運び、書く前のターンの出来事は含めない。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "miss"}, {"check_0": "miss"}),
+            timeline_turns=5,
+        )
+        self._form_after_a_quiet_turn(harness)
+
+        harness.turn(TurnMaterial(actions=("浜に流木は無い",)))
+        harness.turn(TurnMaterial(speeches=("ノア「波が運んでくる」",)))
+
+        (settled,) = _settled_events(harness)
+        assert settled.outcome is Outcome.MISS
+        assert settled.what_happened == (
+            "リオ: 流木を拾う → もう拾ってしまった",
+            "カイ「流木は?」",
+            "浜に流木は無い",
+            "ノア「波が運んでくる」",
+        )
+
+    def test_settlement_trace_shows_timeline_lines_for_miss(self) -> None:
+        """外れの確定の移りには、付けた時系列の行数と、予期を書いたターンと、時系列の最初のターンが trace に残る。時系列が欠けた外れを後から見分けられる。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "miss"}, {"check_0": "miss"}),
+            timeline_turns=5,
+        )
+        self._form_after_a_quiet_turn(harness)
+
+        harness.turn(TurnMaterial(actions=("浜に流木は無い",)))
+        harness.turn()
+
+        (settled,) = [
+            t
+            for trace in harness.settlements()
+            for t in trace["transitions"]
+            if t["event"] == "ExpectationSettled"
+        ]
+        assert (
+            settled["what_happened_lines"],
+            settled["formed_at_turn"],
+            settled["timeline_from_turn"],
+        ) == (3, 2, 1)
+
+    def test_blank_lines_are_left_out_of_timeline(self) -> None:
+        """時系列の空の行は、外れの確定の出来事に載せない。材料は空の文を受け付けない。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "miss"}, {"check_0": "miss"}),
+            timeline_turns=5,
+        )
+        self._form_after_a_quiet_turn(harness)
+
+        harness.turn(TurnMaterial(actions=("", "浜に流木は無い"), speeches=("  ",)))
+        harness.turn()
+
+        (settled,) = _settled_events(harness)
+        assert "" not in settled.what_happened
+        assert "  " not in settled.what_happened
+        assert "浜に流木は無い" in settled.what_happened
+
+    def test_settled_hit_carries_no_timeline(self) -> None:
+        """当たりで確定した出来事は時系列を運ばない。当たりの材料に時系列を付けるのは対象外。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "hit"}, {"check_0": "hit"}),
+            timeline_turns=5,
+        )
+        self._form_after_a_quiet_turn(harness)
+
+        harness.turn(TurnMaterial(actions=("流木を拾えた",)))
+        harness.turn()
+
+        (settled,) = _settled_events(harness)
+        assert settled.what_happened == ()
+
+    def test_miss_settled_by_expiry_also_carries_timeline(self) -> None:
+        """期限を過ぎて暫定の外れで確定した出来事も、書いたターンから確定したターンまでの時系列を運ぶ。"""
+        harness = _Harness(ScriptedJudgmentPort({}, {"check_0": "miss"}), timeline_turns=20)
+        harness.repository.advance_turn(RIO)
+        harness.repository.save(
+            Expectation(
+                expectation_id=ExpectationId("exp-1"),
+                holder=RIO,
+                content="流木を入手できる",
+                origin=ExpectationOrigin.WITH_ACTION,
+                likelihood=Likelihood.PROBABLY,
+                formed_at_turn=1,
+                expires_at_turn=2,
+            ),
+            [],
+        )
+        harness.service.settle_turn(RIO, self_name="リオ", material=TurnMaterial(actions=("拾いに行く",)))
+        harness.turn(TurnMaterial(actions=("流木は無い",)))
+
+        harness.turn(TurnMaterial(actions=("期限の後",)))
+
+        (settled,) = _settled_events(harness)
+        assert settled.what_happened == ("拾いに行く", "流木は無い", "期限の後")
+
+
+def _settled_events(harness: _Harness) -> list[ExpectationSettled]:
+    return [e for e in harness.receiver.events if isinstance(e, ExpectationSettled)]

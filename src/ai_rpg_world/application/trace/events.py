@@ -454,6 +454,8 @@ class TraceEventKind:
     #     #1484 より前の run では "no_beliefs_in_mind" / "no_episodes_in_mind")
     #   - belief_evidence のとき: evidence_id / source_kind / salience / belief_ids
     #     (= 根拠の信念。#1484 より前の run では頭にあった信念すべて)
+    #     / what_happened_lines (= 材料に付けた時系列の行数。当たりは 0)
+    #     / what_happened_truncated (= 上限で切り詰めたか。#1509 より前の run には無い)
     #   - recall_credit のとき: episode_ids (= 根拠のエピソード) / credit
     #     ("hit_count" | "miss_stamp")
     #     / stamped_recalls (= miss_stamp で書き添えた想起の件数。処理済みなら 0)

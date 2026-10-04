@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -194,6 +195,37 @@ class TestRoundTrip:
         assert _snapshots(restored)[0].grounds == grounds
         [entry] = restored.list_undelivered_by_being(RIO)
         assert entry.event.grounds == grounds  # type: ignore[union-attr]
+
+    def test_settled_miss_comes_back_with_what_happened(self) -> None:
+        """未配信の外れの確定の出来事は、運んでいた時系列ごと保存され、復元で同じ並びのまま戻る (#1509)。"""
+        source, store = _service()
+        expectation = _expectation("exp-1")
+        expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
+        settled = expectation.record(Check(turn=12, verdict=CheckVerdict.MISS))
+        lines = ("ノアは井戸に来なかった", "カイ「ノアは浜にいる」")
+        store.save(expectation, [replace(settled, what_happened=lines)])
+        _advance_to(store, 12)
+
+        restored, _ = _round_trip(source)
+
+        [entry] = restored.list_undelivered_by_being(RIO)
+        assert entry.event.what_happened == lines  # type: ignore[union-attr]
+
+    def test_settled_event_without_what_happened_key_comes_back_empty(self) -> None:
+        """時系列のキーが無い #1509 より前の未配信の確定の出来事は、拒まずに空の時系列として戻る。材料が理由を持たないだけで、状態は壊れない。"""
+        source, store = _service()
+        expectation = _expectation("exp-1")
+        expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
+        store.save(expectation, [expectation.record(Check(turn=12, verdict=CheckVerdict.MISS))])
+        _advance_to(store, 12)
+        payload = json.loads(source.capture(RIO))
+        del payload["expectation_undelivered_events"][0]["what_happened"]
+        target, restored = _service()
+
+        target.restore(RIO, json.dumps(payload))
+
+        [entry] = restored.list_undelivered_by_being(RIO)
+        assert entry.event.what_happened == ()  # type: ignore[union-attr]
 
     def test_empty_store_round_trips_as_empty(self) -> None:
         """予期もターン数も無い Being は空の list で保存され、復元しても空のまま。"""

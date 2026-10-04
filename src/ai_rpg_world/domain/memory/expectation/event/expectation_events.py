@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from typing import Union
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.expectation.exception.expectation_exception import (
+    ExpectationValidationException,
+)
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
     Outcome,
 )
@@ -43,6 +46,10 @@ class ExpectationSettled:
 
     受け取る側は予期の保存先を引かずに材料を書けるよう、予期の文も運ぶ。頭に
     あったものではなく根拠だけを運び、返す先を根拠に絞る (#1484)。
+
+    外れのときは、清算に見せた時系列のうち予期を書いてから確定するまでの文を
+    ``what_happened`` に運ぶ (#1509)。予期の文と「外れた」だけでは、外れの理由が
+    信念をまとめる LLM に届かない。集約は時系列を持たないので、清算する側が付ける。
     """
 
     expectation_id: ExpectationId
@@ -52,6 +59,17 @@ class ExpectationSettled:
     outcome: Outcome
     likelihood: Likelihood
     grounds: ExpectationGrounds
+    what_happened: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        # 材料 (BeliefEvidence) は空の行を受け付けない。ここで通すと、受け取る側が
+        # 配り直しのたびに失敗し、外れの材料が配信の上限で静かに落ちる。
+        if not isinstance(self.what_happened, tuple) or not all(
+            isinstance(text, str) and text.strip() for text in self.what_happened
+        ):
+            raise ExpectationValidationException(
+                "what_happened must be tuple of non-blank str"
+            )
 
 
 @dataclass(frozen=True)

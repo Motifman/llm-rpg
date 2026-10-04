@@ -70,13 +70,14 @@ def _settled(**overrides: Any) -> ExpectationSettled:
 
 
 class _Harness:
-    def __init__(self) -> None:
+    def __init__(self, *, max_what_happened_chars: int = 1000) -> None:
         self.buffer = InMemoryBeliefEvidenceBufferStore()
         self.recorder = RecordingTraceRecorder()
         self.receiver = ExpectationBeliefMaterialReceiver(
             self.buffer,
             now_provider=lambda: NOW,
             trace_recorder_provider=lambda: self.recorder,
+            max_what_happened_chars=max_what_happened_chars,
         )
 
     def receive(
@@ -275,4 +276,91 @@ class TestTrace:
             "source_kind": "prediction_error",
             "salience": "high",
             "belief_ids": ["belief-tide"],
+            "what_happened_lines": 0,
+            "what_happened_truncated": False,
+            "what_happened_total_lines": 0,
         }
+
+
+class TestMissCarriesWhatHappened:
+    """外れの材料に、予期を書いてから確定するまでに実際に起きたことが付く挙動を保証する (#1509)。"""
+
+    def test_miss_material_carries_what_happened(self) -> None:
+        """外れで確定した出来事が運ぶ時系列は、材料の what_happened に同じ並びで付き、件数が trace に残る。"""
+        harness = _Harness()
+        lines = ("リオ: 流木を拾う → もう拾ってしまった", "ノア「波が運んでくる」")
+
+        harness.receive(_settled(what_happened=lines))
+
+        (material,) = harness.materials()
+        assert material.what_happened == lines
+        (trace,) = harness.traces()
+        assert (trace["what_happened_lines"], trace["what_happened_truncated"]) == (2, False)
+
+    def test_hit_material_carries_no_what_happened(self) -> None:
+        """当たりの材料には、出来事が時系列を運んでいても付けない。当たりに時系列を付けるのは対象外。"""
+        harness = _Harness()
+
+        harness.receive(
+            _settled(
+                outcome=Outcome.HIT,
+                grounds=ExpectationGrounds(beliefs=("b-1",)),
+                what_happened=("流木を拾えた",),
+            )
+        )
+
+        (material,) = harness.materials()
+        assert material.what_happened == ()
+
+    def test_what_happened_over_limit_keeps_earliest_lines_and_traces_truncation(self) -> None:
+        """時系列の文字数が上限を超えると、先頭から上限に収まる行までを残し、切り詰めたことを trace に残す。"""
+        harness = _Harness(max_what_happened_chars=10)
+
+        harness.receive(_settled(what_happened=("あいうえお", "かきくけ", "さしすせそ")))
+
+        (material,) = harness.materials()
+        assert material.what_happened == ("あいうえお", "かきくけ")
+        (trace,) = harness.traces()
+        assert (trace["what_happened_lines"], trace["what_happened_truncated"]) == (2, True)
+        assert trace["what_happened_total_lines"] == 3
+
+    def test_what_happened_exactly_at_limit_is_kept_whole(self) -> None:
+        """時系列の文字数の合計がちょうど上限のときは、切り詰めずにすべての行を残す。"""
+        harness = _Harness(max_what_happened_chars=9)
+
+        harness.receive(_settled(what_happened=("あいうえお", "かきくけ")))
+
+        (material,) = harness.materials()
+        assert material.what_happened == ("あいうえお", "かきくけ")
+        assert harness.traces()[0]["what_happened_truncated"] is False
+
+    def test_first_line_over_limit_is_cut_to_limit(self) -> None:
+        """先頭の 1 行だけで上限を超えるときは、その行を上限の文字数で切って 1 行だけ残す。"""
+        harness = _Harness(max_what_happened_chars=3)
+
+        harness.receive(_settled(what_happened=("あいうえお", "かき")))
+
+        (material,) = harness.materials()
+        assert material.what_happened == ("あいう",)
+        assert harness.traces()[0]["what_happened_truncated"] is True
+
+    def test_first_line_cut_to_blank_is_dropped(self) -> None:
+        """先頭の行を上限で切ると空白だけになるときは、その行を残さず、材料は時系列を持たない。"""
+        harness = _Harness(max_what_happened_chars=2)
+
+        harness.receive(_settled(what_happened=("   あいう",)))
+
+        (material,) = harness.materials()
+        assert material.what_happened == ()
+        assert harness.traces()[0]["what_happened_truncated"] is True
+
+    @pytest.mark.parametrize("limit", [0, -1, True])
+    def test_non_positive_limit_is_rejected(self, limit: object) -> None:
+        """時系列の上限に 1 未満や真偽値を渡すと、受け取る側を作らずに止める。"""
+        with pytest.raises((TypeError, ValueError)):
+            ExpectationBeliefMaterialReceiver(
+                InMemoryBeliefEvidenceBufferStore(),
+                now_provider=lambda: NOW,
+                trace_recorder_provider=lambda: None,
+                max_what_happened_chars=limit,  # type: ignore[arg-type]
+            )

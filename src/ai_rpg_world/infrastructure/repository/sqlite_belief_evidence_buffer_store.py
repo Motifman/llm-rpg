@@ -63,7 +63,15 @@ def _evidence_to_payload(evidence: BeliefEvidence) -> dict[str, Any]:
         "in_context_belief_ids": list(evidence.in_context_belief_ids),
         # P9 (伝聞): HEARSAY evidence の話者 (payload JSON 内なので schema 変更不要)。
         "source_speaker": evidence.source_speaker,
+        "what_happened": list(evidence.what_happened),
     }
+
+
+def _what_happened(value: Any) -> tuple[str, ...]:
+    # 文字列を 1 文字ずつの行にしたり、None を "None" の行にしたりしない。
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise ValueError(f"what_happened must be list[str], got {value!r}")
+    return tuple(value)
 
 
 def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
@@ -87,6 +95,8 @@ def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
             if data.get("source_speaker") is not None
             else None
         ),
+        # #1509 より前に書かれた行には無い。外れの理由を持たない材料として読む。
+        what_happened=_what_happened(data.get("what_happened", [])),
     )
 
 
