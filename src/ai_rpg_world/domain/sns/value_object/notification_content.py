@@ -32,6 +32,10 @@ class NotificationContent:
     # 関連コンテンツの本文（ポストやリプライの内容）
     content_text: str | None = None
 
+    # 公開SNSでは数値IDを再利用しても別の内容や人物へ再結合しない。
+    related_target_id: str | None = None
+    actor_identity_token: str | None = None
+
     @classmethod
     def create_follow_notification(
         cls,
