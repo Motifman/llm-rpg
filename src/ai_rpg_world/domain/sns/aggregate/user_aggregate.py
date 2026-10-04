@@ -37,6 +37,7 @@ from ai_rpg_world.domain.sns.value_object import (
     UserId,
     UserProfile,
 )
+from ai_rpg_world.domain.sns.value_object.sns_identity_token import SnsIdentityToken
 
 
 class UserAggregate(AggregateRoot):
@@ -47,6 +48,7 @@ class UserAggregate(AggregateRoot):
         follow_relationships: list[FollowRelationShip],
         block_relationships: list[BlockRelationShip],
         subscribe_relationships: list[SubscribeRelationShip],
+        identity_token: str | None = None,
     ):
         super().__init__()
         self._user_id = user_id
@@ -54,6 +56,12 @@ class UserAggregate(AggregateRoot):
         self._follow_relationships = follow_relationships
         self._block_relationships = block_relationships
         self._subscribe_relationships = subscribe_relationships
+        self._identity_token = SnsIdentityToken() if identity_token is None else SnsIdentityToken(identity_token)
+
+    @property
+    def identity_token(self) -> str:
+        """整数の採番や表示名と独立した、作成時から変わらない識別子。"""
+        return self._identity_token.value
     
     @classmethod
     def create_new_user(cls, user_id: UserId, user_name: str, display_name: str, bio: str) -> "UserAggregate":

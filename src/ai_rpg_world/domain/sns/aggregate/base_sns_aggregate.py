@@ -11,6 +11,7 @@ from ai_rpg_world.domain.sns.exception import (
     OwnershipException,
 )
 from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
+from ai_rpg_world.domain.sns.value_object.sns_identity_token import SnsIdentityToken
 
 ContentId = TypeVar("ContentId", PostId, ReplyId)
 
@@ -29,6 +30,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
+        identity_token: str | None = None,
     ):
         super().__init__()
         self._content_id: ContentId = content_id
@@ -40,6 +42,12 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         self._parent_post_id = parent_post_id
         self._parent_reply_id = parent_reply_id
         self._created_at = created_at if created_at is not None else datetime.now()
+        self._identity_token = SnsIdentityToken() if identity_token is None else SnsIdentityToken(identity_token)
+
+    @property
+    def identity_token(self) -> str:
+        """整数の採番や表示順序と独立した、作成時から変わらない識別子。"""
+        return self._identity_token.value
 
     @property
     def content_id(self) -> ContentId:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
@@ -2111,6 +2112,36 @@ def _migration_v35(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v36(connection: sqlite3.Connection) -> None:
+    """SNS の公開参照用識別子を保存し、旧行にも一度だけ割り当てる。"""
+    connection.execute(
+        """
+        CREATE TABLE game_sns_public_namespace (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            namespace TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "INSERT INTO game_sns_public_namespace (singleton, namespace) VALUES (1, ?)",
+        (uuid4().hex,),
+    )
+    for table, key in (
+        ("game_sns_posts", "post_id"),
+        ("game_sns_replies", "reply_id"),
+        ("game_sns_users", "user_id"),
+    ):
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN identity_token TEXT")
+        rows = connection.execute(f"SELECT {key} FROM {table}").fetchall()
+        connection.executemany(
+            f"UPDATE {table} SET identity_token = ? WHERE {key} = ?",
+            [(uuid4().hex, row[0]) for row in rows],
+        )
+        connection.execute(
+            f"CREATE UNIQUE INDEX idx_{table}_identity_token ON {table}(identity_token)"
+        )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -2147,6 +2178,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=33, apply=_migration_v33),
     SqliteMigration(version=34, apply=_migration_v34),
     SqliteMigration(version=35, apply=_migration_v35),
+    SqliteMigration(version=36, apply=_migration_v36),
 )
 
 
@@ -2187,4 +2219,14 @@ def allocate_sequence_value(
     return int(row[0])
 
 
-__all__ = ["allocate_sequence_value", "init_game_write_schema"]
+def get_sns_public_namespace(connection: sqlite3.Connection) -> str:
+    """初期化済みの保存領域の名前空間を読み、欠損時は再発行せず停止する。"""
+    row = connection.execute(
+        "SELECT namespace FROM game_sns_public_namespace WHERE singleton = 1"
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("SNS の公開参照用名前空間がありません")
+    return str(row[0])
+
+
+__all__ = ["allocate_sequence_value", "get_sns_public_namespace", "init_game_write_schema"]

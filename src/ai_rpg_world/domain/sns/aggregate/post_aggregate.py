@@ -26,12 +26,13 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
+        identity_token: str | None = None,
     ):
         # ポストは親を持つことができない
         if parent_post_id is not None or parent_reply_id is not None:
             raise InvalidParentReferenceException("ポストは親ポストまたは親リプライを持つことはできません。")
 
-        super().__init__(post_id, author_user_id, post_content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        super().__init__(post_id, author_user_id, post_content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at, identity_token)
         self._reply_ids = reply_ids.copy()
 
     @classmethod
@@ -44,9 +45,10 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         mentions: set[Mention],
         reply_ids: set[ReplyId],  # リプライIDの一覧
         deleted: bool = False,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
+        identity_token: str | None = None,
     ) -> "PostAggregate":
-        return cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
+        return cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at, identity_token)
 
     @classmethod
     def create(

@@ -124,6 +124,7 @@ class SqliteReplyRepository(ReplyRepository):
         reply_id = ReplyId(int(row["reply_id"]))
         return copy.deepcopy(
             build_reply_aggregate(
+                identity_token=str(row["identity_token"]),
                 reply_id=int(reply_id),
                 author_user_id=int(row["author_user_id"]),
                 parent_post_id=None if row["parent_post_id"] is None else int(row["parent_post_id"]),
@@ -178,8 +179,9 @@ class SqliteReplyRepository(ReplyRepository):
                     content,
                     visibility,
                     deleted,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at,
+                    identity_token
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(reply_id) DO UPDATE SET
                     author_user_id = excluded.author_user_id,
                     parent_post_id = excluded.parent_post_id,
@@ -187,7 +189,8 @@ class SqliteReplyRepository(ReplyRepository):
                     content = excluded.content,
                     visibility = excluded.visibility,
                     deleted = excluded.deleted,
-                    created_at = excluded.created_at
+                    created_at = excluded.created_at,
+                    identity_token = excluded.identity_token
                 """,
                 (
                     int(reply.reply_id),
@@ -198,6 +201,7 @@ class SqliteReplyRepository(ReplyRepository):
                     reply.content.visibility.value,
                     1 if reply.deleted else 0,
                     reply.created_at.isoformat(),
+                    reply.identity_token,
                 ),
             )
             self._conn.execute("DELETE FROM game_sns_reply_hashtags WHERE reply_id = ?", (int(reply.reply_id),))
