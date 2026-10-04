@@ -331,6 +331,10 @@ class WorldLlmWiring:
         # に実装があるが、experiment runtime の _tool_handlers に dispatch が
         # 無く UNSUPPORTED_TOOL に化けていた。executor を遅延構築し、これら
         # の handler を _tool_handlers に追加する。
+        public_sns_executor = getattr(self.runtime, "_public_sns_executor", None)
+        if public_sns_executor is not None:
+            self._tool_handlers["sns_read"] = lambda pid, args, ctx: public_sns_executor.read(int(pid), args, ctx)
+            self._tool_handlers["sns_publish"] = lambda pid, args, ctx: public_sns_executor.publish(int(pid), args, ctx)
         self._spot_graph_executor: Any | None = None
         wire_missing_spot_graph_tools(self)
     def attach_action_failed_wiring(

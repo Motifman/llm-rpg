@@ -562,6 +562,8 @@ class ScenarioLoadResult:
     # 商人 (merchants) とは別の宣言にする。商人の居る町でも「人同士の取引は
     # しない」世界はありえるし、逆もある。meeting_enabled と同じく、宣言の
     # 無い世界では取引ツールを出さず、既存 run の tool 一覧を動かさない。
+    public_sns_enabled: bool = False
+    public_sns_push_budget_chars: int = 6000
     player_trade_enabled: bool = False
     #: 提案が流れるまでの手番数。None なら engine の既定。
     #:

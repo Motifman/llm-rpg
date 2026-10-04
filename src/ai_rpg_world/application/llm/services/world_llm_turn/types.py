@@ -21,6 +21,7 @@ ACTION_RESULT_TRACE_RESERVED_KEYS = frozenset(
         "success",
         "error_code",
         "result_summary",
+        "execution_provenance",
     }
 )
 

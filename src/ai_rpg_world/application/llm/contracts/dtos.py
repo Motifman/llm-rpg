@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
@@ -176,6 +177,8 @@ class ActionResultEntry:
     # 場合や、この entry の生成元が prompt build を経由しない場合は None
     # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
     prediction_context_id: str | None = None
+    # 実行境界で確定した要求と当人の手番。dataset IDの代わりを捏造しない。
+    execution_provenance: ExecutionProvenance | None = None
     # U4 (予測誤差統一設計 部品3): この行動の prompt build 時に【関連する学び】
     # として in-context だった belief_id 群。``PredictionContextLedger.consume``
     # が返す ``PredictionContext.belief_ids`` を ``ActionResultRecorder.record``
@@ -239,6 +242,8 @@ class ActionResultEntry:
         if isinstance(self.occurred_tick, bool):
             # bool は int の subclass。tick として誤注入されないよう弾く
             raise TypeError("occurred_tick must not be bool")
+        if self.execution_provenance is not None and not isinstance(self.execution_provenance, ExecutionProvenance):
+            raise TypeError("execution_provenance must be ExecutionProvenance or None")
         if self.prediction_context_id is not None and not isinstance(
             self.prediction_context_id, str
         ):

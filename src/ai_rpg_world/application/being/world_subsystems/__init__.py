@@ -141,6 +141,7 @@ from ai_rpg_world.application.being.world_subsystems.world_tick_codec import (
 )
 
 __all__ = [
+    "PublicSnsSubsystemCodec",
     "MarketBoardSubsystemCodec",
     "PendingTradeOfferSubsystemCodec",
     # Phase 9-2
@@ -185,3 +186,5 @@ __all__ = [
     "GamePhaseSubsystemCodec",
     "InteractionCooldownSubsystemCodec",
 ]
+
+from ai_rpg_world.application.being.world_subsystems.public_sns_codec import PublicSnsSubsystemCodec

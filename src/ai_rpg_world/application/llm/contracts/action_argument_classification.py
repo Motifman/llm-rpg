@@ -30,6 +30,11 @@ class ActionArgumentDisplayKind(str, Enum):
 # コピー可能な値は identifier_arguments、自由文は値を保存せず引数名だけ、
 # 直後の専用行と重複する主観入力は省略する。
 ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
+    "view": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    "action": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    "target_id": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    "cursor": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    "limit": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # memory_recall_episodes.about: 検索した話題そのものは自由記述。
     "about": ActionArgumentDisplayKind.FREE_TEXT,
     # interact.action_name: 表示された操作名と完全一致が必要。

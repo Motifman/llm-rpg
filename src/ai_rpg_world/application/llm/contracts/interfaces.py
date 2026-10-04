@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
 )
@@ -126,6 +127,7 @@ class IActionResultStore(ABC):
         emotion_hint: str | None = None,
         scene_boundary: bool = False,
         occurred_tick: int | None = None,
+        execution_provenance: ExecutionProvenance | None = None,
         prediction_context_id: str | None = None,
         in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
