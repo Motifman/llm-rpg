@@ -30,6 +30,12 @@ from ai_rpg_world.application.llm.services.belief_create_gate import (
     SHAPE_QUESTION,
     BeliefCreateGate,
 )
+from ai_rpg_world.application.llm.services.embedding_narrowing import (
+    EmbeddingNarrower,
+    EmbeddingUnavailableError,
+    FallbackNarrower,
+    ITextEmbedder,
+)
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     CharBigramBm25Narrower,
     TextCandidate,
@@ -339,14 +345,15 @@ class TestWithoutAJudgmentCreateIsKept:
         assert list(questions) == [SHAPE_QUESTION]
 
     def test_a_failing_narrower_creates(self) -> None:
-        """候補の絞り込みが例外を投げても、作るを通し UNEXPECTED_ERROR を残す。"""
+        """候補の絞り込みが例外を投げても作るを通し、判断の失敗と分けて NARROWER_FAILED を残す。判断の port は呼ばない。"""
 
         class _Broken(CharBigramBm25Narrower):
             def narrow(self, query, candidates, *, top_k):
                 raise RuntimeError("embedding api down")
 
+        port = _ScriptedPort()
         gate = BeliefCreateGate(
-            judgment_port=_ScriptedPort(),
+            judgment_port=port,
             narrower=_Broken(),
             top_k=3,
             min_confidence=0.6,
@@ -355,7 +362,8 @@ class TestWithoutAJudgmentCreateIsKept:
         review = gate.review(_NEW_TEXT, _EXISTING)
 
         assert review.outcome == OUTCOME_CREATE
-        assert review.unavailable_reason == "UNEXPECTED_ERROR"
+        assert review.unavailable_reason == "NARROWER_FAILED"
+        assert port.calls == []
 
     def test_a_judged_review_has_no_unavailable_reason(self) -> None:
         """判断が得られた review の縮退理由は None で、縮退と区別できる。"""
@@ -391,6 +399,45 @@ class TestTheReviewIsReadableInTheTrace:
         assert payload["top_k"] == 1
         assert payload["min_confidence"] == pytest.approx(0.6)
         assert payload["unavailable_reason"] is None
+
+    def test_the_trace_names_the_chosen_narrower_without_fallback(self) -> None:
+        """縮退しなければ、選んだ手法と使った手法は同じ名前で、絞り込みの縮退の理由は None。"""
+        payload = _gate(_ScriptedPort()).review(_NEW_TEXT, _EXISTING).as_trace_payload()
+
+        assert payload["requested_narrower"] == "char_bigram_bm25"
+        assert payload["narrower"] == "char_bigram_bm25"
+        assert payload["narrower_fallback_reason"] is None
+
+    def test_the_trace_keeps_a_narrower_fallback(self) -> None:
+        """埋め込みを得られず 2 字組で絞り直したら、判断はそのまま続け、選んだ手法・使った手法・理由を残す。"""
+        narrower = FallbackNarrower(
+            primary=EmbeddingNarrower(name="qwen3_embedding_8b_openrouter", embedder=_DownEmbedder()),
+            fallback=CharBigramBm25Narrower(),
+        )
+        gate = BeliefCreateGate(
+            judgment_port=_ScriptedPort(), narrower=narrower, top_k=2, min_confidence=0.6
+        )
+
+        review = gate.review(_NEW_TEXT, _EXISTING)
+        payload = review.as_trace_payload()
+
+        assert review.unavailable_reason is None
+        assert review.candidates
+        assert payload["requested_narrower"] == "qwen3_embedding_8b_openrouter"
+        assert payload["narrower"] == "char_bigram_bm25"
+        assert "timeout" in payload["narrower_fallback_reason"]
+
+
+class _DownEmbedder(ITextEmbedder):
+    @property
+    def name(self) -> str:
+        return "down"
+
+    def embed_queries(self, texts: Sequence[str]):
+        raise EmbeddingUnavailableError("timeout")
+
+    def embed_documents(self, texts: Sequence[str]):
+        raise EmbeddingUnavailableError("timeout")
 
 
 class TestConstruction:

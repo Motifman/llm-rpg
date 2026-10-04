@@ -93,7 +93,11 @@ def run_situation_belief_recall(
         builder._logger.error(
             "Situation belief recall failed for player_id=%s", player_id.value, exc_info=True
         )
-        payload, text, belief_ids = {"failed": f"{type(exc).__name__}: {exc}"}, "", ()
+        payload = {
+            "failed": f"{type(exc).__name__}: {exc}",
+            "requested_narrower": sources.recall.narrower_name,
+        }
+        text, belief_ids = "", ()
     _record(builder, player_id=player_id, being_id=being_id, payload=payload)
     return text, belief_ids
 

@@ -320,6 +320,15 @@ class TestRecallOutput:
         assert "ValueError" in env.trace()["failed"]
         assert any(r.levelno == logging.ERROR for r in caplog.records)
 
+    def test_failure_trace_names_the_chosen_narrower(self) -> None:
+        """引く途中で失敗しても、trace に選んだ手法の名前が残る。手法ごとに失敗を数えられる。"""
+        env = _Env()
+        builder = _Builder(env.recorder, top_k=0)
+
+        env.run([_seen("潮が満ちてきた", 1)], builder=builder)
+
+        assert env.trace()["requested_narrower"] == "char_bigram_bm25"
+
 
 class TestSources:
     """SituationRecallSources が、配線の取り違えを作る時点で拒むことを保証する。"""

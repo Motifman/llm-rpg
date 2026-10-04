@@ -9,6 +9,12 @@ import pytest
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
 from ai_rpg_world.application.being.recall.situation import Situation
+from ai_rpg_world.application.llm.services.embedding_narrowing import (
+    EmbeddingNarrower,
+    EmbeddingUnavailableError,
+    FallbackNarrower,
+    ITextEmbedder,
+)
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
@@ -200,3 +206,44 @@ class TestTracePayload:
         assert payload["hits"][0]["text"] == "カニに挟まれたら手を離して待つ"
         assert isinstance(payload["hits"][0]["score"], float)
         assert payload["chosen"] == ["b-crab"]
+
+    def test_payload_without_fallback_names_the_chosen_narrower(self) -> None:
+        """縮退しなければ、選んだ手法と使った手法は同じ名前で、縮退の理由は None。"""
+        store = _store(("b-crab", "カニに挟まれたら手を離して待つ"))
+
+        payload = _bm25(store).retrieve(BEING, SITUATION, top_k=3).to_trace_payload()
+
+        assert payload["requested_narrower"] == "char_bigram_bm25"
+        assert payload["narrower"] == "char_bigram_bm25"
+        assert payload["fallback_reason"] is None
+
+    def test_payload_after_fallback_names_the_used_narrower_and_the_reason(self) -> None:
+        """埋め込みを得られず 2 字組で引き直したら、選んだ手法、実際に使った手法、縮退の理由が残る。"""
+        store = _store(("b-crab", "カニに挟まれたら手を離して待つ"))
+        narrower = FallbackNarrower(
+            primary=EmbeddingNarrower(
+                name="qwen3_embedding_8b_openrouter",
+                embedder=_UnavailableEmbedder(),
+            ),
+            fallback=CharBigramBm25Narrower(),
+        )
+
+        result = SituationBeliefRecall(store, narrower).retrieve(BEING, SITUATION, top_k=3)
+        payload = result.to_trace_payload()
+
+        assert payload["requested_narrower"] == "qwen3_embedding_8b_openrouter"
+        assert payload["narrower"] == "char_bigram_bm25"
+        assert "HTTP 503" in payload["fallback_reason"]
+        assert payload["chosen"] == ["b-crab"]
+
+
+class _UnavailableEmbedder(ITextEmbedder):
+    @property
+    def name(self) -> str:
+        return "unavailable"
+
+    def embed_queries(self, texts: Sequence[str]):
+        raise EmbeddingUnavailableError("HTTP 503")
+
+    def embed_documents(self, texts: Sequence[str]):
+        raise EmbeddingUnavailableError("HTTP 503")

@@ -59,6 +59,7 @@ OUTCOME_SKIP_CURRENT_SITUATION = "skip_current_situation"
 _UNAVAILABLE_ANSWER_INVALID = "TYPED_JUDGMENT_ANSWER_INVALID"
 _UNAVAILABLE_ANSWER_MISSING = "TYPED_JUDGMENT_ANSWER_MISSING"
 _UNAVAILABLE_UNEXPECTED = "UNEXPECTED_ERROR"
+_UNAVAILABLE_NARROWER = "NARROWER_FAILED"
 
 # 「いまの状況」を先頭に置かない。stub は先頭を選ぶ。
 _SHAPE_OPTIONS: Mapping[str, str] = {
@@ -81,6 +82,8 @@ class BeliefCreateReview:
         outcome: ``create`` / ``strengthen`` / ``skip_current_situation``
         target_key: ``strengthen`` のとき強める既存の信念の key
         unavailable_reason: 判断を得られず作るを通した理由。判断が得られたら None
+        narrower: 実際に候補を絞った手法。縮退したら ``requested_narrower`` と違う
+        narrower_fallback_reason: 選んだ手法が使えず別の手法で絞り直した理由
     """
 
     text: str
@@ -99,6 +102,8 @@ class BeliefCreateReview:
     unavailable_reason: str | None = None
     latency_ms: float | None = None
     source: str | None = None
+    requested_narrower: str | None = None
+    narrower_fallback_reason: str | None = None
 
     def as_trace_payload(self) -> dict[str, Any]:
         return {
@@ -116,7 +121,9 @@ class BeliefCreateReview:
             "outcome": self.outcome,
             "target_key": self.target_key,
             "unavailable_reason": self.unavailable_reason,
+            "requested_narrower": self.requested_narrower or self.narrower,
             "narrower": self.narrower,
+            "narrower_fallback_reason": self.narrower_fallback_reason,
             "top_k": self.top_k,
             "min_confidence": self.min_confidence,
             "latency_ms": self.latency_ms,
@@ -157,19 +164,25 @@ class BeliefCreateGate:
             outcome=OUTCOME_CREATE,
             target_key=None,
             narrower=self._narrower.name,
+            requested_narrower=self._narrower.name,
             top_k=self._top_k,
             min_confidence=self._min_confidence,
         )
         try:
-            # 絞り込みも try に入れる。埋め込みの実装は外部 API を呼ぶので、その
-            # 失敗でも作るを通す。
-            # 「該当なし」と同じ文の信念は選択肢として区別できないので並べない。
-            candidates = tuple(
-                c
-                for c in self._narrower.narrow(text, existing, top_k=self._top_k)
-                if c.text != NO_SAME_MEANING
-            )
-            base = replace(base, candidates=candidates)
+            narrowed = self._narrower.narrow_with_outcome(text, existing, top_k=self._top_k)
+        except Exception:
+            # 絞り込みの失敗でも作るを通す。判断の失敗とは理由を分け、trace で見分ける。
+            logger.exception("belief create gate narrowing failed")
+            return replace(base, unavailable_reason=_UNAVAILABLE_NARROWER)
+        # 「該当なし」と同じ文の信念は選択肢として区別できないので並べない。
+        candidates = tuple(c for c in narrowed.hits if c.text != NO_SAME_MEANING)
+        base = replace(
+            base,
+            candidates=candidates,
+            narrower=narrowed.narrower,
+            narrower_fallback_reason=narrowed.fallback_reason,
+        )
+        try:
             questions: dict[str, ChoiceQuestion] = {SHAPE_QUESTION: _shape_question()}
             if candidates:
                 questions[SAME_MEANING_QUESTION] = _same_meaning_question(candidates)

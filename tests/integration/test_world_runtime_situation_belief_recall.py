@@ -133,3 +133,55 @@ class TestSituationRecallIsWiredOnlyWhenEnabled:
 
         with pytest.raises(ValueError, match="episodic stack"):
             runtime._get_or_build_default_prompt_builder()
+
+
+class TestTheEmbeddingNarrowerInTheRun:
+    """埋め込みの手法 (#1454) を profile で選んだとき、組めなければ始める前に止まり、API が落ちたら縮退が trace に残ることを保証する。"""
+
+    def test_qwen3_without_a_key_fails_before_building_the_prompt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenRouter のキーが環境に無ければ、プロンプトを組む前に、キーの名前を添えた ValueError で止まる。"""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        runtime = _build_runtime(
+            semantic_passive_top_k=3,
+            situation_belief_recall_enabled=True,
+            situation_belief_recall_narrower="qwen3_embedding_8b_openrouter",
+        )
+
+        with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+            runtime._get_or_build_default_prompt_builder()
+
+    def test_an_api_failure_falls_back_to_bigrams_and_is_traced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """API が失敗しても想起は 2 字組で続き、trace に選んだ手法・使った手法・縮退の理由が残る。"""
+        from ai_rpg_world.application.llm.services.embedding_narrowing import (
+            EmbeddingUnavailableError,
+        )
+        from ai_rpg_world.infrastructure.llm.openrouter_embedder import OpenRouterEmbedder
+        from tests.application.being.expectation.support import RecordingTraceRecorder
+
+        def down(self, texts):  # type: ignore[no-untyped-def]
+            raise EmbeddingUnavailableError("HTTP 503: overloaded")
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+        monkeypatch.setattr(OpenRouterEmbedder, "_embed", down)
+        runtime = _build_runtime(
+            semantic_passive_top_k=3,
+            situation_belief_recall_enabled=True,
+            situation_belief_recall_narrower="qwen3_embedding_8b_openrouter",
+        )
+        rin = _rin(runtime)
+        _seed(runtime, rin, "sem-a", "リンは書庫の鍵を探している")
+        recorder = RecordingTraceRecorder()
+        runtime.set_trace_recorder(recorder)
+
+        runtime.build_full_prompt(rin)
+
+        [payload] = recorder.payloads("situation_belief_recall")
+        assert payload["failed"] is None
+        assert payload["requested_narrower"] == "qwen3_embedding_8b_openrouter"
+        assert payload["narrower"] == "char_bigram_bm25"
+        assert "HTTP 503" in payload["fallback_reason"]
