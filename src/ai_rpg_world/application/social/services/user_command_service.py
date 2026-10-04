@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.social.contracts.commands import (
     BlockUserCommand,
     CreateUserCommand,
@@ -174,7 +175,11 @@ class UserCommandService:
             # ドメインサービスでフォロー可能かどうかをチェック
             RelationshipDomainService.can_follow(user_aggregate, followee_aggregate)
 
-            user_aggregate.follow(UserId(command.followee_user_id))
+            provenance = current_execution_provenance()
+            user_aggregate.follow(
+                UserId(command.followee_user_id), followee_identity_token=followee_aggregate.identity_token,
+                execution_provenance=provenance.to_dict() if provenance else None,
+            )
 
             # リポジトリに保存
             self.user_repository.save(user_aggregate)

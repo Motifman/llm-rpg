@@ -105,7 +105,7 @@ class UserAggregate(AggregateRoot):
         """ユーザープロファイル（利便性のために追加）"""
         return self._sns_user.user_profile
         
-    def follow(self, followee_user_id: UserId) -> None:
+    def follow(self, followee_user_id: UserId, *, followee_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
         """ユーザーをフォロー"""
         # 自分自身をフォローしようとしていないかチェック
         if self._user_id == followee_user_id:
@@ -120,6 +120,9 @@ class UserAggregate(AggregateRoot):
             follower_user_id=self._user_id,
             followee_user_id=followee_user_id,
             follower_display_name=self.profile.display_name,
+            actor_identity_token=self.identity_token,
+            recipient_identity_token=followee_identity_token,
+            execution_provenance=execution_provenance,
         )
         self.add_event(event)
 

@@ -121,9 +121,9 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         """親情報を取得"""
         return self._parent_post_id, self._parent_reply_id
 
-    def like_reply(self, user_id: UserId, liker_display_name: str = "") -> None:
+    def like_reply(self, user_id: UserId, liker_display_name: str = "", *, liker_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
         """リプライにいいね"""
-        self.like(user_id, "reply", liker_display_name=liker_display_name)
+        self.like(user_id, "reply", liker_display_name=liker_display_name, liker_identity_token=liker_identity_token, execution_provenance=execution_provenance)
 
     def delete_reply(self, user_id: UserId) -> None:
         """リプライを削除"""
