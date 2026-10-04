@@ -2039,13 +2039,17 @@ def _format_event_body(e: TraceEvent) -> str:
     if kind == TraceEventKind.SITUATION_BELIEF_RECALL:
         if payload.get("failed"):
             return f"situation recall failed: {esc(short(str(payload['failed']), 90))}"
-        kept = "・".join(str(f) for f in payload.get("kept_fields") or []) or "なし"
-        reason = payload.get("degraded_reason")
+        if payload.get("query") == "":
+            return (
+                "situation recall: empty situation, not searched"
+                f" / {esc(payload.get('candidate_count'))} candidates"
+            )
         chosen = len(payload.get("chosen") or [])
+        hits = payload.get("hits") or []
+        first = hits[0].get("text") if hits and isinstance(hits[0], dict) else None
         return (
             f"situation recall: {chosen} chosen / {esc(payload.get('candidate_count'))} candidates"
-            f" kept={esc(kept)}"
-            + (f" <span class='dim'>(degraded: {esc(reason)})</span>" if reason else "")
+            + (f" first: <span class='dim'>{esc(short(str(first), 90))}</span>" if first else "")
         )
     if kind == "prediction_outcome":
         outcome = (

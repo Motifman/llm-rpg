@@ -627,8 +627,8 @@ class TestFormatEventBody:
 
         assert "[say_inline]" in _format_event_body(speech)
 
-    def test_situation_belief_recall_shows_kept_fields_and_degrade_reason(self) -> None:
-        """situation_belief_recall は、載せた件数、候補の数、残した欄、縮退の理由を 1 行で表示し、想起に分類される。"""
+    def test_situation_belief_recall_shows_counts_and_the_first_hit(self) -> None:
+        """situation_belief_recall は、載せた件数、候補の数、いちばん近い信念の本文を 1 行で表示し、想起に分類される。"""
         e = TraceEvent(
             seq=1,
             timestamp="t",
@@ -637,17 +637,29 @@ class TestFormatEventBody:
             player_id=1,
             payload={
                 "failed": None,
-                "kept_fields": ["相手", "いま起きたこと"],
-                "degraded_reason": "no_selection",
                 "candidate_count": 4,
+                "hits": [{"entry_id": "b-1", "score": 1.2, "text": "干潟は潮が満ちると渡れない"}],
                 "chosen": ["b-1", "b-2"],
             },
         )
         out = _format_event_body(e)
         assert "2 chosen / 4 candidates" in out
-        assert "相手・いま起きたこと" in out
-        assert "no_selection" in out
+        assert "干潟は潮が満ちると渡れない" in out
         assert _event_timeline_category(e) == "recall"
+
+    def test_situation_belief_recall_with_empty_query_says_it_was_not_searched(self) -> None:
+        """問い合わせ文が空の situation_belief_recall は、一致 0 件ではなく、検索しなかったことを表示する。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind="situation_belief_recall",
+            tick=1,
+            player_id=1,
+            payload={"failed": None, "query": "", "candidate_count": 4, "hits": [], "chosen": []},
+        )
+        out = _format_event_body(e)
+        assert "not searched" in out
+        assert "0 chosen" not in out
 
     def test_failed_situation_belief_recall_shows_the_failure(self) -> None:
         """失敗した situation_belief_recall は、失敗の内容を表示する。"""

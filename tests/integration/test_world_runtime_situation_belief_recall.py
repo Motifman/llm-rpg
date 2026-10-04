@@ -1,4 +1,4 @@
-"""SITUATION_BELIEF_RECALL_ENABLED で、world_runtime の【関連する学び】が状況の欄から引く形に切り替わる配線を保証する (#1414)。
+"""SITUATION_BELIEF_RECALL_ENABLED で、world_runtime の【関連する学び】が状況の項目から引く形に切り替わる配線を保証する (#1414)。
 
 LLM と Jev は呼ばない。信念の store を読むだけ。
 """
@@ -103,7 +103,7 @@ class TestSituationRecallIsWiredOnlyWhenEnabled:
     def test_exactly_one_of_the_recall_traces_is_recorded(
         self, enabled: bool, expected: str, absent: str
     ) -> None:
-        """無効なら受動想起の trace だけが、有効なら状況の欄の trace だけが、プロンプト 1 回につき 1 件残る。"""
+        """無効なら受動想起の trace だけが、有効なら状況の項目の trace だけが、プロンプト 1 回につき 1 件残る。"""
         from tests.application.being.expectation.support import RecordingTraceRecorder
 
         runtime = _build_runtime(

@@ -1,11 +1,10 @@
-"""【関連する学び】を状況の欄から引く (#1414)。profile で有効にしたときだけ使う。
+"""【関連する学び】を状況の項目から引く (#1414)。profile で有効にしたときだけ使う。
 
-ゲームの観測と行動結果は、観測の契約 (design_decisions D1463) に変換してから欄に
+ゲームの観測と行動結果は、観測の契約 (design_decisions D1463) に変換してから項目に
 組み立てる。契約に写せない観測 (ループ警告、目的の振り返り、時刻の無い観測など) は
 飛ばし、飛ばした理由を trace に数で残す。
 
-どの欄を残すかは、直前のターンの終わりの清算で Jev が選んだもの (design_decisions
-D1414-3) を使う。選択が無い、古い、清算を切っている run では、理由をつけて全部の欄で引く。
+全部の項目をつなげて 1 本で問い合わせる (design_decisions D1414-8)。
 """
 
 from __future__ import annotations
@@ -17,17 +16,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
-from ai_rpg_world.application.being.recall.body_band import BodyBand, BodyBandReading
-from ai_rpg_world.application.being.recall.selection_store import (
-    DEGRADED_NO_SELECTION,
-    DEGRADED_SETTLEMENT_DISABLED,
-    NextTurnFieldSelections,
-)
-from ai_rpg_world.application.being.recall.situation import (
-    FieldSelection,
-    Situation,
-    SituationField,
-)
+from ai_rpg_world.application.being.recall.situation import Situation, SituationField
 from ai_rpg_world.application.being.recall.situation_assembly import (
     AgentHoldings,
     assemble_situation,
@@ -51,21 +40,17 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
 
-#: 契約の欄の検査に通らなかった観測。1 件のためにそのターンの想起全体を落とさない。
+#: 契約の検査に通らなかった観測。1 件のためにそのターンの想起全体を落とさない。
 SKIPPED_CONTRACT_VIOLATION = "contract_violation"
 
 
 @dataclass(frozen=True)
 class SituationRecallSources:
-    """状況の欄から引くときに要るもの。``goal_text`` は読み取りだけで、目的を書き込まない。
-
-    ``selections`` が None なのは、清算を切っていて欄が選ばれない run。
-    """
+    """状況の項目から引くときに要るもの。``goal_text`` は読み取りだけで、目的を書き込まない。"""
 
     recall: SituationBeliefRecall
     expectations: ExpectationRepository
     goal_text: Callable[[PlayerId], str | None]
-    selections: NextTurnFieldSelections | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.recall, SituationBeliefRecall):
@@ -74,28 +59,6 @@ class SituationRecallSources:
             raise TypeError("expectations must be ExpectationRepository")
         if not callable(self.goal_text):
             raise TypeError("goal_text must be callable")
-        if self.selections is not None and not isinstance(
-            self.selections, NextTurnFieldSelections
-        ):
-            raise TypeError("selections must be NextTurnFieldSelections or None")
-
-    def band_for(self, being_id: BeingId) -> BodyBandReading:
-        if self.selections is None:
-            return BodyBandReading.degraded(
-                DEGRADED_SETTLEMENT_DISABLED, "expectation settlement is disabled in this run"
-            )
-        return self.selections.band_for_prompt(
-            being_id, current_turn=self.expectations.current_turn(being_id)
-        )
-
-    def selection_for(self, being_id: BeingId) -> FieldSelection:
-        if self.selections is None:
-            return FieldSelection.degraded(
-                DEGRADED_SETTLEMENT_DISABLED, "expectation settlement is disabled in this run"
-            )
-        return self.selections.for_prompt(
-            being_id, current_turn=self.expectations.current_turn(being_id)
-        )
 
 
 def run_situation_belief_recall(
@@ -146,7 +109,6 @@ def _recall(
     observations: Sequence[ObservationEntry],
     action_results: Sequence[ActionResultEntry],
 ) -> tuple[dict[str, Any], str, tuple[str, ...]]:
-    band = sources.band_for(being_id)
     situation, skipped = situation_from_game(
         sources,
         player_id=player_id,
@@ -155,16 +117,13 @@ def _recall(
         place_name=place_name,
         observations=observations,
         action_results=action_results,
-        body_band=band.band,
     )
-    selection = sources.selection_for(being_id)
     result = sources.recall.retrieve(
-        being_id, situation, selection, top_k=builder._semantic_passive_top_k
+        being_id, situation, top_k=builder._semantic_passive_top_k
     )
     payload = {
         "situation": {f.value: list(situation.texts(f)) for f in SituationField},
         "skipped_observations": dict(skipped),
-        "body_band": band.to_trace_payload(),
         "top_k": builder._semantic_passive_top_k,
         "failed": None,
         **result.to_trace_payload(),
@@ -187,9 +146,8 @@ def situation_from_game(
     place_name: str | None,
     observations: Sequence[ObservationEntry],
     action_results: Sequence[ActionResultEntry],
-    body_band: BodyBand | None = None,
 ) -> tuple[Situation, Counter[str]]:
-    """ゲームの観測と行動結果 (新しい順) から欄を組む。プロンプトと清算の両方が使う。
+    """ゲームの観測と行動結果 (新しい順) から状況の項目を組む。
 
     戻り値の 2 つ目は、契約に写せずに飛ばした観測の理由ごとの件数。
     """
@@ -199,7 +157,6 @@ def situation_from_game(
     contract_observations, skipped = _to_contract(observations, action_results, observer)
     holdings = AgentHoldings(
         goal=sources.goal_text(player_id),
-        body_band=body_band,
         inner_thought=action_results[0].inner_thought if action_results else None,
         open_expectations=tuple(
             e.content for e in sources.expectations.list_open_by_being(being_id)
@@ -259,7 +216,7 @@ def _to_contract(
         except ContractViolation:
             skipped[SKIPPED_CONTRACT_VIOLATION] += 1
     for result in action_results:
-        # 呼び出しの ID は欄に入らない。契約の型が空を拒むので、行動の時刻から作る。
+        # 呼び出しの ID は項目に入らない。契約の型が空を拒むので、行動の時刻から作る。
         call_id = result.prediction_context_id or f"action@{result.occurred_at.isoformat()}"
         try:
             dated.append(
@@ -289,7 +246,6 @@ def _current_tick(builder: DefaultPromptBuilder) -> int | None:
 
 
 __all__ = [
-    "DEGRADED_NO_SELECTION",
     "SKIPPED_CONTRACT_VIOLATION",
     "SituationRecallSources",
     "run_situation_belief_recall",
