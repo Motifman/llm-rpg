@@ -26,6 +26,9 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
+        identity_token: str | None = None,
+        author_identity_token: str | None = None,
+        parent_identity_token: str | None = None,
     ):
         # リプライは必ず親を持つことを保証
         if parent_post_id is None and parent_reply_id is None:
@@ -33,7 +36,7 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         if parent_post_id is not None and parent_reply_id is not None:
             raise InvalidParentReferenceException("親ポストIDと親リプライIDを同時に設定することはできません。")
 
-        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at, identity_token, author_identity_token, parent_identity_token)
         self._reply_ids = reply_ids.copy()
 
     @classmethod
@@ -48,9 +51,12 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         mentions: set[Mention],
         reply_ids: set[ReplyId],  # 子リプライIDの一覧
         deleted: bool = False,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
+        identity_token: str | None = None,
+        author_identity_token: str | None = None,
+        parent_identity_token: str | None = None,
     ) -> "ReplyAggregate":
-        return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
+        return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at, identity_token, author_identity_token, parent_identity_token)
 
     @classmethod
     def create(
@@ -64,12 +70,14 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         *,
         author_display_name: str = "",
         mentioned_user_ids: frozenset[UserId] = frozenset(),
+        author_identity_token: str | None = None,
+        parent_identity_token: str | None = None,
     ) -> "ReplyAggregate":
         """リプライを作成"""
         mentions = cls._create_mentions_from_content_static(reply_id, content)
         likes: set[Like] = set()
         reply_ids: set[ReplyId] = set()  # 新しいリプライなので子リプライは空
-        reply = cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
+        reply = cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id, author_identity_token=author_identity_token, parent_identity_token=parent_identity_token)
 
         # 作成イベントを発行
         event = SnsReplyCreatedEvent.create(
@@ -113,9 +121,9 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         """親情報を取得"""
         return self._parent_post_id, self._parent_reply_id
 
-    def like_reply(self, user_id: UserId, liker_display_name: str = "") -> None:
+    def like_reply(self, user_id: UserId, liker_display_name: str = "", *, liker_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
         """リプライにいいね"""
-        self.like(user_id, "reply", liker_display_name=liker_display_name)
+        self.like(user_id, "reply", liker_display_name=liker_display_name, liker_identity_token=liker_identity_token, execution_provenance=execution_provenance)
 
     def delete_reply(self, user_id: UserId) -> None:
         """リプライを削除"""

@@ -89,7 +89,7 @@ _MEETING_TOOLS = frozenset({"vote", "report_body"})
 #:
 #: 蘇生の無い世界 (`grace_ticks: 0`) は、シナリオが `disabled_tools` で
 #: 落とす。engine 側でここから外すと、蘇生のある世界を壊す。
-PHASE_COMMON_TOOLS = frozenset({"speak", "listen", "wait", "tend_to_player"})
+PHASE_COMMON_TOOLS = frozenset({"speak", "listen", "wait", "tend_to_player", "sns_read", "sns_publish"})
 
 #: 死亡した本人に出してよいツール。フェーズの判断と重ねて使う。
 #:
@@ -140,6 +140,8 @@ _CONDITIONAL_TOOL_ORDER = (
     "market_sell",
     "report_body",
     "vote",
+    "sns_read",
+    "sns_publish",
 )
 
 _PAYLOAD_TOOL_ORDER = ALWAYS_PRESENT_TOOL_ORDER + _CONDITIONAL_TOOL_ORDER
@@ -171,6 +173,7 @@ class ToolExposure:
     merchants_declared: bool = False
     player_trade_declared: bool = False
     market_declared: bool = False
+    public_sns_declared: bool = False
 
     @classmethod
     def from_scenario(cls, scenario: Any, *, meeting_declared: bool) -> ToolExposure:
@@ -198,10 +201,13 @@ class ToolExposure:
                 getattr(scenario, "player_trade_enabled", False)
             ),
             market_declared=getattr(scenario, "market", None) is not None,
+            public_sns_declared=bool(getattr(scenario, "public_sns_enabled", False)),
         )
 
     def is_exposed(self, tool_name: str) -> bool:
         """この世界に ``tool_name`` が存在するか。"""
+        if tool_name in {"sns_read", "sns_publish"} and not self.public_sns_declared:
+            return False
         if tool_name in self.disabled_by_scenario:
             return False
         if tool_name in _MEETING_TOOLS and not self.meeting_declared:

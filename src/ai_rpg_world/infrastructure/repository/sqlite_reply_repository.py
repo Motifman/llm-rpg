@@ -28,13 +28,15 @@ class SqliteReplyRepository(ReplyRepository):
         *,
         _commits_after_write: bool,
         event_sink: Any = None,
+        _initialize_schema: bool = True,
     ) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         self._event_sink = event_sink
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
-        init_game_write_schema(connection)
+        if _initialize_schema:
+            init_game_write_schema(connection)
 
     @classmethod
     def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteReplyRepository:
@@ -124,6 +126,9 @@ class SqliteReplyRepository(ReplyRepository):
         reply_id = ReplyId(int(row["reply_id"]))
         return copy.deepcopy(
             build_reply_aggregate(
+                identity_token=str(row["identity_token"]),
+                author_identity_token=None if row["author_identity_token"] is None else str(row["author_identity_token"]),
+                parent_identity_token=None if row["parent_identity_token"] is None else str(row["parent_identity_token"]),
                 reply_id=int(reply_id),
                 author_user_id=int(row["author_user_id"]),
                 parent_post_id=None if row["parent_post_id"] is None else int(row["parent_post_id"]),
@@ -178,8 +183,11 @@ class SqliteReplyRepository(ReplyRepository):
                     content,
                     visibility,
                     deleted,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at,
+                    identity_token,
+                    author_identity_token,
+                    parent_identity_token
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(reply_id) DO UPDATE SET
                     author_user_id = excluded.author_user_id,
                     parent_post_id = excluded.parent_post_id,
@@ -187,7 +195,10 @@ class SqliteReplyRepository(ReplyRepository):
                     content = excluded.content,
                     visibility = excluded.visibility,
                     deleted = excluded.deleted,
-                    created_at = excluded.created_at
+                    created_at = excluded.created_at,
+                    identity_token = excluded.identity_token,
+                    author_identity_token = excluded.author_identity_token,
+                    parent_identity_token = excluded.parent_identity_token
                 """,
                 (
                     int(reply.reply_id),
@@ -198,6 +209,9 @@ class SqliteReplyRepository(ReplyRepository):
                     reply.content.visibility.value,
                     1 if reply.deleted else 0,
                     reply.created_at.isoformat(),
+                    reply.identity_token,
+                    reply.author_identity_token,
+                    reply.parent_identity_token,
                 ),
             )
             self._conn.execute("DELETE FROM game_sns_reply_hashtags WHERE reply_id = ?", (int(reply.reply_id),))

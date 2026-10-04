@@ -43,6 +43,11 @@ class SnsContentLikedEvent(BaseDomainEvent[Union[PostId, ReplyId], "PostAggregat
     content_type: str = "post"  # "post" or "reply"
     content_text: str = ""
     liker_display_name: str = ""
+    actor_identity_token: str | None = None
+    recipient_identity_token: str | None = None
+    target_identity_token: str | None = None
+    is_liked: bool = True
+    execution_provenance: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

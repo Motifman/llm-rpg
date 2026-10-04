@@ -39,6 +39,7 @@ from typing import Any, cast
 from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
+from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
@@ -130,6 +131,7 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "emotion_hint": entry.emotion_hint,
         "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
+        "execution_provenance": entry.execution_provenance.to_dict() if entry.execution_provenance else None,
         "prediction_context_id": entry.prediction_context_id,
         "in_context_belief_ids": list(entry.in_context_belief_ids),
     }
@@ -162,6 +164,7 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         # (= 「この行動はどの prompt build に紐づくか不明」として扱う。
         # 後方互換は data.get レベルで担保しつつ、schema_version 自体は
         # 意味変更を明示するため bump する)。
+        execution_provenance=(ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None),
         prediction_context_id=data.get("prediction_context_id"),
         # U4: 旧スキーマ (v4 以前) には無いキーなので .get で空タプルに倒す
         # (= 「in-context belief は無い」として扱う。attribution 機構 OFF や

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 
+from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.social.contracts.commands import CreateReplyCommand, DeleteReplyCommand, LikeReplyCommand
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
 from ai_rpg_world.application.social.exceptions import (
@@ -154,6 +155,8 @@ class ReplyCommandService:
                 reply_content,
                 author_display_name=user_aggregate.profile.display_name,
                 mentioned_user_ids=frozenset(mentioned_ids),
+                author_identity_token=user_aggregate.identity_token,
+                parent_identity_token=parent_post.identity_token if parent_post is not None else parent_reply.identity_token if parent_reply is not None else None,
             )
 
             # リプライを保存
@@ -201,9 +204,12 @@ class ReplyCommandService:
                 raise ReplyNotFoundForCommandException(command.reply_id, "like_reply")
 
             # いいね実行
+            provenance = current_execution_provenance()
             reply_aggregate.like_reply(
                 UserId(command.user_id),
                 liker_display_name=user_aggregate.profile.display_name,
+                liker_identity_token=user_aggregate.identity_token,
+                execution_provenance=provenance.to_dict() if provenance else None,
             )
 
             # リプライを保存

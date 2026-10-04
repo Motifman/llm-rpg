@@ -26,12 +26,14 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
+        identity_token: str | None = None,
+        author_identity_token: str | None = None,
     ):
         # ポストは親を持つことができない
         if parent_post_id is not None or parent_reply_id is not None:
             raise InvalidParentReferenceException("ポストは親ポストまたは親リプライを持つことはできません。")
 
-        super().__init__(post_id, author_user_id, post_content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        super().__init__(post_id, author_user_id, post_content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at, identity_token, author_identity_token)
         self._reply_ids = reply_ids.copy()
 
     @classmethod
@@ -44,9 +46,11 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         mentions: set[Mention],
         reply_ids: set[ReplyId],  # リプライIDの一覧
         deleted: bool = False,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
+        identity_token: str | None = None,
+        author_identity_token: str | None = None,
     ) -> "PostAggregate":
-        return cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
+        return cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at, identity_token, author_identity_token)
 
     @classmethod
     def create(
@@ -58,12 +62,13 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         author_display_name: str = "",
         mentioned_user_ids: frozenset[UserId] = frozenset(),
         subscriber_user_ids: frozenset[UserId] = frozenset(),
+        author_identity_token: str | None = None,
     ) -> "PostAggregate":
         """投稿を作成"""
         mentions = cls._create_mentions_from_content_static(post_id, post_content)
         likes: set[Like] = set()
         reply_ids: set[ReplyId] = set()  # 新しいポストなのでリプライは空
-        post = cls(post_id, author_user_id, post_content, likes, mentions, reply_ids)
+        post = cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, author_identity_token=author_identity_token)
 
         # ポスト固有のバリデーション
         if post._parent_post_id is not None or post._parent_reply_id is not None:
@@ -114,9 +119,9 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         """親情報を取得"""
         return None, None
 
-    def like_post(self, user_id: UserId, liker_display_name: str = "") -> None:
+    def like_post(self, user_id: UserId, liker_display_name: str = "", *, liker_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
         """ポストにいいね"""
-        self.like(user_id, "post", liker_display_name=liker_display_name)
+        self.like(user_id, "post", liker_display_name=liker_display_name, liker_identity_token=liker_identity_token, execution_provenance=execution_provenance)
 
     def delete_post(self, user_id: UserId) -> None:
         """ポストを削除"""

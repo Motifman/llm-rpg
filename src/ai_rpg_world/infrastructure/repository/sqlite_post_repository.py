@@ -27,13 +27,15 @@ class SqlitePostRepository(PostRepository):
         *,
         _commits_after_write: bool,
         event_sink: Any = None,
+        _initialize_schema: bool = True,
     ) -> None:
         self._conn = connection
         self._commits_after_write = _commits_after_write
         self._event_sink = event_sink
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
-        init_game_write_schema(connection)
+        if _initialize_schema:
+            init_game_write_schema(connection)
 
     @classmethod
     def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqlitePostRepository:
@@ -123,6 +125,8 @@ class SqlitePostRepository(PostRepository):
         post_id = PostId(int(row["post_id"]))
         return copy.deepcopy(
             build_post_aggregate(
+                identity_token=str(row["identity_token"]),
+                author_identity_token=None if row["author_identity_token"] is None else str(row["author_identity_token"]),
                 post_id=int(post_id),
                 author_user_id=int(row["author_user_id"]),
                 content=str(row["content"]),
@@ -165,14 +169,16 @@ class SqlitePostRepository(PostRepository):
             self._conn.execute(
                 """
                 INSERT INTO game_sns_posts (
-                    post_id, author_user_id, content, visibility, deleted, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    post_id, author_user_id, content, visibility, deleted, created_at, identity_token, author_identity_token
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(post_id) DO UPDATE SET
                     author_user_id = excluded.author_user_id,
                     content = excluded.content,
                     visibility = excluded.visibility,
                     deleted = excluded.deleted,
-                    created_at = excluded.created_at
+                    created_at = excluded.created_at,
+                    identity_token = excluded.identity_token,
+                    author_identity_token = excluded.author_identity_token
                 """,
                 (
                     int(entity.post_id),
@@ -181,6 +187,8 @@ class SqlitePostRepository(PostRepository):
                     entity.post_content.visibility.value,
                     1 if entity.deleted else 0,
                     entity.created_at.isoformat(),
+                    entity.identity_token,
+                    entity.author_identity_token,
                 ),
             )
             self._conn.execute("DELETE FROM game_sns_post_hashtags WHERE post_id = ?", (int(entity.post_id),))

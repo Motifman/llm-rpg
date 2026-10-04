@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 
+from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.social.contracts.commands import CreatePostCommand, DeletePostCommand, LikePostCommand
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
 from ai_rpg_world.application.social.exceptions import (
@@ -107,6 +108,7 @@ class PostCommandService:
                 author_display_name=user_aggregate.profile.display_name,
                 mentioned_user_ids=mentioned_ids,
                 subscriber_user_ids=subscriber_ids,
+                author_identity_token=user_aggregate.identity_token,
             )
 
             # リポジトリに保存
@@ -146,9 +148,12 @@ class PostCommandService:
                 raise PostNotFoundForCommandException(command.post_id, "like_post")
 
             # いいね実行
+            provenance = current_execution_provenance()
             post_aggregate.like_post(
                 UserId(command.user_id),
                 liker_display_name=user_aggregate.profile.display_name,
+                liker_identity_token=user_aggregate.identity_token,
+                execution_provenance=provenance.to_dict() if provenance else None,
             )
 
             # リポジトリに保存

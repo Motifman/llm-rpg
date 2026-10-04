@@ -130,6 +130,7 @@ from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     create_text_candidate_narrower,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
+from ai_rpg_world.application.llm.services.tool_catalog.public_sns import get_public_sns_definitions
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     GOAL_OUTCOME_ABANDONED,
@@ -191,6 +192,8 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_outcome_observation_formatter import (
     PlayerOutcomeObservationFormatter,
 )
+from ai_rpg_world.application.social.public_sns.prompt_projection import notification_receipts
+from ai_rpg_world.application.social.public_sns.retained_screen import PublicSnsScreenStore
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
@@ -616,6 +619,13 @@ class WorldRuntime:
     # Phase E-3: プレイヤー個別 outcome の registry (PlayerId → PlayerOutcomeEnum)。
     # factory は PlayerLifeQuery と同じ instance を構築時に渡す。
     _player_outcome_registry: Any | None = field(default=None, repr=False)
+    _public_sns_data_store: Any = field(default=None, repr=False)
+    _public_sns_read_service: Any = field(default=None, repr=False)
+    _public_sns_command_service: Any = field(default=None, repr=False)
+    _public_sns_executor: Any = field(default=None, repr=False)
+    _public_sns_projection: Any = field(default=None, repr=False)
+    _public_sns_screens: PublicSnsScreenStore = field(default_factory=PublicSnsScreenStore, repr=False)
+    _execution_turns: dict[int, int] = field(default_factory=dict, repr=False)
     _tick: int = 0
     # #375 後続: 食料腐敗の日次集約バッファ (code-review HIGH 指摘)。
     # hasattr ベースの遅延初期化だと IDE/mypy / pickle で扱いにくいので
@@ -952,6 +962,11 @@ class WorldRuntime:
                 self._flush_pending_food_spoiled()
         self._maybe_close_meeting_on_timeout(tick.value)
         self._record_world_spatial_metrics(tick.value)
+        if self._public_sns_command_service is not None:
+            try:
+                self._public_sns_command_service.retry_pending_notifications(limit=100)
+            except Exception:
+                logger.exception("公開SNSの通知再送が未完了です")
         return tick.value
 
     def _record_committed_player_travel_tick(self, player_id: PlayerId) -> None:
@@ -1568,7 +1583,7 @@ class WorldRuntime:
         # 何も落とさない。
         if not isinstance(disabled, tuple) or not disabled:
             return ()
-        known = {defn.name for defn, _ in get_spot_graph_specs()}
+        known = {defn.name for defn, _ in get_spot_graph_specs()} | {d.name for d in get_public_sns_definitions()}
         unknown = [name for name in disabled if name not in known]
         if unknown:
             raise ToolExposureConfigurationError(
@@ -1694,7 +1709,7 @@ class WorldRuntime:
                     self._with_expected_result_if_enabled(defn)
                 )
             )
-            for defn, _ in get_spot_graph_specs()
+            for defn in [*(d for d, _ in get_spot_graph_specs()), *get_public_sns_definitions()]
         ]
         # 「この世界に存在するツールか」は ToolExposure が一括で答える。
         # 同時行動 / 会議機構 / シナリオの無効化宣言を 3 つ別々に書いて
@@ -2818,6 +2833,8 @@ class WorldRuntime:
             context_format_strategy=self._context_strategy,
             system_prompt_builder=WorldSystemPromptBuilder(self),
             available_tools_provider=WorldAvailableToolsProvider(),
+            recent_events_projection=(self._public_sns_projection.project if self._public_sns_projection else None),
+            observation_repetition_projection=notification_receipts if self._public_sns_projection else None,
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
@@ -2953,11 +2970,17 @@ class WorldRuntime:
         への参照に書き換える必要がある。
         """
         self._wire_auxiliary_tool_stack()
+        if self._public_sns_command_service is not None:
+            try:
+                self._public_sns_command_service.retry_pending_notifications(limit=100)
+            except Exception:
+                logger.exception("公開SNSの通知再送が未完了です")
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
         tail_sections = tuple(
             section
             for section in (
+                self._public_sns_screen_text(player_id),
                 self._format_ongoing_conditions(),
                 self._format_time_since_last_gathering(),
             )
@@ -2990,7 +3013,29 @@ class WorldRuntime:
             # で player_id をキーに行われるため、呼び出し側がこの値を渡す
             # 必要は無いが、後続 PR のデバッグ・trace 突き合わせ用に残す)。
             "prediction_context_id": result.get("prediction_context_id"),
+            "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
+            "sns_screen_generation": getattr(self._public_sns_screens.get(int(player_id)), "generation", None),
         }
+
+    def _public_sns_header_text(self, player_id: PlayerId) -> str:
+        store = self._public_sns_data_store
+        if store is None:
+            return ""
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
+        user = store.sns_users.get(UserId(int(player_id)))
+        if user is None:
+            return ""
+        own_id = f"sns:{store.sns_public_namespace}:user:{user.identity_token}"
+        pending = self._public_sns_projection.pending_count(int(player_id))
+        return f"【公開SNS】自分: {user.profile.display_name} / 人物: {own_id}\n未表示通知: {pending}件。受信箱で確認できます。"
+
+    def _public_sns_screen_text(self, player_id: PlayerId) -> str:
+        header = self._public_sns_header_text(player_id)
+        if not header:
+            return ""
+        screen = self._public_sns_screens.get(int(player_id))
+        status = self._public_sns_screens.presentation_status(int(player_id))
+        return header + "\n" + status + ("\n" + screen.text if screen else "")
 
     def _format_ongoing_conditions(self) -> str:
         """成立中の異常だけを、最終指示の直前へ置ける本文に整形する。"""
@@ -8348,6 +8393,8 @@ def create_world_runtime(
     # presentation 層の起動時検査まで遅れる。**シナリオの書き間違いは
     # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
     # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
+    from ai_rpg_world.application.world_runtime.public_sns_wiring import wire_public_sns
+    wire_public_sns(runtime)
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()

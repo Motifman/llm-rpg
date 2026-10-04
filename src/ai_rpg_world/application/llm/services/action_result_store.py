@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
+from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
@@ -50,6 +51,7 @@ class DefaultActionResultStore(IActionResultStore):
         emotion_hint: str | None = None,
         scene_boundary: bool = False,
         occurred_tick: int | None = None,
+        execution_provenance: ExecutionProvenance | None = None,
         prediction_context_id: str | None = None,
         in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
@@ -125,6 +127,7 @@ class DefaultActionResultStore(IActionResultStore):
             emotion_hint=emotion_hint,
             scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
+            execution_provenance=execution_provenance,
             prediction_context_id=prediction_context_id,
             in_context_belief_ids=in_context_belief_ids,
         )

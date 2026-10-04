@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -133,6 +133,8 @@ class PromptBuilderCoreServices:
     context_format_strategy: IContextFormatStrategy
     system_prompt_builder: ISystemPromptBuilder
     available_tools_provider: IAvailableToolsProvider
+    recent_events_projection: Callable[[PlayerId, list[Any]], tuple[list[Any], tuple[str, ...]]] | None = None
+    observation_repetition_projection: Callable[[list[Any]], list[Any]] | None = None
 
 
 @dataclass(frozen=True)

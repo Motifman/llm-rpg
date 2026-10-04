@@ -197,12 +197,17 @@ class WorldStateSnapshotService:
             )
 
         codec_by_key = {c.subsystem_key: c for c in self._codecs}
+        sns_enabled = getattr(runtime, "_public_sns_data_store", None) is not None
+        if sns_enabled and "public_sns" in codec_by_key and "public_sns" not in snapshot.subsystems:
+            raise WorldStateSnapshotCoverageError("公開SNSの内容と不変識別子がsnapshotにありません")
         if strict_subsystems:
             expected_keys = (
                 set(self._expected_subsystem_keys)
                 if self._expected_subsystem_keys is not None
                 else set(codec_by_key)
             )
+            if not sns_enabled:
+                expected_keys.discard("public_sns")
             snapshot_keys = set(snapshot.subsystems)
             missing = sorted(expected_keys - snapshot_keys)
             unknown = sorted(snapshot_keys - set(codec_by_key))

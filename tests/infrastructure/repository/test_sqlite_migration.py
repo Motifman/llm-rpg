@@ -162,7 +162,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 35,
+            "game_write": 37,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
@@ -199,7 +199,7 @@ class TestInitGameDbSchema:
         ).fetchone()
         assert row is not None
         assert row[0] == "2026-08-14T01:02:03+00:00"
-        assert get_applied_version(conn, "game_write") == 35
+        assert get_applied_version(conn, "game_write") == 37
 
     def test_migration_v32_rejects_invalid_legacy_trade_datetime(self) -> None:
         """解釈できない旧取引日時は推測変換せず、v32 migration全体をrollbackする。"""
