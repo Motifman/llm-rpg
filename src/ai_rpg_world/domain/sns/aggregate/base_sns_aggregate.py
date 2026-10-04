@@ -31,6 +31,8 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
         identity_token: str | None = None,
+        author_identity_token: str | None = None,
+        parent_identity_token: str | None = None,
     ):
         super().__init__()
         self._content_id: ContentId = content_id
@@ -43,11 +45,23 @@ class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
         self._parent_reply_id = parent_reply_id
         self._created_at = created_at if created_at is not None else datetime.now()
         self._identity_token = SnsIdentityToken() if identity_token is None else SnsIdentityToken(identity_token)
+        self._author_identity_token = None if author_identity_token is None else SnsIdentityToken(author_identity_token).value
+        self._parent_identity_token = None if parent_identity_token is None else SnsIdentityToken(parent_identity_token).value
 
     @property
     def identity_token(self) -> str:
         """整数の採番や表示順序と独立した、作成時から変わらない識別子。"""
         return self._identity_token.value
+
+    @property
+    def author_identity_token(self) -> str | None:
+        """作成時の作者の識別子。欠損時に現在の同じ整数の利用者へ結び直さない。"""
+        return self._author_identity_token
+
+    @property
+    def parent_identity_token(self) -> str | None:
+        """作成時の親の識別子。返信以外、または旧形式の欠損時は None。"""
+        return self._parent_identity_token
 
     @property
     def content_id(self) -> ContentId:

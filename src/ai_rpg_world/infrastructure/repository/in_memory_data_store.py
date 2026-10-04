@@ -231,7 +231,10 @@ class InMemoryDataStore:
         for pid, uid, content, tags, visibility, mins_ago in posts_data:
             post_content = PostContent(content=content, hashtags=tuple(tags), visibility=visibility)
             created_at = base_time - timedelta(minutes=mins_ago)
-            post = PostAggregate(PostId(pid), SnsUserId(uid), post_content, set(), set(), set(), False, None, None, created_at)
+            post = PostAggregate(
+                PostId(pid), SnsUserId(uid), post_content, set(), set(), set(), False, None, None, created_at,
+                author_identity_token=self.sns_users[SnsUserId(uid)].identity_token,
+            )
             self.posts[PostId(pid)] = post
             
         # いいねの追加
@@ -297,7 +300,16 @@ class InMemoryDataStore:
         for rid, uid, content, tags, pid, parent_rid, mins_ago in replies_data:
             rep_content = PostContent(content=content, hashtags=tuple(tags), visibility=PostVisibility.PUBLIC)
             created_at = base_time - timedelta(minutes=mins_ago)
-            reply = ReplyAggregate(ReplyId(rid), SnsUserId(uid), rep_content, set(), set(), set(), False, pid, parent_rid, created_at)
+            if pid is not None:
+                parent_identity_token = self.posts[pid].identity_token
+            else:
+                assert parent_rid is not None
+                parent_identity_token = self.replies[parent_rid].identity_token
+            reply = ReplyAggregate(
+                ReplyId(rid), SnsUserId(uid), rep_content, set(), set(), set(), False, pid, parent_rid, created_at,
+                author_identity_token=self.sns_users[SnsUserId(uid)].identity_token,
+                parent_identity_token=parent_identity_token,
+            )
             self.replies[ReplyId(rid)] = reply
             
         self.next_reply_id = 11
