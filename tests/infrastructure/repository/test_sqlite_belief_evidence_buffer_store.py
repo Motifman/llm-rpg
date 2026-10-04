@@ -10,6 +10,7 @@ from __future__ import annotations
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -233,7 +234,7 @@ class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
 class TestSqliteBeliefEvidenceWhatHappenedPayload:
     """SQLite の行の what_happened (#1509) を、キーが無ければ空として読み、形の崩れた値は作り直さずに拒む挙動を保証する。"""
 
-    _BASE = {
+    _BASE: ClassVar[dict[str, object]] = {
         "evidence_id": "e-1",
         "source_kind": "prediction_error",
         "episode_ids": ["exp-1"],
