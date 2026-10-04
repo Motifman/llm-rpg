@@ -666,6 +666,29 @@ class TestMissCarriesWhatHappened:
             "ノア「波が運んでくる」",
         )
 
+    def test_settlement_trace_shows_timeline_lines_for_miss(self) -> None:
+        """外れの確定の移りには、付けた時系列の行数と、予期を書いたターンと、時系列の最初のターンが trace に残る。時系列が欠けた外れを後から見分けられる。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "miss"}, {"check_0": "miss"}),
+            timeline_turns=5,
+        )
+        self._form_after_a_quiet_turn(harness)
+
+        harness.turn(TurnMaterial(actions=("浜に流木は無い",)))
+        harness.turn()
+
+        (settled,) = [
+            t
+            for trace in harness.settlements()
+            for t in trace["transitions"]
+            if t["event"] == "ExpectationSettled"
+        ]
+        assert (
+            settled["what_happened_lines"],
+            settled["formed_at_turn"],
+            settled["timeline_from_turn"],
+        ) == (3, 2, 1)
+
     def test_blank_lines_are_left_out_of_timeline(self) -> None:
         """時系列の空の行は、外れの確定の出来事に載せない。材料は空の文を受け付けない。"""
         harness = _Harness(

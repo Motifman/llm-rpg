@@ -11,6 +11,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
     BELIEF_EVIDENCE_SALIENCE_HIGH,
@@ -22,6 +24,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
 )
 from ai_rpg_world.infrastructure.repository.sqlite_belief_evidence_buffer_store import (
     SqliteBeliefEvidenceBufferStore,
+    _payload_to_evidence,
 )
 
 
@@ -225,3 +228,30 @@ class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
 
             restored = store.list_all_by_being(being_id)[0]
             assert restored == evidence
+
+
+class TestSqliteBeliefEvidenceWhatHappenedPayload:
+    """SQLite の行の what_happened (#1509) を、キーが無ければ空として読み、形の崩れた値は作り直さずに拒む挙動を保証する。"""
+
+    _BASE = {
+        "evidence_id": "e-1",
+        "source_kind": "prediction_error",
+        "episode_ids": ["exp-1"],
+        "cue_signature": "expectation:miss",
+        "text": "外れた",
+        "salience": "low",
+        "occurred_at": "2026-10-04T00:00:00+00:00",
+        "observed_turn": 3,
+    }
+
+    def test_row_without_what_happened_reads_empty(self) -> None:
+        """#1509 より前に書かれた (キーの無い) 行は、時系列の無い材料として読む。"""
+        evidence = _payload_to_evidence(dict(self._BASE))
+
+        assert evidence.what_happened == ()
+
+    @pytest.mark.parametrize("value", ["浜", [None], None], ids=["str", "none_item", "none"])
+    def test_malformed_what_happened_is_rejected(self, value: object) -> None:
+        """what_happened が list[str] でない行は、1 文字ずつの行や "None" の行に化けさせずに ValueError で拒む。"""
+        with pytest.raises(ValueError, match="what_happened"):
+            _payload_to_evidence({**self._BASE, "what_happened": value})

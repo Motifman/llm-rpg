@@ -67,6 +67,13 @@ def _evidence_to_payload(evidence: BeliefEvidence) -> dict[str, Any]:
     }
 
 
+def _what_happened(value: Any) -> tuple[str, ...]:
+    # 文字列を 1 文字ずつの行にしたり、None を "None" の行にしたりしない。
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise ValueError(f"what_happened must be list[str], got {value!r}")
+    return tuple(value)
+
+
 def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
     return BeliefEvidence(
         evidence_id=str(data["evidence_id"]),
@@ -89,7 +96,7 @@ def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
             else None
         ),
         # #1509 より前に書かれた行には無い。外れの理由を持たない材料として読む。
-        what_happened=tuple(str(x) for x in data.get("what_happened", ())),
+        what_happened=_what_happened(data.get("what_happened", [])),
     )
 
 

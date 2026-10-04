@@ -372,15 +372,21 @@ class ExpectationSettlementService:
                 ),
             )
         self._repository.save(expectation, [] if event is None else [event])
-        current.transitions.append(
-            {
-                "expectation_id": expectation.expectation_id.value,
-                "step": step,
-                "verdict": None if verdict is None else verdict.value,
-                "event": None if event is None else type(event).__name__,
-                "status_after": expectation.snapshot().status.value,
-            }
-        )
+        transition: dict[str, Any] = {
+            "expectation_id": expectation.expectation_id.value,
+            "step": step,
+            "verdict": None if verdict is None else verdict.value,
+            "event": None if event is None else type(event).__name__,
+            "status_after": expectation.snapshot().status.value,
+        }
+        if isinstance(event, ExpectationSettled) and event.outcome is Outcome.MISS:
+            # 時系列は直近の数ターンしか持たず、再開直後は空になる。外れの材料が理由を
+            # 持たなかったことを、書いたターンと時系列の最初のターンで読めるようにする。
+            timeline = self._timelines.get(expectation.holder, ())
+            transition["what_happened_lines"] = len(event.what_happened)
+            transition["formed_at_turn"] = expectation.formed_at_turn
+            transition["timeline_from_turn"] = timeline[0].turn if timeline else None
+        current.transitions.append(transition)
 
     def _trace(
         self,

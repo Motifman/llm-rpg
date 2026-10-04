@@ -332,7 +332,8 @@ def _build_belief_consolidation_system_prompt(
     if hearsay_enabled:
         prompt = prompt + _HEARSAY_INSTRUCTION
     if expectation_what_happened_enabled:
-        assert _WHAT_HAPPENED_ANCHOR in prompt
+        if _WHAT_HAPPENED_ANCHOR not in prompt:
+            raise ValueError("system prompt lost the anchor for what_happened")
         prompt = prompt.replace(
             _WHAT_HAPPENED_ANCHOR, _WHAT_HAPPENED_MEANING + _WHAT_HAPPENED_ANCHOR
         )

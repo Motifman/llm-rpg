@@ -86,7 +86,8 @@ def _timeline(settlement: dict, written: int, settled: int) -> tuple[str, ...]:
     for t in settlement["state"]["出来事の時系列"]:
         n = int(t["ターン"].removeprefix("ターン"))
         if written <= n <= settled:
-            lines += [_masked(x) for x in t["行動"] + t["発言"] if x.strip()]
+            lines += [_masked(x) for x in t["行動"] if x.strip()]
+            lines += [x for x in t["発言"] if x.strip()]
     return tuple(lines)
 
 

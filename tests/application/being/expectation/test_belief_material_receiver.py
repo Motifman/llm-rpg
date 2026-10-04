@@ -278,6 +278,7 @@ class TestTrace:
             "belief_ids": ["belief-tide"],
             "what_happened_lines": 0,
             "what_happened_truncated": False,
+            "what_happened_total_lines": 0,
         }
 
 
@@ -321,6 +322,17 @@ class TestMissCarriesWhatHappened:
         assert material.what_happened == ("あいうえお", "かきくけ")
         (trace,) = harness.traces()
         assert (trace["what_happened_lines"], trace["what_happened_truncated"]) == (2, True)
+        assert trace["what_happened_total_lines"] == 3
+
+    def test_what_happened_exactly_at_limit_is_kept_whole(self) -> None:
+        """時系列の文字数の合計がちょうど上限のときは、切り詰めずにすべての行を残す。"""
+        harness = _Harness(max_what_happened_chars=9)
+
+        harness.receive(_settled(what_happened=("あいうえお", "かきくけ")))
+
+        (material,) = harness.materials()
+        assert material.what_happened == ("あいうえお", "かきくけ")
+        assert harness.traces()[0]["what_happened_truncated"] is False
 
     def test_first_line_over_limit_is_cut_to_limit(self) -> None:
         """先頭の 1 行だけで上限を超えるときは、その行を上限の文字数で切って 1 行だけ残す。"""
@@ -330,6 +342,16 @@ class TestMissCarriesWhatHappened:
 
         (material,) = harness.materials()
         assert material.what_happened == ("あいう",)
+        assert harness.traces()[0]["what_happened_truncated"] is True
+
+    def test_first_line_cut_to_blank_is_dropped(self) -> None:
+        """先頭の行を上限で切ると空白だけになるときは、その行を残さず、材料は時系列を持たない。"""
+        harness = _Harness(max_what_happened_chars=2)
+
+        harness.receive(_settled(what_happened=("   あいう",)))
+
+        (material,) = harness.materials()
+        assert material.what_happened == ()
         assert harness.traces()[0]["what_happened_truncated"] is True
 
     @pytest.mark.parametrize("limit", [0, -1, True])

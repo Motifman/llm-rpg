@@ -62,10 +62,14 @@ class ExpectationSettled:
     what_happened: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        # 材料 (BeliefEvidence) は空の行を受け付けない。ここで通すと、受け取る側が
+        # 配り直しのたびに失敗し、外れの材料が配信の上限で静かに落ちる。
         if not isinstance(self.what_happened, tuple) or not all(
-            isinstance(text, str) for text in self.what_happened
+            isinstance(text, str) and text.strip() for text in self.what_happened
         ):
-            raise ExpectationValidationException("what_happened must be tuple[str, ...]")
+            raise ExpectationValidationException(
+                "what_happened must be tuple of non-blank str"
+            )
 
 
 @dataclass(frozen=True)

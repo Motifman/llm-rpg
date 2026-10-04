@@ -8217,9 +8217,12 @@ def create_world_runtime(
             # (P9) と同じ HEARSAY_ENABLED で連動させる (抽出だけ ON で固着側が
             # 素通しになる中途半端な状態を作らない)。
             hearsay_enabled=_hearsay_enabled,
-            # #1509: 外れた予期の材料は清算が付ける時系列を持つ。清算が off の run
-            # では付かないので、固着の prompt に読み方の節も足さない。
-            expectation_what_happened_enabled=config.expectation_settlement_enabled,
+            # #1509: 外れた予期の材料は清算が付ける時系列を持ち、証拠バッファの
+            # 受け取る側が材料に写す。どちらかが off の run では付かないので、固着の
+            # prompt に読み方の節も足さない。
+            expectation_what_happened_enabled=(
+                config.expectation_settlement_enabled and config.belief_evidence_enabled
+            ),
             # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled

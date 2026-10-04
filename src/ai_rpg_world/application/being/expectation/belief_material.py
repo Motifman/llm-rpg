@@ -43,7 +43,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
     BeliefEvidenceSourceKind,
 )
 
-# 実 run の外れ 30 件では、書いてから確定するまでの時系列は最長 1213 字だった
+# 実 run の外れ 30 件では、書いてから確定するまでの時系列は最長 1193 字だった
 # (#1509)。ふだんは切らず、時系列が長くなったときだけ信念をまとめる入力を抑える。
 MAX_WHAT_HAPPENED_CHARS = 1500
 
@@ -118,6 +118,9 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
             result="appended" if appended else "already_received",
             evidence=evidence,
             what_happened_truncated=truncated,
+            what_happened_total_lines=(
+                len(event.what_happened) if event.outcome is Outcome.MISS else 0
+            ),
         )
 
     def _evidence(
@@ -156,6 +159,7 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
         evidence: BeliefEvidence | None = None,
         skipped_reason: str | None = None,
         what_happened_truncated: bool = False,
+        what_happened_total_lines: int = 0,
     ) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
@@ -178,6 +182,7 @@ class ExpectationBeliefMaterialReceiver(ExpectationEventReceiver):
             payload["belief_ids"] = list(evidence.in_context_belief_ids)
             payload["what_happened_lines"] = len(evidence.what_happened)
             payload["what_happened_truncated"] = what_happened_truncated
+            payload["what_happened_total_lines"] = what_happened_total_lines
         recorder.record(TraceEventKind.EXPECTATION_MATERIAL, **payload)
 
 
@@ -186,8 +191,9 @@ def _capped(lines: tuple[str, ...], limit: int) -> tuple[tuple[str, ...], bool]:
     used = 0
     for line in lines:
         if used + len(line) > limit:
-            if not kept:
-                kept.append(line[:limit])
+            head = line[:limit].strip()
+            if not kept and head:
+                kept.append(head)
             return tuple(kept), True
         kept.append(line)
         used += len(line)
