@@ -126,7 +126,7 @@ jobs:
       - name: Regenerate quality goldens
         # ここは -n を付けない。golden は同じファイルへ書き出すものがあり、
         # 並列にすると書き込み順で中身が変わって差分検査が不安定になる。
-        # 11 件で 51 秒しかかからず、通常試験と並列に走るので短縮の必要もない。
+        # 1 分かからず、通常試験と並列に走るので短縮の必要もない。
         run: uv run --frozen pytest -m quality
 
       - name: Fail if the goldens changed
