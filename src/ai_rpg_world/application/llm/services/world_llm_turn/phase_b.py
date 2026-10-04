@@ -535,6 +535,7 @@ def _augment_with_goal_hint(
         trace_skip(being_id=being_id, reason=detection.skipped_reason)
         return result
     wiring.goal_hint_last_skipped_reason.pop(being_id, None)
+    wiring.goal_hint_last_skipped_reason.pop(_goal_hint_player_key(player_id), None)
     _record_goal_completion_judgments(
         detection,
         trace_recorder=trace_recorder,
@@ -549,6 +550,11 @@ def _augment_with_goal_hint(
         result,
         message=result.message + "".join(hint.to_hint_text() for hint in detection.hints),
     )
+
+
+def _goal_hint_player_key(player_id: PlayerId) -> str:
+    """being が分からないときの見送りを、プレイヤーごとに覚える鍵。"""
+    return f"player:{int(player_id.value)}"
 
 
 def _record_goal_hint_skip(
@@ -566,7 +572,7 @@ def _record_goal_hint_skip(
     残せたときだけ覚える。recorder が後から差し込まれる run や記録に失敗した
     ときに、残っていない理由を残したことにしないため。
     """
-    key = being_id if being_id is not None else f"player:{int(player_id.value)}"
+    key = being_id if being_id is not None else _goal_hint_player_key(player_id)
     if trace_recorder is None or wiring.goal_hint_last_skipped_reason.get(key) == reason:
         return
     try:

@@ -721,6 +721,42 @@ class TestTheSkipWithoutABeing:
         assert skip["skipped_reason"] == "acting_being_resolution_failed"
 
 
+def test_a_missing_being_after_a_judgment_is_traced_again(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """being が分からず見送り、being が分かって問い、また分からなくなったら、no_acting_being は 2 件とも残る。"""
+    state, player_id, _, recorder = _session(monkeypatch, tmp_path, _FixedPort(0.2))
+    wiring = state.llm_wiring
+    acting_being_for = state.runtime._acting_being_for
+    common = {
+        "player_id": player_id,
+        "name": "travel_to",
+        "arguments": {"destination_label": "閲覧室"},
+        "judged_message": "閲覧室に着いた",
+        "tools_payload": [
+            {
+                "function": {
+                    "name": "travel_to",
+                    "parameters": {"properties": {"goal_outcome": {}}},
+                }
+            }
+        ],
+        "trace_recorder": recorder,
+        "current_tick": 1,
+    }
+    result = LlmCommandResultDto(success=True, message="閲覧室に着いた")
+
+    for resolver in (lambda _pid: None, acting_being_for, lambda _pid: None):
+        monkeypatch.setattr(state.runtime, "_acting_being_for", resolver)
+        _augment_with_goal_hint(wiring, result, **common)
+
+    assert [
+        payload["skipped_reason"]
+        for payload in recorder.goal_judgments()
+        if payload["skipped_reason"] is not None
+    ] == ["no_acting_being", "no_acting_being"]
+
+
 class TestTheSkipIsRememberedPerBeing:
     """見送りの理由の重複除去が being ごとに独立していることを保証する (#1448)。"""
 
