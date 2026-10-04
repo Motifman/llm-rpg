@@ -8,6 +8,11 @@
 回す。Jev も LLM も呼ばない。いまの cue で選んだ 3 件は trace の ``semantic_passive_recall`` を
 そのまま使う。
 
+``--narrowers`` に絞り込みの手法を複数渡すと、同じ場面を手法ごとに引き、手法どうしで上位 3 件が
+重なる数も数える (#1498)。手法を足したら、その名前を並べて比べる。人名と地名は、trace に出た
+プレイヤー名と場所の名前を使う。形態素解析の 2 手法と比べた結果は、コミット ef0c3a06 で再現する
+(``docs/experiments/issue_1498_narrower_comparison/README.md``)。
+
 近似:
 
 - 場面の時点の信念は、run の終わりの snapshot にある信念のうち、場面より前に存在したもの。
@@ -20,7 +25,8 @@
 使い方:
     uv run python scripts/situation_recall_probe.py \\
         --run-dir ../../../var/runs/v4coop_reasonfirst_003 \\
-        --out docs/experiments/issue_1414_situation_recall/results_plain.json
+        --narrowers char_bigram_bm25 \\
+        --out /tmp/situation_recall.json
 """
 
 from __future__ import annotations
@@ -30,9 +36,9 @@ import json
 import re
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
-from itertools import pairwise
+from itertools import combinations, pairwise
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +68,9 @@ from ai_rpg_world.application.llm.services.prompt_sections.situation_recall impo
     _to_contract,
 )
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (  # noqa: E402
-    CharBigramBm25Narrower,
+    CHAR_BIGRAM_BM25,
+    SUPPORTED_TEXT_CANDIDATE_NARROWERS,
+    create_text_candidate_narrower,
 )
 from ai_rpg_world.application.observation.being_contract import Observer  # noqa: E402
 from ai_rpg_world.application.observation.contracts.dtos import (  # noqa: E402
@@ -102,6 +110,18 @@ class Scene:
 
 def _at(event: dict[str, Any]) -> datetime:
     return datetime.fromisoformat(event["timestamp"])
+
+
+def _place_names(trace_path: Path) -> set[str]:
+    names: set[str] = set()
+    for line in trace_path.read_text(encoding="utf-8").splitlines():
+        event = json.loads(line)
+        if event["kind"] == "position_change":
+            spot = (event.get("payload") or {}).get("spot_name")
+            # 「観測拠点跡 (廃屋)」の括弧の中は説明で、信念は括弧の前の名前で書かれる。
+            if spot and (head := re.split(r"\s*[(（]", spot)[0]):
+                names.add(head)
+    return names
 
 
 def _scenes(trace_path: Path) -> dict[int, list[Scene]]:
@@ -284,9 +304,10 @@ def _consecutive_jaccard(sequence: list[list[str]]) -> list[float]:
     ]
 
 
-def probe(run_dir: Path, *, window: int) -> dict[str, Any]:
+def probe(run_dir: Path, *, window: int, narrowers: Sequence[str]) -> dict[str, Any]:
     all_scenes = _scenes(run_dir / "trace.jsonl")
     first_seen = _first_seen(run_dir / "trace.jsonl")
+    recalls_by_name = {name: create_text_candidate_narrower(name) for name in narrowers}
     texts: dict[str, str] = {}
     players = []
     for pid in sorted(all_scenes):
@@ -297,38 +318,79 @@ def probe(run_dir: Path, *, window: int) -> dict[str, Any]:
         for scene in _window(all_scenes[pid], window, counts):
             store = _store_at(entries, scene.at)
             situation, skipped = _situation(scene)
-            recall = SituationBeliefRecall(store, CharBigramBm25Narrower())
             being = BeingId(f"being_w1_p{pid}")
-            result = recall.retrieve(being, situation, top_k=_TOP_K)
-            # 場所を入れた検索と抜いた検索の 2 本をやめた根拠 (design_decisions D1414-8) を数える。
-            without_place = recall.retrieve(being, replace(situation, place=()), top_k=_TOP_K)
+            results = {
+                name: SituationBeliefRecall(store, narrower).retrieve(being, situation, top_k=_TOP_K)
+                for name, narrower in recalls_by_name.items()
+            }
+            first = results[narrowers[0]]
             rows.append(
                 {
                     "index": scene.index,
                     "tick": scene.tick,
                     "place": scene.place_name,
-                    "candidate_count": result.candidate_count,
+                    "candidate_count": first.candidate_count,
+                    "candidates": [e.entry_id for e in entries if e.created_at <= scene.at],
                     "situation": {f.value: list(situation.texts(f)) for f in SituationField},
                     "skipped": dict(skipped),
-                    "query": result.query,
+                    "query": first.query,
                     "old": scene.old_ids,
-                    "new": [e.entry_id for e in result.chosen],
-                    "new_without_place": [e.entry_id for e in without_place.chosen],
+                    "new": {name: [e.entry_id for e in r.chosen] for name, r in results.items()},
                 }
             )
         players.append(
             {"player_id": pid, "name": all_scenes[pid][0].name if all_scenes[pid] else "", "scenes": rows}
         )
-    return {"run_dir": str(run_dir), "form": "plain_one_query", "window": window, "players": players, "texts": texts}
+    return {
+        "run_dir": str(run_dir),
+        "form": "plain_one_query",
+        "window": window,
+        "narrowers": list(narrowers),
+        "person_names": sorted({p["name"] for p in players if p["name"]}),
+        "place_names": sorted(_place_names(run_dir / "trace.jsonl")),
+        "players": players,
+        "texts": texts,
+    }
+
+
+def _name_recall(result: dict[str, Any], names: list[str], *, exclude_own: bool) -> dict[str, Any]:
+    """状況に出た名前ごとに、その名前を含む信念が候補にあるとき、上位 3 件に載ったかを数える。
+
+    数える単位は (場面, 名前) の組。候補にその名前を含む信念が 1 件も無い組は、
+    どの手法でも載せられないので分母から外す。
+    """
+    texts = result["texts"]
+    pairs = 0
+    hits = {name: 0 for name in result["narrowers"]}
+    hits["old"] = 0
+    for player in result["players"]:
+        for scene in player["scenes"]:
+            for name in names:
+                if exclude_own and name == player["name"]:
+                    continue
+                if name not in scene["query"]:
+                    continue
+                if not any(name in texts.get(i, "") for i in scene["candidates"]):
+                    continue
+                pairs += 1
+                for key, ids in [*scene["new"].items(), ("old", scene["old"])]:
+                    if any(name in texts.get(i, "") for i in ids):
+                        hits[key] += 1
+    return {"pairs": pairs, "hits": hits}
 
 
 def summarize(result: dict[str, Any]) -> dict[str, Any]:
     scenes = [s for p in result["players"] for s in p["scenes"]]
-    same = {"old": [0, 0], "new": [0, 0]}
-    jaccard: dict[str, list[float]] = {"old": [], "new": []}
+    keys = ["old", *result["narrowers"]]
+
+    def _ids(scene: dict[str, Any], key: str) -> list[str]:
+        return scene["old"] if key == "old" else scene["new"][key]
+
+    same = {k: [0, 0] for k in keys}
+    jaccard: dict[str, list[float]] = {k: [] for k in keys}
     for player in result["players"]:
-        for key in same:
-            sequence = [s[key] for s in player["scenes"]]
+        for key in keys:
+            sequence = [_ids(s, key) for s in player["scenes"]]
             hit, total = _same_three_rate(sequence)
             same[key][0] += hit
             same[key][1] += total
@@ -339,24 +401,28 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
     def _body(ids: list[str]) -> int:
         return sum(1 for i in ids if _BODY_BELIEF.search(texts.get(i, "")))
 
+    overlap = {}
+    for a, b in combinations(keys, 2):
+        shared = [len(set(_ids(s, a)) & set(_ids(s, b))) for s in scenes]
+        overlap[f"{a} x {b}"] = {
+            "mean": round(sum(shared) / len(scenes), 2),
+            "identical_scenes": sum(1 for s in scenes if set(_ids(s, a)) == set(_ids(s, b))),
+            "disjoint_scenes": sum(1 for n in shared if n == 0),
+        }
+
     return {
         "scenes": len(scenes),
         "same_three_in_a_row": {k: f"{v[0]}/{v[1]}" for k, v in same.items()},
         "consecutive_jaccard": {k: round(sum(v) / len(v), 2) if v else None for k, v in jaccard.items()},
-        "overlap_with_old_mean": round(
-            sum(len(set(s["old"]) & set(s["new"])) for s in scenes) / len(scenes), 2
-        ),
-        "same_three_without_place": sum(1 for s in scenes if s["new"] == s["new_without_place"]),
-        "empty": {
-            "old": sum(1 for s in scenes if not s["old"]),
-            "new": sum(1 for s in scenes if not s["new"]),
-        },
+        "overlap": overlap,
+        "empty": {k: sum(1 for s in scenes if not _ids(s, k)) for k in keys},
         "body_beliefs_in_danger_scenes": {
             "scenes": len(danger),
             "slots": len(danger) * _TOP_K,
-            "old": _body([i for s in danger for i in s["old"]]),
-            "new": _body([i for s in danger for i in s["new"]]),
+            **{k: _body([i for s in danger for i in _ids(s, k)]) for k in keys},
         },
+        "person_name_recall": _name_recall(result, result["person_names"], exclude_own=True),
+        "place_name_recall": _name_recall(result, result["place_names"], exclude_own=False),
     }
 
 
@@ -365,14 +431,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--window", type=int, default=10)
+    parser.add_argument(
+        "--narrowers",
+        default=CHAR_BIGRAM_BM25,
+        help=f"カンマ区切り。最初の手法の問い合わせ文と候補数を記録する。選べる手法: "
+        f"{', '.join(sorted(SUPPORTED_TEXT_CANDIDATE_NARROWERS))}",
+    )
     args = parser.parse_args(argv)
-    result = probe(args.run_dir, window=args.window)
+    narrowers = [n.strip() for n in args.narrowers.split(",") if n.strip()]
+    unknown = sorted(set(narrowers) - SUPPORTED_TEXT_CANDIDATE_NARROWERS)
+    if not narrowers or unknown:
+        parser.error(f"unknown narrowers: {unknown}")
+    if len(set(narrowers)) != len(narrowers):
+        parser.error(f"duplicated narrowers: {narrowers}")
+    result = probe(args.run_dir, window=args.window, narrowers=narrowers)
     result["summary"] = summarize(result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
         json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str), "utf-8"
     )
     print(json.dumps(result["summary"], ensure_ascii=False, indent=1))
+    for key in ("person_name_recall", "place_name_recall"):
+        if result["summary"][key]["pairs"] == 0:
+            # 名前が trace から取れなかったのか、本当に 0 組なのかは、この集計では分けられない。
+            print(f"warning: {key} has no pairs; check names in the trace", file=sys.stderr)
     return 0
 
 
