@@ -10,6 +10,7 @@ from ai_rpg_world.application.common.exceptions import CommandPostCommitExceptio
 from ai_rpg_world.application.common.execution_provenance import ExecutionProvenance, execution_provenance_scope
 from ai_rpg_world.application.social.public_sns.command_service import PublicSnsCommandService
 from ai_rpg_world.application.social.public_sns.contracts import PublicSnsInvalidRequestError, PublicSnsUnavailableError
+from ai_rpg_world.application.social.public_sns.notification_delivery import PublicSnsNotificationDeliveryError
 from ai_rpg_world.application.social.public_sns.notification_events import (
     PublicSnsActivityEvent,
     PublicSnsNotificationReadyEvent,
@@ -376,3 +377,113 @@ def test_stale_handle_index_does_not_rebind_a_mention_after_user_replacement(h):
     h.users.save(UserAggregate.create_new_user(UserId(2), "replacement", "新利用者", ""))
     h.service.publish(1, "@user2 古い相手への言及")
     assert not h.notifications.find_all()
+
+
+def test_retry_delivery_failure_does_not_block_other_recipients_or_duplicate_success(h):
+    """一件の再送が失敗しても後続へ配信し、失敗した相手の復旧後にも成功済みを重ねない。"""
+    queued = h.create(None)
+    queued.publish(2, "@user1 配送先停止")
+    queued.publish(3, "@user4 後続へ届く")
+    unavailable = {1}
+    delivered = []
+
+    def deliver(recipient, dto, provenance):
+        if recipient in unavailable:
+            raise RuntimeError("配送先停止")
+        delivered.append((recipient, dto.notification_id))
+
+    service = h.create(deliver)
+    with pytest.raises(PublicSnsNotificationDeliveryError) as error:
+        service.retry_pending_notifications()
+    assert error.value.delivered_count == 1
+    assert len(error.value.failures) == 1
+    assert str(error.value.failures[0][1]) == "配送先停止"
+    assert error.value.__cause__ is error.value.failures[0][1]
+    assert [recipient for recipient, _ in delivered] == [4]
+    assert sorted((n.user_id.value, n.observation_delivered) for n in h.notifications.find_all()) == [(1, False), (4, True)]
+    unavailable.clear()
+    assert service.retry_pending_notifications() == 1
+    assert service.retry_pending_notifications() == 0
+    assert [recipient for recipient, _ in delivered] == [4, 1]
+    assert len({notification_id for _, notification_id in delivered}) == 2
+
+
+def test_initial_handoff_attempts_later_recipients_before_reporting_committed_failure(h):
+    """初回配送も一人の失敗で後続を止めず、投稿確定済みの例外と再送可能な状態を維持する。"""
+    delivered = []
+    unavailable = {1}
+
+    def deliver(recipient, dto, provenance):
+        if recipient in unavailable:
+            raise RuntimeError("先頭の配送先停止")
+        delivered.append(dto.notification_id)
+
+    service = h.create(deliver)
+    with pytest.raises(CommandPostCommitException) as error:
+        service.publish(2, "@user1 @user4 同じ投稿の通知")
+    assert error.value.result.target_id.startswith("sns:")
+    assert isinstance(error.value.handoff_error, PublicSnsNotificationDeliveryError)
+    assert error.value.handoff_error.delivered_count == 1
+    assert len(error.value.handoff_error.failures) == 1
+    assert len(delivered) == 1
+    assert len(h.posts.find_all()) == 1
+    assert sorted((n.user_id.value, n.observation_delivered) for n in h.notifications.find_all()) == [(1, False), (4, True)]
+    unavailable.clear()
+    assert service.retry_pending_notifications() == 1
+    assert service.retry_pending_notifications() == 0
+    assert len(set(delivered)) == len(delivered) == 2
+
+
+def test_more_than_one_batch_of_failed_notifications_does_not_starve_later_success(h):
+    """先頭101件が失敗しても、一度100件までの再送を継続して102件目へ到達し、末尾から再試行へ戻る。"""
+    queued = h.create(None)
+    for index in range(101):
+        queued.publish(2, f"@user1 停止中の宛先 {index}")
+    queued.publish(3, "@user4 百件を超えた後続")
+    unavailable = {1}
+    attempts = []
+    delivered = []
+
+    def deliver(recipient, dto, provenance):
+        attempts.append(dto.notification_id)
+        if recipient in unavailable:
+            raise RuntimeError("配送先停止")
+        delivered.append(dto.notification_id)
+
+    service = h.create(deliver)
+    with pytest.raises(RuntimeError):
+        service.retry_pending_notifications()
+    assert len(attempts) == 100
+    with pytest.raises(RuntimeError):
+        service.retry_pending_notifications()
+    assert len(attempts) == 102
+    assert len(delivered) == 1
+    # 末尾から先頭へ戻り、後で復旧した宛先も失わない。
+    unavailable.clear()
+    assert service.retry_pending_notifications() == 100
+    assert service.retry_pending_notifications() == 1
+    assert service.retry_pending_notifications() == 0
+    assert len(set(delivered)) == len(delivered) == 102
+
+
+def test_recreated_retry_service_starts_at_head_without_losing_pending_notifications(h):
+    """再送位置が失われるサービス再作成後も、保存済み未配送通知から再開して全件を届ける。"""
+    queued = h.create(None)
+    queued.publish(2, "@user1 一件目")
+    queued.publish(3, "@user4 二件目")
+    attempts = []
+
+    def fail(recipient, dto, provenance):
+        attempts.append(dto.notification_id)
+        raise RuntimeError("配送先停止")
+
+    failed_service = h.create(fail)
+    with pytest.raises(RuntimeError):
+        failed_service.retry_pending_notifications(limit=1)
+    delivered = []
+    restored_service = h.create(lambda recipient, dto, provenance: delivered.append(dto.notification_id))
+    assert restored_service.retry_pending_notifications(limit=1) == 1
+    assert delivered == attempts
+    assert restored_service.retry_pending_notifications(limit=1) == 1
+    assert restored_service.retry_pending_notifications(limit=1) == 0
+    assert len(set(delivered)) == 2
