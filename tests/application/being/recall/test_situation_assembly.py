@@ -1,8 +1,7 @@
-"""assemble_situation が、観測の契約とエージェントの持ち物だけから状況の 6 つの欄を組み立てる挙動を保証する。"""
+"""assemble_situation が、観測の契約とエージェントの持ち物だけから状況の 6 つの項目を組み立てる挙動を保証する。"""
 
 from __future__ import annotations
 
-from ai_rpg_world.application.being.recall.body_band import BodyBand
 from ai_rpg_world.application.being.recall.situation import SituationField
 from ai_rpg_world.application.being.recall.situation_assembly import (
     AgentHoldings,
@@ -44,7 +43,7 @@ def _obs(
 
 
 class TestPlace:
-    """場所の欄が、観測の場所の欄だけから決まることを保証する。"""
+    """場所の項目が、観測が持つ場所だけから決まることを保証する。"""
 
     def test_place_is_the_newest_known_place(self) -> None:
         """場所は、場所が分かっている観測のうち最も新しいものの場所になる。"""
@@ -59,14 +58,14 @@ class TestPlace:
         assert situation.place == ("干潟",)
 
     def test_place_is_empty_when_no_observation_knows_it(self) -> None:
-        """どの観測も場所を知らなければ、場所の欄は空になる。"""
+        """どの観測も場所を知らなければ、場所の項目は空になる。"""
         situation = assemble_situation([_obs("霧が出た", place=UNKNOWN)], NO_HOLDINGS)
 
         assert situation.place == ()
 
 
 class TestCounterpart:
-    """相手の欄が、自分以外の主体の名前と、言った・書いた人の名前から決まることを保証する。"""
+    """相手の項目が、自分以外の主体の名前と、言った・書いた人の名前から決まることを保証する。"""
 
     def test_counterparts_are_other_subjects_and_speakers_newest_first_without_duplicates(self) -> None:
         """相手は、自分以外の主体の名前と、言われた・書かれていた観測の情報源を、新しい順に重複なく並べる。"""
@@ -109,10 +108,10 @@ class TestCounterpart:
 
 
 class TestOwnStateAndHappening:
-    """自分の体の状態と、いま起きたことの欄が、観測の経路で分かれることを保証する。"""
+    """自分の体の状態と、いま起きたことの項目が、観測の経路で分かれることを保証する。"""
 
     def test_own_body_state_goes_to_own_state_not_happening(self) -> None:
-        """経路が自分の体の状態の観測は自分の状態の欄に入り、いま起きたことには入らない。"""
+        """経路が自分の体の状態の観測は自分の状態の項目に入り、いま起きたことには入らない。"""
         observations = [
             _obs("お腹が空いてきた", route=OwnBodyState()),
             _obs("潮が満ちてきた"),
@@ -122,22 +121,6 @@ class TestOwnStateAndHappening:
 
         assert situation.own_state == ("お腹が空いてきた",)
         assert situation.happening == ("潮が満ちてきた",)
-
-    def test_body_band_sentence_comes_before_the_raw_body_states(self) -> None:
-        """体の帯があれば、帯の文を自分の状態の欄の先頭に足し、生の本文も残す。"""
-        observations = [_obs("お腹が空いてきた", route=OwnBodyState())]
-
-        situation = assemble_situation(observations, AgentHoldings(body_band=BodyBand.CAUTION))
-
-        assert situation.own_state == ("体の状態は注意", "お腹が空いてきた")
-
-    def test_without_band_only_the_raw_body_states_are_used(self) -> None:
-        """体の帯が無ければ、帯の文を作らずに生の本文だけを使う。"""
-        observations = [_obs("お腹が空いてきた", route=OwnBodyState())]
-
-        situation = assemble_situation(observations, NO_HOLDINGS)
-
-        assert situation.own_state == ("お腹が空いてきた",)
 
     def test_happening_takes_the_newest_three_including_own_action_results(self) -> None:
         """いま起きたことは、自分の行動の結果を含めて新しい順に 3 件までを取る。"""
@@ -154,10 +137,10 @@ class TestOwnStateAndHappening:
 
 
 class TestHoldings:
-    """やろうとしていることと未解決のことの欄が、エージェントの持ち物から決まることを保証する。"""
+    """やろうとしていることと未解決のことの項目が、エージェントの持ち物から決まることを保証する。"""
 
     def test_goal_and_inner_thought_go_to_intent(self) -> None:
-        """目的と直前の内心は、やろうとしていることの欄に、目的を先にして入る。"""
+        """目的と直前の内心は、やろうとしていることの項目に、目的を先にして入る。"""
         holdings = AgentHoldings(goal="島から出る", inner_thought="まず火を起こしたい")
 
         situation = assemble_situation([], holdings)
@@ -165,7 +148,7 @@ class TestHoldings:
         assert situation.intent == ("島から出る", "まず火を起こしたい")
 
     def test_open_expectations_go_to_unresolved_only(self) -> None:
-        """清算待ちの予期は未解決の欄にだけ入り、やろうとしていることには入らない。"""
+        """清算待ちの予期は未解決の項目にだけ入り、やろうとしていることには入らない。"""
         holdings = AgentHoldings(open_expectations=("トムが麦束を焼いてくれる",))
 
         situation = assemble_situation([], holdings)
@@ -174,7 +157,7 @@ class TestHoldings:
         assert situation.intent == ()
 
     def test_unresolved_takes_the_newest_three_expectations(self) -> None:
-        """清算待ちの予期は古い順に渡され、新しいものから 3 件だけを未解決の欄に入れる。"""
+        """清算待ちの予期は古い順に渡され、新しいものから 3 件だけを未解決の項目に入れる。"""
         holdings = AgentHoldings(open_expectations=("一", "二", "三", "四"))
 
         situation = assemble_situation([], holdings)
@@ -182,7 +165,7 @@ class TestHoldings:
         assert situation.unresolved == ("四", "三", "二")
 
     def test_blank_holdings_are_left_out(self) -> None:
-        """空白だけの目的・内心・予期は欄に入れない。"""
+        """空白だけの目的・内心・予期は項目に入れない。"""
         holdings = AgentHoldings(goal=" ", inner_thought="", open_expectations=("  ",))
 
         situation = assemble_situation([], holdings)

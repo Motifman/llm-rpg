@@ -18,13 +18,6 @@
 ない。選ばれたものだけを根拠として形と一緒に予期へ渡し、確定した当否はそこに
 だけ返る。
 
-## 次のターンの想起で残す欄も同じ呼び出しで問う
-
-想起はプロンプトを組むとき (行動の前)、清算はターンの終わり (行動の後) に行う。
-材料が同じなので、次のターンの想起で残す欄 (#1414) も同じ呼び出しで問う。欄を
-選ぶために、予期が 1 件も無いターンにも呼ぶ。欄の答えは予期の判定とは分けて読み、
-欄の答えが崩れても予期の判定は縮退させない。
-
 ## 状態の変化を保存してから配る
 
 集約が返した出来事は、予期と同じ保存の単位で未配信として積み (design_decisions
@@ -50,24 +43,6 @@ from ai_rpg_world.application.being.expectation.grounds import (
 )
 from ai_rpg_world.application.being.expectation.likelihood_labels import (
     LIKELIHOOD_LABELS,
-)
-from ai_rpg_world.application.being.recall.body_band import (
-    BODY_BAND_QUESTION,
-    BodyBandReading,
-    body_band_from_answers,
-    body_band_question,
-)
-from ai_rpg_world.application.being.recall.selection_store import (
-    NextTurnFieldSelections,
-)
-from ai_rpg_world.application.being.recall.situation import (
-    DEFAULT_FIELDS_TO_KEEP,
-    SELECTABLE_FIELDS,
-    FieldSelection,
-    Situation,
-    SituationField,
-    field_selection_from_answers,
-    field_selection_questions,
 )
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,
@@ -148,10 +123,6 @@ class _Turn:
     material: TurnMaterial
     transitions: list[dict[str, Any]] = field(default_factory=list)
     state: dict[str, Any] | None = None
-    field_selection: dict[str, Any] | None = None
-    already_settled: bool = False
-    situation: Situation | None = None
-    situation_note: dict[str, Any] = field(default_factory=dict)
 
 
 class ExpectationSettlementService:
@@ -173,10 +144,7 @@ class ExpectationSettlementService:
         max_grounds_questions: int,
         grounds_min_probability: float,
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
-        field_selections: NextTurnFieldSelections | None = None,
-        fields_to_keep: int = DEFAULT_FIELDS_TO_KEEP,
     ) -> None:
-        """``field_selections`` を渡すと、次のターンの想起で残す欄も毎ターン問う。"""
         if not isinstance(repository, ExpectationRepository):
             raise TypeError("repository must be ExpectationRepository")
         if not isinstance(judgment_port, ITypedJudgmentPort):
@@ -208,23 +176,8 @@ class ExpectationSettlementService:
         self._grounds_reader = grounds_reader
         self._max_grounds_questions = max_grounds_questions
         self._grounds_min_probability = float(grounds_min_probability)
-        if field_selections is not None and not isinstance(
-            field_selections, NextTurnFieldSelections
-        ):
-            raise TypeError("field_selections must be NextTurnFieldSelections or None")
-        self._field_selections = field_selections
-        if isinstance(fields_to_keep, bool) or not isinstance(fields_to_keep, int):
-            raise TypeError("fields_to_keep must be int")
-        if not 1 <= fields_to_keep <= len(SELECTABLE_FIELDS):
-            raise ValueError(f"fields_to_keep must be between 1 and {len(SELECTABLE_FIELDS)}")
-        self._fields_to_keep = fields_to_keep
         self._trace_recorder_provider = trace_recorder_provider
         self._timelines: dict[BeingId, deque[_Turn]] = {}
-
-    @property
-    def asks_fields(self) -> bool:
-        """次のターンの想起で残す欄を問うか。問うなら、呼び出し側はいまの状況を渡す。"""
-        return self._field_selections is not None
 
     def settle_turn(
         self,
@@ -234,8 +187,6 @@ class ExpectationSettlementService:
         material: TurnMaterial,
         tick: int | None = None,
         player_id: int | None = None,
-        situation: Situation | None = None,
-        situation_note: Mapping[str, Any] | None = None,
     ) -> SettlementReport:
         """いまのターン数で清算し、保存のあとで未配信の出来事を配る。
 
@@ -248,26 +199,10 @@ class ExpectationSettlementService:
         """
         if not isinstance(material, TurnMaterial):
             raise TypeError("material must be TurnMaterial")
-        if situation is not None and not isinstance(situation, Situation):
-            raise TypeError("situation must be Situation or None")
-        current = _Turn(
-            turn=self._repository.current_turn(being_id),
-            material=material,
-            situation=situation,
-            situation_note=dict(situation_note or {}),
-        )
+        current = _Turn(turn=self._repository.current_turn(being_id), material=material)
         try:
             return self._settle(being_id, self_name, current, tick, player_id)
         except Exception as exc:
-            # 2 回目の清算は配線の誤り。1 回目に選んだ欄はそのターンの正しい選択なので残す。
-            if not current.already_settled:
-                detail = f"{type(exc).__name__}: {exc}"
-                self._choose_fields(
-                    being_id,
-                    current,
-                    FieldSelection.degraded(SKIPPED_SETTLEMENT_FAILED, detail),
-                    BodyBandReading.degraded(SKIPPED_SETTLEMENT_FAILED, detail),
-                )
             report = SettlementReport(
                 turn=current.turn,
                 judged=False,
@@ -281,7 +216,6 @@ class ExpectationSettlementService:
                 player_id,
                 state=current.state,
                 unavailable_reason=f"{type(exc).__name__}: {exc}",
-                field_selection=current.field_selection,
             )
             self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
             raise
@@ -299,7 +233,6 @@ class ExpectationSettlementService:
             being_id, deque(maxlen=self._timeline_turns)
         )
         if timeline and timeline[-1].turn >= now:
-            current.already_settled = True
             raise ValueError(
                 f"turn {now} of {being_id} has already been settled; "
                 "advance_turn must be called once per move"
@@ -308,26 +241,30 @@ class ExpectationSettlementService:
 
         pending, new = self._close_by_turn_count(being_id, current)
         if not pending and not new:
-            state = None
-            field_answers: Mapping[str, JudgmentResult] | None = None
-            unavailable_reason: str | None = None
-            if self._field_selections is not None:
-                state = _state(
-                    self_name,
-                    now=now,
-                    pending=[],
-                    new=[],
-                    timeline=timeline,
-                    situation=current.situation,
-                )
-                current.state = state
-                field_answers, unavailable_reason = self._ask_fields_only(
-                    being_id, self_name, current, state
-                )
             report = SettlementReport(
                 turn=now,
                 judged=False,
                 skipped_reason=SKIPPED_NOTHING_TO_JUDGE,
+                transitions=tuple(current.transitions),
+            )
+            self._trace(being_id, report, tick, player_id)
+            self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
+            return report
+
+        plan = plan_ground_questions(
+            being_id, new, reader=self._grounds_reader, limit=self._max_grounds_questions
+        )
+        asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
+        state = _state(self_name, now=now, pending=pending, new=new, timeline=timeline)
+        current.state = state
+        try:
+            answers = self._port.judge(state, questions)
+            verdicts = _verdicts(asked, answers)
+        except TypedJudgmentUnavailableException as exc:
+            report = SettlementReport(
+                turn=now,
+                judged=False,
+                skipped_reason=SKIPPED_JUDGMENT_UNAVAILABLE,
                 transitions=tuple(current.transitions),
             )
             self._trace(
@@ -336,46 +273,12 @@ class ExpectationSettlementService:
                 tick,
                 player_id,
                 state=state,
-                answers=field_answers,
-                unavailable_reason=unavailable_reason,
-                field_selection=current.field_selection,
+                asked=asked,
+                grounds=plan.trace(answers=None, judged=None),
+                unavailable_reason=f"{exc.error_code}: {exc}",
             )
             self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
             return report
-
-        plan = plan_ground_questions(
-            being_id, new, reader=self._grounds_reader, limit=self._max_grounds_questions
-        )
-        asked, questions = _questions(self_name, pending=pending, new=new, plan=plan)
-        if self._field_selections is not None:
-            questions.update(_recall_questions(self_name))
-        state = _state(
-            self_name,
-            now=now,
-            pending=pending,
-            new=new,
-            timeline=timeline,
-            situation=current.situation if self._field_selections is not None else None,
-        )
-        current.state = state
-        try:
-            answers = self._port.judge(state, questions)
-        except TypedJudgmentUnavailableException as exc:
-            self._choose_fields(
-                being_id, current, FieldSelection.unavailable(exc), BodyBandReading.unavailable(exc)
-            )
-            return self._unavailable(being_id, current, asked, plan, exc, tick, player_id)
-        # 欄の答えは予期の判定より先に、別に読む。予期の答えが崩れても欄の選択は残す。
-        self._choose_fields(
-            being_id,
-            current,
-            field_selection_from_answers(answers, keep=self._fields_to_keep),
-            body_band_from_answers(answers),
-        )
-        try:
-            verdicts = _verdicts(asked, answers)
-        except TypedJudgmentUnavailableException as exc:
-            return self._unavailable(being_id, current, asked, plan, exc, tick, player_id)
 
         probabilities = {
             name: verdict for name, verdict in verdicts.items() if isinstance(verdict, float)
@@ -415,80 +318,9 @@ class ExpectationSettlementService:
             asked=asked,
             answers=answers,
             grounds=plan.trace(answers=answers, judged=judged_grounds),
-            field_selection=current.field_selection,
         )
         self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
         return report
-
-    def _unavailable(
-        self,
-        being_id: BeingId,
-        current: _Turn,
-        asked: Mapping[str, _Asked],
-        plan: GroundsPlan,
-        exc: TypedJudgmentUnavailableException,
-        tick: int | None,
-        player_id: int | None,
-    ) -> SettlementReport:
-        report = SettlementReport(
-            turn=current.turn,
-            judged=False,
-            skipped_reason=SKIPPED_JUDGMENT_UNAVAILABLE,
-            transitions=tuple(current.transitions),
-        )
-        self._trace(
-            being_id,
-            report,
-            tick,
-            player_id,
-            state=current.state,
-            asked=asked,
-            grounds=plan.trace(answers=None, judged=None),
-            unavailable_reason=f"{exc.error_code}: {exc}",
-            field_selection=current.field_selection,
-        )
-        self._dispatcher.deliver_pending(being_id, tick=tick, player_id=player_id)
-        return report
-
-    def _ask_fields_only(
-        self, being_id: BeingId, self_name: str, current: _Turn, state: dict[str, Any]
-    ) -> tuple[Mapping[str, JudgmentResult] | None, str | None]:
-        """欄だけを問う。戻り値は (答え, 答えが得られなかった理由) で、trace に載せる。"""
-        try:
-            answers = self._port.judge(state, _recall_questions(self_name))
-        except TypedJudgmentUnavailableException as exc:
-            self._choose_fields(
-                being_id, current, FieldSelection.unavailable(exc), BodyBandReading.unavailable(exc)
-            )
-            return None, f"{exc.error_code}: {exc}"
-        self._choose_fields(
-            being_id,
-            current,
-            field_selection_from_answers(answers, keep=self._fields_to_keep),
-            body_band_from_answers(answers),
-        )
-        return answers, None
-
-    def _choose_fields(
-        self,
-        being_id: BeingId,
-        current: _Turn,
-        selection: FieldSelection,
-        band: BodyBandReading,
-    ) -> None:
-        if self._field_selections is None:
-            return
-        self._field_selections.put(
-            being_id, settled_turn=current.turn, selection=selection, band=band
-        )
-        current.field_selection = {
-            **selection.to_trace_payload(),
-            "keep": self._fields_to_keep,
-            # 値を見せずに選んだ選択は、trace の上でふつうの選択と見分けられるようにする。
-            "situation_shown": current.situation is not None,
-            "situation_note": current.situation_note,
-            "body_band": band.to_trace_payload(),
-        }
 
     def _close_by_turn_count(
         self, being_id: BeingId, current: _Turn
@@ -551,7 +383,6 @@ class ExpectationSettlementService:
         answers: Mapping[str, JudgmentResult] | None = None,
         grounds: list[dict[str, Any]] | None = None,
         unavailable_reason: str | None = None,
-        field_selection: dict[str, Any] | None = None,
     ) -> None:
         recorder = self._trace_recorder_provider()
         if recorder is None:
@@ -589,7 +420,6 @@ class ExpectationSettlementService:
             },
             transitions=[dict(t) for t in report.transitions],
             grounds=grounds or [],
-            field_selection=field_selection,
         )
 
 
@@ -670,13 +500,6 @@ def _questions(
     return asked, questions
 
 
-def _recall_questions(self_name: str) -> dict[str, Question]:
-    """次のターンの想起のための問い。残す欄と、自分の体の帯 (#1414)。"""
-    questions: dict[str, Question] = dict(field_selection_questions(self_name))
-    questions[BODY_BAND_QUESTION] = body_band_question(self_name)
-    return questions
-
-
 def _verdicts(
     asked: Mapping[str, _Asked], answers: Mapping[str, JudgmentResult]
 ) -> dict[str, ShapeVerdict | CheckVerdict | float]:
@@ -727,11 +550,10 @@ def _state(
     pending: Sequence[Expectation],
     new: Sequence[Expectation],
     timeline: Sequence[_Turn],
-    situation: Situation | None = None,
 ) -> dict[str, Any]:
     # ターンも「ターン3」の文にする。整数をそのまま載せると、ID と同じ扱いで
     # 数として読まれうる (設計原則 1)。差の計算は Jev に任せない。
-    state: dict[str, Any] = {
+    return {
         "本人の名前": self_name,
         "いまのターン": f"ターン{now}",
         "清算待ちの予期": [_listed(e) for e in pending],
@@ -745,10 +567,6 @@ def _state(
             for t in timeline
         ],
     }
-    if situation is not None:
-        # 欄を選ぶ問いが欄の中身を見られるように、組み立てた欄の値をそのまま見せる (#1414)。
-        state["いまの状況"] = {f.value: list(situation.texts(f)) for f in SituationField}
-    return state
 
 
 def _listed(expectation: Expectation) -> dict[str, str]:

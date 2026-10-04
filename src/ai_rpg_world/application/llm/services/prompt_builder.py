@@ -891,7 +891,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         if self._situation_recall is not None:
             if player_name is None:
                 raise TypeError("player_name is required for situation recall")
-            # 状況の欄の部品は application.llm.services を import するので、ここで遅れて読む。
+            # 状況の想起の部品は application.llm.services を import するので、ここで遅れて読む。
             from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
                 run_situation_belief_recall,
             )

@@ -475,8 +475,6 @@ class WorldLlmWiring:
             max_grounds_questions=int(config.expectation_grounds_max_questions),
             grounds_min_probability=float(config.expectation_grounds_min_probability),
             trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
-            field_selections=self.runtime.field_selections_for_settlement(),
-            fields_to_keep=int(config.situation_fields_to_keep),
         )
 
     def _in_mind_text_reader(self) -> MemoryStoreInMindTextReader:

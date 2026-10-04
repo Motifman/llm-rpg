@@ -7,7 +7,7 @@
 後: 同じ手の ``expected_result`` を予期として積み、実 Jev で清算し (#1440)、
 確定した出来事を本番の受け取る側 (``ExpectationBeliefMaterialReceiver``) に
 通して積んだもの。頭にあった信念とエピソードは、その手の直前の
-``semantic_passive_recall`` (状況の欄から引いた run では ``situation_belief_recall``) /
+``semantic_passive_recall`` (状況の項目から引いた run では ``situation_belief_recall``) /
 ``episodic_recall`` の候補から組み直す。
 
 2 段に分ける。Jev を呼ぶのは ``judge`` だけで、判定は ``--out`` に保存する。
@@ -155,7 +155,7 @@ def _in_mind_before_each_action(trace_path: Path, player_id: int) -> list[_InMin
         if kind == "semantic_passive_recall":
             beliefs = tuple(c["entry_id"] for c in payload.get("candidates", []))
         elif kind == "situation_belief_recall":
-            # 状況の欄から引いた run (#1414) は、受動想起の代わりにこちらへ残る。
+            # 状況の項目から引いた run (#1414) は、受動想起の代わりにこちらへ残る。
             beliefs = tuple(payload.get("chosen") or ())
         elif kind == "episodic_recall":
             episodes = tuple(c["episode_id"] for c in payload.get("candidates", []))

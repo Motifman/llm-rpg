@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
 from typing import Any
 
-from ai_rpg_world.application.being.recall.situation import (
-    RECALL_FIELDS_QUESTION,
-    SELECTABLE_FIELDS,
-)
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
     JudgmentResult,
@@ -71,37 +66,3 @@ class ScriptedJudgmentPort(ITypedJudgmentPort):
         if isinstance(script, Exception):
             raise script
         return DeterministicTypedJudgmentPort(script).judge(state, questions)
-
-
-def ranked_probabilities(*fields: Any) -> dict[str, float]:
-    """欄を並べた順に確率が高くなるよう、選択肢ごとの確率を作る。並べなかった欄は低く同じ値にする。"""
-    probabilities = {f.value: 0.02 for f in SELECTABLE_FIELDS}
-    for rank, field in enumerate(fields):
-        probabilities[field.value] = 0.5 - 0.1 * rank
-    return probabilities
-
-
-class FieldRankingPort(ScriptedJudgmentPort):
-    """台本どおりに答えたうえで、欄を選ぶ問いの確率を呼ぶたびに ``rankings`` の順で差し替える。
-
-    ``rankings`` を使い切ったあとは差し替えず、stub の一様な確率のまま答える。
-    """
-
-    def __init__(self, *scripts: Mapping[str, Any] | Exception, rankings: Sequence[Sequence[Any]]) -> None:
-        super().__init__(*scripts)
-        self._rankings = [tuple(r) for r in rankings]
-
-    def judge(
-        self,
-        state: str | Mapping[str, Any] | Sequence[Any],
-        questions: Mapping[str, Question],
-    ) -> Mapping[str, JudgmentResult]:
-        answers = dict(super().judge(state, questions))
-        if RECALL_FIELDS_QUESTION in answers and self._rankings:
-            ranking = self._rankings.pop(0)
-            answers[RECALL_FIELDS_QUESTION] = replace(
-                answers[RECALL_FIELDS_QUESTION],
-                value=ranking[0].value,
-                probabilities=ranked_probabilities(*ranking),
-            )
-        return answers

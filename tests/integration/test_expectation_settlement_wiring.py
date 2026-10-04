@@ -11,7 +11,10 @@ import pytest
 from ai_rpg_world.application.being.expectation.grounds import (
     MemoryStoreInMindTextReader,
 )
-from ai_rpg_world.application.being.expectation.settlement import TurnMaterial
+from ai_rpg_world.application.being.expectation.settlement import (
+    SKIPPED_NOTHING_TO_JUDGE,
+    TurnMaterial,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
@@ -213,6 +216,34 @@ class TestSettlementWiring:
 
         assert port.calls == []
         assert _settlements(recorder) == []
+
+    def test_situation_recall_does_not_make_settlement_call_without_expectations(self) -> None:
+        """状況から信念を引く run でも、清算待ちの予期が無いターンは Jev を呼ばず、判定するものが無いことを trace に残す。"""
+        port = ScriptedJudgmentPort()
+        config = episodic_config(
+            semantic_passive_top_k=3,
+            situation_belief_recall_enabled=True,
+            typed_judgment_provider="stub",
+            expectation_settlement_enabled=True,
+        )
+        runtime = create_world_runtime(_DRILL, config=config)
+        recorder = RecordingTraceRecorder()
+        runtime.set_trace_recorder(recorder)
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient({"name": TOOL_NAME_SPOT_GRAPH_WAIT, "arguments": {}}),
+            typed_judgment_port=port,
+        )
+
+        _move(wiring)
+
+        assert port.calls == []
+        assert recorder.payloads(TraceEventKind.SITUATION_BELIEF_RECALL)
+        assert [p["skipped_reason"] for p in _settlements(recorder)] == [
+            SKIPPED_NOTHING_TO_JUDGE
+        ]
 
     def test_enabled_settlement_without_a_port_fails_at_wiring(self) -> None:
         """清算を有効にしたのに判断ポートが無い wiring は、組むときに ValueError で落ちる。"""

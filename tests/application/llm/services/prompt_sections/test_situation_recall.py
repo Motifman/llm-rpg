@@ -1,4 +1,4 @@
-"""run_situation_belief_recall が、ゲームの観測と行動結果を観測の契約に変換して状況の欄を組み、信念を引いて【関連する学び】と trace に出す挙動を保証する。"""
+"""run_situation_belief_recall が、ゲームの観測と行動結果を観測の契約に変換して状況の項目を組み、信念を引いて【関連する学び】と trace に出す挙動を保証する。"""
 
 from __future__ import annotations
 
@@ -9,19 +9,11 @@ from typing import Any
 from tests.application.being.expectation.support import RecordingTraceRecorder
 
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
-from ai_rpg_world.application.being.recall.body_band import BodyBand, BodyBandReading
-from ai_rpg_world.application.being.recall.selection_store import (
-    DEGRADED_SETTLEMENT_DISABLED,
-    DEGRADED_STALE_SELECTION,
-    NextTurnFieldSelections,
-)
-from ai_rpg_world.application.being.recall.situation import FieldSelection, SituationField
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
-    DEGRADED_NO_SELECTION,
     SKIPPED_CONTRACT_VIOLATION,
     SituationRecallSources,
     run_situation_belief_recall,
@@ -58,7 +50,7 @@ LABEL = "一日目の朝 9:00"
 
 
 class _Builder:
-    """run_situation_belief_recall が読む prompt builder の欄だけを持つ。"""
+    """run_situation_belief_recall が読む prompt builder の属性だけを持つ。"""
 
     def __init__(self, recorder: Any, *, top_k: int = 3) -> None:
         self._semantic_passive_top_k = top_k
@@ -75,7 +67,6 @@ class _Env:
         self,
         *beliefs: tuple[str, str],
         goal: str | None = None,
-        selections: NextTurnFieldSelections | None = None,
     ) -> None:
         self.recorder = RecordingTraceRecorder()
         self.store = InMemorySemanticMemoryStore()
@@ -98,7 +89,6 @@ class _Env:
             recall=SituationBeliefRecall(self.store, CharBigramBm25Narrower()),
             expectations=self.expectations,
             goal_text=lambda _pid: self.goal,
-            selections=selections,
         )
 
     def expect(self, content: str) -> None:
@@ -159,10 +149,10 @@ def _acted(result: str, minutes: int, *, inner_thought: str | None = None) -> Ac
 
 
 class TestSituationFromGame:
-    """ゲームの観測と行動結果、エージェントの持ち物から欄が組まれることを保証する。"""
+    """ゲームの観測と行動結果、エージェントの持ち物から項目が組まれることを保証する。"""
 
     def test_observations_and_action_results_are_merged_newest_first(self) -> None:
-        """観測と行動結果は時刻の新しい順に混ぜて、いま起きたことの欄に並ぶ。"""
+        """観測と行動結果は時刻の新しい順に混ぜて、いま起きたことの項目に並ぶ。"""
         env = _Env()
 
         env.run(
@@ -177,7 +167,7 @@ class TestSituationFromGame:
         ]
 
     def test_place_comes_from_the_current_place_through_the_contract(self) -> None:
-        """自分の行動の結果は、いまいる場所の名前を場所の欄に運ぶ。"""
+        """自分の行動の結果は、いまいる場所の名前を場所の項目に運ぶ。"""
         env = _Env()
 
         env.run([], [_acted("流木を拾えた", 1)])
@@ -185,7 +175,7 @@ class TestSituationFromGame:
         assert env.trace()["situation"]["場所"] == ["干潟"]
 
     def test_unrepresentable_observations_are_skipped_and_counted_by_reason(self) -> None:
-        """契約に写せない観測は欄に入れず、飛ばした理由ごとの件数を、種類が分かれば種類を添えて trace に残す。"""
+        """契約に写せない観測は項目に入れず、飛ばした理由ごとの件数を、種類が分かれば種類を添えて trace に残す。"""
         env = _Env()
         loop_warning = _seen("同じ手を繰り返している", 1, loop_guard=True)
         untimed = ObservationEntry(
@@ -231,7 +221,7 @@ class TestSituationFromGame:
 
 
 class TestRecallOutput:
-    """引いた信念が【関連する学び】と台帳への ID になり、選択が無いことが trace に残ることを保証する。"""
+    """引いた信念が【関連する学び】と台帳への ID になり、問い合わせ文と結果が trace に残ることを保証する。"""
 
     def test_returns_chosen_beliefs_as_text_and_ids(self) -> None:
         """頭に載せた信念を「- 文」の行と、その ID の並びで返す。"""
@@ -255,80 +245,20 @@ class TestRecallOutput:
         assert ids == ("b-1", "b-2")
         assert text == "- 満ちてきた水は冷たい\n- 潮が満ちてきたら高台へ行く"
 
-    def test_without_settlement_the_trace_says_so_and_every_field_but_place_was_kept(self) -> None:
-        """選択の保存先が無い (清算を切った) run では、清算が無いことを縮退の理由に持ち、場所以外の 5 つの欄を残す (場所は 2 本の検索の片方で必ず使う)。"""
-        env = _Env()
+    def test_trace_has_the_whole_query_and_what_was_found(self) -> None:
+        """trace には、全部の項目をつないだ問い合わせ文、候補の数、引けた信念、載せた信念が残る。"""
+        env = _Env(("b-crab", "潮が満ちると干潟は渡れない"))
 
         env.run([_seen("潮が満ちてきた", 1)])
 
         payload = env.trace()
-        assert payload["degraded_reason"] == DEGRADED_SETTLEMENT_DISABLED
-        assert payload["kept_fields"] == [
-            "相手", "自分の状態", "やろうとしていること", "いま起きたこと", "未解決のこと"
-        ]
-        assert payload["masks"][0]["fields"][0] == "場所"
+        assert payload["query"] == "干潟\n潮が満ちてきた"
+        assert payload["candidate_count"] == 1
+        assert [hit["entry_id"] for hit in payload["hits"]] == ["b-crab"]
+        assert payload["chosen"] == ["b-crab"]
         assert payload["failed"] is None
         assert payload["being_id"] == BEING.value
         assert payload["top_k"] == 3
-
-    def test_selection_settled_at_the_current_turn_chooses_the_fields(self) -> None:
-        """清算がいまのターン番号で選んだ欄があれば、その欄で引き、縮退の理由は無い。"""
-        selections = NextTurnFieldSelections()
-        env = _Env(selections=selections)
-        env.expectations.advance_turn(BEING)
-        selections.put(
-            BEING,
-            settled_turn=1,
-            selection=FieldSelection(kept=frozenset({SituationField.HAPPENING})),
-        )
-
-        env.run([_seen("潮が満ちてきた", 1)])
-
-        payload = env.trace()
-        assert payload["kept_fields"] == ["いま起きたこと"]
-        assert payload["degraded_reason"] is None
-
-    def test_settled_body_band_goes_into_the_own_state_field(self) -> None:
-        """清算がいまのターン番号で丸めた体の帯は、自分の状態の欄に文として入り、trace にも残る。"""
-        selections = NextTurnFieldSelections()
-        env = _Env(selections=selections)
-        selections.put(
-            BEING,
-            settled_turn=0,
-            selection=FieldSelection(kept=frozenset({SituationField.OWN_STATE})),
-            band=BodyBandReading(BodyBand.CRISIS),
-        )
-
-        env.run([_seen("潮が満ちてきた", 1)])
-
-        payload = env.trace()
-        assert payload["situation"]["自分の状態"] == ["体の状態は危機"]
-        assert payload["body_band"]["band"] == "危機"
-
-    def test_without_settlement_no_band_is_added(self) -> None:
-        """清算を切った run では帯を付けず、清算が無いことを理由に持つ。"""
-        env = _Env()
-
-        env.run([_seen("潮が満ちてきた", 1)])
-
-        payload = env.trace()
-        assert payload["situation"]["自分の状態"] == []
-        assert payload["body_band"]["degraded_reason"] == DEGRADED_SETTLEMENT_DISABLED
-
-    def test_selection_of_an_earlier_turn_is_not_reused(self) -> None:
-        """清算したターンよりターン番号が進んでいれば、その選択を使わず、古いことを理由に全部の欄で引く。"""
-        selections = NextTurnFieldSelections()
-        env = _Env(selections=selections)
-        selections.put(
-            BEING,
-            settled_turn=0,
-            selection=FieldSelection(kept=frozenset({SituationField.HAPPENING})),
-        )
-        env.expectations.advance_turn(BEING)
-
-        env.run([_seen("潮が満ちてきた", 1)])
-
-        assert env.trace()["degraded_reason"] == DEGRADED_STALE_SELECTION
 
     def test_without_recorder_the_beliefs_are_returned_without_warning(self, caplog: Any) -> None:
         """trace の記録先が無ければ、記録の失敗として扱わずに、引いた信念を返す。"""
@@ -357,7 +287,7 @@ class TestRecallOutput:
     def test_observation_violating_the_contract_is_skipped_and_counted(
         self, monkeypatch: Any
     ) -> None:
-        """契約の検査に通らない観測は 1 件だけ飛ばして数え、ほかの観測で欄を組む。"""
+        """契約の検査に通らない観測は 1 件だけ飛ばして数え、ほかの観測で項目を組む。"""
         import ai_rpg_world.application.llm.services.prompt_sections.situation_recall as module
         from ai_rpg_world.being.contract import ContractViolation
 
@@ -395,7 +325,7 @@ class TestSources:
     """SituationRecallSources が、配線の取り違えを作る時点で拒むことを保証する。"""
 
     def test_rejects_wrong_types(self) -> None:
-        """引く部品、予期の保存先、目的の口のどれかが違う型なら TypeError を投げる。"""
+        """引く部品、予期の保存先、目的の取り出し方のどれかが違う型なら TypeError を投げる。"""
         import pytest
 
         env = _Env()
@@ -408,7 +338,6 @@ class TestSources:
             ("recall", object()),
             ("expectations", object()),
             ("goal_text", "目的"),
-            ("selections", object()),
         ):
             with pytest.raises(TypeError, match=name):
                 SituationRecallSources(**{**good, name: bad})

@@ -1,12 +1,12 @@
-"""過去 run の想起の場面を組み直し、状況の欄で引いた信念と、いまの cue で選んだ信念を並べる (#1414)。
+"""過去 run の想起の場面を組み直し、状況の項目で引いた信念と、いまの cue で選んだ信念を並べる (#1414)。
 
-場面は、本人のプロンプトを連続 ``--window`` 回ぶん、人ごとに 1 窓ずつ取る。続けての想起で
-同じ 3 件が並ぶ割合を測るため、飛び飛びにしない。窓は、体の危険を表す語が観測に多く出る
-ところを選ぶ (「体が危ない」の場面を確実に含めるため)。
+場面は、本人のプロンプトを連続 ``--window`` 回ぶん、人ごとに 1 回分ずつ連続で取る。続けての
+想起で同じ 3 件が並ぶ割合を測るため、飛び飛びにしない。取る区間は、体の危険を表す語が観測に
+多く出るところを選ぶ (「体が危ない」の場面を確実に含めるため)。
 
-Jev に問うのは、本番の清算と同じ state と問い (残す欄 5 問 + 体の帯 1 問) で、1 場面 1 回。
-``--repeats`` 回くり返して答えの安定性を見る。引く側は本番と同じ ``SituationBeliefRecall`` を
-手元で回す。いまの cue で選んだ 3 件は trace の ``semantic_passive_recall`` をそのまま使う。
+引く側は本番と同じ ``SituationBeliefRecall`` (全部の項目をつなげて 1 本で問い合わせる) を手元で
+回す。Jev も LLM も呼ばない。いまの cue で選んだ 3 件は trace の ``semantic_passive_recall`` を
+そのまま使う。
 
 近似:
 
@@ -14,14 +14,13 @@ Jev に問うのは、本番の清算と同じ state と問い (残す欄 5 問 
   snapshot の ``created_at`` は信念を改めると更新されるので、trace に信念の ID が最初に現れた
   時刻と比べて早いほうを、存在しはじめた時刻とする。あとで置き換えられた信念も、その時点では
   有効だったとみなして候補に入れる
-- この run には予期の仕組みが無いので、未解決の欄と清算待ちの予期は空。目的も入れない
+- この run には予期の仕組みが無いので、未解決のことの項目は空。目的も入れない
 - 行動結果のゲーム内時刻は、直前の観測の時刻で代える
 
 使い方:
     uv run python scripts/situation_recall_probe.py \\
         --run-dir ../../../var/runs/v4coop_reasonfirst_003 \\
-        --out docs/experiments/issue_1414_situation_recall/results.json
-    uv run python scripts/situation_recall_probe.py --run-dir ... --port stub --out /tmp/x.json
+        --out docs/experiments/issue_1414_situation_recall/results_plain.json
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ import json
 import re
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
@@ -43,34 +42,19 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from ai_rpg_world.application.being.expectation.settlement import (  # noqa: E402
     TurnMaterial,
-    _recall_questions,
-    _state,
-    _Turn,
 )
 from ai_rpg_world.application.being.recall.belief_recall import (  # noqa: E402
     SituationBeliefRecall,
 )
-from ai_rpg_world.application.being.recall.body_band import (  # noqa: E402
-    BodyBandReading,
-    body_band_from_answers,
-)
 from ai_rpg_world.application.being.recall.situation import (  # noqa: E402
-    DEFAULT_FIELDS_TO_KEEP,
-    SELECTABLE_FIELDS,
-    FieldSelection,
     Situation,
     SituationField,
-    field_selection_from_answers,
 )
 from ai_rpg_world.application.being.recall.situation_assembly import (  # noqa: E402
     AgentHoldings,
     assemble_situation,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry  # noqa: E402
-from ai_rpg_world.application.llm.ports.typed_judgment_port import (  # noqa: E402
-    ITypedJudgmentPort,
-    TypedJudgmentUnavailableException,
-)
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (  # noqa: E402
     InMemorySemanticMemoryStore,
 )
@@ -275,41 +259,7 @@ def _window(scenes: list[Scene], size: int, counts: list[int]) -> list[Scene]:
     return scenes[best : best + size]
 
 
-def _ask(
-    port: ITypedJudgmentPort, scene: Scene, *, keep: int
-) -> tuple[FieldSelection, BodyBandReading, dict[str, Any]]:
-    """本番の清算と同じく、帯を入れない状況の欄の値を「いまの状況」として見せて問う (D1414-5)。"""
-    turns = [
-        _Turn(turn=i + 1, material=material) for i, material in enumerate(scene.timeline)
-    ] or [_Turn(turn=1, material=TurnMaterial())]
-    shown = _situation(scene, BodyBandReading.degraded("probe_turn_end"))
-    state = _state(
-        scene.name, now=turns[-1].turn, pending=[], new=[], timeline=turns, situation=shown
-    )
-    started = datetime.now()
-    try:
-        answers = port.judge(state, _recall_questions(scene.name))
-    except TypedJudgmentUnavailableException as exc:
-        return (
-            FieldSelection.unavailable(exc),
-            BodyBandReading.unavailable(exc),
-            {"error": f"{exc.error_code}: {exc}", "seconds": (datetime.now() - started).total_seconds()},
-        )
-    return (
-        field_selection_from_answers(answers, keep=keep),
-        body_band_from_answers(answers),
-        {
-            "seconds": (datetime.now() - started).total_seconds(),
-            "state_chars": len(json.dumps(state, ensure_ascii=False)),
-        },
-    )
-
-
-def _situation(scene: Scene, band: BodyBandReading) -> Situation:
-    return _situation_and_skipped(scene, band)[0]
-
-
-def _situation_and_skipped(scene: Scene, band: BodyBandReading) -> tuple[Situation, Any]:
+def _situation(scene: Scene) -> tuple[Situation, Any]:
     observer = Observer(
         player_id=PlayerId(scene.player_id),
         name=scene.name,
@@ -318,25 +268,9 @@ def _situation_and_skipped(scene: Scene, band: BodyBandReading) -> tuple[Situati
     )
     contract, skipped = _to_contract(scene.observations, scene.actions, observer)
     holdings = AgentHoldings(
-        inner_thought=scene.actions[0].inner_thought if scene.actions else None,
-        body_band=band.band,
+        inner_thought=scene.actions[0].inner_thought if scene.actions else None
     )
     return assemble_situation(contract, holdings), skipped
-
-
-def _recall(
-    scene: Scene, store: InMemorySemanticMemoryStore, selection: FieldSelection, band: BodyBandReading
-) -> dict[str, Any]:
-    situation, skipped = _situation_and_skipped(scene, band)
-    result = SituationBeliefRecall(store, CharBigramBm25Narrower()).retrieve(
-        BeingId(f"being_w1_p{scene.player_id}"), situation, selection, top_k=_TOP_K
-    )
-    return {
-        "situation": {f.value: list(situation.texts(f)) for f in SituationField},
-        "skipped": dict(skipped),
-        "chosen": [e.entry_id for e in result.chosen],
-        "payload": result.to_trace_payload(),
-    }
 
 
 def _same_three_rate(sequence: list[list[str]]) -> tuple[int, int]:
@@ -350,9 +284,7 @@ def _consecutive_jaccard(sequence: list[list[str]]) -> list[float]:
     ]
 
 
-def probe(
-    run_dir: Path, port: ITypedJudgmentPort, *, window: int, repeats: int, keep: int
-) -> dict[str, Any]:
+def probe(run_dir: Path, *, window: int) -> dict[str, Any]:
     all_scenes = _scenes(run_dir / "trace.jsonl")
     first_seen = _first_seen(run_dir / "trace.jsonl")
     texts: dict[str, str] = {}
@@ -360,186 +292,81 @@ def probe(
     for pid in sorted(all_scenes):
         entries = _beliefs(run_dir, pid, first_seen)
         texts.update({e.entry_id: e.text for e in entries})
-        rows = []
         counts = [sum(e.created_at <= s.at for e in entries) for s in all_scenes[pid]]
+        rows = []
         for scene in _window(all_scenes[pid], window, counts):
             store = _store_at(entries, scene.at)
-            everything = FieldSelection.degraded("probe_all_fields")
-            row: dict[str, Any] = {
-                "index": scene.index,
-                "tick": scene.tick,
-                "place": scene.place_name,
-                "candidate_count": len(store.list_for_being(BeingId(f"being_w1_p{pid}"))),
-                "old": scene.old_ids,
-                "all_fields": _recall(scene, store, everything, BodyBandReading.degraded("probe"))[
-                    "chosen"
-                ],
-                "leave_one_out": {
-                    f.value: _recall(
-                        scene,
-                        store,
-                        FieldSelection(kept=frozenset(SELECTABLE_FIELDS) - {f}),
-                        BodyBandReading.degraded("probe"),
-                    )["chosen"]
-                    for f in SELECTABLE_FIELDS
-                },
-                "timeline_tail": [
-                    {"行動": list(m.actions), "発言": list(m.speeches)} for m in scene.timeline[-1:]
-                ],
-                "runs": [],
-            }
-            for repeat in range(repeats):
-                selection, band, meta = _ask(port, scene, keep=keep)
-                recalled = _recall(scene, store, selection, band)
-                run = {
-                    "kept_fields": [f.value for f in SituationField if f in selection.kept],
-                    "degraded_reason": selection.degraded_reason,
-                    "judgments": [j.to_trace_payload() for j in selection.judgments],
-                    "band": band.to_trace_payload(),
-                    "chosen": recalled["chosen"],
-                    **meta,
+            situation, skipped = _situation(scene)
+            recall = SituationBeliefRecall(store, CharBigramBm25Narrower())
+            being = BeingId(f"being_w1_p{pid}")
+            result = recall.retrieve(being, situation, top_k=_TOP_K)
+            # 場所を入れた検索と抜いた検索の 2 本をやめた根拠 (design_decisions D1414-8) を数える。
+            without_place = recall.retrieve(being, replace(situation, place=()), top_k=_TOP_K)
+            rows.append(
+                {
+                    "index": scene.index,
+                    "tick": scene.tick,
+                    "place": scene.place_name,
+                    "candidate_count": result.candidate_count,
+                    "situation": {f.value: list(situation.texts(f)) for f in SituationField},
+                    "skipped": dict(skipped),
+                    "query": result.query,
+                    "old": scene.old_ids,
+                    "new": [e.entry_id for e in result.chosen],
+                    "new_without_place": [e.entry_id for e in without_place.chosen],
                 }
-                if repeat == 0:
-                    # 欄の値と問い合わせ文は回ごとに変わらないので、1 回目にだけ残して結果を軽くする。
-                    run.update(
-                        situation=recalled["situation"],
-                        skipped=recalled["skipped"],
-                        masks=recalled["payload"]["masks"],
-                    )
-                row["runs"].append(run)
-            rows.append(row)
-        players.append({"player_id": pid, "name": all_scenes[pid][0].name if all_scenes[pid] else "", "scenes": rows})
-    return {
-        "run_dir": str(run_dir),
-        "question_form": "one_question_top_k",
-        "keep": keep,
-        "window": window,
-        "repeats": repeats,
-        "players": players,
-        "texts": texts,
-    }
+            )
+        players.append(
+            {"player_id": pid, "name": all_scenes[pid][0].name if all_scenes[pid] else "", "scenes": rows}
+        )
+    return {"run_dir": str(run_dir), "form": "plain_one_query", "window": window, "players": players, "texts": texts}
 
 
 def summarize(result: dict[str, Any]) -> dict[str, Any]:
     scenes = [s for p in result["players"] for s in p["scenes"]]
-    runs = [r for s in scenes for r in s["runs"]]
-    pickers: dict[str, Any] = {
-        "old": lambda s: s["old"],
-        "all_fields": lambda s: s["all_fields"],
-        "selected": lambda s: s["runs"][0]["chosen"],
-        **{
-            f"without_{f.value}": (lambda s, name=f.value: s["leave_one_out"][name])
-            for f in SELECTABLE_FIELDS
-        },
-    }
-    same: dict[str, list[int]] = {key: [0, 0] for key in pickers}
-    jaccard: dict[str, list[float]] = {key: [] for key in pickers}
+    same = {"old": [0, 0], "new": [0, 0]}
+    jaccard: dict[str, list[float]] = {"old": [], "new": []}
     for player in result["players"]:
-        for key, picker in pickers.items():
-            sequence = [picker(s) for s in player["scenes"]]
+        for key in same:
+            sequence = [s[key] for s in player["scenes"]]
             hit, total = _same_three_rate(sequence)
             same[key][0] += hit
             same[key][1] += total
             jaccard[key].extend(_consecutive_jaccard(sequence))
     texts = result["texts"]
-    risky = [s for s in scenes if s["runs"][0]["band"]["band"] in ("危機", "注意")]
+    danger = [s for s in scenes if any(_DANGER.search(t) for t in s["situation"]["いま起きたこと"])]
 
     def _body(ids: list[str]) -> int:
         return sum(1 for i in ids if _BODY_BELIEF.search(texts.get(i, "")))
-    keep = {f.value: 0 for f in SELECTABLE_FIELDS}
-    for r in runs:
-        for f in r["kept_fields"]:
-            keep[f] += 1
-    stable_masks = sum(1 for s in scenes if len({tuple(r["kept_fields"]) for r in s["runs"]}) == 1)
-    stable_bands = sum(1 for s in scenes if len({r["band"]["band"] for r in s["runs"]}) == 1)
-    bands: dict[str, int] = {}
-    for r in runs:
-        bands[str(r["band"]["band"])] = bands.get(str(r["band"]["band"]), 0) + 1
-    changed_by_dropping = {
-        f.value: sum(1 for s in scenes if set(s["leave_one_out"][f.value]) != set(s["all_fields"]))
-        for f in SELECTABLE_FIELDS
-    }
-    seconds = [r["seconds"] for r in runs if "seconds" in r]
+
     return {
         "scenes": len(scenes),
-        "jev_calls": len(runs),
-        "degraded": sum(1 for r in runs if r["degraded_reason"]),
-        "mean_seconds": round(sum(seconds) / len(seconds), 2) if seconds else None,
-        "mean_state_chars": round(
-            sum(r.get("state_chars", 0) for r in runs) / max(1, len(runs))
-        ),
         "same_three_in_a_row": {k: f"{v[0]}/{v[1]}" for k, v in same.items()},
-        "consecutive_jaccard": {
-            k: round(sum(v) / len(v), 2) if v else None for k, v in jaccard.items()
-        },
-        "body_beliefs_in_risky_scenes": {
-            "scenes": len(risky),
-            "slots": len(risky) * _TOP_K,
-            "old": _body([i for s in risky for i in s["old"]]),
-            "selected": _body([i for s in risky for i in s["runs"][0]["chosen"]]),
-        },
-        "overlap_with_old": {
-            "selected_mean": round(
-                sum(len(set(s["old"]) & set(s["runs"][0]["chosen"])) for s in scenes) / len(scenes), 2
-            ),
-        },
+        "consecutive_jaccard": {k: round(sum(v) / len(v), 2) if v else None for k, v in jaccard.items()},
+        "overlap_with_old_mean": round(
+            sum(len(set(s["old"]) & set(s["new"])) for s in scenes) / len(scenes), 2
+        ),
+        "same_three_without_place": sum(1 for s in scenes if s["new"] == s["new_without_place"]),
         "empty": {
             "old": sum(1 for s in scenes if not s["old"]),
-            "selected": sum(1 for s in scenes if not s["runs"][0]["chosen"]),
+            "new": sum(1 for s in scenes if not s["new"]),
         },
-        "keep_rate": {k: f"{v}/{len(runs)}" for k, v in keep.items()},
-        "stable_masks": f"{stable_masks}/{len(scenes)}",
-        "stable_bands": f"{stable_bands}/{len(scenes)}",
-        "bands": bands,
-        "changed_by_dropping_one_field": {k: f"{v}/{len(scenes)}" for k, v in changed_by_dropping.items()},
+        "body_beliefs_in_danger_scenes": {
+            "scenes": len(danger),
+            "slots": len(danger) * _TOP_K,
+            "old": _body([i for s in danger for i in s["old"]]),
+            "new": _body([i for s in danger for i in s["new"]]),
+        },
     }
-
-
-def _port(kind: str) -> ITypedJudgmentPort:
-    if kind == "stub":
-        from ai_rpg_world.application.llm.services.typed_judgment_stub import (
-            DeterministicTypedJudgmentPort,
-        )
-
-        return DeterministicTypedJudgmentPort()
-    from dotenv import load_dotenv
-
-    load_dotenv()
-    load_dotenv(_REPO_ROOT.parent.parent.parent / ".env")
-    from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
-        create_typed_judgment_port_from_config,
-    )
-    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-        ResolvedLlmRuntimeConfig,
-    )
-
-    port = create_typed_judgment_port_from_config(
-        ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="jev")
-    )
-    assert port is not None
-    return port
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--port", choices=("jev", "stub"), default="jev")
     parser.add_argument("--window", type=int, default=10)
-    parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--keep", type=int, default=DEFAULT_FIELDS_TO_KEEP)
-    parser.add_argument(
-        "--summarize-only",
-        action="store_true",
-        help="--out の既存の結果から集計だけをやり直す。Jev は呼ばない",
-    )
     args = parser.parse_args(argv)
-    if args.summarize_only:
-        result = json.loads(args.out.read_text("utf-8"))
-    else:
-        result = probe(
-            args.run_dir, _port(args.port), window=args.window, repeats=args.repeats, keep=args.keep
-        )
+    result = probe(args.run_dir, window=args.window)
     result["summary"] = summarize(result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(

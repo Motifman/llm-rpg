@@ -1,4 +1,4 @@
-"""expectation_belief_material_compare が、手の直前に頭にあった信念を、受動想起と状況の欄の想起のどちらの trace からも読む挙動を保証する。"""
+"""expectation_belief_material_compare が、手の直前に頭にあった信念を、受動想起と状況の項目の想起のどちらの trace からも読む挙動を保証する。"""
 
 from __future__ import annotations
 

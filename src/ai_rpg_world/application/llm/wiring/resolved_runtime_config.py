@@ -50,10 +50,6 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ai_rpg_world.application.being.recall.situation import (
-    DEFAULT_FIELDS_TO_KEEP,
-    SELECTABLE_FIELDS,
-)
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     CHAR_BIGRAM_BM25,
     SUPPORTED_TEXT_CANDIDATE_NARROWERS,
@@ -146,7 +142,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
     "SITUATION_BELIEF_RECALL_ENABLED",
     "SITUATION_BELIEF_RECALL_NARROWER",
-    "SITUATION_FIELDS_TO_KEEP",
     "STAGNATION_PRESSURE_ENABLED",
     "STAGNATION_REASONING_ENABLED",
     "STATE_COLLAPSE_EVIDENCE_ENABLED",
@@ -408,11 +403,9 @@ class ResolvedLlmRuntimeConfig:
     belief_attribution_enabled: bool = False
     belief_create_gate_enabled: bool = False
     belief_candidate_narrower: str = CHAR_BIGRAM_BM25
-    # #1414: 【関連する学び】を状況の欄から引く。件数は semantic_passive_top_k。
+    # #1414: 【関連する学び】を状況の項目から引く。件数は semantic_passive_top_k。
     situation_belief_recall_enabled: bool = False
     situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
-    # #1414: 清算で Jev が返した欄の確率の上位いくつを残すか。閾値は持たない。
-    situation_fields_to_keep: int = DEFAULT_FIELDS_TO_KEEP
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
     salience_structured_failure_enabled: bool = False
@@ -892,9 +885,6 @@ class ResolvedLlmRuntimeConfig:
         situation_belief_recall_narrower = (
             _strip_or_none(source.get("SITUATION_BELIEF_RECALL_NARROWER")) or CHAR_BIGRAM_BM25
         )
-        situation_fields_to_keep = _resolve_positive_int(
-            source, "SITUATION_FIELDS_TO_KEEP", default=DEFAULT_FIELDS_TO_KEEP
-        )
         belief_candidate_top_k = _resolve_positive_int(
             source, "BELIEF_CANDIDATE_TOP_K", default=_DEFAULT_BELIEF_CANDIDATE_TOP_K
         )
@@ -1051,7 +1041,6 @@ class ResolvedLlmRuntimeConfig:
             belief_candidate_narrower=belief_candidate_narrower,
             situation_belief_recall_enabled=situation_belief_recall_enabled,
             situation_belief_recall_narrower=situation_belief_recall_narrower,
-            situation_fields_to_keep=situation_fields_to_keep,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
             salience_structured_failure_enabled=salience_structured_failure_enabled,
@@ -1199,7 +1188,6 @@ class ResolvedLlmRuntimeConfig:
             belief_candidate_narrower=CHAR_BIGRAM_BM25,
             situation_belief_recall_enabled=False,
             situation_belief_recall_narrower=CHAR_BIGRAM_BM25,
-            situation_fields_to_keep=DEFAULT_FIELDS_TO_KEEP,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
             salience_structured_failure_enabled=False,
@@ -1247,10 +1235,6 @@ class ResolvedLlmRuntimeConfig:
                 "situation_belief_recall_narrower="
                 f"{self.situation_belief_recall_narrower!r} is not recognized. "
                 f"valid: {sorted(SUPPORTED_TEXT_CANDIDATE_NARROWERS)}"
-            )
-        if not 1 <= self.situation_fields_to_keep <= len(SELECTABLE_FIELDS):
-            raise ValueError(
-                f"SITUATION_FIELDS_TO_KEEP must be between 1 and {len(SELECTABLE_FIELDS)}"
             )
         if self.situation_belief_recall_enabled and self.semantic_passive_top_k < 1:
             # 件数と【関連する学び】を出す条件を受動想起と共有する。0 のまま有効にすると、
