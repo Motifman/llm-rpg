@@ -35,15 +35,6 @@ class TestTheProfileChoosesSituationRecall:
         assert trace["situation_belief_recall_enabled"] is True
         assert trace["situation_belief_recall_narrower"] == "char_bigram_bm25"
 
-    @pytest.mark.parametrize("narrower", ["janome_bm25", "sudachi_bm25"])
-    def test_morpheme_narrowers_can_be_chosen(self, narrower: str) -> None:
-        """形態素解析で語に分ける手法の名前 (#1498) も受け付け、run_start に残る trace 表現に載る。"""
-        config = _config(SITUATION_BELIEF_RECALL_NARROWER=narrower, BELIEF_CANDIDATE_NARROWER=narrower)
-
-        trace = config.to_trace_dict()
-        assert trace["situation_belief_recall_narrower"] == narrower
-        assert trace["belief_candidate_narrower"] == narrower
-
 
 class TestUnusableSettingsFailBeforeTheRun:
     """組めない設定を run の前に ValueError で落とすことを保証する。"""

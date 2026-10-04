@@ -13,30 +13,21 @@ tags と cue を使わない。tags には tool 名や spot 番号が混ざっ�
 ## 手法は差し替える
 
 ``ITextCandidateNarrower`` の実装として差し替える。最初の実装は文字の 2 字組の
-BM25 で、形態素解析・辞書・外部 API が要らない。形態素解析で語に分けてから
-BM25 にかける実装 (Janome / SudachiPy) も選べる (#1498)。言い換えに弱いので、
-相方を取りこぼす割合が高ければ埋め込みの実装を足す。手法と K は profile で選ぶ
+BM25 で、形態素解析・辞書・外部 API が要らない。言い換えに弱いので、相方を
+取りこぼす割合が高ければ埋め込みの実装を足す。手法と K は profile で選ぶ
 (design_decisions #28)。頭に載る信念の選び方 (#1414) の 1 段目でも使う。
 """
 
 from __future__ import annotations
 
 import math
+import unicodedata
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ai_rpg_world.application.llm.services.morpheme_analysis import (
-    JanomeAnalyzer,
-    MorphemeAnalyzer,
-    SudachiAnalyzer,
-    split_at_separators,
-)
-
 CHAR_BIGRAM_BM25 = "char_bigram_bm25"
-JANOME_BM25 = "janome_bm25"
-SUDACHI_BM25 = "sudachi_bm25"
 
 
 @dataclass(frozen=True)
@@ -77,8 +68,8 @@ class ITextCandidateNarrower(ABC):
         raise NotImplementedError
 
 
-class _Bm25Narrower(ITextCandidateNarrower):
-    """文を語の列に分ける方法だけを差し替える BM25。IDF は渡された候補の集合で数える。"""
+class CharBigramBm25Narrower(ITextCandidateNarrower):
+    """文字の 2 字組を語とみなした BM25。IDF は渡された候補の集合で数える。"""
 
     def __init__(self, *, k1: float = 1.5, b: float = 0.75) -> None:
         if k1 < 0:
@@ -88,19 +79,19 @@ class _Bm25Narrower(ITextCandidateNarrower):
         self._k1 = k1
         self._b = b
 
-    @abstractmethod
-    def _terms(self, text: str) -> list[str]:
-        raise NotImplementedError
+    @property
+    def name(self) -> str:
+        return CHAR_BIGRAM_BM25
 
     def narrow(
         self, query: str, candidates: Sequence[TextCandidate], *, top_k: int
     ) -> tuple[RankedCandidate, ...]:
         if top_k < 1:
             raise ValueError("top_k must be >= 1")
-        query_terms = set(self._terms(query))
+        query_terms = set(_char_bigrams(query))
         if not candidates or not query_terms:
             return ()
-        documents = [Counter(self._terms(c.text)) for c in candidates]
+        documents = [Counter(_char_bigrams(c.text)) for c in candidates]
         lengths = [sum(d.values()) for d in documents]
         average_length = sum(lengths) / len(lengths) or 1.0
         document_frequency: Counter[str] = Counter()
@@ -129,38 +120,6 @@ class _Bm25Narrower(ITextCandidateNarrower):
         )
 
 
-class CharBigramBm25Narrower(_Bm25Narrower):
-    """文字の 2 字組を語とみなした BM25。"""
-
-    @property
-    def name(self) -> str:
-        return CHAR_BIGRAM_BM25
-
-    def _terms(self, text: str) -> list[str]:
-        return _char_bigrams(text)
-
-
-class MorphemeBm25Narrower(_Bm25Narrower):
-    """形態素解析で取り出した中身のある語を語とみなした BM25 (#1498)。
-
-    どの語を残すかは解析器ごとの ``MorphemeAnalyzer`` が品詞で決める。
-    """
-
-    def __init__(
-        self, name: str, analyzer: MorphemeAnalyzer, *, k1: float = 1.5, b: float = 0.75
-    ) -> None:
-        super().__init__(k1=k1, b=b)
-        self._name = name
-        self._analyzer = analyzer
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    def _terms(self, text: str) -> list[str]:
-        return self._analyzer.content_words(text)
-
-
 def _char_bigrams(text: str) -> list[str]:
     """改行・句読点・空白・記号を区切りにして、区切りの中だけで 2 字組を作る。
 
@@ -168,16 +127,22 @@ def _char_bigrams(text: str) -> list[str]:
     無い言葉が生まれる (#1414)。区切りで 1 文字だけ残った断片は、ほかに 2 字組が無い
     ときだけ、その文字で比べる。
     """
-    pieces = split_at_separators(text)
+    pieces: list[str] = []
+    current: list[str] = []
+    for ch in unicodedata.normalize("NFKC", text).lower():
+        if unicodedata.category(ch).startswith(("P", "Z", "C", "S")):
+            if current:
+                pieces.append("".join(current))
+                current = []
+        else:
+            current.append(ch)
+    if current:
+        pieces.append("".join(current))
     bigrams = [piece[i : i + 2] for piece in pieces for i in range(len(piece) - 1)]
     return bigrams or pieces
 
 
-_NARROWERS: dict[str, Callable[[], ITextCandidateNarrower]] = {
-    CHAR_BIGRAM_BM25: CharBigramBm25Narrower,
-    JANOME_BM25: lambda: MorphemeBm25Narrower(JANOME_BM25, JanomeAnalyzer()),
-    SUDACHI_BM25: lambda: MorphemeBm25Narrower(SUDACHI_BM25, SudachiAnalyzer()),
-}
+_NARROWERS = {CHAR_BIGRAM_BM25: CharBigramBm25Narrower}
 
 SUPPORTED_TEXT_CANDIDATE_NARROWERS = frozenset(_NARROWERS)
 
@@ -201,9 +166,6 @@ __all__ = [
     "CHAR_BIGRAM_BM25",
     "CharBigramBm25Narrower",
     "ITextCandidateNarrower",
-    "JANOME_BM25",
-    "MorphemeBm25Narrower",
-    "SUDACHI_BM25",
     "RankedCandidate",
     "SUPPORTED_TEXT_CANDIDATE_NARROWERS",
     "TextCandidate",

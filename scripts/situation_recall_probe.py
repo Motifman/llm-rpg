@@ -9,7 +9,9 @@
 そのまま使う。
 
 ``--narrowers`` に絞り込みの手法を複数渡すと、同じ場面を手法ごとに引き、手法どうしで上位 3 件が
-重なる数も数える (#1498)。人名と地名は、trace に出たプレイヤー名と場所の名前を使う。
+重なる数も数える (#1498)。手法を足したら、その名前を並べて比べる。人名と地名は、trace に出た
+プレイヤー名と場所の名前を使う。形態素解析の 2 手法と比べた結果は、コミット ef0c3a06 で再現する
+(``docs/experiments/issue_1498_narrower_comparison/README.md``)。
 
 近似:
 
@@ -23,8 +25,8 @@
 使い方:
     uv run python scripts/situation_recall_probe.py \\
         --run-dir ../../../var/runs/v4coop_reasonfirst_003 \\
-        --narrowers char_bigram_bm25,janome_bm25,sudachi_bm25 \\
-        --out docs/experiments/issue_1498_narrower_comparison/results.json
+        --narrowers char_bigram_bm25 \\
+        --out /tmp/situation_recall.json
 """
 
 from __future__ import annotations

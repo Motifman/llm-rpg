@@ -133,24 +133,3 @@ class TestSituationRecallIsWiredOnlyWhenEnabled:
 
         with pytest.raises(ValueError, match="episodic stack"):
             runtime._get_or_build_default_prompt_builder()
-
-
-class TestTheProfileNarrowerReachesTheRecall:
-    """profile で選んだ絞り込みの手法が想起に使われ、trace に名前が残ることを保証する (#1498)。"""
-
-    @pytest.mark.parametrize("narrower", ["char_bigram_bm25", "janome_bm25", "sudachi_bm25"])
-    def test_the_recall_trace_names_the_chosen_narrower(self, narrower: str) -> None:
-        """SITUATION_BELIEF_RECALL_NARROWER に書いた手法の名前が、situation_belief_recall の trace の narrower に残る。"""
-        from tests.application.being.expectation.support import RecordingTraceRecorder
-
-        runtime = _build_runtime(
-            semantic_passive_top_k=3,
-            situation_belief_recall_enabled=True,
-            situation_belief_recall_narrower=narrower,
-        )
-        recorder = RecordingTraceRecorder()
-        runtime.set_trace_recorder(recorder)
-
-        runtime.build_full_prompt(_rin(runtime))
-
-        assert [p["narrower"] for p in recorder.payloads("situation_belief_recall")] == [narrower]
