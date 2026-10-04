@@ -33,7 +33,6 @@ def _scenario_with_probe(tmp_path: Path, condition: dict) -> Path:
                     "effect_type": "SET_FLAG",
                     "parameters": {
                         "flag_name": "world_context_runtime_probe_fired",
-                        "value": True,
                     },
                 }
             ],

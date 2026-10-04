@@ -175,10 +175,7 @@ class TestSurvivalIslandV4CoveCarving:
         effect_types = [effect["effect_type"] for effect in interaction["effects"]]
         assert effect_types == ["CHANGE_OBJECT_STATE", "SET_FLAG", "SHOW_MESSAGE"]
         flag_effect = interaction["effects"][1]
-        assert flag_effect["parameters"] == {
-            "flag_name": "east_route_revealed",
-            "value": True,
-        }
+        assert flag_effect["parameters"] == {"flag_name": "east_route_revealed"}
         assert _flag_reference_count(raw_v4, "east_route_revealed") == 1
 
     def test_cove_carving_is_loaded_with_witness_message(self, loaded_v4) -> None:

@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
+from ai_rpg_world.infrastructure.scenario.parse_helpers import reject_unknown_keys
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
     reject_values_the_world_does_not_have,
@@ -40,6 +41,82 @@ _TARGET_PLAYER_NOT_WIRED_YET = frozenset(
         InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK,
     }
 )
+
+_TELEPORT_MESSAGE_KEYS = frozenset(
+    {
+        "departure_observation_message",
+        "departure_observation_message_in_dark",
+        "arrival_observation_message",
+        "arrival_observation_message_in_dark",
+    }
+)
+
+_E = InteractionEffectTypeEnum
+
+_EFFECT_KEYS = frozenset({"effect_type", "parameters", "visibility", "target"})
+
+#: ``visibility`` は効果の直下に書くのが正式で、``parameters`` の中に書いた
+#: ものも過渡期の互換として読む。
+_COMMON_EFFECT_PARAMETER_KEYS = frozenset({"visibility"})
+
+#: 効果の種類ごとに、``parameters`` に書けるキー。
+#:
+#: 効果の handler (``effect_application/handlers``) がその種類で読む値に対応
+#: する JSON のキーだけを載せる。``target_object`` → ``object_id`` のように
+#: 読み込みで名前を変えるキーは、JSON に書く側の名前で載せる。種類を足したら
+#: 表にも足す。足し忘れは網羅テストが落とす。
+EFFECT_PARAMETER_KEYS: Mapping[InteractionEffectTypeEnum, frozenset[str]] = {
+    _E.GIVE_ITEM: frozenset({"item_spec", "item_spec_id_parameter", "quantity"}),
+    _E.REMOVE_ITEM: frozenset({"item_spec", "item_spec_id_parameter", "quantity"}),
+    _E.DEPOSIT_ITEM_TO_OBJECT: frozenset(
+        {"item_spec", "item_spec_id_parameter", "state_key", "quantity", "target_object"}
+    ),
+    _E.DEPOSIT_GOLD_TO_OBJECT: frozenset({"state_key", "amount", "target_object"}),
+    _E.CHANGE_OBJECT_STATE: frozenset({"target_object", "state_updates", "new_state"}),
+    _E.REVEAL_OBJECT: frozenset({"target_object"}),
+    _E.REVEAL_SUB_LOCATION: frozenset({"target_sub_location"}),
+    _E.SET_FLAG: frozenset({"flag_name"}),
+    _E.CLEAR_FLAG: frozenset({"flag_name"}),
+    _E.RESOLVE_ONGOING_CONDITION: frozenset({"flag"}),
+    _E.SHOW_MESSAGE: frozenset({"message"}),
+    _E.SHOW_ROOM_OCCUPANCY: frozenset(),
+    _E.APPLY_DAMAGE: frozenset({"damage", "message"}),
+    _E.APPLY_STATUS_EFFECT: frozenset({"status_effect_type", "value", "duration_ticks"}),
+    _E.TELEPORT_ENTITY: frozenset({"target_spot"}) | _TELEPORT_MESSAGE_KEYS,
+    _E.CHANGE_ATMOSPHERE: frozenset(
+        {"target_spot", "lighting", "temperature", "hazard_level", "hazard_description"}
+    ),
+    _E.COMBINE_ITEMS: frozenset({"input_item_spec_ids", "output_item_spec_id"}),
+    _E.CREATE_CONNECTION: frozenset(
+        {
+            "from_spot_id",
+            "to_spot_id",
+            "connection_name",
+            "description",
+            "travel_ticks",
+            "is_bidirectional",
+            "passage",
+        }
+    ),
+    _E.DESTROY_CONNECTION: frozenset({"target_connection"}),
+    _E.CHANGE_PASSAGE_STATE: frozenset(
+        {"target_connection", "new_state", "traversable", "sound_permeability"}
+    ),
+    _E.SATISFY_NEED: frozenset({"need_type", "amount"}),
+    _E.RECORD_OBJECT_STATE_TICK: frozenset({"target_object", "state_key"}),
+    _E.CHANGE_ITEM_INSTANCE_STATE: frozenset({"state_updates"}),
+    _E.RECORD_ITEM_INSTANCE_STATE_TICK: frozenset({"state_key"}),
+    _E.CHANGE_TARGET_ITEM_INSTANCE_STATE: frozenset({"state_updates"}),
+    _E.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: frozenset({"state_key"}),
+    _E.CHANGE_PLAYER_STATE: frozenset({"state_updates"}),
+    _E.RECORD_PLAYER_STATE_TICK: frozenset({"state_key"}),
+    _E.INCREMENT_OBJECT_STATE: frozenset({"target_object", "state_key", "delta"}),
+    _E.CONSUME_OBJECT_STOCK: frozenset({"target_object", "amount"}),
+    _E.GIVE_FROM_LOOT_TABLE: frozenset({"loot_table", "times"}),
+    _E.WRITE_PLAYER_TEXT: frozenset({"target_object", "text_param_key"}),
+    _E.SHOW_PLAYER_TEXT: frozenset({"target_object", "empty_message"}),
+    _E.CALL_MEETING: frozenset({"trigger"}),
+}
 
 def parse_effect_target( raw: dict[str, Any], *, actor_context: str
 ) -> EffectTarget:
@@ -81,11 +158,6 @@ def parse_effect_target( raw: dict[str, Any], *, actor_context: str
         effect_type = InteractionEffectTypeEnum[effect_type_str]
     except KeyError:
         # 未知の effect_type はこの関数の責務ではないので判断しない。
-        # NOTE: 後段の ``InteractionEffectTypeEnum[raw["effect_type"]]`` は
-        # try/except に包まれておらず、素の KeyError が load_from_dict から
-        # 漏れる (ScenarioLoadError にはならない)。本 PR 以前からの挙動で、
-        # 読み込みが失敗すること自体は変わらないが、loader の他のエラーと
-        # 文面の質が揃っていない。統一は別 PR で。
         return target
     if effect_type in _TARGET_PLAYER_NOT_WIRED_YET:
         raise ScenarioLoadError(
@@ -183,8 +255,34 @@ def parse_interaction_effect(
     渡し忘れた瞬間に**その入口だけ検査が消える**。しかも消えたことは緑の
     まま進む。必須なら、渡さない限り呼べない。
     """
-    params = dict(raw.get("parameters", {}))
-    effect_type_str = raw.get("effect_type", "")
+    if not isinstance(raw, dict):
+        raise ScenarioLoadError(
+            f"効果はオブジェクトで書いてください (got {type(raw).__name__}): {raw!r}"
+        )
+    raw_effect_type = raw.get("effect_type")
+    try:
+        effect_type = InteractionEffectTypeEnum[str(raw_effect_type)]
+    except KeyError as exc:
+        raise ScenarioLoadError(
+            f"effect_type {raw_effect_type!r} は engine が知らない種類です。"
+            f"使える種類: "
+            f"{', '.join(sorted(e.name for e in InteractionEffectTypeEnum))}"
+        ) from exc
+    effect_type_str = effect_type.name
+    where = f"効果 {effect_type_str} {raw!r}"
+    reject_unknown_keys(raw, _EFFECT_KEYS, where=where)
+    raw_params = raw.get("parameters", {})
+    if not isinstance(raw_params, dict):
+        raise ScenarioLoadError(
+            f"{where} の parameters はオブジェクトで書いてください "
+            f"(got {type(raw_params).__name__})"
+        )
+    params = dict(raw_params)
+    reject_unknown_keys(
+        params,
+        EFFECT_PARAMETER_KEYS[effect_type] | _COMMON_EFFECT_PARAMETER_KEYS,
+        where=f"{where} の parameters",
+    )
     _reject_writes_to_unchangeable_attributes(
         effect_type_str, params, player_attribute_specs
     )
@@ -242,7 +340,6 @@ def parse_interaction_effect(
         params["loot_table_id"] = mapper.get_int(
             "loot_table", params.pop("loot_table"),
         )
-    effect_type = InteractionEffectTypeEnum[raw["effect_type"]]
     if effect_type is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION:
         flag = params.get("flag")
         if not isinstance(flag, str) or not flag.strip():
@@ -353,38 +450,21 @@ def parse_interaction_effect(
         target=target,
     )
 
-_TELEPORT_PARAM_KEYS = frozenset(
-    {
-        "spot_id",
-        "departure_observation_message",
-        "departure_observation_message_in_dark",
-        "arrival_observation_message",
-        "arrival_observation_message_in_dark",
-    }
-)
-
 _TELEPORT_MESSAGE_PLACEHOLDERS = frozenset({"{actor}"})
 
 def validate_teleport_observation_messages( params: dict[str, Any], raw: dict[str, Any]
 ) -> None:
     """観測文の宣言ミスを起動時に落とす。
 
-    **静かに既定文へ縮退する経路を塞ぐ。** 綴り違いの鍵は誰も読まず、
-    非文字列は None へ落ち、未知のプレースホルダは展開されないまま出る。
-    どれも「書いたのに効かない」形で、対象 spot の欠落を落としているのと
-    同じ理由でここで止める。
+    **静かに既定文へ縮退する経路を塞ぐ。** 非文字列は None へ落ち、未知の
+    プレースホルダは展開されないまま出る。どれも「書いたのに効かない」形で、
+    対象 spot の欠落を落としているのと同じ理由でここで止める。綴り違いの鍵は
+    ``EFFECT_PARAMETER_KEYS`` の検査が先に止める。
 
     空文字も拒否する。formatter は空文字を「宣言なし」として既定文へ戻すので、
     「宣言したが空」を運ぶことはできない。**意味を一方へ揃える。**
     """
-    unknown = sorted(set(params) - _TELEPORT_PARAM_KEYS)
-    if unknown:
-        raise ScenarioLoadError(
-            f"TELEPORT_ENTITY effect has unknown parameters {unknown}. "
-            f"書ける鍵は {sorted(_TELEPORT_PARAM_KEYS)} です "
-            f"(綴り違いは黙って無視され、既定文へ縮退します): {raw!r}"
-        )
-    for key in _TELEPORT_PARAM_KEYS - {"spot_id"}:
+    for key in _TELEPORT_MESSAGE_KEYS:
         if key not in params:
             continue
         value = params[key]

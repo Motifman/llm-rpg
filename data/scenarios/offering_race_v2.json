@@ -149,7 +149,7 @@
                     "condition_type": "OBJECT_STATE_INT_AT_LEAST",
                     "target_object": "east_altar",
                     "state_key": "herb_offered",
-                    "ticks_offset": 1,
+                    "required_quantity": 1,
                     "failure_message": "賽銭は供物のあとだ。まず薬草を 1 つ納めてからでないと、長老は金を受け取らない。"
                   }
                 ],
@@ -241,7 +241,7 @@
                     "condition_type": "OBJECT_STATE_INT_AT_LEAST",
                     "target_object": "west_altar",
                     "state_key": "wheat_offered",
-                    "ticks_offset": 1,
+                    "required_quantity": 1,
                     "failure_message": "賽銭は供物のあとだ。まず麦束を 1 つ納めてからでないと、長老は金を受け取らない。"
                   }
                 ],

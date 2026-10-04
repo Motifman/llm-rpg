@@ -59,31 +59,34 @@ def test_item_interaction_is_registered_by_item_spec_id() -> None:
     assert [entry.effective_display_label for entry in interactions] == ["応答を試す"]
 
 
-_IMPLICIT_OBJECT_EFFECTS = (
-    InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT,
-    InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE,
-    InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
-    InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
-    InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK,
-    InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
-    InteractionEffectTypeEnum.SHOW_PLAYER_TEXT,
-)
+_IMPLICIT_OBJECT_EFFECTS = {
+    InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT: {
+        "item_spec": "portable_radio", "state_key": "used", "quantity": 1,
+    },
+    InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: {"state_key": "used"},
+    InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: {"amount": 1},
+    InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: {"state_updates": {"used": True}},
+    InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK: {"state_key": "used"},
+    InteractionEffectTypeEnum.WRITE_PLAYER_TEXT: {},
+    InteractionEffectTypeEnum.SHOW_PLAYER_TEXT: {},
+}
 
 
-@pytest.mark.parametrize("effect_type", _IMPLICIT_OBJECT_EFFECTS)
+@pytest.mark.parametrize("effect_type", list(_IMPLICIT_OBJECT_EFFECTS))
 def test_item_interaction_rejects_an_implicit_object_effect(
     effect_type: InteractionEffectTypeEnum,
 ) -> None:
     """自身を暗黙対象にする物体効果は、対象物の無い道具操作では読み込み時に拒否する。"""
     effect = {
         "effect_type": effect_type.value,
-        "parameters": {"state_key": "used", "quantity": 1},
+        "parameters": dict(_IMPLICIT_OBJECT_EFFECTS[effect_type]),
     }
-    if effect_type is InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
-        effect["parameters"]["item_spec"] = "portable_radio"
     with pytest.raises(
         ScenarioLoadError,
-        match=rf"item 'portable_radio'.*{effect_type.value}.*target_object",
+        match=(
+            rf"item 'portable_radio'.*{effect_type.value} "
+            r"requires parameters\.target_object"
+        ),
     ):
         ScenarioLoader().load_from_dict(
             _scenario_with_radio_interaction(effect=effect)

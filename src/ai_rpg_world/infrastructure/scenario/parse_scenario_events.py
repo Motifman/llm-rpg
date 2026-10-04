@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
@@ -24,6 +24,7 @@ from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     optional_spot_id,
     parse_bool,
+    reject_unknown_keys,
 )
 from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
     parse_interaction_effect,
@@ -41,6 +42,38 @@ _COMPOSITE_SUGAR: dict[str, str] = {
     "all_of": "AND",
     "any_of": "OR",
     "not_": "NOT",
+}
+
+#: 出来事の条件の種類ごとに、``condition_type`` のほかに書けるキー。
+#:
+#: 評価器 (``ScenarioConditionEvaluator``) がその種類で読むフィールドに対応する
+#: JSON のキーだけを載せる。種類を足したら表にも足す。足し忘れは網羅テストが
+#: 落とす。
+SCENARIO_EVENT_CONDITION_KEYS: Mapping[str, frozenset[str]] = {
+    "NOT": frozenset({"children"}),
+    "AND": frozenset({"children"}),
+    "OR": frozenset({"children"}),
+    "PROBABILITY": frozenset({"probability"}),
+    "TICK_AT_LEAST": frozenset({"tick"}),
+    "TICK_BETWEEN": frozenset({"tick_start", "tick_end"}),
+    "TICK_MODULO": frozenset({"tick_modulo", "tick_phase"}),
+    "FLAG_SET": frozenset({"flag_name"}),
+    "FLAG_NOT_SET": frozenset({"flag_name"}),
+    "PLAYER_AT_SPOT": frozenset({"target_spot"}),
+    "PLAYERS_AT_SPOT": frozenset({"target_spot", "required_player_count"}),
+    "GAME_PHASE_IS": frozenset({"game_phase"}),
+    "OBJECT_STATE": frozenset({"target_object", "required_state"}),
+    "HAS_ITEM": frozenset({"required_item"}),
+    "WEATHER_IS": frozenset({"weather_type"}),
+    "OBJECT_STATE_TICK_AT_LEAST": frozenset(
+        {"target_object", "state_key", "ticks_offset", "treat_missing_as_passed"}
+    ),
+    "OBJECT_STATE_INT_AT_LEAST": frozenset(
+        {"target_object", "state_key", "ticks_offset"}
+    ),
+    "OBJECT_STATE_INT_GREATER_THAN_OTHER": frozenset(
+        {"target_object", "state_key", "other_object", "other_state_key"}
+    ),
 }
 
 def parse_scenario_events(
@@ -271,6 +304,7 @@ def parse_scenario_event_condition(
                 f"shortcut '{sugar_keys[0]}'"
             )
         shortcut = sugar_keys[0]
+        reject_unknown_keys(raw, (shortcut,), where=path)
         target_type = _COMPOSITE_SUGAR[shortcut]
         payload = raw[shortcut]
         if shortcut == "not_":
@@ -327,6 +361,11 @@ def parse_scenario_event_condition(
             f"{path}: unknown condition_type {ctype!r}; valid values: "
             f"{sorted(SUPPORTED_CONDITION_TYPES)}"
         )
+    reject_unknown_keys(
+        raw,
+        SCENARIO_EVENT_CONDITION_KEYS[ctype] | {"condition_type"},
+        where=f"{path} ({ctype})",
+    )
     if ctype == "GAME_PHASE_IS":
         game_phase = raw.get("game_phase")
         known_phases = {phase.value for phase in GamePhase}
