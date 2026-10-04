@@ -24,7 +24,16 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 
 AT = datetime(2026, 10, 4, tzinfo=timezone.utc)
-_LOWER_IDENTIFIER = re.compile(r"(?<![A-Za-z0-9_])[a-z][a-z0-9_]+")
+_ASCII_WORD = re.compile(r"[A-Za-z0-9_]+")
+
+
+def _identifiers(line: str) -> list[str]:
+    """小文字で始まる語と、小文字と数字を両方含む語。tool の名前と ID の形。"""
+    return [
+        w
+        for w in _ASCII_WORD.findall(line)
+        if w[0].islower() or (any(c.isdigit() for c in w) and any(c.islower() for c in w))
+    ]
 
 
 def _action(action_summary: str, result_summary: str, tool_name: str) -> UnifiedRecentEventEntry:
@@ -83,28 +92,37 @@ class TestToolNamesAreLeftOut:
         assert material.actions == (expected,)
 
     def test_material_has_no_ascii_identifiers(self) -> None:
-        """実 run に出た形の行動と観測 (下線の無い操作名、メモの ID を含む) を写した材料には、小文字の英字で始まる語が 1 つも残らない。"""
+        """実 run に出た形の行動と観測 (下線の無い操作名、メモの ID を含む) を写した材料には、小文字で始まる語も、小文字と数字を含む ID も残らない。"""
         entries = [
             _action("「難破船の船倉」に search_wreck_hold した", "行動が拒否された: 船倉はもう漁り尽くした。", "interact"),
             _action("「カイ」に「貝」を渡した", "give_item 結果:\n貝 → カイ: OK", "give_item"),
             _action("「流木の山」に gather した", "行動が拒否された: 流木はもう拾ってしまった。", "interact"),
             _action("メモを書いた", "メモを追加しました（ID: a8cbc3…）。", "memo_add"),
+            _action("メモを書いた", "メモを追加しました（ID: 774c5e…）。", "memo_add"),
             _observation("interact を試みたが失敗した: 修正のヒント: ツール説明を確認してください。"),
         ]
 
         material = turn_material(entries, self_name="リオ")
 
-        leaked = [w for line in material.actions for w in _LOWER_IDENTIFIER.findall(line)]
+        leaked = [w for line in material.actions for w in _identifiers(line)]
         assert leaked == []
 
+    def test_memo_id_is_removed_not_renamed(self) -> None:
+        """数字を含むメモの ID は「操作」に置き換えず、文から消す。"""
+        entries = [_action("メモを書いた", "メモを追加しました（ID: 774c5e…）。", "memo_add")]
+
+        material = turn_material(entries, self_name="リオ")
+
+        assert material.actions == ("[Day 1 4:30] リオ: メモを書いた → メモを追加しました（ID:…）。",)
+
     def test_uppercase_words_in_speech_are_kept(self) -> None:
-        """大文字の英字 (SOS など) は tool の名前ではないので、発言の文に残す。"""
+        """小文字を含まない英字の語 (SOS など) と数は識別子ではないので、文に残す。"""
         entries = [
             UnifiedRecentEventEntry.from_observation(
                 ObservationEntry(
                     occurred_at=AT,
                     output=ObservationOutput(
-                        prose="ノア「浜に SOS と書こう」",
+                        prose="ノア「浜に SOS と書こう。天候は CLEAR、残り 10 本」",
                         structured={"type": "player_spoke"},
                     ),
                     game_time_label=None,
@@ -114,4 +132,4 @@ class TestToolNamesAreLeftOut:
 
         material = turn_material(entries, self_name="リオ")
 
-        assert material.speeches == ("ノア「浜に SOS と書こう」",)
+        assert material.speeches == ("ノア「浜に SOS と書こう。天候は CLEAR、残り 10 本」",)

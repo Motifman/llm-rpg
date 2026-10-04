@@ -41,18 +41,29 @@ logger = logging.getLogger(__name__)
 _SPEECH_OBSERVATION_TYPES = frozenset({"player_spoke"})
 
 # 清算の時系列は外れた予期の信念の材料にそのまま載る (#1509)。この世界の出来事は日本語で
-# 書かれ、小文字の英字で始まる語は tool の名前、シナリオの操作名 (gather、
-# search_wreck_hold)、メモの ID (a8cbc3) のような識別子になる。操作名はシナリオごとに
-# 増え、tool の一覧では拾いきれないので、語の形で拾う。大文字で始まる語 (SOS) は残す。
-_IDENTIFIER_REPLACEMENT = "操作"
+# 書かれ、小文字の英字を含む英数字の語は識別子になる。数字を含む語はメモの ID
+# (774c5e、a8cbc3) で、消す。数字を含まず小文字で始まる語は tool の名前やシナリオの
+# 操作名 (interact、gather、search_wreck_hold) で、文が崩れないよう「操作」に置き換える。
+# 操作名はシナリオごとに増え、tool の一覧では拾いきれないので、語の形で拾う。小文字を
+# 含まない語 (SOS、CLEAR) と数 (10、0.1) は残す。
+_TOOL_NAME_REPLACEMENT = "操作"
 _IDENTIFIER_PATTERN = re.compile(
-    r"[ \t]?(?<![A-Za-z0-9_])[a-z][a-z0-9_]+(?![A-Za-z0-9_])[ \t]?"
+    r"[ \t]?(?<![A-Za-z0-9_])(?=[A-Za-z0-9_]*[a-z])[A-Za-z0-9_]+(?![A-Za-z0-9_])[ \t]?"
 )
 
 
+def _replace_identifier(match: re.Match[str]) -> str:
+    word = match.group(0).strip(" \t")
+    if any(c.isdigit() for c in word):
+        return ""
+    if word[0].islower() and len(word) > 1:
+        return _TOOL_NAME_REPLACEMENT
+    return match.group(0)
+
+
 def without_tool_names(text: str) -> str:
-    """文に入った tool の名前などの識別子を「操作」に置き換える。前後の半角空白も詰める。"""
-    return _IDENTIFIER_PATTERN.sub(_IDENTIFIER_REPLACEMENT, text)
+    """文に入った tool の名前を「操作」に置き換え、ID を消す。前後の半角空白も詰める。"""
+    return _IDENTIFIER_PATTERN.sub(_replace_identifier, text)
 
 
 def turn_material(
