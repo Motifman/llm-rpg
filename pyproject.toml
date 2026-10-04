@@ -29,6 +29,9 @@ dependencies = [
     "anyio>=4.0",
     "uvicorn[standard]==0.30.6",
     "semantic-resolver",
+    "janome==0.5.0",
+    "sudachipy==0.6.10",
+    "sudachidict-core==20250825",
 ]
 
 [project.optional-dependencies]
@@ -157,6 +160,11 @@ files = [
 [[tool.mypy.overrides]]
 module = "litellm.*"
 implicit_reexport = true
+
+# 形態素解析器 (#1498) は型情報を配っていない。呼ぶのは morpheme_analysis.py の中だけ。
+[[tool.mypy.overrides]]
+module = ["janome.*", "sudachipy.*"]
+ignore_missing_imports = true
 
 [tool.uv.sources]
 semantic-resolver = { git = "https://github.com/Motifman/semantic-resolver.git", rev = "f164e0973c0cb6aa59aaa75837107f2a962b4d08" }
