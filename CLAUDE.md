@@ -144,6 +144,7 @@ uv run pytest tests/domain/guild -v                # 一部だけ
 uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
 # マーカー: -m unit | integration | slow | asyncio
 # quality は通常の pytest / CI から除外される手動点検用。実行する場合は -m quality を明示する
+# live_api は実 endpoint を叩くプローブ。通常の pytest / CI / -m quality のどれでも選ばれず、-m live_api を明示したときだけ走る
 ```
 
 `make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の

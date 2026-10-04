@@ -27,7 +27,7 @@ _PROBE_TOOL = {
 }
 
 
-@pytest.mark.quality
+@pytest.mark.live_api
 def test_deepseek_official_still_rejects_required_tool_choice() -> None:
     """公式が required を拒む間は成功し、対応して呼べるようになったら失敗する。"""
     load_dotenv()

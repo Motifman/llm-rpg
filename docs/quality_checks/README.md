@@ -29,6 +29,9 @@ material:
 したがって **prompt を変えたら `uv run pytest -m quality` を回し、
 `docs/quality_checks/` の変更を一緒に commit してください。**
 
+`-m quality` は実 API を呼びません。実 endpoint を叩くプローブは `live_api`
+marker に分けてあります (`docs/llm_provider_selection.md` の「実呼び出しのプローブ」)。
+
 この検査は **CI のまっさらな checkout を前提にしています**。手元の作業
 ツリーが汚れている状態で同じ検査をすると、無関係な変更で誤爆します。
 
