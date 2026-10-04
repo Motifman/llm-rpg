@@ -54,6 +54,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (  # noqa: E40
     undelivered_expectation_event_to_dict,
 )
 from ai_rpg_world.application.being.expectation.belief_material import (  # noqa: E402
+    MAX_WHAT_HAPPENED_CHARS,
     ExpectationBeliefMaterialReceiver,
 )
 from ai_rpg_world.application.being.expectation.event_delivery import (  # noqa: E402
@@ -279,6 +280,7 @@ def count(windows: list[dict[str, Any]]) -> dict[str, Any]:
         buffer,
         now_provider=lambda: datetime(2026, 10, 3, tzinfo=timezone.utc),
         trace_recorder_provider=lambda: None,
+        max_what_happened_chars=MAX_WHAT_HAPPENED_CHARS,
     )
     reasons: Counter[str] = Counter()
     before: Counter[str] = Counter()
