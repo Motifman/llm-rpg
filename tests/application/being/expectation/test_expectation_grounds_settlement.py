@@ -138,6 +138,7 @@ class _Harness:
                         self.evidence,
                         now_provider=lambda: datetime(2026, 10, 4, tzinfo=timezone.utc),
                         trace_recorder_provider=trace,
+                        max_what_happened_chars=1000,
                     ),
                     ExpectationRecallCreditReceiver(
                         success_store=self.success,

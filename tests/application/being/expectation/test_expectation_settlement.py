@@ -666,6 +666,22 @@ class TestMissCarriesWhatHappened:
             "ノア「波が運んでくる」",
         )
 
+    def test_blank_lines_are_left_out_of_timeline(self) -> None:
+        """時系列の空の行は、外れの確定の出来事に載せない。材料は空の文を受け付けない。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "miss"}, {"check_0": "miss"}),
+            timeline_turns=5,
+        )
+        self._form_after_a_quiet_turn(harness)
+
+        harness.turn(TurnMaterial(actions=("", "浜に流木は無い"), speeches=("  ",)))
+        harness.turn()
+
+        (settled,) = _settled_events(harness)
+        assert "" not in settled.what_happened
+        assert "  " not in settled.what_happened
+        assert "浜に流木は無い" in settled.what_happened
+
     def test_settled_hit_carries_no_timeline(self) -> None:
         """当たりで確定した出来事は時系列を運ばない。当たりの材料に時系列を付けるのは対象外。"""
         harness = _Harness(

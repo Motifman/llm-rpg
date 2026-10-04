@@ -265,6 +265,7 @@ class TestBeliefEvidenceV1:
             buffer_store,
             now_provider=lambda: datetime(2026, 7, 5, 9, 3, tzinfo=timezone.utc),
             trace_recorder_provider=lambda: recorder,
+            max_what_happened_chars=1000,
         )
         quality_being = BeingId("being-quality")
         receiver.receive(ExpectationEventId("exp-shore@6"), _settled())

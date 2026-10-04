@@ -67,6 +67,7 @@ class ToolExposureConfigurationError(RuntimeError):
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.being.expectation.belief_material import (
+    MAX_WHAT_HAPPENED_CHARS,
     ExpectationBeliefMaterialReceiver,
 )
 from ai_rpg_world.application.being.expectation.chunk_note import (
@@ -4685,6 +4686,7 @@ def _expectation_event_receivers(
                 stack.belief_evidence_buffer_store,
                 now_provider=lambda: datetime.now(timezone.utc),
                 trace_recorder_provider=trace_provider,
+                max_what_happened_chars=MAX_WHAT_HAPPENED_CHARS,
             )
         )
     recall_buffer = (

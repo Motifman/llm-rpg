@@ -587,8 +587,11 @@ def _what_happened(
     lines: list[str] = []
     for t in timeline:
         if since <= t.turn <= until:
-            lines.extend(t.material.actions)
-            lines.extend(t.material.speeches)
+            lines.extend(
+                text
+                for text in (*t.material.actions, *t.material.speeches)
+                if text.strip()
+            )
     return tuple(lines)
 
 
