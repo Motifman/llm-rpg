@@ -255,6 +255,8 @@ class WorldLlmWiring:
         else:
             self.memo_completion_hint_service = None
         self.goal_completion_hint_service = self._build_goal_completion_hint_service()
+        #: being ごとに、目的の達成を問わなかった理由のうち最後に trace に残したもの。問うたら消す (#1448)。
+        self.goal_hint_last_skipped_reason: dict[str, str] = {}
         self.expectation_settlement = self._build_expectation_settlement()
         self.expectation_forming = self._build_expectation_forming()
         if self.typed_judgment_port is not None:
