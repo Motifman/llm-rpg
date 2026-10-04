@@ -121,14 +121,25 @@ class CharBigramBm25Narrower(ITextCandidateNarrower):
 
 
 def _char_bigrams(text: str) -> list[str]:
-    normalized = "".join(
-        ch
-        for ch in unicodedata.normalize("NFKC", text).lower()
-        if not unicodedata.category(ch).startswith(("P", "Z", "C", "S"))
-    )
-    if len(normalized) < 2:
-        return [normalized] if normalized else []
-    return [normalized[i : i + 2] for i in range(len(normalized) - 1)]
+    """改行・句読点・空白・記号を区切りにして、区切りの中だけで 2 字組を作る。
+
+    区切りを消してからつなぐと、別々の文の境目に「屋ノ」(「廃屋」と「ノア」) のような
+    無い言葉が生まれる (#1414)。区切りで 1 文字だけ残った断片は、ほかに 2 字組が無い
+    ときだけ、その文字で比べる。
+    """
+    pieces: list[str] = []
+    current: list[str] = []
+    for ch in unicodedata.normalize("NFKC", text).lower():
+        if unicodedata.category(ch).startswith(("P", "Z", "C", "S")):
+            if current:
+                pieces.append("".join(current))
+                current = []
+        else:
+            current.append(ch)
+    if current:
+        pieces.append("".join(current))
+    bigrams = [piece[i : i + 2] for piece in pieces for i in range(len(piece) - 1)]
+    return bigrams or pieces
 
 
 _NARROWERS = {CHAR_BIGRAM_BM25: CharBigramBm25Narrower}
