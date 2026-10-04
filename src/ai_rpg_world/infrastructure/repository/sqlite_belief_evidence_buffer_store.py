@@ -63,6 +63,7 @@ def _evidence_to_payload(evidence: BeliefEvidence) -> dict[str, Any]:
         "in_context_belief_ids": list(evidence.in_context_belief_ids),
         # P9 (伝聞): HEARSAY evidence の話者 (payload JSON 内なので schema 変更不要)。
         "source_speaker": evidence.source_speaker,
+        "what_happened": list(evidence.what_happened),
     }
 
 
@@ -87,6 +88,8 @@ def _payload_to_evidence(data: dict[str, Any]) -> BeliefEvidence:
             if data.get("source_speaker") is not None
             else None
         ),
+        # #1509 より前に書かれた行には無い。外れの理由を持たない材料として読む。
+        what_happened=tuple(str(x) for x in data.get("what_happened", ())),
     )
 
 

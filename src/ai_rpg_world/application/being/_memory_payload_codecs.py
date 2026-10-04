@@ -673,6 +673,7 @@ def belief_evidence_to_dict(evidence: BeliefEvidence) -> dict[str, Any]:
         "in_context_belief_ids": list(evidence.in_context_belief_ids),
         # P9 (伝聞): HEARSAY evidence の話者。HEARSAY 以外は None。
         "source_speaker": evidence.source_speaker,
+        "what_happened": list(evidence.what_happened),
     }
 
 
@@ -721,6 +722,10 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> BeliefEvidence:
                 str(data["source_speaker"])
                 if data.get("source_speaker") is not None
                 else None
+            ),
+            # #1509: 旧データには無いキー。外れの理由を持たない材料として戻す。
+            what_happened=_str_tuple(
+                data.get("what_happened", []), name="what_happened"
             ),
         )
     except BeliefEvidenceValidationException as exc:
@@ -899,6 +904,7 @@ def undelivered_expectation_event_to_dict(
         data["content"] = event.content
         data["outcome"] = event.outcome.value
         data["grounds"] = _grounds_to_dict(event.grounds)
+        data["what_happened"] = list(event.what_happened)
     if isinstance(event, ExpectationDismissed):
         data["shape"] = event.shape.value
     return data
@@ -928,6 +934,11 @@ def dict_to_undelivered_expectation_event(
                     "(saved before #1484); refusing to guess them"
                 )
             fields["grounds"] = _dict_to_grounds(data["grounds"])
+            # #1509 より前の出来事にはキーが無い。時系列が無くても材料が理由を
+            # 持たないだけで状態は壊れないので、拒まずに空として戻す。
+            fields["what_happened"] = _str_tuple(
+                data.get("what_happened", []), name="what_happened"
+            )
         if event_type is ExpectationDismissed:
             fields["shape"] = ShapeVerdict(data["shape"])
         return UndeliveredExpectationEvent(

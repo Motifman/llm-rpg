@@ -196,6 +196,7 @@ class TestSqliteBeliefEvidenceFullFieldRoundtripContract:
             tick=42,
             in_context_belief_ids=("belief-1", "belief-2"),
             source_speaker="noah",
+            what_happened=("浜に流木は無かった", "ノア「波が運んでくる」"),
         )
 
     def test_all_round_trips_exactly(self) -> None:
