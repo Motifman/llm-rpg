@@ -43,7 +43,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
     BeliefEvidenceSourceKind,
 )
 
-
 # 実 run の外れ 30 件では、書いてから確定するまでの時系列は最長 1213 字だった
 # (#1509)。ふだんは切らず、時系列が長くなったときだけ信念をまとめる入力を抑える。
 MAX_WHAT_HAPPENED_CHARS = 1500

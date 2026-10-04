@@ -41,6 +41,9 @@ from ai_rpg_world.application.llm.services.belief_consolidation_coordinator impo
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
+    InMemorySemanticMemoryStore,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn import (
     without_tool_names,
 )
@@ -62,9 +65,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import (
     ExpectationId,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-    InMemorySemanticMemoryStore,
-)
 
 HERE = Path(__file__).resolve().parent
 _LABEL = re.compile(r"^(\[[^\]]*\] )?(.*)$", re.S)
