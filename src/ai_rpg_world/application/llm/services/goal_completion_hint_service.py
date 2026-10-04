@@ -44,6 +44,10 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
 #: trace と呼び出し側の分岐に使う質問名。
 QUESTION_NAME = "goal_achieved"
 
+#: 問える目的が無いので見送った理由。trace の ``skipped_reason`` に載る (#1448)。
+SKIPPED_NO_ACTIVE_GOAL = "no_active_goal"
+SKIPPED_ONLY_LOCKED_GOALS = "only_locked_goals"
+
 
 @dataclass(frozen=True)
 class GoalCompletionHint:
@@ -80,11 +84,13 @@ class GoalHintDetection:
         hints: 出す hint。閾値以上の目的ごとに 1 件
         judgments: 問うた目的ごとの判断。問わなかったときは空
         unavailable_reason: 判断を得られなかった理由。得られたときは None
+        skipped_reason: 問える目的が無く、判断を求めなかった理由。求めたときは None
     """
 
     hints: tuple[GoalCompletionHint, ...] = ()
     judgments: tuple[GoalCompletionJudgment, ...] = ()
     unavailable_reason: str | None = None
+    skipped_reason: str | None = None
 
 
 class GoalCompletionHintService:
@@ -121,13 +127,18 @@ class GoalCompletionHintService:
         1 件でも答えが得られなければ、全体を判断なしとして扱う。目的を 1 回の
         呼び出しで問うので、欠けた答えは同じ呼び出しの他の答えの信頼も損なう。
         """
-        goals = [
+        active = [
             goal
             for goal in self._goal_store.list_all_by_being(being_id)
-            if goal.status == GOAL_STATUS_ACTIVE and not goal.locked
+            if goal.status == GOAL_STATUS_ACTIVE
         ]
+        goals = [goal for goal in active if not goal.locked]
         if not goals:
-            return GoalHintDetection()
+            return GoalHintDetection(
+                skipped_reason=(
+                    SKIPPED_ONLY_LOCKED_GOALS if active else SKIPPED_NO_ACTIVE_GOAL
+                )
+            )
         try:
             return self._by_judgment(goals, action_summary, result_summary)
         except TypedJudgmentUnavailableException as exc:
@@ -202,4 +213,6 @@ __all__ = [
     "GoalCompletionJudgment",
     "GoalHintDetection",
     "QUESTION_NAME",
+    "SKIPPED_NO_ACTIVE_GOAL",
+    "SKIPPED_ONLY_LOCKED_GOALS",
 ]

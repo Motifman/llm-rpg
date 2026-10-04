@@ -168,6 +168,7 @@ class TestEveryOpenGoalIsAskedInOneRequest:
         assert port.calls == []
         assert detection.hints == ()
         assert detection.judgments == ()
+        assert detection.skipped_reason == "no_active_goal"
 
     def test_a_goal_the_scenario_locked_is_not_asked(self) -> None:
         """シナリオが固定した目的は goal_outcome で清算できないので問わない。
@@ -181,6 +182,23 @@ class TestEveryOpenGoalIsAskedInOneRequest:
 
         assert port.calls == []
         assert detection.hints == ()
+        assert detection.skipped_reason == "only_locked_goals"
+
+    def test_an_askable_goal_beside_a_locked_one_is_asked_without_a_skip(self) -> None:
+        """固定された目的と自分で立てた目的が並ぶとき、自分の目的だけを問い、見送りの理由は付かない。"""
+        port = _RecordingPort({"島から脱出する": 0.95, "斧を手に入れる": 0.2})
+        service, _ = _service(
+            [
+                _goal("g1", "島から脱出する", locked=True),
+                _goal("g2", "斧を手に入れる"),
+            ],
+            port,
+        )
+
+        detection = service.detect(_BEING, "倉庫で斧を探した", "見つからなかった")
+
+        assert [judgment.goal_id for judgment in detection.judgments] == ["g2"]
+        assert detection.skipped_reason is None
 
 
 class TestOnlyLikelyGoalsAreHinted:

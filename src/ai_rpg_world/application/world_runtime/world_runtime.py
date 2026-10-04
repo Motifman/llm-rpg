@@ -693,6 +693,7 @@ class WorldRuntime:
     # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _goal_journal_store: Any | None = field(default=None, repr=False)
+    _goal_hint_locked_notice_recorded: bool = field(default=False, repr=False)
     # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _stagnation_pressure_store: Any | None = field(default=None, repr=False)
@@ -1040,6 +1041,7 @@ class WorldRuntime:
         既に作成済みでもこのフィールドが反映される。
         """
         self._trace_recorder = recorder
+        self._record_goal_hint_locked_notice()
         # 市場の値動きは trace が一次データになる。recorder が差し込まれた
         # 時点で市場へも渡さないと、**run 後に価格の時系列が引けない**。
         market_service = getattr(self, "_market_service", None)
@@ -2443,6 +2445,56 @@ class WorldRuntime:
             return _scenario_has_goal(self.scenario)
         self._warn_unknown_player_spawn(player_id, "goal_locked")
         return _scenario_has_goal(self.scenario)
+
+    def _goal_hint_locked_player_ids(self) -> list[int]:
+        """目的の知らせを有効にしたのに、初期目的が固定されるプレイヤーを返す (#1448)。
+
+        固定された目的は知らせの対象外で、本人による言い直しも拒否される。この
+        プレイヤーには run の間ずっと知らせが出ない。
+        """
+        config = self._runtime_config
+        if config is None or not getattr(
+            config, "typed_judgment_goal_hint_enabled", False
+        ):
+            return []
+        return [
+            int(player_id.value)
+            for player_id in self.get_player_ids()
+            if self._resolve_player_goal_locked(player_id)
+        ]
+
+    def _warn_goal_hint_locked(self) -> None:
+        locked = self._goal_hint_locked_player_ids()
+        if not locked:
+            return
+        logging.getLogger(__name__).warning(
+            "TYPED_JUDGMENT_GOAL_HINT_ENABLED=1 だが、players %s の初期目的は"
+            "シナリオで固定されるため、目的の知らせは出ない。知らせを見たいなら"
+            "シナリオで players[].goal_locked=false を指定する",
+            locked,
+        )
+
+    def _record_goal_hint_locked_notice(self) -> None:
+        """起動時の警告と同じ内容を、trace が始まった時点で 1 度だけ残す (#1448)。"""
+        if self._goal_hint_locked_notice_recorded or self._trace_recorder is None:
+            return
+        locked = self._goal_hint_locked_player_ids()
+        self._goal_hint_locked_notice_recorded = True
+        if not locked:
+            return
+        try:
+            self._trace_recorder.record(
+                TraceEventKind.NOTE,
+                tick=None,
+                topic="goal_completion_hint",
+                message="初期目的がシナリオで固定されるプレイヤーには目的の知らせが出ない",
+                locked_player_ids=locked,
+                all_players_locked=len(locked) == len(self.get_player_ids()),
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "trace_recorder.record(goal hint locked notice) failed"
+            )
 
     def _resolve_objective_via_goal_store(
         self, player_id: PlayerId, fallback_text: str
@@ -7800,6 +7852,7 @@ def create_world_runtime(
             _goal_revision_requested and runtime._goal_journal_store is not None
         )
         log_goal_revision_enabled_state(runtime._goal_revision_enabled)
+        runtime._warn_goal_hint_locked()
         # P8: 目的の清算 (goal_outcome) が起きたとき belief evidence へ転記する
         # transcriber は、この下で BELIEF 系 flag 依存で後から構築される。U7 と
         # 同じ遅延 holder で applier に渡し、transcriber 確定後に中身を埋める

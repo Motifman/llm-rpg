@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         WorldLlmWiring,
     )
 
+import functools
 import logging
 from dataclasses import replace as dataclass_replace
 from typing import Any
@@ -458,6 +459,12 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
     return result
 
 
+#: 問える目的を確かめられなかった理由。trace の ``skipped_reason`` に載る (#1448)。
+#: 問える目的が無かった理由は service 側 (``SKIPPED_*``) が持つ。
+GOAL_HINT_SKIPPED_NO_ACTING_BEING = "no_acting_being"
+GOAL_HINT_SKIPPED_ACTING_BEING_RESOLUTION_FAILED = "acting_being_resolution_failed"
+
+
 def _augment_with_goal_hint(
     wiring: WorldLlmWiring,
     result: LlmCommandResultDto,
@@ -474,7 +481,11 @@ def _augment_with_goal_hint(
 
     失敗した行動、提示した定義に goal_outcome が無い tool (memo など)、行動と同時に
     目的を清算・言い直した行動では問わない。前の 2 つは目的を進めず、最後は本人が
-    もう決めている。
+    もう決めている。これらは action の trace から分かるので、見送りとしては残さない。
+
+    問える目的が無くて見送ったときは、理由を trace に残す。残さないと、判断が
+    0 件の run を「配線されていない」と「問える目的が無かった」とで見分けられない。
+    行動ごとに残すと trace が埋まるので、being ごとに理由が変わったときだけ残す。
     """
     service = wiring.goal_completion_hint_service
     if (
@@ -489,13 +500,26 @@ def _augment_with_goal_hint(
         GOAL_OUTCOME_ABANDONED,
     ) or (isinstance(goal_update, str) and goal_update.strip()):
         return result
+    trace_skip = functools.partial(
+        _record_goal_hint_skip,
+        wiring,
+        trace_recorder=trace_recorder,
+        current_tick=current_tick,
+        player_id=player_id,
+        tool_name=name,
+    )
     try:
         acting = wiring.runtime._acting_being_for(player_id)
     except Exception:
         logger.exception("goal hint: acting being resolution failed")
+        trace_skip(
+            being_id=None, reason=GOAL_HINT_SKIPPED_ACTING_BEING_RESOLUTION_FAILED
+        )
         return result
     if acting is None:
+        trace_skip(being_id=None, reason=GOAL_HINT_SKIPPED_NO_ACTING_BEING)
         return result
+    being_id = str(acting.being_id.value)
     try:
         detection = service.detect(
             acting.being_id,
@@ -507,12 +531,17 @@ def _augment_with_goal_hint(
         detection = GoalHintDetection(
             unavailable_reason=f"UNEXPECTED:{type(exc).__name__}"
         )
+    if detection.skipped_reason is not None:
+        trace_skip(being_id=being_id, reason=detection.skipped_reason)
+        return result
+    wiring.goal_hint_last_skipped_reason.pop(being_id, None)
+    wiring.goal_hint_last_skipped_reason.pop(_goal_hint_player_key(player_id), None)
     _record_goal_completion_judgments(
         detection,
         trace_recorder=trace_recorder,
         current_tick=current_tick,
         player_id=player_id,
-        being_id=str(acting.being_id.value),
+        being_id=being_id,
         tool_name=name,
     )
     if not detection.hints:
@@ -521,6 +550,52 @@ def _augment_with_goal_hint(
         result,
         message=result.message + "".join(hint.to_hint_text() for hint in detection.hints),
     )
+
+
+def _goal_hint_player_key(player_id: PlayerId) -> str:
+    """being が分からないときの見送りを、プレイヤーごとに覚える鍵。"""
+    return f"player:{int(player_id.value)}"
+
+
+def _record_goal_hint_skip(
+    wiring: WorldLlmWiring,
+    *,
+    trace_recorder: Any | None,
+    current_tick: int | None,
+    player_id: PlayerId,
+    tool_name: str,
+    being_id: str | None,
+    reason: str,
+) -> None:
+    """見送った理由を、being ごとに前回残した理由と変わったときだけ trace に残す。
+
+    残せたときだけ覚える。recorder が後から差し込まれる run や記録に失敗した
+    ときに、残っていない理由を残したことにしないため。
+    """
+    key = being_id if being_id is not None else _goal_hint_player_key(player_id)
+    if trace_recorder is None or wiring.goal_hint_last_skipped_reason.get(key) == reason:
+        return
+    try:
+        trace_recorder.record(
+            TraceEventKind.TYPED_JUDGMENT,
+            tick=current_tick,
+            player_id=int(player_id.value),
+            being_id=being_id,
+            question=GOAL_ACHIEVED_QUESTION,
+            tool_name=tool_name,
+            goal_id=None,
+            probability=None,
+            min_confidence=None,
+            accepted=False,
+            latency_ms=None,
+            source=None,
+            unavailable_reason=None,
+            skipped_reason=reason,
+        )
+    except Exception:
+        logger.exception("trace_recorder.record(typed_judgment goal skip) failed")
+        return
+    wiring.goal_hint_last_skipped_reason[key] = reason
 
 
 def _offered_with_goal_outcome(tools_payload: Any, name: str) -> bool:
@@ -569,6 +644,7 @@ def _record_goal_completion_judgments(
                 latency_ms=judgment.latency_ms,
                 source=judgment.source,
                 unavailable_reason=None,
+                skipped_reason=None,
             )
         if detection.unavailable_reason is not None:
             trace_recorder.record(
@@ -581,6 +657,7 @@ def _record_goal_completion_judgments(
                 latency_ms=None,
                 source=None,
                 unavailable_reason=detection.unavailable_reason,
+                skipped_reason=None,
             )
     except Exception:
         logger.exception("trace_recorder.record(typed_judgment goal) failed")

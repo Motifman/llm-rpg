@@ -42,12 +42,21 @@ class TraceEventKind:
     # **採らなかった判断と、得られなかった判断も残す。** 採用分だけ残すと、
     # OFF の run と全件 fallback の run が trace で見分けられず、閾値を動かす
     # 判断ができない。
+    #
+    # question が goal_achieved の行は skipped_reason も持つ (#1448)。問える目的が
+    # 無くて問わなかった行動で、being ごとに理由が変わったときだけ 1 件残す。値は
+    # "no_active_goal" | "only_locked_goals" | "no_acting_being" |
+    # "acting_being_resolution_failed"。問うた行では None。失敗した行動など、
+    # action の trace から分かる見送りは残さない。
     TYPED_JUDGMENT = "typed_judgment"
     # Issue #240 後続: 同一 (tool, fingerprint) の連打を loop guard が検知し
     # 警告観測を注入したタイミング。trace で wait spam の抑制動作を可視化する。
     # payload: tool_name / argument_fingerprint / consecutive_count
     LOOP_GUARD_WARNING = "loop_guard_warning"
     SCENE = "scene"
+    # topic が goal_completion_hint の行は、目的の知らせを有効にしたのに初期目的が
+    # 固定されるプレイヤーがいることを、trace の始まりに 1 件残す (#1448)。
+    # payload: locked_player_ids / all_players_locked
     NOTE = "note"
     # Phase 1d viewer: プレイヤーがスポット間を移動した瞬間。空間アニメーション
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
