@@ -47,11 +47,11 @@ class SqlitePublicSnsCommandRepositoryProvider:
             (source_event_id, recipient_token, kind),
         ).fetchone() is not None
 
-    def pending_notifications(self, limit: int) -> list[Notification]:
+    def pending_notifications(self, limit: int, *, after_id: int = 0) -> list[Notification]:
         self._require_active()
         rows = self._connection.execute(
-            "SELECT * FROM game_sns_notifications WHERE source_event_id IS NOT NULL AND observation_delivered=0 ORDER BY notification_id LIMIT ?",
-            (limit,),
+            "SELECT * FROM game_sns_notifications WHERE source_event_id IS NOT NULL AND observation_delivered=0 AND notification_id>? ORDER BY notification_id LIMIT ?",
+            (after_id, limit),
         ).fetchall()
         return [self.notifications._hydrate(row) for row in rows]
 

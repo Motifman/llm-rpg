@@ -56,12 +56,13 @@ class InMemoryPublicSnsCommandRepositoryProvider:
         return any(n.source_event_id == source_event_id and n.recipient_identity_token == recipient_token
                    and n.notification_type.value == kind for n in self._store.sns_notifications.values())
 
-    def pending_notifications(self, limit: int) -> list[Notification]:
+    def pending_notifications(self, limit: int, *, after_id: int = 0) -> list[Notification]:
         self._require_active()
         selected = heapq.nsmallest(
             limit,
             (n for n in self._store.sns_notifications.values()
-             if n.source_event_id is not None and not n.observation_delivered),
+             if n.source_event_id is not None and not n.observation_delivered
+             and n.notification_id.value > after_id),
             key=lambda n: n.notification_id.value,
         )
         return [copy.deepcopy(n) for n in selected]
