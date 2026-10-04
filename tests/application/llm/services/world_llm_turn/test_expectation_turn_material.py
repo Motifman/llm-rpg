@@ -24,7 +24,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 
 AT = datetime(2026, 10, 4, tzinfo=timezone.utc)
-_LOWER_IDENTIFIER = re.compile(r"[a-z][a-z_]{2,}")
+_LOWER_IDENTIFIER = re.compile(r"(?<![A-Za-z0-9_])[a-z][a-z0-9_]+")
 
 
 def _action(action_summary: str, result_summary: str, tool_name: str) -> UnifiedRecentEventEntry:
@@ -77,16 +77,18 @@ class TestToolNamesAreLeftOut:
     def test_tool_name_becomes_generic_word(
         self, entry: UnifiedRecentEventEntry, expected: str
     ) -> None:
-        """snake_case の操作名と、下線の無い tool の名前は、どちらも「操作」の 1 語に置き換わる。"""
+        """snake_case の操作名も下線の無い tool の名前も、小文字の英字で始まる語は「操作」の 1 語に置き換わる。"""
         material = turn_material([entry], self_name="リオ")
 
         assert material.actions == (expected,)
 
     def test_material_has_no_ascii_identifiers(self) -> None:
-        """実 run に出た形の行動と観測を写した材料には、小文字の英字の識別子が 1 つも残らない。"""
+        """実 run に出た形の行動と観測 (下線の無い操作名、メモの ID を含む) を写した材料には、小文字の英字で始まる語が 1 つも残らない。"""
         entries = [
             _action("「難破船の船倉」に search_wreck_hold した", "行動が拒否された: 船倉はもう漁り尽くした。", "interact"),
             _action("「カイ」に「貝」を渡した", "give_item 結果:\n貝 → カイ: OK", "give_item"),
+            _action("「流木の山」に gather した", "行動が拒否された: 流木はもう拾ってしまった。", "interact"),
+            _action("メモを書いた", "メモを追加しました（ID: a8cbc3…）。", "memo_add"),
             _observation("interact を試みたが失敗した: 修正のヒント: ツール説明を確認してください。"),
         ]
 

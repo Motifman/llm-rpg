@@ -24,7 +24,6 @@ from ai_rpg_world.application.llm.services.expectation_arguments import (
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     EXPECTATIONS_FIELD_NAME,
 )
-from ai_rpg_world.application.llm import tool_constants
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
@@ -41,31 +40,19 @@ logger = logging.getLogger(__name__)
 
 _SPEECH_OBSERVATION_TYPES = frozenset({"player_spoke"})
 
-# 清算の時系列は外れた予期の信念の材料にそのまま載る (#1509)。tool の名前は世界の
-# 出来事ではないので、文から外す。シナリオが定める操作名 (search_wreck_hold) は
-# 一覧に無いので snake_case の形で拾い、下線の無い tool の名前は定数から拾う。
-_TOOL_NAME_REPLACEMENT = "操作"
-_SINGLE_WORD_TOOL_NAMES = sorted(
-    {
-        value
-        for name, value in vars(tool_constants).items()
-        if name.startswith("TOOL_NAME_")
-        and isinstance(value, str)
-        and re.fullmatch(r"[a-z]+", value)
-    },
-    key=len,
-    reverse=True,
-)
-_TOOL_NAME_PATTERN = re.compile(
-    r"[ \t]?(?<![A-Za-z0-9_])(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|"
-    + "|".join(_SINGLE_WORD_TOOL_NAMES)
-    + r")(?![A-Za-z0-9_])[ \t]?"
+# 清算の時系列は外れた予期の信念の材料にそのまま載る (#1509)。この世界の出来事は日本語で
+# 書かれ、小文字の英字で始まる語は tool の名前、シナリオの操作名 (gather、
+# search_wreck_hold)、メモの ID (a8cbc3) のような識別子になる。操作名はシナリオごとに
+# 増え、tool の一覧では拾いきれないので、語の形で拾う。大文字で始まる語 (SOS) は残す。
+_IDENTIFIER_REPLACEMENT = "操作"
+_IDENTIFIER_PATTERN = re.compile(
+    r"[ \t]?(?<![A-Za-z0-9_])[a-z][a-z0-9_]+(?![A-Za-z0-9_])[ \t]?"
 )
 
 
 def without_tool_names(text: str) -> str:
-    """文に入った tool の名前を「操作」に置き換える。前後の半角空白も詰める。"""
-    return _TOOL_NAME_PATTERN.sub(_TOOL_NAME_REPLACEMENT, text)
+    """文に入った tool の名前などの識別子を「操作」に置き換える。前後の半角空白も詰める。"""
+    return _IDENTIFIER_PATTERN.sub(_IDENTIFIER_REPLACEMENT, text)
 
 
 def turn_material(
