@@ -15,6 +15,9 @@
   source_kind: prediction_error
   salience: high
   belief_ids: ['belief-shore-rich']
+  what_happened_lines: 0
+  what_happened_truncated: False
+  what_happened_total_lines: 0
 --- event[1] tick=None ---
   being_id: being-quality
   event_id: exp-fire@7
@@ -27,6 +30,9 @@
   source_kind: confirmation
   salience: low
   belief_ids: ['belief-driftwood-burns']
+  what_happened_lines: 0
+  what_happened_truncated: False
+  what_happened_total_lines: 0
 
 === evidence buffer (list_all_by_being) ===
 --- evidence[0] ---
