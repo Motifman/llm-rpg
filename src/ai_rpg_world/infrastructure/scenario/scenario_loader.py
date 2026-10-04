@@ -263,6 +263,12 @@ class ScenarioLoader:
         reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = parse_meeting_enabled(raw)
         player_trade_enabled, player_trade_offer_expires = parse_player_trade(raw)
+        public_sns_enabled = raw.get("public_sns_enabled", False)
+        public_sns_push_budget_chars = raw.get("public_sns_push_budget_chars", 6000)
+        if not isinstance(public_sns_enabled, bool):
+            raise ScenarioLoadError("public_sns_enabled は真偽値が必要です")
+        if isinstance(public_sns_push_budget_chars, bool) or not isinstance(public_sns_push_budget_chars, int) or not 512 <= public_sns_push_budget_chars <= 24000:
+            raise ScenarioLoadError("public_sns_push_budget_chars は512以上24000以下の整数が必要です")
         market = parse_market(raw, mapper, merchants)
         departed_agents_enabled = parse_departed_agents_enabled(raw)
         death_semantics = parse_death_semantics(raw)
@@ -303,6 +309,8 @@ class ScenarioLoader:
             death_semantics=death_semantics,
             departed_agents_enabled=departed_agents_enabled,
             merchants=merchants,
+            public_sns_enabled=public_sns_enabled,
+            public_sns_push_budget_chars=public_sns_push_budget_chars,
             player_trade_enabled=player_trade_enabled,
             player_trade_offer_expires_in_ticks=player_trade_offer_expires,
             market=market,

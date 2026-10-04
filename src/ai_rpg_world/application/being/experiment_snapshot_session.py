@@ -102,6 +102,7 @@ from ai_rpg_world.domain.world.value_object.world_id import (
 logger = logging.getLogger(__name__)
 
 EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
+    "public_sns",
     # Phase 9-2
     "world_tick",
     "player_position",
@@ -341,7 +342,9 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
     restore したいが、本 PR の vitals codec は ``hp_max`` を直接保存して
     いるので順序非依存。
     """
+    from ai_rpg_world.application.being.world_subsystems.public_sns_codec import PublicSnsSubsystemCodec
     return [
+        PublicSnsSubsystemCodec(),
         # Phase 9-2
         WorldTickSubsystemCodec(),
         PlayerPositionSubsystemCodec(),
@@ -645,6 +648,9 @@ class ExperimentSnapshotSession:
         (= world は scenario 依存なので別 scenario への load は不可)。
         """
         if not self._world_gateway.exists_in(input_dir):
+            if getattr(runtime, "_public_sns_data_store", None) is not None:
+                from ai_rpg_world.application.being.world_state_snapshot import WorldStateSnapshotCoverageError
+                raise WorldStateSnapshotCoverageError("公開SNSの再開には内容と不変識別子を持つworld.jsonが必要です")
             logger.info(
                 "no world.json in %s; skipping world state restore "
                 "(legacy snapshot directory)",

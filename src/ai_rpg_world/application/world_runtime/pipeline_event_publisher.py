@@ -131,6 +131,13 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
             )
 
     def _dispatch(self, event: DomainEvent) -> None:
+        # 公開SNSの受信は専用の確定境界で記録する。旧formatterへ同じ通知を
+        # 二重に流すと全文・起床が重複するため、ここで一本化する。
+        from ai_rpg_world.domain.sns.event import SnsContentLikedEvent, SnsUserFollowedEvent
+        public_sns = getattr(self._runtime, "_public_sns_command_service", None)
+        if public_sns is not None and isinstance(event, (SnsContentLikedEvent, SnsUserFollowedEvent)):
+            public_sns.record_event(event)
+            return
         # Phase E-3: side handler を先に走らせる。observation pipeline より先に
         # registry mutation を済ませることで「player downed → DEAD outcome が
         # 立った状態で観測が emit される」順序になる。

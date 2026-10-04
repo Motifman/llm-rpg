@@ -1135,7 +1135,11 @@ class LiteLLMClient(
                 arguments = {}
         if not isinstance(arguments, dict):
             arguments = {}
-        return {"name": name, "arguments": arguments}
+        result = {"name": name, "arguments": arguments}
+        call_id = getattr(first, "id", None)
+        if isinstance(call_id, str) and call_id:
+            result["tool_call_id"] = call_id
+        return result
 
 
 def _extract_llm_call_id(prompt_capture_context: Any | None) -> str | None:

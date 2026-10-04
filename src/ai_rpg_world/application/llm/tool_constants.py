@@ -218,3 +218,7 @@ SHADOW_TARGET_PREFIX = "__"
 #: **プロンプトの候補には出さない**ので、引用符つき表示の契約検査からも
 #: 除外する (道の名前の shadow は候補に出る名前なので除外しない)。
 HERE_TARGET_LABEL = "__here"
+
+# 公開SNSの入口（旧アプリ操作とは独立）。
+TOOL_NAME_SNS_READ = "sns_read"
+TOOL_NAME_SNS_PUBLISH = "sns_publish"

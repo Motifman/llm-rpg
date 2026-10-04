@@ -37,6 +37,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
     PredictionContextLedger,
@@ -119,6 +120,7 @@ class ActionResultRecorder:
             should_reschedule=should_reschedule,
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
+            execution_provenance=current_execution_provenance(),
             prediction_context_id=prediction_context_id,
             in_context_belief_ids=in_context_belief_ids,
             inner_thought=inner_thought,

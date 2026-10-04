@@ -367,6 +367,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
+        self._observation_repetition_projection = core.observation_repetition_projection
+        self._recent_events_projection = core.recent_events_projection
         self._recent_events_formatter = recent_events_formatter
         self._context_format_strategy = context_format_strategy
         self._system_prompt_builder = system_prompt_builder
@@ -639,11 +641,15 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_id, self._recent_actions_limit
         )
         recent_entries = self._recent_event_store.get_active_timeline(player_id)
+        projected_entries = recent_entries
+        shown_notification_ids: tuple[str, ...] = ()
+        if self._recent_events_projection is not None:
+            projected_entries, shown_notification_ids = self._recent_events_projection(player_id, recent_entries)
         recent_events_text = self._recent_events_formatter.format_unified_entries(
-            recent_entries
+            projected_entries
         )
         prediction_feedback_text = build_prediction_feedback_text(
-            action_results, observations
+            action_results, (self._observation_repetition_projection(observations) if self._observation_repetition_projection else observations)
         )
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
         # 再浮上。store 未配線 (flag OFF) なら常に空文字 (= section 省略)。
@@ -784,6 +790,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             "tools": tools,
             "tool_choice": "required",
         }
+        result["sns_shown_notification_ids"] = shown_notification_ids
         result["overflow"] = overflow
         result["tool_runtime_context"] = ui_context.tool_runtime_context
         # Phase A が、実際に API へ出す tool 集合から動的引数候補表を作り、

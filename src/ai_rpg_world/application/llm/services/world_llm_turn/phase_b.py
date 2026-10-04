@@ -12,8 +12,14 @@ if TYPE_CHECKING:
 import logging
 from dataclasses import replace as dataclass_replace
 from typing import Any
+from uuid import uuid4
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.common.execution_provenance import (
+    ExecutionProvenance,
+    current_execution_provenance,
+    execution_provenance_scope,
+)
 from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.action_summary_format import (
@@ -86,7 +92,41 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 logger = logging.getLogger(__name__)
 
 
+def _execution_trace() -> dict[str, Any] | None:
+    source = current_execution_provenance()
+    return source.to_dict() if source else None
+
+
 def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
+    """実行境界で当人の手番と要求IDを一度だけ確定する。"""
+    runtime = wiring.runtime
+    projection = getattr(runtime, "_public_sns_projection", None)
+    if projection is not None and phase_a.tool_call is not None and phase_a.exception is None and phase_a.failure_result is None:
+        projection.confirm_shown(int(phase_a.player_id), phase_a.prompt.get("sns_shown_notification_ids", ()))
+        runtime._public_sns_screens.confirm_presented(int(phase_a.player_id), phase_a.prompt.get("sns_screen_generation"))
+    turn = runtime.advance_memory_turn(phase_a.player_id)
+    turns = getattr(runtime, "_execution_turns", None)
+    if not isinstance(turns, dict):
+        turns = {}
+        runtime._execution_turns = turns
+    pid = int(phase_a.player_id.value)
+    # Beingに結びつかない最小構成にも、実際に開始した手番を数える。
+    turn = max(turn if isinstance(turn, int) else 0, turns.get(pid, 0) + 1)
+    turns[pid] = turn
+    call = phase_a.tool_call or {}
+    provider_id = call.get("tool_call_id") or call.get("id")
+    provenance = ExecutionProvenance(
+        execution_request_id=f"execution-{uuid4().hex}",
+        actor_player_id=pid,
+        actor_turn=turn,
+        tool_call_id=provider_id if isinstance(provider_id, str) and provider_id else None,
+        llm_call_id=phase_a.llm_call_id,
+    )
+    with execution_provenance_scope(provenance):
+        return _run_phase_b(wiring, phase_a)
+
+
+def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
     """Phase B: Phase A の結果を受けて世界 mutation を適用する。
 
     serial 実行が前提 (世界 mutation / 観測 broadcast / trace 順序が決定論
@@ -94,7 +134,6 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
     """
     player_id = phase_a.player_id
     # 1 手の処理より先に進める。手の中で作る予期 (#1441) が、この手のターン数を持つ。
-    wiring.runtime.advance_memory_turn(player_id)
     if phase_a.failure_result is not None:
         result = phase_a.failure_result
         wiring.runtime._record_action_result(
@@ -192,6 +231,7 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
                 player_id=int(player_id.value),
                 tool=name,
                 arguments=arguments,
+                execution_provenance=_execution_trace(),
             )
         except Exception:
             logger.exception("trace_recorder.record(action) failed")
@@ -377,6 +417,7 @@ def run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommandR
                 success=result.success,
                 error_code=result.error_code,
                 result_summary=result.message,
+                execution_provenance=_execution_trace(),
                 **trace_payload,
             )
         except Exception:
