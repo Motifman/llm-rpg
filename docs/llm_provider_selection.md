@@ -56,6 +56,21 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 
 5. **profile の description に残す**: 選んだ理由・確かめた日付・実測値を書く。provider を替えたら、既存 profile は書き換えずに新しい profile を足す (#39。既存 profile は過去の実験条件の記録)
 
+## 実呼び出しのプローブ
+
+provider の対応が変わったことに気づくための試験を、`live_api` marker で置いている。`.env` の `OPENAI_API_KEY` (Jev は `OPENROUTER_API_KEY` を優先) を読んで実 endpoint を叩くので、通常の pytest、CI、`-m quality` のいずれでも選ばれない。回すときは `-m live_api` を明示する。
+
+```bash
+uv run pytest -m live_api
+```
+
+| 試験 | 叩く先 | 失敗したら |
+|---|---|---|
+| `tests/quality/test_deepseek_v4_flash_0731_required_probe.py` | OpenRouter 経由の DeepSeek 公式 provider | 公式が `required` に対応した。Cloudflare 固定を見直す (設計判断 #39) |
+| `tests/quality/test_jev_typed_judgment_probe.py` | OpenRouter の Jev (`/api/alpha/decisions`) | 応答の形か、行動名を救う閾値 0.7 が実モデルと合わなくなった |
+
+実 endpoint を叩く試験を新しく足すときも `live_api` を付ける。`quality` を付けると、golden を直すために `-m quality` を回した人が知らずに実 API を呼ぶ。
+
 ## 記録
 
 ある時点での状況。**今の状態ではない。** 使う前に上の手順で確かめ直すこと。
