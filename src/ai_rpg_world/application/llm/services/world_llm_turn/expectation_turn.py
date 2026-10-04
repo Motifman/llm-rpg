@@ -40,21 +40,20 @@ logger = logging.getLogger(__name__)
 
 _SPEECH_OBSERVATION_TYPES = frozenset({"player_spoke"})
 
-# 清算の時系列は外れた予期の信念の材料にそのまま載る (#1509)。この世界の出来事は日本語で
-# 書かれ、小文字の英字を含む英数字の語は識別子になる。数字を含む語はメモの ID
-# (774c5e、a8cbc3) で、消す。数字を含まず小文字で始まる語は tool の名前やシナリオの
-# 操作名 (interact、gather、search_wreck_hold) で、文が崩れないよう「操作」に置き換える。
-# 操作名はシナリオごとに増え、tool の一覧では拾いきれないので、語の形で拾う。小文字を
-# 含まない語 (SOS、CLEAR) と数 (10、0.1) は残す。
+# 清算の時系列は外れた予期の信念の材料にそのまま載る (#1509)。行動と観測の文に入る
+# 識別子を外す。小文字で始まる語は tool の名前やシナリオの操作名 (interact、gather、
+# search_wreck_hold) で、文が崩れないよう「操作」に置き換える。操作名はシナリオごとに
+# 増え、tool の一覧では拾いきれないので、語の形で拾う。数字と a〜f だけでできた 6 文字
+# 以上の語はメモの ID (774c5e、a8cbc3) で、消す。数と単位 (1.5kg、10m) と、小文字で
+# 始まらない語 (SOS、CLEAR) は残す。発言は本人たちの言葉なので触らない。
 _TOOL_NAME_REPLACEMENT = "操作"
-_IDENTIFIER_PATTERN = re.compile(
-    r"[ \t]?(?<![A-Za-z0-9_])(?=[A-Za-z0-9_]*[a-z])[A-Za-z0-9_]+(?![A-Za-z0-9_])[ \t]?"
-)
+_WORD_PATTERN = re.compile(r"[ \t]?(?<![A-Za-z0-9_.])[A-Za-z0-9_]+(?![A-Za-z0-9_])[ \t]?")
+_HEX_ID = re.compile(r"(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{6,}")
 
 
 def _replace_identifier(match: re.Match[str]) -> str:
     word = match.group(0).strip(" \t")
-    if any(c.isdigit() for c in word):
+    if _HEX_ID.fullmatch(word):
         return ""
     if word[0].islower() and len(word) > 1:
         return _TOOL_NAME_REPLACEMENT
@@ -62,8 +61,8 @@ def _replace_identifier(match: re.Match[str]) -> str:
 
 
 def without_tool_names(text: str) -> str:
-    """文に入った tool の名前を「操作」に置き換え、ID を消す。前後の半角空白も詰める。"""
-    return _IDENTIFIER_PATTERN.sub(_replace_identifier, text)
+    """行動と観測の文に入った tool の名前を「操作」に置き換え、ID を消す。前後の半角空白も詰める。"""
+    return _WORD_PATTERN.sub(_replace_identifier, text)
 
 
 def turn_material(
@@ -72,7 +71,8 @@ def turn_material(
     """観測と自分の行動の結果を、届いた順に行動と発言へ分ける。
 
     自分の行動は本人の名前を付けて書く。行動の要約は一人称の表示文で、主語が
-    無いと Jev が他の人の行動と取り違える。tool の名前は文から外す。
+    無いと Jev が他の人の行動と取り違える。行動と観測の文からは tool の名前と
+    ID を外す。発言は本人たちの言葉なので、そのまま写す。
     """
     actions: list[str] = []
     speeches: list[str] = []
@@ -80,18 +80,20 @@ def turn_material(
         label = f"[{entry.game_time_label}] " if entry.game_time_label else ""
         payload = entry.payload
         if isinstance(payload, ActionResultEntry):
-            text = (
-                f"{label}{self_name}: {without_tool_names(payload.action_summary)}"
-                f" → {without_tool_names(payload.result_summary)}"
-            )
-            target = speeches if payload.tool_name == TOOL_NAME_SPEECH else actions
-            target.append(text)
+            if payload.tool_name == TOOL_NAME_SPEECH:
+                speeches.append(
+                    f"{label}{self_name}: {payload.action_summary} → {payload.result_summary}"
+                )
+            else:
+                actions.append(
+                    f"{label}{self_name}: {without_tool_names(payload.action_summary)}"
+                    f" → {without_tool_names(payload.result_summary)}"
+                )
             continue
-        text = f"{label}{without_tool_names(payload.output.prose)}"
         if payload.output.structured.get("type") in _SPEECH_OBSERVATION_TYPES:
-            speeches.append(text)
+            speeches.append(f"{label}{payload.output.prose}")
         else:
-            actions.append(text)
+            actions.append(f"{label}{without_tool_names(payload.output.prose)}")
     return TurnMaterial(actions=tuple(actions), speeches=tuple(speeches))
 
 

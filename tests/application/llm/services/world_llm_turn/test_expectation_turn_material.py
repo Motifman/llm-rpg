@@ -28,11 +28,12 @@ _ASCII_WORD = re.compile(r"[A-Za-z0-9_]+")
 
 
 def _identifiers(line: str) -> list[str]:
-    """小文字で始まる語と、小文字と数字を両方含む語。tool の名前と ID の形。"""
+    """小文字で始まる語と、小文字と数字を両方含む 6 文字以上の語。tool の名前と ID の形。"""
     return [
         w
         for w in _ASCII_WORD.findall(line)
-        if w[0].islower() or (any(c.isdigit() for c in w) and any(c.islower() for c in w))
+        if w[0].islower()
+        or (len(w) >= 6 and any(c.isdigit() for c in w) and any(c.islower() for c in w))
     ]
 
 
@@ -114,6 +115,33 @@ class TestToolNamesAreLeftOut:
         material = turn_material(entries, self_name="リオ")
 
         assert material.actions == ("[Day 1 4:30] リオ: メモを書いた → メモを追加しました（ID:…）。",)
+
+    def test_quantity_with_unit_is_kept(self) -> None:
+        """数と単位 (1.5kg、10m) は ID ではないので、行動の結果の文に残す。"""
+        entries = [_action("「流木の山」を調べた", "1.5kg ほどの流木が 10m 先にある", "inspect_target")]
+
+        material = turn_material(entries, self_name="リオ")
+
+        assert material.actions == ("[Day 1 4:30] リオ: 「流木の山」を調べた → 1.5kg ほどの流木が 10m 先にある",)
+
+    def test_speech_is_copied_as_is(self) -> None:
+        """発言は本人たちの言葉なので、小文字の英語を含んでいても置き換えない。"""
+        entries = [
+            UnifiedRecentEventEntry.from_observation(
+                ObservationEntry(
+                    occurred_at=AT,
+                    output=ObservationOutput(
+                        prose="ノア「wait, the wreck is open」",
+                        structured={"type": "player_spoke"},
+                    ),
+                    game_time_label=None,
+                )
+            )
+        ]
+
+        material = turn_material(entries, self_name="リオ")
+
+        assert material.speeches == ("ノア「wait, the wreck is open」",)
 
     def test_uppercase_words_in_speech_are_kept(self) -> None:
         """小文字を含まない英字の語 (SOS など) と数は識別子ではないので、文に残す。"""
