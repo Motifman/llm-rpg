@@ -26,6 +26,7 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,
         created_at: datetime | None = None,
+        identity_token: str | None = None,
     ):
         # リプライは必ず親を持つことを保証
         if parent_post_id is None and parent_reply_id is None:
@@ -33,7 +34,7 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         if parent_post_id is not None and parent_reply_id is not None:
             raise InvalidParentReferenceException("親ポストIDと親リプライIDを同時に設定することはできません。")
 
-        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at, identity_token)
         self._reply_ids = reply_ids.copy()
 
     @classmethod
@@ -48,9 +49,10 @@ class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
         mentions: set[Mention],
         reply_ids: set[ReplyId],  # 子リプライIDの一覧
         deleted: bool = False,
-        created_at: datetime | None = None
+        created_at: datetime | None = None,
+        identity_token: str | None = None,
     ) -> "ReplyAggregate":
-        return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
+        return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at, identity_token)
 
     @classmethod
     def create(

@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any
+from uuid import uuid4
 
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -69,6 +70,8 @@ class InMemoryDataStore:
         self._uow_transactions_poisoned = False
 
         # SNS Domain
+        # 保存領域の複製では維持し、新規作成時だけ別の名前空間を割り当てる。
+        self.sns_public_namespace = uuid4().hex
         self.sns_users: dict[SnsUserId, UserAggregate] = {}
         self.sns_username_to_user_id: dict[str, SnsUserId] = {}
         self.sns_next_user_id = 1
