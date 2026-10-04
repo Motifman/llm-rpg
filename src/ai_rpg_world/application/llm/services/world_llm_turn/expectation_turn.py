@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,7 @@ from ai_rpg_world.application.llm.services.expectation_arguments import (
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     EXPECTATIONS_FIELD_NAME,
 )
+from ai_rpg_world.application.llm import tool_constants
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
@@ -39,6 +41,32 @@ logger = logging.getLogger(__name__)
 
 _SPEECH_OBSERVATION_TYPES = frozenset({"player_spoke"})
 
+# 清算の時系列は外れた予期の信念の材料にそのまま載る (#1509)。tool の名前は世界の
+# 出来事ではないので、文から外す。シナリオが定める操作名 (search_wreck_hold) は
+# 一覧に無いので snake_case の形で拾い、下線の無い tool の名前は定数から拾う。
+_TOOL_NAME_REPLACEMENT = "操作"
+_SINGLE_WORD_TOOL_NAMES = sorted(
+    {
+        value
+        for name, value in vars(tool_constants).items()
+        if name.startswith("TOOL_NAME_")
+        and isinstance(value, str)
+        and re.fullmatch(r"[a-z]+", value)
+    },
+    key=len,
+    reverse=True,
+)
+_TOOL_NAME_PATTERN = re.compile(
+    r"[ \t]?(?<![A-Za-z0-9_])(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|"
+    + "|".join(_SINGLE_WORD_TOOL_NAMES)
+    + r")(?![A-Za-z0-9_])[ \t]?"
+)
+
+
+def without_tool_names(text: str) -> str:
+    """文に入った tool の名前を「操作」に置き換える。前後の半角空白も詰める。"""
+    return _TOOL_NAME_PATTERN.sub(_TOOL_NAME_REPLACEMENT, text)
+
 
 def turn_material(
     entries: Iterable[UnifiedRecentEventEntry], *, self_name: str
@@ -46,7 +74,7 @@ def turn_material(
     """観測と自分の行動の結果を、届いた順に行動と発言へ分ける。
 
     自分の行動は本人の名前を付けて書く。行動の要約は一人称の表示文で、主語が
-    無いと Jev が他の人の行動と取り違える。
+    無いと Jev が他の人の行動と取り違える。tool の名前は文から外す。
     """
     actions: list[str] = []
     speeches: list[str] = []
@@ -54,11 +82,14 @@ def turn_material(
         label = f"[{entry.game_time_label}] " if entry.game_time_label else ""
         payload = entry.payload
         if isinstance(payload, ActionResultEntry):
-            text = f"{label}{self_name}: {payload.action_summary} → {payload.result_summary}"
+            text = (
+                f"{label}{self_name}: {without_tool_names(payload.action_summary)}"
+                f" → {without_tool_names(payload.result_summary)}"
+            )
             target = speeches if payload.tool_name == TOOL_NAME_SPEECH else actions
             target.append(text)
             continue
-        text = f"{label}{payload.output.prose}"
+        text = f"{label}{without_tool_names(payload.output.prose)}"
         if payload.output.structured.get("type") in _SPEECH_OBSERVATION_TYPES:
             speeches.append(text)
         else:
@@ -259,4 +290,5 @@ __all__ = [
     "form_expectations_from_call",
     "settle_expectations_after_turn",
     "turn_material",
+    "without_tool_names",
 ]
