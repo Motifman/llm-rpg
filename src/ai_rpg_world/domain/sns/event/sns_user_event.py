@@ -24,6 +24,9 @@ class SnsUserFollowedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     follower_user_id: UserId
     followee_user_id: UserId
     follower_display_name: str = ""
+    actor_identity_token: str | None = None
+    recipient_identity_token: str | None = None
+    execution_provenance: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

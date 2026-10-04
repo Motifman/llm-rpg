@@ -119,9 +119,9 @@ class PostAggregate(BaseSnsContentAggregate[PostId]):
         """親情報を取得"""
         return None, None
 
-    def like_post(self, user_id: UserId, liker_display_name: str = "") -> None:
+    def like_post(self, user_id: UserId, liker_display_name: str = "", *, liker_identity_token: str | None = None, execution_provenance: dict[str, object] | None = None) -> None:
         """ポストにいいね"""
-        self.like(user_id, "post", liker_display_name=liker_display_name)
+        self.like(user_id, "post", liker_display_name=liker_display_name, liker_identity_token=liker_identity_token, execution_provenance=execution_provenance)
 
     def delete_post(self, user_id: UserId) -> None:
         """ポストを削除"""
