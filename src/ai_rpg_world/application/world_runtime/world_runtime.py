@@ -8326,7 +8326,7 @@ def create_world_runtime(
                 world_id = getattr(runtime, "_aux_being_default_world_id", None)
                 if resolver is None or world_id is None:
                     return None
-                return cast(BeingId, resolver.resolve_being_id(world_id, player_id))
+                return cast("BeingId", resolver.resolve_being_id(world_id, player_id))
 
             pipeline_event_publisher.register_handler(
                 PlayerDownedEvent,
