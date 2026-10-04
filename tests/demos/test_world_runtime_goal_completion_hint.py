@@ -404,3 +404,174 @@ class TestDisabledLeavesTheResultAlone:
         assert state.llm_wiring.goal_completion_hint_service is None
         assert "[hint] 目的" not in result.message
         assert recorder.goal_judgments() == []
+
+
+class TestTheSkipIsTraced:
+    """判断を見送った理由が、being ごとに理由が変わったときだけ trace に残ることを保証する (#1512)。"""
+
+    @staticmethod
+    def _skips(recorder: _CapturingRecorder) -> list[str]:
+        return [
+            payload["skipped_reason"]
+            for payload in recorder.goal_judgments()
+            if payload.get("skipped_reason") is not None
+        ]
+
+    def test_a_goal_the_scenario_locked_is_traced_as_the_reason_to_skip(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """シナリオが固定した目的しか無ければ、Jev は呼ばれず、見送りの理由 only_locked_goals が being_id つきで 1 件残る。"""
+        port = _FixedPort(0.9)
+        state, player_id, being_id, recorder = _session(
+            monkeypatch, tmp_path, port, goal_texts=()
+        )
+
+        _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+
+        assert port.calls == []
+        (skip,) = recorder.goal_judgments()
+        assert skip["skipped_reason"] == "only_locked_goals"
+        assert skip["being_id"] == being_id
+        assert skip["accepted"] is False
+        assert skip["probability"] is None
+        assert skip["unavailable_reason"] is None
+
+    def test_the_same_reason_is_traced_only_once(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """同じ理由で 2 回続けて見送ったら、trace に残るのは最初の 1 件だけ。"""
+        state, player_id, _, recorder = _session(
+            monkeypatch, tmp_path, _FixedPort(0.9), goal_texts=()
+        )
+
+        _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+        _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+
+        assert self._skips(recorder) == ["only_locked_goals"]
+
+    def test_a_changed_reason_is_traced_again(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """失敗した行動、memo、失敗した行動と理由が変わるたびに 1 件ずつ残る。"""
+        state, player_id, _, recorder = _session(monkeypatch, tmp_path, _FixedPort(0.9))
+
+        _act(state, player_id, "travel_to", {"destination_label": "存在しない部屋"})
+        _act(state, player_id, "memo_add", {"content": "閲覧室へ行く"})
+        _act(state, player_id, "travel_to", {"destination_label": "存在しない部屋"})
+
+        assert self._skips(recorder) == [
+            "action_failed",
+            "goal_outcome_not_offered",
+            "action_failed",
+        ]
+
+    def test_the_same_reason_after_a_judgment_is_traced_again(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """見送り、判断、同じ理由での見送りと続いたら、見送りは 2 件とも残る。間に判断があれば理由は途切れている。"""
+        state, player_id, _, recorder = _session(monkeypatch, tmp_path, _FixedPort(0.2))
+
+        _act(state, player_id, "travel_to", {"destination_label": "存在しない部屋"})
+        _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+        _act(state, player_id, "travel_to", {"destination_label": "存在しない部屋"})
+
+        assert self._skips(recorder) == ["action_failed", "action_failed"]
+
+    def test_an_action_that_settles_the_goal_is_traced_as_the_reason_to_skip(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """行動と同時に goal_outcome を書いたら、見送りの理由 goal_settled_by_action が残る。"""
+        state, player_id, _, recorder = _session(monkeypatch, tmp_path, _FixedPort(0.9))
+
+        _act(
+            state,
+            player_id,
+            "travel_to",
+            {"destination_label": "閲覧室", "goal_outcome": "achieved"},
+        )
+
+        assert self._skips(recorder) == ["goal_settled_by_action"]
+
+    def test_a_judged_action_leaves_no_skip(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """問える目的があって判断したなら、判断の trace に skipped_reason は None で載る。"""
+        state, player_id, _, recorder = _session(monkeypatch, tmp_path, _FixedPort(0.9))
+
+        _act(state, player_id, "travel_to", {"destination_label": "閲覧室"})
+
+        (judgment,) = recorder.goal_judgments()
+        assert judgment["skipped_reason"] is None
+        assert judgment["goal_id"] == "goal-self-1"
+
+
+class TestTheLockedGoalsAreNoticedAtStartup:
+    """目的の知らせを有効にしたのに初期目的が固定されるプレイヤーがいれば、起動時に警告と trace を残すことを保証する (#1512)。"""
+
+    @staticmethod
+    def _notices(recorder: _CapturingRecorder) -> list[dict[str, Any]]:
+        return [
+            payload
+            for kind, payload in recorder.records
+            if kind == TraceEventKind.NOTE
+            and payload.get("topic") == "goal_completion_hint"
+        ]
+
+    def test_locked_initial_goals_are_noted_once_when_the_trace_starts(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """勝敗条件のあるシナリオで有効にすると、recorder を差し込んだ時点で固定されるプレイヤーを並べた note が 1 件残る。差し直しても増えない。"""
+        state = _create_session(monkeypatch, tmp_path, runtime_config=_config())
+        runtime = state.runtime
+        recorder = _CapturingRecorder()
+
+        runtime.set_trace_recorder(recorder)
+        runtime.set_trace_recorder(recorder)
+
+        (notice,) = self._notices(recorder)
+        assert notice["locked_player_ids"] == [
+            int(pid.value) for pid in runtime.get_player_ids()
+        ]
+        assert notice["all_players_locked"] is True
+
+    def test_locked_initial_goals_are_warned_when_the_runtime_is_built(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """勝敗条件のあるシナリオで有効にすると、session を組んだ時点で warning が出る。"""
+        with caplog.at_level("WARNING"):
+            _create_session(monkeypatch, tmp_path, runtime_config=_config())
+
+        assert any(
+            "TYPED_JUDGMENT_GOAL_HINT_ENABLED" in record.getMessage()
+            for record in caplog.records
+            if record.levelname == "WARNING"
+        )
+
+    def test_unlocked_initial_goals_leave_no_note(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """どのプレイヤーの初期目的も固定されないなら、note は残らない。"""
+        state = _create_session(monkeypatch, tmp_path, runtime_config=_config())
+        runtime = state.runtime
+        monkeypatch.setattr(runtime, "_resolve_player_goal_locked", lambda _pid: False)
+        recorder = _CapturingRecorder()
+
+        runtime.set_trace_recorder(recorder)
+
+        assert self._notices(recorder) == []
+
+    def test_a_disabled_goal_hint_leaves_no_note(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """目的の知らせを有効にしていなければ、固定された目的があっても note は残らない。"""
+        state = _create_session(
+            monkeypatch, tmp_path, runtime_config=_config(goal_hint_enabled=False)
+        )
+        recorder = _CapturingRecorder()
+
+        state.runtime.set_trace_recorder(recorder)
+
+        assert self._notices(recorder) == []
