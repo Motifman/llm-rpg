@@ -88,6 +88,9 @@ class TestOutcomeAndReason:
             def round_assignment_trace(self) -> list:
                 return []
 
+            def team_result_trace(self, _end_check) -> None:
+                return None
+
             def pop_llm_call_count(self) -> int:
                 return 0
 
@@ -130,6 +133,92 @@ class TestOutcomeAndReason:
         assert summary["outcome"] == "LOSE"
         assert summary["end_reason"] == "インポスター陣営が人数差を作った"
         assert state.llm_wiring.llm_session_run_id == "run034-calibration"
+        events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        assert not [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
+
+    def test_drive_scenario_records_team_result_when_the_game_ends(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """終了した判定結果から runtime が team_result の payload を返すと、その tick で trace に 1 件残る。"""
+        import ai_rpg_world.presentation.spot_graph_game.runtime_manager as manager_module
+
+        payload = {
+            "reason": "北の班: チームの全員が RESCUED になった (2人)",
+            "teams": [{"team_id": "north", "result": "WIN"}],
+            "players": [{"player_id": 1, "team_id": "north", "outcome": "RESCUED", "result": "WIN"}],
+        }
+        end_check = GameEndResult(is_ended=True, result=None, reason=payload["reason"])
+        received: list[GameEndResult] = []
+
+        class FakeRuntime:
+            tick = 0
+
+            def get_player_ids(self):
+                return ()
+
+            def set_trace_recorder(self, recorder) -> None:
+                pass
+
+            def current_tick(self) -> int:
+                return self.tick
+
+            def advance_tick(self) -> None:
+                self.tick += 1
+
+            def check_game_end(self) -> GameEndResult:
+                return end_check
+
+            def round_assignment_trace(self) -> list:
+                return []
+
+            def team_result_trace(self, checked: GameEndResult) -> dict:
+                received.append(checked)
+                return payload
+
+            def pop_llm_call_count(self) -> int:
+                return 0
+
+            def count_traveling_players(self) -> int:
+                return 0
+
+            def shutdown(self, *, timeout: float) -> None:
+                pass
+
+        state = SimpleNamespace(
+            runtime=FakeRuntime(),
+            llm_wiring=SimpleNamespace(
+                prompt_dataset_sink=None,
+                llm_turn_trigger=SimpleNamespace(schedule_turn=lambda _pid: None),
+            ),
+        )
+
+        class FakeManager:
+            def __init__(self, **_kwargs) -> None:
+                self._sessions = {"session": state}
+
+            def create_character(self, _request):
+                return SimpleNamespace(id="character")
+
+            def create_session(self, _request):
+                return SimpleNamespace(session_id="session")
+
+        monkeypatch.setattr(manager_module, "GameRuntimeManager", FakeManager)
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            _drive_scenario(
+                run_id="team-run",
+                scenario_path=tmp_path / "scenario.json",
+                max_world_ticks=5,
+                recorder=recorder,
+                progress=lambda _message: None,
+            )
+
+        events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        team_events = [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
+        assert received == [end_check]
+        assert len(team_events) == 1
+        assert team_events[0]["tick"] == 1
+        assert team_events[0]["payload"] == payload
 
 
 class TestLlmRunHealth:

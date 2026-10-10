@@ -64,11 +64,11 @@
 
 | # | 項目 | 判定 | 書き方の要点 | 根拠 | 制限 |
 |---|---|---|---|---|---|
-| 14 | チームの定義と勝利条件 | **部分的** | 陣営は `initial_state.role`。`mutually_known_roles` で同じ役同士が互いを知る。陣営ごとの勝利は、陣営 A から見た `win` / `lose` として書く | `L/parse_actors.py:44-76`。使用例: station_drill | **陣営という概念が無い**。結果は全体で 1 つ。3 陣営以上、陣営ごとの勝敗、引き分けは表せない |
+| 14 | チームの定義と勝利条件 | **できる** (#1516 で追記) | シナリオの `teams` に、`id`、`name`、`member_state` (所属を決める `initial_state` の値)、`win` (勝利条件) を書く。チームの全員の個人結果を見る `ALL_MEMBERS_HAVE_OUTCOME` が使える。回ごとの組み分けは `round_assignment` の枠に `member_state` の値を書く。勝つのは高々 1 チームで、同時に成立したら DRAW | `L/parse_teams.py`、`D/value_object/scenario_team.py`、design_decisions D1516 | `teams` を書くと `game_end_conditions.win` / `lose` は置けない。チームの所属・名前はプロンプトに出ない。チーム内だけに公開する属性とチームだけの連絡手段は無い |
 | 15 | 隠れた役 | **できる** | `initial_state.role` と `PLAYER_STATE_IS`。偽装用の操作を並べることもできる | `A/world_graph/hidden_interaction_filter.py` | 役の割り当ては JSON に固定 |
 | 16 | 攻撃・妨害・盗み・死・脱落 | **できる** | `player_interactions` (`APPLY_DAMAGE`、`REMOVE_ITEM` と `GIVE_ITEM`、`witness_policy`、暗所の目撃文)、`death`、`tend_to_player`、`departed_agents_enabled` | `L/parse_world.py:78-235, 307-331` | 相手に状態異常や移動を与える効果は未配線。`attack` は人に使えない |
 | 17 | 会議と投票 | **できる** | `meeting` ブロック、`CALL_MEETING`、`report_body`、`vote` | `L/parse_world.py:269-305, 371-390` | 投票の方式は engine 固定 (推測) |
-| 18 | 勝敗の判定 | **部分的** | `game_end_conditions.win` / `lose`、`player_outcome_rules` | `L/validate_features.py:81-96` | 個人の結果は **RESCUED か STRANDED だけ**。役を見る条件が無く、**チーム単位の個人結果を書けない** |
+| 18 | 勝敗の判定 | **できる** (#1516 で追記) | `game_end_conditions.win` / `lose` / `end`、`player_outcome_rules`。`teams` のあるシナリオでは `teams[].win` と `end` | `L/validate_features.py` の `_GAME_END_CONDITION_ALLOWED_SECTIONS`、design_decisions D1516 | 個人の結果は RESCUED / DEAD / EJECTED / STRANDED で、個人の勝敗は所属チームの勝敗と同じ (別の軸として trace の `team_result` に並ぶ)。個人結果の規則に役を見る条件は無い。結果を本人に届けて記憶へ持ち越す経路は無い |
 
 ## D. 繰り返し遊ぶ
 
@@ -82,7 +82,7 @@
 
 | # | 項目 | 判定 | 根拠 | 制限 |
 |---|---|---|---|---|
-| 22 | 行動の結果・フラグ・資源の変化が trace に出るか | **部分的** | 出るもの: `action`、`action_result` (`success`、`error_code`、`precondition_failure_kind`)、`world_flag_changed`、`scenario_predicate_evaluated` (出来事・反応・個人結果の判定)、`observation`、`position_change`、`meeting_started/ended`、`run_end` | **出ないもの**: 物体の state の変化、持ち物の増減、HP、個人結果の確定、操作の前提条件の評価 (どの条件で落ちたか)。「資源が尽きたのを見て場所を変えた」のような、世界の状態との対応が組み立てにくい |
+| 22 | 行動の結果・フラグ・資源の変化が trace に出るか | **部分的** | 出るもの: `action`、`action_result` (`success`、`error_code`、`precondition_failure_kind`)、`world_flag_changed`、`scenario_predicate_evaluated` (出来事・反応・個人結果の判定)、`observation`、`position_change`、`meeting_started/ended`、`run_end` | **出ないもの**: 物体の state の変化、持ち物の増減、HP、個人結果の確定 (終了時の個人結果は、`teams` のあるシナリオでだけ `team_result` に出る)、操作の前提条件の評価 (どの条件で落ちたか)。「資源が尽きたのを見て場所を変えた」のような、世界の状態との対応が組み立てにくい |
 
 ## 確かめた不具合 (#1513 で直した)
 
@@ -100,7 +100,7 @@
 | I-6 | 移動に決まりを付けられない (渡ったときの効果、同時に渡る人数) | #1517 |
 | I-7 | 出来事の条件に時間帯が無い。天候の遷移を書けず、天候を変える効果も無い | #1517 |
 | I-8 | 乱数のシードが一部にしか効かない | #1514 (#1529 で対応) |
-| I-9 | 陣営が概念として無い (陣営ごとの勝敗、チーム内の情報、チームの連絡手段) | #1516 |
+| I-9 | 陣営が概念として無い (陣営ごとの勝敗、チーム内の情報、チームの連絡手段) | #1516 (勝敗は対応。チーム内の情報は続く PR、連絡手段は未対応) |
 | I-10 | 本人の過去の行為を条件にできない | #1517 |
 | I-11 | 約束を記録し、守ったかを判定する仕組みが無い | 優先度を下げた (予期の仕組みで他人についての予期として扱う) |
 | I-12 | `COMBINE_ITEMS` が JSON から使えない | 優先度を下げた (今ある効果を並べれば表現できる) |

@@ -1898,6 +1898,7 @@ _REQUIRED_END_CONDITION_FIELDS: dict[GameEndConditionTypeEnum, tuple[str, ...]] 
         "comparison_state",
     ),
     GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: ("required_flags", "min_set_count"),
+    GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME: ("required_outcome",),
 }
 
 #: 必須フィールドを埋めるための、型として妥当な最小の値。
@@ -1913,6 +1914,7 @@ _SAMPLE_END_CONDITION_VALUES: dict[str, object] = {
     "comparison_state": {"role": "keeper"},
     "required_flags": ("sample_flag",),
     "min_set_count": 1,
+    "required_outcome": PlayerOutcomeEnum.RESCUED,
 }
 
 #: 必須フィールドを持たない条件型と、持たなくて成立する理由。

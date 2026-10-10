@@ -78,21 +78,29 @@ _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, str | None] = {
 
 # 終了条件は、置かれた配列が成立時の勝敗ラベルを決める。条件型を追加した人が
 # 「勝敗あり / 中立」のどちらかを判断するまで loader が受理しないよう全件を列挙する。
+#
+# teams のあるシナリオ (#1516) では、勝敗はチームの ``win`` が決める。全体の
+# ``end`` は「どのチームも勝たずに終わる」中立の終わりなので ``team_end`` として
+# 読み、世界の出来事を見る条件をすべて置ける。
+_WORLD_END_SECTIONS = frozenset({"win", "lose", "team_win", "team_end"})
 _GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
     GameEndConditionTypeEnum, frozenset[str]
 ] = {
-    GameEndConditionTypeEnum.ALL_AT_SPOT: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.ANY_AT_SPOT: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.FLAG_SET: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.TICK_LIMIT: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: frozenset(
-        {"win", "lose"}
+    GameEndConditionTypeEnum.ALL_AT_SPOT: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.ANY_AT_SPOT: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.FLAG_SET: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.TICK_LIMIT: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: (
+        _WORLD_END_SECTIONS
     ),
     GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE: (
-        frozenset({"win", "lose"})
+        _WORLD_END_SECTIONS
     ),
-    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: frozenset({"win", "lose"}),
-    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end"}),
+    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset(
+        {"end", "team_end"}
+    ),
+    GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME: frozenset({"team_win"}),
 }
 
 _SCENARIO_EVENT_TRIGGERS = frozenset({"ON_TICK", "ON_CHAIN"})

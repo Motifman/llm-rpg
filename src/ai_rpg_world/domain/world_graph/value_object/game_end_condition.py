@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -29,6 +30,8 @@ class GameEndCondition:
     # FLAGS_SET_AT_LEAST 用。数える対象の作業フラグと、成立に要る個数。
     required_flags: tuple[str, ...] | None = None
     min_set_count: int | None = None
+    # ALL_MEMBERS_HAVE_OUTCOME 用。チームの全員がなっているべき個人結果。
+    required_outcome: PlayerOutcomeEnum | None = None
 
     def __post_init__(self) -> None:
         """条件型ごとの必須フィールド欠落を構築時に拒否する。"""
@@ -120,6 +123,18 @@ class GameEndCondition:
             if self.target_spot_id is None:
                 raise GameEndConditionValidationException(
                     f"{self.condition_type.value} には target_spot_id が必要です"
+                )
+            return
+        if self.condition_type is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME:
+            if not isinstance(self.required_outcome, PlayerOutcomeEnum):
+                raise GameEndConditionValidationException(
+                    "ALL_MEMBERS_HAVE_OUTCOME には required_outcome が必要です"
+                )
+            if not self.required_outcome.is_resolved:
+                # 全員が UNRESOLVED で始まるので、開始した瞬間に成立する。
+                raise GameEndConditionValidationException(
+                    "ALL_MEMBERS_HAVE_OUTCOME の required_outcome に UNRESOLVED は"
+                    "指定できません"
                 )
             return
         if self.condition_type is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED:

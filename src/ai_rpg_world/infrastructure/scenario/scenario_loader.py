@@ -68,6 +68,7 @@ from ai_rpg_world.infrastructure.scenario.parse_reactive_bindings import (
     parse_reactive_object_state_bindings,
     parse_reactive_passage_bindings,
 )
+from ai_rpg_world.infrastructure.scenario.parse_teams import parse_teams
 from ai_rpg_world.infrastructure.scenario.parse_round_assignment import (
     apply_round_assignment,
 )
@@ -230,7 +231,14 @@ class ScenarioLoader:
             raw.get("mutually_known_roles"), players
         )
         role_personas = parse_role_personas(raw.get("role_personas"), players)
+        teams = parse_teams(raw.get("teams"), players, mapper)
         raw_end_conditions = raw.get("game_end_conditions", {})
+        if teams and (raw_end_conditions.get("win") or raw_end_conditions.get("lose")):
+            raise ScenarioLoadError(
+                "teams を書いたシナリオでは game_end_conditions.win / lose を"
+                "置けません。勝ちは teams[].win に、どのチームも勝たない終わりは"
+                " game_end_conditions.end に書いてください"
+            )
         win_conds = parse_end_conditions(
             raw_end_conditions.get("win", []), mapper, section="win"
         )
@@ -238,7 +246,9 @@ class ScenarioLoader:
             raw_end_conditions.get("lose", []), mapper, section="lose"
         )
         end_conds = parse_end_conditions(
-            raw_end_conditions.get("end", []), mapper, section="end"
+            raw_end_conditions.get("end", []),
+            mapper,
+            section="team_end" if teams else "end",
         )
         initial_flags = tuple(raw.get("initial_flags", []))
         ongoing_conditions = parse_ongoing_conditions(
@@ -337,6 +347,7 @@ class ScenarioLoader:
             player_trade_offer_expires_in_ticks=player_trade_offer_expires,
             market=market,
             round_assignments=round_assignments,
+            teams=teams,
             **meeting_tuning,
         )
         validate_feature_consistency(result, raw)

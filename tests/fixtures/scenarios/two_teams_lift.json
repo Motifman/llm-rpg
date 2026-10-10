@@ -1,0 +1,85 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "two_teams_lift",
+    "title": "一度だけ動く昇降機",
+    "description": "二つの班が、一度だけ動く昇降機で谷を出ようとする。班の全員が乗れた班が勝つ。",
+    "theme": "test",
+    "difficulty": "easy",
+    "estimated_ticks": 10,
+    "author": "test",
+    "tags": [],
+    "llm_objective_text": "班の全員で昇降機に乗って谷を出る。"
+  },
+  "item_specs": [],
+  "spots": [
+    {"id": "camp_north", "name": "北の野営地", "description": "崖の上の平地。"},
+    {
+      "id": "lift",
+      "name": "昇降機の乗り場",
+      "description": "錆びた籠が吊られている。",
+      "interior": {
+        "objects": [
+          {
+            "id": "lift_lever",
+            "name": "籠のレバー",
+            "description": "一度倒すと籠が下りていき、二度と上がってこない。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "pull_lift_lever",
+                "display_label": "レバーを倒す",
+                "effects": [
+                  {"effect_type": "SET_FLAG", "parameters": {"flag_name": "lift_departed"}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "籠が軋みながら谷へ下りはじめた。"}}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {"id": "camp_south", "name": "南の野営地", "description": "沢沿いの岩場。"}
+  ],
+  "connections": [
+    {"id": "north_to_lift", "from": "camp_north", "to": "lift", "name": "北の坂道", "travel_ticks": 1, "is_bidirectional": true},
+    {"id": "lift_to_south", "from": "lift", "to": "camp_south", "name": "南の坂道", "travel_ticks": 1, "is_bidirectional": true}
+  ],
+  "players": [
+    {"id": "north_1", "name": "ミナト", "spawn_spot": "camp_north", "initial_items": [], "initial_state": {"team": "north"}, "knows_at_start": ["north_2"]},
+    {"id": "north_2", "name": "トウカ", "spawn_spot": "camp_north", "initial_items": [], "initial_state": {"team": "north"}, "knows_at_start": ["north_1"]},
+    {"id": "south_1", "name": "ゲンジ", "spawn_spot": "camp_south", "initial_items": [], "initial_state": {"team": "south"}, "knows_at_start": ["south_2"]},
+    {"id": "south_2", "name": "サヤ", "spawn_spot": "camp_south", "initial_items": [], "initial_state": {"team": "south"}, "knows_at_start": ["south_1"]}
+  ],
+  "teams": [
+    {
+      "id": "north",
+      "name": "北の班",
+      "member_state": {"team": "north"},
+      "win": [{"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"}]
+    },
+    {
+      "id": "south",
+      "name": "南の班",
+      "member_state": {"team": "south"},
+      "win": [{"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"}]
+    }
+  ],
+  "player_outcome_rules": [
+    {
+      "id": "ride_the_lift",
+      "trigger": {"condition_type": "FLAG_SET", "flag_name": "lift_departed"},
+      "once": true,
+      "player_conditions": [
+        {"condition_type": "PLAYER_AT_SPOT", "target_spot": "lift"}
+      ],
+      "outcome": "RESCUED"
+    }
+  ],
+  "game_end_conditions": {
+    "end": [{"type": "FLAG_SET", "target_flag": "lift_departed"}]
+  },
+  "initial_flags": [],
+  "scenario_events": []
+}
