@@ -126,6 +126,22 @@ class PlayerAcquaintances:
             and 0 <= now - a.last_met_turn <= within_turns
         )
 
+    def knows(self, recipient: PlayerId, other: PlayerId) -> bool:
+        """引けないときは知らない側へ倒す。知っていると答えると、相手の存在が届く。"""
+        if other.value == recipient.value:
+            return True
+        name = self._names_by_player_id.get(other.value)
+        if name is None:
+            return False
+        try:
+            return self.find(recipient, name) is not None
+        except Exception:
+            _logger.exception(
+                "知り合いの記録を引けず、知らない相手として扱う (recipient=%s)",
+                recipient.value,
+            )
+            return False
+
     def view_for(
         self, recipient: PlayerId, output: ObservationOutput
     ) -> ObservationOutput | None:

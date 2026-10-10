@@ -415,3 +415,47 @@ class TestViewForWithheld:
         )
 
         assert acquaintances.view_for(NOA, _remote_revive("リオ")) is None
+
+
+class TestKnowsPlayer:
+    """受け手の Being が、プレイヤー番号で指した相手を知っているかを答えることを保証する (#1531)。"""
+
+    def test_introduced_player_is_known(self) -> None:
+        """エイダは、入るときにノアを紹介されていれば、ノアを知っていると答える。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
+
+        assert acquaintances.knows(ADA, NOA) is True
+
+    def test_unmet_player_is_not_known(self) -> None:
+        """エイダは、ノアを紹介されても会ってもいなければ、知らないと答える。"""
+        acquaintances, _, _ = _make()
+
+        assert acquaintances.knows(ADA, NOA) is False
+
+    def test_oneself_is_known(self) -> None:
+        """エイダは、自分自身 (同じプレイヤー番号) を知っていると答える。知り合いの記録に自分が無くてもよい。"""
+        acquaintances, _, _ = _make()
+
+        assert acquaintances.knows(ADA, ADA) is True
+
+    def test_non_participant_is_not_known(self) -> None:
+        """シナリオの参加者に無いプレイヤー番号の相手は、知らないと答える。"""
+        acquaintances, _, _ = _make()
+
+        assert acquaintances.knows(ADA, STRANGER) is False
+
+    def test_lookup_failure_is_not_known(self) -> None:
+        """受け手の Being を引くところで例外が出たら、知らないと答える。知っていると答えると相手の存在が届くため。"""
+        def broken(_pid: PlayerId) -> BeingId | None:
+            raise RuntimeError("lookup failed")
+
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=broken,
+            turn_reader=InMemoryExpectationRepository(),
+            environment_name="島",
+            names_by_player_id=NAMES,
+        )
+
+        assert acquaintances.knows(ADA, NOA) is False

@@ -181,6 +181,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
     SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
@@ -6848,6 +6849,9 @@ def create_world_runtime(
         )
         if message is None:
             return  # UNRESOLVED への遷移は通常起きないが防御的に skip
+        # 救助・取り残し・死亡は、名前を伏せても知らない誰かがいることが分かって
+        # しまう。追放は会議の場で全員が見て決めたことなので、全員へ届ける。
+        withheld_from_strangers = new_outcome is not PlayerOutcomeEnum.EJECTED
         output = ObservationOutput(
             prose=message,
             structured={
@@ -6860,6 +6864,10 @@ def create_world_runtime(
             observation_category="environment",
             schedules_turn=True,
             breaks_movement=False,
+            subject_name=actor_name if withheld_from_strangers else None,
+            if_subject_unknown=(
+                WithheldFromStrangers() if withheld_from_strangers else None
+            ),
         )
         # 死は世界の設定に従う。追放は常に全員へ。
         #
