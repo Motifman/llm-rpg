@@ -475,6 +475,54 @@
       "interior": {
         "objects": [
           {
+            "id": "oil_barrel",
+            "name": "油の樽",
+            "description": "壁際に置かれた古い油の樽。底の栓から、カンテラに足す油を汲める。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 2,
+              "stock_capacity": 2,
+              "stock_tick": 0,
+              "stock_refill_interval": 12
+            },
+            "interactions": [
+              {
+                "action_name": "draw_lamp_oil",
+                "display_label": "油を汲む",
+                "witness_observation_message": "{actor}が樽から油を汲んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "oil_barrel",
+                    "required_quantity": 1,
+                    "failure_message": "栓をひねっても、いまは油が垂れてこない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "oil_barrel",
+                      "amount": 1
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "lamp_oil"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "栓をひねり、カンテラに足す油を一本ぶん汲んだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "id": "storehouse_crates",
             "name": "奥の木箱",
             "description": "倉庫の奥に積まれた木箱。",
@@ -1592,7 +1640,7 @@
               },
               {
                 "action_name": "pour_small_fuel_can",
-                "display_label": "残りの少ない缶を注ぐ",
+                "display_label": "燃料が少し残った缶を注ぐ",
                 "witness_observation_message": "{actor}が発電機に燃料を注いでいる。",
                 "preconditions": [
                   {
@@ -1686,9 +1734,14 @@
                     "failure_message": "スイッチを入れても、ポンプはぴくりとも動かない。"
                   },
                   {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "pump_pulse",
+                    "failure_message": "ポンプはいま唸りを上げて動いている最中だ。"
+                  },
+                  {
                     "condition_type": "FLAG_SET",
                     "flag_name": "generator_fuel_1",
-                    "failure_message": "スイッチを入れても、ポンプはぴくりとも動かない。"
+                    "failure_message": "スイッチを入れると、ポンプは一瞬唸って、すぐに黙った。"
                   }
                 ],
                 "effects": [
@@ -1727,7 +1780,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "ポンプが低く唸り、配管の奥で水を吸い上げる音がした。しばらくして音はやんだ。"
+                      "message": "スイッチを入れると、ポンプが低く唸りはじめた。"
                     }
                   }
                 ]
@@ -2086,7 +2139,7 @@
           {
             "id": "lift",
             "name": "昇降機",
-            "description": "地上へ続く縦穴に吊られた鉄の籠。籠の入口の上に「定員三名」と刻んだ鉄の札が打ち付けてある。脇に操作盤があり、鍵穴と始動の把手が付いている。",
+            "description": "地上へ続く縦穴に吊られた鉄の籠。籠の入口の上に「定員三名」と刻んだ鉄の札が打ち付けてある。脇に操作盤があり、鍵穴と始動の把手が付いている。鍵穴の下に「起動鍵は鉱山会社の事務所で預かる」と書いた古い張り紙が残っている。",
             "object_type": "OTHER",
             "state": {
               "used": 0,
@@ -2624,7 +2677,7 @@
       "knows_at_start": [
         "mio"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはハル、山の測量を請け負う調査隊の隊長。慎重で、確かめてから動く。古い測量日誌を手がかりにしている。\n\n古い測量日誌には、こうある。中層の分岐の大水門を開けると、下層の近道が水に沈む。機械室の排水ポンプを動かせば、溜まった水を引かせられる。\n\n話し方: 落ち着いた常体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはハル、山の測量を請け負う調査隊の隊長。慎重で、確かめてから動く。古い測量日誌を手がかりにしている。\n\n古い測量日誌には、こうある。中層の分岐の大水門が開いているあいだ、下層の近道は水に浸かって通れない。別の頁には、機械室の排水ポンプで坑道の水を引かせた日のことが、短く書き留めてある。\n\n話し方: 落ち着いた常体。",
       "objective": "ミオと二人そろって、坑道の奥の昇降機で外へ出る。"
     },
     {
@@ -2642,7 +2695,7 @@
       "knows_at_start": [
         "haru"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはミオ、調査隊の若い隊員。身軽で、先に行って様子を見るのが得意。機械いじりが好き。\n\n古い測量日誌には、こうある。中層の分岐の大水門を開けると、下層の近道が水に沈む。機械室の排水ポンプを動かせば、溜まった水を引かせられる。\n\n話し方: 気さくな常体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはミオ、調査隊の若い隊員。身軽で、先に行って様子を見るのが得意。機械いじりが好き。\n\n古い測量日誌には、こうある。中層の分岐の大水門が開いているあいだ、下層の近道は水に浸かって通れない。別の頁には、機械室の排水ポンプで坑道の水を引かせた日のことが、短く書き留めてある。\n\n話し方: 気さくな常体。",
       "objective": "ハルと二人そろって、坑道の奥の昇降機で外へ出る。"
     },
     {
@@ -2662,7 +2715,7 @@
       "knows_at_start": [
         "sayo"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。\n\n坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。\n\n話し方: ぶっきらぼうな常体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。昇降機を動かす起動鍵も、その金庫にしまわれていた。\n\n坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。\n\n話し方: ぶっきらぼうな常体。",
       "objective": "サヨと二人そろって、坑道の奥の昇降機で外へ出る。"
     },
     {
@@ -2682,7 +2735,7 @@
       "knows_at_start": [
         "gen"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n父から、事務所の金庫の番号は 1907 だと聞いている。\n\n坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。\n\n話し方: はきはきした敬体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度上がったら二度と下りてこず、籠には三人しか乗れないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n父から、事務所の金庫の番号は 1907 だと聞いている。昇降機を動かす起動鍵は、その金庫にしまわれていたそうだ。\n\n坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。\n\n話し方: はきはきした敬体。",
       "objective": "ゲンと二人そろって、坑道の奥の昇降機で外へ出る。"
     }
   ],
@@ -2895,6 +2948,336 @@
           "effect_type": "SET_FLAG",
           "parameters": {
             "flag_name": "generator_warm"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_drained_valve_1",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_1"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_south_entry"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gate_a_open"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の奥で、水が勢いよく吸い上げられていく音がした。やがて音は軽くなった。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_refilling_valve_1",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_1"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_south_entry"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gate_a_open"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の奥で水を吸い上げる音がするが、奥から水の流れ込む音がやまない。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_dry_valve_1",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_1"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "flooded_south_entry"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管が空気を吸う音がするばかりで、水の音はしない。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_drained_valve_2",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_2"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_shortcut"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gate_c_open"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の奥で、水が勢いよく吸い上げられていく音がした。やがて音は軽くなった。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_refilling_valve_2",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_2"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_shortcut"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gate_c_open"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の奥で水を吸い上げる音がするが、奥から水の流れ込む音がやまない。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_dry_valve_2",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_2"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "flooded_shortcut"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管が空気を吸う音がするばかりで、水の音はしない。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_drained_valve_3",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_3"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_north_entry"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gate_b_open"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の奥で、水が勢いよく吸い上げられていく音がした。やがて音は軽くなった。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_refilling_valve_3",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_3"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_north_entry"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gate_b_open"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の奥で水を吸い上げる音がするが、奥から水の流れ込む音がやまない。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_sounds_dry_valve_3",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": false,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_3"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "flooded_north_entry"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管が空気を吸う音がするばかりで、水の音はしない。"
           }
         }
       ]
