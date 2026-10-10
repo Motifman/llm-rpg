@@ -68,66 +68,20 @@ class TestCurrentSpotFamiliarityE2E:
 
 
 class TestNearbyPlayerFamiliarityE2E:
-    """初対面の player に対して「初めて会った」が出る。"""
+    """別々の場所から始めた二人が顔を合わせると、双方の【現在地と周囲】で相手に「初めて会った」が付く。"""
 
-    def test_spot_player_rendered(self) -> None:
-        """同 spot 初対面 player に初めて会った注記が出る。"""
+    def test_both_sides_see_first_meeting_after_one_walks_in(self) -> None:
+        """カイトがリンのいる閲覧室へ歩いて入ると、入った側のカイトにも、いた側のリンにも、相手の名前に (初めて会った) が付く。"""
         runtime = _create_runtime()
-        pids = runtime.get_player_ids()
-        kaito = pids[0]
-        rin = pids[1]
-        # entity_entered_spot 観測を rin に直接届けて「カイトが来た」を encounter にする
-        from datetime import datetime, timezone
+        kaito, rin = runtime.get_player_ids()[:2]
 
-        from ai_rpg_world.application.observation.contracts.dtos import (
-            ObservationOutput,
-        )
-
-        output = ObservationOutput(
-            prose="カイトがやってきた。",
-            structured={
-                "type": "entity_entered_spot",
-                "actor": "カイト",
-                "spot_name": "閲覧室",
-            },
-            observation_category="social",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        # 観測を rin に届ける (= 注: rin の同 spot に kaito が visible になる
-        # わけではないので、prompt の「同じ場所にいるプレイヤー」リストには出ない。
-        # encounter memory にだけ記録される。本テストでは encounter 記録の
-        # 結果として、もし kaito が同 spot に居れば familiarity が出ることを
-        # 確認するが、実際は kaito は別 spot なので「他のプレイヤーはこの
-        # スポットにいない」のままになる。)
-        runtime._observation_appender.append(
-            rin, output, datetime.now(timezone.utc), None
-        )
-
-        # kaito を rin の spot に動かして同 spot に居させる
         runtime.do_move(kaito, "reading_room")
-        # 注: do_move 直後では travel state を立てて即 return する設計 (#404)
-        # advance_until_player_idle で travel を完了させる
         runtime.advance_until_player_idle(kaito)
 
-        # この時点で kaito は rin の spot (reading_room) に居る (PR3 spawn 後は
-        # observation pipeline で rin に entity_entered_spot が届くため
-        # encounter は二重記録になる可能性あり)
-        section = _current_state_section(_user_prompt_text(runtime, rin))
-        # PR-N (task #30): graph_event_flusher が tick 末尾で graph events を
-        # PipelineEventPublisher に流すようになったため、kaito の travel 完了で
-        # 発火する PlayerEnteredSpotEvent が rin に届き、encounter が 2 回目以降
-        # にカウントされる。結果として「初めて会った」注記が常に出るとは限らない
-        # (= 直前に同じ kaito の到着観測が rin に届いていれば first encounter
-        # ではなくなる)。本テストでは encounter 自体が記録されていることを
-        # 別経路で確認する。
-        from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
-            EncounterKey,
-        )
-        assert (
-            runtime._encounter_memory.lookup(rin, EncounterKey.player("カイト"))
-            is not None
-        )
+        rin_section = _current_state_section(_user_prompt_text(runtime, rin))
+        kaito_section = _current_state_section(_user_prompt_text(runtime, kaito))
+        assert '"カイト" (初めて会った)' in rin_section, rin_section
+        assert '"リン" (初めて会った)' in kaito_section, kaito_section
 
 
 class TestPromptRegressionForViewer:
@@ -181,7 +135,7 @@ class TestEncounterCuesReachEpisodicRecall:
         )
         rin = runtime.get_player_ids()[1]
         tick = runtime.current_tick()
-        runtime._encounter_memory.observe(rin, EncounterKey.player("カイト"), tick)
+        runtime._player_acquaintances.record_meeting(rin, "カイト")
         runtime._encounter_memory.observe(rin, EncounterKey.spot("entrance_hall"), tick)
         self.entrance_hall = runtime.id_mapper.get_int("spot", "entrance_hall")
         recorder = _TraceRecorderSpy()
@@ -197,7 +151,7 @@ class TestEncounterCuesReachEpisodicRecall:
         return cues
 
     def test_met_player_and_visited_spot_become_situation_cues(self) -> None:
-        """表示名 'カイト' の人物と、いま居ない場所 entrance_hall に遭遇した記録から、episodic と semantic の両方の受動想起の situation_cues に entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が入る。"""
+        """知り合いの記録で直近に会った 'カイト' と、環境の encounter でいま居ない場所 entrance_hall に遭遇した記録から、episodic と semantic の両方の受動想起の situation_cues に entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が入る。"""
         from ai_rpg_world.application.trace.events import TraceEventKind
 
         kinds = (TraceEventKind.EPISODIC_RECALL, TraceEventKind.SEMANTIC_PASSIVE_RECALL)

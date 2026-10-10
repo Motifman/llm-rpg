@@ -615,6 +615,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         afterglow_store=afterglow_store,
         recall_habituation_store=recall_habituation_store,
         expectation_store=expectation_store,
+        acquaintance_store=getattr(runtime, "_acquaintance_store", None),
     )
 
 

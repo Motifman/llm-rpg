@@ -80,12 +80,12 @@ class TestConstructor:
 
 
 class TestEntityEnteredSpot:
-    """type=entity_entered_spot の観測から player encounter を抽出する。"""
+    """人が入ってきた観測を、環境の encounter に人として記録しないことを保証する。"""
 
-    def test_records_actor_player_encounter(
+    def test_entering_person_is_not_recorded_in_environment_encounter(
         self, memory: InMemoryEncounterMemory, kai: PlayerId
     ) -> None:
-        """actor を player encounter として 記録する。"""
+        """actor のある entity_entered_spot 観測を受けても、環境の encounter には何も残らない。会った人は Being の知り合いの記録が持つ。"""
         collector = EncounterObservationCollector(
             memory=memory, current_tick_provider=lambda: 42
         )
@@ -97,70 +97,6 @@ class TestEntityEnteredSpot:
                     "actor": "ノア",
                     "spot_name": "森の入口",
                 }
-            ),
-        )
-        record = memory.lookup(kai, EncounterKey.player("ノア"))
-        assert record is not None
-        assert record.is_first is True
-        assert record.last_seen_tick == 42
-
-    def test_two_observation_count_two(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
-        """2 度目の観測で count が 2 になる。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 5
-        )
-        struct = {"type": "entity_entered_spot", "actor": "ノア"}
-        collector.on_observation(kai, _output(structured=struct))
-        collector.on_observation(
-            kai,
-            _output(structured=struct),
-        )
-        record = memory.lookup(kai, EncounterKey.player("ノア"))
-        assert record is not None
-        assert record.count == 2
-
-    def test_actor_around_blank_strip(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
-        """actor 前後の 空白は strip される。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
-        collector.on_observation(
-            kai,
-            _output(
-                structured={"type": "entity_entered_spot", "actor": "  ノア  "}
-            ),
-        )
-        # strip 後の名前で記録される
-        assert memory.lookup(kai, EncounterKey.player("ノア")) is not None
-
-    def test_actor_missing_observation_skip(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
-        """actor 欠落の 観測は skip。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
-        collector.on_observation(
-            kai,
-            _output(structured={"type": "entity_entered_spot"}),
-        )
-        assert memory.get_records_for(kai) == {}
-
-    def test_actor_str_skip(
-        self, memory: InMemoryEncounterMemory, kai: PlayerId
-    ) -> None:
-        """actor が str でなければ skip。"""
-        collector = EncounterObservationCollector(
-            memory=memory, current_tick_provider=lambda: 0
-        )
-        collector.on_observation(
-            kai,
-            _output(
-                structured={"type": "entity_entered_spot", "actor": 42}
             ),
         )
         assert memory.get_records_for(kai) == {}
