@@ -9,7 +9,10 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -442,11 +445,9 @@ def _split_interactions_for_display_and_resolution(
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。
 
-    PR4 (Encounter Memory): ``encounter_memory`` / ``current_tick_provider`` /
-    ``spot_str_id_resolver`` を optional に受け取る。3 つ揃っていれば「現在地」
-    と「同じ場所にいるプレイヤー」line に familiarity 注記 (= ``(初めて訪れた)``
-    / ``(初めて会った)``) を付ける。1 つでも欠ければ既存挙動と完全に同じ
-    (= 後方互換)。
+    ``encounter_memory`` / ``current_tick_provider`` / ``spot_str_id_resolver``
+    が 3 つ揃っていれば「現在地」に ``(初めて訪れた)`` を、``acquaintances``
+    があれば「同じ場所にいるプレイヤー」に ``(初めて会った)`` を付ける。
     """
 
     def __init__(
@@ -455,6 +456,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         encounter_memory: IEncounterMemory | None = None,
         current_tick_provider: Callable[[], int] | None = None,
         spot_str_id_resolver: Callable[[int], str] | None = None,
+        acquaintances: PlayerAcquaintances | None = None,
     ) -> None:
         if encounter_memory is not None and not isinstance(
             encounter_memory, IEncounterMemory
@@ -473,6 +475,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._encounter_memory = encounter_memory
         self._current_tick_provider = current_tick_provider
         self._spot_str_id_resolver = spot_str_id_resolver
+        self._acquaintances = acquaintances
 
     @staticmethod
     def _phase_of(current_state: PlayerCurrentStateDto | None) -> GamePhase:
@@ -689,24 +692,18 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         viewer_player_id: PlayerId | None,
         target_display_name: str,
     ) -> str | None:
-        if not self._encounter_enabled() or viewer_player_id is None:
+        if self._acquaintances is None or viewer_player_id is None:
             return None
         if not target_display_name:
             return None
         try:
-            record = self._encounter_memory.lookup(  # type: ignore[union-attr]
-                viewer_player_id, EncounterKey.player(target_display_name)
-            )
+            met = self._acquaintances.find(viewer_player_id, target_display_name)
         except Exception:
             _logger.exception(
-                "encounter_memory.lookup failed (player=%s)",
-                target_display_name,
+                "acquaintances.find failed (player=%s)", target_display_name
             )
             return None
-        if record is None:
-            # まだ encounter が立っていない (= observation 未到達) なら注記しない
-            return None
-        if record.is_first:
+        if met is not None and met.is_first_meeting:
             return "(初めて会った)"
         return None
 
@@ -1016,9 +1013,6 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 carried_suffix = (
                     f" 〔{'、'.join(carried)}〕" if carried else " 〔手ぶら〕"
                 )
-            # PR4 (Encounter Memory): familiarity 注記 (= 「初めて会った」)。
-            # display_name (= 表示名 / 安定名) で encounter を引く。is_down /
-            # fatigue suffix と併存させたいので suffix の後に追加する。
             familiarity = self._player_familiarity_annotation(
                 viewer_player_id, entry.display_name or ""
             )

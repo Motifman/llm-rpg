@@ -4,9 +4,8 @@
 
 - runtime が ``_encounter_memory`` を生成し、observation_appender に collector が
   注入されていること (wiring の end-to-end)
-- ``observation_appender.append`` 経由で entity_entered_spot / scenario_event
-  観測が来たら encounter が記録されること (= 実 runtime の subsystems を経由
-  した wiring 確認)
+- ``observation_appender.append`` 経由で scenario_event 観測が来たら encounter
+  が記録され、entity_entered_spot 観測は知り合いの記録に回ること
 - snapshot codec list に encounter_memory が含まれ、実 runtime で capture →
   別 runtime で restore の round-trip が動くこと
 
@@ -145,11 +144,12 @@ class TestAppenderToEncounterEndToEnd:
     encounter_memory に到達する」end-to-end の経路を保証する。
     """
 
-    def test_entity_entered_spot_observation_player_encounter_recorded(
+    def test_entering_person_goes_to_acquaintances_not_encounter(
         self,
     ) -> None:
-        """entityenteredspot 観測で playerencounter が記録される。"""
+        """人が入ってきた観測は環境の encounter に人を残さず、受け手と入ってきた人の双方の知り合いの記録に残る。"""
         runtime = _create_runtime()
+        kaito = runtime.get_player_ids()[0]
         rin = runtime.get_player_ids()[1]
         runtime._observation_appender.append(
             rin,
@@ -157,13 +157,12 @@ class TestAppenderToEncounterEndToEnd:
             datetime.now(timezone.utc),
             None,
         )
-        record = runtime._encounter_memory.lookup(
+        assert runtime._encounter_memory.lookup(
             rin, EncounterKey.player("カイト")
-        )
-        assert record is not None
-        assert record.is_first is True
-        # tick は runtime.current_tick() (= 初期 0) で記録される
-        assert record.last_seen_tick == runtime.current_tick()
+        ) is None
+        acquaintances = runtime._player_acquaintances
+        assert acquaintances.find(rin, "カイト") is not None
+        assert acquaintances.find(kaito, "リン") is not None
 
     def test_scenario_event_observation_event_encounter_recorded(
         self,
@@ -182,29 +181,6 @@ class TestAppenderToEncounterEndToEnd:
         )
         assert record is not None
         assert record.is_first is True
-
-    def test_other_player_independently_encounter(self) -> None:
-        """他 player は独立に encounter を持つ。"""
-        runtime = _create_runtime()
-        kaito = runtime.get_player_ids()[0]
-        rin = runtime.get_player_ids()[1]
-        # rin だけが noa を観測
-        runtime._observation_appender.append(
-            rin,
-            _entered_spot_output("ノア"),
-            datetime.now(timezone.utc),
-            None,
-        )
-        assert (
-            runtime._encounter_memory.lookup(rin, EncounterKey.player("ノア"))
-            is not None
-        )
-        assert (
-            runtime._encounter_memory.lookup(
-                kaito, EncounterKey.player("ノア")
-            )
-            is None
-        )
 
 
 class TestSnapshotRoundTripViaRuntime:
@@ -234,12 +210,6 @@ class TestSnapshotRoundTripViaRuntime:
         rin = runtime_a.get_player_ids()[1]
         runtime_a._observation_appender.append(
             rin,
-            _entered_spot_output("カイト"),
-            datetime.now(timezone.utc),
-            None,
-        )
-        runtime_a._observation_appender.append(
-            rin,
             _scenario_event_output("storm_arrives", "嵐"),
             datetime.now(timezone.utc),
             None,
@@ -261,5 +231,4 @@ class TestSnapshotRoundTripViaRuntime:
         # restore 後の runtime_b で rin の encounter が完全復元
         records = runtime_b._encounter_memory.get_records_for(rin)
         keys = {k.canonical for k in records.keys()}
-        assert "player:カイト" in keys
         assert "event:storm_arrives" in keys

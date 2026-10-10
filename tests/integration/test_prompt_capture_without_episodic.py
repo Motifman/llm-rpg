@@ -95,15 +95,18 @@ class TestPromptCaptureWithoutEpisodicMemory:
         assert expected is not None
         assert row["being_id"] == str(expected.value)
 
-    def test_capture_disabled_does_not_wire_beings_early(self) -> None:
-        """capture と episodic がともに無効なら従来どおり補助 Being 配線を遅延する。"""
+    def test_capture_disabled_still_wires_beings_at_startup(self) -> None:
+        """capture と episodic がともに無効でも、会った相手を Being が覚えるために、起動時に全参加者の Being を用意する。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=_config(capture_enabled=False),
         )
 
-        assert runtime.aux_being_resolver is None
-        assert runtime.aux_being_default_world_id is None
+        world_id = runtime.aux_being_default_world_id
+        assert all(
+            runtime.aux_being_resolver.resolve_being_id(world_id, pid) is not None
+            for pid in runtime.get_player_ids()
+        )
 
     def test_capture_does_not_change_exposed_tools(self) -> None:
         """記録の有効化は同じ player に提示する tool 名を増減させない。"""

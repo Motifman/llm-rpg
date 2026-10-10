@@ -145,6 +145,9 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
         InMemoryStagnationPressureStore,
     )
+    from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+        InMemoryAcquaintanceRepository,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
         InMemoryExpectationRepository,
     )
@@ -170,6 +173,7 @@ def _build_stack(
         goal_journal_store=InMemoryGoalJournalStore(),
         # P-U2: CLI 経由の単発 dump では停滞感 store も in-memory で足りる。
         stagnation_pressure_store=InMemoryStagnationPressureStore(),
+        acquaintance_store=InMemoryAcquaintanceRepository(),
         expectation_store=InMemoryExpectationRepository(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()

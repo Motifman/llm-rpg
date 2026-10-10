@@ -212,6 +212,9 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
         )
+        from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+            InMemoryAcquaintanceRepository,
+        )
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
@@ -245,6 +248,7 @@ class TestExpectedPayloadKeysCoverage:
             _goal_journal_store=InMemoryGoalJournalStore(),
             _stagnation_pressure_store=InMemoryStagnationPressureStore(),
             _expectation_store=InMemoryExpectationRepository(),
+            _acquaintance_store=InMemoryAcquaintanceRepository(),
         )
 
     def _fallback_logs(

@@ -16,13 +16,13 @@ Y_after_pr634 trace で観測された問題:
 
 1. **precondition の概念が完全に欠落**。「action が存在 = 呼べば成功」と読まれる
 2. **action_name の読み方が無い**。LLM が表示名や推測名を渡す
-3. **「現在の状況」section との対応が暗黙**
+3. **【現在地と周囲】との対応が暗黙**
 
 本 PR では description を以下の方針で書き直す:
 
 - precondition の存在を明示し、満たさない場合は ``INTERACTION_PRECONDITION_FAILED``
   で失敗することを書く
-- action_name は「現在の状況」の対象行から読み取ると書く
+- action_name は【現在地と周囲】の対象行から読み取ると書く
 - シナリオに存在するとは限らない具体名を、静的な手本として載せない
 
 description は静的文字列 (prefix cache 安全)。CLAUDE.md の
@@ -59,10 +59,10 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
         )
 
     def test_includes_section(self) -> None:
-        """precondition と action 一覧は『現在の状況』section に出ているので、
+        """precondition と action 一覧は【現在地と周囲】に出ているので、
         そこを読めば良いという誘導文を入れる。"""
         desc = INTERACT_DEFINITION.description
-        assert "現在の状況" in desc, (
+        assert "【現在地と周囲】" in desc, (
             "precondition と action_name の出所を明示しないと、LLM が "
             "思いつきで推測してしまう"
         )
@@ -85,7 +85,7 @@ class TestInteractActionNameDescriptionUsesOnlyOfferedValues:
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
             "description"
         ]
-        assert "現在の状況" in action_name_desc
+        assert "【現在地と周囲】" in action_name_desc
         assert '``\"\"``' in action_name_desc
         assert "そのまま" in action_name_desc
         assert "推測" in action_name_desc, (
@@ -101,7 +101,7 @@ class TestInteractTargetDescriptionDoesNotInventAnActionExample:
         target_desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
             "description"
         ]
-        assert "現在の状況" in target_desc
+        assert "【現在地と周囲】" in target_desc
         assert '``\"\"``' in target_desc
         assert "例" not in target_desc
         assert not any(name in target_desc for name in ("gather", "search", "examine"))

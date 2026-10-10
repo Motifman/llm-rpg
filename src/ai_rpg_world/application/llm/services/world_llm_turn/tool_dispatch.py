@@ -607,7 +607,7 @@ def build_interact_invalid_label_failure(
         ),
         error_code=error_code,
         remediation=(
-            "target_label には「現在の状況」のオブジェクト欄で "
+            "target_label には【現在地と周囲】のオブジェクト欄で "
             "\"\" に囲まれているオブジェクト名を指定してください。"
             "action_name は同じ行の [] 内に表示された操作名から選んでください。"
         ),
@@ -654,7 +654,7 @@ def build_travel_to_invalid_label_failure(
         ),
         error_code=error_code,
         remediation=(
-            "destination_label には「現在の状況」の接続先で "
+            "destination_label には【現在地と周囲】の接続先で "
             "\"\" に囲まれている行き先スポット名を指定してください。"
             "矢印の左側の道や扉の名前は指定しないでください。"
         ),
@@ -673,17 +673,17 @@ def resolver_failure_remediation(tool_name: str, error_code: str) -> str:
         return "ツール説明にある必須引数と型を確認し、足りない引数を指定してください。"
     if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
         return (
-            "item_label には「現在の状況」の所持アイテム欄で \"\" に囲まれている"
+            "item_label には【現在地と周囲】の所持アイテム欄で \"\" に囲まれている"
             "アイテム名を指定してください。食べ物以外を使うと別の失敗になります。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_DROP_ITEM:
         return (
-            "item_label には「現在の状況」の所持アイテム欄で \"\" に囲まれている"
+            "item_label には【現在地と周囲】の所持アイテム欄で \"\" に囲まれている"
             "アイテム名を指定してください。地面に落ちているものの名前は drop_item には使えません。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM:
         return (
-            "ground_item_label には「現在の状況」の地面に落ちているもの欄で "
+            "ground_item_label には【現在地と周囲】の地面に落ちているもの欄で "
             "\"\" に囲まれているアイテム名を指定してください。所持アイテム名は pickup_item には使えません。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
@@ -693,20 +693,20 @@ def resolver_failure_remediation(tool_name: str, error_code: str) -> str:
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_ATTACK:
         return (
-            "target_label には「現在の状況」に表示されているモンスター名を指定してください。"
+            "target_label には【現在地と周囲】に表示されているモンスター名を指定してください。"
             "アイテム名・プレイヤー名・オブジェクト名は attack の対象には使えません。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
         return (
             "target_player_label には同じ場所で倒れているプレイヤーの名前を指定してください。"
-            "相手が別の場所にいるなら travel_to で移動し、倒れていない相手には speech_speak などを使ってください。"
+            "相手が別の場所にいるなら移動し、倒れていない相手には話しかけてください。"
         )
     if tool_name == TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION:
         return (
-            "sub_location_label には「現在の状況」に表示されているサブロケーション名を指定してください。"
+            "sub_location_label には【現在地と周囲】に表示されているサブロケーション名を指定してください。"
         )
     return (
-        "ツール説明と「現在の状況」を確認し、そのツールが要求する種類の名前を指定してください。"
+        "ツール説明と【現在地と周囲】を確認し、そのツールが要求する種類の名前を指定してください。"
     )
 
 def _wrap_every_handler_with_gold_change(
