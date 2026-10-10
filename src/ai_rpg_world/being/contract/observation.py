@@ -100,7 +100,11 @@ KNOWN_IF_POSSIBLE_FIELDS: Final = ("subject_name", "source", "place", "addressed
 
 @dataclass(frozen=True, kw_only=True)
 class Observation:
-    """``wants_wake`` の None は助言なし、False は「起こさなくてよい」。"""
+    """``wants_wake`` の None は助言なし、False は「起こさなくてよい」。
+
+    ``body_if_subject_unknown`` は、主体を知らない受け手向けに名前を伏せた本文。
+    どちらの本文で覚えるかは、受け手の Being が自分の知り合いの記録で決める。
+    """
 
     body: str
     route: Route
@@ -113,6 +117,7 @@ class Observation:
     addressed_to_self: bool | UnknownValue
 
     wants_wake: bool | None = None
+    body_if_subject_unknown: str | None = None
 
     def __post_init__(self) -> None:
         require_text(self.body, "body")
@@ -129,6 +134,12 @@ class Observation:
             require_bool(self.addressed_to_self, "addressed_to_self")
         if self.wants_wake is not None:
             require_bool(self.wants_wake, "wants_wake")
+        if self.body_if_subject_unknown is not None:
+            require_text(self.body_if_subject_unknown, "body_if_subject_unknown")
+            if self.subject_name is UNKNOWN or self.subject_is_self:
+                raise ContractViolation(
+                    "body_if_subject_unknown needs a known subject other than self"
+                )
 
     def unknown_fields(self) -> tuple[str, ...]:
         return tuple(
