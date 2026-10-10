@@ -178,7 +178,7 @@ class TestTurnMaterial:
         state, _ = port.calls[-1]
         (latest,) = [t for t in state["出来事の時系列"] if t["ターン"] == "ターン2"]
         assert latest["発言"] == ["[朝 8:00] カイが「火打ち石はある」と言った。"]
-        (own,) = latest["行動"]
+        (own,) = latest["出来事"]
         assert f"] {runtime.get_player_name(_ME)}: その場で待機した" in own
         assert state["本人の名前"] == runtime.get_player_name(_ME)
 
@@ -198,7 +198,7 @@ class TestTurnMaterial:
 
         state, _ = port.calls[-1]
         (latest,) = [t for t in state["出来事の時系列"] if t["ターン"] == "ターン2"]
-        assert latest["行動"] == []
+        assert latest["出来事"] == []
         assert len(latest["発言"]) == 1
 
 

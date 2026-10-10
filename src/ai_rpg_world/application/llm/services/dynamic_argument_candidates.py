@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -359,6 +360,46 @@ def render_dynamic_argument_candidate_table(
         return ""
     lines.append("※ 一覧にあることは操作の成功を保証しない。現在の状態や前提条件によって失敗する場合がある。")
     return "\n".join(lines)
+
+
+_CANDIDATE_TABLE_HEADING = "【現在選べる対象引数】"
+_CANDIDATE_LINE = re.compile(
+    r'^- (?P<tool>[A-Za-z0-9_]+)\.(?P<argument>[^\s(:]+)'
+    r'(?: \((?P<target>"(?:[^"\\]|\\.)*")\))?: (?P<values>.+)$'
+)
+
+
+def parse_dynamic_argument_candidate_table(text: str) -> list[dict[str, Any]]:
+    """プロンプト本文から候補表を読み戻し、``tool`` / ``argument`` / ``target`` / ``values`` の列にする。
+
+    でたらめに行動するスタブが、エージェントに見えている候補だけから選ぶために使う。
+    表が無ければ空の列を返す。読めない行に当たったら、そこまでで止める。
+    """
+    lines = text.splitlines()
+    try:
+        start = lines.index(_CANDIDATE_TABLE_HEADING)
+    except ValueError:
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in lines[start + 1 :]:
+        match = _CANDIDATE_LINE.match(line)
+        if match is None:
+            break
+        target = match.group("target")
+        try:
+            values = json.loads(f"[{match.group('values')}]")
+            parsed_target = json.loads(target) if target else None
+        except json.JSONDecodeError:
+            break
+        entries.append(
+            {
+                "tool": match.group("tool"),
+                "argument": match.group("argument"),
+                "target": parsed_target,
+                "values": values,
+            }
+        )
+    return entries
 
 
 def inject_dynamic_argument_candidate_table(

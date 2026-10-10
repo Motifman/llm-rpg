@@ -8,6 +8,7 @@ from __future__ import annotations
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
@@ -48,7 +49,7 @@ def _run_rules(
 ) -> None:
     """確定境界から独立したneeds更新規則だけを検証する。"""
     evidence_statuses = service._run_with_repository(repository)
-    service._sync_hunger_max_evidence_all(evidence_statuses)
+    service._sync_hunger_max_evidence_all(evidence_statuses, WorldTick(1))
 
 
 class TestNeedsDecayStageService:

@@ -8,11 +8,13 @@ from types import SimpleNamespace
 
 import pytest
 from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
+from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.player.services.departed_position_store import (
     DepartedPositionStore,
 )
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
     SpotTravelBlocked,
@@ -20,6 +22,10 @@ from ai_rpg_world.application.world_graph.spot_graph_movement_application_servic
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
+)
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -424,15 +430,22 @@ class TestBlockedObserverFailure:
     """止まった観察者が失敗しても、移動の取りやめと残りの観察者は失われないことを保証する。"""
 
     def test_failing_observer_does_not_undo_the_stop_or_skip_later_observers(self) -> None:
-        """先に足した観察者が例外を投げても travel stage は例外を出さず、後の観察者にも届き、本人は止まったままになる。"""
+        """isolate で先に足した観察者が例外を投げても travel stage は例外を出さず、後の観察者にも届き、本人は止まったままで、失敗は travel.blocked_observer として trace に残る。"""
         world = _door_world()
 
         def _fail(_pid, _blocked) -> None:
             raise RuntimeError("observer failed")
 
         later: list[PlayerId] = []
+        recorder = CollectingTraceRecorder()
         world.stage = SpotGraphTravelStageService(
-            world.player_repo, world.service, world.context
+            world.player_repo,
+            world.service,
+            world.context,
+            failure_isolator=WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.ISOLATE,
+                trace_recorder_provider=lambda: recorder,
+            ),
         )
         world.stage.add_blocked_observer(_fail)
         world.stage.add_blocked_observer(lambda pid, _b: later.append(pid))
@@ -446,6 +459,9 @@ class TestBlockedObserverFailure:
         nav = world.nav()
         assert nav is not None
         assert not nav.is_traveling
+        assert [
+            e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        ] == ["travel.blocked_observer"]
 
 
 class TestPostCommitFailureAfterBlocked:

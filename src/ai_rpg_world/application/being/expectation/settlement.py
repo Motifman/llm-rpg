@@ -18,6 +18,13 @@
 ない。選ばれたものだけを根拠として形と一緒に予期へ渡し、確定した当否はそこに
 だけ返る。
 
+## 発言の中身だけでは当たりにしない
+
+発言は、その人がそう言ったという事実にすぎない。清算待ちの予期ごとに、当たりの
+決め手が発言の中身しかないかを同じ呼び出しで問い、当たりでその確率が閾値を超え
+たら「まだ分からない」として記録する (#1568)。問いの文で伝えるだけでは、Jev が
+従わなかったことを結果からも trace からも見分けられない。
+
 ## 状態の変化を保存してから配る
 
 集約が返した出来事は、予期と同じ保存の単位で未配信として積み (design_decisions
@@ -80,6 +87,8 @@ SCENE_QUESTION = "scene_changed"
 SKIPPED_NOTHING_TO_JUDGE = "nothing_to_judge"
 SKIPPED_JUDGMENT_UNAVAILABLE = "judgment_unavailable"
 SKIPPED_SETTLEMENT_FAILED = "settlement_failed"
+# 根拠の閾値 (design_decisions D1484) と同じく、stub の迷った答え 0.5 ちょうどは採らない。
+HEARSAY_ONLY_THRESHOLD = 0.5
 
 
 @dataclass(frozen=True)
@@ -117,6 +126,7 @@ class _Asked:
     kind: str
     expectation: Expectation | None = None
     ground_id: str | None = None
+    hearsay_question: str | None = None
 
 
 @dataclass
@@ -292,6 +302,7 @@ class ExpectationSettlementService:
             expectation = asked[name].expectation
             assert expectation is not None
             event: ExpectationEvent | None
+            downgraded: dict[str, Any] = {}
             if isinstance(verdict, ShapeVerdict):
                 grounds = plan.grounds_for(
                     expectation, probabilities, self._grounds_min_probability
@@ -300,9 +311,16 @@ class ExpectationSettlementService:
                 judged_grounds[expectation.expectation_id.value] = grounds
                 step = "shape"
             else:
+                hearsay_question = asked[name].hearsay_question
+                assert hearsay_question is not None
+                hearsay_only = probabilities[hearsay_question]
+                if verdict is CheckVerdict.HIT and hearsay_only > HEARSAY_ONLY_THRESHOLD:
+                    downgraded = {"judged_verdict": verdict.value, "hearsay_only": hearsay_only}
+                    verdict = CheckVerdict.UNDETERMINED
                 event = expectation.record(Check(turn=now, verdict=verdict))
                 step = "check"
             self._save(current, expectation, event, step=step, verdict=verdict)
+            current.transitions[-1].update(downgraded)
 
         report = SettlementReport(
             turn=now,
@@ -483,18 +501,22 @@ def _questions(
         )
     for index, expectation in enumerate(pending):
         name = f"check_{index}"
-        asked[name] = _Asked("check", expectation)
+        hearsay = f"hearsay_{index}"
+        asked[name] = _Asked("check", expectation, hearsay_question=hearsay)
         questions[name] = ChoiceQuestion(
             instructions=(
                 f"{self_name}がターン{expectation.formed_at_turn}に書いた予期"
                 f"「{expectation.content}」(いつ頃: {_due(expectation)}) は、"
                 "出来事の時系列に照らして当たったか。予期の中身だけを見て、"
                 f"やり方の成否は問わない。主語の無い予期は{self_name}本人のこととして読む。"
+                "「発言」の欄は、その人がそう言ったという事実で、言った中身が起きた"
+                "ことの確かめにはならない。"
             ),
             options={
                 CheckVerdict.HIT.value: "当たった。予期したことが起きた",
                 CheckVerdict.MISS.value: (
-                    "外れた。予期と違うことが起きた、またはいつ頃を過ぎても起きなかった"
+                    "外れた。予期と違うことや予期に反する出来事が起きた、"
+                    "またはいつ頃を過ぎても起きなかった"
                 ),
                 CheckVerdict.UNDETERMINED.value: (
                     "まだ分からない。決め手になる出来事がまだ届いていない。"
@@ -504,6 +526,22 @@ def _questions(
                     "予期になっていない。当たり外れを決められる形をしていない"
                 ),
             },
+        )
+        asked[hearsay] = _Asked("hearsay", expectation)
+        questions[hearsay] = NoulQuestion(
+            instructions=(
+                f"{self_name}の予期「{expectation.content}」について。時系列の中で、"
+                "この予期が当たったと言える決め手は、誰かの発言の中身しかないか。"
+            ),
+            true_means=(
+                "決め手は発言の中身しかない。誰かがそう言っただけで、"
+                f"{self_name}がしたことや見聞きした出来事には、当たりを裏づけるものが無い"
+            ),
+            false_means=(
+                f"{self_name}がしたことや見聞きした出来事に、当たりを裏づけるものがある。"
+                "または予期が人の言動そのもの (誰かが何かを言う、来る) についてで、"
+                "その言動が起きた。当たりと言える出来事が何も無い場合も含む"
+            ),
         )
     for name, ground in plan.questions.items():
         asked[name] = _Asked("ground", ground.expectation, ground_id=ground.ground_id)
@@ -522,7 +560,7 @@ def _verdicts(
 ) -> dict[str, ShapeVerdict | CheckVerdict | float]:
     """答えをすべて判定に直す。1 つでも使えなければ、どの予期にも渡さない。
 
-    根拠の問いは確率のまま返す。根拠の答えだけが壊れたときも形を渡さないのは、
+    根拠の問いと、決め手が発言だけかの問いは確率のまま返す。根拠の答えだけが壊れたときも形を渡さないのは、
     形が判定済みなら根拠も判定済みという予期の決まりを保つため。
     """
     missing = sorted(set(asked) - set(answers))
@@ -539,7 +577,7 @@ def _verdicts(
                 verdicts[name] = ShapeVerdict(value)
             elif a.kind == "check":
                 verdicts[name] = CheckVerdict(value)
-            elif a.kind == "ground":
+            elif a.kind in ("ground", "hearsay"):
                 verdicts[name] = _probability(value)
             else:
                 float(value)
@@ -578,7 +616,7 @@ def _state(
         "出来事の時系列": [
             {
                 "ターン": f"ターン{t.turn}",
-                "行動": list(t.material.actions),
+                "出来事": list(t.material.actions),
                 "発言": list(t.material.speeches),
             }
             for t in timeline

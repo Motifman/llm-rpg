@@ -14,6 +14,8 @@ from ai_rpg_world.application.llm.services.dynamic_argument_candidates import (
     build_dynamic_argument_candidate_snapshot,
     evaluate_dynamic_argument_choice,
     inject_dynamic_argument_candidate_table,
+    parse_dynamic_argument_candidate_table,
+    render_dynamic_argument_candidate_table,
 )
 
 
@@ -547,3 +549,26 @@ def test_evaluation_checks_every_give_entry_without_executing_current_code() -> 
             "reason": "not_in_candidates",
         }
     ]
+
+
+def test_parsing_the_rendered_table_returns_the_same_tools_arguments_targets_and_values() -> None:
+    """表示した候補表を読み戻すと、対象つきの行・入れ子の引数・引用符を含む名前まで元の候補と一致する。"""
+    entries = [
+        {"tool": "travel_to", "argument": "destination_label", "values": ["集会所", "北の竪坑の底"]},
+        {"tool": "interact", "argument": "action_name", "target": "古い \"金庫\"", "values": ["open_safe"]},
+        {"tool": "give_item", "argument": "gives[].item_label", "values": ["燃料の缶", "カンテラ, 予備"]},
+    ]
+    prompt = f"本文\n\n{render_dynamic_argument_candidate_table(entries)}\n\n行動を選んでください。"
+
+    parsed = parse_dynamic_argument_candidate_table(prompt)
+
+    assert parsed == [
+        {"tool": "travel_to", "argument": "destination_label", "target": None, "values": ["集会所", "北の竪坑の底"]},
+        {"tool": "interact", "argument": "action_name", "target": '古い "金庫"', "values": ["open_safe"]},
+        {"tool": "give_item", "argument": "gives[].item_label", "target": None, "values": ["燃料の缶", "カンテラ, 予備"]},
+    ]
+
+
+def test_parsing_a_prompt_without_the_table_returns_no_candidates() -> None:
+    """候補表の見出しが無い本文からは、候補を 1 つも読み取らない。"""
+    assert parse_dynamic_argument_candidate_table("- travel_to.destination_label: \"集会所\"") == []
