@@ -236,3 +236,66 @@ class TestWorldTickFailurePolicyParse:
         """知らない値は ValueError で止め、受け付ける値を文に含める。"""
         with pytest.raises(ValueError, match="fail_fast"):
             WorldTickFailurePolicy.parse("skip")
+
+
+class TestRecordContinuedFailure:
+    """確定済みの処理に続く後処理の失敗を、取りやめずに trace と件数へ残すこと。"""
+
+    def test_isolate_records_and_continues(self) -> None:
+        """isolate では committed=True / continued=True の world_tick_unit_failed を 1 件残し、例外を投げずに件数へ数える。"""
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
+
+        isolator.record_continued_failure(
+            RuntimeError("observer failed"),
+            stage="travel.arrival_observer",
+            tick=WorldTick(3),
+            target_kind="player",
+            target_id=2,
+            player_id=2,
+        )
+
+        event = recorder.events[0]
+        assert event.kind == TraceEventKind.WORLD_TICK_UNIT_FAILED
+        assert event.tick == 3
+        assert event.payload["committed"] is True
+        assert event.payload["continued"] is True
+        assert isolator.failure_counts() == {"travel.arrival_observer": 1}
+
+    def test_without_recorder_continues_without_counting(self) -> None:
+        """isolate で記録先が無ければ、確定済みの状態は戻らないので例外を投げずに続け、件数には数えない。"""
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, None)
+
+        isolator.record_continued_failure(
+            RuntimeError("observer failed"),
+            stage="travel.arrival_observer",
+            tick=None,
+            target_kind="player",
+        )
+
+        assert isolator.failure_counts() == {}
+
+    def test_fail_fast_records_then_raises(self) -> None:
+        """fail_fast では trace に残したうえで、渡された例外を投げる。"""
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.FAIL_FAST, recorder)
+
+        with pytest.raises(RuntimeError, match="observer failed"):
+            isolator.record_continued_failure(
+                RuntimeError("observer failed"),
+                stage="travel.arrival_observer",
+                tick=WorldTick(1),
+                target_kind="player",
+            )
+
+        assert len(recorder.events) == 1
+
+    def test_unit_failure_is_marked_not_continued(self) -> None:
+        """1 体の処理を取りやめた行は continued=False で、後処理の失敗と見分けられる。"""
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
+
+        with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="player"):
+            _raise(RuntimeError("boom"))
+
+        assert recorder.events[0].payload["continued"] is False
