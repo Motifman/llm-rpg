@@ -159,10 +159,10 @@ class TestLampOil:
     """R7: カンテラは油を足して灯すと灯りになり、灯は時間で燃え尽き、油は使うと減ることを保証する。"""
 
     def test_south_carries_more_oil_than_north(self, runtime) -> None:
-        """北の 2 人は油を 1 本ずつ、南の 2 人は 3 本ずつ持って始まり、全員カンテラを持つ。"""
+        """北の 2 人は油を 2 本ずつ、南の 2 人は 3 本ずつ持って始まり、全員カンテラを持つ。北の 2 人が機械室と乗り場に分かれても、それぞれ最初と最後に 1 回ずつ灯せる。"""
         oil = {pid: _count(runtime, pid, "lamp_oil") for pid in _NORTH + _SOUTH}
 
-        assert oil == {_HARU: 1, _MIO: 1, _GEN: 3, _SAYO: 3}
+        assert oil == {_HARU: 2, _MIO: 2, _GEN: 3, _SAYO: 3}
         assert all(_owns(runtime, pid, "lamp") for pid in _NORTH + _SOUTH)
 
     def test_an_unlit_lamp_shows_nothing_in_the_dark(self, runtime) -> None:
@@ -182,7 +182,8 @@ class TestLampOil:
         assert "発電機" not in _hidden_in_the_dark(runtime, _GEN)
 
     def test_no_oil_no_light(self, runtime) -> None:
-        """ハルが 1 本きりの油で灯したあとは、もう一度灯そうとしても断られる。"""
+        """ハルが 2 本の油を使って 2 回灯したあとは、もう一度灯そうとしても断られる。"""
+        _use(runtime, _HARU, "lamp", "light_lamp")
         _use(runtime, _HARU, "lamp", "light_lamp")
 
         done, message = _use(runtime, _HARU, "lamp", "light_lamp")

@@ -96,7 +96,7 @@ def _make_noise(runtime, sector: str, times: int) -> None:
     gate, spot = _SECTORS[sector]
     for _ in range(times):
         is_open = f"{gate}_open" in runtime._world_flag_state.as_frozen_set()
-        _act(runtime, _HARU, spot, gate, f"close_{gate}" if is_open else f"open_{gate}")
+        _act(runtime, _HARU, spot, gate, "close_gate" if is_open else "open_gate")
         _ticks(runtime, 1)
 
 

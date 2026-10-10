@@ -46,7 +46,7 @@ _GATES = {
 _FLOODABLE = set().union(*(c for _, c in _GATES.values()))
 
 #: R2: 切り替え弁の目盛り → ポンプで水が引く水門の側。目盛りとの対応はどこにも書かない。
-_VALVE = {"set_valve_1": "gate_a", "set_valve_2": "gate_c", "set_valve_3": "gate_b"}
+_VALVE = {"turn_valve_to_one": "gate_a", "turn_valve_to_two": "gate_c", "turn_valve_to_three": "gate_b"}
 
 #: 仮の値 (設計の「未決」)。水門を閉じてから、溜まった水が自然に引くまでの tick。
 _DRAIN_TICKS = 12
@@ -133,11 +133,11 @@ def _fuel(runtime) -> int:
 
 
 def _open_gate(runtime, gate: str) -> None:
-    _act(runtime, _HARU, _GATES[gate][0], gate, f"open_{gate}")
+    _act(runtime, _HARU, _GATES[gate][0], gate, "open_gate")
 
 
 def _close_gate(runtime, gate: str) -> None:
-    _act(runtime, _HARU, _GATES[gate][0], gate, f"close_{gate}")
+    _act(runtime, _HARU, _GATES[gate][0], gate, "close_gate")
 
 
 def _fuel_and_start_generator(runtime, cans: int = 1) -> None:
@@ -242,6 +242,18 @@ class TestPumpDrainsWhatTheValveSelects:
 
         assert _blocked(runtime) == _FLOODABLE - _GATES[_VALVE[valve]][1]
 
+    def test_pump_at_the_initial_valve_mark_leaves_the_shortcut_flooded(self, runtime) -> None:
+        """弁に触らずに、水門 C で沈めて閉じた近道へポンプを動かしても、近道は沈んだまま。弁は一の目盛りから始まるので、近道を引かせるには弁を回すしかない。"""
+        _open_gate(runtime, "gate_c")
+        _ticks(runtime, 1)
+        _close_gate(runtime, "gate_c")
+        _fuel_and_start_generator(runtime)
+
+        _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+        _ticks(runtime, 1)
+
+        assert not _passable(runtime, "shortcut_lift")
+
     def test_one_pump_run_drains_once(self, runtime) -> None:
         """弁を二 (近道) にしてポンプを 1 回動かしたあとに弁を一へ回しても、一の側の水は、ポンプをもう一度動かすまで引かない。"""
         for gate in ("gate_a", "gate_c"):
@@ -250,11 +262,11 @@ class TestPumpDrainsWhatTheValveSelects:
         for gate in ("gate_a", "gate_c"):
             _close_gate(runtime, gate)
         _fuel_and_start_generator(runtime)
-        _act(runtime, _HARU, "machine_room", "valve", "set_valve_2")
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_two")
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
         _ticks(runtime, 1)
 
-        _act(runtime, _HARU, "machine_room", "valve", "set_valve_1")
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_one")
         _ticks(runtime, 1)
 
         assert not _passable(runtime, "stun_sab")
@@ -264,7 +276,7 @@ class TestPumpDrainsWhatTheValveSelects:
         """水門 C を開けたまま、弁を近道に合わせてポンプを動かすと、燃料は減るのに近道は沈んだまま。"""
         _open_gate(runtime, "gate_c")
         _fuel_and_start_generator(runtime)
-        _act(runtime, _HARU, "machine_room", "valve", "set_valve_2")
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_two")
 
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
         _ticks(runtime, 1)
@@ -497,6 +509,7 @@ class TestWaterLeavesATrace:
         _open_gate(runtime, "gate_c")
         _close_gate(runtime, "gate_c")
         _fuel_and_start_generator(runtime)
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_two")
         runtime.set_trace_recorder(recorder)
 
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
