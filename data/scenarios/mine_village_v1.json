@@ -29,6 +29,12 @@
       "visibility": "hidden",
       "mutable": false,
       "values": ["north", "south"]
+    },
+    "aboard": {
+      "display_name": "籠",
+      "visibility": "hidden",
+      "mutable": true,
+      "values": ["no", "yes"]
     }
   },
   "item_specs": [
@@ -56,6 +62,55 @@
       "name": "昇降機の起動鍵",
       "description": "鉄でできた太い鍵。昇降機の操作盤の鍵穴に合う。",
       "category": "KEY_ITEM"
+    },
+    {
+      "id": "lift_berth",
+      "name": "籠の中の場所",
+      "description": "昇降機の籠の中に乗り込んでいる。籠が上がれば、一緒に地上へ出られる。",
+      "category": "KEY_ITEM",
+      "interactions": [
+        {
+          "action_name": "leave_lift",
+          "display_label": "籠から降りる",
+          "preconditions": [
+            {
+              "condition_type": "FLAG_NOT_SET",
+              "flag_name": "lift_departed",
+              "failure_message": "籠はもう上がってしまった。"
+            }
+          ],
+          "effects": [
+            {
+              "effect_type": "REMOVE_ITEM",
+              "parameters": {
+                "item_spec": "lift_berth"
+              }
+            },
+            {
+              "effect_type": "CHANGE_PLAYER_STATE",
+              "parameters": {
+                "state_updates": {
+                  "aboard": "no"
+                }
+              }
+            },
+            {
+              "effect_type": "INCREMENT_OBJECT_STATE",
+              "parameters": {
+                "target_object": "lift",
+                "state_key": "stock",
+                "delta": 1
+              }
+            },
+            {
+              "effect_type": "SHOW_MESSAGE",
+              "parameters": {
+                "message": "籠から降りた。籠に一人ぶんの隙間ができた。"
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "environment": {
@@ -1684,7 +1739,11 @@
             "description": "地上へ続く縦穴に吊られた鉄の籠。脇に操作盤があり、鍵穴と始動の把手が付いている。",
             "object_type": "OTHER",
             "state": {
-              "used": 0
+              "used": 0,
+              "stock": 3,
+              "stock_capacity": 3,
+              "stock_tick": 0,
+              "stock_refill_interval": 0
             },
             "state_display": [
               {
@@ -1699,6 +1758,60 @@
               }
             ],
             "interactions": [
+              {
+                "action_name": "board_lift",
+                "display_label": "籠に乗り込む",
+                "witness_observation_message": "{actor}が昇降機の籠に乗り込んだ。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "aboard": "no"
+                    },
+                    "failure_message": "もう籠の中にいる。"
+                  },
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "lift_departed",
+                    "failure_message": "籠はもう上がってしまった。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "lift",
+                    "required_quantity": 1,
+                    "failure_message": "籠はもう人でいっぱいで、乗り込めない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "lift",
+                      "amount": 1
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_PLAYER_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "aboard": "yes"
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "lift_berth"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "鉄の籠に乗り込んだ。籠が足もとで小さく揺れた。"
+                    }
+                  }
+                ]
+              },
               {
                 "action_name": "start_lift",
                 "display_label": "鍵を差して昇降機を動かす",
@@ -1723,6 +1836,11 @@
                     "condition_type": "FLAG_SET",
                     "flag_name": "generator_fuel_2",
                     "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "lift_berth",
+                    "failure_message": "操作盤は籠の中にある。乗り込まないと、把手に手が届かない。"
                   }
                 ],
                 "effects": [
@@ -2149,7 +2267,8 @@
         "fuel_can"
       ],
       "initial_state": {
-        "team": "north"
+        "team": "north",
+        "aboard": "no"
       },
       "knows_at_start": [
         "mio"
@@ -2165,7 +2284,8 @@
         "lamp"
       ],
       "initial_state": {
-        "team": "north"
+        "team": "north",
+        "aboard": "no"
       },
       "knows_at_start": [
         "haru"
@@ -2181,7 +2301,8 @@
         "lamp"
       ],
       "initial_state": {
-        "team": "south"
+        "team": "south",
+        "aboard": "no"
       },
       "knows_at_start": [
         "sayo"
@@ -2197,7 +2318,8 @@
         "lamp"
       ],
       "initial_state": {
-        "team": "south"
+        "team": "south",
+        "aboard": "no"
       },
       "knows_at_start": [
         "gen"
@@ -2659,6 +2781,157 @@
           "effect_type": "CLEAR_FLAG",
           "parameters": {
             "flag_name": "flooded_shortcut"
+          }
+        }
+      ]
+    },
+    {
+      "id": "scuffle_heard_north",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "scuffle_noise"
+        },
+        {
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "north_shaft_bottom",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "north_tunnel",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "miners_rest",
+              "required_player_count": 2
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "noise_north"
+          }
+        }
+      ]
+    },
+    {
+      "id": "scuffle_heard_south",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "scuffle_noise"
+        },
+        {
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "south_tunnel",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "south_adit_end",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "tool_store",
+              "required_player_count": 2
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "noise_south"
+          }
+        }
+      ]
+    },
+    {
+      "id": "scuffle_heard_deep",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "scuffle_noise"
+        },
+        {
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "mid_junction",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "machine_room",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "gas_chamber",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "lower_shortcut",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "timber_passage",
+              "required_player_count": 2
+            },
+            {
+              "condition_type": "PLAYERS_AT_SPOT",
+              "target_spot": "lift_landing",
+              "required_player_count": 2
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "noise_deep"
+          }
+        }
+      ]
+    },
+    {
+      "id": "scuffle_noise_ends",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "scuffle_noise"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "scuffle_noise"
           }
         }
       ]
@@ -3177,6 +3450,10 @@
         {
           "condition_type": "PLAYER_AT_SPOT",
           "target_spot": "lift_landing"
+        },
+        {
+          "condition_type": "HAS_ITEM",
+          "required_item": "lift_berth"
         }
       ],
       "outcome": "RESCUED"
@@ -3190,6 +3467,112 @@
       "once": true,
       "player_conditions": [],
       "outcome": "STRANDED"
+    }
+  ],
+  "player_interactions": [
+    {
+      "action_name": "strike",
+      "display_label": "殴りかかる",
+      "witness_policy": "SAME_SPOT",
+      "witness_observation_message": "{actor}が{target}に殴りかかった。",
+      "witness_observation_message_in_dark": "暗がりで、誰かが誰かを殴りつける鈍い音がした。",
+      "preconditions": [],
+      "effects": [
+        {
+          "effect_type": "APPLY_DAMAGE",
+          "target": "TARGET_PLAYER",
+          "parameters": {
+            "damage": 10
+          }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "scuffle_noise"
+          }
+        }
+      ],
+      "cooldown_ticks": 3
+    },
+    {
+      "action_name": "pickpocket",
+      "display_label": "持ち物を奪う (奪う品の名前を item に書く)",
+      "witness_policy": "SAME_SPOT",
+      "witness_observation_message": "{actor}が{target}の荷から何かを抜き取った。",
+      "witness_observation_message_in_dark": "暗がりで、誰かが荷を探るような物音がした。",
+      "preconditions": [
+        {
+          "condition_type": "TARGET_PLAYER_STATE_IS",
+          "required_state": {
+            "aboard": "no"
+          },
+          "failure_message": "籠の中の相手には手が届かない。"
+        },
+        {
+          "condition_type": "TARGET_HAS_ITEM",
+          "item_spec_id_parameter_key": "item_spec_id",
+          "failure_message": "相手はそれを持っていない。"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "REMOVE_ITEM",
+          "target": "TARGET_PLAYER",
+          "parameters": {
+            "item_spec_id_parameter": "item_spec_id"
+          }
+        },
+        {
+          "effect_type": "GIVE_ITEM",
+          "target": "ACTOR",
+          "parameters": {
+            "item_spec_id_parameter": "item_spec_id"
+          }
+        }
+      ],
+      "cooldown_ticks": 3
+    },
+    {
+      "action_name": "loot_from_downed",
+      "display_label": "持ち物を奪う (奪う品の名前を item に書く)",
+      "witness_policy": "SAME_SPOT",
+      "witness_observation_message": "{actor}が倒れている{target}の荷を探っている。",
+      "witness_observation_message_in_dark": "暗がりで、誰かが荷を探るような物音がした。",
+      "preconditions": [
+        {
+          "condition_type": "TARGET_PLAYER_IS_INCAPACITATED",
+          "failure_message": "相手は動いている。"
+        },
+        {
+          "condition_type": "TARGET_PLAYER_STATE_IS",
+          "required_state": {
+            "aboard": "no"
+          },
+          "failure_message": "籠の中の相手には手が届かない。"
+        },
+        {
+          "condition_type": "TARGET_HAS_ITEM",
+          "item_spec_id_parameter_key": "item_spec_id",
+          "failure_message": "相手はそれを持っていない。"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "REMOVE_ITEM",
+          "target": "TARGET_PLAYER",
+          "parameters": {
+            "item_spec_id_parameter": "item_spec_id"
+          }
+        },
+        {
+          "effect_type": "GIVE_ITEM",
+          "target": "ACTOR",
+          "parameters": {
+            "item_spec_id_parameter": "item_spec_id"
+          }
+        }
+      ],
+      "cooldown_ticks": 3
     }
   ]
 }
