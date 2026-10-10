@@ -3,8 +3,8 @@
 PR4 で追加された機能:
 
 - 「現在地: 〇〇」line に ``(初めて訪れた)`` を追加
-- 「同じ場所にいるプレイヤー」の名前に ``(初めて会った)`` を追加
-- encounter_memory が未注入の場合は完全に既存挙動 (= 注記なし)
+- 「同じ場所にいるプレイヤー」の名前に ``(初めて会った)`` を追加 (Being の知り合いの記録から)
+- encounter_memory / acquaintances が未注入の場合は注記なし
 
 dto 構築は重いので unit test は internal helper を直接呼んで挙動を担保する。
 end-to-end の経路 (= 実 PlayerCurrentStateDto → ui_context_builder → 注記) は
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -26,12 +27,29 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+    InMemoryAcquaintanceRepository,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
+    InMemoryExpectationRepository,
+)
 
 _SPOT_NAMES = {100: "forest_clearing", 200: "summit"}
+
+
+def _acquaintances() -> PlayerAcquaintances:
+    return PlayerAcquaintances(
+        store=InMemoryAcquaintanceRepository(),
+        being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
+        turn_reader=InMemoryExpectationRepository(),
+        environment_name="森",
+        names_by_player_id={1: "エイダ", 2: "カイ", 3: "ノア"},
+    )
 
 
 def _make_builder(memory: InMemoryEncounterMemory, tick: int = 0):
@@ -80,49 +98,52 @@ class TestSpotFamiliarityAnnotation:
 
 
 class TestPlayerFamiliarityAnnotation:
-    """``_player_familiarity_annotation`` の挙動。"""
+    """``_player_familiarity_annotation`` が、見ている側の Being の知り合いの記録から「初めて会った」を決めることを保証する。"""
 
-    def test_player(self) -> None:
-        """初対面 player は初めて会った注記。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        builder = _make_builder(memory)
+    def test_person_met_once_gets_first_meeting_note(self) -> None:
+        """一度だけ会った相手には (初めて会った) を付ける。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
         assert (
             builder._player_familiarity_annotation(PlayerId(1), "ノア")
             == "(初めて会った)"
         )
 
-    def test_player_pr4_none(self) -> None:
-        """再会 player は PR4 範囲では None。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 5)
-        builder = _make_builder(memory)
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
-        )
+    def test_person_met_twice_gets_no_note(self) -> None:
+        """二度以上会った相手には注記を付けない。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
 
-    def test_observe_player_none(self) -> None:
-        """未 observe な player は None。"""
-        memory = InMemoryEncounterMemory()
-        builder = _make_builder(memory)
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
-        )
+    def test_person_never_met_gets_no_note(self) -> None:
+        """会った記録の無い相手には注記を付けない。"""
+        builder = SpotGraphUiContextBuilder(acquaintances=_acquaintances())
+        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
 
-    def test_display_name_empty_string_none(self) -> None:
-        """displayname が空文字なら None。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        builder = _make_builder(memory)
+    def test_meeting_of_another_viewer_does_not_count(self) -> None:
+        """別のプレイヤーが会った記録は、見ている側の注記に使わない。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(2), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
+
+    def test_blank_name_or_missing_viewer_gets_no_note(self) -> None:
+        """表示名が空のときと、見ている側が分からないときは注記を付けない。"""
+        acquaintances = _acquaintances()
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
         assert builder._player_familiarity_annotation(PlayerId(1), "") is None
+        assert builder._player_familiarity_annotation(None, "ノア") is None
 
-    def test_viewer_id_none(self) -> None:
-        """viewer id が None なら None。"""
+    def test_environment_encounter_alone_gives_no_note(self) -> None:
+        """環境の encounter に人の記録が残っていても、知り合いの記録を渡さなければ人に注記を付けない。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = _make_builder(memory)
-        assert builder._player_familiarity_annotation(None, "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
 
 
 class TestEncounterEnabledGuard:
@@ -144,16 +165,6 @@ class TestEncounterEnabledGuard:
         """完全未注入で disabled。"""
         builder = SpotGraphUiContextBuilder()
         assert builder._encounter_enabled() is False
-
-    def test_disabled_player_not_rendered(self) -> None:
-        """disabled 時 player 注記は 出ない。"""
-        memory = InMemoryEncounterMemory()
-        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
-        builder = SpotGraphUiContextBuilder(encounter_memory=memory)
-        # tick / resolver が無いので encounter_enabled=False
-        assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
-        )
 
 
 class TestConstructorTypeChecks:

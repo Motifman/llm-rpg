@@ -185,6 +185,7 @@ def _populate_runtime_state(runtime: Any) -> None:
         EncounterKey.spot("ancient_archive"),
         current_tick=37,
     )
+    runtime._player_acquaintances.record_meeting(player_id, "リン")
 
     runtime._todo_store.add_by_being(
         being_id,
@@ -345,3 +346,4 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
     assert being_payload["pending_predictions"][0]["kind"] == "plan"
     assert being_payload["goal_journal"][0]["goal_id"] == "goal-runtime-1"
     assert being_payload["stagnation_pressure_count"] == [2]
+    assert [a["name"] for a in being_payload["acquaintances"]] == ["リン"]

@@ -162,12 +162,13 @@ class TestWithGoalUpdateSchema:
         assert 'goal_update' in decorated.parameters['properties']
         assert 'goal_update' not in decorated.parameters['required']
 
-    def test_description_contrasts_with_intention(self) -> None:
-        """高度の防衛は説明文。intention (次の 1 手) との対比が載る。"""
+    def test_description_contrasts_with_the_next_move_without_naming_an_argument(self) -> None:
+        """高度の防衛は説明文。次の 1 手の意図との対比を載せるが、goal_update を足す tool が受け取らない intention 引数は指さない。"""
         from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_update_schema
         decorated = with_goal_update_schema(self._world_tool())
         desc = decorated.parameters['properties']['goal_update']['description']
-        assert 'intention' in desc
+        assert '次の 1 手の意図' in desc
+        assert 'intention' not in desc
         assert '数日スケール' in desc
         assert '続けるなら書かない' in desc
 

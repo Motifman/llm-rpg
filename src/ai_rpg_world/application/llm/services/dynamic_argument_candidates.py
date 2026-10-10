@@ -84,7 +84,7 @@ _EXACT_LABEL_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
         ("shop_label", ("shop",)),
         ("listing_label", ("shop_listing",)),
     ),
-    "speak": (("target_label", ("player", "spot_graph_player")),),
+    "speak": (("target_label", ("player",)),),
 }
 
 
@@ -102,6 +102,7 @@ _DISPLAY_NAME_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
     "trade_offer": (("target_player_label", ("spot_graph_player",)),),
     "trade_accept": (("offerer_player_label", ("spot_graph_player",)),),
     "trade_decline": (("offerer_player_label", ("spot_graph_player",)),),
+    "speak": (("target_label", ("spot_graph_player",)),),
 }
 
 

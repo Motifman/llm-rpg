@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
+    PERSONA_HEADING,
     PersonaPromptFragmentBuilder,
 )
 from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
@@ -232,6 +233,13 @@ def _expectations_rule_line(enabled: bool) -> str:
     )
 
 
+def _persona_section(persona_block: str) -> str:
+    """本文が「上記【ペルソナ】」と指すので、見出しの無い人物像 (シナリオの persona_prompt) に見出しを付ける。"""
+    if persona_block.lstrip().startswith(PERSONA_HEADING):
+        return persona_block
+    return f"{PERSONA_HEADING}\n{persona_block}"
+
+
 def build_world_system_prompt(
     *,
     world_title: str,
@@ -317,9 +325,10 @@ def build_world_system_prompt(
             "（書き方は【独白と一言の書き方】）。"
         )
     )
+    persona_section = _persona_section(persona_block)
     body = f"""あなたは次のペルソナとして行動するキャラクターである。
 
-{persona_block}
+{persona_section}
 
 【世界の前提】
 - 舞台のタイトル: {world_title}

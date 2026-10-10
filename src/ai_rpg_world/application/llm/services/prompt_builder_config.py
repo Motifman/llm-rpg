@@ -55,6 +55,7 @@ from ai_rpg_world.domain.player.repository.player_profile_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
     from ai_rpg_world.application.encounter.contracts.interfaces import (
         IEncounterMemory,
     )
@@ -186,6 +187,10 @@ class EpisodicRecallConfig:
     # encounter の spot key はシナリオの文字列 ID なので、runtime 由来の
     # place_spot cue (数値 spot_id) と揃えるために数値へ直す。
     encounter_spot_id_resolver: Callable[[str], int] | None = None
+    # #1520: 直近に会った相手は、環境の encounter ではなく Being の知り合いの
+    # 記録から引く。「直近」は Being のターン数で数える。
+    acquaintances: PlayerAcquaintances | None = None
+    acquaintance_recent_window_turns: int = 5
     # #526 段階 2: 慣化ペナルティの sidecar store。注入時のみ動く
     # (= default off で既存挙動と同一)。retrieve 後に prompt_builder が
     # 採用された episode の last_recalled_tick を記録する。
