@@ -17,6 +17,8 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 _logger = logging.getLogger(__name__)
 
 _MAX_MESSAGE_CHARS = 500
+# fail_fast で内側の単位が記録して投げ直した例外を、外側の段の単位で二重に数えない。
+_RECORDED_ATTR = "_world_tick_failure_recorded"
 
 
 class WorldTickFailurePolicy(str, Enum):
@@ -73,6 +75,8 @@ class WorldTickFailureIsolator:
         try:
             yield
         except Exception as exc:
+            if getattr(exc, _RECORDED_ATTR, False):
+                raise
             recorder = self._trace_recorder_provider()
             if recorder is None:
                 # trace に残せない取りやめは静かな失敗になるので、止める。
@@ -104,6 +108,7 @@ class WorldTickFailureIsolator:
             with self._lock:
                 self._counts[stage] = self._counts.get(stage, 0) + 1
             if self._policy is WorldTickFailurePolicy.FAIL_FAST:
+                setattr(exc, _RECORDED_ATTR, True)
                 raise
             _logger.error(
                 "world tick unit skipped (stage=%s target=%s:%s tick=%s)",

@@ -101,6 +101,16 @@ class TestIsolatePolicy:
 
         assert recorder.events[0].payload["committed"] is True
 
+    def test_non_json_target_id_is_recorded_as_text(self) -> None:
+        """int と str 以外の対象 ID は文字列にして残し、JSON に書けない値で記録が失敗しない。"""
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
+
+        with isolator.unit(stage="trade_offer_expiry", tick=WorldTick(1), target_kind="trade_offer", target_id=("offer", 9)):
+            _raise(RuntimeError("boom"))
+
+        assert recorder.events[0].payload["target_id"] == "('offer', 9)"
+
     def test_long_message_is_truncated(self) -> None:
         """500 字を超える例外の文は 500 字で切り詰めて残す。"""
         recorder = _CollectingRecorder()
@@ -155,6 +165,19 @@ class TestFailFastPolicy:
 
         assert [e.kind for e in recorder.events] == [TraceEventKind.WORLD_TICK_UNIT_FAILED]
         assert recorder.events[0].payload["policy"] == "fail_fast"
+        assert isolator.failure_counts() == {"travel": 1}
+
+    def test_nested_units_record_the_failure_once(self) -> None:
+        """fail_fast で 1 体の単位を段の単位が包んでいても、例外は内側の 1 件だけ記録され、件数も 1 になる。"""
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.FAIL_FAST, recorder)
+
+        with pytest.raises(ValueError):
+            with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="stage"):
+                with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="player", target_id=3):
+                    _raise(ValueError("passage closed"))
+
+        assert [e.payload["target_kind"] for e in recorder.events] == ["player"]
         assert isolator.failure_counts() == {"travel": 1}
 
     def test_without_recorder_reraises(self) -> None:
