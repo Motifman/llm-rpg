@@ -54,6 +54,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
@@ -312,6 +313,7 @@ def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
         WorldObjectInteractedEvent,
         ItemAddedToInventoryEvent,
         ItemDroppedFromInventoryEvent,
+        ItemRemovedFromInventoryEvent,
         ItemEquippedEvent,
         ItemUnequippedEvent,
         InventorySlotOverflowEvent,

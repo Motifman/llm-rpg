@@ -36,6 +36,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
@@ -199,6 +200,7 @@ _OBSERVED_EVENT_TYPES = (
     WorldObjectInteractedEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
+    ItemRemovedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,

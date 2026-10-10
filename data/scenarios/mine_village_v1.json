@@ -156,6 +156,7 @@
       "id": "lamp_flame",
       "name": "カンテラの灯",
       "description": "カンテラに灯した火。油が尽きれば消える。",
+      "event_removal_message": "カンテラの灯が燃え尽きた。",
       "category": "TOOL",
       "is_light_source": true
     },
@@ -163,6 +164,7 @@
       "id": "torch",
       "name": "たいまつ",
       "description": "布を巻いて油を染ませた棒。燃えているあいだは辺りが見える。",
+      "event_removal_message": "火が燃え尽き、手もとには焦げた棒だけが残った。",
       "category": "TOOL",
       "is_light_source": true
     },

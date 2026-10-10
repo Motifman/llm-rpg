@@ -5,6 +5,7 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import Play
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.event.inventory_events import (
     ItemDroppedFromInventoryEvent,
+    ItemRemovedFromInventoryEvent,
     ItemReservationCancelledEvent,
     ItemReservedForTradeEvent,
 )
@@ -89,9 +90,10 @@ class TestPlayerInventoryReservation:
         assert inventory.get_item_instance_id_by_slot(SlotId(0)) is None
         assert inventory.is_item_reserved(item_id) is False
         
-        # アイテム削除イベントが発行されること
+        # 外れたイベントが出て、捨てたイベントは出ないこと (取引で渡した品を「捨てた」と伝えないため)
         events = inventory.get_events()
-        assert any(isinstance(e, ItemDroppedFromInventoryEvent) and e.item_instance_id == item_id for e in events)
+        assert any(isinstance(e, ItemRemovedFromInventoryEvent) and e.item_instance_id == item_id for e in events)
+        assert not any(isinstance(e, ItemDroppedFromInventoryEvent) for e in events)
 
     def test_remove_non_reserved_item(self):
         inventory = setup_inventory(occupied_slots={0: 100})
