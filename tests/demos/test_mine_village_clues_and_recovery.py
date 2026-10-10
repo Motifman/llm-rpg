@@ -31,10 +31,11 @@ _SOUTH = ("gen", "sayo")
 
 #: 切り替え弁の目盛り → (水が引く場所の沈んだフラグ, その場所を沈める水門, 水門の置き場所)。
 _VALVE = {
-    "set_valve_1": ("flooded_south_entry", "gate_a", "north_tunnel"),
-    "set_valve_2": ("flooded_shortcut", "gate_c", "mid_junction"),
-    "set_valve_3": ("flooded_north_entry", "gate_b", "south_tunnel"),
+    "turn_valve_to_one": ("flooded_south_entry", "gate_a", "north_tunnel"),
+    "turn_valve_to_two": ("flooded_shortcut", "gate_c", "mid_junction"),
+    "turn_valve_to_three": ("flooded_north_entry", "gate_b", "south_tunnel"),
 }
+_VALVE_FLAG = {"turn_valve_to_one": "valve_1", "turn_valve_to_two": "valve_2", "turn_valve_to_three": "valve_3"}
 
 #: ポンプを動かした次の tick に機械室へ届く音。水が引いた / 水門が開いていて流れ込み続ける / 引く水が無い。
 _PUMP_SOUND = {
@@ -182,9 +183,9 @@ class TestThePumpSoundsDifferentlyByWhatItDrew:
     def test_pump_drains_a_flooded_place_whose_gate_is_closed(self, runtime, valve) -> None:
         """水門を閉じたあとも沈んでいる場所に弁を合わせてポンプを動かすと、水が引き、機械室に「勢いよく吸い上げられ」る音が届く。"""
         flood, gate, gate_spot = _VALVE[valve]
-        _act(runtime, _HARU, gate_spot, gate, f"open_{gate}")
+        _act(runtime, _HARU, gate_spot, gate, "open_gate")
         _ticks(runtime, 1)
-        _act(runtime, _HARU, gate_spot, gate, f"close_{gate}")
+        _act(runtime, _HARU, gate_spot, gate, "close_gate")
         _start_generator(runtime)
         assert flood in _flags(runtime)
 
@@ -198,7 +199,7 @@ class TestThePumpSoundsDifferentlyByWhatItDrew:
     def test_pump_cannot_beat_an_open_gate(self, runtime, valve) -> None:
         """水門が開いたまま、その水門が沈める場所に弁を合わせてポンプを動かすと、水は引かず、機械室に「流れ込む音がやまない」が届く。"""
         flood, gate, gate_spot = _VALVE[valve]
-        _act(runtime, _HARU, gate_spot, gate, f"open_{gate}")
+        _act(runtime, _HARU, gate_spot, gate, "open_gate")
         _start_generator(runtime)
 
         heard = _pump_with(runtime, valve)
@@ -222,7 +223,7 @@ class TestThePumpSoundsDifferentlyByWhatItDrew:
     def test_exactly_one_sound_for_every_valve_and_water_state(self, valve, flooded, gate_open) -> None:
         """弁の目盛り・弁の先が沈んでいるか・その水門が開いているかのどの組み合わせでも、ポンプの音の出来事はちょうど 1 つだけ条件を満たす。水門が開いていれば必ず沈んでいるので、開いていて沈んでいない組は無い。"""
         flood, gate, _spot = _VALVE[valve]
-        flags = {"pump_pulse", f"valve_{valve[-1]}"}
+        flags = {"pump_pulse", _VALVE_FLAG[valve]}
         if flooded:
             flags.add(flood)
         if gate_open:
@@ -249,7 +250,7 @@ class TestThePumpSoundsDifferentlyByWhatItDrew:
         _start_generator(runtime)
         before = len(_heard(runtime, _GEN))
 
-        _pump_with(runtime, "set_valve_2")
+        _pump_with(runtime, "turn_valve_to_two")
 
         assert not [h for h in _heard(runtime, _GEN)[before:] if "配管" in h]
 

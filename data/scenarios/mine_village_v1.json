@@ -6,7 +6,7 @@
     "description": "記憶を測るための、推論と敵対が要るシナリオの試作 (#1508)。雪に閉ざされた廃村と、その下の古い坑道。2 組が別々の入口から、互いを知らずに入り、1 回しか動かない昇降機を目指す。設計は docs/mine_village_scenario_design.md。",
     "theme": "adversarial",
     "difficulty": "hard",
-    "estimated_ticks": 200,
+    "estimated_ticks": 40,
     "author": "mine-village-prototype",
     "tags": [
       "adversarial",
@@ -100,7 +100,7 @@
     {
       "id": "lift_berth",
       "name": "籠の中の場所",
-      "description": "昇降機の籠の中に乗り込んでいる。籠が上がれば、一緒に地上へ出られる。",
+      "description": "昇降機の籠の中に取ってある、自分の場所。籠が上がるときに乗り場にいれば、一緒に地上へ出られる。乗り場を離れていれば、置いていかれる。",
       "category": "KEY_ITEM",
       "interactions": [
         {
@@ -878,7 +878,7 @@
             ],
             "interactions": [
               {
-                "action_name": "open_gate_a",
+                "action_name": "open_gate",
                 "display_label": "水門を開ける",
                 "hide_when_flag_preconditions_fail": true,
                 "witness_observation_message": "{actor}が水門の把手を回している。",
@@ -925,7 +925,7 @@
                 ]
               },
               {
-                "action_name": "close_gate_a",
+                "action_name": "close_gate",
                 "display_label": "水門を閉じる",
                 "hide_when_flag_preconditions_fail": true,
                 "witness_observation_message": "{actor}が水門の把手を回している。",
@@ -1090,7 +1090,7 @@
             ],
             "interactions": [
               {
-                "action_name": "open_gate_b",
+                "action_name": "open_gate",
                 "display_label": "水門を開ける",
                 "hide_when_flag_preconditions_fail": true,
                 "witness_observation_message": "{actor}が水門の把手を回している。",
@@ -1137,7 +1137,7 @@
                 ]
               },
               {
-                "action_name": "close_gate_b",
+                "action_name": "close_gate",
                 "display_label": "水門を閉じる",
                 "hide_when_flag_preconditions_fail": true,
                 "witness_observation_message": "{actor}が水門の把手を回している。",
@@ -1404,7 +1404,7 @@
             ],
             "interactions": [
               {
-                "action_name": "open_gate_c",
+                "action_name": "open_gate",
                 "display_label": "水門を開ける",
                 "hide_when_flag_preconditions_fail": true,
                 "witness_observation_message": "{actor}が水門の把手を回している。",
@@ -1451,7 +1451,7 @@
                 ]
               },
               {
-                "action_name": "close_gate_c",
+                "action_name": "close_gate",
                 "display_label": "水門を閉じる",
                 "hide_when_flag_preconditions_fail": true,
                 "witness_observation_message": "{actor}が水門の把手を回している。",
@@ -1793,7 +1793,7 @@
             "description": "ポンプの配管に付いた大きな弁。ハンドルの周りに一から三までの目盛りが刻まれている。",
             "object_type": "OTHER",
             "state": {
-              "mark": 2
+              "mark": 1
             },
             "state_display": [
               {
@@ -1814,7 +1814,7 @@
             ],
             "interactions": [
               {
-                "action_name": "set_valve_1",
+                "action_name": "turn_valve_to_one",
                 "display_label": "弁を一の目盛りに合わせる",
                 "witness_observation_message": "{actor}が切り替え弁のハンドルを回している。",
                 "preconditions": [],
@@ -1854,7 +1854,7 @@
                 ]
               },
               {
-                "action_name": "set_valve_2",
+                "action_name": "turn_valve_to_two",
                 "display_label": "弁を二の目盛りに合わせる",
                 "witness_observation_message": "{actor}が切り替え弁のハンドルを回している。",
                 "preconditions": [],
@@ -1894,7 +1894,7 @@
                 ]
               },
               {
-                "action_name": "set_valve_3",
+                "action_name": "turn_valve_to_three",
                 "display_label": "弁を三の目盛りに合わせる",
                 "witness_observation_message": "{actor}が切り替え弁のハンドルを回している。",
                 "preconditions": [],
@@ -2282,7 +2282,7 @@
       "to": "assembly_hall",
       "name": "北の竪坑口と集会所の道",
       "description": "北の竪坑口から集会所へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2294,7 +2294,7 @@
       "to": "snow_pass",
       "name": "北の竪坑口と雪の峠道の道",
       "description": "北の竪坑口から雪の峠道へ続く道。",
-      "travel_ticks": 4,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2306,7 +2306,7 @@
       "to": "village_square",
       "name": "雪の峠道と廃村の広場の道",
       "description": "雪の峠道から廃村の広場へ続く道。",
-      "travel_ticks": 5,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2318,7 +2318,7 @@
       "to": "village_square",
       "name": "集会所と廃村の広場の道",
       "description": "集会所から廃村の広場へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2330,7 +2330,7 @@
       "to": "storehouse",
       "name": "集会所と倉庫の道",
       "description": "集会所から倉庫へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2342,7 +2342,7 @@
       "to": "well",
       "name": "廃村の広場と井戸の道",
       "description": "廃村の広場から井戸へ続く道。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2354,7 +2354,7 @@
       "to": "storehouse",
       "name": "廃村の広場と倉庫の道",
       "description": "廃村の広場から倉庫へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2366,7 +2366,7 @@
       "to": "smithy",
       "name": "廃村の広場と鍛冶場の道",
       "description": "廃村の広場から鍛冶場へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2378,7 +2378,7 @@
       "to": "company_office",
       "name": "井戸と鉱山会社の事務所の道",
       "description": "井戸から鉱山会社の事務所へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2390,7 +2390,7 @@
       "to": "company_office",
       "name": "鍛冶場と鉱山会社の事務所の道",
       "description": "鍛冶場から鉱山会社の事務所へ続く道。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2402,7 +2402,7 @@
       "to": "south_adit_mouth",
       "name": "鍛冶場と南の横坑口の道",
       "description": "鍛冶場から南の横坑口へ続く道。",
-      "travel_ticks": 4,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2414,7 +2414,7 @@
       "to": "south_adit_mouth",
       "name": "鉱山会社の事務所と南の横坑口の道",
       "description": "鉱山会社の事務所から南の横坑口へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2426,7 +2426,7 @@
       "to": "south_adit_mouth",
       "name": "倉庫と南の横坑口の道",
       "description": "倉庫から南の横坑口へ続く道。",
-      "travel_ticks": 7,
+      "travel_ticks": 3,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2438,7 +2438,7 @@
       "to": "north_shaft_bottom",
       "name": "竪坑の梯子",
       "description": "北の竪坑口から竪坑の底へ下りる錆びた梯子。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2450,7 +2450,7 @@
       "to": "south_adit_end",
       "name": "横坑",
       "description": "南の横坑口から上層へ続く緩い下り坂の横坑。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2462,7 +2462,7 @@
       "to": "north_tunnel",
       "name": "北の竪坑の底と北の坑道の道",
       "description": "北の竪坑の底から北の坑道へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "BARRIER",
@@ -2475,7 +2475,7 @@
       "to": "south_tunnel",
       "name": "防火扉",
       "description": "北の坑道と南の坑道を仕切る重い鉄の防火扉。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "DOOR",
@@ -2488,7 +2488,7 @@
       "to": "south_adit_end",
       "name": "南の坑道と南の横坑の奥の道",
       "description": "南の坑道から南の横坑の奥へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "BARRIER",
@@ -2501,7 +2501,7 @@
       "to": "miners_rest",
       "name": "北の坑道と坑夫の詰所の道",
       "description": "北の坑道から坑夫の詰所へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2513,7 +2513,7 @@
       "to": "tool_store",
       "name": "南の坑道と道具置き場の道",
       "description": "南の坑道から道具置き場へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2525,7 +2525,7 @@
       "to": "mid_junction",
       "name": "坑夫の詰所と中層の分岐の道",
       "description": "坑夫の詰所から中層の分岐へ続く道。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2537,7 +2537,7 @@
       "to": "mid_junction",
       "name": "道具置き場と中層の分岐の道",
       "description": "道具置き場から中層の分岐へ続く道。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2549,7 +2549,7 @@
       "to": "machine_room",
       "name": "中層の分岐と機械室の道",
       "description": "中層の分岐から機械室へ続く道。",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2561,7 +2561,7 @@
       "to": "gas_chamber",
       "name": "中層の分岐と掘り場の道",
       "description": "中層の分岐から掘り場へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2573,7 +2573,7 @@
       "to": "lower_shortcut",
       "name": "中層の分岐と下層の近道の道",
       "description": "中層の分岐から下層の近道へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "BARRIER",
@@ -2599,7 +2599,7 @@
       "to": "lift_landing",
       "name": "下層の近道と昇降機の乗り場の道",
       "description": "下層の近道から昇降機の乗り場へ続く道。",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
         "kind": "BARRIER",
@@ -2612,7 +2612,7 @@
       "to": "timber_passage",
       "name": "中層の分岐と古い支柱の通路の道",
       "description": "中層の分岐から古い支柱の通路へ続く道。",
-      "travel_ticks": 5,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2624,7 +2624,7 @@
       "to": "lift_landing",
       "name": "支柱の下の道",
       "description": "古い支柱の通路から昇降機の乗り場へ抜ける、傾いた支柱の下の道。",
-      "travel_ticks": 4,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "BARRIER",
@@ -2637,7 +2637,7 @@
       "to": "machine_room",
       "name": "坑夫の詰所と機械室の道",
       "description": "坑夫の詰所から機械室へ続く道。",
-      "travel_ticks": 4,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2649,7 +2649,7 @@
       "to": "timber_passage",
       "name": "道具置き場と古い支柱の通路の道",
       "description": "道具置き場から古い支柱の通路へ続く道。",
-      "travel_ticks": 5,
+      "travel_ticks": 2,
       "is_bidirectional": true,
       "passage": {
         "kind": "OPEN"
@@ -2668,6 +2668,7 @@
       "initial_items": [
         "lamp",
         "fuel_can",
+        "lamp_oil",
         "lamp_oil"
       ],
       "initial_state": {
@@ -2686,6 +2687,7 @@
       "spawn_spot": "north_shaft_head",
       "initial_items": [
         "lamp",
+        "lamp_oil",
         "lamp_oil"
       ],
       "initial_state": {
@@ -2775,7 +2777,7 @@
     ]
   },
   "initial_flags": [
-    "valve_2"
+    "valve_1"
   ],
   "scenario_events": [
     {
