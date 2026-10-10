@@ -1,5 +1,5 @@
 """Issue #171a: SpotGraphCurrentStateFormatter が tick_budget_remaining を
-「残り行動可能 tick」として LLM プロンプトに載せるかを検証する。
+「時間切れまで」の残り時間として LLM プロンプトに載せるかを検証する。
 
 設計判断:
 - WIN 条件には触れない (メタ情報のみ)。シナリオに TICK_LIMIT lose_condition が
@@ -21,7 +21,7 @@ from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(
-    *, tick_budget_remaining: int | None
+    *, tick_budget_remaining: int | None, minutes_per_tick: int | None = 5
 ) -> PlayerCurrentStateDto:
     snap = SpotGraphPlayerSnapshotDto(
         current_spot_id=1,
@@ -52,26 +52,35 @@ def _make_dto(
         attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
         tick_budget_remaining=tick_budget_remaining,
+        minutes_per_tick=minutes_per_tick,
     )
 
 
 class TestTickBudgetRendering:
     """tick_budget_remaining のプロンプト表示。"""
 
-    def test_renders_positive_remaining(self) -> None:
-        """正の残量は「残り行動可能 tick: N」として出る。"""
+    def test_renders_positive_remaining_in_world_minutes(self) -> None:
+        """1 tick 5 分の世界で残り 42 tick なら「時間切れまで: あと 210 分」と出し、tick の語は出さない (#1562)。"""
         text = SpotGraphCurrentStateFormatter().format(
-            _make_dto(tick_budget_remaining=42)
+            _make_dto(tick_budget_remaining=42, minutes_per_tick=5)
         )
-        assert "残り行動可能 tick: 42" in text
+        assert "時間切れまで: あと 210 分" in text
+        assert "tick" not in text
+
+    def test_renders_remaining_turns_when_clock_is_unknown(self) -> None:
+        """分に直せない世界では、残りを手番の回数で書く (#1562)。"""
+        text = SpotGraphCurrentStateFormatter().format(
+            _make_dto(tick_budget_remaining=12, minutes_per_tick=None)
+        )
+        assert "時間切れまで: あと 手番 12 回ぶん" in text
 
     def test_renders_zero_as_imminent(self) -> None:
-        """残り 0 のときは「時間切れ寸前」が明示される。"""
+        """残り 0 のときは「時間切れ寸前」が明示され、tick の語は出ない。"""
         text = SpotGraphCurrentStateFormatter().format(
             _make_dto(tick_budget_remaining=0)
         )
-        assert "残り行動可能 tick: 0" in text
         assert "時間切れ寸前" in text
+        assert "tick" not in text
 
     def test_negative_clamped_to_imminent(self) -> None:
         """負値 (理論上来ないが防御的に) も「時間切れ寸前」として扱う。"""
@@ -85,7 +94,7 @@ class TestTickBudgetRendering:
         text = SpotGraphCurrentStateFormatter().format(
             _make_dto(tick_budget_remaining=None)
         )
-        assert "残り行動可能 tick" not in text
+        assert "時間切れ" not in text
 
     def test_does_not_leak_win_condition(self) -> None:
         """tick budget セクションには WIN 関連の語彙が紛れていない。"""

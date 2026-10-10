@@ -3,7 +3,7 @@
 で LLM プロンプトに配線するかを検証する。
 
 責務:
-- コードはメタ情報「残り行動可能 tick」しか流さない (WIN 条件はシナリオ責務)
+- コードはメタ情報「時間切れまで」の残り時間しか流さない (WIN 条件はシナリオ責務)
 - TICK_LIMIT が無いシナリオでは None のまま (セクションごと出さない)
 """
 
@@ -48,4 +48,5 @@ class TestTickBudgetWiring:
         player_ids = rt.get_player_ids()
         assert player_ids, "シナリオに player_spawn が無い"
         text = rt.build_observation(player_ids[0])
-        assert "残り行動可能 tick: 50" in text
+        assert "時間切れまで: あと 250 分" in text
+        assert "残り行動可能 tick" not in text

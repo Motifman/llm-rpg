@@ -1643,6 +1643,7 @@ class WorldRuntime:
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),
+            minutes_per_tick=_minutes_per_tick(self.scenario),
             meeting_status_line=self._compute_meeting_status_line(player_id),
             task_progress_line=self._compute_task_progress_line(),
             game_phase=self._game_phase_store.current.phase,
@@ -2447,6 +2448,7 @@ class WorldRuntime:
             entries,
             current_tick=self.current_tick(),
             stale_age_ticks=stale_age_ticks,
+            minutes_per_tick=_minutes_per_tick(self.scenario),
         )
 
     # ── 完全プロンプト構築 ──
@@ -3038,6 +3040,7 @@ class WorldRuntime:
         limits = PromptLimits(
             tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
+            minutes_per_tick=_minutes_per_tick(self.scenario),
         )
         # Issue #283 後続: episodic stack が注入されていれば、prompt builder の
         # passive_recall + noun_matcher を有効化する。未注入なら従来挙動
