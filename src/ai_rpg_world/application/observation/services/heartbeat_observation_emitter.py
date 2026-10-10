@@ -47,6 +47,9 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -70,6 +73,7 @@ class HeartbeatObservationEmitter:
         interval_ticks: int = _DEFAULT_INTERVAL_TICKS,
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         is_traveling_provider: Callable[[PlayerId], bool] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
         if interval_ticks < 1:
             raise ValueError("interval_ticks must be >= 1")
@@ -88,14 +92,17 @@ class HeartbeatObservationEmitter:
         # silent failure 経路だった。is_traveling_provider が None なら
         # 従来通りの全員一斉発火 (後方互換)。
         self._is_traveling_provider = is_traveling_provider
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
 
     def run(self, current_tick: WorldTick) -> None:
         """post-tick hook 本体。各 LLM プレイヤーを巡回し必要なら観測を投入する。"""
         try:
             player_ids = list(self._llm_player_ids_provider())
-        except Exception:
+        except Exception as exc:
             # provider 失敗が tick 全体を倒さないようにする (post-tick hook の責務)
-            logger.exception("Failed to enumerate LLM player ids; skipping heartbeat")
+            self._failure_isolator.record_continued_failure(
+                exc, stage="heartbeat.player_ids", tick=current_tick, target_kind="stage"
+            )
             return
 
         # now / time_label は実際に発行する直前に解決する (anchor tick で
@@ -120,12 +127,9 @@ class HeartbeatObservationEmitter:
                 try:
                     if self._is_traveling_provider(player_id):
                         continue
-                except Exception:
+                except Exception as exc:
                     # provider 失敗は fail-safe で従来通り emit する
-                    logger.exception(
-                        "is_traveling_provider failed for player %s; emitting heartbeat anyway",
-                        player_id.value,
-                    )
+                    self._record_player_failure(exc, "heartbeat.is_traveling", current_tick, player_id)
             if now is None:
                 now = self._now_provider()
             if not time_label_resolved:
@@ -145,25 +149,32 @@ class HeartbeatObservationEmitter:
                 self._observation_appender.append(
                     player_id, output, now, time_label
                 )
-            except Exception:
+            except Exception as exc:
                 # append 自体が失敗 → buffer に何も入っていないので next tick
                 # で再試行する (= _last_emitted_tick を更新しない)。
-                logger.exception(
-                    "Heartbeat append failed for player %s", player_id.value
-                )
+                self._record_player_failure(exc, "heartbeat.append", current_tick, player_id)
                 continue
             # append 成功 = 観測は buffer に乗ったので duplicate を避けるため
             # ここで last_emitted を進める。後続の schedule 失敗とは独立。
             self._last_emitted_tick[player_id.value] = current_tick.value
             try:
                 self._turn_scheduler.maybe_schedule(player_id, output)
-            except Exception:
+            except Exception as exc:
                 # ターン投入失敗は best-effort: 観測は届いているので次の
                 # heartbeat か他観測でリカバーされる。
-                logger.exception(
-                    "Heartbeat schedule_turn failed for player %s",
-                    player_id.value,
-                )
+                self._record_player_failure(exc, "heartbeat.schedule_turn", current_tick, player_id)
+
+    def _record_player_failure(
+        self, exc: Exception, stage: str, current_tick: WorldTick, player_id: PlayerId
+    ) -> None:
+        self._failure_isolator.record_continued_failure(
+            exc,
+            stage=stage,
+            tick=current_tick,
+            target_kind="player",
+            target_id=player_id.value,
+            player_id=player_id.value,
+        )
 
     def _should_emit(self, player_id: PlayerId, current_tick: WorldTick) -> bool:
         last = self._last_emitted_tick.get(player_id.value)
