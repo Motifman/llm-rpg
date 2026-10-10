@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
@@ -25,6 +25,12 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    SpotTravelUnreachableException,
+)
+from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import (
+    SpotGraphNavigationService,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -404,3 +410,72 @@ class TestTravelStageOnArrival:
         assert p is not None
         assert p.spot_navigation_state is not None
         assert not p.spot_navigation_state.is_traveling
+
+
+class TestUnreachableTravelMessageHidesSpotIds:
+    """移動を始められないときの文が、内部のスポット番号を含まない普通の文になることを保証する。"""
+
+    def test_destination_without_route_reports_plain_sentence_without_spot_ids(self) -> None:
+        """経路の無い目的地を指定すると、番号も場所の名前も含まない「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        graph.add_spot(_node(19))
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = _movement_service(graph_repo, player_repo)
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(
+                PlayerId(1), SpotId.create(19), frozenset(), frozenset()
+            )
+
+        assert str(excinfo.value) == "その先へは行けない。"
+
+    def test_flooded_connection_on_the_only_route_reports_plain_sentence_without_spot_ids(
+        self,
+    ) -> None:
+        """唯一の経路の通路が通れなくなる (水で沈むなど) と、同じ行き先の指定が「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        flooded = graph.get_connection(ConnectionId.create(2))
+        graph.set_connection_passage(
+            ConnectionId.create(2), replace(flooded.passage, traversable=False)
+        )
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = _movement_service(graph_repo, player_repo)
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(
+                PlayerId(1), SpotId.create(3), frozenset(), frozenset()
+            )
+
+        assert str(excinfo.value) == "その先へは行けない。"
+
+    def test_route_leg_without_passable_connection_reports_plain_sentence_without_spot_ids(
+        self,
+    ) -> None:
+        """経路の途中に通れる接続が見つからないときも、番号を含まない「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        graph.add_spot(_node(19))
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+
+        class _RouteThroughMissingLeg(SpotGraphNavigationService):
+            def calculate_route(self, graph, from_spot_id, to_spot_id):
+                return [from_spot_id, SpotId.create(19)]
+
+        svc = SpotGraphMovementApplicationService(
+            graph_repo,
+            player_repo,
+            navigation_service=_RouteThroughMissingLeg(),
+            command_scope_factory=_DirectScopeFactory(graph_repo, player_repo),
+        )
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(
+                PlayerId(1), SpotId.create(19), frozenset(), frozenset()
+            )
+
+        assert str(excinfo.value) == "その先へは行けない。"

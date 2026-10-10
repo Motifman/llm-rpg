@@ -680,15 +680,17 @@ class SpotGraphToolExecutor:
             # ``self._spot_graph_repository`` として持っている同一 instance
             # なので、他オブジェクトの private 属性を触らず自分の依存で
             # 参照する (レビュー指摘 HIGH #1)。
-            display_name: str
+            display_name = "目的地"
             try:
                 if self._spot_graph_repository is not None:
                     graph = self._spot_graph_repository.find_graph()
                     display_name = graph.get_spot(SpotId.create(dest)).name
-                else:
-                    display_name = f"スポット {dest}"
             except Exception:
-                display_name = f"スポット {dest}"
+                logger.warning(
+                    "travel_to の行き先の名前を引けませんでした: spot_id=%s",
+                    dest,
+                    exc_info=True,
+                )
             base = f"{display_name}へ移動しました。"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
