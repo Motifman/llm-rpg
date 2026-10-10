@@ -13,10 +13,18 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from tests.support.trace_recorders import CollectingTraceRecorder
+
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -27,7 +35,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
     """needs更新後のevidence同期規則だけを検証する。"""
     evidence_statuses = stage._run_with_repository(repo)
-    stage._sync_hunger_max_evidence_all(evidence_statuses)
+    stage._sync_hunger_max_evidence_all(evidence_statuses, WorldTick(1))
 
 
 def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusAggregate:
@@ -141,19 +149,28 @@ class TestHungerMaxEvidenceWiring:
         assert transcriber.cleared == []
 
     def test_transcriber_exception_does_not_stop_tick_processing(self) -> None:
-        """transcriberが例外を投げても tick処理は止まらない。"""
+        """isolate で transcriber が例外を投げても tick 処理は止まらず、証拠の書き起こしの失敗が trace に残る。"""
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
         being_id = BeingId("being-1")
+        recorder = CollectingTraceRecorder()
         stage = SpotGraphNeedsDecayStageService(
             state_collapse_evidence_transcriber=_RaisingTranscriber(),
             state_collapse_being_id_resolver=lambda pid: being_id,
+            failure_isolator=WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.ISOLATE,
+                trace_recorder_provider=lambda: recorder,
+            ),
         )
 
         _run_rules(stage, repo)  # 例外なく完了
 
         assert status.needs.get(NeedType.HUNGER).value == 100
+        assert [
+            (e.payload["stage"], e.payload["target_id"])
+            for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        ] == [("needs_decay.state_collapse_evidence", int(status.player_id))]
 
 
 class TestSetterInjection:

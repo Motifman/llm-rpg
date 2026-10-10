@@ -117,9 +117,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                     self.pending_player_ids.clear()
                     self._self_reschedule_streak.clear()
                     return
-            except Exception:
+            except Exception as exc:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
-                logger.exception("check_game_end raised; continuing turn execution")
+                self._record_follow_up_failure(exc, "llm_turn.check_game_end", None)
 
         scheduled = list(self.pending_player_ids)
         self.pending_player_ids.clear()
@@ -211,11 +211,27 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                 result = self.wiring.run_phase_b(phase_a)
                 self._account_result(pid_value, result)
 
+    def _isolator(self) -> WorldTickFailureIsolator:
+        isolator = getattr(self.wiring.runtime, "world_tick_failure_isolator", None)
+        return isolator if isolator is not None else WorldTickFailureIsolator.fail_fast()
+
+    def _record_follow_up_failure(
+        self, exc: Exception, stage: str, player_id_value: int | None
+    ) -> None:
+        self._isolator().record_continued_failure(
+            exc,
+            stage=stage,
+            tick=WorldTick(int(self.wiring.runtime.current_tick())),
+            target_kind="player" if player_id_value is not None else "stage",
+            target_id=player_id_value,
+            player_id=player_id_value,
+            # ターンは CommandScope 1 回ではないので、何が確定済みかは分からない。
+            committed=None,
+        )
+
     def _turn_unit(self, player_id_value: int) -> AbstractContextManager[None]:
         runtime = self.wiring.runtime
-        isolator = getattr(runtime, "world_tick_failure_isolator", None)
-        if isolator is None:
-            isolator = WorldTickFailureIsolator.fail_fast()
+        isolator = self._isolator()
         return isolator.unit(
             stage="llm_turn",
             tick=WorldTick(int(runtime.current_tick())),
@@ -302,13 +318,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                 if hasattr(player_status, "snapshot_hp_for_delta"):
                     player_status.snapshot_hp_for_delta()
                 repo.save(player_status)
-        except Exception:
+        except Exception as exc:
             # snapshot 精度低下は致命ではない (差分が 0 になるだけ)
-            logger.warning(
-                "snapshot_needs_for_delta failed for player_id=%s",
-                player_id_value,
-                exc_info=True,
-            )
+            self._record_follow_up_failure(exc, "llm_turn.needs_snapshot", player_id_value)
 
     def _note_turn_for_reinterpretation(self, player_id_value: int) -> None:
         """reinterpretation coordinator に turn 完了を通知する fail-safe ヘルパ。
@@ -328,13 +340,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             return
         try:
             coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception:
+        except Exception as exc:
             # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
-            logger.warning(
-                "reinterpretation after_turn_completed failed for player=%s",
-                player_id_value,
-                exc_info=True,
-            )
+            self._record_follow_up_failure(exc, "llm_turn.reinterpretation", player_id_value)
 
     def _note_turn_for_belief_consolidation(self, player_id_value: int) -> None:
         """固着パス coordinator に turn 完了を通知する fail-safe ヘルパ。
@@ -355,13 +363,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             return
         try:
             coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception:
+        except Exception as exc:
             # 固着の失敗は致命ではない (worst case: 学びが固着しないだけ)。
-            logger.warning(
-                "belief consolidation after_turn_completed failed for player=%s",
-                player_id_value,
-                exc_info=True,
-            )
+            self._record_follow_up_failure(exc, "llm_turn.belief_consolidation", player_id_value)
 
     def _note_activity_after_turn(self, player_id_value: int) -> None:
         """heartbeat emitter に「player が今ターン走った」を通知する fail-safe ヘルパ。
@@ -380,13 +384,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             emitter.note_player_activity(
                 PlayerId(player_id_value), WorldTick(current)
             )
-        except Exception:
+        except Exception as exc:
             # idle timer の精度低下は致命ではない (worst case 旧来挙動)
-            logger.warning(
-                "note_player_activity failed for player_id=%s",
-                player_id_value,
-                exc_info=True,
-            )
+            self._record_follow_up_failure(exc, "llm_turn.note_activity", player_id_value)
 
     def _can_player_act(self, player_id_value: int) -> bool:
         """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
@@ -422,10 +422,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             if nav is not None and nav.is_traveling:
                 return False
             return True
-        except Exception:
-            logger.warning(
-                "player_status_repo.find_by_id failed for player_id=%s; "
-                "falling back to turn-continue", player_id_value,
-                exc_info=True,
-            )
+        except Exception as exc:
+            # 判定できないときはターンを回す側に倒す。
+            self._record_follow_up_failure(exc, "llm_turn.can_act", player_id_value)
             return True

@@ -120,3 +120,40 @@ class TestEveryStageSharesTheRuntimeIsolator:
         holder = getattr(stage, "_service", stage)
 
         assert holder._failure_isolator is runtime.world_tick_failure_isolator
+
+
+class TestFollowUpFailureInTheRuntime:
+    """runtime が tick の後に回す後処理の失敗を、tick を止めずに trace へ残すこと。"""
+
+    def test_public_sns_retry_failure_is_recorded_and_the_tick_completes(self) -> None:
+        """isolate で公開 SNS の通知の再送が例外を出しても advance_tick は終わり、public_sns.retry_notifications として続けた失敗が残る。"""
+        from unittest.mock import MagicMock
+
+        runtime = _runtime("isolate")
+        recorder = CollectingTraceRecorder()
+        runtime.set_trace_recorder(recorder)
+        broken_sns = MagicMock()
+        broken_sns.retry_pending_notifications.side_effect = RuntimeError("outbox locked")
+        runtime._public_sns_command_service = broken_sns
+        before = runtime.current_tick()
+
+        runtime.advance_tick()
+
+        assert runtime.current_tick() == before + 1
+        failures = recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        assert [(e.payload["stage"], e.payload["continued"]) for e in failures] == [
+            ("public_sns.retry_notifications", True)
+        ]
+
+
+class TestEveryCommandEventDispatcherReportsFailures:
+    """create_world_runtime の commit 後ハンドラの配送が、どれも失敗の受け口を持つこと。"""
+
+    def test_world_runtime_builds_no_dispatcher_without_failure_observer(self) -> None:
+        """受け口を渡さない CommandEventDispatcher() を 1 つでも作ると、その配送の best-effort ハンドラの失敗が warning だけになるので、ソースに残っていないことを見る。"""
+        import ai_rpg_world.application.world_runtime.world_runtime as module
+
+        source = Path(module.__file__).read_text(encoding="utf-8")
+
+        assert "CommandEventDispatcher()" not in source
+        assert source.count("CommandEventDispatcher(failure_observer=_record_after_commit_failure)") == 8

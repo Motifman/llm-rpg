@@ -983,9 +983,36 @@ class WorldRuntime:
         if self._public_sns_command_service is not None:
             try:
                 self._public_sns_command_service.retry_pending_notifications(limit=100)
-            except Exception:
-                logger.exception("公開SNSの通知再送が未完了です")
+            except Exception as exc:
+                self._record_world_tick_follow_up_failure(
+                    exc, stage="public_sns.retry_notifications", target_kind="stage"
+                )
         return tick.value
+
+    def _record_world_tick_follow_up_failure(
+        self,
+        exc: Exception,
+        *,
+        stage: str,
+        target_kind: str,
+        target_id: object = None,
+        player_id: int | None = None,
+    ) -> None:
+        """確定済みの処理に続く後処理の失敗を trace に残す (design_decisions D1558)。"""
+        from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+            WorldTickFailureIsolator,
+        )
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        isolator = self._world_tick_failure_isolator or WorldTickFailureIsolator.fail_fast()
+        isolator.record_continued_failure(
+            exc,
+            stage=stage,
+            tick=WorldTick(self.current_tick()),
+            target_kind=target_kind,
+            target_id=target_id,
+            player_id=player_id,
+        )
 
     def _record_committed_player_travel_tick(self, player_id: PlayerId) -> None:
         """確定済みの player 移動 1 tick を実験指標へ反映する。"""
@@ -5095,6 +5122,9 @@ def create_world_runtime(
         # recorder は set_trace_recorder で後から入るので、呼ばれた時点の値を見る。
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
+    _record_after_commit_failure = world_tick_failure_isolator.after_commit_failure_observer(
+        tick_provider=lambda: runtime.current_tick(),
+    )
 
     loader = ScenarioLoader()
     scenario = loader.load_from_file(
@@ -5659,7 +5689,7 @@ def create_world_runtime(
         InMemoryUnitOfWorkTransactionFactory,
     )
 
-    item_transfer_dispatcher = CommandEventDispatcher()
+    item_transfer_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     for item_transfer_event_type in (
         PlayerDroppedItemEvent,
         PlayerGaveItemEvent,
@@ -6411,6 +6441,7 @@ def create_world_runtime(
         try:
             spot_name = runtime.get_player_spot_name(player_id)
         except Exception:
+            # 盤から外れた人は場所の名前を持たない。到着の行を書かないだけの正常な経路。
             logger.debug(
                 "arrival history: spot name unavailable for player %s",
                 player_id.value,
@@ -6425,9 +6456,13 @@ def create_world_runtime(
                 success=True,
                 scene_boundary=True,
             )
-        except Exception:
-            logger.exception(
-                "arrival history hook failed for player %s", player_id.value
+        except Exception as exc:
+            runtime._record_world_tick_follow_up_failure(
+                exc,
+                stage="travel.arrival_history",
+                target_kind="player",
+                target_id=player_id.value,
+                player_id=player_id.value,
             )
 
     travel_stage.add_arrival_observer(_record_arrival_in_history)
@@ -6530,6 +6565,7 @@ def create_world_runtime(
     needs_config = scenario.needs_config
     starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
+        failure_isolator=world_tick_failure_isolator,
         starvation_damage_per_tick=starvation_dmg,
         # 空腹と疲労の進み方もシナリオの宣言から取る。**ここで渡し忘れると、
         # 宣言しても既定のまま進む** = 変えたつもりで変わっていない run に
@@ -7040,10 +7076,13 @@ def create_world_runtime(
                     EncounterKey(kind="body", identifier=f"player_{int(victim)}"),
                     int(runtime.current_tick()),
                 )
-            except Exception:
-                logger.warning(
-                    "加害者への死体発見抑止に失敗した (killer=%s victim=%s)",
-                    killer, victim, exc_info=True,
+            except Exception as exc:
+                runtime._record_world_tick_follow_up_failure(
+                    exc,
+                    stage="player_downed.killer_saw_body",
+                    target_kind="player",
+                    target_id=int(killer),
+                    player_id=int(killer),
                 )
 
     # 加害者の遭遇記録は確定後の最善努力処理。身体・猶予の正本更新には使わない。
@@ -7218,7 +7257,7 @@ def create_world_runtime(
                 event_id=event.event_id,
             )
 
-    interaction_dispatcher = CommandEventDispatcher()
+    interaction_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     interaction_dispatcher.register_required_before_commit(
         PlayerDownedEvent,
         _apply_player_lifecycle_before_commit,
@@ -7244,7 +7283,7 @@ def create_world_runtime(
     )
     from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 
-    use_item_dispatcher = CommandEventDispatcher()
+    use_item_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
 
     def _apply_consumable_effect_before_commit(event: Any, context: Any) -> None:
         repositories = context.repositories
@@ -7414,7 +7453,7 @@ def create_world_runtime(
     if food_spoilage_stage is not None:
         from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
 
-        food_spoilage_dispatcher = CommandEventDispatcher()
+        food_spoilage_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
         food_spoilage_dispatcher.register_after_commit(
             ItemSpoiledEvent,
             lambda event: runtime._append_food_spoiled_batch_observation(
@@ -7434,7 +7473,7 @@ def create_world_runtime(
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
     from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 
-    trade_offer_expiry_dispatcher = CommandEventDispatcher()
+    trade_offer_expiry_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     trade_offer_expiry_dispatcher.register_after_commit(
         TradeOfferExpiredEvent,
         _observe_expired_trade_offer,
@@ -7555,7 +7594,7 @@ def create_world_runtime(
         SynchronizedActionMessageEvent,
     )
 
-    synchronized_action_dispatcher = CommandEventDispatcher()
+    synchronized_action_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     synchronized_action_dispatcher.register_after_commit(
         ConnectionStateChangedEvent,
         lambda event: pipeline_event_publisher.publish_all((event,)),
@@ -7600,7 +7639,7 @@ def create_world_runtime(
         TimeOfDayChangedEvent,
     )
 
-    weather_dispatcher = CommandEventDispatcher()
+    weather_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     if weather_config is None or weather_config.announce_changes:
         weather_dispatcher.register_after_commit(
             SpotGraphWeatherChangedEvent,
@@ -7620,7 +7659,7 @@ def create_world_runtime(
     )
     environment_stage.set_command_scope_factory(weather_scope_factory)
     if day_night_stage is not None:
-        day_night_dispatcher = CommandEventDispatcher()
+        day_night_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
         if day_night_config is not None and day_night_config.announce_changes:
 
             def _observe_day_night_transition(

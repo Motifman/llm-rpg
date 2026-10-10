@@ -6,12 +6,18 @@ from types import SimpleNamespace
 
 import pytest
 from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
+from tests.support.trace_recorders import CollectingTraceRecorder
 
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
+)
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -387,7 +393,7 @@ class TestTravelStageOnArrival:
         assert arrived == [1]
 
     def test_on_arrival_exception_does_not_fail_travel_stage(self) -> None:
-        """コールバック失敗は他 player の advance を止めない (fail-safe)。"""
+        """isolate でコールバックが失敗しても移動は完了し、失敗は travel.arrival_observer として trace に残る。"""
         graph = _line_graph_three_spots(travel_ticks=1)
         graph_repo = InMemorySpotGraphRepository(graph)
         player_repo = InMemoryPlayerStatusRepository()
@@ -399,10 +405,19 @@ class TestTravelStageOnArrival:
         def boom(pid):
             raise RuntimeError("notify boom")
 
-        stage = SpotGraphTravelStageService(player_repo, svc, ctx, on_arrival=boom)
+        recorder = CollectingTraceRecorder()
+        stage = SpotGraphTravelStageService(
+            player_repo,
+            svc,
+            ctx,
+            on_arrival=boom,
+            failure_isolator=WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.ISOLATE,
+                trace_recorder_provider=lambda: recorder,
+            ),
+        )
 
         svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
-        # 例外を呑む (fail-safe) のでテストが通る
         stage.run(WorldTick(1))
 
         # 到着自体はちゃんと完了している (travel_stage の本体は走り切る)
@@ -410,6 +425,9 @@ class TestTravelStageOnArrival:
         assert p is not None
         assert p.spot_navigation_state is not None
         assert not p.spot_navigation_state.is_traveling
+        assert [
+            e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        ] == ["travel.arrival_observer"]
 
 
 class TestUnreachableTravelMessageHidesSpotIds:

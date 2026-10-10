@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -21,7 +22,7 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
     """確定境界から独立した飢餓規則だけを検証する。"""
     evidence_statuses = stage._run_with_repository(repo)
-    stage._sync_hunger_max_evidence_all(evidence_statuses)
+    stage._sync_hunger_max_evidence_all(evidence_statuses, WorldTick(1))
 
 
 def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusAggregate:
