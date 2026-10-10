@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import (
     SUPPORTED_FORMAT_VERSIONS,
     ScenarioLoadError,
@@ -144,7 +145,8 @@ class ScenarioLoader:
     def load_from_file(self, path: Path) -> ScenarioLoadResult:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
-        return self.load_from_dict(raw)
+        with declaring(f"{path}:"):
+            return self.load_from_dict(raw)
 
     def load_from_dict(self, raw: dict[str, Any]) -> ScenarioLoadResult:
         version = raw.get("scenario_format_version")

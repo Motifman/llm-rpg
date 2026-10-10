@@ -84,7 +84,7 @@ class TestEffectTargetParsing:
                 {
                     "effect_type": "REMOVE_ITEM",
                     "target": "TARGET_PLAYER",
-                    "parameters": {"item_spec_id": "iron_sword"},
+                    "parameters": {"item_spec": "key"},
                 }
             )
         )

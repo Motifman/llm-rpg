@@ -358,9 +358,8 @@ def parse_departed_agents_enabled(raw: dict[str, Any]) -> bool:
 def parse_item_spec_id_parameter_key(raw: dict[str, Any]) -> str | None:
     """``item_spec_id_parameter_key`` を検証して返す。
 
-    対象所持条件でしか意味を持たないフィールドなので、他の condition_type
-    に書かれていたら黙って無視せず落とす。無視すると「書いたのに効かない」
-    宣言がシナリオに残り、実 run で初めて気付くことになる。
+    対象所持条件以外の condition_type に書かれたものは、前提条件の許可キーの
+    表 (``INTERACTION_CONDITION_KEYS``) が先に落とす。
     """
     key = raw.get("item_spec_id_parameter_key")
     if key is None:
@@ -368,12 +367,6 @@ def parse_item_spec_id_parameter_key(raw: dict[str, Any]) -> str | None:
     if not isinstance(key, str) or not key.strip():
         raise ScenarioLoadError(
             "item_spec_id_parameter_key must be a non-empty string"
-        )
-    cond_type = raw.get("condition_type")
-    if cond_type not in ("TARGET_HAS_ITEM", "TARGET_HAS_NO_ITEM"):
-        raise ScenarioLoadError(
-            "item_spec_id_parameter_key is only valid on TARGET_HAS_ITEM / "
-            f"TARGET_HAS_NO_ITEM (got condition_type={cond_type!r})"
         )
     return key.strip()
 
@@ -467,3 +460,19 @@ def declared_action_names(raw: dict[str, Any]) -> set[str]:
             add_from(connection.get("interactions"))
     add_from(raw.get("player_interactions"))
     return names
+
+def reject_unknown_keys(
+    raw: Mapping[str, Any], allowed: Iterable[str], *, where: str
+) -> None:
+    """``allowed`` に無いキーがあれば ``ScenarioLoadError`` を投げる。
+
+    知らないキーは読まれずに捨てられ、書いた決まりが黙って効かなくなる。
+    """
+    allowed_keys = frozenset(allowed)
+    unknown = sorted(set(raw) - allowed_keys)
+    if unknown:
+        raise ScenarioLoadError(
+            f"{where} に知らないキー {unknown} があります。"
+            f"書けるキー: {sorted(allowed_keys)}。"
+            "知らないキーは読まれずに捨てられ、書いた決まりが効きません"
+        )

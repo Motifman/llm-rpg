@@ -58,7 +58,7 @@ def _with_event(condition_type: str):
             "trigger": "ON_TICK",
             "conditions": [{"condition_type": condition_type, "tick": 3}],
             "effects": [
-                {"effect_type": "SET_FLAG", "parameters": {"flag": "x", "value": True}}
+                {"effect_type": "SET_FLAG", "parameters": {"flag_name": "x"}}
             ],
         })
 

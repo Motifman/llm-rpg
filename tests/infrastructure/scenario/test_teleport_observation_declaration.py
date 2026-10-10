@@ -65,7 +65,7 @@ class TestDeclaredObservationMistakesStopTheRun:
             lambda params: params.__setitem__("arrival_observation_mesage", "出た")
         )
 
-        with pytest.raises(ScenarioLoadError, match="unknown parameters"):
+        with pytest.raises(ScenarioLoadError, match="arrival_observation_mesage"):
             create_world_runtime(path)
 
     def test_an_unknown_placeholder_is_rejected(self) -> None:
