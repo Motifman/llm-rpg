@@ -1,7 +1,7 @@
 .PHONY: test test-cov test-html lint lint-fix typecheck clean install dev-install help \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
 	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
-	check-no-internal-hostnames build-trace-viewer
+	check-no-internal-hostnames build-trace-viewer fuzz-scenario
 
 # relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
 PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
@@ -28,6 +28,8 @@ help:
 	@echo "  make experiment [EXPERIMENT_PROFILE=belief_goal_full] [OUT=...]"
 	@echo "                                - profile に固定した汎用シナリオ実験"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
+	@echo "  make fuzz-scenario [SCENARIO=...] [SEEDS=0-19] [FUZZ_TICKS=40]"
+	@echo "                                - でたらめに行動するスタブで回し、例外と内部番号の漏れを探す (実 LLM なし)"
 	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
 	@echo "                                - survival_island_v2 専用 (140 tick / workers 4 / publish 既定)"
 	@echo "  make experiment-survival-coop OUT=... [EPISODIC=1]"
@@ -326,3 +328,11 @@ build-trace-viewer:
 	@$(PYTHON) scripts/build_episodic_viewer.py $(RUN_DIR) || true
 	@$(PYTHON) scripts/build_timeline_viewer.py $(RUN_DIR) || true
 	@$(PYTHON) scripts/build_prompt_viewer.py $(RUN_DIR) || true
+
+# でたらめに行動するスタブで、実 run の前に組み合わせの穴を探す (#1557)。実 LLM を呼ばない。
+FUZZ_SCENARIO ?= data/scenarios/mine_village_v1.json
+SEEDS ?= 0-19
+FUZZ_TICKS ?= 40
+fuzz-scenario:
+	uv run python scripts/fuzz_scenario_with_random_agents.py \
+		--scenario $(if $(SCENARIO),$(SCENARIO),$(FUZZ_SCENARIO)) --seeds $(SEEDS) --ticks $(FUZZ_TICKS)
