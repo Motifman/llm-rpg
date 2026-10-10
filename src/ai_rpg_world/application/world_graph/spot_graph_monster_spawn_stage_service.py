@@ -24,6 +24,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
@@ -131,7 +134,9 @@ class SpotGraphMonsterSpawnStageService:
         loadout_id_factory: Callable[[], int] | None = None,
         world_object_id_factory: Callable[[], int] | None = None,
         command_scope_factory: CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._slots = slots
         self._monster_repository = monster_repository
         self._skill_loadout_repository = skill_loadout_repository
@@ -215,31 +220,38 @@ class SpotGraphMonsterSpawnStageService:
                 "monster spawn用CommandScopeFactoryが未配線です。"
             )
         for slot in self._slots:
-            try:
-                satisfied = self._evaluate(slot)
-            except Exception:
-                _logger.warning(
-                    "monster spawn condition evaluation failed for slot=%s; skipping this tick",
-                    slot.slot_key,
-                    exc_info=True,
-                )
-                continue
-            current = self._slot_to_monster[slot.slot_key]
-            if satisfied and current is None:
-                self._run_slot_command(
-                    slot,
-                    current_tick,
-                    spawn=True,
-                    scope_factory=scope_factory,
-                )
-            elif not satisfied and current is not None:
-                self._run_slot_command(
-                    slot,
-                    current_tick,
-                    spawn=False,
-                    monster_id=current,
-                    scope_factory=scope_factory,
-                )
+            with self._failure_isolator.unit(
+                stage="monster_spawn",
+                tick=current_tick,
+                target_kind="monster_spawn_slot",
+                target_id=slot.slot_key,
+            ):
+                self._run_slot(slot, current_tick, scope_factory=scope_factory)
+
+    def _run_slot(
+        self,
+        slot: MonsterSpawnSlot,
+        current_tick: WorldTick,
+        *,
+        scope_factory: CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort],
+    ) -> None:
+        satisfied = self._evaluate(slot)
+        current = self._slot_to_monster[slot.slot_key]
+        if satisfied and current is None:
+            self._run_slot_command(
+                slot,
+                current_tick,
+                spawn=True,
+                scope_factory=scope_factory,
+            )
+        elif not satisfied and current is not None:
+            self._run_slot_command(
+                slot,
+                current_tick,
+                spawn=False,
+                monster_id=current,
+                scope_factory=scope_factory,
+            )
 
     def _run_slot_command(
         self,

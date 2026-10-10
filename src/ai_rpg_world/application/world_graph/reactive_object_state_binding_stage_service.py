@@ -21,6 +21,9 @@ from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter impor
     ScenarioPredicateTraceEmitter,
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_with_owner
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -63,7 +66,9 @@ class ReactiveObjectStateBindingStageService:
         command_scope_factory: (
             CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None
         ) = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._bindings = tuple(bindings)
         self._condition_evaluator = condition_evaluator
         self._predicate_trace_emitter = predicate_trace_emitter
@@ -81,7 +86,12 @@ class ReactiveObjectStateBindingStageService:
                 "reactive object用CommandScopeFactoryが未配線です。"
             )
         for binding_index, binding in enumerate(self._bindings):
-            with factory.create() as context:
+            with self._failure_isolator.unit(
+                stage="reactive_object_state",
+                tick=current_tick,
+                target_kind="object_state_binding",
+                target_id=f"{binding_index}:{binding.target_object_id.value}",
+            ), factory.create() as context:
                 repositories = context.repositories
                 graph = repositories.spot_graph.find_graph()
                 existing_events = tuple(graph.get_events())

@@ -26,6 +26,9 @@ from ai_rpg_world.application.player.services.fallen_body_registry import (
 from ai_rpg_world.application.player.services.player_death_grace_timer import (
     PlayerDeathGraceTimer,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
@@ -68,7 +71,9 @@ class PlayerDeathGraceTickStage:
         fallen_body_registry: FallenBodyRegistry | None = None,
         departed_position_store: DepartedPositionStore | None = None,
         command_scope_factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         if not isinstance(outcome_registry, PlayerOutcomeRegistry):
             raise TypeError("outcome_registry must be PlayerOutcomeRegistry")
         if not isinstance(grace_timer, PlayerDeathGraceTimer):
@@ -136,7 +141,14 @@ class PlayerDeathGraceTickStage:
             grace_ticks=self._grace_ticks,
         )
         for player_id in overdue:
-            self._run_player_command(player_id, tick_value, scope_factory)
+            with self._failure_isolator.unit(
+                stage="death_grace",
+                tick=current_tick,
+                target_kind="player",
+                target_id=int(player_id),
+                player_id=int(player_id),
+            ):
+                self._run_player_command(player_id, tick_value, scope_factory)
 
     def _run_player_command(
         self,

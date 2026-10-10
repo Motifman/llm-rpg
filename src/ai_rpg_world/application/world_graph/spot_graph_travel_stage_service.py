@@ -9,6 +9,9 @@ from ai_rpg_world.application.world_graph.spot_graph_movement_application_servic
 from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
     SpotGraphTravelContextProvider,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -31,7 +34,9 @@ class SpotGraphTravelStageService:
         travel_context: SpotGraphTravelContextProvider,
         on_arrival: Callable[[PlayerId], None] | None = None,
         on_travel_tick_committed: Callable[[PlayerId], None] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._player_status_repository = player_status_repository
         self._movement_service = movement_service
         self._travel_context = travel_context
@@ -94,7 +99,6 @@ class SpotGraphTravelStageService:
         self._departed_checker = checker
 
     def run(self, current_tick: WorldTick) -> None:
-        del current_tick  # 将来: ログやスケジュールに使用
         # 進める前に「移動中だった player」のスナップショットを取る。
         # advance_spot_travel_one_tick 後に再 fetch して is_traveling
         # 遷移を比較するため。
@@ -121,23 +125,34 @@ class SpotGraphTravelStageService:
                 # 取り消すことで、新しい予約入口にも同じ不変条件を効かせる。
                 # 追放は is_down を立てず graph から外れるため、終局判定も
                 # ここで合わせて見ないと次の移動消化で例外になり続ける。
-                self._movement_service.cancel_spot_travel(status.player_id)
+                with self._player_unit(current_tick, status.player_id):
+                    self._movement_service.cancel_spot_travel(status.player_id)
                 continue
             was_traveling.append(status.player_id)
 
         for pid in was_traveling:
-            try:
-                self._movement_service.advance_spot_travel_one_tick(
-                    pid,
-                    self._travel_context.owned_item_spec_ids_for(pid),
-                    self._travel_context.world_flags(),
-                )
-            except CommandPostCommitException:
-                # commandの状態は確定済みである。cleanup/handoff失敗を返す前に、
-                # 確定に追随する計測と到着通知を失わない。
+            with self._player_unit(current_tick, pid):
+                try:
+                    self._movement_service.advance_spot_travel_one_tick(
+                        pid,
+                        self._travel_context.owned_item_spec_ids_for(pid),
+                        self._travel_context.world_flags(),
+                    )
+                except CommandPostCommitException:
+                    # commandの状態は確定済みである。cleanup/handoff失敗を返す前に、
+                    # 確定に追随する計測と到着通知を失わない。
+                    self._notify_committed_travel(pid)
+                    raise
                 self._notify_committed_travel(pid)
-                raise
-            self._notify_committed_travel(pid)
+
+    def _player_unit(self, current_tick: WorldTick, player_id: PlayerId):
+        return self._failure_isolator.unit(
+            stage="travel",
+            tick=current_tick,
+            target_kind="player",
+            target_id=player_id.value,
+            player_id=player_id.value,
+        )
 
     def _notify_committed_travel(self, player_id: PlayerId) -> None:
         """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""

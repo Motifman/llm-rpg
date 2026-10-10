@@ -67,7 +67,7 @@ class WorldTickFailureIsolator:
         stage: str,
         tick: WorldTick,
         target_kind: str,
-        target_id: int | str | None = None,
+        target_id: object = None,
         player_id: int | None = None,
     ) -> Iterator[None]:
         try:
@@ -84,7 +84,11 @@ class WorldTickFailureIsolator:
                     player_id=player_id,
                     stage=stage,
                     target_kind=target_kind,
-                    target_id=target_id,
+                    target_id=(
+                        target_id
+                        if target_id is None or isinstance(target_id, (int, str))
+                        else str(target_id)
+                    ),
                     error_type=type(exc).__name__,
                     error_message=_truncate(str(exc)),
                     error_origin=_innermost_frame(exc),

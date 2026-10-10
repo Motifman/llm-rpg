@@ -1197,6 +1197,11 @@ def _drive_scenario(
                     "async LLM completions may not be fully drained",
                     exc_info=True,
                 )
+        # 実験用の差し替え runtime は持っていないことがある。0 件と区別するため None で返す。
+        failure_counts_getter = getattr(runtime, "world_tick_failure_counts", None)
+        world_tick_failure_counts = (
+            failure_counts_getter() if callable(failure_counts_getter) else None
+        )
         outcome, end_reason, llm_call_count, llm_success_count = (
             _classify_llm_run_health(
                 recorder,
@@ -1214,6 +1219,12 @@ def _drive_scenario(
             "max_world_ticks": max_world_ticks,
             "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
             "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
+            "world_tick_failure_counts": world_tick_failure_counts,
+            "world_tick_failure_total": (
+                sum(world_tick_failure_counts.values())
+                if world_tick_failure_counts is not None
+                else None
+            ),
         }
 
 
@@ -1226,6 +1237,22 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
         code = str(event.payload.get("error_code") or "UNKNOWN")
         counts[code] = counts.get(code, 0) + 1
     return counts
+
+
+def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
+    """世界の tick で取りやめた 1 体ぶんの処理の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
+    counts = summary.get("world_tick_failure_counts")
+    if counts is None:
+        return ["- world tick failures: 未計測"]
+    total = sum(counts.values())
+    if total == 0:
+        return ["- world tick failures: 0"]
+    breakdown = ", ".join(f"{stage}={count}" for stage, count in sorted(counts.items()))
+    return [
+        f"- world tick failures: **{total}** ({breakdown})",
+        "  - 1 体ぶんの処理を取りやめて続けた run。効果の測定に使う前に、"
+        "trace の world_tick_unit_failed で原因を切り分ける",
+    ]
 
 
 def _build_report(
@@ -1316,6 +1343,7 @@ def _build_report(
         lines.append(
             f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)"
         )
+    lines.extend(_world_tick_failure_lines(summary))
     lines.append("")
     if llm_failures:
         lines.append("## LLM 呼び出しの失敗内訳")
@@ -1893,6 +1921,9 @@ def main(argv: list[str] | None = None) -> int:
         f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']} "
         f"elapsed={summary['elapsed_sec']:.1f}s"
     )
+    tick_failures = summary.get("world_tick_failure_total")
+    if tick_failures:
+        done_line += f" world_tick_failures={tick_failures}"
     llm_total = int(summary.get("llm_call_count") or 0)
     if llm_total:
         llm_ok = int(summary.get("llm_success_count") or 0)

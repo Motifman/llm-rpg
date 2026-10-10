@@ -27,6 +27,9 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -93,7 +96,9 @@ class SpotGraphScenarioEventStageService:
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         overflow_sink: Any = None,
         command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -152,25 +157,31 @@ class SpotGraphScenarioEventStageService:
                 continue
             if event.once and self._progress_store.is_fired(event.event_id):
                 continue
-            if not self._matches_conditions(event, current_tick):
-                continue
-            self._run_event_command(event, current_tick, scope_factory=scope_factory)
+            with self._event_unit(current_tick, event.event_id):
+                if self._matches_conditions(event, current_tick):
+                    self._run_event_command(event, current_tick, scope_factory=scope_factory)
 
         # 2. スケジュール済みチェーンイベントの発火
         for due_id in self._progress_store.due_event_ids(current_tick.value):
-            chained = events_by_id.get(due_id)
-            if chained is None:
-                self._discard_scheduled_event(due_id, scope_factory)
-                continue
-            if chained.once and self._progress_store.is_fired(due_id):
-                self._discard_scheduled_event(due_id, scope_factory)
-                continue
-            self._run_event_command(
-                chained,
-                current_tick,
-                scheduled_event_id=due_id,
-                scope_factory=scope_factory,
-            )
+            with self._event_unit(current_tick, due_id):
+                chained = events_by_id.get(due_id)
+                if chained is None or (chained.once and self._progress_store.is_fired(due_id)):
+                    self._discard_scheduled_event(due_id, scope_factory)
+                else:
+                    self._run_event_command(
+                        chained,
+                        current_tick,
+                        scheduled_event_id=due_id,
+                        scope_factory=scope_factory,
+                    )
+
+    def _event_unit(self, current_tick: WorldTick, event_id: str):
+        return self._failure_isolator.unit(
+            stage="scenario_event",
+            tick=current_tick,
+            target_kind="scenario_event",
+            target_id=event_id,
+        )
 
     def _run_event_command(
         self,
