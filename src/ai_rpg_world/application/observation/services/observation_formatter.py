@@ -1,6 +1,6 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
@@ -108,6 +108,7 @@ class ObservationFormatter(IObservationFormatter):
         departed_player_checker: Callable[[PlayerId], bool] | None = None,
         downed_self_becomes_departed: bool = False,
         effective_lighting_resolver: Any | None = None,
+        event_removal_messages: Mapping[int, str] | None = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -138,6 +139,7 @@ class ObservationFormatter(IObservationFormatter):
             departed_player_checker=departed_player_checker,
             downed_self_becomes_departed=downed_self_becomes_departed,
             effective_lighting_resolver=effective_lighting_resolver,
+            event_removal_messages=dict(event_removal_messages or {}),
         )
         self._formatters: list[_EventFormatter] = [
             ConversationObservationFormatter(self._context),

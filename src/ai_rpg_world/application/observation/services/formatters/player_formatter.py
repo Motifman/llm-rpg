@@ -19,6 +19,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
@@ -113,6 +114,8 @@ class PlayerObservationFormatter:
             return self._format_item_added_to_inventory(event, recipient_player_id)
         if isinstance(event, ItemDroppedFromInventoryEvent):
             return self._format_item_dropped(event, recipient_player_id)
+        if isinstance(event, ItemRemovedFromInventoryEvent):
+            return self._format_item_removed(event)
         if isinstance(event, ItemEquippedEvent):
             return self._format_item_equipped(event, recipient_player_id)
         if isinstance(event, ItemUnequippedEvent):
@@ -609,6 +612,25 @@ class PlayerObservationFormatter:
             structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="self_only"
+        )
+
+    def _format_item_removed(self, event: ItemRemovedFromInventoryEvent) -> ObservationOutput:
+        item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
+        structured: dict[str, Any] = {"type": "item_removed", "item_name": item_name}
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.item_instance_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
+        prose = (
+            self._context.event_removal_messages.get(spec_val)
+            if event.by_world_event and spec_val is not None
+            else None
+        )
+        return ObservationOutput(
+            prose=prose or f"{item_name}が手もとからなくなった。",
+            structured=structured,
+            observation_category="self_only",
         )
 
     def _format_item_equipped(

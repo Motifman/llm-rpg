@@ -25,6 +25,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
@@ -257,6 +258,7 @@ _RECIPIENT_RULES: RuleTable = {
     PlayerGoldPaidEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemAddedToInventoryEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemDroppedFromInventoryEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
+    ItemRemovedFromInventoryEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemEquippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemUnequippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     InventorySlotOverflowEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
