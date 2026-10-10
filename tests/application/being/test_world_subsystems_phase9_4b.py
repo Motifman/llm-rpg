@@ -271,3 +271,31 @@ class TestDayNightCodec:
             DayNightSubsystemCodec().restore(
                 SimpleNamespace(), {"schema_version": 999}
             )
+
+    def test_restore_raises_when_stage_lacks_cycle_instead_of_keeping_stale_phase(
+        self,
+    ) -> None:
+        """stage に _cycle が無いとき、restore は AttributeError を投げ、復元前の phase のまま黙って進めない。"""
+        stage = SimpleNamespace(_current=_StubTimeOfDay("MORNING"))
+        runtime = SimpleNamespace(
+            _day_night_stage=stage,
+            _time_provider=_StubTimeProvider(30),
+        )
+
+        with pytest.raises(AttributeError, match="_cycle"):
+            DayNightSubsystemCodec().restore(
+                runtime, {"schema_version": 1, "phase_name": None}
+            )
+
+    def test_restore_raises_when_runtime_lacks_time_provider(self) -> None:
+        """昼夜の stage があるのに _time_provider が無いとき、restore は AttributeError を投げ、再計算を黙って飛ばさない。"""
+        stage = SimpleNamespace(
+            _cycle=_StubCycle({30: _StubTimeOfDay("NIGHT")}),
+            _current=_StubTimeOfDay("MORNING"),
+        )
+        runtime = SimpleNamespace(_day_night_stage=stage)
+
+        with pytest.raises(AttributeError, match="_time_provider"):
+            DayNightSubsystemCodec().restore(
+                runtime, {"schema_version": 1, "phase_name": None}
+            )
