@@ -16,7 +16,11 @@
     ],
     "llm_public_intro": "冬が近い山あいの廃村。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。\n\n坑道の中は光が無いと何も見えない。古い坑道には、まだ誰も知らない仕掛けが残っているかもしれない。",
     "llm_objective_text": "- 最終目標は、坑道の奥の昇降機で外へ出ること。\n- 昇降機は一度しか動かない。\n- この村と坑道のことは、自分で確かめないと分からないことが多い。",
-    "show_world_map": true
+    "show_world_map": true,
+    "player_outcome_messages": {
+      "RESCUED": "{player_name}は昇降機で外へ出た。",
+      "STRANDED": "{player_name}は坑道に取り残された。"
+    }
   },
   "disabled_tools": [],
   "item_specs": [
@@ -38,6 +42,12 @@
       "name": "燃料が少し残った缶",
       "description": "底に少しだけ燃料が残った金属の缶。",
       "category": "TOOL"
+    },
+    {
+      "id": "lift_key",
+      "name": "昇降機の起動鍵",
+      "description": "鉄でできた太い鍵。昇降機の操作盤の鍵穴に合う。",
+      "category": "KEY_ITEM"
     }
   ],
   "environment": {
@@ -313,7 +323,102 @@
       },
       "is_outdoor": false,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "office_safe",
+            "name": "金庫",
+            "description": "壁際に据えられた重い鉄の金庫。四桁の番号を合わせるダイヤルが付いている。",
+            "object_type": "OTHER",
+            "state": {
+              "open": 0
+            },
+            "state_display": [
+              {
+                "key": "open",
+                "value": 0,
+                "text": "扉は固く閉じている"
+              },
+              {
+                "key": "open",
+                "value": 1,
+                "text": "扉が開いていて、中は空だ"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "open_safe",
+                "display_label": "番号を合わせて金庫を開ける",
+                "witness_observation_message": "{actor}が金庫のダイヤルを回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "safe_opened",
+                    "failure_message": "金庫の扉はもう開いている。中は空だ。"
+                  },
+                  {
+                    "condition_type": "PUZZLE_INPUT_MATCH",
+                    "puzzle_input_key": "code",
+                    "required_state": {
+                      "answer": "1907"
+                    },
+                    "failure_message": "ダイヤルを合わせて把手を引いたが、扉はびくともしない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "safe_opened"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "lift_key"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ダイヤルが噛み合う音がして、金庫の扉が開いた。中に鉄の鍵が 1 本入っていた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "office_desk",
+            "name": "事務机",
+            "description": "埃をかぶった事務机。引き出しが半分開いている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "search_desk_drawer",
+                "display_label": "引き出しを探る",
+                "witness_observation_message": "{actor}が事務机の引き出しを探っている。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "引き出しの奥に、黄ばんだ紙切れが挟まっていた。「金庫 1907」と鉛筆で走り書きがある。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -359,7 +464,7 @@
     {
       "id": "north_tunnel",
       "name": "北の坑道",
-      "description": "上層の北の坑道。壁に古い鉄の水門が埋め込まれ、南の端に重い防火扉がある。",
+      "description": "上層の北の坑道。壁に古い鉄の水門が埋め込まれ、南の端に重い防火扉がある。天井の裂け目から、かすかに光が落ちている。",
       "category": "OTHER",
       "area_id": "north_works",
       "position": {
@@ -367,7 +472,7 @@
         "y": 9.0
       },
       "atmosphere": {
-        "lighting": "DARK",
+        "lighting": "DIM",
         "sound_ambient": "水門の向こうで水が岩を打つ音",
         "temperature": "COLD"
       },
@@ -411,6 +516,12 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
+                      "flag_name": "noise_north"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
                       "flag_name": "gate_a_open"
                     }
                   },
@@ -449,6 +560,12 @@
                   }
                 ],
                 "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_north"
+                    }
+                  },
                   {
                     "effect_type": "CLEAR_FLAG",
                     "parameters": {
@@ -541,6 +658,17 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "noise_north_tracker",
+            "name": "坑道の奥の気配",
+            "description": "坑道の奥で何かが眠っている気配。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {
+              "noise": 0
+            },
+            "interactions": []
           }
         ]
       }
@@ -548,7 +676,7 @@
     {
       "id": "south_tunnel",
       "name": "南の坑道",
-      "description": "上層の南の坑道。壁に古い鉄の水門が埋め込まれ、北の端に重い防火扉がある。",
+      "description": "上層の南の坑道。壁に古い鉄の水門が埋め込まれ、北の端に重い防火扉がある。天井の裂け目から、かすかに光が落ちている。",
       "category": "OTHER",
       "area_id": "south_works",
       "position": {
@@ -556,7 +684,7 @@
         "y": 9.0
       },
       "atmosphere": {
-        "lighting": "DARK",
+        "lighting": "DIM",
         "sound_ambient": "水門の向こうで水が岩を打つ音",
         "temperature": "COLD"
       },
@@ -600,6 +728,12 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
+                      "flag_name": "noise_south"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
                       "flag_name": "gate_b_open"
                     }
                   },
@@ -638,6 +772,12 @@
                   }
                 ],
                 "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_south"
+                    }
+                  },
                   {
                     "effect_type": "CLEAR_FLAG",
                     "parameters": {
@@ -730,6 +870,17 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "noise_south_tracker",
+            "name": "坑道の奥の気配",
+            "description": "坑道の奥で何かが眠っている気配。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {
+              "noise": 0
+            },
+            "interactions": []
           }
         ]
       }
@@ -797,7 +948,7 @@
     {
       "id": "mid_junction",
       "name": "中層の分岐",
-      "description": "坑道がいくつも交わる中層の分岐。壁に大きな水門が埋め込まれている。",
+      "description": "坑道がいくつも交わる中層の分岐。壁に大きな水門が埋め込まれている。天井の裂け目から、かすかに光が落ちている。",
       "category": "OTHER",
       "area_id": "deep_works",
       "position": {
@@ -805,7 +956,7 @@
         "y": 5.0
       },
       "atmosphere": {
-        "lighting": "DARK",
+        "lighting": "DIM",
         "sound_ambient": "四方の坑道から響く水の音",
         "temperature": "COLD"
       },
@@ -849,6 +1000,12 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
                       "flag_name": "gate_c_open"
                     }
                   },
@@ -888,6 +1045,12 @@
                 ],
                 "effects": [
                   {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
                     "effect_type": "CLEAR_FLAG",
                     "parameters": {
                       "flag_name": "gate_c_open"
@@ -916,6 +1079,17 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "noise_deep_tracker",
+            "name": "坑道の奥の気配",
+            "description": "坑道の奥で何かが眠っている気配。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {
+              "noise": 0
+            },
+            "interactions": []
           }
         ]
       }
@@ -1070,6 +1244,12 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
                       "flag_name": "generator_running"
                     }
                   },
@@ -1113,6 +1293,12 @@
                   }
                 ],
                 "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
                   {
                     "effect_type": "INCREMENT_OBJECT_STATE",
                     "parameters": {
@@ -1436,6 +1622,12 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
                       "flag_name": "timber_felled"
                     }
                   },
@@ -1477,7 +1669,80 @@
       },
       "is_outdoor": false,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "lift",
+            "name": "昇降機",
+            "description": "地上へ続く縦穴に吊られた鉄の籠。脇に操作盤があり、鍵穴と始動の把手が付いている。",
+            "object_type": "OTHER",
+            "state": {
+              "used": 0
+            },
+            "state_display": [
+              {
+                "key": "used",
+                "value": 0,
+                "text": "籠は乗り場に止まっている"
+              },
+              {
+                "key": "used",
+                "value": 1,
+                "text": "籠はもう上がってしまった"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "start_lift",
+                "display_label": "鍵を差して昇降機を動かす",
+                "witness_observation_message": "{actor}が昇降機の操作盤に鍵を差し、把手を引いた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "lift_departed",
+                    "failure_message": "籠はもう上がってしまった。昇降機は二度と動かない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "lift_key",
+                    "failure_message": "鍵穴に合う鍵を持っていない。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_warm",
+                    "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_fuel_2",
+                    "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "lift_departed"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "used": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "籠が大きく揺れ、ゆっくりと縦穴を上がりはじめた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     }
   ],
@@ -1904,7 +2169,7 @@
       "knows_at_start": [
         "sayo"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n話し方: ぶっきらぼうな常体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。\n\n話し方: ぶっきらぼうな常体。",
       "objective": "サヨと二人そろって、坑道の奥の昇降機で外へ出る。"
     },
     {
@@ -1917,7 +2182,7 @@
       "knows_at_start": [
         "gen"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n話し方: はきはきした敬体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n父から、事務所の金庫の番号は 1907 だと聞いている。\n\n話し方: はきはきした敬体。",
       "objective": "ゲンと二人そろって、坑道の奥の昇降機で外へ出る。"
     }
   ],
@@ -2063,6 +2328,47 @@
           "effect_type": "CLEAR_FLAG",
           "parameters": {
             "flag_name": "generator_running"
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_warm"
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_hum_heard"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warms_up",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_running"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "generator",
+          "state_key": "started_at",
+          "ticks_offset": 6
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_warm"
           }
         }
       ]
@@ -2310,6 +2616,372 @@
           }
         }
       ]
+    },
+    {
+      "id": "noise_north_builds",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "noise_north"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "INCREMENT_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_key": "noise",
+            "delta": 1
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "noise_north"
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_north_wakes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "noise_north_tracker",
+          "state_key": "noise",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "beast_north_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "beast_north_awake"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_key": "awake_at"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_north_sleeps",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "noise_north_tracker",
+          "state_key": "awake_at",
+          "ticks_offset": 20
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "beast_north_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "beast_north_awake"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "noise_south_builds",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "noise_south"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "INCREMENT_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_key": "noise",
+            "delta": 1
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "noise_south"
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_south_wakes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "noise_south_tracker",
+          "state_key": "noise",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "beast_south_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "beast_south_awake"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_key": "awake_at"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_south_sleeps",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "noise_south_tracker",
+          "state_key": "awake_at",
+          "ticks_offset": 20
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "beast_south_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "beast_south_awake"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "noise_deep_builds",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "noise_deep"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "INCREMENT_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_key": "noise",
+            "delta": 1
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "noise_deep"
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_deep_wakes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "noise_deep_tracker",
+          "state_key": "noise",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "beast_deep_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "beast_deep_awake"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_key": "awake_at"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_deep_sleeps",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "noise_deep_tracker",
+          "state_key": "awake_at",
+          "ticks_offset": 20
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "beast_deep_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "beast_deep_awake"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_hum_heard",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_running"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_hum_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_hum_heard"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "地の底のほうから、機械の低い唸りが響いてきた。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "office_bell_heard",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "safe_opened"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "村のほうで、鐘が大きく鳴り響いた。"
+          }
+        }
+      ]
     }
   ],
   "reactive_bindings": {
@@ -2387,5 +3059,91 @@
         "on_false_state": "INACTIVE"
       }
     ]
-  }
+  },
+  "monsters": {
+    "templates": [
+      {
+        "id": "mine_beast",
+        "name": "坑道の獣",
+        "description": "坑道の奥に棲む、大きな黒い獣。",
+        "race": "BEAST",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 60,
+          "max_mp": 0,
+          "attack": 14,
+          "defense": 6,
+          "speed": 4,
+          "critical_rate": 0.05,
+          "evasion_rate": 0.05
+        },
+        "reward": {
+          "exp": 20,
+          "gold": 0
+        },
+        "respawn": {
+          "interval_ticks": 9999,
+          "auto": false
+        },
+        "vision_range": 2,
+        "flee_threshold": 0.0
+      }
+    ],
+    "initial_placements": [
+      {
+        "template": "mine_beast",
+        "spot": "north_tunnel",
+        "spawn_condition": {
+          "required_flags": [
+            "beast_north_awake"
+          ]
+        }
+      },
+      {
+        "template": "mine_beast",
+        "spot": "south_tunnel",
+        "spawn_condition": {
+          "required_flags": [
+            "beast_south_awake"
+          ]
+        }
+      },
+      {
+        "template": "mine_beast",
+        "spot": "mid_junction",
+        "spawn_condition": {
+          "required_flags": [
+            "beast_deep_awake"
+          ]
+        }
+      }
+    ]
+  },
+  "player_outcome_rules": [
+    {
+      "id": "escape_by_lift",
+      "trigger": {
+        "condition_type": "FLAG_SET",
+        "flag_name": "lift_departed"
+      },
+      "once": true,
+      "player_conditions": [
+        {
+          "condition_type": "PLAYER_AT_SPOT",
+          "target_spot": "lift_landing"
+        }
+      ],
+      "outcome": "RESCUED"
+    },
+    {
+      "id": "left_behind",
+      "trigger": {
+        "condition_type": "FLAG_SET",
+        "flag_name": "lift_departed"
+      },
+      "once": true,
+      "player_conditions": [],
+      "outcome": "STRANDED"
+    }
+  ]
 }

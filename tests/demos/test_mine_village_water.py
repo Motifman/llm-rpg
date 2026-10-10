@@ -514,15 +514,15 @@ def _interactions(raw: dict[str, Any]):
                 yield obj["id"], interaction
 
 
-#: 操作の前提条件に使ってよい種類。ほかの種類は試す前にヒントとして出る。
-_ALLOWED_PRECONDITIONS = frozenset({"FLAG_SET", "FLAG_NOT_SET", "HAS_ITEM"})
+#: 操作の前提条件に使ってよい種類。ほかの種類は試す前にヒントとして出る。金庫の番号の入力は、番号そのものを出さない。
+_ALLOWED_PRECONDITIONS = frozenset({"FLAG_SET", "FLAG_NOT_SET", "HAS_ITEM", "PUZZLE_INPUT_MATCH"})
 
 
 class TestRulesStayOutOfThePrompt:
     """決まりがヒントとして漏れないよう、操作の前提条件をフラグと持ち物だけで書いていることを保証する。"""
 
     def test_preconditions_use_only_flags_and_items(self) -> None:
-        """どの操作の前提条件も、フラグか持ち物だけを見る。時刻・天候・物の状態の条件は試す前にヒントとして出るため使わない。"""
+        """どの操作の前提条件も、フラグか持ち物か金庫の番号の入力だけを見る。時刻・天候・物の状態の条件は試す前にヒントとして出るため使わない。番号の入力は、番号そのものを出さない。"""
         raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
 
         used = {
