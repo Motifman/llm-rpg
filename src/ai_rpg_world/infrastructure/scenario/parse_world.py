@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
@@ -582,6 +583,15 @@ def parse_disabled_tools( raw: Any) -> tuple[str, ...]:
         names.append(name)
     return tuple(names)
 
+_SECTION_LABELS: Mapping[str, str] = {
+    "win": "game_end_conditions.win",
+    "lose": "game_end_conditions.lose",
+    "end": "game_end_conditions.end",
+    "team_win": "teams[].win",
+    "team_end": "teams のあるシナリオの game_end_conditions.end",
+}
+
+
 def parse_end_conditions(
     raw: Any,
     mapper: ScenarioIdMapper,
@@ -602,11 +612,12 @@ def parse_end_conditions(
             )
         if section not in allowed_sections:
             allowed = " / ".join(
-                name for name in ("win", "lose", "end")
+                _SECTION_LABELS[name]
+                for name in _SECTION_LABELS
                 if name in allowed_sections
             )
             raise ScenarioLoadError(
-                f"game_end_conditions.{section} に {ctype.value} は置けません。"
+                f"{_SECTION_LABELS[section]} に {ctype.value} は置けません。"
                 f"{allowed} に置いてください [index={index}]"
             )
         validate_end_condition_required_fields(item, ctype, index=index)
@@ -627,6 +638,11 @@ def parse_end_conditions(
                 else None
             ),
             min_set_count=item.get("min_set_count"),
+            required_outcome=(
+                PlayerOutcomeEnum(item["outcome"])
+                if ctype is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME
+                else None
+            ),
         ))
     return conditions
 
@@ -662,6 +678,16 @@ def validate_end_condition_required_fields(
             )
         # 数の整合 (0 以下 / 上限超え / 重複) は GameEndCondition の
         # __post_init__ が見る。ここで二重に書くと判断が 2 箇所に散る。
+        return
+
+    if ctype is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME:
+        outcome = item.get("outcome")
+        resolved = [o.value for o in PlayerOutcomeEnum if o.is_resolved]
+        if outcome not in resolved:
+            raise ScenarioLoadError(
+                f"{ctype.value} の outcome は {resolved} のどれかにしてください: "
+                f"{outcome!r} [index={index}]"
+            )
         return
 
     if ctype == GameEndConditionTypeEnum.FLAG_SET:

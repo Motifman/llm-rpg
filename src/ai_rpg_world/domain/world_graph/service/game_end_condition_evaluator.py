@@ -147,6 +147,42 @@ class GameEndConditionEvaluator:
         )
 
     @staticmethod
+    def _evaluate_all_members_have_outcome(
+        condition: GameEndCondition,
+        team_member_ids: Sequence[PlayerId] | None,
+        player_outcomes: Mapping[int, PlayerOutcomeEnum] | None,
+        result_on_match: GameResultEnum | None,
+    ) -> GameEndResult:
+        required = condition.required_outcome
+        if required is None:
+            raise GameEndConditionValidationException(
+                "ALL_MEMBERS_HAVE_OUTCOME に required_outcome がありません"
+            )
+        if team_member_ids is None or player_outcomes is None:
+            raise GameEndConditionValidationException(
+                "ALL_MEMBERS_HAVE_OUTCOME は team_member_ids と player_outcomes を"
+                "必要とします (チームの勝利条件の外では評価できません)"
+            )
+        if not team_member_ids:
+            return GameEndResult(False, None, "チームに所属する人がいない")
+        reached = sum(
+            1
+            for player_id in team_member_ids
+            if player_outcomes.get(int(player_id)) is required
+        )
+        if reached == len(team_member_ids):
+            return GameEndResult(
+                True,
+                result_on_match,
+                f"チームの全員が {required.value} になった ({reached}人)",
+            )
+        return GameEndResult(
+            False,
+            None,
+            f"チームの {required.value} は {reached}/{len(team_member_ids)}人",
+        )
+
+    @staticmethod
     def entity_id_for_player(player_id: PlayerId) -> EntityId:
         return EntityId.create(int(player_id))
 
@@ -176,8 +212,15 @@ class GameEndConditionEvaluator:
         # どちらのリストに書いたかで決まる。既定値を置かないのは、新しい
         # 呼び出し側が黙ってどちらかに倒れるのを防ぐため。
         result_on_match: GameResultEnum | None,
+        # ALL_MEMBERS_HAVE_OUTCOME の判定材料。チームの勝利条件を評価するときに
+        # だけ渡す。他の条件型はチームの中に書いても世界全体を見る。
+        team_member_ids: Sequence[PlayerId] | None = None,
     ) -> GameEndResult:
         t = condition.condition_type
+        if t is GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME:
+            return self._evaluate_all_members_have_outcome(
+                condition, team_member_ids, player_outcomes, result_on_match
+            )
         if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
             declared = tuple(condition.required_flags or ())
             need = condition.min_set_count

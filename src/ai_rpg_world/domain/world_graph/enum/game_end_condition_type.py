@@ -31,3 +31,6 @@ class GameEndConditionTypeEnum(str, Enum):
     # 個人結果が混在していても、全対象プレイヤーが終局結果へ確定したら
     # 集団 WIN / LOSE を付けずに世界を終了する。
     ALL_PLAYER_OUTCOMES_RESOLVED = "ALL_PLAYER_OUTCOMES_RESOLVED"
+    # チームの全員が ``required_outcome`` の個人結果になったら成立 (#1516)。
+    # ``teams[].win`` の中でだけ使え、評価には所属する人の一覧が要る。
+    ALL_MEMBERS_HAVE_OUTCOME = "ALL_MEMBERS_HAVE_OUTCOME"

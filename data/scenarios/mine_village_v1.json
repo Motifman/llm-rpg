@@ -1,0 +1,3149 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "mine_village_v1",
+    "title": "廃坑の山村",
+    "description": "記憶を測るための、推論と敵対が要るシナリオの試作 (#1508)。雪に閉ざされた廃村と、その下の古い坑道。2 組が別々の入口から、互いを知らずに入り、1 回しか動かない昇降機を目指す。設計は docs/mine_village_scenario_design.md。",
+    "theme": "adversarial",
+    "difficulty": "hard",
+    "estimated_ticks": 200,
+    "author": "mine-village-prototype",
+    "tags": [
+      "adversarial",
+      "memory_probe",
+      "hidden_rules",
+      "spot_graph"
+    ],
+    "llm_public_intro": "冬が近い山あいの廃村。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。\n\n坑道の中は光が無いと何も見えない。古い坑道には、まだ誰も知らない仕掛けが残っているかもしれない。",
+    "llm_objective_text": "- 最終目標は、坑道の奥の昇降機で外へ出ること。\n- 昇降機は一度しか動かない。\n- この村と坑道のことは、自分で確かめないと分からないことが多い。",
+    "show_world_map": true,
+    "player_outcome_messages": {
+      "RESCUED": "{player_name}は昇降機で外へ出た。",
+      "STRANDED": "{player_name}は坑道に取り残された。"
+    }
+  },
+  "disabled_tools": [],
+  "item_specs": [
+    {
+      "id": "lamp",
+      "name": "カンテラ",
+      "description": "油で灯す手提げのカンテラ。暗い坑道でも足もとが見える。",
+      "category": "TOOL",
+      "is_light_source": true
+    },
+    {
+      "id": "fuel_can",
+      "name": "燃料の缶",
+      "description": "発電機用の燃料が詰まった金属の缶。",
+      "category": "TOOL"
+    },
+    {
+      "id": "small_fuel_can",
+      "name": "燃料が少し残った缶",
+      "description": "底に少しだけ燃料が残った金属の缶。",
+      "category": "TOOL"
+    },
+    {
+      "id": "lift_key",
+      "name": "昇降機の起動鍵",
+      "description": "鉄でできた太い鍵。昇降機の操作盤の鍵穴に合う。",
+      "category": "KEY_ITEM"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "SNOW",
+        "intensity": 0.5
+      },
+      "update_interval_ticks": 100000,
+      "announce_changes": false
+    },
+    "day_night": {
+      "enabled": true,
+      "ticks_per_day": 48,
+      "starting_tick_in_day": 0,
+      "announce_changes": true,
+      "phases": [
+        {
+          "name": "predawn",
+          "start_ratio": 0.0,
+          "display_text": "未明",
+          "ambient_light": 0.1,
+          "is_dark": true
+        },
+        {
+          "name": "morning",
+          "start_ratio": 0.25,
+          "display_text": "朝",
+          "ambient_light": 0.9,
+          "is_dark": false
+        },
+        {
+          "name": "noon",
+          "start_ratio": 0.5,
+          "display_text": "昼",
+          "ambient_light": 1.0,
+          "is_dark": false
+        },
+        {
+          "name": "night",
+          "start_ratio": 0.75,
+          "display_text": "夜",
+          "ambient_light": 0.1,
+          "is_dark": true
+        }
+      ]
+    }
+  },
+  "areas": [
+    {
+      "id": "village",
+      "name": "廃村",
+      "visible_name": "雪に埋もれた廃村",
+      "prominence": 0.2
+    },
+    {
+      "id": "north_works",
+      "name": "北の坑道",
+      "visible_name": "北の坑道",
+      "prominence": 0.0
+    },
+    {
+      "id": "south_works",
+      "name": "南の坑道",
+      "visible_name": "南の坑道",
+      "prominence": 0.0
+    },
+    {
+      "id": "deep_works",
+      "name": "坑道の深部",
+      "visible_name": "坑道の深部",
+      "prominence": 0.0
+    }
+  ],
+  "spots": [
+    {
+      "id": "north_shaft_head",
+      "name": "北の竪坑口",
+      "description": "村の北外れ、雪に半ば埋もれた竪坑の口。錆びた鉄の梯子が闇の底へ下りている。",
+      "category": "FIELD",
+      "area_id": "village",
+      "position": {
+        "x": 2.0,
+        "y": 9.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "竪坑の底から吹き上がる冷たい風の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "snow_pass",
+      "name": "雪の峠道",
+      "description": "村から谷の外へ抜ける峠道。腰まで積もった雪に覆われ、この先へは進めそうにない。",
+      "category": "FIELD",
+      "area_id": "village",
+      "position": {
+        "x": 6.0,
+        "y": 10.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "吹きだまりを渡る風の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "assembly_hall",
+      "name": "集会所",
+      "description": "村の寄り合いに使われていた板張りの集会所。壁に古い掲示板が掛かっている。",
+      "category": "OTHER",
+      "area_id": "village",
+      "position": {
+        "x": 3.0,
+        "y": 6.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "隙間風が板壁を鳴らす音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "village_square",
+      "name": "廃村の広場",
+      "description": "廃村の真ん中の広場。雪をかぶった家々が四方を囲み、足跡ひとつ無い。",
+      "category": "FIELD",
+      "area_id": "village",
+      "position": {
+        "x": 6.0,
+        "y": 5.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "雪が屋根から落ちる鈍い音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "well",
+      "name": "井戸",
+      "description": "石組みの古い井戸。滑車と桶がまだ残っている。",
+      "category": "FIELD",
+      "area_id": "village",
+      "position": {
+        "x": 8.0,
+        "y": 6.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "井戸の底で水の滴る音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "storehouse",
+      "name": "倉庫",
+      "description": "村の共同の倉庫。棚の多くは空で、奥に木箱がいくつか残っている。",
+      "category": "OTHER",
+      "area_id": "village",
+      "position": {
+        "x": 4.0,
+        "y": 3.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "棚の上を鼠が走る音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "storehouse_crates",
+            "name": "奥の木箱",
+            "description": "倉庫の奥に積まれた木箱。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "take_small_fuel_can",
+                "display_label": "木箱を探る",
+                "witness_observation_message": "{actor}が木箱の中を探っている。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "small_fuel_taken",
+                    "failure_message": "木箱にはもう何も残っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "small_fuel_taken"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "small_fuel_can"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "中から燃料の缶を取り出した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "smithy",
+      "name": "鍛冶場",
+      "description": "火の落ちた鍛冶場。金床と炉が残り、隅に布切れと油の瓶が転がっている。",
+      "category": "OTHER",
+      "area_id": "village",
+      "position": {
+        "x": 8.0,
+        "y": 3.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "冷えた炉の中で灰が崩れる音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "company_office",
+      "name": "鉱山会社の事務所",
+      "description": "鉱山会社の事務所。机と帳簿棚が並び、奥の壁際に重そうな金庫が据えてある。屋根の上に古い鐘が吊るされている。",
+      "category": "OTHER",
+      "area_id": "village",
+      "position": {
+        "x": 10.0,
+        "y": 4.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "鐘の綱が風に揺れて柱をこする音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "office_safe",
+            "name": "金庫",
+            "description": "壁際に据えられた重い鉄の金庫。四桁の番号を合わせるダイヤルが付いている。",
+            "object_type": "OTHER",
+            "state": {
+              "open": 0
+            },
+            "state_display": [
+              {
+                "key": "open",
+                "value": 0,
+                "text": "扉は固く閉じている"
+              },
+              {
+                "key": "open",
+                "value": 1,
+                "text": "扉が開いていて、中は空だ"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "open_safe",
+                "display_label": "番号を合わせて金庫を開ける",
+                "witness_observation_message": "{actor}が金庫のダイヤルを回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "safe_opened",
+                    "failure_message": "金庫の扉はもう開いている。中は空だ。"
+                  },
+                  {
+                    "condition_type": "PUZZLE_INPUT_MATCH",
+                    "puzzle_input_key": "code",
+                    "required_state": {
+                      "answer": "1907"
+                    },
+                    "failure_message": "ダイヤルを合わせて把手を引いたが、扉はびくともしない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "safe_opened"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "lift_key"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ダイヤルが噛み合う音がして、金庫の扉が開いた。中に鉄の鍵が 1 本入っていた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "office_desk",
+            "name": "事務机",
+            "description": "埃をかぶった事務机。引き出しが半分開いている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "search_desk_drawer",
+                "display_label": "引き出しを探る",
+                "witness_observation_message": "{actor}が事務机の引き出しを探っている。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "引き出しの奥に、黄ばんだ紙切れが挟まっていた。「金庫 1907」と鉛筆で走り書きがある。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "south_adit_mouth",
+      "name": "南の横坑口",
+      "description": "村の南の斜面に口を開けた横坑。坑口には朽ちかけた木枠が組まれている。",
+      "category": "FIELD",
+      "area_id": "village",
+      "position": {
+        "x": 11.0,
+        "y": 1.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "横坑の奥から響く水の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": true,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "north_shaft_bottom",
+      "name": "北の竪坑の底",
+      "description": "竪坑の梯子を下りきった底。四方を岩に囲まれ、南へ坑道が延びている。",
+      "category": "OTHER",
+      "area_id": "north_works",
+      "position": {
+        "x": 16.0,
+        "y": 9.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "頭上の竪坑を抜ける風の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "north_tunnel",
+      "name": "北の坑道",
+      "description": "上層の北の坑道。壁に古い鉄の水門が埋め込まれ、南の端に重い防火扉がある。天井の裂け目から、かすかに光が落ちている。",
+      "category": "OTHER",
+      "area_id": "north_works",
+      "position": {
+        "x": 19.0,
+        "y": 9.0
+      },
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "水門の向こうで水が岩を打つ音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "gate_a",
+            "name": "北の坑道の水門",
+            "description": "坑道の壁に埋め込まれた古い鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。",
+            "object_type": "OTHER",
+            "state": {
+              "open": 0
+            },
+            "state_display": [
+              {
+                "key": "open",
+                "value": 0,
+                "text": "閉じている"
+              },
+              {
+                "key": "open",
+                "value": 1,
+                "text": "開いていて、水の流れる音がする"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "open_gate_a",
+                "display_label": "水門を開ける",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が水門の把手を回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "gate_a_open",
+                    "failure_message": "水門はもう開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_north"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "gate_a_open"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "flooded_south_entry"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "close_gate_a",
+                "display_label": "水門を閉じる",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が水門の把手を回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "gate_a_open",
+                    "failure_message": "水門は閉じている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_north"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "gate_a_open"
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "closed_at"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 0
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "把手を戻すと、水の流れる音がやんだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "fire_door_bar_north",
+            "name": "防火扉の閂 (北側)",
+            "description": "防火扉に渡す太い鉄の閂。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "bar_fire_door_north",
+                "display_label": "閂を掛ける",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が防火扉に閂を掛けた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "fire_door_barred_north",
+                    "failure_message": "閂はもう掛かっている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "fire_door_barred_north"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "閂を渡した。この扉はもう開かない。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "unbar_fire_door_north",
+                "display_label": "閂を外す",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が防火扉の閂を外した。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "fire_door_barred_north",
+                    "failure_message": "この閂は掛かっていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "fire_door_barred_north"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "閂を外した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "noise_north_tracker",
+            "name": "坑道の奥の気配",
+            "description": "坑道の奥で何かが眠っている気配。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {
+              "noise": 0
+            },
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "south_tunnel",
+      "name": "南の坑道",
+      "description": "上層の南の坑道。壁に古い鉄の水門が埋め込まれ、北の端に重い防火扉がある。天井の裂け目から、かすかに光が落ちている。",
+      "category": "OTHER",
+      "area_id": "south_works",
+      "position": {
+        "x": 21.0,
+        "y": 9.0
+      },
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "水門の向こうで水が岩を打つ音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "gate_b",
+            "name": "南の坑道の水門",
+            "description": "坑道の壁に埋め込まれた古い鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。",
+            "object_type": "OTHER",
+            "state": {
+              "open": 0
+            },
+            "state_display": [
+              {
+                "key": "open",
+                "value": 0,
+                "text": "閉じている"
+              },
+              {
+                "key": "open",
+                "value": 1,
+                "text": "開いていて、水の流れる音がする"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "open_gate_b",
+                "display_label": "水門を開ける",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が水門の把手を回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "gate_b_open",
+                    "failure_message": "水門はもう開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_south"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "gate_b_open"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "flooded_north_entry"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "close_gate_b",
+                "display_label": "水門を閉じる",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が水門の把手を回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "gate_b_open",
+                    "failure_message": "水門は閉じている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_south"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "gate_b_open"
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "closed_at"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 0
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "把手を戻すと、水の流れる音がやんだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "fire_door_bar_south",
+            "name": "防火扉の閂 (南側)",
+            "description": "防火扉に渡す太い鉄の閂。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "bar_fire_door_south",
+                "display_label": "閂を掛ける",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が防火扉に閂を掛けた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "fire_door_barred_south",
+                    "failure_message": "閂はもう掛かっている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "fire_door_barred_south"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "閂を渡した。この扉はもう開かない。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "unbar_fire_door_south",
+                "display_label": "閂を外す",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が防火扉の閂を外した。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "fire_door_barred_south",
+                    "failure_message": "この閂は掛かっていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "fire_door_barred_south"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "閂を外した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "noise_south_tracker",
+            "name": "坑道の奥の気配",
+            "description": "坑道の奥で何かが眠っている気配。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {
+              "noise": 0
+            },
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "south_adit_end",
+      "name": "南の横坑の奥",
+      "description": "横坑を奥まで進んだ突き当たり。ここから上層の坑道へつながっている。",
+      "category": "OTHER",
+      "area_id": "south_works",
+      "position": {
+        "x": 24.0,
+        "y": 9.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "坑口から吹き込む風の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "miners_rest",
+      "name": "坑夫の詰所",
+      "description": "坑夫たちが休んだ詰所。腰掛けと湧き水の溜まり、鳥籠が吊るされている。",
+      "category": "OTHER",
+      "area_id": "north_works",
+      "position": {
+        "x": 18.0,
+        "y": 6.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "湧き水の細い流れの音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "tool_store",
+      "name": "道具置き場",
+      "description": "中層の道具置き場。ロープや古い工具が棚に並んでいる。",
+      "category": "OTHER",
+      "area_id": "south_works",
+      "position": {
+        "x": 22.0,
+        "y": 6.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "工具が触れ合う乾いた音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "mid_junction",
+      "name": "中層の分岐",
+      "description": "坑道がいくつも交わる中層の分岐。壁に大きな水門が埋め込まれている。天井の裂け目から、かすかに光が落ちている。",
+      "category": "OTHER",
+      "area_id": "deep_works",
+      "position": {
+        "x": 20.0,
+        "y": 5.0
+      },
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "四方の坑道から響く水の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "gate_c",
+            "name": "分岐の大水門",
+            "description": "分岐の壁に埋め込まれた大きな鉄の水門。大きな把手で開け閉めする。向こう側で水が岩を打つ音がする。",
+            "object_type": "OTHER",
+            "state": {
+              "open": 0
+            },
+            "state_display": [
+              {
+                "key": "open",
+                "value": 0,
+                "text": "閉じている"
+              },
+              {
+                "key": "open",
+                "value": 1,
+                "text": "開いていて、水の流れる音がする"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "open_gate_c",
+                "display_label": "水門を開ける",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が水門の把手を回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "gate_c_open",
+                    "failure_message": "水門はもう開いている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "gate_c_open"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "flooded_shortcut"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "close_gate_c",
+                "display_label": "水門を閉じる",
+                "hide_when_flag_preconditions_fail": true,
+                "witness_observation_message": "{actor}が水門の把手を回している。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "gate_c_open",
+                    "failure_message": "水門は閉じている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "gate_c_open"
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "closed_at"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "open": 0
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "把手を戻すと、水の流れる音がやんだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "noise_deep_tracker",
+            "name": "坑道の奥の気配",
+            "description": "坑道の奥で何かが眠っている気配。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {
+              "noise": 0
+            },
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "machine_room",
+      "name": "機械室",
+      "description": "中層の機械室。古い発電機と排水ポンプが据えられ、太い配管が壁を這っている。",
+      "category": "OTHER",
+      "area_id": "deep_works",
+      "position": {
+        "x": 20.0,
+        "y": 3.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "冷えた機械が軋む音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "generator",
+            "name": "発電機",
+            "description": "古い発電機。給油口と始動の把手、燃料計が付いている。",
+            "object_type": "OTHER",
+            "state": {
+              "fuel": 0
+            },
+            "state_display": [
+              {
+                "key": "fuel",
+                "value": 0,
+                "text": "燃料計の針は空を指している"
+              },
+              {
+                "key": "fuel",
+                "value": 1,
+                "text": "燃料計の針は1つ目の目盛りを指している"
+              },
+              {
+                "key": "fuel",
+                "value": 2,
+                "text": "燃料計の針は2つ目の目盛りを指している"
+              },
+              {
+                "key": "fuel",
+                "value": 3,
+                "text": "燃料計の針は3つ目の目盛りを指している"
+              },
+              {
+                "key": "fuel",
+                "value": 4,
+                "text": "燃料計の針は4つ目の目盛りを指している"
+              },
+              {
+                "key": "fuel",
+                "value": 5,
+                "text": "燃料計の針は5つ目の目盛りを指している"
+              },
+              {
+                "key": "fuel",
+                "value": 6,
+                "text": "燃料計の針は6つ目の目盛りを指している"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "pour_fuel_can",
+                "display_label": "燃料の缶を注ぐ",
+                "witness_observation_message": "{actor}が発電機に燃料を注いでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "fuel_can",
+                    "failure_message": "注げる燃料を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fuel_can"
+                    }
+                  },
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "fuel",
+                      "delta": 2
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "缶の燃料を残らず給油口に注いだ。空になった缶は置いていく。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "pour_small_fuel_can",
+                "display_label": "残りの少ない缶を注ぐ",
+                "witness_observation_message": "{actor}が発電機に燃料を注いでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "small_fuel_can",
+                    "failure_message": "注げる燃料を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "small_fuel_can"
+                    }
+                  },
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "state_key": "fuel",
+                      "delta": 1
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "缶の底に残っていた燃料を給油口に注いだ。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "start_generator",
+                "display_label": "発電機を動かす",
+                "witness_observation_message": "{actor}が発電機の始動の把手を引いた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "generator_running",
+                    "failure_message": "発電機はもう回っている。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_fuel_1",
+                    "failure_message": "把手を引いても、発電機は咳き込むだけで回らない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "generator_running"
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "started_at"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "把手を引くと、発電機が唸りを上げて回りはじめた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "pump",
+            "name": "排水ポンプ",
+            "description": "太い配管が坑道の奥へ延びる排水ポンプ。脇に始動のスイッチがある。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "run_pump",
+                "display_label": "排水ポンプを動かす",
+                "witness_observation_message": "{actor}が排水ポンプのスイッチを入れた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_running",
+                    "failure_message": "スイッチを入れても、ポンプはぴくりとも動かない。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_fuel_1",
+                    "failure_message": "スイッチを入れても、ポンプはぴくりとも動かない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "generator",
+                      "state_key": "fuel",
+                      "delta": -1
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "generator_fuel_1"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "generator_fuel_2"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "pump_pulse"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ポンプが低く唸り、配管の奥で水を吸い上げる音がした。しばらくして音はやんだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "valve",
+            "name": "切り替え弁",
+            "description": "ポンプの配管に付いた大きな弁。ハンドルの周りに一から三までの目盛りが刻まれている。",
+            "object_type": "OTHER",
+            "state": {
+              "mark": 2
+            },
+            "state_display": [
+              {
+                "key": "mark",
+                "value": 1,
+                "text": "一の目盛りを指している"
+              },
+              {
+                "key": "mark",
+                "value": 2,
+                "text": "二の目盛りを指している"
+              },
+              {
+                "key": "mark",
+                "value": 3,
+                "text": "三の目盛りを指している"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "set_valve_1",
+                "display_label": "弁を一の目盛りに合わせる",
+                "witness_observation_message": "{actor}が切り替え弁のハンドルを回している。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_1"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_2"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_3"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "mark": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ハンドルを回し、弁を一の目盛りに合わせた。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "set_valve_2",
+                "display_label": "弁を二の目盛りに合わせる",
+                "witness_observation_message": "{actor}が切り替え弁のハンドルを回している。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_2"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_1"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_3"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "mark": 2
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ハンドルを回し、弁を二の目盛りに合わせた。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "set_valve_3",
+                "display_label": "弁を三の目盛りに合わせる",
+                "witness_observation_message": "{actor}が切り替え弁のハンドルを回している。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_3"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_1"
+                    }
+                  },
+                  {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "valve_2"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "mark": 3
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ハンドルを回し、弁を三の目盛りに合わせた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "gas_chamber",
+      "name": "掘り場",
+      "description": "中層の奥の掘り場。掘りかけの岩肌が続く行き止まりで、空気が重い。",
+      "category": "OTHER",
+      "area_id": "deep_works",
+      "position": {
+        "x": 23.0,
+        "y": 4.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "どこかで岩がはぜる小さな音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "spare_fuel_crate",
+            "name": "予備の燃料の木箱",
+            "description": "掘り場の隅に置かれた木箱。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "take_spare_fuel_can",
+                "display_label": "木箱から燃料の缶を取る",
+                "witness_observation_message": "{actor}が木箱の中を探っている。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "spare_fuel_taken",
+                    "failure_message": "木箱はもう空だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "spare_fuel_taken"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "fuel_can"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "中から燃料の缶を取り出した。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "lower_shortcut",
+      "name": "下層の近道",
+      "description": "下層へ下る近道。低い坑道が昇降機の乗り場へまっすぐ続いている。",
+      "category": "OTHER",
+      "area_id": "deep_works",
+      "position": {
+        "x": 19.0,
+        "y": 2.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "足もとを流れる水の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "timber_passage",
+      "name": "古い支柱の通路",
+      "description": "古い支柱が並ぶ下層の通路。乗り場の手前で、傾いた支柱が天井を支えている。",
+      "category": "OTHER",
+      "area_id": "deep_works",
+      "position": {
+        "x": 24.0,
+        "y": 2.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "支柱が重みで軋む音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "old_timber",
+            "name": "傾いた支柱",
+            "description": "乗り場の手前で天井を支える古い支柱。大きく傾き、根元が腐りかけている。",
+            "object_type": "OTHER",
+            "state": {
+              "felled": 0
+            },
+            "state_display": [
+              {
+                "key": "felled",
+                "value": 0,
+                "text": "傾きながらも天井を支えている"
+              },
+              {
+                "key": "felled",
+                "value": 1,
+                "text": "倒れて、崩れた岩が道を埋めている"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "fell_timber",
+                "display_label": "支柱を倒す",
+                "witness_observation_message": "{actor}が支柱を蹴り倒した。轟音とともに天井が崩れた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "timber_felled",
+                    "failure_message": "支柱はもう倒れている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "noise_deep"
+                    }
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "timber_felled"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "felled": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "腐った根元を蹴ると、支柱が倒れ、轟音とともに天井の岩が崩れ落ちた。乗り場へ抜ける道は岩で埋まった。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "lift_landing",
+      "name": "昇降機の乗り場",
+      "description": "坑道の最も深い所にある昇降機の乗り場。鉄の籠が地上へ続く縦穴に吊られている。",
+      "category": "OTHER",
+      "area_id": "deep_works",
+      "position": {
+        "x": 21.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "縦穴を吹き上がる風の音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "lift",
+            "name": "昇降機",
+            "description": "地上へ続く縦穴に吊られた鉄の籠。脇に操作盤があり、鍵穴と始動の把手が付いている。",
+            "object_type": "OTHER",
+            "state": {
+              "used": 0
+            },
+            "state_display": [
+              {
+                "key": "used",
+                "value": 0,
+                "text": "籠は乗り場に止まっている"
+              },
+              {
+                "key": "used",
+                "value": 1,
+                "text": "籠はもう上がってしまった"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "start_lift",
+                "display_label": "鍵を差して昇降機を動かす",
+                "witness_observation_message": "{actor}が昇降機の操作盤に鍵を差し、把手を引いた。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "lift_departed",
+                    "failure_message": "籠はもう上がってしまった。昇降機は二度と動かない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "lift_key",
+                    "failure_message": "鍵穴に合う鍵を持っていない。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_warm",
+                    "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "generator_fuel_2",
+                    "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "lift_departed"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "state_updates": {
+                        "used": 1
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "籠が大きく揺れ、ゆっくりと縦穴を上がりはじめた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "nsh_hall",
+      "from": "north_shaft_head",
+      "to": "assembly_hall",
+      "name": "北の竪坑口と集会所の道",
+      "description": "北の竪坑口から集会所へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "nsh_pass",
+      "from": "north_shaft_head",
+      "to": "snow_pass",
+      "name": "北の竪坑口と雪の峠道の道",
+      "description": "北の竪坑口から雪の峠道へ続く道。",
+      "travel_ticks": 4,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "pass_square",
+      "from": "snow_pass",
+      "to": "village_square",
+      "name": "雪の峠道と廃村の広場の道",
+      "description": "雪の峠道から廃村の広場へ続く道。",
+      "travel_ticks": 5,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "hall_square",
+      "from": "assembly_hall",
+      "to": "village_square",
+      "name": "集会所と廃村の広場の道",
+      "description": "集会所から廃村の広場へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "hall_store",
+      "from": "assembly_hall",
+      "to": "storehouse",
+      "name": "集会所と倉庫の道",
+      "description": "集会所から倉庫へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "square_well",
+      "from": "village_square",
+      "to": "well",
+      "name": "廃村の広場と井戸の道",
+      "description": "廃村の広場から井戸へ続く道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "square_store",
+      "from": "village_square",
+      "to": "storehouse",
+      "name": "廃村の広場と倉庫の道",
+      "description": "廃村の広場から倉庫へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "square_smithy",
+      "from": "village_square",
+      "to": "smithy",
+      "name": "廃村の広場と鍛冶場の道",
+      "description": "廃村の広場から鍛冶場へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "well_office",
+      "from": "well",
+      "to": "company_office",
+      "name": "井戸と鉱山会社の事務所の道",
+      "description": "井戸から鉱山会社の事務所へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "smithy_office",
+      "from": "smithy",
+      "to": "company_office",
+      "name": "鍛冶場と鉱山会社の事務所の道",
+      "description": "鍛冶場から鉱山会社の事務所へ続く道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "smithy_sam",
+      "from": "smithy",
+      "to": "south_adit_mouth",
+      "name": "鍛冶場と南の横坑口の道",
+      "description": "鍛冶場から南の横坑口へ続く道。",
+      "travel_ticks": 4,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "office_sam",
+      "from": "company_office",
+      "to": "south_adit_mouth",
+      "name": "鉱山会社の事務所と南の横坑口の道",
+      "description": "鉱山会社の事務所から南の横坑口へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "store_sam",
+      "from": "storehouse",
+      "to": "south_adit_mouth",
+      "name": "倉庫と南の横坑口の道",
+      "description": "倉庫から南の横坑口へ続く道。",
+      "travel_ticks": 7,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "north_shaft",
+      "from": "north_shaft_head",
+      "to": "north_shaft_bottom",
+      "name": "竪坑の梯子",
+      "description": "北の竪坑口から竪坑の底へ下りる錆びた梯子。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "south_adit",
+      "from": "south_adit_mouth",
+      "to": "south_adit_end",
+      "name": "横坑",
+      "description": "南の横坑口から上層へ続く緩い下り坂の横坑。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "nsb_ntun",
+      "from": "north_shaft_bottom",
+      "to": "north_tunnel",
+      "name": "北の竪坑の底と北の坑道の道",
+      "description": "北の竪坑の底から北の坑道へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE"
+      }
+    },
+    {
+      "id": "fire_door",
+      "from": "north_tunnel",
+      "to": "south_tunnel",
+      "name": "防火扉",
+      "description": "北の坑道と南の坑道を仕切る重い鉄の防火扉。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "DOOR",
+        "state": "OPEN"
+      }
+    },
+    {
+      "id": "stun_sab",
+      "from": "south_tunnel",
+      "to": "south_adit_end",
+      "name": "南の坑道と南の横坑の奥の道",
+      "description": "南の坑道から南の横坑の奥へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE"
+      }
+    },
+    {
+      "id": "ntun_rest",
+      "from": "north_tunnel",
+      "to": "miners_rest",
+      "name": "北の坑道と坑夫の詰所の道",
+      "description": "北の坑道から坑夫の詰所へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "stun_tools",
+      "from": "south_tunnel",
+      "to": "tool_store",
+      "name": "南の坑道と道具置き場の道",
+      "description": "南の坑道から道具置き場へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "rest_junction",
+      "from": "miners_rest",
+      "to": "mid_junction",
+      "name": "坑夫の詰所と中層の分岐の道",
+      "description": "坑夫の詰所から中層の分岐へ続く道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "tools_junction",
+      "from": "tool_store",
+      "to": "mid_junction",
+      "name": "道具置き場と中層の分岐の道",
+      "description": "道具置き場から中層の分岐へ続く道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "junction_machine",
+      "from": "mid_junction",
+      "to": "machine_room",
+      "name": "中層の分岐と機械室の道",
+      "description": "中層の分岐から機械室へ続く道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "junction_gas",
+      "from": "mid_junction",
+      "to": "gas_chamber",
+      "name": "中層の分岐と掘り場の道",
+      "description": "中層の分岐から掘り場へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "junction_shortcut",
+      "from": "mid_junction",
+      "to": "lower_shortcut",
+      "name": "中層の分岐と下層の近道の道",
+      "description": "中層の分岐から下層の近道へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE"
+      }
+    },
+    {
+      "id": "machine_shortcut",
+      "from": "machine_room",
+      "to": "lower_shortcut",
+      "name": "機械室と下層の近道の道",
+      "description": "機械室から下層の近道へ続く道。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE"
+      }
+    },
+    {
+      "id": "shortcut_lift",
+      "from": "lower_shortcut",
+      "to": "lift_landing",
+      "name": "下層の近道と昇降機の乗り場の道",
+      "description": "下層の近道から昇降機の乗り場へ続く道。",
+      "travel_ticks": 3,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE"
+      }
+    },
+    {
+      "id": "junction_timber",
+      "from": "mid_junction",
+      "to": "timber_passage",
+      "name": "中層の分岐と古い支柱の通路の道",
+      "description": "中層の分岐から古い支柱の通路へ続く道。",
+      "travel_ticks": 5,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "timber_lift",
+      "from": "timber_passage",
+      "to": "lift_landing",
+      "name": "支柱の下の道",
+      "description": "古い支柱の通路から昇降機の乗り場へ抜ける、傾いた支柱の下の道。",
+      "travel_ticks": 4,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "BARRIER",
+        "state": "INACTIVE"
+      }
+    },
+    {
+      "id": "rest_machine",
+      "from": "miners_rest",
+      "to": "machine_room",
+      "name": "坑夫の詰所と機械室の道",
+      "description": "坑夫の詰所から機械室へ続く道。",
+      "travel_ticks": 4,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "tools_timber",
+      "from": "tool_store",
+      "to": "timber_passage",
+      "name": "道具置き場と古い支柱の通路の道",
+      "description": "道具置き場から古い支柱の通路へ続く道。",
+      "travel_ticks": 5,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    }
+  ],
+  "death": {
+    "announce_globally": false,
+    "victim_learns_killer": false
+  },
+  "players": [
+    {
+      "id": "haru",
+      "name": "ハル",
+      "spawn_spot": "north_shaft_head",
+      "initial_items": [
+        "lamp",
+        "fuel_can"
+      ],
+      "knows_at_start": [
+        "mio"
+      ],
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはハル、山の測量を請け負う調査隊の隊長。慎重で、確かめてから動く。古い測量日誌を手がかりにしている。\n\n古い測量日誌には、こうある。中層の分岐の大水門を開けると、下層の近道が水に沈む。機械室の排水ポンプを動かせば、溜まった水を引かせられる。\n\n話し方: 落ち着いた常体。",
+      "objective": "ミオと二人そろって、坑道の奥の昇降機で外へ出る。"
+    },
+    {
+      "id": "mio",
+      "name": "ミオ",
+      "spawn_spot": "north_shaft_head",
+      "initial_items": [
+        "lamp"
+      ],
+      "knows_at_start": [
+        "haru"
+      ],
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはミオ、調査隊の若い隊員。身軽で、先に行って様子を見るのが得意。機械いじりが好き。\n\n古い測量日誌には、こうある。中層の分岐の大水門を開けると、下層の近道が水に沈む。機械室の排水ポンプを動かせば、溜まった水を引かせられる。\n\n話し方: 気さくな常体。",
+      "objective": "ハルと二人そろって、坑道の奥の昇降機で外へ出る。"
+    },
+    {
+      "id": "gen",
+      "name": "ゲン",
+      "spawn_spot": "south_adit_mouth",
+      "initial_items": [
+        "lamp"
+      ],
+      "knows_at_start": [
+        "sayo"
+      ],
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。\n\n話し方: ぶっきらぼうな常体。",
+      "objective": "サヨと二人そろって、坑道の奥の昇降機で外へ出る。"
+    },
+    {
+      "id": "sayo",
+      "name": "サヨ",
+      "spawn_spot": "south_adit_mouth",
+      "initial_items": [
+        "lamp"
+      ],
+      "knows_at_start": [
+        "gen"
+      ],
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n父から、事務所の金庫の番号は 1907 だと聞いている。\n\n話し方: はきはきした敬体。",
+      "objective": "ゲンと二人そろって、坑道の奥の昇降機で外へ出る。"
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [],
+    "end": [
+      {
+        "type": "ALL_PLAYER_OUTCOMES_RESOLVED"
+      }
+    ]
+  },
+  "initial_flags": [
+    "valve_2"
+  ],
+  "scenario_events": [
+    {
+      "id": "generator_fuel_1_on",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "generator",
+          "state_key": "fuel",
+          "ticks_offset": 1
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_fuel_1"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_fuel_1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_fuel_1_off",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+              "target_object": "generator",
+              "state_key": "fuel",
+              "ticks_offset": 1
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_fuel_1"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_fuel_1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_fuel_2_on",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "generator",
+          "state_key": "fuel",
+          "ticks_offset": 2
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_fuel_2"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_fuel_2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_fuel_2_off",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+              "target_object": "generator",
+              "state_key": "fuel",
+              "ticks_offset": 2
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_fuel_2"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_fuel_2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_stops_without_fuel",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_running"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_fuel_1"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_running"
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_warm"
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_hum_heard"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warms_up",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_running"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "generator",
+          "state_key": "started_at",
+          "ticks_offset": 6
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_warm"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_drains_valve_1",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_1"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "flooded_south_entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_drains_valve_2",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_2"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "flooded_shortcut"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_drains_valve_3",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "valve_3"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "flooded_north_entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump_pulse_ends",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "pump_pulse"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "pump_pulse"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gate_a_keeps_flooding",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gate_a_open"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "flooded_south_entry"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "flooded_south_entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gate_a_water_recedes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gate_a_open"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_south_entry"
+        },
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "gate_a",
+          "state_key": "closed_at",
+          "ticks_offset": 12
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "flooded_south_entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gate_b_keeps_flooding",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gate_b_open"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "flooded_north_entry"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "flooded_north_entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gate_b_water_recedes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gate_b_open"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_north_entry"
+        },
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "gate_b",
+          "state_key": "closed_at",
+          "ticks_offset": 12
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "flooded_north_entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gate_c_keeps_flooding",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gate_c_open"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "flooded_shortcut"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "flooded_shortcut"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gate_c_water_recedes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gate_c_open"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_shortcut"
+        },
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "gate_c",
+          "state_key": "closed_at",
+          "ticks_offset": 12
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "flooded_shortcut"
+          }
+        }
+      ]
+    },
+    {
+      "id": "noise_north_builds",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "noise_north"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "INCREMENT_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_key": "noise",
+            "delta": 1
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "noise_north"
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_north_wakes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "noise_north_tracker",
+          "state_key": "noise",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "beast_north_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "beast_north_awake"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_key": "awake_at"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_north_sleeps",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "noise_north_tracker",
+          "state_key": "awake_at",
+          "ticks_offset": 20
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "beast_north_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "beast_north_awake"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_north_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "noise_south_builds",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "noise_south"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "INCREMENT_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_key": "noise",
+            "delta": 1
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "noise_south"
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_south_wakes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "noise_south_tracker",
+          "state_key": "noise",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "beast_south_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "beast_south_awake"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_key": "awake_at"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_south_sleeps",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "noise_south_tracker",
+          "state_key": "awake_at",
+          "ticks_offset": 20
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "beast_south_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "beast_south_awake"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_south_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "noise_deep_builds",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "noise_deep"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "INCREMENT_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_key": "noise",
+            "delta": 1
+          }
+        },
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "noise_deep"
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_deep_wakes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "noise_deep_tracker",
+          "state_key": "noise",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "beast_deep_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "beast_deep_awake"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_key": "awake_at"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "beast_deep_sleeps",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "noise_deep_tracker",
+          "state_key": "awake_at",
+          "ticks_offset": 20
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "beast_deep_awake"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "beast_deep_awake"
+          }
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {
+            "target_object": "noise_deep_tracker",
+            "state_updates": {
+              "noise": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_hum_heard",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_running"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_hum_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_hum_heard"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "地の底のほうから、機械の低い唸りが響いてきた。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "office_bell_heard",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "safe_opened"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "村のほうで、鐘が大きく鳴り響いた。"
+          }
+        }
+      ]
+    }
+  ],
+  "reactive_bindings": {
+    "passages": [
+      {
+        "target": "stun_sab",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_south_entry"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "nsb_ntun",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_north_entry"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "junction_shortcut",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_shortcut"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "machine_shortcut",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_shortcut"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "shortcut_lift",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flooded_shortcut"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      },
+      {
+        "target": "fire_door",
+        "predicate": {
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "FLAG_SET",
+              "flag_name": "fire_door_barred_north"
+            },
+            {
+              "condition_type": "FLAG_SET",
+              "flag_name": "fire_door_barred_south"
+            }
+          ]
+        },
+        "on_true_state": "LOCKED",
+        "on_false_state": "OPEN"
+      },
+      {
+        "target": "timber_lift",
+        "predicate": {
+          "condition_type": "FLAG_SET",
+          "flag_name": "timber_felled"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      }
+    ]
+  },
+  "monsters": {
+    "templates": [
+      {
+        "id": "mine_beast",
+        "name": "坑道の獣",
+        "description": "坑道の奥に棲む、大きな黒い獣。",
+        "race": "BEAST",
+        "faction": "ENEMY",
+        "base_stats": {
+          "max_hp": 60,
+          "max_mp": 0,
+          "attack": 14,
+          "defense": 6,
+          "speed": 4,
+          "critical_rate": 0.05,
+          "evasion_rate": 0.05
+        },
+        "reward": {
+          "exp": 20,
+          "gold": 0
+        },
+        "respawn": {
+          "interval_ticks": 9999,
+          "auto": false
+        },
+        "vision_range": 2,
+        "flee_threshold": 0.0
+      }
+    ],
+    "initial_placements": [
+      {
+        "template": "mine_beast",
+        "spot": "north_tunnel",
+        "spawn_condition": {
+          "required_flags": [
+            "beast_north_awake"
+          ]
+        }
+      },
+      {
+        "template": "mine_beast",
+        "spot": "south_tunnel",
+        "spawn_condition": {
+          "required_flags": [
+            "beast_south_awake"
+          ]
+        }
+      },
+      {
+        "template": "mine_beast",
+        "spot": "mid_junction",
+        "spawn_condition": {
+          "required_flags": [
+            "beast_deep_awake"
+          ]
+        }
+      }
+    ]
+  },
+  "player_outcome_rules": [
+    {
+      "id": "escape_by_lift",
+      "trigger": {
+        "condition_type": "FLAG_SET",
+        "flag_name": "lift_departed"
+      },
+      "once": true,
+      "player_conditions": [
+        {
+          "condition_type": "PLAYER_AT_SPOT",
+          "target_spot": "lift_landing"
+        }
+      ],
+      "outcome": "RESCUED"
+    },
+    {
+      "id": "left_behind",
+      "trigger": {
+        "condition_type": "FLAG_SET",
+        "flag_name": "lift_departed"
+      },
+      "once": true,
+      "player_conditions": [],
+      "outcome": "STRANDED"
+    }
+  ]
+}

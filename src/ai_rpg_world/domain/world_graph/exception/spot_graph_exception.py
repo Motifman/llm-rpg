@@ -250,6 +250,14 @@ class GameEndConditionValidationException(
     error_code = "WORLD_GRAPH.GAME_END_CONDITION_VALIDATION"
 
 
+class ScenarioTeamValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """ScenarioTeam の宣言不変条件違反。"""
+
+    error_code = "WORLD_GRAPH.SCENARIO_TEAM_VALIDATION"
+
+
 class PlayerOutcomeRuleValidationException(
     SpotGraphDomainException, ValidationException
 ):
