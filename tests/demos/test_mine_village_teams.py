@@ -179,24 +179,30 @@ class TestTeamsStayHiddenAtStart:
     """チームを書いても、相手の存在を伏せる設定とぶつからないことを保証する。"""
 
     @pytest.mark.parametrize("viewer", sorted(_PLAYERS))
-    def test_start_prompt_shows_neither_the_other_side_nor_team_names(self, runtime, viewer) -> None:
-        """開始時のプロンプト全文とツールに、相手チームの 2 人の名前、相手チームの所属、チームの名前が出ない。仲間の名前と自分の所属は出る。
-
-        自分の所属が `team=north` の形で本人に出るのは、所属のキーを本人の
-        「自分の状態」から伏せる手段が無いあいだの穴 (docs/mine_village_scenario_design.md)。
-        ここでは、相手の所属を探す形が実際のプロンプトの形と同じであることの確認に使う。
-        """
+    def test_start_prompt_shows_neither_the_other_side_nor_any_team(self, runtime, viewer) -> None:
+        """開始時のプロンプト全文とツールに、相手チームの 2 人の名前、チームの名前、所属のキー `team=` が出ない。仲間の名前は出る。"""
         names = {p["id"]: p["name"] for p in _raw()["players"]}
         mine = _TEAM_OF[viewer]
-        other = "south" if mine == "north" else "north"
 
         text = _whole_prompt(runtime, viewer)
 
-        assert [names[s] for s, t in _TEAM_OF.items() if t == other and names[s] in text] == []
+        assert [names[s] for s, t in _TEAM_OF.items() if t != mine and names[s] in text] == []
         assert [names[s] for s, t in _TEAM_OF.items() if t == mine and s != viewer and names[s] not in text] == []
-        assert f"team={_TEAM_OF[viewer]}" in text
-        assert f"team={other}" not in text
+        assert "team=" not in text
         assert [n for n in _TEAM_NAMES if n in text] == []
+
+    def test_team_key_shows_up_as_own_state_without_the_hidden_declaration(self, tmp_path) -> None:
+        """`player_attributes.team` の宣言を外すと、ハルの「自分の状態」に `team=north` が出る。所属が伏せられているのが、この宣言のおかげであることを確かめる。"""
+        raw = _raw()
+        del raw["player_attributes"]["team"]
+        if not raw["player_attributes"]:
+            del raw["player_attributes"]
+        path = tmp_path / "mine_village_without_hidden_team.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+        text = _whole_prompt(create_world_runtime(path), "haru")
+
+        assert "team=north" in text
 
     def test_team_key_does_not_add_a_faction_count_to_the_briefing(self, runtime) -> None:
         """所属を書いても、世界の説明に「参加者は 4 人。内訳は …」の行が出ない。役を 2 種類にすると出る行で、何人いる世界かが分かる。"""

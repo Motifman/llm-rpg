@@ -162,10 +162,11 @@ def _render_own_state(
     記録する``)。呼び名の出所はシナリオ (metadata.role_labels / interaction の
     display_label) で、**ここに新しい辞書を作らない**。
 
-    ``hidden_keys`` に挙がったキーは出さない。手番を記録する効果が書いた
-    内部の記録で、``prayed_at_tick=5`` と出ても読み手は何も判断できない
-    (#892)。どのキーがそれかは**シナリオの宣言から導出**しており、名前を
-    当てにいってはいない。
+    ``hidden_keys`` に挙がったキーは出さない。1 つは手番を記録する効果が
+    書いた内部の記録で、``prayed_at_tick=5`` と出ても読み手は何も判断できない
+    (#892)。もう 1 つは ``player_attributes`` で ``hidden`` と宣言された属性で、
+    ``team=north`` が本人に見えるだけで対になる側の存在が漏れる (#1546)。
+    どちらも**シナリオの宣言から決めて**おり、名前を当てにいってはいない。
 
     **それ以外で宣言の無いキーは従来どおり ``key=value`` で残す。** 一度は落とす実装に
     したが、それだと ``cursed=true`` のような自由 state を持つ世界で
@@ -179,8 +180,6 @@ def _render_own_state(
     hidden = frozenset(hidden_keys or ())
     rendered: list[str] = []
     for key, value in sorted(dict(player_state or {}).items()):
-        # 手番を記録する効果が書いた key は出さない。宣言から導出したもので、
-        # 名前を当てにいってはいない (物体 state と同じ判断)。
         if key in hidden:
             continue
         entry = names.get(f"{key}={_render_value(value)}")

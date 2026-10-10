@@ -750,10 +750,10 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
                 f"player_attributes.{name} must be an object"
             )
         visibility = body.get("visibility")
-        if visibility not in ("public", "secret"):
+        if visibility not in ("public", "secret", "hidden"):
             raise ScenarioLoadError(
-                f"player_attributes.{name}.visibility は public / secret の"
-                f"どちらかで指定してください (got {visibility!r})"
+                f"player_attributes.{name}.visibility は public / secret / "
+                f"hidden のどれかで指定してください (got {visibility!r})"
             )
         mutable = body.get("mutable")
         if not isinstance(mutable, bool):
