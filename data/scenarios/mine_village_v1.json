@@ -2892,6 +2892,12 @@
       "id": "generator_stops_without_fuel",
       "trigger": "ON_TICK",
       "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
       "conditions": [
         {
           "condition_type": "FLAG_SET",
@@ -2919,6 +2925,12 @@
           "effect_type": "CLEAR_FLAG",
           "parameters": {
             "flag_name": "generator_hum_heard"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "地の底から響いていた機械の唸りが、ふっと途切れた。"
           }
         }
       ]

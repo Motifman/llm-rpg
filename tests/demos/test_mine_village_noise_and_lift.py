@@ -263,7 +263,7 @@ class TestDistantCuesTellSomeoneIsAhead:
         _fuel_and_start_generator(runtime)
         _ticks(runtime, 3)
 
-        heard = [h for h in _observations(runtime, _GEN, "scenario_event") if "唸り" in h]
+        heard = [h for h in _observations(runtime, _GEN, "scenario_event") if "唸りが響いてきた" in h]
         assert len(heard) == 1
         assert "ハル" not in heard[0]
 
@@ -284,7 +284,7 @@ class TestDistantCuesTellSomeoneIsAhead:
         _act(runtime, _HARU, "machine_room", "generator", "start_generator")
         _ticks(runtime, 1)
 
-        heard = [h for h in _observations(runtime, _GEN, "scenario_event") if "唸り" in h]
+        heard = [h for h in _observations(runtime, _GEN, "scenario_event") if "唸りが響いてきた" in h]
         assert len(heard) == 2
 
     def test_safe_bell_reaches_someone_far_away(self, runtime) -> None:

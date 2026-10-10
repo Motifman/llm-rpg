@@ -46,6 +46,8 @@ _PUMP_SOUND = {
 #: 倉庫の油の樽 (仮の値、設計の「未決」)。
 _OIL_STOCK = 2
 _OIL_REFILL_TICKS = 12
+#: 北の缶 1 つで発電機にたまる燃料。
+_CAN_FUEL = 3
 
 #: 地上が夜になる tick (1 日 48 tick、tick 36 から夜)。
 _NIGHT_TICK = 40
@@ -156,12 +158,14 @@ class TestTheSurveyDiaryReadsAsAStateNotASteps:
 
     @pytest.mark.parametrize("player_id", _NORTH)
     def test_diary_describes_the_open_gate_as_a_state(self, player_id) -> None:
-        """日誌は「大水門が開いているあいだ、近道は水に浸かる」と状態として書き、開ける行為を促す形 (開けると) を使わない。"""
+        """日誌の水門の文は「開いているあいだ」の形で状態として書き、開ける・動かす行為を促す活用形 (開けると、開ければ、動かせば、回せば など) を使わない。"""
         persona = _persona(player_id)
 
-        assert "開いているあいだ" in persona
-        assert "開けると" not in persona
-        assert "動かせば" not in persona
+        gate_sentences = [s for s in persona.split("。") if "水門" in s]
+
+        assert gate_sentences
+        assert all("あいだ" in s for s in gate_sentences)
+        assert re.search("開け[るれたよてば]|動かせ[ばる]|回せ[ばる]|回し[たて]", persona) is None
 
     @pytest.mark.parametrize("player_id", _NORTH)
     def test_gate_and_pump_are_not_in_the_same_sentence(self, player_id) -> None:
@@ -190,25 +194,54 @@ class TestThePumpSoundsDifferentlyByWhatItDrew:
         assert [h for h in heard if _PUMP_SOUND["drained"] in h]
         assert not [h for h in heard if _PUMP_SOUND["refilling"] in h or _PUMP_SOUND["dry"] in h]
 
-    def test_pump_cannot_beat_an_open_gate(self, runtime) -> None:
-        """水門 C が開いたままポンプで近道を引かせると、水は引かず、機械室に「流れ込む音がやまない」が届く。"""
-        _act(runtime, _HARU, "mid_junction", "gate_c", "open_gate_c")
+    @pytest.mark.parametrize("valve", sorted(_VALVE))
+    def test_pump_cannot_beat_an_open_gate(self, runtime, valve) -> None:
+        """水門が開いたまま、その水門が沈める場所に弁を合わせてポンプを動かすと、水は引かず、機械室に「流れ込む音がやまない」が届く。"""
+        flood, gate, gate_spot = _VALVE[valve]
+        _act(runtime, _HARU, gate_spot, gate, f"open_{gate}")
         _start_generator(runtime)
 
-        heard = _pump_with(runtime, "set_valve_2")
+        heard = _pump_with(runtime, valve)
 
-        assert "flooded_shortcut" in _flags(runtime)
+        assert flood in _flags(runtime)
         assert [h for h in heard if _PUMP_SOUND["refilling"] in h]
         assert not [h for h in heard if _PUMP_SOUND["drained"] in h]
 
-    def test_pump_on_a_dry_place_only_draws_air(self, runtime) -> None:
-        """どこも沈んでいないときにポンプを動かすと、機械室に「空気を吸う音」だけが届く。"""
+    @pytest.mark.parametrize("valve", sorted(_VALVE))
+    def test_pump_on_a_dry_place_only_draws_air(self, runtime, valve) -> None:
+        """どこも沈んでいないときにポンプを動かすと、どの目盛りでも、機械室に「空気を吸う音」だけが届く。"""
         _start_generator(runtime)
 
-        heard = _pump_with(runtime, "set_valve_2")
+        heard = _pump_with(runtime, valve)
 
         assert [h for h in heard if _PUMP_SOUND["dry"] in h]
         assert not [h for h in heard if _PUMP_SOUND["drained"] in h or _PUMP_SOUND["refilling"] in h]
+
+    @pytest.mark.parametrize("valve", sorted(_VALVE))
+    @pytest.mark.parametrize("flooded,gate_open", [(False, False), (True, False), (True, True)])
+    def test_exactly_one_sound_for_every_valve_and_water_state(self, valve, flooded, gate_open) -> None:
+        """弁の目盛り・弁の先が沈んでいるか・その水門が開いているかのどの組み合わせでも、ポンプの音の出来事はちょうど 1 つだけ条件を満たす。水門が開いていれば必ず沈んでいるので、開いていて沈んでいない組は無い。"""
+        flood, gate, _spot = _VALVE[valve]
+        flags = {"pump_pulse", f"valve_{valve[-1]}"}
+        if flooded:
+            flags.add(flood)
+        if gate_open:
+            flags.add(f"{gate}_open")
+
+        def holds(cond: dict[str, Any]) -> bool:
+            if cond["condition_type"] == "FLAG_SET":
+                return cond["flag_name"] in flags
+            if cond["condition_type"] == "FLAG_NOT_SET":
+                return cond["flag_name"] not in flags
+            raise AssertionError(cond)
+
+        matching = [
+            e["id"]
+            for e in _raw()["scenario_events"]
+            if e["id"].startswith("pump_sounds_") and all(holds(c) for c in e["conditions"])
+        ]
+
+        assert len(matching) == 1
 
     def test_pump_sound_reaches_only_the_machine_room(self, runtime) -> None:
         """ポンプの音は機械室にいる人にだけ届き、離れた場所の人には届かない。"""
@@ -265,6 +298,24 @@ class TestThePumpRefusesForEachReasonInItsOwnWords:
         assert outcome == "refused"
         assert "ぴくりとも" in message
 
+    def test_after_the_fuel_runs_out_the_generator_stops_and_its_hum_is_heard_to_break(self, runtime) -> None:
+        """缶 1 つ分を使い切るまでポンプを動かすと、次の tick に発電機が止まり、離れた場所の人にも唸りが途切れたことが名前なしで届く。そのあとのポンプは「ぴくりとも動かない」と断られる。燃料の断りの文はこの流れでは出ない (燃料が 0 になった tick のうちに発電機が止まる)。"""
+        _place(runtime, _GEN, "south_adit_end")
+        _start_generator(runtime)
+        before = len(_heard(runtime, _GEN))
+        for _ in range(_CAN_FUEL):
+            _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+            _ticks(runtime, 1)
+
+        outcome, message = _try(runtime, _HARU, "machine_room", "pump", "run_pump")
+        broke = [h for h in _heard(runtime, _GEN)[before:] if "途切れ" in h]
+
+        assert "generator_running" not in _flags(runtime)
+        assert len(broke) == 1
+        assert "ハル" not in broke[0]
+        assert outcome == "refused"
+        assert "ぴくりとも" in message
+
     def test_pump_sentences_do_not_name_the_generator_or_fuel(self) -> None:
         """断りの文は、発電機も燃料も名指ししない。ポンプが発電機の燃料で動くこと (R3) は試して学ぶ。"""
         pump = _object(_raw(), "machine_room", "pump")
@@ -287,6 +338,16 @@ class TestLampOilCanBeFoundAgain:
         assert outcome == "refused"
         assert message
 
+    def test_oil_barrel_is_still_empty_one_tick_before_the_interval(self, runtime) -> None:
+        """空になった油の樽は、`_OIL_REFILL_TICKS` - 1 tick たっただけでは、まだ汲めない。"""
+        for _ in range(_OIL_STOCK):
+            _act(runtime, _HARU, "storehouse", "oil_barrel", "draw_lamp_oil")
+        _ticks(runtime, _OIL_REFILL_TICKS - 1)
+
+        outcome, _message = _try(runtime, _HARU, "storehouse", "oil_barrel", "draw_lamp_oil")
+
+        assert outcome == "refused"
+
     def test_oil_barrel_refills_one_after_the_interval(self, runtime) -> None:
         """空になった油の樽は、`_OIL_REFILL_TICKS` tick たつと 1 本ぶん汲めるようになる。"""
         for _ in range(_OIL_STOCK):
@@ -298,7 +359,10 @@ class TestLampOilCanBeFoundAgain:
         assert outcome == "done"
 
     def test_oil_barrel_is_visible_at_night_without_a_light(self, runtime) -> None:
-        """地上が夜になっても、灯りを持たない人に倉庫の油の樽は見える。地下で灯りを失った人が補いに戻れるようにするため。"""
+        """倉庫は屋内の明るい場所で、地上が夜の tick でも暗くならず、灯りを持たない人に油の樽が見える。地下で灯りを失った人が補いに戻れるようにするため。"""
+        storehouse = next(s for s in _raw()["spots"] if s["id"] == "storehouse")
+        assert storehouse["is_outdoor"] is False
+        assert storehouse["atmosphere"]["lighting"] == "BRIGHT"
         _ticks(runtime, _NIGHT_TICK)
         _place(runtime, _HARU, "storehouse")
 
