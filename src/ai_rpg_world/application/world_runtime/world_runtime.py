@@ -976,9 +976,36 @@ class WorldRuntime:
         if self._public_sns_command_service is not None:
             try:
                 self._public_sns_command_service.retry_pending_notifications(limit=100)
-            except Exception:
-                logger.exception("公開SNSの通知再送が未完了です")
+            except Exception as exc:
+                self._record_world_tick_follow_up_failure(
+                    exc, stage="public_sns.retry_notifications", target_kind="stage"
+                )
         return tick.value
+
+    def _record_world_tick_follow_up_failure(
+        self,
+        exc: Exception,
+        *,
+        stage: str,
+        target_kind: str,
+        target_id: object = None,
+        player_id: int | None = None,
+    ) -> None:
+        """確定済みの処理に続く後処理の失敗を trace に残す (design_decisions D1558)。"""
+        from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+            WorldTickFailureIsolator,
+        )
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        isolator = self._world_tick_failure_isolator or WorldTickFailureIsolator.fail_fast()
+        isolator.record_continued_failure(
+            exc,
+            stage=stage,
+            tick=WorldTick(self.current_tick()),
+            target_kind=target_kind,
+            target_id=target_id,
+            player_id=player_id,
+        )
 
     def _record_committed_player_travel_tick(self, player_id: PlayerId) -> None:
         """確定済みの player 移動 1 tick を実験指標へ反映する。"""
@@ -6336,13 +6363,6 @@ def create_world_runtime(
         """
         try:
             spot_name = runtime.get_player_spot_name(player_id)
-        except Exception:
-            logger.debug(
-                "arrival history: spot name unavailable for player %s",
-                player_id.value,
-            )
-            return
-        try:
             runtime._record_action_result(
                 player_id,
                 f"「{spot_name}」に着いた",
@@ -6351,9 +6371,13 @@ def create_world_runtime(
                 success=True,
                 scene_boundary=True,
             )
-        except Exception:
-            logger.exception(
-                "arrival history hook failed for player %s", player_id.value
+        except Exception as exc:
+            runtime._record_world_tick_follow_up_failure(
+                exc,
+                stage="travel.arrival_history",
+                target_kind="player",
+                target_id=player_id.value,
+                player_id=player_id.value,
             )
 
     travel_stage.add_arrival_observer(_record_arrival_in_history)
@@ -6966,10 +6990,13 @@ def create_world_runtime(
                     EncounterKey(kind="body", identifier=f"player_{int(victim)}"),
                     int(runtime.current_tick()),
                 )
-            except Exception:
-                logger.warning(
-                    "加害者への死体発見抑止に失敗した (killer=%s victim=%s)",
-                    killer, victim, exc_info=True,
+            except Exception as exc:
+                runtime._record_world_tick_follow_up_failure(
+                    exc,
+                    stage="player_downed.killer_saw_body",
+                    target_kind="player",
+                    target_id=int(killer),
+                    player_id=int(killer),
                 )
 
     # 加害者の遭遇記録は確定後の最善努力処理。身体・猶予の正本更新には使わない。
