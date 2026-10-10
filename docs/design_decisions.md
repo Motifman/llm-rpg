@@ -7338,3 +7338,41 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 **どうしないと壊れるか**: 伏せた版だけで済ませると、遠くの気配のたびに、会っていない相手の存在がエージェントに届く。届けない観測でもターンを積むと、何も新しくない手番が回り、気配があったことが手番の数から分かる。
 
 **関連**: D1520 / Issue #1508 / #1520。
+
+---
+
+## D1558. 世界の tick の 1 体ぶんの例外は、CommandScope の単位で取りやめ、必ず trace と報告に出す
+
+**何を**: 世界の tick の各段で、1 体 (プレイヤー、モンスター、出来事、取引など) の処理が例外を出したら、その 1 体の処理だけを取りやめて tick を続ける。取りやめるたびに trace に `world_tick_unit_failed` を 1 件残し (段・対象・例外の型と文・発生箇所・commit 済みか)、run_end の `world_tick_failure_counts` と report.md の冒頭に段ごとの件数を出す。実験設定の `WORLD_TICK_FAILURE_POLICY` で `isolate` (取りやめて続ける) と `fail_fast` (trace に残してから止める) を選ぶ。判断は `WorldTickFailureIsolator` の 1 か所に置く (Issue #1558)。
+
+**なぜ**: 廃坑の 2 本目の実 run (`mine_v1_002`) は、1 人の移動の続きで出た `ConnectionNotPassableException` が `_execute_with_error_handling` で包み直されて run ごと止まった。費用のかかる run を 1 体の失敗で捨てたくない。一方で、例外を捕まえてログに出すだけで続ける箇所もあり、BeingId の NameError で状態崩壊の証拠が 1 件も作られていなかった不具合 (#1507) はこの形だった。止めすぎる箇所と黙りすぎる箇所の両方を、止めないが隠さない形にそろえる。
+
+**決まり**:
+
+| 段 | 取りやめる単位 |
+|---|---|
+| travel / death_grace / llm_turn | プレイヤー 1 人 |
+| monster_behavior | モンスター 1 体 |
+| monster_spawn | 出現の枠 1 つ |
+| scenario_event | 出来事 1 件 (条件の評価を含む) |
+| reactive_object_state | 物の状態の結び付け 1 件 |
+| sync_action_resolver | 同期操作の組 1 つ |
+| trade_offer_expiry / market_order_expiry | 提案 1 件 / 注文 1 件 |
+| player_outcome_rule | 規則 1 件 |
+| 上以外の段 (needs_decay / status_effects / food_spoilage / environment / day_night / reactive_binding) | 段そのもの |
+| 確定後フック | フック 1 つ (`post_tick.<名前>`) |
+
+- **取りやめる単位は CommandScope 1 回にそろえる**: scope の中で出た例外は rollback されるので、取りやめても状態が中途半端に残らない。全員を 1 つの scope で処理している段は、段そのものが単位になる。1 体ずつにするには scope を分ける必要があり、それは段ごとの変更として別に扱う
+- **段の単位は受け皿として常に置く**: 1 体ずつ包んでいない例外も、段の単位で取りやめて残る。段の中の配線を忘れても、粒度が粗くなるだけで黙らない
+- **commit 後の後処理だけが失敗した例外は `committed: true` で残す**: 状態は確定済みで、通知や配送だけが欠けている。rollback された取りやめと区別しないと、trace を読む人が状態を誤る
+- **trace に残せないなら止める**: isolate でも、記録先が無いときと記録そのものが失敗したときは元の例外を投げる。記録先を持たない試験や API サーバーは、これまでどおり例外で止まる
+- **fail_fast でも trace に残してから止める**: どこで止まったかを trace から読める。内側の単位が記録して投げ直した例外は、外側の段の単位で記録し直さない
+- **既定は isolate**: `make experiment` はその場で書いた実験設定 (`mine_v1_002` もそう) でも回す。既定を fail_fast にすると、キーを書き忘れた run がまた止まる。でたらめに行動するスタブでシナリオの穴を探す試験 (#1557) のように、例外で止めたい試験は `"WORLD_TICK_FAILURE_POLICY": "fail_fast"` と書く
+- **取りやめた 1 体は次の tick にまた試される**: 隔離して二度と試さない形にはしない。毎 tick 失敗するなら毎 tick 残るので、件数で分かる
+- **件数が 0 でない run は、効果の測定に使う前に原因を切り分ける**: report.md の冒頭にその旨を出す
+
+**ターンは CommandScope 1 回ではない**: LLM のターンを取りやめても、プロンプトを組むときに読み出した観測は戻らない。ツールの実行は中で例外を捕まえて `action_result` に残すので、取りやめに来るのはプロンプトの組み立てなど、ツールの外の例外になる。
+
+**どうしないと壊れるか**: 例外で run が止まると、費用をかけた run が途中で捨てられ、同じ穴に次の run でも当たる。ログだけに出して続けると、trace と報告からは何も起きていない run に見え、効果の測定に混ざる。
+
+**関連**: design_decisions 5 / 10 / 67、`docs/agent_design_principles.md` の 6、Issue #1507 / #1508 / #1557 / #1558。
