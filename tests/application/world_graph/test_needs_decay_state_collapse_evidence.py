@@ -15,10 +15,10 @@ from unittest.mock import MagicMock
 
 from tests.support.trace_recorders import CollectingTraceRecorder
 
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
-from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
     WorldTickFailureIsolator,
     WorldTickFailurePolicy,
