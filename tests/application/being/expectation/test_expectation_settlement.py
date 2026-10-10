@@ -583,8 +583,20 @@ class TestUnavailableJudgment:
 
     @pytest.mark.parametrize(
         "answers",
-        [{"check_0": "certainly"}, {"scene_changed": None}, {"scene_changed": "high"}],
-        ids=["unknown_option", "missing_answer", "non_numeric_scene"],
+        [
+            {"check_0": "certainly"},
+            {"scene_changed": None},
+            {"scene_changed": "high"},
+            {"hearsay_0": None},
+            {"hearsay_0": 2.0},
+        ],
+        ids=[
+            "unknown_option",
+            "missing_answer",
+            "non_numeric_scene",
+            "missing_hearsay",
+            "hearsay_out_of_range",
+        ],
     )
     def test_unusable_answer_is_treated_as_unavailable(
         self, answers: dict[str, Any]
