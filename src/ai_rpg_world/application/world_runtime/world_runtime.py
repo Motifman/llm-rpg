@@ -421,37 +421,6 @@ class WorldStandaloneNoopLlmTurnTrigger(ILlmTurnTrigger):
         return None
 
 
-def _other_explorer_names_for_world_system_prompt(
-    spawns: tuple[PlayerSpawnConfig, ...],
-    world_character: CharacterPromptInput | None,
-) -> tuple[str, ...]:
-    """【同じ局面にいる者】用の表示名。自身（LLM ペルソナ）に対応するスポーンは含めない。
-
-    シナリオ上の他プレイヤー全員名ではなく、同席する他者のみ述べるため、単体プレイでは空になる。
-    `world_character` 未指定時は `player_spawns[0]` を操作対象（ペルソナのフォールバック名と同じ扱い）とみなし除外する。
-    """
-    if not spawns:
-        return ()
-    self_spawn: PlayerSpawnConfig | None = None
-    if world_character is not None:
-        cid = (world_character.character_id or "").strip()
-        if cid:
-            for s in spawns:
-                if s.string_id == cid:
-                    self_spawn = s
-                    break
-        if self_spawn is None:
-            cname = (world_character.name or "").strip()
-            if cname:
-                for s in spawns:
-                    if s.name == cname:
-                        self_spawn = s
-                        break
-    if self_spawn is None:
-        self_spawn = spawns[0]
-    return tuple(s.name for s in spawns if s is not self_spawn)
-
-
 #: 昼夜サイクルを宣言していない世界の 1 tick あたりの分数。
 #:
 #: ``_time_label`` の後方互換フォールバックと同じ値。**別々に持つと、地図の
@@ -2939,6 +2908,11 @@ class WorldRuntime:
                 pid, self._resolve_player_objective_text(pid, resolved_objective_text)
             ),
             memo_store=self._todo_store if self._memo_tools_enabled() else None,
+            known_people_text_provider=(
+                self._player_acquaintances.known_people_text
+                if self._player_acquaintances is not None
+                else None
+            ),
         )
         limits = PromptLimits(
             tile_map_enabled=False,
@@ -4958,14 +4932,10 @@ def create_world_runtime(
     )
     if briefing:
         safe_intro = f"{safe_intro}\n\n{briefing}" if safe_intro else briefing
-    participants = _other_explorer_names_for_world_system_prompt(
-        scenario.player_spawns, world_character
-    )
     system_prompt_text = build_world_system_prompt(
         world_title=scenario.metadata.title,
         persona_block=persona_block,
         safe_intro=safe_intro,
-        participant_names=participants,
         enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
         expected_result_policy=config.expected_result_policy,
         expectation_argument_enabled=config.expectation_argument_enabled,
@@ -4988,7 +4958,8 @@ def create_world_runtime(
     #   - spawn.persona_prompt が設定されていれば最優先
     #   - world_character がこの spawn を指していれば rich persona
     #   - それ以外は fallback persona (= スポーン名から生成された最小ペルソナ)
-    #   - participant_names は各 player から見た「自分以外の探索者」のリスト
+    #   - 誰を知っているかは system prompt に書かない。入るときの紹介として
+    #     Being に渡し、毎ターンのメッセージの【知っている人】に出す (#1520)
     system_prompts_by_player_id: dict[int, str] = {}
     if scenario.player_spawns:
         # world_character に一致する spawn を特定
@@ -5002,20 +4973,7 @@ def create_world_runtime(
                     break
 
         for spawn in scenario.player_spawns:
-            # この spawn から見た「他者」名リスト。仲間の印はここで世界内の
-            # 表示へ解決し、role の生値を汎用 prompt builder へ渡さない。
             viewer_role = str(spawn.initial_state.get("role") or "")
-            reveals_allies = viewer_role in scenario.mutually_known_roles
-            other_names = tuple(
-                (
-                    f"{other.name} (あなたと同じ側)"
-                    if reveals_allies
-                    and other.initial_state.get("role") == viewer_role
-                    else other.name
-                )
-                for other in scenario.player_spawns
-                if other is not spawn
-            )
             # この spawn のペルソナ (優先度):
             #   1. spawn.persona_prompt (Phase E): シナリオ JSON で個別宣言された
             #      ペルソナ。多 player シナリオの第一選択肢
@@ -5041,7 +4999,6 @@ def create_world_runtime(
                     world_title=scenario.metadata.title,
                     persona_block=this_persona,
                     safe_intro=safe_intro,
-                    participant_names=other_names,
                     enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
                     expected_result_policy=config.expected_result_policy,
                     expectation_argument_enabled=config.expectation_argument_enabled,
@@ -8526,6 +8483,32 @@ def create_world_runtime(
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
 
+    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
+    # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
+    # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
+    # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
+    runtime._wire_auxiliary_tool_stack()
+    for spawn in scenario.player_spawns:
+        try:
+            runtime._aux_being_provisioning.ensure_attached(
+                PlayerId(int(spawn.player_id))
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
+                "渡せない"
+            ) from exc
+    from ai_rpg_world.application.observation.being_contract import (
+        environment_entry_for_player,
+    )
+
+    for spawn in scenario.player_spawns:
+        player_id = PlayerId(int(spawn.player_id))
+        player_acquaintances.receive_entry(
+            player_id, environment_entry_for_player(scenario, player_id)
+        )
+    _record_meetings_at_spawn(scenario, player_acquaintances)
+
     # disabled_tools の名前が実在するかを、ここで確かめる。
     #
     # 判定自体は get_tool_definitions が持っているが、それを待つと
@@ -8537,21 +8520,6 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
-    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
-    # 用意に失敗した player は、PlayerAcquaintances が Being 無しとして警告して読み書きしない。
-    runtime._wire_auxiliary_tool_stack()
-    for spawn in scenario.player_spawns:
-        try:
-            runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(spawn.player_id))
-            )
-        except Exception:
-            logger.exception(
-                "world_runtime: Being provision failed for player_id=%s "
-                "(この player は会った相手を記録しない)",
-                spawn.player_id,
-            )
-    _record_meetings_at_spawn(scenario, player_acquaintances)
     return runtime
 
 

@@ -138,7 +138,7 @@ class TestEachSideKnowsItsOwnRole:
         **ここが漏れたら成立しない。** 名前が出ていないことを確かめる。
         """
         text = prompts[int(_CREW)]
-        assert "クゼ" not in text.split("【同じ局面にいる者】")[0]
+        assert "クゼ" not in text
         assert "あなたがインポスター" not in text
 
 

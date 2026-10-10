@@ -4,6 +4,7 @@ import pytest
 
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -202,3 +203,85 @@ class TestWhoCanBeMet:
                 environment_name=" ",
                 names_by_player_id=NAMES,
             )
+
+
+class TestIntroductionsAndKnownPeople:
+    """入るときの紹介を Being の記録に移し、いま知っている人の文を Being の記録から描くことを保証する。"""
+
+    def test_introductions_become_known_people_with_notes(self) -> None:
+        """取り決めの紹介を受け取ると、紹介した順に名前と関係の注記で【知っている人】の文になる。"""
+        acquaintances, _, _ = _make()
+
+        acquaintances.receive_entry(
+            ADA,
+            _entry(Introduction(name="ノア", relation_note="あなたと同じ側"), Introduction(name="リオ")),
+        )
+
+        assert acquaintances.known_people_text(ADA) == "- ノア（あなたと同じ側）\n- リオ"
+
+    def test_introduced_person_is_recorded_with_no_meetings(self) -> None:
+        """紹介されただけの相手は、会った回数が 0 のまま記録される。"""
+        acquaintances, _, _ = _make()
+
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
+
+        met = acquaintances.find(ADA, "ノア")
+        assert met is not None and met.met_count == 0
+
+    def test_person_met_without_introduction_is_known_too(self) -> None:
+        """紹介されていなくても、会った相手は【知っている人】に加わる。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
+
+        acquaintances.record_meeting(ADA, "リオ")
+
+        assert acquaintances.known_people_text(ADA) == "- ノア\n- リオ"
+
+    def test_meeting_introduced_people_again_and_again_keeps_the_text(self) -> None:
+        """紹介された相手に何度会っても、【知っている人】の文は 1 行のまま、並びも文も変わらない。変わるとそこから後ろのキャッシュが切れる。"""
+        acquaintances, _, turns = _make()
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア"), Introduction(name="リオ")))
+        before = acquaintances.known_people_text(ADA)
+
+        acquaintances.record_meeting(ADA, "リオ")
+        turns.advance_turn(BeingId("being_p1"))
+        acquaintances.record_meeting(ADA, "リオ")
+        acquaintances.record_meeting(ADA, "ノア")
+
+        assert acquaintances.known_people_text(ADA) == before == "- ノア\n- リオ"
+
+    def test_entry_of_another_environment_is_rejected(self) -> None:
+        """記録している環境と違う名前の取り決めを渡すと、別の環境の記録に紛れ込ませずに ValueError を投げる。"""
+        acquaintances, _, _ = _make()
+
+        with pytest.raises(ValueError):
+            acquaintances.receive_entry(
+                ADA,
+                EnvironmentEntry(
+                    environment_name="山村", self_name="エイダ",
+                    introductions=[Introduction(name="ノア")],
+                ),
+            )
+
+    def test_introductions_without_a_being_are_rejected(self) -> None:
+        """Being に結び付かないプレイヤーに紹介を渡すと、黙って捨てずに ValueError を投げる。紹介が無ければ何もしない。"""
+        acquaintances, _, _ = _make()
+
+        with pytest.raises(ValueError):
+            acquaintances.receive_entry(STRANGER, _entry(Introduction(name="ノア")))
+        acquaintances.receive_entry(STRANGER, _entry())
+
+        assert acquaintances.known_people_text(STRANGER) == ""
+
+    def test_introduced_but_unmet_person_is_not_recently_met(self) -> None:
+        """紹介されただけでまだ会っていない相手は、直近に会った相手に入らない。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
+
+        assert acquaintances.recently_met_names(ADA, within_turns=5) == ()
+
+
+def _entry(*introductions: Introduction) -> EnvironmentEntry:
+    return EnvironmentEntry(
+        environment_name="島", self_name="エイダ", introductions=introductions
+    )

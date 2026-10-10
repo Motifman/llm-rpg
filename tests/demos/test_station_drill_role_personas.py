@@ -82,6 +82,8 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     説明を system prompt へ寄せた時点で、**意図してバイトが変わった**ので値を更新
     してある。#1521 で、persona_prompt に【ペルソナ】の見出しが付くようになり
     (本文が「上記【ペルソナ】」と指す見出しが無かった)、見出しの 1 行ぶん
+    バイトが変わった。#1520 で、誰を知っているかを system prompt に書かず、毎ターンの
+    メッセージの【知っている人】に移したので、【同じ局面にいる者】の節のぶん
     バイトが変わった。
 
     以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
@@ -90,12 +92,12 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "85603e70d90a99c395bab250c874a904167ec2975c1554a683880103353d7531",
-        "sena": "8b81211e9f65109cdbfba36f719f3e9715c3e76eaa76dded10e83cebadf697c0",
-        "aoi": "4bdcbde0de63c8d941bece1caa7dc6604df9f472837e42e09b606dad79e1c688",
-        "hagi": "0a5712de12c7541c00a78fa3e41a286a29cba62b6ff6f486b37953f2cfaf5d91",
-        "yura": "1a432288641e7e057440d6e00ff9a45c9fe9cd464fc341c50eb205d56b435685",
-        "saki": "e518f52836077aa297df6dce35180f0554bcaaf8e89f8bd5ca2595de90f0ac74",
+        "mori": "0e016781702c7bb32e605405dd676550e9354be856ae1bd9ec8ffc9d4d26da60",
+        "sena": "2d6da6f50bea748c49daf3d19063fd90dae6d57e85b23e781b6f88852d0e5747",
+        "aoi": "f7493ca1e7cd4a0f617f9bf4815ef8f6072c5cc7b0124e4dc100c4dc3860f2fe",
+        "hagi": "6f866b5d468135b9d1656395cc23333eba09ad87fb95f7b62b183b02d9e0191e",
+        "yura": "8da1dc81b2b251d6b00584566d6a604733d333521e8026a42d5004d68dc31dae",
+        "saki": "0d532944d5425a1c20280992b95237944602fcac8d93b70b4378fd57fbabd3f3",
     }
 
     actual_by_string_id = {

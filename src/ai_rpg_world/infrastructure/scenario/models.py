@@ -153,6 +153,9 @@ class PlayerSpawnConfig:
     # 挙動は変わらない。PlayerStatusAggregate への配線は売買ツールを入れる PR
     # の管轄なので、ここでは宣言の保持までを行う。
     initial_gold: int = 0
+    # #1520: 入るときに紹介する相手の player id。None なら自分以外の全員を紹介する。
+    # 紹介しなかった相手は、会うまでその Being にとって居ないのと同じになる。
+    knows_at_start: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,8 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.being.application.known_people import render_known_people
+from ai_rpg_world.being.contract import EnvironmentEntry
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, AcquaintanceRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
@@ -68,6 +70,39 @@ class PlayerAcquaintances:
             turn=self._turn_reader.current_turn(being_id),
         )
 
+    def receive_entry(self, player_id: PlayerId, entry: EnvironmentEntry) -> None:
+        """紹介はプロンプトの前提なので、渡せないときは黙って捨てずに止める。"""
+        if entry.environment_name != self._environment_name:
+            raise ValueError(
+                f"entry is for {entry.environment_name!r}, "
+                f"but acquaintances are kept for {self._environment_name!r}"
+            )
+        being_id = self._resolve(player_id)
+        if being_id is None:
+            if entry.introductions:
+                raise ValueError(
+                    f"player_id={player_id.value} has no Being to receive introductions"
+                )
+            return
+        turn = self._turn_reader.current_turn(being_id)
+        for introduction in entry.introductions:
+            self._store.record_introduction(
+                being_id,
+                environment_name=self._environment_name,
+                name=introduction.name,
+                turn=turn,
+                relation_note=introduction.relation_note,
+            )
+
+    def known_people_text(self, player_id: PlayerId) -> str:
+        being_id = self._resolve(player_id)
+        if being_id is None:
+            return ""
+        return render_known_people(
+            self._store.list_by_being(being_id),
+            environment_name=self._environment_name,
+        )
+
     def find(self, player_id: PlayerId, name: str) -> Acquaintance | None:
         being_id = self._resolve(player_id)
         if being_id is None:
@@ -87,6 +122,7 @@ class PlayerAcquaintances:
             a.name
             for a in self._store.list_by_being(being_id)
             if a.environment_name == self._environment_name
+            and a.last_met_turn is not None
             and 0 <= now - a.last_met_turn <= within_turns
         )
 

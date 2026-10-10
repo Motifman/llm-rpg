@@ -44,7 +44,7 @@ if TYPE_CHECKING:
         BeliefEvidence,
     )
 
-from ai_rpg_world.being.domain.acquaintance import Acquaintance
+from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
@@ -954,9 +954,12 @@ def acquaintance_to_dict(acquaintance: Acquaintance) -> dict[str, Any]:
     return {
         "environment_name": acquaintance.environment_name,
         "name": acquaintance.name,
+        "how_known": acquaintance.how_known.name,
+        "known_since_turn": acquaintance.known_since_turn,
+        "relation_note": acquaintance.relation_note,
+        "met_count": acquaintance.met_count,
         "first_met_turn": acquaintance.first_met_turn,
         "last_met_turn": acquaintance.last_met_turn,
-        "met_count": acquaintance.met_count,
     }
 
 
@@ -964,7 +967,10 @@ def dict_to_acquaintance(data: dict[str, Any]) -> Acquaintance:
     return Acquaintance(
         environment_name=data["environment_name"],
         name=data["name"],
+        how_known=HowKnown[data["how_known"]],
+        known_since_turn=data["known_since_turn"],
+        relation_note=data["relation_note"],
+        met_count=data["met_count"],
         first_met_turn=data["first_met_turn"],
         last_met_turn=data["last_met_turn"],
-        met_count=data["met_count"],
     )

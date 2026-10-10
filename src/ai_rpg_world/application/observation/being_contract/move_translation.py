@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.being.contract import AgentMove, EnvironmentEntry
+from ai_rpg_world.being.contract import AgentMove, EnvironmentEntry, Introduction
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -42,6 +42,29 @@ def environment_entry_for_player(
         environment_name=scenario.metadata.title,
         self_name=spawn.name,
         imposed_goal=goal or None,
+        introductions=_introductions_for(scenario, spawn),
+    )
+
+
+_SAME_SIDE_NOTE = "あなたと同じ側"
+
+
+def _introductions_for(scenario: ScenarioLoadResult, spawn: Any) -> tuple[Introduction, ...]:
+    """``knows_at_start`` を書かなければ、従来の system prompt と同じく全員を紹介する。"""
+    known = spawn.knows_at_start
+    role = spawn.initial_state.get("role")
+    reveals_allies = role in scenario.mutually_known_roles
+    return tuple(
+        Introduction(
+            name=other.name,
+            relation_note=(
+                _SAME_SIDE_NOTE
+                if reveals_allies and other.initial_state.get("role") == role
+                else None
+            ),
+        )
+        for other in scenario.player_spawns
+        if other is not spawn and (known is None or other.string_id in known)
     )
 
 

@@ -195,6 +195,7 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         persona_block_provider = sections.persona_block_provider
         objective_text_provider = sections.objective_text_provider
+        known_people_text_provider = sections.known_people_text_provider
         inventory_text_provider = sections.inventory_text_provider
         memo_store = sections.memo_store
 
@@ -325,6 +326,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise ValueError("memo_stale_age_ticks must be 0 or greater")
         if objective_text_provider is not None and not callable(objective_text_provider):
             raise TypeError("objective_text_provider must be callable or None")
+        if known_people_text_provider is not None and not callable(known_people_text_provider):
+            raise TypeError("known_people_text_provider must be callable or None")
         if inventory_text_provider is not None and not callable(inventory_text_provider):
             raise TypeError("inventory_text_provider must be callable or None")
         if trace_recorder is not None and not isinstance(trace_recorder, ITraceRecorder):
@@ -358,6 +361,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
         self._prediction_context_ledger = prediction_context_ledger
         self._objective_text_provider = objective_text_provider
+        self._known_people_text_provider = known_people_text_provider
         self._inventory_text_provider = inventory_text_provider
         self._current_tick_provider = current_tick_provider
         self._memo_stale_age_ticks = memo_stale_age_ticks
@@ -507,6 +511,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         tools: list[dict[str, Any]],
         user_content: str,
         prediction_feedback_text: str = "",
+        known_people_text: str = "",
     ) -> None:
         """``PROMPT_SECTION_BREAKDOWN`` を 1 件記録する (失敗は握りつぶす)。
 
@@ -539,6 +544,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 player_id=int(player_id.value),
                 system_chars=len(system_content),
                 objective_chars=len(objective_text),
+                known_people_chars=len(known_people_text),
                 current_state_chars=len(current_state_text),
                 memos_chars=len(active_memos_text),
                 prediction_feedback_chars=len(prediction_feedback_text),
@@ -734,6 +740,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         inventory_text = self._call_text_provider(
             self._inventory_text_provider, player_id, "inventory_text_provider"
         )
+        known_people_text = self._call_text_provider(
+            self._known_people_text_provider, player_id, "known_people_text_provider"
+        )
 
         # Phase 2: 短期記憶の L4 mid summary (rolling 実装のみが値を返す)。
         # 失敗しても prompt 構築を止めない。
@@ -774,6 +783,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             long_summary_text=long_summary_text,
             prediction_feedback_text=prediction_feedback_text,
             pending_predictions_text=pending_predictions_text,
+            known_people_text=known_people_text,
         )
 
         # Issue #227 chore β: failure_block (直前ターン失敗時の補正セクション)
@@ -836,6 +846,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_id=player_id,
             system_content=system_content,
             objective_text=objective_text,
+            known_people_text=known_people_text,
             current_state_text=current_state_text,
             active_memos_text=active_memos_text,
             prediction_feedback_text=prediction_feedback_text,

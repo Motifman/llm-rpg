@@ -715,17 +715,16 @@ def test_reinterpretation_on_builds_coordinator_without_completion_under_stub(
     assert stack.recall_buffer_store is None
 
 
-def test_being_provisioning_failure_does_not_break_runtime_creation(
+def test_being_provisioning_failure_stops_runtime_creation(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """R2c-2 (ii): Being provisioning が失敗しても create_world_runtime は
-    例外を出さず runtime を返す (factory graceful)。
+    """Being の用意に失敗すると、create_world_runtime はどの player かを示す RuntimeError で止まる。
 
-    退役した LlmAgentTurnRunner は per-turn provisioning を try/except していたが、
-    escape factory は scenario load 時の ensure_attached を try/except して runtime
-    作成を継続する。その graceful を回帰固定する (失敗時 episode は書かれないが
-    runtime 自体は壊れない)。"""
+    以前は失敗しても runtime を返した (失うのは episode の記録だけだった)。#1520 で
+    誰を知っているかを Being が持つようになり、用意できないと入るときの紹介が落ちて
+    【知っている人】が消える。実験の条件が run のどこにも残らないまま変わるので、
+    壊れた状態で始めない。"""
     from ai_rpg_world.application.being.being_provisioning_service import (
         BeingProvisioningService,
     )
@@ -737,11 +736,9 @@ def test_being_provisioning_failure_does_not_break_runtime_creation(
 
     monkeypatch.setattr(BeingProvisioningService, "ensure_attached", _boom)
 
-    # 例外を出さずに runtime が返ること (= factory graceful)
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    assert runtime is not None
-    # provisioning 失敗は握り潰され、episodic stack 自体の構築は継続する
-    assert runtime._episodic_stack is not None
+    with pytest.raises(RuntimeError, match="player_id=") as excinfo:
+        _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+    assert "provision boom" in str(excinfo.value.__cause__)
 
 
 def test_expected_result_policy_off_exposes_no_prediction_field(
