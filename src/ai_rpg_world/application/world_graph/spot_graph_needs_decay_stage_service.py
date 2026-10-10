@@ -11,11 +11,13 @@ commit前必須処理で身体・死亡猶予まで一緒に確定した後、�
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -31,7 +33,6 @@ if TYPE_CHECKING:
         PlayerStatusTickCommandRepositoryProviderPort,
     )
 
-_logger = logging.getLogger(__name__)
 
 
 class SpotGraphNeedsDecayStageService:
@@ -67,7 +68,9 @@ class SpotGraphNeedsDecayStageService:
         state_collapse_evidence_transcriber: Any | None = None,
         state_collapse_being_id_resolver: Callable[[PlayerId], Any | None] | None = None,
         command_scope_factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._rates = rates or dict(DEFAULT_NEED_RATES)
         self._starvation_damage_per_tick = max(0, starvation_damage_per_tick)
         # PR β: 疲労が threshold (default 95) を超えたプレイヤーに毎 tick
@@ -119,9 +122,9 @@ class SpotGraphNeedsDecayStageService:
         except CommandPostCommitException:
             # statusは確定済みなので、evidenceも確定状態に追随させてから
             # commit後処理の失敗を呼出し側へ返す。
-            self._sync_hunger_max_evidence_all(evidence_statuses)
+            self._sync_hunger_max_evidence_all(evidence_statuses, current_tick)
             raise
-        self._sync_hunger_max_evidence_all(evidence_statuses)
+        self._sync_hunger_max_evidence_all(evidence_statuses, current_tick)
 
     def _run_with_repository(
         self,
@@ -150,12 +153,12 @@ class SpotGraphNeedsDecayStageService:
             player_status_repository.save_all(updated)
         return evidence_statuses
 
-    def _sync_hunger_max_evidence_all(self, statuses: list[Any]) -> None:
+    def _sync_hunger_max_evidence_all(self, statuses: list[Any], current_tick: WorldTick) -> None:
         """確定済みstatusだけをevidenceへ転記する。"""
         for status in statuses:
-            self._sync_hunger_max_evidence(status)
+            self._sync_hunger_max_evidence(status, current_tick)
 
-    def _sync_hunger_max_evidence(self, status: Any) -> None:
+    def _sync_hunger_max_evidence(self, status: Any, current_tick: WorldTick) -> None:
         """PR-D: hunger.value と max_value を比較し、transcriber の dedup 状態を
         同期する。
 
@@ -166,7 +169,7 @@ class SpotGraphNeedsDecayStageService:
 
         transcriber / being_id_resolver のどちらかが未配線、または
         being_id が解決できないときは完全に no-op。evidence 記録は
-        best-effort な副作用なので、transcriber 側の例外はここで握って
+        best-effort な副作用なので、transcriber 側の例外は trace に残して
         tick 処理全体を止めない。
         """
         transcriber = self._state_collapse_evidence_transcriber
@@ -178,11 +181,8 @@ class SpotGraphNeedsDecayStageService:
             return
         try:
             being_id = resolver(status.player_id)
-        except Exception:
-            _logger.exception(
-                "state_collapse_being_id_resolver failed for player_id=%s",
-                status.player_id,
-            )
+        except Exception as exc:
+            self._record_evidence_failure(exc, status, current_tick)
             return
         if being_id is None:
             return
@@ -191,8 +191,18 @@ class SpotGraphNeedsDecayStageService:
                 transcriber.record_hunger_max_evidence(being_id)
             else:
                 transcriber.clear_hunger_max_state(being_id)
-        except Exception:
-            _logger.exception(
-                "state_collapse_evidence_transcriber failed for being_id=%s",
-                being_id,
-            )
+        except Exception as exc:
+            self._record_evidence_failure(exc, status, current_tick)
+
+    def _record_evidence_failure(
+        self, exc: Exception, status: Any, current_tick: WorldTick
+    ) -> None:
+        player_id = int(status.player_id)
+        self._failure_isolator.record_continued_failure(
+            exc,
+            stage="needs_decay.state_collapse_evidence",
+            tick=current_tick,
+            target_kind="player",
+            target_id=player_id,
+            player_id=player_id,
+        )

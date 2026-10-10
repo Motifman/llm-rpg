@@ -9,9 +9,15 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from enum import Enum
 
+from ai_rpg_world.application.common.event_delivery import (
+    AfterCommitFailureObserver,
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 _logger = logging.getLogger(__name__)
@@ -89,11 +95,7 @@ class WorldTickFailureIsolator:
                     player_id=player_id,
                     stage=stage,
                     target_kind=target_kind,
-                    target_id=(
-                        target_id
-                        if target_id is None or isinstance(target_id, (int, str))
-                        else str(target_id)
-                    ),
+                    target_id=_jsonable_target_id(target_id),
                     error_type=type(exc).__name__,
                     error_message=_truncate(str(exc)),
                     error_origin=_innermost_frame(exc),
@@ -103,6 +105,7 @@ class WorldTickFailureIsolator:
                         if command_scoped
                         else None
                     ),
+                    continued=False,
                     policy=self._policy.value,
                 )
                 if event.seq < 0:
@@ -128,6 +131,99 @@ class WorldTickFailureIsolator:
                 stage, target_kind, target_id, tick.value,
                 exc_info=True,
             )
+
+
+    def record_continued_failure(
+        self,
+        exc: Exception,
+        *,
+        stage: str,
+        tick: WorldTick | None,
+        target_kind: str,
+        target_id: object = None,
+        player_id: int | None = None,
+        committed: bool | None = True,
+    ) -> None:
+        """本体の処理に続く後処理や、本体の前後の判断 (通知・観測・記録) の失敗を残す。
+
+        取りやめるものが無いので isolate では続ける。isolate で記録先が無い
+        構成では、止めても確定済みの状態は戻らないので、ログに残して続ける。
+        committed は本体が確定済みかで、本体の前の判断なら None を渡す。
+        """
+        if getattr(exc, _RECORDED_ATTR, False):
+            # fail_fast で内側が記録して投げ直した例外を、外側の後処理が二重に数えない。
+            raise exc
+        recorder = self._trace_recorder_provider()
+        if recorder is None:
+            _logger.warning(
+                "world tick follow-up failed without trace recorder (stage=%s target=%s:%s)",
+                stage, target_kind, target_id,
+                exc_info=exc,
+            )
+        else:
+            try:
+                event = recorder.record(
+                    TraceEventKind.WORLD_TICK_UNIT_FAILED,
+                    tick=tick.value if tick is not None else None,
+                    player_id=player_id,
+                    stage=stage,
+                    target_kind=target_kind,
+                    target_id=_jsonable_target_id(target_id),
+                    error_type=type(exc).__name__,
+                    error_message=_truncate(str(exc)),
+                    error_origin=_innermost_frame(exc),
+                    committed=committed,
+                    continued=True,
+                    policy=self._policy.value,
+                )
+                if event.seq < 0:
+                    raise RuntimeError("trace recorder dropped world_tick_unit_failed")
+            except Exception:
+                _logger.error(
+                    "failed to record world_tick_unit_failed (stage=%s target=%s:%s)",
+                    stage, target_kind, target_id,
+                    exc_info=exc,
+                )
+                raise
+            with self._lock:
+                self._counts[stage] = self._counts.get(stage, 0) + 1
+            _logger.warning(
+                "world tick follow-up failed (stage=%s target=%s:%s)",
+                stage, target_kind, target_id,
+                exc_info=exc,
+            )
+        if self._policy is WorldTickFailurePolicy.FAIL_FAST:
+            setattr(exc, _RECORDED_ATTR, True)
+            raise exc
+
+    def after_commit_failure_observer(
+        self, *, tick_provider: Callable[[], int]
+    ) -> AfterCommitFailureObserver:
+        """CommandEventDispatcher の best-effort な commit 後ハンドラの失敗を受ける口を返す。"""
+
+        def observe(
+            channel: DeliveryChannel,
+            guarantee: DeliveryGuarantee,
+            event: DomainEvent,
+            handler: object,
+            error: Exception,
+        ) -> None:
+            del guarantee, handler
+            self.record_continued_failure(
+                error,
+                stage=f"after_commit.{channel.value}",
+                tick=WorldTick(tick_provider()),
+                target_kind="domain_event",
+                target_id=type(event).__name__,
+            )
+
+        return observe
+
+
+def _jsonable_target_id(target_id: object) -> object:
+    if target_id is None or isinstance(target_id, (int, str)):
+        return target_id
+    return str(target_id)
 
 
 def _truncate(message: str) -> str:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 
@@ -19,8 +18,6 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-
-logger = logging.getLogger(__name__)
 
 
 class SpotGraphTravelStageService:
@@ -59,6 +56,8 @@ class SpotGraphTravelStageService:
         ] = []
         self._eliminated_checker: Callable[[PlayerId], bool] | None = None
         self._departed_checker: Callable[[PlayerId], bool] | None = None
+        # 確定後の通知の失敗を trace に残すときの tick。run の入口で更新する。
+        self._current_tick: WorldTick | None = None
 
     def add_arrival_observer(
         self, callback: Callable[[PlayerId], None]
@@ -114,6 +113,7 @@ class SpotGraphTravelStageService:
         self._departed_checker = checker
 
     def run(self, current_tick: WorldTick) -> None:
+        self._current_tick = current_tick
         # 進める前に「移動中だった player」のスナップショットを取る。
         # advance_spot_travel_one_tick 後に再 fetch して is_traveling
         # 遷移を比較するため。
@@ -186,20 +186,16 @@ class SpotGraphTravelStageService:
         for observer in tuple(self._blocked_observers):
             try:
                 observer(player_id, blocked)
-            except Exception:
-                logger.exception(
-                    "travel blocked observer failed for player %s", player_id.value
-                )
+            except Exception as exc:
+                self._record_follow_up_failure(exc, "travel.blocked_observer", player_id)
 
     def _notify_travel_tick_committed(self, player_id: PlayerId) -> None:
         if self._on_travel_tick_committed is None:
             return
         try:
             self._on_travel_tick_committed(player_id)
-        except Exception:
-            logger.exception(
-                "travel tick observer failed for player %s", player_id.value
-            )
+        except Exception as exc:
+            self._record_follow_up_failure(exc, "travel.tick_committed_observer", player_id)
 
     def _notify_committed_travel(
         self, player_id: PlayerId, destination: SpotId
@@ -224,11 +220,19 @@ class SpotGraphTravelStageService:
             for observer in tuple(self._arrival_observers):
                 try:
                     observer(player_id)
-                except Exception:
-                    logger.exception(
-                        "arrival observer failed for player %s", player_id.value
-                    )
-        except Exception:
-            logger.exception(
-                "arrival observation failed for player %s", player_id.value
-            )
+                except Exception as exc:
+                    self._record_follow_up_failure(exc, "travel.arrival_observer", player_id)
+        except Exception as exc:
+            self._record_follow_up_failure(exc, "travel.arrival_detection", player_id)
+
+    def _record_follow_up_failure(
+        self, exc: Exception, stage: str, player_id: PlayerId
+    ) -> None:
+        self._failure_isolator.record_continued_failure(
+            exc,
+            stage=stage,
+            tick=self._current_tick,
+            target_kind="player",
+            target_id=player_id.value,
+            player_id=player_id.value,
+        )

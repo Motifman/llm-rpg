@@ -1240,8 +1240,8 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 
 def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
-    """世界の tick で取りやめた 1 体ぶんの処理の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
-    label = "- 世界の tick で取りやめた処理 (のべ)"
+    """世界の tick で例外を出した処理 (取りやめと後処理の失敗) の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
+    label = "- 世界の tick で例外を出した処理 (のべ)"
     counts = summary.get("world_tick_failure_counts")
     if counts is None:
         return [f"{label}: 未計測"]
@@ -1251,9 +1251,9 @@ def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
     breakdown = ", ".join(f"{stage}={count}" for stage, count in sorted(counts.items()))
     return [
         f"{label}: **{total} 件** ({breakdown})",
-        "  - 1 体ぶんの処理を取りやめて続けた run。効果の測定に使う前に、"
-        "trace の world_tick_unit_failed で原因を切り分ける。"
-        "同じ対象が毎 tick 失敗すると、そのたびに数える",
+        "  - 1 体ぶんの処理を取りやめたか、後処理の失敗を残して続けた run。"
+        "効果の測定に使う前に、trace の world_tick_unit_failed で原因を切り分ける"
+        " (continued が後処理の失敗)。同じ対象が毎 tick 失敗すると、そのたびに数える",
     ]
 
 

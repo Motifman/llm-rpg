@@ -227,9 +227,9 @@ class SpotGraphScenarioEventStageService:
                 )
                 self._record_event_progress(event, current_tick)
         except CommandPostCommitException:
-            self._notify_committed_messages(event, messages)
+            self._notify_committed_messages(event, messages, current_tick)
             raise
-        self._notify_committed_messages(event, messages)
+        self._notify_committed_messages(event, messages, current_tick)
 
     def _record_event_progress(
         self, event: ScenarioEventDef, current_tick: WorldTick
@@ -250,7 +250,7 @@ class SpotGraphScenarioEventStageService:
             self._progress_store.unschedule(event_id)
 
     def _notify_committed_messages(
-        self, event: ScenarioEventDef, messages: tuple[str, ...]
+        self, event: ScenarioEventDef, messages: tuple[str, ...], current_tick: WorldTick
     ) -> None:
         """確定済みeventのmessageを最善努力で通知する。"""
         if self._on_message is None:
@@ -258,11 +258,13 @@ class SpotGraphScenarioEventStageService:
         for message in messages:
             try:
                 self._on_message(event, message)
-            except Exception:  # noqa: BLE001 - commit済み観測は業務結果を戻さない
-                logging.getLogger(__name__).warning(
-                    "scenario_event message callback failed after commit: event_id=%s",
-                    event.event_id,
-                    exc_info=True,
+            except Exception as exc:  # noqa: BLE001 - commit済み観測は業務結果を戻さない
+                self._failure_isolator.record_continued_failure(
+                    exc,
+                    stage="scenario_event.message",
+                    tick=current_tick,
+                    target_kind="scenario_event",
+                    target_id=event.event_id,
                 )
 
     def _schedule_next_if_chained(

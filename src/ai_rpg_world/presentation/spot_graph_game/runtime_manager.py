@@ -496,6 +496,7 @@ class GameRuntimeManager:
                 getattr(runtime._runtime_config, "llm_idle_timeout_ticks", 6)
             ),
             is_traveling_provider=_is_traveling,
+            failure_isolator=runtime.world_tick_failure_isolator,
         )
         # ActionFailed 観測の wire: 失敗 DTO を当該プレイヤーへの観測に変換する。
         # ``intent_id_generator`` は wiring と emitter で共有しないが、wiring 側
