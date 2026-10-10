@@ -227,12 +227,11 @@ def _format_memo_list(args: Mapping[str, Any]) -> str:
 
 def _format_interact(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_label")
-    action = _text(args, "action_name")
     display_phrase = _text(args, ACTION_DISPLAY_PHRASE_KEY)
     if target and display_phrase:
         return f"{_quote(target)}{display_phrase}"
-    if target and action:
-        return f"{_quote(target)}に {action} した"
+    # 表示名が届かないときも action_name は書かない。呼び出しの値で、本人の経験の行に
+    # 残すと記憶へ流れる (#1564)。何を試したかは断られた理由の文に残る。
     if target:
         return f"{_quote(target)}に働きかけた"
     return "目の前の対象に働きかけた"

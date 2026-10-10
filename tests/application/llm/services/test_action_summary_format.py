@@ -89,7 +89,7 @@ class TestFormatActionSummaryForDisplay:
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
                 {"target_label": "流木の山", "action_name": "gather"},
             )
-            == "「流木の山」に gather した"
+            == "「流木の山」に働きかけた"
         )
         assert (
             format_action_summary_for_display(
@@ -174,3 +174,12 @@ class TestInteractSummaryUsesTheDisplayLabel:
         )
 
         assert summary == "「昇降機」で鍵を差して昇降機を動かす"
+
+    def test_without_display_phrase_the_action_name_is_not_written(self) -> None:
+        """表示名が届かない行 (候補に無い操作名で断られたときなど) も、操作名を書かず「「対象」に働きかけた」と書く (#1564)。操作名は呼び出しの値で、世界の言葉ではない。"""
+        summary = format_action_summary_for_display(
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {"target_label": "カンテラ", "action_name": "light_lamp"},
+        )
+
+        assert summary == "「カンテラ」に働きかけた"
