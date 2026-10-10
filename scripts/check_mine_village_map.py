@@ -84,7 +84,7 @@ def win_path_ticks(connections: list[dict[str, Any]]) -> dict[str, int]:
     # 北のもう 1 人: 乗り場の張り紙で鍵のありかを知り、事務所の引き出しで番号を見つけて戻る。
     north_discover = d(n, lift) + 1 + d(lift, office) + 2 + d(office, lift) + 2
     # 鍵のありかと番号を最初から知っている回 (記憶を持ち越した回)。
-    north_knows = d(n, office) + 2 + d(office, lift) + 2
+    north_knows = d(n, office) + 1 + d(office, lift) + 2
     # 南の 1 人: 番号を知っているので金庫を開けて乗り場へ。もう 1 人: 掘り場の缶を取って発電機を動かす。
     south_key = d(s, office) + 1 + d(office, lift) + 2
     south_generator = d(s, gas) + 2 + d(gas, machine) + 2

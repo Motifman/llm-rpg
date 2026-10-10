@@ -151,6 +151,13 @@ class TestEachTeamCanWinWithinTheRunLimit:
 
         assert ticks <= script.RUN_TICK_LIMIT == 40
 
+    def test_counted_warm_up_matches_the_scenario(self, scenario) -> None:
+        """数え方に入れた発電機を温める tick が、シナリオの「温まった」の出来事の tick と同じ。温める時間を延ばしたら、数え方も直さないと落ちる。"""
+        warm = next(e for e in scenario["scenario_events"] if e["id"] == "generator_warms_up")
+        offset = next(c["ticks_offset"] for c in warm["conditions"] if c["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST")
+
+        assert _map_check_script().WARM_TICKS == offset
+
     def test_north_discovering_the_key_is_slower_than_south(self, scenario) -> None:
         """鍵のありかと番号を知っている南のほうが、乗り場で知る北より先に脱出できる。南が先に事務所へ寄る得を残す。"""
         ticks = _map_check_script().win_path_ticks(scenario["connections"])
