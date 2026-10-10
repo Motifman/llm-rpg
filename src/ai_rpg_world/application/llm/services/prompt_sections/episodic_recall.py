@@ -371,6 +371,7 @@ def run_episodic_passive_recall(
         encounter_current_tick=encounter_tick,
         encounter_recent_window_ticks=builder._encounter_recent_window_ticks,
         encounter_spot_id_resolver=builder._encounter_spot_id_resolver,
+        recently_met_names=builder._recently_met_names(player_id),
     )
     recall_now = datetime.now(timezone.utc)
     # PR5 (R1): sliding window にまだ生きている直近 episode を recall から
