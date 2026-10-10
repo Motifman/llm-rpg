@@ -225,6 +225,8 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             target_kind="player" if player_id_value is not None else "stage",
             target_id=player_id_value,
             player_id=player_id_value,
+            # ターンは CommandScope 1 回ではないので、何が確定済みかは分からない。
+            committed=None,
         )
 
     def _turn_unit(self, player_id_value: int) -> AbstractContextManager[None]:

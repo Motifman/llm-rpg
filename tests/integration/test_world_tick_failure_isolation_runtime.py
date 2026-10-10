@@ -144,3 +144,16 @@ class TestFollowUpFailureInTheRuntime:
         assert [(e.payload["stage"], e.payload["continued"]) for e in failures] == [
             ("public_sns.retry_notifications", True)
         ]
+
+
+class TestEveryCommandEventDispatcherReportsFailures:
+    """create_world_runtime の commit 後ハンドラの配送が、どれも失敗の受け口を持つこと。"""
+
+    def test_world_runtime_builds_no_dispatcher_without_failure_observer(self) -> None:
+        """受け口を渡さない CommandEventDispatcher() を 1 つでも作ると、その配送の best-effort ハンドラの失敗が warning だけになるので、ソースに残っていないことを見る。"""
+        import ai_rpg_world.application.world_runtime.world_runtime as module
+
+        source = Path(module.__file__).read_text(encoding="utf-8")
+
+        assert "CommandEventDispatcher()" not in source
+        assert source.count("CommandEventDispatcher(failure_observer=_record_after_commit_failure)") == 8

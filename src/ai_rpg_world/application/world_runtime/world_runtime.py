@@ -6366,6 +6366,14 @@ def create_world_runtime(
         """
         try:
             spot_name = runtime.get_player_spot_name(player_id)
+        except Exception:
+            # 盤から外れた人は場所の名前を持たない。到着の行を書かないだけの正常な経路。
+            logger.debug(
+                "arrival history: spot name unavailable for player %s",
+                player_id.value,
+            )
+            return
+        try:
             runtime._record_action_result(
                 player_id,
                 f"「{spot_name}」に着いた",

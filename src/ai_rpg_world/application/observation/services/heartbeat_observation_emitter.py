@@ -101,7 +101,11 @@ class HeartbeatObservationEmitter:
         except Exception as exc:
             # provider 失敗が tick 全体を倒さないようにする (post-tick hook の責務)
             self._failure_isolator.record_continued_failure(
-                exc, stage="heartbeat.player_ids", tick=current_tick, target_kind="stage"
+                exc,
+                stage="heartbeat.player_ids",
+                tick=current_tick,
+                target_kind="stage",
+                committed=None,
             )
             return
 
@@ -174,6 +178,7 @@ class HeartbeatObservationEmitter:
             target_kind="player",
             target_id=player_id.value,
             player_id=player_id.value,
+            committed=None,
         )
 
     def _should_emit(self, player_id: PlayerId, current_tick: WorldTick) -> bool:

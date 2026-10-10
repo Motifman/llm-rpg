@@ -142,12 +142,17 @@ class WorldTickFailureIsolator:
         target_kind: str,
         target_id: object = None,
         player_id: int | None = None,
+        committed: bool | None = True,
     ) -> None:
-        """確定済みの処理に続く後処理 (通知・観測・記録) の失敗を残す。
+        """本体の処理に続く後処理や、本体の前後の判断 (通知・観測・記録) の失敗を残す。
 
-        取りやめるものが無いので isolate では続ける。記録先が無い構成では
-        止めても確定済みの状態は戻らないので、ログに残して続ける。
+        取りやめるものが無いので isolate では続ける。isolate で記録先が無い
+        構成では、止めても確定済みの状態は戻らないので、ログに残して続ける。
+        committed は本体が確定済みかで、本体の前の判断なら None を渡す。
         """
+        if getattr(exc, _RECORDED_ATTR, False):
+            # fail_fast で内側が記録して投げ直した例外を、外側の後処理が二重に数えない。
+            raise exc
         recorder = self._trace_recorder_provider()
         if recorder is None:
             _logger.warning(
@@ -156,22 +161,30 @@ class WorldTickFailureIsolator:
                 exc_info=exc,
             )
         else:
-            event = recorder.record(
-                TraceEventKind.WORLD_TICK_UNIT_FAILED,
-                tick=tick.value if tick is not None else None,
-                player_id=player_id,
-                stage=stage,
-                target_kind=target_kind,
-                target_id=_jsonable_target_id(target_id),
-                error_type=type(exc).__name__,
-                error_message=_truncate(str(exc)),
-                error_origin=_innermost_frame(exc),
-                committed=True,
-                continued=True,
-                policy=self._policy.value,
-            )
-            if event.seq < 0:
-                raise RuntimeError("trace recorder dropped world_tick_unit_failed") from exc
+            try:
+                event = recorder.record(
+                    TraceEventKind.WORLD_TICK_UNIT_FAILED,
+                    tick=tick.value if tick is not None else None,
+                    player_id=player_id,
+                    stage=stage,
+                    target_kind=target_kind,
+                    target_id=_jsonable_target_id(target_id),
+                    error_type=type(exc).__name__,
+                    error_message=_truncate(str(exc)),
+                    error_origin=_innermost_frame(exc),
+                    committed=committed,
+                    continued=True,
+                    policy=self._policy.value,
+                )
+                if event.seq < 0:
+                    raise RuntimeError("trace recorder dropped world_tick_unit_failed")
+            except Exception:
+                _logger.error(
+                    "failed to record world_tick_unit_failed (stage=%s target=%s:%s)",
+                    stage, target_kind, target_id,
+                    exc_info=exc,
+                )
+                raise
             with self._lock:
                 self._counts[stage] = self._counts.get(stage, 0) + 1
             _logger.warning(
@@ -182,7 +195,6 @@ class WorldTickFailureIsolator:
         if self._policy is WorldTickFailurePolicy.FAIL_FAST:
             setattr(exc, _RECORDED_ATTR, True)
             raise exc
-
 
     def after_commit_failure_observer(
         self, *, tick_provider: Callable[[], int]

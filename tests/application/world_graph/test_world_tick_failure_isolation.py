@@ -341,3 +341,52 @@ class TestAfterCommitFailureObserver:
             (6, "after_commit.observation", "BaseDomainEvent", True)
         ]
         assert isolator.failure_counts() == {"after_commit.observation": 1}
+
+
+class TestRecordContinuedFailureEdges:
+    """後処理の失敗の入口が、記録先が無いときと記録できないときに黙らないこと。"""
+
+    def test_fail_fast_without_recorder_raises(self) -> None:
+        """fail_fast で記録先が無ければ、ログに残したうえで渡された例外を投げる。部品を渡されていない段の後処理が黙らない。"""
+        isolator = WorldTickFailureIsolator.fail_fast()
+
+        with pytest.raises(RuntimeError, match="observer failed"):
+            isolator.record_continued_failure(
+                RuntimeError("observer failed"),
+                stage="travel.arrival_observer",
+                tick=WorldTick(1),
+                target_kind="player",
+            )
+
+    def test_broken_recorder_raises_instead_of_continuing(self) -> None:
+        """isolate でも記録先が記録に失敗したら、黙って続けずに記録の失敗を投げ、件数に数えない。"""
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, _BrokenRecorder())
+
+        with pytest.raises(OSError, match="disk full"):
+            isolator.record_continued_failure(
+                RuntimeError("observer failed"),
+                stage="travel.arrival_observer",
+                tick=WorldTick(1),
+                target_kind="player",
+            )
+
+        assert isolator.failure_counts() == {}
+
+    def test_dropping_recorder_raises_instead_of_continuing(self) -> None:
+        """isolate で閉じた記録先が黙って捨てた (seq が負) ときも、続けずに例外を投げ、件数に数えない。"""
+
+        class _DroppingRecorder(NullTraceRecorder):
+            def record(self, kind: str, **kwargs: Any) -> Any:
+                return replace(super().record(kind, **kwargs), seq=-1)
+
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, _DroppingRecorder())
+
+        with pytest.raises(RuntimeError, match="dropped"):
+            isolator.record_continued_failure(
+                RuntimeError("observer failed"),
+                stage="travel.arrival_observer",
+                tick=WorldTick(1),
+                target_kind="player",
+            )
+
+        assert isolator.failure_counts() == {}

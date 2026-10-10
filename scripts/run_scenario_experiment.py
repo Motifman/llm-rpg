@@ -1240,7 +1240,7 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 
 def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
-    """世界の tick で取りやめた 1 体ぶんの処理の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
+    """世界の tick で例外を出した処理 (取りやめと後処理の失敗) の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
     label = "- 世界の tick で例外を出した処理 (のべ)"
     counts = summary.get("world_tick_failure_counts")
     if counts is None:

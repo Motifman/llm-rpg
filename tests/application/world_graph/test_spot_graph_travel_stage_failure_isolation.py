@@ -111,3 +111,36 @@ class TestTravelStageFailureIsolation:
 
         assert arrived == []
         assert _skipped(recorder) == [("travel", 1, 1)]
+
+
+class TestTravelStageFollowUpFailures:
+    """確定済みの移動に続く通知の失敗を、止めずに trace へ残すこと。"""
+
+    def test_failing_arrival_observer_is_recorded_and_later_observers_still_run(self) -> None:
+        """isolate で到着の観察者が例外を出すと、travel.arrival_observer として続けた失敗を残し、後ろの観察者 (ターンの再開など) は呼ばれる。"""
+        recorder = CollectingTraceRecorder()
+        repo = InMemoryPlayerStatusRepository()
+        _traveling_players(repo, 2)
+        resumed: list[int] = []
+        stage = SpotGraphTravelStageService(
+            repo,
+            _FirstPlayerFails(repo),  # type: ignore[arg-type]
+            _NoItemsContext(),
+            failure_isolator=WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.ISOLATE, trace_recorder_provider=lambda: recorder
+            ),
+        )
+
+        def broken_history(player_id: PlayerId) -> None:
+            raise RuntimeError("history store down")
+
+        stage.add_arrival_observer(broken_history)
+        stage.add_arrival_observer(lambda player_id: resumed.append(int(player_id)))
+
+        stage.run(WorldTick(4))
+
+        assert resumed == [2]
+        failures = recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        assert [(e.tick, e.payload["stage"], e.payload["target_id"], e.payload["continued"]) for e in failures] == [
+            (4, "travel.arrival_observer", 2, True)
+        ]

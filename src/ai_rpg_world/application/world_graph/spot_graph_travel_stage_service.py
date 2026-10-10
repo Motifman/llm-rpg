@@ -51,6 +51,8 @@ class SpotGraphTravelStageService:
         )
         self._eliminated_checker: Callable[[PlayerId], bool] | None = None
         self._departed_checker: Callable[[PlayerId], bool] | None = None
+        # 確定後の通知の失敗を trace に残すときの tick。run の入口で更新する。
+        self._current_tick: WorldTick | None = None
 
     def add_arrival_observer(
         self, callback: Callable[[PlayerId], None]
@@ -100,6 +102,7 @@ class SpotGraphTravelStageService:
         self._departed_checker = checker
 
     def run(self, current_tick: WorldTick) -> None:
+        self._current_tick = current_tick
         # 進める前に「移動中だった player」のスナップショットを取る。
         # advance_spot_travel_one_tick 後に再 fetch して is_traveling
         # 遷移を比較するため。
@@ -159,16 +162,11 @@ class SpotGraphTravelStageService:
 
     def _notify_committed_travel(self, player_id: PlayerId) -> None:
         """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
-        import logging
-
-        logger = logging.getLogger(__name__)
         if self._on_travel_tick_committed is not None:
             try:
                 self._on_travel_tick_committed(player_id)
-            except Exception:
-                logger.exception(
-                    "travel tick observer failed for player %s", player_id.value
-                )
+            except Exception as exc:
+                self._record_follow_up_failure(exc, "travel.tick_committed_observer", player_id)
         # 到着 (is_traveling=True → False) を検知して on_arrival 通知。
         # advance 後の player_status を再 fetch する。
         if not self._arrival_observers:
@@ -185,11 +183,19 @@ class SpotGraphTravelStageService:
             for observer in tuple(self._arrival_observers):
                 try:
                     observer(player_id)
-                except Exception:
-                    logger.exception(
-                        "arrival observer failed for player %s", player_id.value
-                    )
-        except Exception:
-            logger.exception(
-                "arrival observation failed for player %s", player_id.value
-            )
+                except Exception as exc:
+                    self._record_follow_up_failure(exc, "travel.arrival_observer", player_id)
+        except Exception as exc:
+            self._record_follow_up_failure(exc, "travel.arrival_detection", player_id)
+
+    def _record_follow_up_failure(
+        self, exc: Exception, stage: str, player_id: PlayerId
+    ) -> None:
+        self._failure_isolator.record_continued_failure(
+            exc,
+            stage=stage,
+            tick=self._current_tick,
+            target_kind="player",
+            target_id=player_id.value,
+            player_id=player_id.value,
+        )

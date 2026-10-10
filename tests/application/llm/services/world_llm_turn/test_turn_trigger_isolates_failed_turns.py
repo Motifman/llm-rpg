@@ -102,7 +102,7 @@ class TestFollowUpFailures:
     """ターンの前後の判断や後処理の失敗を、続けたうえで trace に残すこと。"""
 
     def test_game_end_check_failure_is_recorded_and_turns_still_run(self) -> None:
-        """isolate でゲーム終了の判定が例外を出すと、llm_turn.check_game_end として trace に残し、予定どおり全員のターンを回す。"""
+        """isolate でゲーム終了の判定が例外を出すと、ターンの前の判断なので committed=None の llm_turn.check_game_end として trace に残し、予定どおり全員のターンを回す。"""
         recorder = CollectingTraceRecorder()
         trigger = _trigger(WorldTickFailurePolicy.ISOLATE, recorder, workers=0)
         trigger.wiring.run_turn.side_effect = None
@@ -113,6 +113,6 @@ class TestFollowUpFailures:
 
         assert trigger.wiring.run_turn.call_count == 2
         failures = recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
-        assert [(e.payload["stage"], e.payload["continued"]) for e in failures] == [
-            ("llm_turn.check_game_end", True)
+        assert [(e.payload["stage"], e.payload["continued"], e.payload["committed"]) for e in failures] == [
+            ("llm_turn.check_game_end", True, None)
         ]
