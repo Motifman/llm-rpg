@@ -1643,6 +1643,7 @@ class WorldRuntime:
             spot_graph_snapshot=snap,
             current_game_time_label=time_label,
             tick_budget_remaining=self._compute_tick_budget_remaining(),
+            minutes_per_tick=_minutes_per_tick(self.scenario),
             meeting_status_line=self._compute_meeting_status_line(player_id),
             task_progress_line=self._compute_task_progress_line(),
             game_phase=self._game_phase_store.current.phase,
@@ -2447,6 +2448,7 @@ class WorldRuntime:
             entries,
             current_tick=self.current_tick(),
             stale_age_ticks=stale_age_ticks,
+            minutes_per_tick=_minutes_per_tick(self.scenario),
         )
 
     # ── 完全プロンプト構築 ──
@@ -3038,6 +3040,7 @@ class WorldRuntime:
         limits = PromptLimits(
             tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
+            minutes_per_tick=_minutes_per_tick(self.scenario),
         )
         # Issue #283 後続: episodic stack が注入されていれば、prompt builder の
         # passive_recall + noun_matcher を有効化する。未注入なら従来挙動
@@ -4447,7 +4450,7 @@ class WorldRuntime:
             「野いちごが3つ腐った。」 (同 tick 内のみ aggregate)
             → 1 日に渡って 8 個が別 tick で腐ると 8 件の観測が走る
 
-        新 (本 PR): 日 (24 tick) を跨いで pending buffer に貯め、日境界
+        新 (本 PR): 1 日を跨いで pending buffer に貯め、日境界
         または game-end の直前に **1 日分まとめて** flush する:
             「今日は野いちごが5個、椰子の実が2個腐った。」
 
@@ -4457,7 +4460,6 @@ class WorldRuntime:
             return
         # 当日分の buffer に積む。flush は day boundary で行う (下記参照)。
         # field 化済 (#375 後続レビュー対応): 遅延 hasattr 初期化を廃止。
-        # 当日 day index を計算 (cycle が無いシナリオは tick そのまま使う)
         ticks_per_day = self._ticks_per_day_or_default()
         current_day = self.current_tick() // max(1, ticks_per_day)
         # 日が変わっていたら前日分を flush してから新日のバッファに積む
@@ -4480,10 +4482,10 @@ class WorldRuntime:
             entry["instance_ids"].append(int(instance_id.value))
 
     def _ticks_per_day_or_default(self) -> int:
-        """day_night_config があればそこから ticks_per_day を取り、無ければ 24。"""
+        """「今日」の区切りを、エージェントが見ている時計の 1 日にそろえる (#1576)。"""
         cfg = self.scenario.day_night_config
         if cfg is None:
-            return 24
+            return (24 * 60) // _FALLBACK_MINUTES_PER_TICK
         return cfg.cycle.ticks_per_day
 
     def _flush_pending_food_spoiled(self) -> None:

@@ -230,6 +230,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         tile_map_view_distance = limits.tile_map_view_distance
         tile_map_enabled = limits.tile_map_enabled
         memo_stale_age_ticks = limits.memo_stale_age_ticks
+        self._minutes_per_tick = limits.minutes_per_tick
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not isinstance(short_term_memory, IShortTermMemory):
@@ -1003,7 +1004,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         Issue #188 Phase 1a:
         - memo_store 未注入なら空文字 (section ごと出さない)
         - 未完了メモがゼロなら空文字
-        - 各 memo に age (経過 tick) と stale フラグを付与する
+        - 各 memo に経過 (世界の時計の分) と stale フラグを付与する
           (詳細は active_memos_formatter.format_active_memos に委譲)
         """
         if self._memo_store is None:
@@ -1021,6 +1022,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             entries,
             current_tick=current_tick,
             stale_age_ticks=self._memo_stale_age_ticks,
+            minutes_per_tick=self._minutes_per_tick,
         )
 
     def _call_text_provider(

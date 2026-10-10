@@ -231,3 +231,5 @@ class PromptLimits:
     tile_map_view_distance: int = DEFAULT_TILE_MAP_VIEW_DISTANCE
     tile_map_enabled: bool = True
     memo_stale_age_ticks: int = DEFAULT_MEMO_STALE_AGE_TICKS
+    #: メモの経過を世界の時計の分で書くための換算。None なら手番の回数で書く (#1562)。
+    minutes_per_tick: int | None = None

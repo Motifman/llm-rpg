@@ -6,14 +6,15 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 from scripts.fuzz_scenario_with_random_agents import (
-    KNOWN_HOLES,
     FuzzFinding,
     FuzzResult,
+    KnownHole,
     TurnView,
     classify,
     find_leaks,
@@ -329,52 +330,85 @@ class TestDetectsLoggedErrors:
         assert all(f.detail == "ai_rpg_world.test_fuzz: 仕込んだエラー" for f in logged)
 
 
+_PLANTED_HOLE = KnownHole(9001, "leak", re.compile(r"看板に「スポット 19」"))
+
+
+def _plant_spot_number(raw: dict[str, Any]) -> None:
+    raw["spots"][0]["description"] = "石畳の小さな広場。看板に「スポット 19」と書いてある。"
+
+
 class TestKnownHoles:
     """Issue にした穴は、見つけても run を失敗にせず、Issue 番号を添えて出す。"""
 
-    def test_wait_result_tick_is_tagged_with_its_issue_and_does_not_fail_the_run(self) -> None:
-        """待つの結果の tick=N の漏れだけなら、#1562 の既知の穴として OK の行に番号を添える。"""
-        finding = classify(FuzzFinding("leak", 3, "- [Day 1 1:30] [行動] その場で待機した → [結果] 今ターンは行動を控えた: tick=3"), KNOWN_HOLES)
+    def test_a_known_leak_is_tagged_with_its_issue_and_does_not_fail_the_run(self) -> None:
+        """既知の穴の形に合う漏れだけなら、OK の行にその Issue 番号を添える。"""
+        finding = classify(FuzzFinding("leak", 3, "広場。看板に「スポット 19」と書いてある。"), [_PLANTED_HOLE])
         result = FuzzResult("s", 1, 10, reached_tick=10, findings=[finding])
 
-        assert finding.known_issue == 1562
+        assert finding.known_issue == 9001
         assert not result.failed
-        assert result.report() == "OK   s seed=1 ticks=10 reached=10 actions=0 known=#1562"
+        assert result.report() == "OK   s seed=1 ticks=10 reached=10 actions=0 known=#9001"
 
     def test_an_unknown_leak_beside_a_known_one_still_fails_the_run(self) -> None:
         """既知の穴と一緒に新しい漏れが出たら失敗にし、新しい漏れだけを並べる。"""
         findings = [
-            classify(FuzzFinding("leak", 2, "メモ (追加: 2026-10-10 22:56)"), KNOWN_HOLES),
-            classify(FuzzFinding("leak", 4, "到達不能: 16 → 19"), KNOWN_HOLES),
+            classify(FuzzFinding("leak", 2, "看板に「スポット 19」"), [_PLANTED_HOLE]),
+            classify(FuzzFinding("leak", 4, "到達不能: 16 → 19"), [_PLANTED_HOLE]),
         ]
         result = FuzzResult("s", 1, 10, reached_tick=10, findings=findings)
 
         assert result.failed
         assert result.report().splitlines()[:2] == [
-            "FAIL s seed=1 ticks=10 reached=10 actions=0 known=#1563",
+            "FAIL s seed=1 ticks=10 reached=10 actions=0 known=#9001",
             "  [leak] tick 4: 到達不能: 16 → 19",
         ]
 
     def test_known_shape_of_another_kind_is_not_excused(self) -> None:
-        """既知の穴は種類まで合わせる。tick=N が例外の文に出ても、既知の漏れとしては扱わない。"""
-        finding = classify(FuzzFinding("exception", 3, "RuntimeError: 今ターンは行動を控えた: tick=3"), KNOWN_HOLES)
+        """既知の穴は種類まで合わせる。同じ形が例外の文に出ても、既知の漏れとしては扱わない。"""
+        finding = classify(FuzzFinding("exception", 3, "RuntimeError: 看板に「スポット 19」"), [_PLANTED_HOLE])
 
         assert finding.known_issue is None
 
-    def test_run_tags_known_leaks_by_default(self, tmp_path: Path) -> None:
-        """既定の既知の穴で回すと、待つの結果の tick=N は #1562 の印付きで出て、run を失敗にしない。"""
-        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=20)
+    def test_run_tags_leaks_matching_the_given_known_holes(self, tmp_path: Path) -> None:
+        """渡した既知の穴に合う漏れは、run の中でもその Issue 番号の印付きで出て、run を失敗にしない。"""
+        result = run_random_agents(
+            _small_scenario(tmp_path, _plant_spot_number), seed=0, max_world_ticks=3, known_holes=[_PLANTED_HOLE]
+        )
 
-        tick_leaks = [f for f in result.findings if "今ターンは行動を控えた: tick=" in f.detail]
-        assert tick_leaks, "このシードでは一度も待たなかった。シードを変えないと何も確かめていない"
-        assert {f.known_issue for f in tick_leaks} == {1562}
-        assert 1562 in result.known_issues
+        planted = [f for f in result.findings if "スポット 19" in f.detail]
+        assert planted
+        assert {f.known_issue for f in planted} == {9001}
+        assert not result.failed
 
     def test_passing_no_known_holes_reports_every_finding(self, tmp_path: Path) -> None:
-        """既知の穴を空にして回すと、待つの結果の tick=N も失敗として出す。"""
+        """既知の穴を空にして回すと、同じ漏れが失敗として出る。"""
+        result = run_random_agents(
+            _small_scenario(tmp_path, _plant_spot_number), seed=0, max_world_ticks=3, known_holes=()
+        )
+
+        assert any("スポット 19" in f.detail and f.known_issue is None for f in result.findings)
+        assert result.failed
+
+
+class TestFixedHolesStayFixed:
+    """直して KNOWN_HOLES から外した穴が、でたらめに動かしても再び出ないことを見張る。"""
+
+    def test_wait_result_does_not_leak_world_tick(self, tmp_path: Path) -> None:
+        """待つを何度も選ぶシードで回しても、待つの結果に tick の番号が出ない (#1562)。"""
         result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=20, known_holes=())
 
-        assert any("tick=" in f.detail and f.known_issue is None for f in result.findings)
+        assert [a for a in result.actions if a.tool == "wait"], "このシードでは一度も待たなかった。シードを変えないと何も確かめていない"
+        assert [f for f in result.findings if f.kind == "leak"] == []
+
+    def test_memo_list_does_not_leak_real_world_date(self, tmp_path: Path) -> None:
+        """メモ一覧を選ぶシードで回しても、現実の日付と時刻が漏れとして出ない (#1563)。"""
+        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=20, known_holes=())
+
+        tools = [a.tool for a in result.actions]
+        assert "memo_add" in tools and "memo_list" in tools[tools.index("memo_add") + 1 :], (
+            "このシードではメモを足したあとに一覧を見ていない。空の一覧には日時が出ないので、何も確かめていない"
+        )
+        assert [f for f in result.findings if f.kind == "leak"] == []
 
 
 class TestUnreadableCandidates:

@@ -10,6 +10,7 @@ from ai_rpg_world.application.llm.services.world_vocabulary import (
     weather_display,
 )
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
 from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
     HEALTH_BUCKET_JP,
 )
@@ -94,9 +95,11 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if dto.tick_budget_remaining is not None:
             remaining = dto.tick_budget_remaining
             if remaining <= 0:
-                lines.append("残り行動可能 tick: 0 (時間切れ寸前)")
+                lines.append("時間切れまで: もう時間が残っていない (時間切れ寸前)")
             else:
-                lines.append(f"残り行動可能 tick: {remaining}")
+                lines.append(
+                    f"時間切れまで: あと{span_text(remaining, dto.minutes_per_tick)}"
+                )
 
         # Phase 4-E: スポット内オブジェクトの動的 state は、
         # UiContextBuilder._build_object_section が「オブジェクト:」section

@@ -2984,14 +2984,14 @@ class SpotGraphToolExecutor:
             # 主観の入力 (心の声・予測など) は結果 DTO とともにターン実行が
             # 記録する。do_wait へ渡していたのは、あちらが記録していた頃の
             # 名残で、いまは記録経路がここ 1 本になっている。
-            tick = self._runtime.do_wait(PlayerId(player_id), reason=reason)
+            self._runtime.do_wait(PlayerId(player_id), reason=reason)
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
             self._recover_fatigue_safe(
                 player_id, _FATIGUE_POLICY.recovery_of(ExertionKind.WAIT)
             )
             self._maybe_emit_say_inline(player_id, args)
             suffix = f"（理由: {reason}）" if reason else ""
-            base = f"今ターンは行動を控えた: tick={tick}{suffix}"
+            base = f"しばらく行動を控えて、様子を見た{suffix}"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_WAIT,
                 args,

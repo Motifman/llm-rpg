@@ -42,17 +42,27 @@ class TestFormatActiveMemos:
         result = format_active_memos([], current_tick=10)
         assert result == ""
 
-    def test_renders_single_memo_with_tick(self) -> None:
-        """tick 付き memo は時刻の直後に ``memo_`` handleを表示する。"""
+    def test_renders_elapsed_time_in_world_minutes(self) -> None:
+        """世界の時計で 1 tick 5 分なら、7 tick 前のメモは「経過 35 分」と書き、tick の番号は出さない (#1562)。"""
         memo = _make_memo("m1", "鍵を探す", added_at_tick=5)
-        result = format_active_memos([memo], current_tick=12)
-        assert result == "- [memo_m1] [tick=5, 経過 7 tick] 鍵を探す"
+
+        result = format_active_memos([memo], current_tick=12, minutes_per_tick=5)
+
+        assert result == "- [memo_m1] [経過 35 分] 鍵を探す"
+
+    def test_renders_elapsed_turns_when_clock_is_unknown(self) -> None:
+        """分に直せない世界では、経過を手番の回数で書く (#1562)。"""
+        memo = _make_memo("m1", "鍵を探す", added_at_tick=5)
+
+        result = format_active_memos([memo], current_tick=12, minutes_per_tick=None)
+
+        assert result == "- [memo_m1] [経過 手番 7 回ぶん] 鍵を探す"
 
     def test_marks_stale_when_elapsed_exceeds_threshold(self) -> None:
         """elapsed が stale_age_ticks 以上なら [STALE] プレフィックスが付く。"""
         memo = _make_memo("m1", "鍵を探す", added_at_tick=0)
         result = format_active_memos(
-            [memo], current_tick=25, stale_age_ticks=20
+            [memo], current_tick=25, stale_age_ticks=20, minutes_per_tick=5
         )
         assert result.startswith("- [memo_m1] [STALE] ")
 
@@ -60,36 +70,36 @@ class TestFormatActiveMemos:
         """elapsed < stale_age_ticks なら [STALE] が付かない。"""
         memo = _make_memo("m1", "鍵を探す", added_at_tick=0)
         result = format_active_memos(
-            [memo], current_tick=10, stale_age_ticks=20
+            [memo], current_tick=10, stale_age_ticks=20, minutes_per_tick=5
         )
         assert "[STALE]" not in result
 
     def test_negative_elapsed_is_clamped_to_zero(self) -> None:
         """added_at_tick > current_tick なら elapsed を 0 にクランプする (バグ防止)。"""
         memo = _make_memo("m1", "未来のメモ", added_at_tick=100)
-        result = format_active_memos([memo], current_tick=10)
-        assert "経過 0 tick" in result
+        result = format_active_memos([memo], current_tick=10, minutes_per_tick=5)
+        assert "経過 0 分" in result
 
-    def test_falls_back_to_time_string_when_no_tick(self) -> None:
-        """added_at_tick=None の memo は HH:MM 形式で fallback する。"""
+    def test_omits_time_bracket_when_added_tick_is_unknown(self) -> None:
+        """added_at_tick=None の memo は、現実の時刻 (added_at) を出さず、時間の括弧ごと省く (#1562)。"""
         memo = _make_memo(
             "m1",
             "メモ",
             added_at_tick=None,
             added_at=datetime(2026, 1, 1, 9, 5),
         )
-        result = format_active_memos([memo], current_tick=10)
-        # tick 不明なので age_part は出ない
-        assert "[09:05]" in result
-        assert "経過" not in result
 
-    def test_skips_age_when_current_tick_none(self) -> None:
-        """current_tick=None なら age 計算をスキップし、tick part のみ。"""
+        result = format_active_memos([memo], current_tick=10, minutes_per_tick=5)
+
+        assert result == "- [memo_m1] メモ"
+
+    def test_omits_time_bracket_when_current_tick_none(self) -> None:
+        """current_tick=None なら経過を出さず、追加した時点の tick の番号も出さない (#1562)。"""
         memo = _make_memo("m1", "メモ", added_at_tick=5)
-        result = format_active_memos([memo], current_tick=None)
-        assert "[tick=5]" in result
-        assert "経過" not in result
-        assert "[STALE]" not in result
+
+        result = format_active_memos([memo], current_tick=None, minutes_per_tick=5)
+
+        assert result == "- [memo_m1] メモ"
 
     def test_renders_multiple_memos_separated_by_newline(self) -> None:
         """複数 memo は改行区切り。"""

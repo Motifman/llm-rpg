@@ -5,6 +5,8 @@ Phase 3 Step 3a-3: Resolver+WorldId 必須 + provision 済 Being を前提に書
 todo_store として共有する。
 """
 
+import re
+
 import pytest
 from tests.application.llm._memo_being_test_helpers import (
     MemoBeingTestSetup,
@@ -111,6 +113,17 @@ class TestTodoToolExecutorList:
         assert result.success is True
         assert "タスクA" in result.message
         assert "タスクB" in result.message
+
+    def test_list_does_not_show_real_world_date_or_time(self, acting, executor_with_store):
+        """メモ一覧の結果に、現実の日付 (2026-10-10) も時刻 (23:04) も出ない (#1563)。"""
+        executor_with_store._execute_memo_add(acting, {"content": "坑道の奥へ向かう"})
+
+        result = executor_with_store._execute_memo_list(acting, {})
+
+        assert "坑道の奥へ向かう" in result.message
+        assert re.search(r"20\d\d-\d\d-\d\d", result.message) is None
+        assert re.search(r"\d\d:\d\d", result.message) is None
+        assert "追加:" not in result.message
 
     def test_list_without_store_returns_unknown_tool(self, acting, executor_without_store):
         result = executor_without_store._execute_memo_list(acting, {})

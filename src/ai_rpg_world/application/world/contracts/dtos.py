@@ -528,6 +528,8 @@ class PlayerCurrentStateDto:
     # WIN 条件を漏らさないメタ情報として、LLM に「時間切れまでの猶予」だけ伝える。
     # シナリオに時間制限が無い場合は None。
     tick_budget_remaining: int | None = None
+    # tick_budget_remaining を世界の時計の分に直す換算。None なら手番の回数で書く。
+    minutes_per_tick: int | None = None
     # 会議中だけ入る 1 行。自由時間と、会議機構を宣言していない
     # シナリオでは None (= 行ごと出ない)。
     #: いまのフェーズ。プロンプトの節をどの並びで出すかがこれで決まる。
