@@ -6786,6 +6786,7 @@ def create_world_runtime(
             encounter_collector.on_observation,
             player_acquaintances.on_observation,
         ],
+        recipient_view=player_acquaintances.view_for,
     )
     pipeline_event_publisher = PipelineEventPublisher(runtime)
 

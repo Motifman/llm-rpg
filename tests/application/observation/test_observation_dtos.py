@@ -11,6 +11,7 @@ import pytest
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
+    SubjectUnknownView,
 )
 
 
@@ -153,3 +154,40 @@ class TestObservationEntry:
                 output=sample_output,
                 game_time_label=123,  # type: ignore[arg-type]
             )
+
+
+class TestSubjectUnknownView:
+    """話し手を知らない受け手向けの版を、話し手の名前と組で持つことを保証する。"""
+
+    def test_output_keeps_subject_name_and_view_for_unknown_subject(self):
+        """話し手の名前と、名前を伏せた本文・structured を渡すと、そのまま読める。"""
+        view = SubjectUnknownView(prose="誰かが言った: 「やあ」", structured={"type": "player_spoke"})
+        out = ObservationOutput(
+            prose="ノアが言った: 「やあ」",
+            structured={"type": "player_spoke", "speaker": "ノア"},
+            subject_name="ノア",
+            if_subject_unknown=view,
+        )
+
+        assert out.subject_name == "ノア"
+        assert out.if_subject_unknown == view
+
+    def test_without_view_both_are_none(self):
+        """何も渡さなければ、話し手の名前も伏せた版も None になる。"""
+        out = ObservationOutput(prose="x", structured={})
+
+        assert (out.subject_name, out.if_subject_unknown) == (None, None)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"subject_name": "ノア"},
+            {"if_subject_unknown": SubjectUnknownView(prose="誰か", structured={})},
+            {"subject_name": " ", "if_subject_unknown": SubjectUnknownView(prose="誰か", structured={})},
+        ],
+        ids=["name_only", "view_only", "blank_name"],
+    )
+    def test_name_and_view_must_come_together(self, kwargs):
+        """話し手の名前と伏せた版は片方だけでは持てず、名前が空でも持てない (TypeError)。"""
+        with pytest.raises(TypeError):
+            ObservationOutput(prose="x", structured={}, **kwargs)

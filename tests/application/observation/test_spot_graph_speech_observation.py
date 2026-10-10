@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from tests.application.observation.test_observation_recipient_resolver_extended_events import (
     _make_status,
 )
@@ -174,3 +175,116 @@ class TestSpotGraphSpeechFormatter:
         assert out is not None
         assert "の向こうから" not in out.prose
         assert "source_connection_name" not in out.structured
+
+
+def _spoke(channel: SpeechChannel = SpeechChannel.SAY) -> PlayerSpokeEvent:
+    return PlayerSpokeEvent.create(
+        aggregate_id=PlayerId(1),
+        aggregate_type="PlayerStatusAggregate",
+        content="水門を開けるな",
+        channel=channel,
+        spot_id=SpotId(1),
+        speaker_coordinate=Coordinate(0, 0, 0),
+        target_player_id=None,
+    )
+
+
+def _same_spot_formatter() -> ObservationFormatter:
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    graph.place_entity(EntityId.create(2), SpotId.create(1))
+    return ObservationFormatter(spot_graph_repository=InMemorySpotGraphRepository(graph))
+
+
+class TestSpeechForListenerWhoDoesNotKnowSpeaker:
+    """話し声の観測が、話し手を知らない受け手向けに、名前を伏せた本文と structured を持つことを保証する。"""
+
+    def test_muffled_voice_has_an_anonymous_view_with_direction(self) -> None:
+        """隣の場所からのぼんやりした声は、話し手の名前と組で「〈接続〉の向こうから、誰かの遠くの声が聞こえる」版を持ち、伏せた structured に話し手の名前と番号が無い。"""
+        formatter = ObservationFormatter(
+            spot_graph_repository=InMemorySpotGraphRepository(
+                _build_two_spot_graph(perm=0.5, conn_name="西の坂道")
+            )
+        )
+
+        out = formatter.format(_spoke(), PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.subject_name == out.structured["speaker"]
+        assert out.subject_name in out.prose
+        assert out.if_subject_unknown.prose.startswith("〈西の坂道〉の向こうから、誰かの遠くの声が聞こえる: 「")
+        assert "speaker" not in out.if_subject_unknown.structured
+        assert "speaker_player_id" not in out.if_subject_unknown.structured
+        assert out.if_subject_unknown.structured["sound_clarity"] == "MUFFLED"
+
+    def test_faint_voice_has_an_anonymous_view(self) -> None:
+        """かすかな声の伏せた版は「誰かの声がかすかに聞こえるが、内容ははっきりしない。」になる。"""
+        formatter = ObservationFormatter(
+            spot_graph_repository=InMemorySpotGraphRepository(
+                _build_two_spot_graph(perm=0.2, conn_name="西の坂道")
+            )
+        )
+
+        out = formatter.format(_spoke(), PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == (
+            "〈西の坂道〉の向こうから、誰かの声がかすかに聞こえるが、内容ははっきりしない。"
+        )
+
+    @pytest.mark.parametrize(
+        ("channel", "verb"),
+        [(SpeechChannel.SAY, "言った"), (SpeechChannel.SHOUT, "叫んだ")],
+    )
+    def test_clear_voice_in_the_same_place_has_an_anonymous_view(self, channel, verb) -> None:
+        """同じ場所の声も、伏せた版は「誰かが言った」「誰かが叫んだ」になる。暗がりなど、同じ場所でも会っていない相手がいるため。"""
+        out = _same_spot_formatter().format(_spoke(channel), PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == f"誰かが{verb}: 「水門を開けるな」"
+
+    def test_speaker_saying_own_name_still_yields_an_observation(self) -> None:
+        """話し手が自分の名前を口にしても観測は作られ、伏せた版の本文には言った言葉がそのまま残る。声がそう言ったのは聞こえているため。"""
+        formatter = _same_spot_formatter()
+        speaker = formatter.format(_spoke(), PlayerId(2)).subject_name
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content=f"{speaker}だ、聞こえるか",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+
+        out = formatter.format(event, PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == f"誰かが言った: 「{speaker}だ、聞こえるか」"
+
+    def test_whisper_has_an_anonymous_view(self) -> None:
+        """同じ場所で自分に宛てた囁きも、伏せた版は「誰かが囁いた」になる。"""
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="水門を開けるな",
+            channel=SpeechChannel.WHISPER,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=PlayerId(2),
+        )
+
+        out = _same_spot_formatter().format(event, PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == "誰かが囁いた: 「水門を開けるな」"
+
+    def test_formatter_without_spot_graph_still_has_an_anonymous_view(self) -> None:
+        """空間グラフの無い formatter で作る声も、話し手の名前と組で「誰かが言った」の版を持ち、伏せた structured に話し手が無い。"""
+        out = ObservationFormatter().format(_spoke(), PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == "誰かが言った: 「水門を開けるな」"
+        assert "speaker" not in out.if_subject_unknown.structured
+        assert "speaker_player_id" not in out.if_subject_unknown.structured

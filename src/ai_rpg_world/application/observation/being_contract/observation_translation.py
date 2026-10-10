@@ -155,6 +155,13 @@ def observation_from_game(
         place=_place(structured, route, output.prose, observer),
         addressed_to_self=_addressed_to_self(structured, route, targets_self),
         wants_wake=output.schedules_turn,
+        body_if_subject_unknown=(
+            output.if_subject_unknown.prose
+            if output.if_subject_unknown is not None
+            and subject_name is not UNKNOWN
+            and not subject_is_self
+            else None
+        ),
     )
 
 

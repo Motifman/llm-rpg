@@ -26,6 +26,7 @@ from ai_rpg_world.application.observation.being_contract import (
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
     ObservationOutput,
+    SubjectUnknownView,
 )
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -579,3 +580,45 @@ def _catalogued_tool_definitions() -> dict[str, ToolCategory]:
     assess = assess_situation_definition(expected_result_policy="off")
     found[assess.name] = assess.category
     return found
+
+
+class TestBodyIfSubjectUnknownFromGame:
+    """ゲームの観測が持つ名前を伏せた版を、契約の観測の本文に写すことを保証する。"""
+
+    def test_anonymous_view_becomes_body_if_subject_unknown(self) -> None:
+        """話し手の名前と伏せた版を持つ話し声は、伏せた版の本文を body_if_subject_unknown に写す。"""
+        output = ObservationOutput(
+            prose="カイが言った: 「水場は北だ」",
+            structured=_speech(),
+            observation_category="social",
+            subject_name="カイ",
+            if_subject_unknown=SubjectUnknownView(
+                prose="誰かが言った: 「水場は北だ」",
+                structured={"type": "player_spoke", "content": "水場は北だ"},
+            ),
+        )
+
+        observation = _translate(output)
+
+        assert observation.subject_name == "カイ"
+        assert observation.body_if_subject_unknown == "誰かが言った: 「水場は北だ」"
+
+    def test_observation_without_view_has_no_alternate_body(self) -> None:
+        """伏せた版を持たない観測は、body_if_subject_unknown が None になる。"""
+        assert _translate(_output(_speech())).body_if_subject_unknown is None
+
+    def test_view_is_not_copied_when_subject_is_unknown_or_self(self) -> None:
+        """伏せた版を持っていても、本文から話し手が分からない観測と、自分が話し手の観測には body_if_subject_unknown を付けない (付けると契約が拒んで観測が失われる)。"""
+        view = SubjectUnknownView(prose="誰かが言った: 「水場は北だ」", structured={"type": "player_spoke"})
+        hidden_name = ObservationOutput(
+            prose="声がした。", structured=_speech(), observation_category="social",
+            subject_name="カイ", if_subject_unknown=view,
+        )
+        own = ObservationOutput(
+            prose="ノアが言った: 「水場は北だ」",
+            structured=_speech(speaker="ノア", speaker_player_id=2),
+            observation_category="social", subject_name="ノア", if_subject_unknown=view,
+        )
+
+        assert _translate(hidden_name).body_if_subject_unknown is None
+        assert _translate(own).body_if_subject_unknown is None
