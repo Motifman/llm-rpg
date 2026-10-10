@@ -1,6 +1,6 @@
 """観測まわりの DTO・値オブジェクト"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Literal
 
@@ -53,6 +53,22 @@ class ObservationOutput:
                 raise TypeError("subject_name must be non-blank str")
             if not isinstance(self.if_subject_unknown, SubjectUnknownView):
                 raise TypeError("if_subject_unknown must be SubjectUnknownView")
+
+    def as_subject_known(self) -> "ObservationOutput":
+        return replace(self, subject_name=None, if_subject_unknown=None)
+
+    def as_subject_unknown(self) -> "ObservationOutput":
+        """伏せた版を持たない観測は、そのまま返す。"""
+        view = self.if_subject_unknown
+        if view is None:
+            return self
+        return replace(
+            self,
+            prose=view.prose,
+            structured=dict(view.structured),
+            subject_name=None,
+            if_subject_unknown=None,
+        )
 
 
 @dataclass(frozen=True)

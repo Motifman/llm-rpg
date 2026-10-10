@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.being.application.known_people import render_known_people
@@ -141,15 +140,7 @@ class PlayerAcquaintances:
                 recipient.value,
             )
             known = False
-        if known:
-            return replace(output, subject_name=None, if_subject_unknown=None)
-        return replace(
-            output,
-            prose=view.prose,
-            structured=dict(view.structured),
-            subject_name=None,
-            if_subject_unknown=None,
-        )
+        return output.as_subject_known() if known else output.as_subject_unknown()
 
     def on_observation(self, recipient: PlayerId, output: ObservationOutput) -> None:
         """入ってきた人とその場にいた受け手は、互いの姿を見ている。

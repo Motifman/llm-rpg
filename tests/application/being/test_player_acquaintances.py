@@ -327,6 +327,7 @@ class TestViewForRecipient:
 
         assert seen.prose == "ノアの遠くの声が聞こえる: 「水門」"
         assert seen.structured["speaker"] == "ノア"
+        assert (seen.subject_name, seen.if_subject_unknown) == (None, None)
 
     def test_observation_without_alternate_view_is_unchanged(self) -> None:
         """話し手で描き方が変わらない観測は、そのまま返す。"""

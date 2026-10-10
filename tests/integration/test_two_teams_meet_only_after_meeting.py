@@ -94,6 +94,7 @@ class TestDistantVoice:
         assert "ミナト" not in _whole_prompt(runtime, ids["ゲンジ"])
         heard = _line_with(self._recent_events(runtime, ids["ゲンジ"]), "おーい")
         assert "誰か" in heard
+        assert runtime._player_acquaintances.find(ids["ゲンジ"], "ミナト") is None
 
         runtime.do_move(ids["ミナト"], "camp_west")
         runtime.advance_until_player_idle(ids["ミナト"])

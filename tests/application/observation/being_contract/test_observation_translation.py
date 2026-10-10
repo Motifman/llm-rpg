@@ -606,3 +606,19 @@ class TestBodyIfSubjectUnknownFromGame:
     def test_observation_without_view_has_no_alternate_body(self) -> None:
         """伏せた版を持たない観測は、body_if_subject_unknown が None になる。"""
         assert _translate(_output(_speech())).body_if_subject_unknown is None
+
+    def test_view_is_not_copied_when_subject_is_unknown_or_self(self) -> None:
+        """伏せた版を持っていても、本文から話し手が分からない観測と、自分が話し手の観測には body_if_subject_unknown を付けない (付けると契約が拒んで観測が失われる)。"""
+        view = SubjectUnknownView(prose="誰かが言った: 「水場は北だ」", structured={"type": "player_spoke"})
+        hidden_name = ObservationOutput(
+            prose="声がした。", structured=_speech(), observation_category="social",
+            subject_name="カイ", if_subject_unknown=view,
+        )
+        own = ObservationOutput(
+            prose="ノアが言った: 「水場は北だ」",
+            structured=_speech(speaker="ノア", speaker_player_id=2),
+            observation_category="social", subject_name="ノア", if_subject_unknown=view,
+        )
+
+        assert _translate(hidden_name).body_if_subject_unknown is None
+        assert _translate(own).body_if_subject_unknown is None

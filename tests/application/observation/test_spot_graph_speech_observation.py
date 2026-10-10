@@ -262,3 +262,29 @@ class TestSpeechForListenerWhoDoesNotKnowSpeaker:
 
         assert out is not None and out.if_subject_unknown is not None
         assert out.if_subject_unknown.prose == f"誰かが言った: 「{speaker}だ、聞こえるか」"
+
+    def test_whisper_has_an_anonymous_view(self) -> None:
+        """同じ場所で自分に宛てた囁きも、伏せた版は「誰かが囁いた」になる。"""
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="水門を開けるな",
+            channel=SpeechChannel.WHISPER,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=PlayerId(2),
+        )
+
+        out = _same_spot_formatter().format(event, PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == "誰かが囁いた: 「水門を開けるな」"
+
+    def test_formatter_without_spot_graph_still_has_an_anonymous_view(self) -> None:
+        """空間グラフの無い formatter で作る声も、話し手の名前と組で「誰かが言った」の版を持ち、伏せた structured に話し手が無い。"""
+        out = ObservationFormatter().format(_spoke(), PlayerId(2))
+
+        assert out is not None and out.if_subject_unknown is not None
+        assert out.if_subject_unknown.prose == "誰かが言った: 「水門を開けるな」"
+        assert "speaker" not in out.if_subject_unknown.structured
+        assert "speaker_player_id" not in out.if_subject_unknown.structured

@@ -320,6 +320,7 @@ class TestRecipientView:
         assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
         assert recorded[0].payload["prose"] == "誰かが言った: 「水門」"
         assert recorded[0].payload["subject_hidden"] is True
+        assert recorded[0].payload["hidden_subject_name"] == "ノア"
         assert [o.prose for o in observed] == ["誰かが言った: 「水門」"]
 
     def test_unchanged_view_is_not_marked_hidden(self) -> None:
@@ -339,3 +340,51 @@ class TestRecipientView:
         appender.append(PlayerId(7), self._heard(), datetime.now())
 
         assert "subject_hidden" not in recorded[0].payload
+
+    def test_hiding_is_marked_even_if_the_speaker_is_named_someone(self) -> None:
+        """話し手の表示名がたまたま「誰か」で本文が変わらなくても、伏せた版を記録したら trace に伏せた印が付く。"""
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+        recorder.record = lambda kind, **kw: recorded.append(original_record(kind, **kw))  # type: ignore[method-assign]
+        named_someone = ObservationOutput(
+            prose="誰かが言った: 「水門」",
+            structured={"type": "player_spoke", "speaker": "誰か"},
+            observation_category="social",
+            subject_name="誰か",
+            if_subject_unknown=SubjectUnknownView(
+                prose="誰かが言った: 「水門」", structured={"type": "player_spoke"}
+            ),
+        )
+        appender = ObservationAppender(
+            buffer=DefaultObservationContextBuffer(),
+            trace_recorder=recorder,
+            recipient_view=self._hide,
+        )
+
+        appender.append(PlayerId(7), named_someone, datetime.now())
+
+        assert recorded[0].payload["subject_hidden"] is True
+
+    def test_appender_without_recipient_view_hides_the_subject(self) -> None:
+        """選ぶ口を渡していない入口でも、伏せた版を持つ観測は伏せた版で記録する。配線を忘れても名前が全員に届かない。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer)
+
+        appender.append(PlayerId(7), self._heard(), datetime.now())
+
+        assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
+
+    def test_failing_recipient_view_still_records_hidden_view(self) -> None:
+        """選ぶ口が例外を出しても観測は落とさず、伏せた版で記録する。"""
+        def broken(_pid: PlayerId, _out: ObservationOutput) -> ObservationOutput:
+            raise RuntimeError("view failed")
+
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer, recipient_view=broken)
+
+        appender.append(PlayerId(7), self._heard(), datetime.now())
+
+        assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
