@@ -146,6 +146,33 @@ class TestTeamResults:
             "south": GameResultEnum.LOSE,
         }
 
+    def test_external_stop_without_a_winner_makes_every_team_lose(self) -> None:
+        """END_ON_ALL_DOWN で止まったとき、どのチームも全員 RESCUED でなければ全チーム LOSE になる。"""
+        runtime = create_world_runtime(_SCENARIO, config=runtime_config(end_on_all_down=True))
+        ids = _ids(runtime)
+        registry = runtime._player_outcome_registry
+        for string_id in ("north_1", "south_1"):
+            registry.set_outcome(ids[string_id], PlayerOutcomeEnum.RESCUED)
+        for string_id in ("north_2", "south_2"):
+            registry.set_outcome(ids[string_id], PlayerOutcomeEnum.DEAD)
+
+        result = runtime.check_game_end()
+
+        assert result.reason.startswith("外的停止 END_ON_ALL_DOWN")
+        assert result.team_results == {
+            "north": GameResultEnum.LOSE,
+            "south": GameResultEnum.LOSE,
+        }
+
+    def test_werewolf_scenario_keeps_a_single_result(self) -> None:
+        """teams の無い station_drill では、終了判定の team_results は None のまま。"""
+        runtime = create_world_runtime(Path("data/scenarios/station_drill.json"))
+
+        result = runtime.check_game_end()
+
+        assert runtime.scenario.teams == ()
+        assert result.team_results is None
+
 
 class TestTeamResultTrace:
     """終了時の勝敗を、trace の team_result にそのまま書ける形で返すことを保証する。"""
@@ -174,6 +201,29 @@ class TestTeamResultTrace:
         }
         assert payload["reason"] == result.reason
 
+    def test_draw_payload_marks_both_teams_satisfied(self) -> None:
+        """4 人全員が乗った回の payload は、両チームが DRAW かつ satisfied で、4 人の result も DRAW。理由には両チームの名前が入る。"""
+        runtime = _runtime()
+        result = _depart(runtime, "north_1", "north_2", "south_1", "south_2")
+
+        payload = runtime.team_result_trace(result)
+
+        assert [(t["result"], t["satisfied"]) for t in payload["teams"]] == [("DRAW", True), ("DRAW", True)]
+        assert {p["result"] for p in payload["players"]} == {"DRAW"}
+        assert "北の班" in payload["reason"] and "南の班" in payload["reason"]
+
+    def test_losing_payload_says_what_each_team_lacked(self) -> None:
+        """北 1 人と南 1 人だけが乗った回の payload は、両チーム LOSE で、それぞれの理由に RESCUED が 1/2 人だったことが残る。"""
+        runtime = _runtime()
+        result = _depart(runtime, "north_1", "south_1")
+
+        payload = runtime.team_result_trace(result)
+
+        for team in payload["teams"]:
+            assert team["result"] == "LOSE" and team["satisfied"] is False
+            assert team["reason"] == "チームの RESCUED は 1/2人"
+        assert payload["reason"] == "フラグ成立: lift_departed"
+
     def test_no_payload_while_the_game_continues(self) -> None:
         """終わっていない判定結果からは payload を作らない。"""
         runtime = _runtime()
@@ -196,15 +246,48 @@ class TestTeamResultTrace:
         assert runtime.team_result_trace(result) is None
 
 
+def _whole_prompt(runtime, pid) -> str:
+    prompt = runtime.build_full_prompt(pid)
+    text = "\n".join(str(m["content"]) for m in prompt["messages"])
+    return text + json.dumps(prompt["tools"], ensure_ascii=False)
+
+
 class TestTeamsStayHidden:
-    """チームの所属と名前が、プロンプトのどこにも出ないことを保証する。"""
+    """チームの名前と、相手チームの所属が、プロンプトに出ないことを保証する。
 
-    def test_team_names_appear_in_no_prompt(self) -> None:
-        """起動直後、4 人それぞれのプロンプト全体に、どちらのチームの名前も出ない。"""
+    所属を書いた initial_state のキーは、他の state と同じく本人の「自分の状態」に
+    だけ出る (相手には出ない)。
+    """
+
+    def test_no_prompt_shows_team_names_or_the_other_side(self) -> None:
+        """起動直後、4 人それぞれのプロンプトに、チームの名前も相手チームの所属の値も出ない。自分の所属と仲間の名前は出る。"""
         runtime = _runtime()
+        ids = _ids(runtime)
+        mates = {"north_1": "トウカ", "north_2": "ミナト", "south_1": "サヤ", "south_2": "ゲンジ"}
 
-        for pid in runtime.get_player_ids():
-            prompt = runtime.build_full_prompt(pid)
-            text = "\n".join(str(m["content"]) for m in prompt["messages"])
-            text += json.dumps(prompt["tools"], ensure_ascii=False)
+        for string_id, pid in ids.items():
+            own, other = ("north", "south") if string_id.startswith("north") else ("south", "north")
+            text = _whole_prompt(runtime, pid)
+
+            assert f"team={own}" in text and mates[string_id] in text, text
+            assert f"team={other}" not in text, text
             assert "北の班" not in text and "南の班" not in text, text
+
+    def test_meeting_the_other_side_does_not_reveal_their_team(self) -> None:
+        """北のミナトが南の野営地に入って南の 2 人に会っても、ミナトのプロンプトに南の所属は出ず、南の 2 人のプロンプトにも北の所属は出ない。"""
+        runtime = _runtime()
+        ids = _ids(runtime)
+        graph = runtime._spot_graph_repo.find_graph()
+        entity_id = EntityId.create(int(ids["north_1"]))
+        graph.unplace_entity(entity_id)
+        graph.place_entity(
+            entity_id, SpotId.create(runtime.id_mapper.get_int("spot", "camp_south"))
+        )
+        runtime._spot_graph_repo.save(graph)
+        runtime.advance_tick()
+
+        minato = _whole_prompt(runtime, ids["north_1"])
+        assert "ゲンジ" in minato and "team=south" not in minato, minato
+        for south in ("south_1", "south_2"):
+            text = _whole_prompt(runtime, ids[south])
+            assert "ミナト" in text and "team=north" not in text, text

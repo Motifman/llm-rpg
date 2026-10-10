@@ -110,3 +110,22 @@ class TestEvaluation:
         result = _evaluate({}, members=[])
 
         assert result.is_ended is False
+
+    def test_missing_player_outcomes_raises(self) -> None:
+        """player_outcomes を渡さずに評価すると GameEndConditionValidationException を投げる。"""
+        with pytest.raises(GameEndConditionValidationException):
+            GameEndConditionEvaluator().evaluate(
+                SpotGraphAggregate.empty(SpotGraphId.create(1)),
+                _ESCAPED,
+                frozenset(),
+                _ALL,
+                team_member_ids=_NORTH,
+                result_on_match=GameResultEnum.WIN,
+            )
+
+    def test_member_missing_from_outcomes_counts_as_not_reached(self) -> None:
+        """outcome の表に北の 1 人の行が無ければ、その人は RESCUED ではないとして成立しない。"""
+        result = _evaluate({1: PlayerOutcomeEnum.RESCUED})
+
+        assert result.is_ended is False
+

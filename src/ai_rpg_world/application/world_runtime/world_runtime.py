@@ -4472,8 +4472,11 @@ class WorldRuntime:
         satisfied, _ = self._satisfied_teams()
         return decide_team_results(self.scenario.teams, satisfied)
 
-    def _satisfied_teams(self) -> tuple[frozenset[str], str | None]:
-        """勝利条件が成立したチームの id と、最初に成立した条件の理由を返す。"""
+    def _satisfied_teams(self) -> tuple[frozenset[str], Mapping[str, str]]:
+        """勝利条件が成立したチームの id と、チームごとの判定の理由を返す。
+
+        成立しなかったチームの理由は、最後に評価した条件の理由 (何が足りないか)。
+        """
         graph = self._spot_graph_repo.find_graph()
         flags = self._world_flag_state.as_frozen_set()
         player_ids = self.get_player_ids()
@@ -4482,7 +4485,7 @@ class WorldRuntime:
         player_states = self._collect_player_states(player_ids)
         player_outcomes = self._collect_player_outcomes(player_ids)
         satisfied: list[str] = []
-        reason: str | None = None
+        reasons: dict[str, str] = {}
         for team in self.scenario.teams:
             for condition in team.win_conditions:
                 result = self._game_end_evaluator.evaluate(
@@ -4492,11 +4495,11 @@ class WorldRuntime:
                     result_on_match=GameResultEnum.WIN,
                     team_member_ids=team.member_player_ids,
                 )
+                reasons[team.team_id] = result.reason
                 if result.is_ended:
                     satisfied.append(team.team_id)
-                    reason = reason or f"{team.name}: {result.reason}"
                     break
-        return frozenset(satisfied), reason
+        return frozenset(satisfied), reasons
 
     def team_result_trace(
         self, end_result: GameEndResult
@@ -4510,6 +4513,7 @@ class WorldRuntime:
         if not end_result.is_ended or team_results is None:
             return None
         registry = self._player_outcome_registry
+        _, team_reasons = self._satisfied_teams()
         team_of: dict[int, str] = {}
         teams_payload: list[dict[str, Any]] = []
         for team in self.scenario.teams:
@@ -4519,6 +4523,7 @@ class WorldRuntime:
                 "name": team.name,
                 "result": result.value,
                 "satisfied": result is not GameResultEnum.LOSE,
+                "reason": team_reasons[team.team_id],
                 "member_player_ids": [int(pid) for pid in team.member_player_ids],
                 "member_player_string_ids": [
                     self.id_mapper.get_str("player", int(pid))
@@ -4609,12 +4614,16 @@ class WorldRuntime:
         if self.scenario.teams:
             # チームの win を end より先に見る。勝ちが決まった tick に end も
             # 成立していても、勝ったチームを負けにしない。
-            satisfied, team_reason = self._satisfied_teams()
+            satisfied, team_reasons = self._satisfied_teams()
             if satisfied:
                 return GameEndResult(
                     is_ended=True,
                     result=None,
-                    reason=team_reason or "チームの勝利条件が成立",
+                    reason=" / ".join(
+                        f"{team.name}: {team_reasons[team.team_id]}"
+                        for team in self.scenario.teams
+                        if team.team_id in satisfied
+                    ),
                     player_outcomes=self._collect_player_outcomes(player_ids),
                     team_results=decide_team_results(self.scenario.teams, satisfied),
                 )

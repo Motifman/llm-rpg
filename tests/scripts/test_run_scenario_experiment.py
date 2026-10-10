@@ -1262,3 +1262,45 @@ def _teleport_player(runtime, player_id: int, spot_id: str) -> None:  # noqa: AN
         pass
     graph.place_entity(entity_id, spot)
     runtime._spot_graph_repo.save(graph)
+
+
+class TestTeamResultReachesTheTrace:
+    """2 チームの fixture を実際の runtime で回し、trace.jsonl に team_result が届くことを保証する (#1516)。"""
+
+    def test_defector_run_writes_one_team_result(self, tmp_path: Path) -> None:
+        """北の 2 人と南の 1 人が乗り場にいて 2 tick 目にレバーが倒れると、team_result が 1 件残り、北が WIN、乗った南の人は RESCUED / LOSE になる。"""
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_lift.json"
+        raw = json.loads(fixture.read_text(encoding="utf-8"))
+        for player in raw["players"]:
+            if player["id"] in ("north_1", "north_2", "south_1"):
+                player["spawn_spot"] = "lift"
+        raw["scenario_events"] = [{
+            "id": "lever_pulled",
+            "trigger": "ON_TICK",
+            "once": True,
+            "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 2}],
+            "effects": [{"effect_type": "SET_FLAG", "parameters": {"flag_name": "lift_departed"}}],
+        }]
+        scenario_path = tmp_path / "two_teams_lift_auto.json"
+        scenario_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        trace_path = tmp_path / "trace.jsonl"
+
+        with JsonlTraceRecorder(trace_path) as recorder:
+            summary = _drive_scenario(
+                run_id="team-e2e",
+                scenario_path=scenario_path,
+                max_world_ticks=6,
+                recorder=recorder,
+                progress=lambda _message: None,
+                runtime_config=ResolvedLlmRuntimeConfig.for_tests(),
+            )
+
+        events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        [team_event] = [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
+        assert summary["outcome"] == "ENDED"
+        assert {t["team_id"]: t["result"] for t in team_event["payload"]["teams"]} == {
+            "north": "WIN",
+            "south": "LOSE",
+        }
+        players = {p["player_string_id"]: p for p in team_event["payload"]["players"]}
+        assert (players["south_1"]["outcome"], players["south_1"]["result"]) == ("RESCUED", "LOSE")

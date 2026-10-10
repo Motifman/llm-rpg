@@ -249,3 +249,37 @@ class TestBrokenTeamsAreRejected:
 
         with pytest.raises(ScenarioLoadError, match="勝利条件を 1 つ以上"):
             _load(raw)
+
+    def test_place_condition_in_team_win_is_rejected(self) -> None:
+        """teams[].win に ALL_AT_SPOT を置くと ScenarioLoadError を投げる。世界全体を数えるので「チームの全員が」と読み違えるため。"""
+        raw = _raw()
+        raw["teams"][0]["win"] = [{"type": "ALL_AT_SPOT", "target_spot": "lift"}]
+
+        with pytest.raises(ScenarioLoadError, match="teams\\[\\]\\.win に ALL_AT_SPOT は置けません"):
+            _load(raw)
+
+    def test_teams_without_end_are_rejected(self) -> None:
+        """teams を書いて game_end_conditions.end を書かないと ScenarioLoadError を投げる。どのチームも勝たない終わり方が無いと、勝敗が決まらないまま打ち切られるため。"""
+        raw = _raw()
+        raw["game_end_conditions"] = {}
+
+        with pytest.raises(ScenarioLoadError, match="game_end_conditions.end を 1 つ以上"):
+            _load(raw)
+
+    def test_waiting_for_outcome_no_rule_gives_is_rejected(self) -> None:
+        """win が全員の RESCUED を待つのに、RESCUED を付ける player_outcome_rules が無いと ScenarioLoadError を投げる。"""
+        raw = _raw()
+        raw["player_outcome_rules"][0]["outcome"] = "STRANDED"
+
+        with pytest.raises(ScenarioLoadError, match="RESCUED を付ける規則がありません"):
+            _load(raw)
+
+    def test_waiting_for_death_needs_no_rule(self) -> None:
+        """win が相手ではなく全員の DEAD を待つ形でも、DEAD は死が付けるので player_outcome_rules が無くても読める。"""
+        raw = _raw()
+        raw["teams"][1]["win"] = [{"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "DEAD"}]
+
+        result = _load(raw)
+
+        assert result.teams[1].win_conditions[0].required_outcome is PlayerOutcomeEnum.DEAD
+

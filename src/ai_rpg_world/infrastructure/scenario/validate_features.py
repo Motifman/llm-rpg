@@ -82,12 +82,17 @@ _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, str | None] = {
 # teams のあるシナリオ (#1516) では、勝敗はチームの ``win`` が決める。全体の
 # ``end`` は「どのチームも勝たずに終わる」中立の終わりなので ``team_end`` として
 # 読み、世界の出来事を見る条件をすべて置ける。
+#
+# 「全員が / 誰かが その場所にいる」は、チームの win に書くと「チームの全員が」と
+# 読み違える。世界全体を見るので相手チームの人まで数え、ANY_AT_SPOT なら相手が
+# 着いただけで勝つ。チームの win には置かせない。
 _WORLD_END_SECTIONS = frozenset({"win", "lose", "team_win", "team_end"})
+_PLACE_END_SECTIONS = frozenset({"win", "lose", "team_end"})
 _GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
     GameEndConditionTypeEnum, frozenset[str]
 ] = {
-    GameEndConditionTypeEnum.ALL_AT_SPOT: _WORLD_END_SECTIONS,
-    GameEndConditionTypeEnum.ANY_AT_SPOT: _WORLD_END_SECTIONS,
+    GameEndConditionTypeEnum.ALL_AT_SPOT: _PLACE_END_SECTIONS,
+    GameEndConditionTypeEnum.ANY_AT_SPOT: _PLACE_END_SECTIONS,
     GameEndConditionTypeEnum.FLAG_SET: _WORLD_END_SECTIONS,
     GameEndConditionTypeEnum.TICK_LIMIT: _WORLD_END_SECTIONS,
     GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: (

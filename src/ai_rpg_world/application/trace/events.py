@@ -198,8 +198,10 @@ class TraceEventKind:
     # spawn_spot が無ければ宣言どおりの場所が入る。
     ROUND_ASSIGNMENT = "round_assignment"
     # teams のあるシナリオで、ゲームが終わったときのチームの勝敗と個人の結果
-    # (#1516)。終わった tick に 1 件。teams の無いシナリオでは出ない。
-    # payload: reason / teams: list[{team_id, name, result, satisfied,
+    # (#1516)。check_game_end で終わった tick に 1 件。teams の無いシナリオでは
+    # 出ない。ゲームが終わる前に run が止まったとき (run_end の outcome が
+    # TIMEOUT / LLM_ABORTED / INTERRUPTED) も出ない。勝敗は決まっていない。
+    # payload: reason / teams: list[{team_id, name, result, satisfied, reason,
     # member_player_ids, member_player_string_ids}] / players: list[{player_id,
     # player_string_id, player_name, team_id, outcome, result}]。
     # result は WIN / LOSE / DRAW で、個人の result は所属チームと同じ。

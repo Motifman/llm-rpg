@@ -59,10 +59,11 @@ class TestScenarioTeamDeclaration:
         with pytest.raises(ScenarioTeamValidationException):
             _team("north", 1, 1)
 
-    def test_blank_team_id_is_rejected(self) -> None:
-        """空白だけの team_id を渡すと ScenarioTeamValidationException を投げる。"""
+    @pytest.mark.parametrize("team_id", ["", "  "])
+    def test_blank_team_id_is_rejected(self, team_id: str) -> None:
+        """空文字か空白だけの team_id を渡すと ScenarioTeamValidationException を投げる。"""
         with pytest.raises(ScenarioTeamValidationException):
-            _team("  ", 1)
+            _team(team_id, 1)
 
 
 class TestDecideTeamResults:

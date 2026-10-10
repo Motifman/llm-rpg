@@ -79,7 +79,10 @@ from ai_rpg_world.infrastructure.scenario.parse_sync_groups import (
     parse_synchronized_action_groups,
     reject_unreachable_synchronized_action_names,
 )
-from ai_rpg_world.infrastructure.scenario.parse_teams import parse_teams
+from ai_rpg_world.infrastructure.scenario.parse_teams import (
+    parse_teams,
+    reject_unreachable_team_outcomes,
+)
 from ai_rpg_world.infrastructure.scenario.parse_world import (
     declared_world_flag_writers,
     parse_day_night_config,
@@ -250,6 +253,12 @@ class ScenarioLoader:
             mapper,
             section="team_end" if teams else "end",
         )
+        if teams and not end_conds:
+            raise ScenarioLoadError(
+                "teams を書いたシナリオには game_end_conditions.end を 1 つ以上"
+                "書いてください。どのチームも勝たないまま終わる道が無いと、"
+                "勝敗が決まらないまま run が打ち切られます"
+            )
         initial_flags = tuple(raw.get("initial_flags", []))
         ongoing_conditions = parse_ongoing_conditions(
             raw.get("ongoing_conditions"),
@@ -270,6 +279,7 @@ class ScenarioLoader:
         player_outcome_rules = parse_player_outcome_rules(
             raw.get("player_outcome_rules", []), mapper,
         )
+        reject_unreachable_team_outcomes(teams, player_outcome_rules)
         needs_config = parse_needs_config(raw.get("needs"))
         weather_config = parse_weather_config(raw.get("environment", {}))
         day_night_config = parse_day_night_config(raw.get("environment", {}))

@@ -64,7 +64,7 @@
 
 | # | 項目 | 判定 | 書き方の要点 | 根拠 | 制限 |
 |---|---|---|---|---|---|
-| 14 | チームの定義と勝利条件 | **できる** (#1516 で追記) | シナリオの `teams` に、`id`、`name`、`member_state` (所属を決める `initial_state` の値)、`win` (勝利条件) を書く。チームの全員の個人結果を見る `ALL_MEMBERS_HAVE_OUTCOME` が使える。回ごとの組み分けは `round_assignment` の枠に `member_state` の値を書く。勝つのは高々 1 チームで、同時に成立したら DRAW | `L/parse_teams.py`、`D/value_object/scenario_team.py`、design_decisions D1516 | `teams` を書くと `game_end_conditions.win` / `lose` は置けない。チームの所属・名前はプロンプトに出ない。チーム内だけに公開する属性とチームだけの連絡手段は無い |
+| 14 | チームの定義と勝利条件 | **できる** (#1516 で追記) | シナリオの `teams` に、`id`、`name`、`member_state` (所属を決める `initial_state` の値)、`win` (勝利条件) を書く。チームの全員の個人結果を見る `ALL_MEMBERS_HAVE_OUTCOME` が使える。回ごとの組み分けは `round_assignment` の枠に `member_state` の値を書く。勝つのは高々 1 チームで、同時に成立したら DRAW | `L/parse_teams.py`、`D/value_object/scenario_team.py`、design_decisions D1516 | `teams` を書くと `game_end_conditions.win` / `lose` は置けず、`end` が 1 つ以上要る。`ALL_AT_SPOT` / `ANY_AT_SPOT` はチームの勝利条件に置けない。チームの名前と相手チームの所属はプロンプトに出ない。チーム内だけに公開する属性とチームだけの連絡手段は無い |
 | 15 | 隠れた役 | **できる** | `initial_state.role` と `PLAYER_STATE_IS`。偽装用の操作を並べることもできる | `A/world_graph/hidden_interaction_filter.py` | 役の割り当ては JSON に固定 |
 | 16 | 攻撃・妨害・盗み・死・脱落 | **できる** | `player_interactions` (`APPLY_DAMAGE`、`REMOVE_ITEM` と `GIVE_ITEM`、`witness_policy`、暗所の目撃文)、`death`、`tend_to_player`、`departed_agents_enabled` | `L/parse_world.py:78-235, 307-331` | 相手に状態異常や移動を与える効果は未配線。`attack` は人に使えない |
 | 17 | 会議と投票 | **できる** | `meeting` ブロック、`CALL_MEETING`、`report_body`、`vote` | `L/parse_world.py:269-305, 371-390` | 投票の方式は engine 固定 (推測) |

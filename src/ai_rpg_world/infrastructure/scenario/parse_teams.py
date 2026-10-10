@@ -9,9 +9,16 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
+    GameEndConditionTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioTeamValidationException,
+)
+from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import (
+    PlayerOutcomeRule,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_team import ScenarioTeam
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
@@ -95,6 +102,32 @@ def parse_teams(
             " (勝敗が決まりません)"
         )
     return tuple(teams)
+
+
+# RESCUED / STRANDED は player_outcome_rules からしか付かない。DEAD と EJECTED は
+# 死と会議の投票が付けるので、規則が無くても届く。
+_OUTCOMES_FROM_RULES_ONLY = frozenset(
+    {PlayerOutcomeEnum.RESCUED, PlayerOutcomeEnum.STRANDED}
+)
+
+
+def reject_unreachable_team_outcomes(
+    teams: Sequence[ScenarioTeam],
+    rules: Sequence[PlayerOutcomeRule],
+) -> None:
+    """どの規則も付けない個人結果を待つチームの勝利条件を止める。"""
+    produced = {rule.outcome for rule in rules}
+    for team in teams:
+        for condition in team.win_conditions:
+            if condition.condition_type is not GameEndConditionTypeEnum.ALL_MEMBERS_HAVE_OUTCOME:
+                continue
+            outcome = condition.required_outcome
+            if outcome in _OUTCOMES_FROM_RULES_ONLY and outcome not in produced:
+                raise ScenarioLoadError(
+                    f"teams の {team.team_id} の win は全員の {outcome.value} を"
+                    " 待ちますが、player_outcome_rules に"
+                    f" {outcome.value} を付ける規則がありません"
+                )
 
 
 def _matches(state: Mapping[str, Any], required: Mapping[str, Any]) -> bool:
