@@ -6,8 +6,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import pytest
 from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.player.services.departed_position_store import (
     DepartedPositionStore,
 )
@@ -22,6 +24,9 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+    PlayerSpotNavigationState,
+)
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -394,3 +399,56 @@ class TestBlockedObserverFailure:
         nav = world.nav()
         assert nav is not None
         assert not nav.is_traveling
+
+
+class TestPostCommitFailureAfterBlocked:
+    """確定後の後処理が失敗して結果が返らないとき、行き先に着いていなければ到着として通知しないことを保証する。"""
+
+    @staticmethod
+    def _stage_with_post_commit_failure(settle_at: SpotId):
+        player_repo = InMemoryPlayerStatusRepository()
+        status = create_test_status_aggregate(player_id=1)
+        status.set_spot_navigation_state(
+            PlayerSpotNavigationState.begin_travel(
+                route=(_S1, _S2),
+                leg_connection_ids=(_C1,),
+                leg_travel_ticks=(1,),
+            )
+        )
+        player_repo.save(status)
+
+        class _Movement:
+            def advance_spot_travel_one_tick(self, player_id, items, flags):
+                del items, flags
+                current = player_repo.find_by_id(player_id)
+                assert current is not None
+                current.set_spot_navigation_state(PlayerSpotNavigationState.at_rest(settle_at))
+                player_repo.save(current)
+                raise CommandPostCommitException(cleanup_error=RuntimeError("cleanup failed"))
+
+        arrived: list[PlayerId] = []
+        stage = SpotGraphTravelStageService(
+            player_repo,
+            _Movement(),  # type: ignore[arg-type]
+            _Context(),
+            on_arrival=arrived.append,
+        )
+        return stage, arrived
+
+    def test_abandoned_travel_is_not_reported_as_arrival(self) -> None:
+        """取りやめて出発した場所で止まったまま後処理が失敗すると、例外は上がるが到着の観察者は呼ばれない。"""
+        stage, arrived = self._stage_with_post_commit_failure(settle_at=_S1)
+
+        with pytest.raises(CommandPostCommitException):
+            stage.run(WorldTick(1))
+
+        assert arrived == []
+
+    def test_real_arrival_is_still_reported(self) -> None:
+        """行き先に着いてから後処理が失敗したときは、これまでどおり到着の観察者が呼ばれる。"""
+        stage, arrived = self._stage_with_post_commit_failure(settle_at=_S2)
+
+        with pytest.raises(CommandPostCommitException):
+            stage.run(WorldTick(1))
+
+        assert arrived == [_PLAYER]

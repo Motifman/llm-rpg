@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -13,6 +14,9 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+logger = logging.getLogger(__name__)
 
 
 class SpotGraphTravelStageService:
@@ -109,6 +113,7 @@ class SpotGraphTravelStageService:
         # advance_spot_travel_one_tick 後に再 fetch して is_traveling
         # 遷移を比較するため。
         was_traveling: list[PlayerId] = []
+        destinations: dict[PlayerId, SpotId] = {}
         for status in self._player_status_repository.find_all():
             nav = status.spot_navigation_state
             if nav is None or not nav.is_traveling:
@@ -134,6 +139,7 @@ class SpotGraphTravelStageService:
                 self._movement_service.cancel_spot_travel(status.player_id)
                 continue
             was_traveling.append(status.player_id)
+            destinations[status.player_id] = nav.route[-1]
 
         for pid in was_traveling:
             try:
@@ -144,12 +150,13 @@ class SpotGraphTravelStageService:
                 )
             except CommandPostCommitException:
                 # commandの状態は確定済みである。cleanup/handoff失敗を返す前に、
-                # 確定に追随する計測と到着通知を失わない。
-                self._notify_committed_travel(pid)
+                # 確定に追随する計測と到着通知を失わない。結果が返らないので、
+                # 取りやめて止まったのか着いたのかは行き先と比べて決める。
+                self._notify_committed_travel(pid, destinations[pid])
                 raise
             blocked = result.blocked if result is not None else None
             if blocked is None:
-                self._notify_committed_travel(pid)
+                self._notify_committed_travel(pid, destinations[pid])
             else:
                 self._notify_blocked_travel(pid, blocked)
 
@@ -157,16 +164,7 @@ class SpotGraphTravelStageService:
         self, player_id: PlayerId, blocked: SpotTravelBlocked
     ) -> None:
         """取りやめた移動の計測と通知を、いずれも最善努力で行う。"""
-        import logging
-
-        logger = logging.getLogger(__name__)
-        if self._on_travel_tick_committed is not None:
-            try:
-                self._on_travel_tick_committed(player_id)
-            except Exception:
-                logger.exception(
-                    "travel tick observer failed for player %s", player_id.value
-                )
+        self._notify_travel_tick_committed(player_id)
         for observer in tuple(self._blocked_observers):
             try:
                 observer(player_id, blocked)
@@ -175,18 +173,21 @@ class SpotGraphTravelStageService:
                     "travel blocked observer failed for player %s", player_id.value
                 )
 
-    def _notify_committed_travel(self, player_id: PlayerId) -> None:
-        """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
-        import logging
+    def _notify_travel_tick_committed(self, player_id: PlayerId) -> None:
+        if self._on_travel_tick_committed is None:
+            return
+        try:
+            self._on_travel_tick_committed(player_id)
+        except Exception:
+            logger.exception(
+                "travel tick observer failed for player %s", player_id.value
+            )
 
-        logger = logging.getLogger(__name__)
-        if self._on_travel_tick_committed is not None:
-            try:
-                self._on_travel_tick_committed(player_id)
-            except Exception:
-                logger.exception(
-                    "travel tick observer failed for player %s", player_id.value
-                )
+    def _notify_committed_travel(
+        self, player_id: PlayerId, destination: SpotId
+    ) -> None:
+        """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
+        self._notify_travel_tick_committed(player_id)
         # 到着 (is_traveling=True → False) を検知して on_arrival 通知。
         # advance 後の player_status を再 fetch する。
         if not self._arrival_observers:
@@ -197,6 +198,8 @@ class SpotGraphTravelStageService:
                 return
             nav_after = status_after.spot_navigation_state
             if nav_after is not None and nav_after.is_traveling:
+                return
+            if nav_after is not None and nav_after.current_spot_id != destination:
                 return
             # 遷移検出: 通知する。コールバックの例外は travel stage 全体を
             # 倒さない (post-commit hook 同等の責務分離)。
