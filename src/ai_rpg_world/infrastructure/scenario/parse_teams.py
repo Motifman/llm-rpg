@@ -49,6 +49,9 @@ def parse_teams(
         if team_id in seen_ids:
             raise ScenarioLoadError(f"teams の id {team_id!r} が重複しています")
         seen_ids.add(team_id)
+        name = team_raw.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ScenarioLoadError(f"{where}.name は空でない文字列にしてください")
         member_state = team_raw.get("member_state")
         if not isinstance(member_state, Mapping) or not member_state:
             raise ScenarioLoadError(
@@ -76,7 +79,7 @@ def parse_teams(
             teams.append(
                 ScenarioTeam(
                     team_id=team_id,
-                    name=team_raw.get("name"),
+                    name=name,
                     member_player_ids=tuple(PlayerId(p.player_id) for p in members),
                     win_conditions=tuple(
                         parse_end_conditions(win_raw, mapper, section="team_win")

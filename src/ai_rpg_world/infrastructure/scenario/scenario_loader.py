@@ -68,7 +68,6 @@ from ai_rpg_world.infrastructure.scenario.parse_reactive_bindings import (
     parse_reactive_object_state_bindings,
     parse_reactive_passage_bindings,
 )
-from ai_rpg_world.infrastructure.scenario.parse_teams import parse_teams
 from ai_rpg_world.infrastructure.scenario.parse_round_assignment import (
     apply_round_assignment,
 )
@@ -80,6 +79,7 @@ from ai_rpg_world.infrastructure.scenario.parse_sync_groups import (
     parse_synchronized_action_groups,
     reject_unreachable_synchronized_action_names,
 )
+from ai_rpg_world.infrastructure.scenario.parse_teams import parse_teams
 from ai_rpg_world.infrastructure.scenario.parse_world import (
     declared_world_flag_writers,
     parse_day_night_config,

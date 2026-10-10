@@ -33,10 +33,10 @@ from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import Pla
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import ReactiveObjectStateBinding
 from ai_rpg_world.domain.world_graph.value_object.reactive_passage_binding import ReactivePassageBinding
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.scenario_team import ScenarioTeam
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import SynchronizedActionGroup
-from ai_rpg_world.domain.world_graph.value_object.scenario_team import ScenarioTeam
 from ai_rpg_world.infrastructure.scenario.parse_round_assignment import RoundSlotAssignment
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
