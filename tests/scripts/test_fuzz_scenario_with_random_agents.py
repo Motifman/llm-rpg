@@ -13,8 +13,8 @@ from typing import Any
 import pytest
 from scripts.fuzz_scenario_with_random_agents import (
     FuzzFinding,
-    KnownHole,
     FuzzResult,
+    KnownHole,
     TurnView,
     classify,
     find_leaks,
