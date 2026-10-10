@@ -77,7 +77,7 @@ def apply_give_from_loot_table(
         return
     times = max(1, min(100, int(p.get("times", 1))))
     for _ in range(times):
-        rolled = lt.roll()
+        rolled = lt.roll(ctx.loot_random_source)
         if rolled is None:
             continue
         for _q in range(rolled.quantity):

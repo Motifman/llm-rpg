@@ -87,18 +87,23 @@ class LootTableAggregate(AggregateRoot):
     def name(self) -> str:
         return self._name
 
-    def roll(self) -> LootResult | None:
-        """アイテムを抽選する。何も出ない場合はNoneを返す。"""
+    def roll(self, random_source: random.Random | None = None) -> LootResult | None:
+        """アイテムを抽選する。何も出ない場合はNoneを返す。
+
+        ``random_source`` を渡すと、その乱数で引く。シードから作った乱数を
+        渡せば、抽選の結果を run の間でそろえられる (#1514)。
+        """
         if not self._entries or self._total_weight <= 0:
             return None
 
-        r = random.randint(1, self._total_weight)
+        rng = random_source if random_source is not None else random
+        r = rng.randint(1, self._total_weight)
         current_weight = 0
         
         for entry in self._entries:
             current_weight += entry.weight
             if r <= current_weight:
-                quantity = random.randint(entry.min_quantity, entry.max_quantity)
+                quantity = rng.randint(entry.min_quantity, entry.max_quantity)
                 return LootResult(entry.item_spec_id, quantity)
         
         return None

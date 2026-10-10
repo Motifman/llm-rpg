@@ -144,3 +144,41 @@ class TestSilentSkip:
         result = _apply(svc, {"loot_table_id": "not_an_int"})
 
         assert result.item_spec_ids_to_grant == ()
+
+
+class TestSeededLootDrop:
+    """渡した乱数源で抽選し、同じ種なら同じ結果になることを保証する (#1514)。"""
+
+    @staticmethod
+    def _service(seed: int) -> WorldGraphEffectService:
+        import random
+
+        repo = InMemoryLootTableRepository()
+        repo.save(_make_loot_table(1, [
+            LootEntry(item_spec_id=ItemSpecId.create(100 + i), weight=1, min_quantity=1, max_quantity=3)
+            for i in range(5)
+        ]))
+        return WorldGraphEffectService(loot_table_repository=repo, random_source=random.Random(seed))
+
+    def test_same_seed_grants_the_same_items(self) -> None:
+        """同じ種の乱数源を渡した 2 つの service は 30 回の抽選で同じ物を同じ数だけ渡し、別の種なら違う物を渡す。"""
+        first, second = self._service(7), self._service(7)
+
+        grants = [
+            _apply(svc, {"loot_table_id": 1, "times": 30}).item_spec_ids_to_grant
+            for svc in (first, second, self._service(8))
+        ]
+
+        assert grants[0] == grants[1]
+        assert grants[0] != grants[2]
+
+    def test_module_random_does_not_change_the_result(self) -> None:
+        """モジュール全体の乱数を動かしても、渡した乱数源の抽選結果は変わらない。"""
+        import random
+
+        random.seed(1)
+        first = _apply(self._service(7), {"loot_table_id": 1, "times": 30}).item_spec_ids_to_grant
+        random.seed(2)
+        second = _apply(self._service(7), {"loot_table_id": 1, "times": 30}).item_spec_ids_to_grant
+
+        assert first == second
