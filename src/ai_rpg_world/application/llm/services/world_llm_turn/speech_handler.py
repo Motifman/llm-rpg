@@ -189,4 +189,8 @@ def build_audience_summary(
     except Exception:
         logger.exception("speech_audience_resolver.resolve_audience_with_clarity failed")
         return ""
+    # 会っていない聞き手を数えると、人数から知らない誰かが近くにいると分かる。
+    acquaintances = getattr(wiring.runtime, "_player_acquaintances", None)
+    if acquaintances is not None:
+        members = [m for m in members if acquaintances.knows(player_id, m.player_id)]
     return f"（{compact_audience_summary_text(channel, members)}）"
