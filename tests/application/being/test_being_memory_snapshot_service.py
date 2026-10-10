@@ -270,6 +270,7 @@ class TestRestoreRoundTrip:
         src_stores['acquaintances'].record_meeting(being, environment_name='島', name='ノア', turn=0)
         src_stores['acquaintances'].record_meeting(being, environment_name='島', name='ノア', turn=6)
         src_stores['acquaintances'].record_meeting(being, environment_name='山村', name='リオ', turn=9)
+        src_stores['acquaintances'].record_introduction(being, environment_name='山村', name='カイ', turn=9, relation_note='あなたと同じ側')
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
         dst_stores['acquaintances'].record_meeting(being, environment_name='島', name='カイ', turn=1)
@@ -277,11 +278,11 @@ class TestRestoreRoundTrip:
         assert dst_stores['acquaintances'].list_by_being(being) == src_stores['acquaintances'].list_by_being(being)
 
     def test_malformed_acquaintance_is_rejected_as_format_error(self) -> None:
-        """会った回数が 0 の知り合いが payload にあると、BeingMemoryPayloadFormatError で拒む。"""
+        """会って知ったのに会った回数が 0 の知り合いが payload にあると、BeingMemoryPayloadFormatError で拒む。"""
         (src_svc, _) = _make_service()
         being = BeingId('ada')
         payload = json.loads(src_svc.capture(being))
-        payload['acquaintances'] = [{'environment_name': '島', 'name': 'ノア', 'first_met_turn': 0, 'last_met_turn': 0, 'met_count': 0}]
+        payload['acquaintances'] = [{'environment_name': '島', 'name': 'ノア', 'how_known': 'MET', 'known_since_turn': 0, 'relation_note': None, 'met_count': 0, 'first_met_turn': None, 'last_met_turn': None}]
         (dst_svc, _) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError):
             dst_svc.restore(being, json.dumps(payload))
@@ -292,7 +293,7 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         src_stores['memo'].add_by_being(being, '書かれてはいけない', current_tick=1)
         payload = json.loads(src_svc.capture(being))
-        met = {'environment_name': '島', 'name': 'ノア', 'first_met_turn': 0, 'last_met_turn': 0, 'met_count': 1}
+        met = {'environment_name': '島', 'name': 'ノア', 'how_known': 'MET', 'known_since_turn': 0, 'relation_note': None, 'met_count': 1, 'first_met_turn': 0, 'last_met_turn': 0}
         payload['acquaintances'] = [met, dict(met)]
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_rpg_world.being.domain.acquaintance import Acquaintance
+from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -22,8 +22,8 @@ class TestInMemoryAcquaintanceRepository:
 
         assert repo.list_by_being(ADA) == (
             Acquaintance(
-                environment_name="島", name="ノア",
-                first_met_turn=1, last_met_turn=4, met_count=2,
+                environment_name="島", name="ノア", how_known=HowKnown.MET,
+                known_since_turn=1, first_met_turn=1, last_met_turn=4, met_count=2,
             ),
         )
 
@@ -54,11 +54,36 @@ class TestInMemoryAcquaintanceRepository:
         repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
         repo.record_meeting(KAI, environment_name="島", name="リオ", turn=2)
         restored = Acquaintance(
-            environment_name="島", name="カイ",
-            first_met_turn=0, last_met_turn=5, met_count=3,
+            environment_name="島", name="カイ", how_known=HowKnown.MET,
+            known_since_turn=0, first_met_turn=0, last_met_turn=5, met_count=3,
         )
 
         repo.replace_all_by_being(ADA, [restored])
 
         assert repo.list_by_being(ADA) == (restored,)
         assert repo.find(KAI, environment_name="島", name="リオ") is not None
+
+    def test_introduction_is_recorded_once_and_does_not_overwrite(self) -> None:
+        """紹介は知らない相手にだけ記録を作り、すでに会って知っている相手や紹介済みの相手の記録は変えない。"""
+        repo = InMemoryAcquaintanceRepository()
+        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1)
+
+        repo.record_introduction(ADA, environment_name="島", name="ノア", turn=2, relation_note="仲間")
+        repo.record_introduction(ADA, environment_name="島", name="カイ", turn=2, relation_note="仲間")
+        repo.record_introduction(ADA, environment_name="島", name="カイ", turn=3, relation_note=None)
+
+        noa = repo.find(ADA, environment_name="島", name="ノア")
+        kai = repo.find(ADA, environment_name="島", name="カイ")
+        assert noa is not None and (noa.how_known, noa.relation_note) == (HowKnown.MET, None)
+        assert kai is not None and (kai.how_known, kai.relation_note, kai.known_since_turn) == (
+            HowKnown.INTRODUCED, "仲間", 2,
+        )
+
+    def test_meeting_someone_introduced_counts_as_first_meeting(self) -> None:
+        """紹介された相手に会うと、同じ記録の会った回数が 1 になる。"""
+        repo = InMemoryAcquaintanceRepository()
+        repo.record_introduction(ADA, environment_name="島", name="ノア", turn=0, relation_note=None)
+
+        met = repo.record_meeting(ADA, environment_name="島", name="ノア", turn=3)
+
+        assert (met.how_known, met.met_count, met.first_met_turn) == (HowKnown.INTRODUCED, 1, 3)

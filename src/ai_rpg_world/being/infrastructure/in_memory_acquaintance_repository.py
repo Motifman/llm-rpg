@@ -27,10 +27,33 @@ class InMemoryAcquaintanceRepository(AcquaintanceRepository):
                 environment_name=environment_name, name=name, turn=turn
             )
             if known is None
-            else known.met_again(turn=turn)
+            else known.met_at(turn=turn)
         )
         book[key] = met
         return met
+
+    def record_introduction(
+        self,
+        being_id: BeingId,
+        *,
+        environment_name: str,
+        name: str,
+        turn: int,
+        relation_note: str | None,
+    ) -> Acquaintance:
+        book = self._by_being.setdefault(being_id, {})
+        key = (environment_name, name)
+        known = book.get(key)
+        if known is not None:
+            return known
+        introduced = Acquaintance.introduced(
+            environment_name=environment_name,
+            name=name,
+            turn=turn,
+            relation_note=relation_note,
+        )
+        book[key] = introduced
+        return introduced
 
     def find(
         self, being_id: BeingId, *, environment_name: str, name: str
