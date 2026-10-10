@@ -293,7 +293,7 @@ class TestStrikingLeavesATrace:
     def test_who_struck_and_which_sector_heard_it_are_recorded(self, runtime) -> None:
         """北の詰所でハルが殴ると、音のフラグがハルの名で立ち、北の区画の音のフラグだけが出来事として立つ。
 
-        掘り場のガスは毎 tick 確率で溜まりフラグを立てるので、見るのは音のフラグに限る。
+        掘り場のガスは毎 tick 確率で溜まって gas_present を立てるので、見るのは音のフラグに限る。
         """
         _place(runtime, _HARU, "miners_rest")
         _place(runtime, _GEN, "miners_rest")
