@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationOutput,
+    SubjectUnknownView,
+)
 from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
@@ -285,3 +288,75 @@ def _entry(*introductions: Introduction) -> EnvironmentEntry:
     return EnvironmentEntry(
         environment_name="島", self_name="エイダ", introductions=introductions
     )
+
+
+def _heard(speaker: str = "ノア") -> ObservationOutput:
+    return ObservationOutput(
+        prose=f"{speaker}の遠くの声が聞こえる: 「水門」",
+        structured={"type": "player_spoke", "speaker": speaker, "content": "水門"},
+        observation_category="social",
+        schedules_turn=True,
+        subject_name=speaker,
+        if_subject_unknown=SubjectUnknownView(
+            prose="誰かの遠くの声が聞こえる: 「水門」",
+            structured={"type": "player_spoke", "content": "水門"},
+        ),
+    )
+
+
+class TestViewForRecipient:
+    """観測を受け手の記録に入れるとき、話し手を知っているかでどちらの版を記録するかを決めることを保証する。"""
+
+    def test_unknown_speaker_is_recorded_as_someone(self) -> None:
+        """知らない話し手の声は、伏せた本文と structured で記録され、ほかの欄は元の観測のまま保たれる。"""
+        acquaintances, _, _ = _make()
+
+        seen = acquaintances.view_for(ADA, _heard())
+
+        assert seen.prose == "誰かの遠くの声が聞こえる: 「水門」"
+        assert seen.structured == {"type": "player_spoke", "content": "水門"}
+        assert (seen.observation_category, seen.schedules_turn) == ("social", True)
+        assert (seen.subject_name, seen.if_subject_unknown) == (None, None)
+
+    def test_known_speaker_is_recorded_by_name(self) -> None:
+        """紹介された話し手の声は、名前の付いた元の本文で記録される。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
+
+        seen = acquaintances.view_for(ADA, _heard())
+
+        assert seen.prose == "ノアの遠くの声が聞こえる: 「水門」"
+        assert seen.structured["speaker"] == "ノア"
+
+    def test_observation_without_alternate_view_is_unchanged(self) -> None:
+        """話し手で描き方が変わらない観測は、そのまま返す。"""
+        acquaintances, _, _ = _make()
+        plain = ObservationOutput(prose="雨が降り出した。", structured={"type": "weather"})
+
+        assert acquaintances.view_for(ADA, plain) is plain
+
+    def test_knowing_later_does_not_rewrite_what_was_recorded(self) -> None:
+        """伏せて記録したあとで話し手と会っても、記録した観測は伏せたままで、そのあとの声から名前が付く。"""
+        acquaintances, _, _ = _make()
+        before = acquaintances.view_for(ADA, _heard())
+
+        acquaintances.record_meeting(ADA, "ノア")
+        after = acquaintances.view_for(ADA, _heard())
+
+        assert before.prose.startswith("誰か")
+        assert after.prose.startswith("ノア")
+
+    def test_lookup_failure_hides_the_name(self) -> None:
+        """知り合いの記録を引くところで例外が出ても観測は失われず、名前を伏せた版で記録される。"""
+        def broken(_pid: PlayerId) -> BeingId | None:
+            raise RuntimeError("lookup failed")
+
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=broken,
+            turn_reader=InMemoryExpectationRepository(),
+            environment_name="島",
+            names_by_player_id=NAMES,
+        )
+
+        assert acquaintances.view_for(ADA, _heard()).prose.startswith("誰か")

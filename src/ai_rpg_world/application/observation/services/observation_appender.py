@@ -23,6 +23,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 # PR3 では encounter collector がこの slot に入るが、将来別目的の observer
 # (例えば metrics, debug visualization) も同じ slot に挿せる。
 ObservationObserver = Callable[[PlayerId, ObservationOutput], None]
+# #1520: 受け手の記録に入れる版を選ぶ口。話し手を知っているかは受け手の Being が
+# 決めるので、ObservationAppender は中身を知らずに呼ぶだけにする。
+RecipientView = Callable[[PlayerId, ObservationOutput], ObservationOutput]
 
 
 class ObservationAppender:
@@ -49,6 +52,7 @@ class ObservationAppender:
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         observers: list[ObservationObserver] | None = None,
+        recipient_view: RecipientView | None = None,
     ) -> None:
         self._buffer = buffer
         self._runtime_context_provider = runtime_context_provider
@@ -72,6 +76,9 @@ class ObservationAppender:
         self._observers: tuple[ObservationObserver, ...] = (
             tuple(observers) if observers else ()
         )
+        if recipient_view is not None and not callable(recipient_view):
+            raise TypeError("recipient_view must be callable or None")
+        self._recipient_view = recipient_view
 
     def append(
         self,
@@ -84,7 +91,15 @@ class ObservationAppender:
         指定プレイヤーに観測エントリを追加する。
         ObservationEntry を構築して buffer.append に委譲し、合わせて trace
         に observation event を記録する (recorder 注入時)。
+
+        ``recipient_view`` があれば、先に受け手の記録に入れる版を選び、バッファ・
+        trace・observer のすべてにその版を渡す。
         """
+        hidden = False
+        if self._recipient_view is not None:
+            chosen = self._recipient_view(player_id, output)
+            hidden = chosen.prose != output.prose
+            output = chosen
         entry = ObservationEntry(
             occurred_at=occurred_at,
             output=output,
@@ -96,7 +111,7 @@ class ObservationAppender:
             else None
         )
         self._buffer.append(player_id, entry, runtime_context=rtc)
-        self._record_trace(player_id, output, game_time_label)
+        self._record_trace(player_id, output, game_time_label, subject_hidden=hidden)
         # PR3: 各 observer に通知する。observer は副次的な観察 (encounter 抽出
         # / metrics / debug) を意図し、append の本流は止めない契約。例外は
         # observer 側で握ることを期待するが、念のためここでも握って続行する。
@@ -128,6 +143,8 @@ class ObservationAppender:
         player_id: PlayerId,
         output: ObservationOutput,
         game_time_label: str | None,
+        *,
+        subject_hidden: bool = False,
     ) -> None:
         recorder = self._resolve_trace_recorder()
         if recorder is None:
@@ -149,6 +166,8 @@ class ObservationAppender:
         }
         if game_time_label:
             payload["game_time_label"] = game_time_label
+        if subject_hidden:
+            payload["subject_hidden"] = True
         try:
             recorder.record(
                 TraceEventKind.OBSERVATION,

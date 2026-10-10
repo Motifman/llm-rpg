@@ -207,13 +207,13 @@ class TestClosedContract:
     """観測の欄が契約で閉じていて、環境が欄を足したり後から書き換えたりできないことを保証する。"""
 
     def test_fields_are_exactly_the_contract(self) -> None:
-        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1 の 9 つだけである。"""
+        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1・主体を知らない受け手向けの本文 1 の 10 個だけである。"""
         names = {f.name for f in dataclasses.fields(Observation)}
 
         assert names == {
             "body", "route", "time", "subject_is_self",
             "subject_name", "source", "place", "addressed_to_self",
-            "wants_wake",
+            "wants_wake", "body_if_subject_unknown",
         }
 
     def test_unexpected_field_cannot_be_added(self) -> None:
@@ -239,3 +239,31 @@ class TestClosedContract:
 
         assert KNOWN_IF_POSSIBLE_FIELDS == accepts_unknown
         assert len(accepts_unknown) == 4
+
+
+class TestBodyIfSubjectUnknown:
+    """話し手を知らない受け手向けの本文を、話し手が分かる観測にだけ持たせられることを保証する。"""
+
+    def test_body_if_subject_unknown_defaults_to_none(self) -> None:
+        """省けば None で、話し手を知っているかで描き方が変わらない観測になる。"""
+        assert Observation(**_fields()).body_if_subject_unknown is None
+
+    def test_body_if_subject_unknown_is_kept(self) -> None:
+        """名前を伏せた本文を渡すと、そのまま読める。"""
+        observation = Observation(**_fields(body_if_subject_unknown="誰かが言った: 「水場は北だ」"))
+
+        assert observation.body_if_subject_unknown == "誰かが言った: 「水場は北だ」"
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"body_if_subject_unknown": " "},
+            {"body_if_subject_unknown": "誰かが言った", "subject_name": UNKNOWN},
+            {"body_if_subject_unknown": "誰かが言った", "subject_is_self": True},
+        ],
+        ids=["blank", "unknown_subject", "self_subject"],
+    )
+    def test_body_if_subject_unknown_needs_a_known_other_subject(self, overrides) -> None:
+        """空の本文、話し手が不明な観測、自分が主体の観測には持たせられない (ContractViolation)。"""
+        with pytest.raises(ContractViolation):
+            Observation(**_fields(**overrides))

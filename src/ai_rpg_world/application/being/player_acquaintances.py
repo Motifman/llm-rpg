@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
@@ -124,6 +125,30 @@ class PlayerAcquaintances:
             if a.environment_name == self._environment_name
             and a.last_met_turn is not None
             and 0 <= now - a.last_met_turn <= within_turns
+        )
+
+    def view_for(self, recipient: PlayerId, output: ObservationOutput) -> ObservationOutput:
+        """受け手の記録に入れる版を選ぶ。記録したあとで相手を知っても、記録は書き換えない。"""
+        view = output.if_subject_unknown
+        if output.subject_name is None or view is None:
+            return output
+        try:
+            known = self.find(recipient, output.subject_name) is not None
+        except Exception:
+            # 引けないときは伏せる側へ倒す。名前は、あとで記録から消せない。
+            _logger.exception(
+                "知り合いの記録を引けず、話し手の名前を伏せて記録する (recipient=%s)",
+                recipient.value,
+            )
+            known = False
+        if known:
+            return replace(output, subject_name=None, if_subject_unknown=None)
+        return replace(
+            output,
+            prose=view.prose,
+            structured=dict(view.structured),
+            subject_name=None,
+            if_subject_unknown=None,
         )
 
     def on_observation(self, recipient: PlayerId, output: ObservationOutput) -> None:
