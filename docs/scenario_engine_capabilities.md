@@ -19,6 +19,7 @@
 |---|---|---|
 | `spots[].interior.objects[].interactions[]` | 物体への操作 (`interact` ツール)。`preconditions` (すべて AND) と `effects` | `L/parse_map.py:449-509`, `L/parse_interactions.py:77-233` |
 | `item_specs[].interactions[]` | 持ち物の操作 (`use_item`)。物体系の効果には `target_object` が必須 | `L/parse_economy.py:308-375` |
+| `metadata.limits_actions` | false にすると、system prompt の「行動の制限」の行 (行動の総量には限りがある) を出さない。締め切りを置かない世界で使う。既定は true | `L/parse_helpers.py`、design_decisions D1569-3 |
 | `player_interactions[]` | 人を対象にする操作。`target: TARGET_PLAYER` の効果が 1 つ以上要る | `L/parse_interactions.py:343-400` |
 | `scenario_events[]` | 世界の側で起きる出来事。`trigger` は `ON_TICK` か `ON_CHAIN`。条件は AND/OR/NOT の木 | `L/parse_scenario_events.py:46-166`, `L/validate_features.py:98-99` |
 | `reactive_bindings.objects/passages` | 条件の真偽に応じて物体の state / 通路の状態を切り替える | `L/parse_reactive_bindings.py:23-198` |

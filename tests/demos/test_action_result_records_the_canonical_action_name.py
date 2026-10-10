@@ -180,3 +180,47 @@ def test_tools_without_identifier_arguments_leave_the_mapping_empty() -> None:
 
     entry = _latest_action(runtime, _MORI)
     assert entry.identifier_arguments == {}
+
+
+def test_failed_interaction_line_names_the_action_by_its_display_label(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """前提条件で断られた操作の行は、成功の行と同じく「「対象」で表示名」と書き、action_name を出さない。
+
+    廃坑の山村の 3 本目の実 run で「「昇降機」に start_lift した → [失敗]」と出ていた。
+    action_name は呼び出しの値で、世界の言葉ではない。断られた行は呼び出しの手本も
+    残さないので、ここに出すと内部の名前だけが経験として残る。
+    """
+    stub = StubLlmClient(
+        tool_call_to_return={
+            "name": "interact",
+            "arguments": {
+                "target_label": "非常用ランタンケース",
+                "action_name": "take_lantern",
+                "inner_thought": "ランタンを取る。",
+            },
+        }
+    )
+    state = create_world_runtime_session(
+        monkeypatch,
+        tmp_path,
+        stub,
+        world_id="station_drill",
+    )
+    player_id = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+    _move(state.runtime, player_id, "storage")
+    while True:
+        try:
+            state.runtime.do_interact(player_id, "emergency_lantern_case", "take_lantern")
+        except Exception:
+            break
+
+    result = state.llm_wiring.run_turn(player_id)
+    user = state.runtime.build_full_prompt(player_id)["messages"][1]["content"]
+
+    assert result.success is False
+    failed = [line for line in user.splitlines() if "[失敗]" in line]
+    assert len(failed) == 1
+    assert "「非常用ランタンケース」でランタンを取り出す → [失敗]" in failed[0]
+    assert "take_lantern" not in failed[0]

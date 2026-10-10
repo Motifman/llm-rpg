@@ -51,6 +51,17 @@ def parse_show_world_map(raw: Any) -> bool:
         )
     return value
 
+def parse_limits_actions(raw: Any) -> bool:
+    """``limits_actions`` を読む。省略時は True (行動の制限の行を出す)。真偽値以外は拒否する。"""
+    value = raw.get("limits_actions")
+    if value is None:
+        return True
+    if not isinstance(value, bool):
+        raise ScenarioLoadError(
+            f"metadata.limits_actions は true / false で書いてください: {value!r}"
+        )
+    return value
+
 def parse_bool(value: Any, *, path: str) -> bool:
     """JSON の真偽値だけを受理し、文字列や整数の暗黙変換を拒否する。"""
     if not isinstance(value, bool):

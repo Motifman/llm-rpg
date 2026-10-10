@@ -250,6 +250,7 @@ def build_world_system_prompt(
     tool_schema_mode: str = "legacy",
     has_goal: bool = True,
     expectation_argument_enabled: bool = False,
+    limits_actions: bool = True,
 ) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
 
@@ -275,6 +276,10 @@ def build_world_system_prompt(
         ``True`` のとき、予期の引数 ``expectations`` を書く指示行を 行動ルール に
         追加する (#1441)。``expected_result`` とは設定で併用させない。
 
+    limits_actions:
+        ``False`` なら「行動の制限」の行を出さない。締め切りを置かない世界で、無い制限を
+        信じさせないため。既定 ``True`` は従来どおりで、prompt は不変。
+
     tool_schema_mode:
         ``"legacy"`` (既定) なら従来通り各行動 tool が ``inner_thought`` を受け取る。
         ``"reason_first"`` なら ``assess_situation`` が主観入力を先に受け取り、
@@ -282,7 +287,11 @@ def build_world_system_prompt(
     """
     if tool_schema_mode not in {"legacy", "reason_first"}:
         raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
-    time_pressure = limited_action_and_time_pressure_text(has_goal=has_goal)
+    action_limit_line = (
+        f"\n- 行動の制限: {limited_action_and_time_pressure_text(has_goal=has_goal)}"
+        if limits_actions
+        else ""
+    )
     # 層2: 目的の枠付け。has_goal=True は従来どおり「勝利条件 (最終目的)」前提。
     # has_goal=False (永続世界) は勝敗を否定し、【現在の目的】があれば参照する中立文に。
     if has_goal:
@@ -326,8 +335,7 @@ def build_world_system_prompt(
 
 【世界の前提】
 - 舞台のタイトル: {world_title}
-- 概要: {safe_intro}
-- 行動の制限: {time_pressure}
+- 概要: {safe_intro}{action_limit_line}
 
 【渡される文面の内訳】
 - 先に与えられる文面: 役割・ルールと世界の前提（このメッセージに相当）。

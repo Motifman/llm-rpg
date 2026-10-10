@@ -4,6 +4,7 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_DISPLAY_PHRASE_KEY,
     ACTION_SUMMARY_FORMATTERS,
     ACTION_SUMMARY_HIDDEN_FIELDS,
     INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS,
@@ -160,3 +161,16 @@ class TestFormatActionSummaryForDisplay:
             {"target_label": "OBJ1", "action_name": "inspect"}
         )
         assert fp_full == fp_outcome_only
+
+
+class TestInteractSummaryUsesTheDisplayLabel:
+    """interact の行動の行が、resolver の運んだ表示名を action_name より優先することを保証する。"""
+
+    def test_display_phrase_replaces_the_action_name(self) -> None:
+        """resolver が対象名の後ろに続く句 (ACTION_DISPLAY_PHRASE_KEY) を運んでいれば「「対象」〈句〉」と書き、action_name を出さない。成功の行と同じ書き方にそろえる。"""
+        summary = format_action_summary_for_display(
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {"target_label": "昇降機", "action_name": "start_lift", ACTION_DISPLAY_PHRASE_KEY: "で鍵を差して昇降機を動かす"},
+        )
+
+        assert summary == "「昇降機」で鍵を差して昇降機を動かす"

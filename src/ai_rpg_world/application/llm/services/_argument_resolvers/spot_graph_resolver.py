@@ -30,6 +30,7 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_DISPLAY_PHRASE_KEY,
     CANONICAL_IDENTIFIERS_KEY,
 )
 
@@ -495,6 +496,18 @@ def _give_quantity_or_raise(raw: Any) -> int:
     return raw
 
 
+def interact_display_phrase(target_kind: str, display_label: str | None) -> str | None:
+    """行動の行で対象名の後ろに続く句を、成功の行 (runtime の do_interact 系) と同じ助詞で作る。
+
+    人は「に対して〈表示名〉」、物と持ち物は「で〈表示名〉」。表示名が無ければ None。
+    """
+    if not display_label:
+        return None
+    if target_kind == "spot_graph_player":
+        return f"に対して{display_label}"
+    return f"で{display_label}"
+
+
 def _with_inner_thought(
     base: dict[str, Any],
     args: dict[str, Any],
@@ -502,6 +515,7 @@ def _with_inner_thought(
     canonical: Mapping[str, str] | None = None,
     action_name_judgment: Mapping[str, Any] | None = None,
     target_label_judgments: Sequence[Mapping[str, Any]] | None = None,
+    action_display_phrase: str | None = None,
 ) -> dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
@@ -532,6 +546,8 @@ def _with_inner_thought(
         out[ACTION_NAME_JUDGMENT_KEY] = dict(action_name_judgment)
     if target_label_judgments:
         out[TARGET_LABEL_JUDGMENTS_KEY] = [dict(j) for j in target_label_judgments]
+    if action_display_phrase:
+        out[ACTION_DISPLAY_PHRASE_KEY] = action_display_phrase
     for passthrough_key in (
         "say_inline",
         "expected_result",
@@ -1609,6 +1625,9 @@ class SpotGraphArgumentResolver:
             args, action_name=action, target_label=target.display_name
         )
         judgment_payload = _action_name_judgment_payload(resolution)
+        display_phrase = interact_display_phrase(
+            target.kind, dict(target.interaction_labels).get(action.strip())
+        )
         if target.kind == "spot_graph_player":
             if target.player_id is None:
                 raise ToolArgumentResolutionException(
@@ -1625,6 +1644,7 @@ class SpotGraphArgumentResolver:
                 canonical=canonical,
                 action_name_judgment=judgment_payload,
                 target_label_judgments=judgments,
+                action_display_phrase=display_phrase,
             )
         if target.kind == "inventory_item":
             if target.item_instance_id is None:
@@ -1645,6 +1665,7 @@ class SpotGraphArgumentResolver:
                 canonical=canonical,
                 action_name_judgment=judgment_payload,
                 target_label_judgments=judgments,
+                action_display_phrase=display_phrase,
             )
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
@@ -1662,4 +1683,5 @@ class SpotGraphArgumentResolver:
             canonical=canonical,
             action_name_judgment=judgment_payload,
             target_label_judgments=judgments,
+            action_display_phrase=display_phrase,
         )

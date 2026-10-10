@@ -28,6 +28,7 @@ from ai_rpg_world.infrastructure.scenario.models import (
 )
 from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     parse_bool,
+    parse_limits_actions,
     parse_player_outcome_messages,
     parse_role_labels,
     parse_show_world_map,
@@ -402,6 +403,7 @@ def parse_metadata( raw: dict[str, Any]) -> ScenarioMetadata:
         tags=tuple(raw.get("tags", [])),
         llm_public_intro=str(raw.get("llm_public_intro", "") or "").strip(),
         show_world_map=parse_show_world_map(raw),
+        limits_actions=parse_limits_actions(raw),
         role_labels=parse_role_labels(raw),
         llm_objective_text=str(raw.get("llm_objective_text", "") or "").strip(),
         player_outcome_messages=parse_player_outcome_messages(raw),
