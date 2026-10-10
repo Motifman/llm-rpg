@@ -27,6 +27,10 @@ def _player_ids(runtime, role: str) -> tuple[PlayerId, ...]:
     )
 
 
+def _known_people(runtime, player_id: PlayerId) -> str:
+    return runtime._player_acquaintances.known_people_text(player_id)
+
+
 def _variant(tmp_path: Path, known_roles: list[str]) -> Path:
     scenario = json.loads(_DRILL.read_text(encoding="utf-8"))
     scenario["mutually_known_roles"] = known_roles
@@ -65,10 +69,10 @@ class TestStationDrillHeadcount:
 
 
 class TestMutuallyKnownImpostors:
-    """仲間の印はインポスター同士だけに現れ、内部 role 名を漏らさない。"""
+    """仲間の印はインポスター同士だけの【知っている人】に現れ、内部 role 名を漏らさない。"""
 
-    def test_each_impostor_system_prompt_marks_the_other(self) -> None:
-        """インポスター二人の system には、互いの表示名に仲間の印が付く。"""
+    def test_each_impostor_knows_the_other_as_an_ally(self) -> None:
+        """インポスター二人の【知っている人】には、互いの表示名に仲間の印が付き、毎ターンのメッセージに出る。"""
         runtime = create_world_runtime(_DRILL)
         keepers = _player_ids(runtime, "keeper")
         names = {
@@ -77,26 +81,28 @@ class TestMutuallyKnownImpostors:
         }
 
         for viewer, ally in ((keepers[0], keepers[1]), (keepers[1], keepers[0])):
-            prompt = runtime._world_llm_system_prompts_by_player_id[int(viewer)]
-            assert f"- {names[ally]} ({_ALLY_MARK})" in prompt
+            assert f"- {names[ally]}（{_ALLY_MARK}）" in _known_people(runtime, viewer)
+            user = runtime.build_full_prompt(viewer)["messages"][1]["content"]
+            assert f"【知っている人】\n" in user
+            assert f"- {names[ally]}（{_ALLY_MARK}）" in user
 
-    def test_no_crew_system_prompt_contains_an_ally_mark(self) -> None:
-        """クルー六人には仲間の印を一つも作らず、逆算による役割漏洩を防ぐ。"""
+    def test_no_crew_prompt_contains_an_ally_mark(self) -> None:
+        """クルー六人には、system prompt にも【知っている人】にも仲間の印を一つも作らず、逆算による役割漏洩を防ぐ。"""
         runtime = create_world_runtime(_DRILL)
 
         for crew in _player_ids(runtime, "crew"):
-            prompt = runtime._world_llm_system_prompts_by_player_id[int(crew)]
-            assert _ALLY_MARK not in prompt
+            assert _ALLY_MARK not in runtime._world_llm_system_prompts_by_player_id[int(crew)]
+            assert _ALLY_MARK not in _known_people(runtime, crew)
 
     def test_the_mark_does_not_name_the_internal_role(self) -> None:
         """仲間の表示には keeper や管理人という内部・役職語を使わない。"""
         runtime = create_world_runtime(_DRILL)
 
         for keeper in _player_ids(runtime, "keeper"):
-            section = runtime._world_llm_system_prompts_by_player_id[
-                int(keeper)
-            ].split("【同じ局面にいる者】", 1)[1].split("【渡される文面の内訳】", 1)[0]
-            marked = next(line for line in section.splitlines() if _ALLY_MARK in line)
+            marked = next(
+                line for line in _known_people(runtime, keeper).splitlines()
+                if _ALLY_MARK in line
+            )
             assert "keeper" not in marked
             assert "管理人" not in marked
 
@@ -107,7 +113,7 @@ class TestMutuallyKnownImpostors:
         runtime = create_world_runtime(_variant(tmp_path, []))
 
         assert all(
-            _ALLY_MARK not in runtime._world_llm_system_prompts_by_player_id[int(pid)]
+            _ALLY_MARK not in _known_people(runtime, pid)
             for pid in _player_ids(runtime, "keeper")
         )
 
@@ -118,7 +124,7 @@ class TestMutuallyKnownImpostors:
         runtime = create_world_runtime(_variant(tmp_path, ["keeper", "crew"]))
 
         assert any(
-            _ALLY_MARK in runtime._world_llm_system_prompts_by_player_id[int(pid)]
+            _ALLY_MARK in _known_people(runtime, pid)
             for pid in _player_ids(runtime, "crew")
         )
 

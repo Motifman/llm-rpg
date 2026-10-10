@@ -18,7 +18,6 @@ def _build(*, has_goal: bool) -> str:
         world_title="テスト世界",
         persona_block="【ペルソナ】テスト",
         safe_intro="導入文",
-        participant_names=(),
         has_goal=has_goal,
     )
 
@@ -66,5 +65,4 @@ class TestBuildWorldSystemPromptGoalFraming:
             world_title="テスト世界",
             persona_block="【ペルソナ】テスト",
             safe_intro="導入文",
-            participant_names=(),
         )

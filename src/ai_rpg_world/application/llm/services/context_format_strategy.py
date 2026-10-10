@@ -37,6 +37,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     ## stable_to_volatile (default, Phase 0 以降)
 
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
+    1b. **【知っている人】** — known_people_text (Being が知っている人。新しい人を知ったときだけ変わる)
     2. **【自己像と世界観】** — long_summary_text (L5)
     3. **【最近の流れ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
@@ -91,6 +92,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         long_summary_text: str = "",
         prediction_feedback_text: str = "",
         pending_predictions_text: str = "",
+        known_people_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -104,6 +106,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("long_summary_text", long_summary_text),
             ("prediction_feedback_text", prediction_feedback_text),
             ("pending_predictions_text", pending_predictions_text),
+            ("known_people_text", known_people_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -121,6 +124,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 long_summary_text=long_summary_text,
                 prediction_feedback_text=prediction_feedback_text,
                 pending_predictions_text=pending_predictions_text,
+                known_people_text=known_people_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -134,6 +138,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             long_summary_text=long_summary_text,
             prediction_feedback_text=prediction_feedback_text,
             pending_predictions_text=pending_predictions_text,
+            known_people_text=known_people_text,
         )
 
 
@@ -200,6 +205,16 @@ def _emit_objective(sections: list[str], objective_text: str) -> None:
         sections.extend([
             "【現在の目的】",
             objective_text.strip(),
+            "",
+        ])
+
+
+def _emit_known_people(sections: list[str], known_people_text: str) -> None:
+    """目的の次に変わりにくい。新しい人を知ったときだけ、この節から後ろが変わる。"""
+    if known_people_text.strip():
+        sections.extend([
+            "【知っている人】",
+            known_people_text.strip(),
             "",
         ])
 
@@ -310,6 +325,7 @@ def _format_stable_to_volatile(
     long_summary_text: str,
     prediction_feedback_text: str,
     pending_predictions_text: str = "",
+    known_people_text: str = "",
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
@@ -352,6 +368,7 @@ def _format_stable_to_volatile(
 
     # 1. 現在の目的 (静的、空なら省略)
     _emit_objective(sections, objective_text)
+    _emit_known_people(sections, known_people_text)
 
     # 2. 自己像と世界観 (L5 long summary、空なら省略)
     # 最も更新頻度が低い (= prefix cache 寿命最長) ので objective の直後
@@ -452,6 +469,7 @@ def _format_legacy(
     long_summary_text: str,
     prediction_feedback_text: str,
     pending_predictions_text: str = "",
+    known_people_text: str = "",
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
@@ -462,6 +480,7 @@ def _format_legacy(
     sections: list[str] = []
 
     _emit_objective(sections, objective_text)
+    _emit_known_people(sections, known_people_text)
     _emit_long_summary(sections, long_summary_text)
     _emit_learned(sections, learned_text)
     _emit_mid_summary(sections, mid_summary_text)

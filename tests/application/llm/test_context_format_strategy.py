@@ -257,6 +257,23 @@ class TestSectionBasedContextFormatStrategyDefault:
         idx_events = text.index("【直近の出来事】")
         assert idx_obj < idx_long < idx_mid < idx_events < idx_learned
 
+    def test_known_people_follow_objective_and_precede_self_image(self, strategy):
+        """【知っている人】は【現在の目的】の直後、【自己像と世界観】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
+        text = strategy.format(
+            current_state_text="x",
+            recent_events_text="y",
+            objective_text="目的",
+            known_people_text="- ノア（あなたと同じ側）\n- カイ",
+            long_summary_text="私について",
+        )
+        assert "【知っている人】\n- ノア（あなたと同じ側）\n- カイ\n" in text
+        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【自己像と世界観】")
+
+    def test_known_people_section_is_omitted_when_empty(self, strategy):
+        """known_people_text が空なら【知っている人】の節ごと省略する。"""
+        text = strategy.format(current_state_text="x", recent_events_text="y", known_people_text="")
+        assert "【知っている人】" not in text
+
     def test_returns_empty_when_long_summary_text_section(self, strategy):
         """longsummarytext が空なら section ごと省略。"""
         text = strategy.format(
@@ -325,6 +342,14 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
             < idx["current"] < idx["memos"] < idx["feedback"]
             < idx["pending"] < idx["events"] < idx["mem"]
         )
+
+    def test_legacy_known_people_follow_objective(self, strategy):
+        """legacy でも【知っている人】は【現在の目的】の直後に置く。"""
+        text = strategy.format(
+            current_state_text="現在地", recent_events_text="出来事",
+            objective_text="目的", known_people_text="- ノア",
+        )
+        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【現在地と周囲】")
 
     def test_legacy_empty_section(self, strategy):
         """空 section の挙動は default と同じ。"""

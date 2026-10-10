@@ -43,7 +43,6 @@ def _everything_the_model_reads() -> str:
         world_title="町",
         persona_block="【ペルソナ】あなたは焼き手だ。",
         safe_intro="市場のある町。",
-        participant_names=("レナ",),
     )
     return system + INNER_THOUGHT_DEFAULT_DESCRIPTION + SAY_INLINE_DEFAULT_DESCRIPTION
 

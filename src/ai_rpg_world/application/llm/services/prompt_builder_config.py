@@ -149,6 +149,9 @@ class PromptSectionProviders:
     persona_block_provider: Callable[[PlayerId], str] | None = None
     objective_text_provider: Callable[[PlayerId], str] | None = None
     inventory_text_provider: Callable[[PlayerId], str] | None = None
+    # #1520: Being が描いた【知っている人】。system prompt ではなく毎ターンの
+    # メッセージの、目的の直後に置く。
+    known_people_text_provider: Callable[[PlayerId], str] | None = None
     memo_store: MemoRepository | None = None
 
 

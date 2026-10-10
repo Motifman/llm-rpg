@@ -11,7 +11,6 @@ def test_system_prompt_tells_agent_to_choose_displayed_object_actions() -> None:
         world_title="島",
         persona_block="名前: エイダ",
         safe_intro="浜辺にいる。",
-        participant_names=("ノア",),
     )
 
     assert "行動は条件を満たさないと拒否されることがある" in prompt
