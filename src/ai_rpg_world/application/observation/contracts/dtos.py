@@ -8,6 +8,14 @@ ObservationCategory = Literal["self_only", "social", "environment"]
 
 
 @dataclass(frozen=True)
+class SubjectUnknownView:
+    """話し手を知らない受け手に記録させる版。名前を伏せた本文と structured。"""
+
+    prose: str
+    structured: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ObservationOutput:
     """1イベント分の観測出力（プローズ文と構造化データの両方）。
     observation_category は attention_level によるフィルタで使用する。
@@ -20,6 +28,10 @@ class ObservationOutput:
     observation_category: ObservationCategory = "self_only"
     schedules_turn: bool = False
     breaks_movement: bool = False
+    # #1520: 話し手を知っているかで描き方が変わる観測だけが持つ。どちらを記録
+    # するかは、受け手の Being が知り合いの記録を引いて決める。
+    subject_name: str | None = None
+    if_subject_unknown: SubjectUnknownView | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.prose, str):
@@ -34,6 +46,13 @@ class ObservationOutput:
             raise TypeError("schedules_turn must be bool")
         if not isinstance(self.breaks_movement, bool):
             raise TypeError("breaks_movement must be bool")
+        if (self.subject_name is None) != (self.if_subject_unknown is None):
+            raise TypeError("subject_name and if_subject_unknown must come together")
+        if self.subject_name is not None:
+            if not isinstance(self.subject_name, str) or not self.subject_name.strip():
+                raise TypeError("subject_name must be non-blank str")
+            if not isinstance(self.if_subject_unknown, SubjectUnknownView):
+                raise TypeError("if_subject_unknown must be SubjectUnknownView")
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,11 @@
 
 from typing import Any
 
-from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory, ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationCategory,
+    ObservationOutput,
+    SubjectUnknownView,
+)
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
     resolve_item_spec_id_value_for_instance,
@@ -30,6 +34,22 @@ from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 #: 隣から漏れ聞こえる言葉の長さ。誰が何の話をしているかは分かり、中身までは
 #: 分からない量。
 _OVERHEARD_CHARS = 20
+
+
+_UNKNOWN_SPEAKER = "誰か"
+_SPEAKER_KEYS = ("speaker", "speaker_player_id")
+
+
+def _without_speaker(prose: str, structured: dict[str, Any]) -> SubjectUnknownView:
+    """話し手を知らない受け手の記録には、structured にも話し手を残さない。
+
+    structured の名前は episode の who や想起の手がかりに入り、記憶を通して
+    プロンプトに出るため。
+    """
+    return SubjectUnknownView(
+        prose=prose,
+        structured={k: v for k, v in structured.items() if k not in _SPEAKER_KEYS},
+    )
 
 
 def _overheard_fragment(content: str) -> str:
@@ -467,16 +487,17 @@ class PlayerObservationFormatter:
                     direction_clause = (
                         f"〈{source_connection_name}〉の向こうから、"
                     )
-                if clarity == SoundClarityEnum.CLEAR:
-                    prose = f"{speaker_name}が{verb}: 「{event.content}」"
-                elif clarity == SoundClarityEnum.MUFFLED:
-                    prose = (
-                        f"{direction_clause}{speaker_name}の遠くの声が聞こえる: "
-                        f"「{_overheard_fragment(event.content)}」"
-                    )
-                else:
-                    prose = (
-                        f"{direction_clause}{speaker_name}の声がかすかに聞こえるが、"
+
+                def heard_as(name: str) -> str:
+                    if clarity == SoundClarityEnum.CLEAR:
+                        return f"{name}が{verb}: 「{event.content}」"
+                    if clarity == SoundClarityEnum.MUFFLED:
+                        return (
+                            f"{direction_clause}{name}の遠くの声が聞こえる: "
+                            f"「{_overheard_fragment(event.content)}」"
+                        )
+                    return (
+                        f"{direction_clause}{name}の声がかすかに聞こえるが、"
                         f"内容ははっきりしない。"
                     )
 
@@ -496,22 +517,29 @@ class PlayerObservationFormatter:
                     # この経路に来ないので is_self ガードは不要。
                     structured["content"] = ""
                 return ObservationOutput(
-                    prose=prose,
+                    prose=heard_as(speaker_name),
                     structured=structured,
                     observation_category=category,
                     # is_self は上で早期 return 済みなので、ここに来るのは他者
                     # の speech を聞いたケースのみ。相手の発話を受けたら自分の
                     # ターンを再スケジュールする (返答や反応のため)。
                     schedules_turn=True,
+                    subject_name=speaker_name,
+                    if_subject_unknown=_without_speaker(
+                        heard_as(_UNKNOWN_SPEAKER), structured
+                    ),
                 )
 
-        prose = f"{speaker_name}が{verb}: 「{event.content}」"
         return ObservationOutput(
-            prose=prose,
+            prose=f"{speaker_name}が{verb}: 「{event.content}」",
             structured=structured_base,
             observation_category=category,
             # 同上: 他者発話を聞いた recipient のターンを積む
             schedules_turn=True,
+            subject_name=speaker_name,
+            if_subject_unknown=_without_speaker(
+                f"{_UNKNOWN_SPEAKER}が{verb}: 「{event.content}」", structured_base
+            ),
         )
 
     def _format_item_added_to_inventory(
