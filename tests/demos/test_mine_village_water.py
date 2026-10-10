@@ -18,6 +18,10 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -143,6 +147,15 @@ def _fuel_and_start_generator(runtime, cans: int = 1) -> None:
     _act(runtime, _HARU, "machine_room", "generator", "start_generator")
 
 
+
+
+def _clear_gas(runtime) -> None:
+    """掘り場のガスを抜く。ガスは確率で溜まり (R6、test_mine_village_light_gas_and_food.py)、溜まっていると予備の燃料が取れない。燃料の量を見るテストを偶然に左右させないため。"""
+    if "gas_present" in runtime._world_flag_state.as_frozen_set():
+        runtime._world_flag_state.remove(
+            "gas_present",
+            context=WorldFlagMutationContext(source=WorldFlagMutationSource.SCENARIO_EVENT, actor_player_id=None),
+        )
 
 class TestGatesFloodTheirTargets:
     """R1: 水門ごとに沈む通路が決まっていて、ほかの通路は沈まないことを保証する。"""
@@ -324,6 +337,7 @@ class TestFuelSupply:
 
     def test_all_cans_together_fill_five_units(self, runtime) -> None:
         """掘り場と倉庫の缶を拾い、北の缶と合わせて注ぐと、発電機の燃料は 5 になる。"""
+        _clear_gas(runtime)
         _act(runtime, _HARU, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
         _act(runtime, _HARU, "storehouse", "storehouse_crates", "take_small_fuel_can")
 
@@ -334,8 +348,10 @@ class TestFuelSupply:
 
     def test_a_crate_gives_its_can_only_once(self, runtime) -> None:
         """掘り場の缶は 1 度しか拾えない。2 度目は断られる。"""
+        _clear_gas(runtime)
         _act(runtime, _HARU, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
 
+        _clear_gas(runtime)
         outcome, _message = _try(runtime, _GEN, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
 
         assert outcome == "refused"
