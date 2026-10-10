@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.being.application.known_people import render_known_people
-from ai_rpg_world.being.contract import Introduction
+from ai_rpg_world.being.contract import EnvironmentEntry
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, AcquaintanceRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
@@ -70,14 +70,22 @@ class PlayerAcquaintances:
             turn=self._turn_reader.current_turn(being_id),
         )
 
-    def receive_introductions(
-        self, player_id: PlayerId, introductions: Iterable[Introduction]
-    ) -> None:
+    def receive_entry(self, player_id: PlayerId, entry: EnvironmentEntry) -> None:
+        """紹介はプロンプトの前提なので、渡せないときは黙って捨てずに止める。"""
+        if entry.environment_name != self._environment_name:
+            raise ValueError(
+                f"entry is for {entry.environment_name!r}, "
+                f"but acquaintances are kept for {self._environment_name!r}"
+            )
         being_id = self._resolve(player_id)
         if being_id is None:
+            if entry.introductions:
+                raise ValueError(
+                    f"player_id={player_id.value} has no Being to receive introductions"
+                )
             return
         turn = self._turn_reader.current_turn(being_id)
-        for introduction in introductions:
+        for introduction in entry.introductions:
             self._store.record_introduction(
                 being_id,
                 environment_name=self._environment_name,

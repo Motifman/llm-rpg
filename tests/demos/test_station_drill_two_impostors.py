@@ -83,7 +83,7 @@ class TestMutuallyKnownImpostors:
         for viewer, ally in ((keepers[0], keepers[1]), (keepers[1], keepers[0])):
             assert f"- {names[ally]}（{_ALLY_MARK}）" in _known_people(runtime, viewer)
             user = runtime.build_full_prompt(viewer)["messages"][1]["content"]
-            assert f"【知っている人】\n" in user
+            assert "【知っている人】\n" in user
             assert f"- {names[ally]}（{_ALLY_MARK}）" in user
 
     def test_no_crew_prompt_contains_an_ally_mark(self) -> None:

@@ -113,7 +113,7 @@ class TraceEventKind:
     LLM_CALL = "llm_call"
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
-    # payload: system_chars / objective_chars / current_state_chars / memos_chars /
+    # payload: system_chars / objective_chars / known_people_chars / current_state_chars / memos_chars /
     # prediction_feedback_chars / recent_events_chars / recall_chars / inventory_chars /
     # instruction_chars / tools_chars / messages_total_chars
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。

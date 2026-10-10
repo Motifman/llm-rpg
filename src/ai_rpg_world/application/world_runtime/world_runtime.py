@@ -8467,27 +8467,27 @@ def create_world_runtime(
 
     # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
     # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
-    # 用意に失敗した player は、PlayerAcquaintances が Being 無しとして警告して読み書きしない。
+    # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
+    # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
     runtime._wire_auxiliary_tool_stack()
     for spawn in scenario.player_spawns:
         try:
             runtime._aux_being_provisioning.ensure_attached(
                 PlayerId(int(spawn.player_id))
             )
-        except Exception:
-            logger.exception(
-                "world_runtime: Being provision failed for player_id=%s "
-                "(この player は会った相手を記録しない)",
-                spawn.player_id,
-            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
+                "渡せない"
+            ) from exc
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
     )
 
     for spawn in scenario.player_spawns:
         player_id = PlayerId(int(spawn.player_id))
-        player_acquaintances.receive_introductions(
-            player_id, environment_entry_for_player(scenario, player_id).introductions
+        player_acquaintances.receive_entry(
+            player_id, environment_entry_for_player(scenario, player_id)
         )
     _record_meetings_at_spawn(scenario, player_acquaintances)
 

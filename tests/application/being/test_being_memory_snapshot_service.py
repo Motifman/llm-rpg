@@ -301,6 +301,16 @@ class TestRestoreRoundTrip:
         assert dst_stores['memo'].list_all_by_being(being) == []
         assert dst_stores['acquaintances'].list_by_being(being) == ()
 
+    def test_acquaintance_without_how_known_is_rejected(self) -> None:
+        """知り方 (how_known) の無い古い形式の知り合いは、推測で補わず BeingMemoryPayloadFormatError で拒む。互換は保たない (#1436)。"""
+        (src_svc, _) = _make_service()
+        being = BeingId('ada')
+        payload = json.loads(src_svc.capture(being))
+        payload['acquaintances'] = [{'environment_name': '島', 'name': 'ノア', 'first_met_turn': 0, 'last_met_turn': 0, 'met_count': 1}]
+        (dst_svc, _) = _make_service()
+        with pytest.raises(BeingMemoryPayloadFormatError, match='acquaintances'):
+            dst_svc.restore(being, json.dumps(payload))
+
     def test_reads_capture_stagnation_pressure_once(self) -> None:
         """LOW-1 (敵対的レビュー指摘): capture() が同じ being_id に対して
         stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)
