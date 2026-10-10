@@ -404,7 +404,10 @@ class TestFixedHolesStayFixed:
         """メモ一覧を選ぶシードで回しても、現実の日付と時刻が漏れとして出ない (#1563)。"""
         result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=20, known_holes=())
 
-        assert [a for a in result.actions if a.tool == "memo_list"], "このシードではメモ一覧を一度も選ばなかった。シードを変えないと何も確かめていない"
+        tools = [a.tool for a in result.actions]
+        assert "memo_add" in tools and "memo_list" in tools[tools.index("memo_add") + 1 :], (
+            "このシードではメモを足したあとに一覧を見ていない。空の一覧には日時が出ないので、何も確かめていない"
+        )
         assert [f for f in result.findings if f.kind == "leak"] == []
 
 
