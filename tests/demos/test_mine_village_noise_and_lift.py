@@ -43,6 +43,9 @@ _SECTORS = {
 _NOISE_THRESHOLD = 3
 _SLEEP_TICKS = 20
 _WARM_TICKS = 6
+#: 燃料の缶 1 つで発電機にたまる量と、ポンプ 1 回で使う量 (設計の「未決」)。
+_CAN_FUEL = 3
+_PUMP_FUEL = 1
 _SAFE_CODE = "1907"
 
 
@@ -120,7 +123,7 @@ def _observations(runtime, pid: PlayerId, kind: str) -> list[str]:
 
 
 def _fuel_and_start_generator(runtime) -> None:
-    """北のハルの燃料の缶 (発電機の燃料 2 つ分) を注ぎ、次の tick に発電機を動かす。"""
+    """北のハルの燃料の缶 (発電機の燃料 `_CAN_FUEL` 分) を注ぎ、次の tick に発電機を動かす。"""
     _act(runtime, _HARU, "machine_room", "generator", "pour_fuel_can")
     _ticks(runtime, 1)
     _act(runtime, _HARU, "machine_room", "generator", "start_generator")
@@ -269,7 +272,7 @@ class TestDistantCuesTellSomeoneIsAhead:
         _place(runtime, _GEN, "south_adit_end")
         _fuel_and_start_generator(runtime)
         _ticks(runtime, 1)
-        for _ in range(2):
+        for _ in range(_CAN_FUEL // _PUMP_FUEL):
             _act(runtime, _HARU, "machine_room", "pump", "run_pump")
             _ticks(runtime, 1)
         _ticks(runtime, 1)
@@ -382,7 +385,7 @@ class TestLift:
         """温まったあとにポンプで燃料を使い切って発電機が止まると、燃料を足しても温め直すまで昇降機は動かない。"""
         self._ready(runtime)
         _ticks(runtime, _WARM_TICKS)
-        for _ in range(2):
+        for _ in range(_CAN_FUEL // _PUMP_FUEL):
             _act(runtime, _HARU, "machine_room", "pump", "run_pump")
             _ticks(runtime, 1)
         _clear_gas(runtime)
@@ -395,10 +398,12 @@ class TestLift:
         assert outcome == "refused"
 
     def test_lift_refuses_with_too_little_fuel(self, runtime) -> None:
-        """燃料を 2 入れてからポンプで 1 使うと、温まっていても昇降機は動かない。"""
+        """缶 1 つ分の燃料からポンプで燃料が 2 を下回るまで使うと、温まっていても昇降機は動かない。"""
         self._ready(runtime)
         _ticks(runtime, 1)
-        _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+        for _ in range((_CAN_FUEL - 1) // _PUMP_FUEL):
+            _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+            _ticks(runtime, 1)
         _ticks(runtime, _WARM_TICKS + 1)
 
         outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
