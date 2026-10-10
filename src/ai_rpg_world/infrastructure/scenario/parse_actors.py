@@ -425,6 +425,9 @@ def parse_players(
         initial_gold = parse_player_initial_gold(
             p.get("initial_gold"), owner_id=p["id"],
         )
+        knows_at_start = parse_player_knows_at_start(
+            p, owner_id=p["id"], player_ids=[raw["id"] for raw in players_raw],
+        )
         spawns.append(PlayerSpawnConfig(
             string_id=p["id"],
             player_id=pid,
@@ -436,8 +439,35 @@ def parse_players(
             objective=objective,
             goal_locked=goal_locked,
             initial_gold=initial_gold,
+            knows_at_start=knows_at_start,
         ))
     return spawns
+
+
+def parse_player_knows_at_start(
+    player: dict[str, Any], *, owner_id: str, player_ids: Sequence[str]
+) -> tuple[str, ...] | None:
+    """``players[].knows_at_start`` を検証する (#1520)。
+
+    書かなければ None で、自分以外の全員を紹介する。空の配列は「誰も紹介しない」で、
+    None と区別する。
+    """
+    if "knows_at_start" not in player:
+        return None
+    raw = player["knows_at_start"]
+    where = f"players[{owner_id}].knows_at_start"
+    if not isinstance(raw, list):
+        raise ScenarioLoadError(f"{where} は player id の配列で書いてください (got {raw!r})")
+    known: list[str] = []
+    for value in raw:
+        if not isinstance(value, str) or value not in player_ids:
+            raise ScenarioLoadError(f"{where} に居ない player id があります: {value!r}")
+        if value == owner_id:
+            raise ScenarioLoadError(f"{where} に自分自身は書けません: {value!r}")
+        if value in known:
+            raise ScenarioLoadError(f"{where} に重複があります: {value!r}")
+        known.append(value)
+    return tuple(known)
 
 def parse_player_initial_gold(raw: Any, *, owner_id: str) -> int:
     """``players[].initial_gold`` を検証する (経済統合 Phase 0)。

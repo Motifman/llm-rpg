@@ -11,7 +11,7 @@ from ai_rpg_world.application.observation.being_contract import (
     agent_move_from_tool_call,
     environment_entry_for_player,
 )
-from ai_rpg_world.being.contract import EnvironmentEntry
+from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -61,9 +61,42 @@ def _scenario(*, objective: str | None, shared_objective: str) -> Any:
             title="無人島サバイバル", llm_objective_text=shared_objective
         ),
         player_spawns=(
-            SimpleNamespace(player_id=1, name="エイダ", objective=objective),
-            SimpleNamespace(player_id=2, name="リオ", objective=None),
+            _spawn(1, "エイダ", objective=objective),
+            _spawn(2, "リオ"),
         ),
+        mutually_known_roles=(),
+    )
+
+
+def _spawn(
+    player_id: int,
+    name: str,
+    *,
+    objective: str | None = None,
+    role: str | None = None,
+    knows_at_start: tuple[str, ...] | None = None,
+) -> Any:
+    return SimpleNamespace(
+        player_id=player_id,
+        string_id=f"p{player_id}",
+        name=name,
+        objective=objective,
+        initial_state={"role": role} if role else {},
+        knows_at_start=knows_at_start,
+    )
+
+
+def _team_scenario(
+    *, knows_at_start: tuple[str, ...] | None, mutually_known_roles: tuple[str, ...] = ()
+) -> Any:
+    return SimpleNamespace(
+        metadata=SimpleNamespace(title="山村", llm_objective_text=""),
+        player_spawns=(
+            _spawn(1, "エイダ", role="miner", knows_at_start=knows_at_start),
+            _spawn(2, "ノア", role="miner"),
+            _spawn(3, "カイ", role="villager"),
+        ),
+        mutually_known_roles=mutually_known_roles,
     )
 
 
@@ -81,6 +114,7 @@ class TestEnvironmentEntryForPlayer:
             environment_name="無人島サバイバル",
             self_name="エイダ",
             imposed_goal="全員を救助させる",
+            introductions=(Introduction(name="リオ"),),
         )
 
     def test_shared_objective_is_used_without_player_objective(self) -> None:
@@ -107,3 +141,43 @@ class TestEnvironmentEntryForPlayer:
             environment_entry_for_player(
                 _scenario(objective=None, shared_objective=""), PlayerId.create(9)
             )
+
+
+class TestIntroductionsForPlayer:
+    """シナリオの宣言から、入るときに紹介する相手と関係の注記を決める規則を保証する。"""
+
+    def test_without_declaration_everyone_else_is_introduced(self) -> None:
+        """knows_at_start を書かないプレイヤーには、自分以外の全員をシナリオの順に注記なしで紹介する。"""
+        entry = environment_entry_for_player(
+            _team_scenario(knows_at_start=None), PlayerId.create(1)
+        )
+
+        assert entry.introductions == (Introduction(name="ノア"), Introduction(name="カイ"))
+
+    def test_declared_list_limits_who_is_introduced(self) -> None:
+        """knows_at_start に p2 だけを書くと、紹介されるのはノアだけになる。"""
+        entry = environment_entry_for_player(
+            _team_scenario(knows_at_start=("p2",)), PlayerId.create(1)
+        )
+
+        assert entry.introductions == (Introduction(name="ノア"),)
+
+    def test_empty_declaration_introduces_nobody(self) -> None:
+        """knows_at_start を空の配列にすると、誰も紹介しない。"""
+        entry = environment_entry_for_player(
+            _team_scenario(knows_at_start=()), PlayerId.create(1)
+        )
+
+        assert entry.introductions == ()
+
+    def test_mutually_known_role_adds_same_side_note(self) -> None:
+        """互いを知る役 (mutually_known_roles) が同じ相手には「あなたと同じ側」を付け、違う役の相手には付けない。"""
+        entry = environment_entry_for_player(
+            _team_scenario(knows_at_start=None, mutually_known_roles=("miner",)),
+            PlayerId.create(1),
+        )
+
+        assert entry.introductions == (
+            Introduction(name="ノア", relation_note="あなたと同じ側"),
+            Introduction(name="カイ"),
+        )

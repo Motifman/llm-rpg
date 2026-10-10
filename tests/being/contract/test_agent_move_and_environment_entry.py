@@ -8,7 +8,12 @@ from datetime import datetime
 
 import pytest
 
-from ai_rpg_world.being.contract import AgentMove, ContractViolation, EnvironmentEntry
+from ai_rpg_world.being.contract import (
+    AgentMove,
+    ContractViolation,
+    EnvironmentEntry,
+    Introduction,
+)
 
 
 class TestAgentMove:
@@ -123,3 +128,56 @@ class TestEnvironmentEntry:
 
         with pytest.raises(ContractViolation):
             EnvironmentEntry(**values)
+
+
+class TestIntroductions:
+    """入るときの紹介が、名前と関係の注記を持ち、紹介しない環境では空になることを保証する。"""
+
+    def test_entry_without_introductions_introduces_nobody(self) -> None:
+        """introductions を省くと、誰も紹介されない空の tuple になる。"""
+        entry = EnvironmentEntry(environment_name="山村", self_name="リオ")
+
+        assert entry.introductions == ()
+
+    def test_introductions_keep_names_and_relation_notes_in_order(self) -> None:
+        """紹介は渡した順に、名前と関係の注記 (無ければ None) を保つ。"""
+        entry = EnvironmentEntry(
+            environment_name="山村",
+            self_name="リオ",
+            introductions=[
+                Introduction(name="ノア", relation_note="あなたと同じ側"),
+                Introduction(name="カイ"),
+            ],
+        )
+
+        assert entry.introductions == (
+            Introduction(name="ノア", relation_note="あなたと同じ側"),
+            Introduction(name="カイ", relation_note=None),
+        )
+
+    def test_blank_name_or_note_is_rejected(self) -> None:
+        """紹介の名前が空、または関係の注記が空文字なら拒む。"""
+        with pytest.raises(ContractViolation):
+            Introduction(name=" ")
+        with pytest.raises(ContractViolation):
+            Introduction(name="ノア", relation_note="")
+
+    def test_introducing_oneself_or_the_same_person_twice_is_rejected(self) -> None:
+        """本人を紹介したり、同じ名前を 2 回紹介したりすると拒む。"""
+        with pytest.raises(ContractViolation):
+            EnvironmentEntry(
+                environment_name="山村", self_name="リオ",
+                introductions=[Introduction(name="リオ")],
+            )
+        with pytest.raises(ContractViolation):
+            EnvironmentEntry(
+                environment_name="山村", self_name="リオ",
+                introductions=[Introduction(name="ノア"), Introduction(name="ノア")],
+            )
+
+    def test_non_introduction_items_are_rejected(self) -> None:
+        """紹介に Introduction 以外 (名前の文字列など) を混ぜると拒む。"""
+        with pytest.raises(ContractViolation):
+            EnvironmentEntry(
+                environment_name="山村", self_name="リオ", introductions=["ノア"],
+            )
