@@ -17,19 +17,24 @@
 
 ## 何を見ているか
 
-- 【】で書いた節名: system prompt か、続く文面に、その見出しで始まる行がある
-- 『』で囲んだ名前: プロンプトに見出しか欄の名前 (行頭の「接続先:」など)
-  として在るか、節を指していないと宣言したもの (`_QUOTES_THAT_ARE_NOT_PLACES`)
+- 【】で書いた節名: system prompt か、続く文面に、その見出しで始まる行がある。
+  失敗したときに返す対処文も同じ規則で見る
+- 『』で囲んだ名前: プロンプトに見出しか、続く文面の欄の名前 (行頭の
+  「接続先:」など) として在るか、節を指していないと宣言したもの (`_QUOTES_THAT_ARE_NOT_PLACES`)
   である。本文のどこかに同じ語があるだけでは足りない。『現在の状況』は
   system prompt の「現在の状況・観測・直近の出来事」という説明文に含まれて
   いたので、語の有無で見ると素通りした
 - 引数名: どこかのツールが受け取る引数の名前を書いたら、このターンに渡した
-  ツールのどれかがその引数を受け取る
+  ツールのどれかがその引数を受け取る。説明を持つツール自身に限らないのは、
+  speak の説明が他のツールの say_inline を勧めるように、別のツールの引数を
+  指す文が正しく存在するため
 
 ## 限界
 
 「」で囲んだ欄の名前 (「所持アイテム」など) は見ていない。「」は台詞や例の
-引用にも使うので、節を指しているかを機械では分けられない。また、この
+引用にも使うので、節を指しているかを機械では分けられない。旧ワールド用の
+ツールの説明と system prompt の雛形 (system_prompt_builder) は、spot graph の
+run では渡らないので見ていない。そこには「現在の状況」がまだ残っている。また、この
 fixture が作る 1 ターン目の状態でしか見ていないので、条件付きで出る見出し
 (【関連する学び】など) を指す文を足すと、ここでは落ちる。そのときは状態を
 増やすか、指すのをやめる。
@@ -43,8 +48,14 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.llm.remediation_mapping import (
+    DEFAULT_REMEDIATION_BY_ERROR_CODE,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
+    resolver_failure_remediation,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     EXPECTATIONS_FIELD_NAME,
@@ -62,9 +73,10 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmW
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 
-#: persona_prompt を使う経路と、人物像の組み立て部品を使う経路の両方を見る。
 _SCENARIO_FILES = (
+    # persona_prompt を使う経路。【ペルソナ】の見出しが付かなかったのはこちら
     "survival_island_v4_coop.json",
+    # persona_prompt を持たず、人物像の組み立て部品が見出し付きの節を作る経路
     "recall_probe_v1.json",
 )
 
@@ -158,6 +170,21 @@ def captured(request) -> dict[str, Any]:
     }
 
 
+def _headings(captured: dict[str, Any]) -> set[str]:
+    return set(_HEADING_LINE.findall(captured["system"])) | set(
+        _HEADING_LINE.findall(captured["user"])
+    )
+
+
+def _remediation_texts() -> list[str]:
+    """失敗したときに返す対処文。共通の対応表と、ツールごとの名前の指定の案内。"""
+    texts = list(DEFAULT_REMEDIATION_BY_ERROR_CODE.values())
+    for definition, _ in get_spot_graph_specs():
+        for error_code in ("INVALID_TARGET_LABEL", "INVALID_ARGUMENT"):
+            texts.append(resolver_failure_remediation(definition.name, error_code))
+    return texts
+
+
 class TestPromptPointsOnlyAtWhatExists:
     """実際に組み立てたプロンプトが、実在しない見出し・名前・引数を指さない。"""
 
@@ -169,34 +196,27 @@ class TestPromptPointsOnlyAtWhatExists:
 
     def test_every_section_written_in_brackets_is_a_real_heading(self, captured) -> None:
         """system prompt とツールの説明が【】で指す節は、system prompt か続く文面に、その見出しで始まる行として在る。"""
-        headings = set(_HEADING_LINE.findall(captured["system"])) | set(
-            _HEADING_LINE.findall(captured["user"])
-        )
+        headings = _headings(captured)
         referring_texts = [captured["system"], *captured["descriptions"]]
 
-        missing = {
-            name
-            for text in referring_texts
-            for name in _HEADING_REF.findall(text)
-            if name not in headings
-        }
+        referred = {name for text in referring_texts for name in _HEADING_REF.findall(text)}
+        missing = referred - headings
+
+        assert referred, "【】の参照を 1 つも拾えていない。検査が空振りしている"
 
         assert missing == set(), f"実在しない見出し: {sorted(missing)} / 実在する見出し: {sorted(headings)}"
 
     def test_every_quoted_name_is_a_heading_or_field_in_the_prompt(self, captured) -> None:
         """system prompt とツールの説明が『』で囲む名前は、プロンプトに見出しか欄の名前として在るか、節を指していないと宣言したものである。"""
-        prompt = captured["system"] + "\n" + captured["user"]
-        places = set(_HEADING_LINE.findall(prompt)) | {
-            label.strip() for label in _FIELD_LABEL_LINE.findall(prompt)
+        places = _headings(captured) | {
+            label.strip() for label in _FIELD_LABEL_LINE.findall(captured["user"])
         }
         referring_texts = [captured["system"], *captured["descriptions"]]
 
-        missing = {
-            name
-            for text in referring_texts
-            for name in _QUOTED.findall(text)
-            if name not in places and name not in _QUOTES_THAT_ARE_NOT_PLACES
-        }
+        quoted = {name for text in referring_texts for name in _QUOTED.findall(text)}
+        missing = quoted - places - set(_QUOTES_THAT_ARE_NOT_PLACES)
+
+        assert quoted, "『』の名前を 1 つも拾えていない。検査が空振りしている"
 
         assert missing == set(), f"プロンプトに見出しも欄も無い名前: {sorted(missing)}"
 
@@ -214,6 +234,19 @@ class TestPromptPointsOnlyAtWhatExists:
         }
 
         assert not_offered == set(), f"渡していない引数: {sorted(not_offered)}"
+
+
+    def test_every_section_named_in_failure_remediation_is_a_real_heading(self, captured) -> None:
+        """失敗したときに返す対処文が【】で指す節も、system prompt か続く文面に、その見出しで始まる行として在る。"""
+        headings = _headings(captured)
+
+        referred = {
+            name for text in _remediation_texts() for name in _HEADING_REF.findall(text)
+        }
+        missing = referred - headings
+
+        assert referred, "【】の参照を 1 つも拾えていない。検査が空振りしている"
+        assert missing == set(), f"実在しない見出し: {sorted(missing)}"
 
 
 def test_every_declared_non_place_quote_is_still_in_use() -> None:
