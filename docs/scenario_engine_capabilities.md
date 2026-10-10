@@ -74,7 +74,7 @@
 
 | # | 項目 | 判定 | 書き方の要点 | 根拠 | 制限 |
 |---|---|---|---|---|---|
-| 19 | 記憶を持ち越して何回も遊ぶ | **部分的** | `make experiment-with-snapshot` で `being_*.json` と `world.json` を書き出し、`make experiment-resume` で読む | `Makefile:149-202`、`scripts/run_scenario_experiment.py:706-800, 968-1080` | **`world.json` があると世界も復元される**ので「続きから」になる。記憶だけを持ち越すには `being_*.json` を手で写す必要がある。別のシナリオで読むと world.json の不一致で止まる |
+| 19 | 記憶を持ち越して何回も遊ぶ | **できる** (#1526 で追記) | 実験設定に `"snapshot_load_mode": "replay"` を書く。1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は `make experiment-resume` に前の回の `snapshots` を渡す。回の番号は前の回の resolved から数え、`run_start` に残る | `scripts/run_scenario_experiment.py` の `_resolve_replay_round`、`A/being/world_clock_restart.py`、design_decisions D1514 | 記憶に残る世界の tick の欄は 0 に置き換わり、前の回の記録どうしの前後は消える。保留中の予測は捨てる |
 | 20 | 回ごとに役や初期配置を変える | **できない** | 回ごとに別のシナリオファイルを用意するしかない | 役を混ぜる処理は src と scripts のどこにも無い | — |
 | 21 | 1 つの run の中で回を区切る | **できない** | — | ゲームが終わると run も終わる | 持ち物の回収、HP の回復、死者の復帰、tick の巻き戻しは書けない |
 
@@ -92,7 +92,7 @@
 
 | 候補 | 中身 | Issue |
 |---|---|---|
-| I-1 | 「最初からやり直す」と「続きから」を区別して起動できない | #1514 |
+| I-1 | 「最初からやり直す」と「続きから」を区別して起動できない | #1514 (#1526 で対応) |
 | I-2 | 回ごとに役と初期配置を割り当て直せない | #1514 |
 | I-3 | 結果の分岐と確率が操作に書けない (AND だけ、効果に条件が付かない、人数の上限が無い) | #1515 |
 | I-4 | 決まりのヒントを伏せられない | #1515 |
