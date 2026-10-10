@@ -299,3 +299,45 @@ class TestRecordContinuedFailure:
             _raise(RuntimeError("boom"))
 
         assert recorder.events[0].payload["continued"] is False
+
+
+class TestAfterCommitFailureObserver:
+    """CommandEventDispatcher の best-effort な commit 後ハンドラの失敗が、trace と件数に出ること。"""
+
+    def test_best_effort_handler_failure_is_recorded_as_continued(self) -> None:
+        """best-effort な commit 後ハンドラが例外を出すと、after_commit.<配送先> の段・出来事の型名を対象として、続けた失敗が 1 件残る。"""
+        from datetime import datetime, timezone
+
+        from ai_rpg_world.application.common.event_delivery import (
+            DeliveryChannel,
+            DeliveryGuarantee,
+        )
+        from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+        from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+            CommandEventDispatcher,
+        )
+
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
+        dispatcher = CommandEventDispatcher(
+            failure_observer=isolator.after_commit_failure_observer(tick_provider=lambda: 6)
+        )
+        dispatcher.register_after_commit(
+            BaseDomainEvent,
+            lambda event: _raise(RuntimeError("observation pipeline failed")),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
+        event = BaseDomainEvent(
+            event_id=1,
+            occurred_at=datetime.now(timezone.utc),
+            aggregate_id="aggregate",
+            aggregate_type="Aggregate",
+        )
+
+        dispatcher.handoff([event])
+
+        assert [(e.tick, e.payload["stage"], e.payload["target_id"], e.payload["continued"]) for e in recorder.events] == [
+            (6, "after_commit.observation", "BaseDomainEvent", True)
+        ]
+        assert isolator.failure_counts() == {"after_commit.observation": 1}

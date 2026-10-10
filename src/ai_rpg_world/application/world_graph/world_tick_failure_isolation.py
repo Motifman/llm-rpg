@@ -9,9 +9,15 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from enum import Enum
 
+from ai_rpg_world.application.common.event_delivery import (
+    AfterCommitFailureObserver,
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 _logger = logging.getLogger(__name__)
@@ -176,6 +182,30 @@ class WorldTickFailureIsolator:
         if self._policy is WorldTickFailurePolicy.FAIL_FAST:
             setattr(exc, _RECORDED_ATTR, True)
             raise exc
+
+
+    def after_commit_failure_observer(
+        self, *, tick_provider: Callable[[], int]
+    ) -> AfterCommitFailureObserver:
+        """CommandEventDispatcher の best-effort な commit 後ハンドラの失敗を受ける口を返す。"""
+
+        def observe(
+            channel: DeliveryChannel,
+            guarantee: DeliveryGuarantee,
+            event: DomainEvent,
+            handler: object,
+            error: Exception,
+        ) -> None:
+            del guarantee, handler
+            self.record_continued_failure(
+                error,
+                stage=f"after_commit.{channel.value}",
+                tick=WorldTick(tick_provider()),
+                target_kind="domain_event",
+                target_id=type(event).__name__,
+            )
+
+        return observe
 
 
 def _jsonable_target_id(target_id: object) -> object:

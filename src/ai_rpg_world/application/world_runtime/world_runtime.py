@@ -5027,6 +5027,9 @@ def create_world_runtime(
         # recorder は set_trace_recorder で後から入るので、呼ばれた時点の値を見る。
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
+    _record_after_commit_failure = world_tick_failure_isolator.after_commit_failure_observer(
+        tick_provider=lambda: runtime.current_tick(),
+    )
 
     loader = ScenarioLoader()
     scenario = loader.load_from_file(
@@ -5591,7 +5594,7 @@ def create_world_runtime(
         InMemoryUnitOfWorkTransactionFactory,
     )
 
-    item_transfer_dispatcher = CommandEventDispatcher()
+    item_transfer_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     for item_transfer_event_type in (
         PlayerDroppedItemEvent,
         PlayerGaveItemEvent,
@@ -7140,7 +7143,7 @@ def create_world_runtime(
                 event_id=event.event_id,
             )
 
-    interaction_dispatcher = CommandEventDispatcher()
+    interaction_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     interaction_dispatcher.register_required_before_commit(
         PlayerDownedEvent,
         _apply_player_lifecycle_before_commit,
@@ -7166,7 +7169,7 @@ def create_world_runtime(
     )
     from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 
-    use_item_dispatcher = CommandEventDispatcher()
+    use_item_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
 
     def _apply_consumable_effect_before_commit(event: Any, context: Any) -> None:
         repositories = context.repositories
@@ -7336,7 +7339,7 @@ def create_world_runtime(
     if food_spoilage_stage is not None:
         from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
 
-        food_spoilage_dispatcher = CommandEventDispatcher()
+        food_spoilage_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
         food_spoilage_dispatcher.register_after_commit(
             ItemSpoiledEvent,
             lambda event: runtime._append_food_spoiled_batch_observation(
@@ -7356,7 +7359,7 @@ def create_world_runtime(
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
     from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 
-    trade_offer_expiry_dispatcher = CommandEventDispatcher()
+    trade_offer_expiry_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     trade_offer_expiry_dispatcher.register_after_commit(
         TradeOfferExpiredEvent,
         _observe_expired_trade_offer,
@@ -7477,7 +7480,7 @@ def create_world_runtime(
         SynchronizedActionMessageEvent,
     )
 
-    synchronized_action_dispatcher = CommandEventDispatcher()
+    synchronized_action_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     synchronized_action_dispatcher.register_after_commit(
         ConnectionStateChangedEvent,
         lambda event: pipeline_event_publisher.publish_all((event,)),
@@ -7522,7 +7525,7 @@ def create_world_runtime(
         TimeOfDayChangedEvent,
     )
 
-    weather_dispatcher = CommandEventDispatcher()
+    weather_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
     if weather_config is None or weather_config.announce_changes:
         weather_dispatcher.register_after_commit(
             SpotGraphWeatherChangedEvent,
@@ -7542,7 +7545,7 @@ def create_world_runtime(
     )
     environment_stage.set_command_scope_factory(weather_scope_factory)
     if day_night_stage is not None:
-        day_night_dispatcher = CommandEventDispatcher()
+        day_night_dispatcher = CommandEventDispatcher(failure_observer=_record_after_commit_failure)
         if day_night_config is not None and day_night_config.announce_changes:
 
             def _observe_day_night_transition(
