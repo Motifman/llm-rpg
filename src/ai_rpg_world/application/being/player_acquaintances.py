@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.being.application.known_people import render_known_people
+from ai_rpg_world.being.contract import Introduction
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, AcquaintanceRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
@@ -68,6 +70,31 @@ class PlayerAcquaintances:
             turn=self._turn_reader.current_turn(being_id),
         )
 
+    def receive_introductions(
+        self, player_id: PlayerId, introductions: Iterable[Introduction]
+    ) -> None:
+        being_id = self._resolve(player_id)
+        if being_id is None:
+            return
+        turn = self._turn_reader.current_turn(being_id)
+        for introduction in introductions:
+            self._store.record_introduction(
+                being_id,
+                environment_name=self._environment_name,
+                name=introduction.name,
+                turn=turn,
+                relation_note=introduction.relation_note,
+            )
+
+    def known_people_text(self, player_id: PlayerId) -> str:
+        being_id = self._resolve(player_id)
+        if being_id is None:
+            return ""
+        return render_known_people(
+            self._store.list_by_being(being_id),
+            environment_name=self._environment_name,
+        )
+
     def find(self, player_id: PlayerId, name: str) -> Acquaintance | None:
         being_id = self._resolve(player_id)
         if being_id is None:
@@ -87,6 +114,7 @@ class PlayerAcquaintances:
             a.name
             for a in self._store.list_by_being(being_id)
             if a.environment_name == self._environment_name
+            and a.last_met_turn is not None
             and 0 <= now - a.last_met_turn <= within_turns
         )
 

@@ -4,6 +4,7 @@ import pytest
 
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.being.contract import Introduction
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -202,3 +203,51 @@ class TestWhoCanBeMet:
                 environment_name=" ",
                 names_by_player_id=NAMES,
             )
+
+
+class TestIntroductionsAndKnownPeople:
+    """入るときの紹介を Being の記録に移し、いま知っている人の文を Being の記録から描くことを保証する。"""
+
+    def test_introductions_become_known_people_with_notes(self) -> None:
+        """紹介を受け取ると、紹介した順に名前と関係の注記で【知っている人】の文になる。"""
+        acquaintances, _, _ = _make()
+
+        acquaintances.receive_introductions(
+            ADA,
+            [Introduction(name="ノア", relation_note="あなたと同じ側"), Introduction(name="リオ")],
+        )
+
+        assert acquaintances.known_people_text(ADA) == "- ノア（あなたと同じ側）\n- リオ"
+
+    def test_introduced_person_is_known_but_not_yet_met(self) -> None:
+        """紹介された相手は、まだ会っていないので (初めて会った) の元になる会った記録を持たない。"""
+        acquaintances, _, _ = _make()
+
+        acquaintances.receive_introductions(ADA, [Introduction(name="ノア")])
+
+        met = acquaintances.find(ADA, "ノア")
+        assert met is not None and met.met_count == 0
+
+    def test_person_met_without_introduction_is_known_too(self) -> None:
+        """紹介されていなくても、会った相手は【知っている人】に加わる。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_introductions(ADA, [Introduction(name="ノア")])
+
+        acquaintances.record_meeting(ADA, "リオ")
+
+        assert acquaintances.known_people_text(ADA) == "- ノア\n- リオ"
+
+    def test_player_without_being_knows_nobody(self) -> None:
+        """Being に結び付かないプレイヤーの【知っている人】は空文字になる。"""
+        acquaintances, _, _ = _make()
+
+        acquaintances.receive_introductions(STRANGER, [Introduction(name="ノア")])
+
+        assert acquaintances.known_people_text(STRANGER) == ""
+
+    def test_introduced_but_unmet_person_is_not_recently_met(self) -> None:
+        """紹介されただけでまだ会っていない相手は、直近に会った相手に入らない。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_introductions(ADA, [Introduction(name="ノア")])
+
+        assert acquaintances.recently_met_names(ADA, within_turns=5) == ()
