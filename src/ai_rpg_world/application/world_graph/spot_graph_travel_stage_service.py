@@ -5,6 +5,7 @@ from collections.abc import Callable
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
+    SpotTravelBlocked,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
     SpotGraphTravelContextProvider,
@@ -43,6 +44,9 @@ class SpotGraphTravelStageService:
         self._arrival_observers: list[Callable[[PlayerId], None]] = (
             [on_arrival] if on_arrival is not None else []
         )
+        self._blocked_observers: list[
+            Callable[[PlayerId, SpotTravelBlocked], None]
+        ] = []
         self._eliminated_checker: Callable[[PlayerId], bool] | None = None
         self._departed_checker: Callable[[PlayerId], bool] | None = None
 
@@ -56,6 +60,12 @@ class SpotGraphTravelStageService:
         ある。上書きにすると、先に置かれた hook が実走経路でだけ消える。
         """
         self._arrival_observers.append(callback)
+
+    def add_blocked_observer(
+        self, callback: Callable[[PlayerId, SpotTravelBlocked], None]
+    ) -> None:
+        """区間が閉じて移動を取りやめたときの観察者を足す。到着の観察者は呼ばない。"""
+        self._blocked_observers.append(callback)
 
     def set_on_arrival(self, callback: Callable[[PlayerId], None] | None) -> None:
         """後方互換の入口。**観察者を置き換えるのではなく足す。**
@@ -127,7 +137,7 @@ class SpotGraphTravelStageService:
 
         for pid in was_traveling:
             try:
-                self._movement_service.advance_spot_travel_one_tick(
+                result = self._movement_service.advance_spot_travel_one_tick(
                     pid,
                     self._travel_context.owned_item_spec_ids_for(pid),
                     self._travel_context.world_flags(),
@@ -137,7 +147,33 @@ class SpotGraphTravelStageService:
                 # 確定に追随する計測と到着通知を失わない。
                 self._notify_committed_travel(pid)
                 raise
-            self._notify_committed_travel(pid)
+            blocked = result.blocked if result is not None else None
+            if blocked is None:
+                self._notify_committed_travel(pid)
+            else:
+                self._notify_blocked_travel(pid, blocked)
+
+    def _notify_blocked_travel(
+        self, player_id: PlayerId, blocked: SpotTravelBlocked
+    ) -> None:
+        """取りやめた移動の計測と通知を、いずれも最善努力で行う。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if self._on_travel_tick_committed is not None:
+            try:
+                self._on_travel_tick_committed(player_id)
+            except Exception:
+                logger.exception(
+                    "travel tick observer failed for player %s", player_id.value
+                )
+        for observer in tuple(self._blocked_observers):
+            try:
+                observer(player_id, blocked)
+            except Exception:
+                logger.exception(
+                    "travel blocked observer failed for player %s", player_id.value
+                )
 
     def _notify_committed_travel(self, player_id: PlayerId) -> None:
         """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
