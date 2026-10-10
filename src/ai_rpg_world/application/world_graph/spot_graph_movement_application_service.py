@@ -42,6 +42,11 @@ if TYPE_CHECKING:
     )
 
 
+# この文はそのままエージェントに届く。スポット番号も、行き先の名前も、
+# 通れない理由も伏せる。番号はゲームの外の情報で、理由は現地で知るものだから。
+_UNREACHABLE_MESSAGE = "その先へは行けない。"
+
+
 @dataclass(frozen=True)
 class SpotTravelTickAdvanceDto:
     """1 ティック進行後の横断結果（観測・ログ用）。"""
@@ -201,9 +206,7 @@ class SpotGraphMovementApplicationService:
             graph, nav.current_spot_id, destination_spot_id
         )
         if not route:
-            raise SpotTravelUnreachableException(
-                f"到達不能: {nav.current_spot_id} → {destination_spot_id}"
-            )
+            raise SpotTravelUnreachableException(_UNREACHABLE_MESSAGE)
 
         leg_cids = []
         leg_ticks = []
@@ -211,7 +214,7 @@ class SpotGraphMovementApplicationService:
             a, b = route[i], route[i + 1]
             conn = graph.find_first_passable_connection_between(a, b)
             if conn is None:
-                raise SpotTravelUnreachableException(f"接続なし: {a} → {b}")
+                raise SpotTravelUnreachableException(_UNREACHABLE_MESSAGE)
             ok, reason = self._navigation.can_pass(conn, owned_item_spec_ids, world_flags)
             if not ok:
                 raise ConnectionNotPassableException(reason or "通行できません")
