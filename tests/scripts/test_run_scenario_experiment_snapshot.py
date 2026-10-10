@@ -169,6 +169,9 @@ class TestExpectedPayloadKeysCoverage:
     def _runtime_stub_with_all_stores() -> SimpleNamespace:
         """BeingMemorySnapshotService が対応する全 per-Being store を
         episodic_stack / runtime に揃えた runtime stub を作る。"""
+        from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+            InMemoryAcquaintanceRepository,
+        )
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
@@ -245,6 +248,7 @@ class TestExpectedPayloadKeysCoverage:
             _goal_journal_store=InMemoryGoalJournalStore(),
             _stagnation_pressure_store=InMemoryStagnationPressureStore(),
             _expectation_store=InMemoryExpectationRepository(),
+            _acquaintance_store=InMemoryAcquaintanceRepository(),
         )
 
     def _fallback_logs(

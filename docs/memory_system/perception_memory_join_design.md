@@ -104,6 +104,8 @@ agent は「現在のもの」を見ることはできるが、「自分が初�
   そのまま従います
 - entity_key は polymorphic な string にします。`player:noa` / `spot:forest_clearing` /
   `weather:storm` / `emotion:fear` のように prefix で kind を表します
+- 人 (`player:`) は、いまは環境の encounter に書きません。会った人は Being の知り合いの
+  記録が持ちます (design_decisions D1520)
 - state は最小から始めます。first_seen / last_seen / count の 3 つ。intensity や context
   は必要になってから追加します
 - 「忘却」は当面入れません。snapshot resume との相性を考えて全保持から始めて、token

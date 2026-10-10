@@ -6572,8 +6572,10 @@ def create_world_runtime(
     acquaintance_store = InMemoryAcquaintanceRepository()
 
     def _being_id_of(player_id: PlayerId) -> "BeingId | None":
-        acting = runtime._acting_being_for(player_id)
-        return acting.being_id if acting is not None else None
+        resolver = runtime.aux_being_resolver
+        if resolver is None:
+            return None
+        return resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id)
 
     player_acquaintances = PlayerAcquaintances(
         store=acquaintance_store,
@@ -8514,6 +8516,20 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
+    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
+    # 用意に失敗した player は、PlayerAcquaintances が Being 無しとして警告して読み書きしない。
+    runtime._wire_auxiliary_tool_stack()
+    for spawn in scenario.player_spawns:
+        try:
+            runtime._aux_being_provisioning.ensure_attached(
+                PlayerId(int(spawn.player_id))
+            )
+        except Exception:
+            logger.exception(
+                "world_runtime: Being provision failed for player_id=%s "
+                "(この player は会った相手を記録しない)",
+                spawn.player_id,
+            )
     _record_meetings_at_spawn(scenario, player_acquaintances)
     return runtime
 
