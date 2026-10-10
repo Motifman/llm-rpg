@@ -92,3 +92,31 @@ class TestFailFastWorld:
         assert [e.payload["stage"] for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)] == [
             "monster_behavior"
         ]
+
+
+_STAGES_WITH_PER_UNIT_ISOLATION = (
+    "travel",
+    "scenario_event",
+    "reactive_object_state",
+    "sync_action_resolver",
+    "monster_spawn",
+    "monster_behavior",
+    "trade_offer_expiry",
+    "market_order_expiry",
+    "player_outcome_rule",
+    "death_grace",
+)
+
+
+class TestEveryStageSharesTheRuntimeIsolator:
+    """create_world_runtime が、1 体ずつ取りやめる段すべてに runtime と同じ部品を渡していること。"""
+
+    @pytest.mark.parametrize("stage_name", _STAGES_WITH_PER_UNIT_ISOLATION)
+    def test_stage_uses_the_runtime_isolator(self, stage_name: str) -> None:
+        """段が runtime の部品と別の部品 (既定の fail_fast) を持っていると、isolate の run でも 1 体の例外で段ごと取りやめになるので、同じ部品であることを見る。"""
+        runtime = create_world_runtime(Path("data/scenarios/mine_village_v1.json"))
+        stage = getattr(runtime._simulation_service, f"_{stage_name}_stage")
+        # モンスター行動は run を tick へ橋渡しする薄い入れ物に包まれている。
+        holder = getattr(stage, "_service", stage)
+
+        assert holder._failure_isolator is runtime.world_tick_failure_isolator

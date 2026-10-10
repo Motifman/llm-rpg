@@ -71,6 +71,7 @@ class WorldTickFailureIsolator:
         target_kind: str,
         target_id: object = None,
         player_id: int | None = None,
+        command_scoped: bool = True,
     ) -> Iterator[None]:
         try:
             yield
@@ -82,7 +83,7 @@ class WorldTickFailureIsolator:
                 # trace に残せない取りやめは静かな失敗になるので、止める。
                 raise
             try:
-                recorder.record(
+                event = recorder.record(
                     TraceEventKind.WORLD_TICK_UNIT_FAILED,
                     tick=tick.value,
                     player_id=player_id,
@@ -96,9 +97,17 @@ class WorldTickFailureIsolator:
                     error_type=type(exc).__name__,
                     error_message=_truncate(str(exc)),
                     error_origin=_innermost_frame(exc),
-                    committed=isinstance(exc, CommandPostCommitException),
+                    # CommandScope 1 回でない単位では、取りやめる前に何が確定したか分からない。
+                    committed=(
+                        isinstance(exc, CommandPostCommitException)
+                        if command_scoped
+                        else None
+                    ),
                     policy=self._policy.value,
                 )
+                if event.seq < 0:
+                    # 閉じた recorder は例外を出さずに捨てて seq=-1 を返す。
+                    raise RuntimeError("trace recorder dropped world_tick_unit_failed")
             except Exception:
                 _logger.exception(
                     "failed to record world_tick_unit_failed (stage=%s target=%s:%s)",
@@ -107,7 +116,11 @@ class WorldTickFailureIsolator:
                 raise exc
             with self._lock:
                 self._counts[stage] = self._counts.get(stage, 0) + 1
-            if self._policy is WorldTickFailurePolicy.FAIL_FAST:
+            # commit 後の後始末に失敗した transaction 資源は、次の 1 体の scope が
+            # 再利用してしまう。1 体の失敗ではないので isolate でも止める。
+            if self._policy is WorldTickFailurePolicy.FAIL_FAST or isinstance(
+                exc, CommandPostCommitException
+            ):
                 setattr(exc, _RECORDED_ATTR, True)
                 raise
             _logger.error(

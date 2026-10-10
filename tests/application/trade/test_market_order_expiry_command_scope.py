@@ -304,7 +304,7 @@ def test_full_inventory_commits_awaiting_collection_without_losing_goods() -> No
 def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """commit済みcleanup失敗では観測後に専用例外を呼び出し元へ返す。"""
+    """commit済みcleanup失敗では、trace の記録先があって isolate でも取りやめず、committed=True で残して観測後に専用例外を呼び出し元へ返す。"""
     runtime = _runtime()
     market: MarketService = runtime._market_service
     runtime._market_board_store.save(MarketBoard.empty())
@@ -326,6 +326,7 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
         raise RuntimeError("market expiry cleanup failed")
 
     monkeypatch.setattr(data_store, "release_uow_transaction", release_then_fail)
+    recorder = _traced(runtime)
 
     with pytest.raises(CommandPostCommitException):
         _stage(runtime).run(WorldTick(order.expires_at_tick + 1))
@@ -333,6 +334,10 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     assert runtime._market_board_store.board().find(order.order_id) is None
     assert _held(runtime, _HERB) == 1
     assert observer.states == [(True, 1)]
+    failures = recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+    assert [(e.payload["stage"], e.payload["committed"]) for e in failures] == [
+        ("market_order_expiry", True)
+    ]
 
 
 def test_public_expiry_notifies_before_preserving_post_commit_failure(

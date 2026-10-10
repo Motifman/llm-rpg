@@ -128,18 +128,18 @@ class TestTheReportHeaderShowsTheCounts:
         """件数が 0 でなければ、冒頭に合計と段ごとの内訳、効果の測定の前に切り分ける旨が出る。"""
         header = _report(tmp_path, {"travel": 2, "monster_behavior": 1}).split("##")[0]
 
-        assert "world tick failures: **3** (monster_behavior=1, travel=2)" in header
+        assert "世界の tick で取りやめた処理 (のべ): **3 件** (monster_behavior=1, travel=2)" in header
         assert "world_tick_unit_failed" in header
 
     def test_zero_failures_are_shown_without_warning(self, tmp_path: Path) -> None:
         """件数が 0 なら 0 と出し、切り分けの注意は出さない。"""
         header = _report(tmp_path, {}).split("##")[0]
 
-        assert "- world tick failures: 0" in header
+        assert "- 世界の tick で取りやめた処理 (のべ): 0 件" in header
         assert "world_tick_unit_failed" not in header
 
     def test_unmeasured_is_not_shown_as_zero(self, tmp_path: Path) -> None:
         """件数が無い要約では 0 と書かず、未計測と出す。"""
         header = _report(tmp_path, None).split("##")[0]
 
-        assert "- world tick failures: 未計測" in header
+        assert "- 世界の tick で取りやめた処理 (のべ): 未計測" in header

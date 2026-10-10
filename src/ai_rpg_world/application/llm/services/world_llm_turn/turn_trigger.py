@@ -212,7 +212,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
 
     def _turn_unit(self, player_id_value: int):
         runtime = self.wiring.runtime
-        isolator = runtime._world_tick_failure_isolator
+        isolator = runtime.world_tick_failure_isolator
         if isolator is None:
             isolator = WorldTickFailureIsolator.fail_fast()
         return isolator.unit(
@@ -221,6 +221,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             target_kind="player",
             target_id=player_id_value,
             player_id=player_id_value,
+            command_scoped=False,
         )
 
     def _account_result(

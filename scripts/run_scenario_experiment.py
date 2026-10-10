@@ -1241,17 +1241,19 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
     """世界の tick で取りやめた 1 体ぶんの処理の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
+    label = "- 世界の tick で取りやめた処理 (のべ)"
     counts = summary.get("world_tick_failure_counts")
     if counts is None:
-        return ["- world tick failures: 未計測"]
+        return [f"{label}: 未計測"]
     total = sum(counts.values())
     if total == 0:
-        return ["- world tick failures: 0"]
+        return [f"{label}: 0 件"]
     breakdown = ", ".join(f"{stage}={count}" for stage, count in sorted(counts.items()))
     return [
-        f"- world tick failures: **{total}** ({breakdown})",
+        f"{label}: **{total} 件** ({breakdown})",
         "  - 1 体ぶんの処理を取りやめて続けた run。効果の測定に使う前に、"
-        "trace の world_tick_unit_failed で原因を切り分ける",
+        "trace の world_tick_unit_failed で原因を切り分ける。"
+        "同じ対象が毎 tick 失敗すると、そのたびに数える",
     ]
 
 

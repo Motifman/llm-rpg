@@ -1073,6 +1073,10 @@ class WorldRuntime:
     def trace_recorder(self) -> Any:
         return self._trace_recorder
 
+    @property
+    def world_tick_failure_isolator(self) -> Any | None:
+        return self._world_tick_failure_isolator
+
     def world_tick_failure_counts(self) -> dict[str, int]:
         """世界の tick で取りやめた (fail_fast なら止めた) 1 体ぶんの処理の件数を段ごとに返す。"""
         if self._world_tick_failure_isolator is None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -91,15 +92,17 @@ class TestIsolatePolicy:
         assert recorder.events == []
         assert isolator.failure_counts() == {}
 
-    def test_post_commit_failure_is_marked_committed(self) -> None:
-        """commit 済みで後処理だけが失敗した例外は committed=True で残り、状態が確定済みだと trace から分かる。"""
+    def test_post_commit_failure_is_recorded_as_committed_then_reraised(self) -> None:
+        """isolate でも commit 後の後始末に失敗した例外は取りやめず、committed=True で残したうえで投げ直す。"""
         recorder = _CollectingRecorder()
         isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
 
-        with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="player"):
-            _raise(CommandPostCommitException(handoff_error=RuntimeError("handoff")))
+        with pytest.raises(CommandPostCommitException):
+            with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="player"):
+                _raise(CommandPostCommitException(cleanup_error=RuntimeError("release failed")))
 
         assert recorder.events[0].payload["committed"] is True
+        assert isolator.failure_counts() == {"travel": 1}
 
     def test_non_json_target_id_is_recorded_as_text(self) -> None:
         """int と str 以外の対象 ID は文字列にして残し、JSON に書けない値で記録が失敗しない。"""
@@ -138,6 +141,31 @@ class TestIsolatePolicy:
         with pytest.raises(ValueError, match="passage closed"):
             with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="player"):
                 _raise(ValueError("passage closed"))
+
+    def test_recorder_that_drops_the_event_reraises(self) -> None:
+        """閉じた recorder のように例外を出さず捨てた (seq が負) ときも、記録できなかったとして元の例外を投げ、件数に数えない。"""
+
+        class _DroppingRecorder(NullTraceRecorder):
+            def record(self, kind: str, **kwargs: Any) -> Any:
+                return replace(super().record(kind, **kwargs), seq=-1)
+
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, _DroppingRecorder())
+
+        with pytest.raises(ValueError, match="passage closed"):
+            with isolator.unit(stage="travel", tick=WorldTick(1), target_kind="player"):
+                _raise(ValueError("passage closed"))
+
+        assert isolator.failure_counts() == {}
+
+    def test_unit_that_is_not_a_command_scope_records_committed_as_unknown(self) -> None:
+        """CommandScope 1 回でない単位として包むと、取りやめる前に何が確定したか分からないので committed を None で残す。"""
+        recorder = _CollectingRecorder()
+        isolator = _isolator(WorldTickFailurePolicy.ISOLATE, recorder)
+
+        with isolator.unit(stage="llm_turn", tick=WorldTick(1), target_kind="player", command_scoped=False):
+            _raise(RuntimeError("prompt build failed"))
+
+        assert recorder.events[0].payload["committed"] is None
 
     def test_base_exception_is_not_caught(self) -> None:
         """KeyboardInterrupt のような Exception 以外は取りやめの対象にせず、trace にも残さない。"""

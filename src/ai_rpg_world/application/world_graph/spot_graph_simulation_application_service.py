@@ -245,6 +245,7 @@ class SpotGraphSimulationApplicationService:
                     stage=f"post_tick.{hook_name}",
                     tick=current_tick,
                     target_kind="post_tick_hook",
+                    command_scoped=False,
                 ):
                     runner(hook)
             except Exception as exc:  # post-commit hook なので残りも実行して失敗を集約する

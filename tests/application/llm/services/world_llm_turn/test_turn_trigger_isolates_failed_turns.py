@@ -37,7 +37,7 @@ def _trigger(
     wiring.runtime.current_tick.return_value = 5
     wiring.runtime._runtime_config.llm_turn_parallel_workers = workers
     wiring.runtime._runtime_config.llm_meeting_serial_turns = False
-    wiring.runtime._world_tick_failure_isolator = WorldTickFailureIsolator(
+    wiring.runtime.world_tick_failure_isolator = WorldTickFailureIsolator(
         policy=policy, trace_recorder_provider=lambda: recorder
     )
     wiring.run_turn.side_effect = _fail_for_player_1
@@ -63,7 +63,7 @@ class TestIsolatePolicy:
     """isolate のとき、例外を出した 1 人のターンだけを取りやめ、他の人のターンは回ること。"""
 
     def test_serial_turn_failure_skips_only_that_player(self) -> None:
-        """直列の経路で 1 人のターンが例外を出すと、その人だけを llm_turn として trace に残し、もう 1 人のターンは回る。"""
+        """直列の経路で 1 人のターンが例外を出すと、その人だけを llm_turn として trace に残し、もう 1 人のターンは回る。ターンは CommandScope 1 回ではないので committed は分からない (None) と残す。"""
         recorder = CollectingTraceRecorder()
         trigger = _trigger(WorldTickFailurePolicy.ISOLATE, recorder, workers=0)
 
@@ -71,6 +71,7 @@ class TestIsolatePolicy:
 
         assert trigger.wiring.run_turn.call_count == 2
         assert _skipped(recorder) == [("llm_turn", 1, 5)]
+        assert recorder.events[0].payload["committed"] is None
 
     def test_parallel_phase_b_failure_skips_only_that_player(self) -> None:
         """並列の経路で 1 人の Phase B が例外を出すと、その人だけを trace に残し、もう 1 人の Phase B は回る。"""
