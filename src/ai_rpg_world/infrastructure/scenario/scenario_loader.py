@@ -68,6 +68,9 @@ from ai_rpg_world.infrastructure.scenario.parse_reactive_bindings import (
     parse_reactive_object_state_bindings,
     parse_reactive_passage_bindings,
 )
+from ai_rpg_world.infrastructure.scenario.parse_round_assignment import (
+    apply_round_assignment,
+)
 from ai_rpg_world.infrastructure.scenario.parse_scenario_events import (
     parse_player_outcome_rules,
     parse_scenario_events,
@@ -142,13 +145,27 @@ __all__ = [
 class ScenarioLoader:
     """シナリオ定義 JSON を読み込んでドメインオブジェクト群に変換する。"""
 
-    def load_from_file(self, path: Path) -> ScenarioLoadResult:
+    def load_from_file(
+        self,
+        path: Path,
+        *,
+        random_seed: int | None = None,
+        round_number: int = 1,
+    ) -> ScenarioLoadResult:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
         with declaring(f"{path}:"):
-            return self.load_from_dict(raw)
+            return self.load_from_dict(
+                raw, random_seed=random_seed, round_number=round_number
+            )
 
-    def load_from_dict(self, raw: dict[str, Any]) -> ScenarioLoadResult:
+    def load_from_dict(
+        self,
+        raw: dict[str, Any],
+        *,
+        random_seed: int | None = None,
+        round_number: int = 1,
+    ) -> ScenarioLoadResult:
         version = raw.get("scenario_format_version")
         if version not in SUPPORTED_FORMAT_VERSIONS:
             raise ScenarioLoadError(
@@ -161,6 +178,9 @@ class ScenarioLoader:
                 "player_outcome_rules / game_end_conditions.end / needs を"
                 "それぞれ宣言してください"
             )
+        raw, round_assignments = apply_round_assignment(
+            raw, random_seed=random_seed, round_number=round_number
+        )
         mapper = ScenarioIdMapper()
 
         metadata = parse_metadata(raw["metadata"])
@@ -316,6 +336,7 @@ class ScenarioLoader:
             player_trade_enabled=player_trade_enabled,
             player_trade_offer_expires_in_ticks=player_trade_offer_expires,
             market=market,
+            round_assignments=round_assignments,
             **meeting_tuning,
         )
         validate_feature_consistency(result, raw)

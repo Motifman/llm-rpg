@@ -191,6 +191,12 @@ class TraceEventKind:
     #   - expectation_counts: SNAPSHOT_LOAD と同じ形。保存できた Being ごと
     SNAPSHOT_LOAD = "snapshot_load"
     SNAPSHOT_SAVE = "snapshot_save"
+    # シナリオの round_assignment で player に割り当てた枠 (#1514)。宣言の無い
+    # シナリオでは出ない。payload: round / seed / assignments: list[{player_id,
+    # player_name, group_index, slot_index, spawn_spot, initial_state}]。
+    # spawn_spot と initial_state は割り当てたあとに player が持つ値で、枠に
+    # spawn_spot が無ければ宣言どおりの場所が入る。
+    ROUND_ASSIGNMENT = "round_assignment"
     # Phase 9-1 (Issue #470): WorldStateSnapshot (= scenario 全体の world state)
     # の save / load。Being snapshot とは独立に発火 (= 同じ run で両方出る)。
     # WORLD_SNAPSHOT_LOAD payload:

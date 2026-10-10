@@ -59,6 +59,9 @@ class _Runtime:
             return None
         return "LLM 呼び出しが 8 件連続で失敗した (LLM_API_CALL_FAILED: 8)"
 
+    def round_assignment_trace(self) -> list:
+        return []
+
     def pop_llm_call_count(self) -> int:
         return 0
 

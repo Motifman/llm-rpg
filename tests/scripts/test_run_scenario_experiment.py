@@ -85,6 +85,9 @@ class TestOutcomeAndReason:
                     reason="インポスター陣営が人数差を作った",
                 )
 
+            def round_assignment_trace(self) -> list:
+                return []
+
             def pop_llm_call_count(self) -> int:
                 return 0
 
