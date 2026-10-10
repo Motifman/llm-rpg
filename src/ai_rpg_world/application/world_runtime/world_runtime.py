@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.being.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
@@ -82,10 +85,6 @@ from ai_rpg_world.application.being.expectation.recall_credit import (
 )
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
-from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
-from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
-    InMemoryAcquaintanceRepository,
-)
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -322,6 +321,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+    InMemoryAcquaintanceRepository,
+)
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -6571,8 +6574,8 @@ def create_world_runtime(
     expectation_store = InMemoryExpectationRepository()
     acquaintance_store = InMemoryAcquaintanceRepository()
 
-    def _being_id_of(player_id: PlayerId) -> "BeingId | None":
-        resolver = runtime.aux_being_resolver
+    def _being_id_of(player_id: PlayerId) -> BeingId | None:
+        resolver: BeingAttachmentResolver | None = runtime.aux_being_resolver
         if resolver is None:
             return None
         return resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id)

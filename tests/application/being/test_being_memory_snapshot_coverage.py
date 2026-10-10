@@ -7,12 +7,11 @@ PR-G で Recall Slot / Afterglow / Habituation を snapshot に追加すると�
 """
 import pytest
 
-from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
-from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     SnapshotCoverageError,
     _validate_snapshot_payload_coverage,
 )
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 
 
 class TestValidateSnapshotPayloadCoverage:
