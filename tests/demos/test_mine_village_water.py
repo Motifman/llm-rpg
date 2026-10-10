@@ -23,6 +23,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -46,7 +47,7 @@ _GATES = {
 _FLOODABLE = set().union(*(c for _, c in _GATES.values()))
 
 #: R2: 切り替え弁の目盛り → ポンプで水が引く水門の側。目盛りとの対応はどこにも書かない。
-_VALVE = {"set_valve_1": "gate_a", "set_valve_2": "gate_c", "set_valve_3": "gate_b"}
+_VALVE = {"turn_valve_to_one": "gate_a", "turn_valve_to_two": "gate_c", "turn_valve_to_three": "gate_b"}
 
 #: 仮の値 (設計の「未決」)。水門を閉じてから、溜まった水が自然に引くまでの tick。
 _DRAIN_TICKS = 12
@@ -133,11 +134,11 @@ def _fuel(runtime) -> int:
 
 
 def _open_gate(runtime, gate: str) -> None:
-    _act(runtime, _HARU, _GATES[gate][0], gate, f"open_{gate}")
+    _act(runtime, _HARU, _GATES[gate][0], gate, "open_gate")
 
 
 def _close_gate(runtime, gate: str) -> None:
-    _act(runtime, _HARU, _GATES[gate][0], gate, f"close_{gate}")
+    _act(runtime, _HARU, _GATES[gate][0], gate, "close_gate")
 
 
 def _fuel_and_start_generator(runtime, cans: int = 1) -> None:
@@ -242,6 +243,18 @@ class TestPumpDrainsWhatTheValveSelects:
 
         assert _blocked(runtime) == _FLOODABLE - _GATES[_VALVE[valve]][1]
 
+    def test_pump_at_the_initial_valve_mark_leaves_the_shortcut_flooded(self, runtime) -> None:
+        """弁に触らずに、水門 C で沈めて閉じた近道へポンプを動かしても、近道は沈んだまま。弁は一の目盛りから始まるので、近道を引かせるには弁を回すしかない。"""
+        _open_gate(runtime, "gate_c")
+        _ticks(runtime, 1)
+        _close_gate(runtime, "gate_c")
+        _fuel_and_start_generator(runtime)
+
+        _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+        _ticks(runtime, 1)
+
+        assert not _passable(runtime, "shortcut_lift")
+
     def test_one_pump_run_drains_once(self, runtime) -> None:
         """弁を二 (近道) にしてポンプを 1 回動かしたあとに弁を一へ回しても、一の側の水は、ポンプをもう一度動かすまで引かない。"""
         for gate in ("gate_a", "gate_c"):
@@ -250,11 +263,11 @@ class TestPumpDrainsWhatTheValveSelects:
         for gate in ("gate_a", "gate_c"):
             _close_gate(runtime, gate)
         _fuel_and_start_generator(runtime)
-        _act(runtime, _HARU, "machine_room", "valve", "set_valve_2")
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_two")
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
         _ticks(runtime, 1)
 
-        _act(runtime, _HARU, "machine_room", "valve", "set_valve_1")
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_one")
         _ticks(runtime, 1)
 
         assert not _passable(runtime, "stun_sab")
@@ -264,7 +277,7 @@ class TestPumpDrainsWhatTheValveSelects:
         """水門 C を開けたまま、弁を近道に合わせてポンプを動かすと、燃料は減るのに近道は沈んだまま。"""
         _open_gate(runtime, "gate_c")
         _fuel_and_start_generator(runtime)
-        _act(runtime, _HARU, "machine_room", "valve", "set_valve_2")
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_two")
 
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
         _ticks(runtime, 1)
@@ -497,6 +510,7 @@ class TestWaterLeavesATrace:
         _open_gate(runtime, "gate_c")
         _close_gate(runtime, "gate_c")
         _fuel_and_start_generator(runtime)
+        _act(runtime, _HARU, "machine_room", "valve", "turn_valve_to_two")
         runtime.set_trace_recorder(recorder)
 
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
@@ -569,3 +583,24 @@ class TestRulesStayOutOfThePrompt:
 
         assert texts
         assert [t for t in texts if any(p in t for p in places)] == []
+
+
+class TestPromptsUseWorldWordsForGatesAndValve:
+    """水門と弁の操作が、世界に無い A・B・C の区別や設定の番号の名前でプロンプトに出ないことを保証する。"""
+
+    def test_full_prompts_near_the_gates_and_valve_hide_internal_names(self, runtime) -> None:
+        """3 つの水門の前と、灯した機械室に 1 人ずつ立たせ、水門と弁の操作が出ているプロンプトの全文 (本文とツールの定義) に `open_gate_`・`close_gate_`・`set_valve_` が出ない。3 本目の実 run では「「北の坑道の水門」に open_gate_a した」と出ていた。"""
+        lamp = ItemSpecId(runtime.id_mapper.get_int("item_spec", "lamp"))
+        _place(runtime, PlayerId(4), "machine_room")
+        runtime.do_interact_with_item(PlayerId(4), lamp, "light_lamp")
+        for pid, spot in ((_HARU, "north_tunnel"), (_GEN, "south_tunnel"), (PlayerId(2), "mid_junction")):
+            _place(runtime, pid, spot)
+
+        texts = []
+        for pid in (_HARU, PlayerId(2), _GEN, PlayerId(4)):
+            prompt = runtime.build_full_prompt(pid)
+            texts.append("\n".join(str(m.get("content", "")) for m in prompt["messages"]) + json.dumps(prompt["tools"], ensure_ascii=False))
+        full = "\n".join(texts)
+
+        assert "open_gate" in full and "turn_valve_to_one" in full
+        assert [name for name in ("open_gate_", "close_gate_", "set_valve_") if name in full] == []
