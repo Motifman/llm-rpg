@@ -283,11 +283,18 @@ class _CapturingRecorder(NullTraceRecorder):
         return event
 
 
+def _is_noise_flag(flag_name: str) -> bool:
+    return flag_name == "scuffle_noise" or flag_name.startswith("noise_")
+
+
 class TestStrikingLeavesATrace:
     """攻撃した人と、音が積もった区画が trace から読めることを保証する。獣をけしかけたかの判定に使う。"""
 
     def test_who_struck_and_which_sector_heard_it_are_recorded(self, runtime) -> None:
-        """北の詰所でハルが殴ると、音のフラグがハルの名で立ち、北の区画の音のフラグが出来事として立つ。"""
+        """北の詰所でハルが殴ると、音のフラグがハルの名で立ち、北の区画の音のフラグだけが出来事として立つ。
+
+        掘り場のガスは毎 tick 確率で溜まりフラグを立てるので、見るのは音のフラグに限る。
+        """
         _place(runtime, _HARU, "miners_rest")
         _place(runtime, _GEN, "miners_rest")
         recorder = _CapturingRecorder()
@@ -299,7 +306,9 @@ class TestStrikingLeavesATrace:
         raised = [
             (e.payload["flag_name"], e.payload["source"], e.payload["actor_player_id"])
             for e in recorder.events
-            if e.kind == TraceEventKind.WORLD_FLAG_CHANGED and e.payload["set"]
+            if e.kind == TraceEventKind.WORLD_FLAG_CHANGED
+            and e.payload["set"]
+            and _is_noise_flag(e.payload["flag_name"])
         ]
         assert raised == [
             ("scuffle_noise", "player_interaction", int(_HARU)),
