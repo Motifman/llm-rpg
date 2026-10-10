@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
@@ -48,6 +49,15 @@ _SAFE_CODE = "1907"
 @pytest.fixture()
 def runtime():
     return create_world_runtime(_SCENARIO)
+
+
+@pytest.fixture()
+def seeded_runtime():
+    """獣の攻撃と回避は乱数で決まるので、襲われるかを見るテストはシードを固定する。"""
+    config = ResolvedLlmRuntimeConfig.from_mapping(
+        values={"LLM_CLIENT": "stub", "SCENARIO_RANDOM_SEED": "42", "TYPED_JUDGMENT_PROVIDER": "stub"}
+    )
+    return create_world_runtime(_SCENARIO, config=config)
 
 
 def _place(runtime, pid: PlayerId, spot: str) -> None:
@@ -137,8 +147,9 @@ def _clear_gas(runtime) -> None:
 class TestNoiseWakesTheBeastOfThatSector:
     """R5: 区画ごとに音が積もり、閾値に届くとその区画の決まった場所に獣が現れることを保証する。"""
 
-    def test_beast_attacks_someone_where_it_appears(self, runtime) -> None:
-        """北の坑道にいるミオは、獣が現れてから 3 tick のうちに襲われて HP が減り、南の坑道にいるサヨは減らない。"""
+    def test_beast_attacks_someone_where_it_appears(self, seeded_runtime) -> None:
+        """シードを固定すると、北の坑道にいるミオは獣が現れてから 3 tick のうちに襲われて HP が減り、南の坑道にいるサヨは減らない。"""
+        runtime = seeded_runtime
         _place(runtime, _MIO, "north_tunnel")
         _place(runtime, _SAYO, "south_tunnel")
         before = {p: _hp(runtime, p) for p in (_MIO, _SAYO)}
