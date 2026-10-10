@@ -64,6 +64,10 @@ class TraceEventKind:
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
     # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
     POSITION_CHANGE = "position_change"
+    # 予約の後に区間が閉じ、その手前で移動を取りやめた (#1559)。payload は
+    # connection_id / connection_name / passage_kind / passage_state / reason /
+    # condition_message と、区間の両端と最終の行き先の spot id と名前。
+    TRAVEL_BLOCKED = "travel_blocked"
     # 経済統合 Phase 3: 市場の掲示板の上で起きたこと。出品・値の付け直し・
     # 約定・取り下げ・期限切れを 1 つの kind にまとめ、payload の ``kind`` で
     # 分ける。**品目ごとの (tick, 単価) の並びを 1 種類の行から組み立てられる**
