@@ -16,6 +16,9 @@ from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter impor
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
@@ -54,7 +57,9 @@ class PlayerOutcomeRuleStageService:
         player_ids: Sequence[PlayerId],
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         command_scope_factory: CommandScopeFactoryPort[object] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._rules = tuple(rules)
         self._outcome_registry = outcome_registry
         self._condition_evaluator = condition_evaluator
@@ -89,7 +94,13 @@ class PlayerOutcomeRuleStageService:
             progress_id = f"{_PROGRESS_PREFIX}{rule.rule_id}"
             if rule.once and self._progress_store.is_fired(progress_id):
                 continue
-            self._run_rule_command(rule, current_tick, scope_factory)
+            with self._failure_isolator.unit(
+                stage="player_outcome_rule",
+                tick=current_tick,
+                target_kind="player_outcome_rule",
+                target_id=rule.rule_id,
+            ):
+                self._run_rule_command(rule, current_tick, scope_factory)
 
     def _run_rule_command(
         self,

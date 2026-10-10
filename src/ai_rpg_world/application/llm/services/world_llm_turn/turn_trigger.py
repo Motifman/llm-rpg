@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,9 @@ from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn impor
     settle_expectations_after_turn,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -159,8 +163,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             # 旧シリアル経路: 並列化を OFF にした / プレイヤーが 1 人だけ。
             # 完全に従来挙動。
             for player_id_value in to_run:
-                result = self.wiring.run_turn(PlayerId(player_id_value))
-                self._account_result(player_id_value, result)
+                with self._turn_unit(player_id_value):
+                    result = self.wiring.run_turn(PlayerId(player_id_value))
+                    self._account_result(player_id_value, result)
             return
 
         # 並列 Phase A: 各プレイヤーの prompt 構築 + LLM 呼び出しを ThreadPool
@@ -202,8 +207,23 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             phase_a = phase_a_results.get(pid_value)
             if phase_a is None:
                 continue
-            result = self.wiring.run_phase_b(phase_a)
-            self._account_result(pid_value, result)
+            with self._turn_unit(pid_value):
+                result = self.wiring.run_phase_b(phase_a)
+                self._account_result(pid_value, result)
+
+    def _turn_unit(self, player_id_value: int) -> AbstractContextManager[None]:
+        runtime = self.wiring.runtime
+        isolator = getattr(runtime, "world_tick_failure_isolator", None)
+        if isolator is None:
+            isolator = WorldTickFailureIsolator.fail_fast()
+        return isolator.unit(
+            stage="llm_turn",
+            tick=WorldTick(int(runtime.current_tick())),
+            target_kind="player",
+            target_id=player_id_value,
+            player_id=player_id_value,
+            command_scoped=False,
+        )
 
     def _account_result(
         self, player_id_value: int, result: LlmCommandResultDto

@@ -43,6 +43,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.player_interaction_application_service import (
         PlayerInteractionApplicationService,
     )
+    from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+        WorldTickFailureIsolator,
+    )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
         WorldGraphEffectService,
@@ -748,6 +751,7 @@ class WorldRuntime:
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
+    _world_tick_failure_isolator: WorldTickFailureIsolator | None = field(default=None, repr=False)
     # trace 用の run 内集計。世界状態ではなく観測値なので snapshot へは載せない。
     _cumulative_travel_ticks_by_player: dict[int, int] = field(
         default_factory=dict, repr=False
@@ -1142,6 +1146,16 @@ class WorldRuntime:
     @property
     def trace_recorder(self) -> Any:
         return self._trace_recorder
+
+    @property
+    def world_tick_failure_isolator(self) -> WorldTickFailureIsolator | None:
+        return self._world_tick_failure_isolator
+
+    def world_tick_failure_counts(self) -> dict[str, int]:
+        """世界の tick で取りやめた (fail_fast なら止めた) 1 体ぶんの処理の件数を段ごとに返す。"""
+        if self._world_tick_failure_isolator is None:
+            return {}
+        return self._world_tick_failure_isolator.failure_counts()
 
     def shutdown(self, timeout: float | None = None) -> None:
         """非同期スケジューラ等の in-flight ジョブを drain して資源を解放する。
@@ -5077,6 +5091,17 @@ def create_world_runtime(
     if config is None:
         config = ResolvedLlmRuntimeConfig.from_mapping()
 
+    from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+        WorldTickFailureIsolator,
+        WorldTickFailurePolicy,
+    )
+
+    world_tick_failure_isolator = WorldTickFailureIsolator(
+        policy=WorldTickFailurePolicy.parse(config.world_tick_failure_policy),
+        # recorder は set_trace_recorder で後から入るので、呼ばれた時点の値を見る。
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
+
     loader = ScenarioLoader()
     scenario = loader.load_from_file(
         scenario_path,
@@ -5702,7 +5727,7 @@ def create_world_runtime(
             )
         )
 
-    trade_offer_expiry_stage = TradeOfferExpiryStage()
+    trade_offer_expiry_stage = TradeOfferExpiryStage(failure_isolator=world_tick_failure_isolator)
     player_trade_service = PlayerTradeService(
         pending_trade_offer_store=pending_trade_offer_store,
         trade_freeze_service=trade_freeze_service,
@@ -5760,7 +5785,10 @@ def create_world_runtime(
     # 期限を過ぎた注文を毎 tick 片付ける。**これを繋がないと、期限は
     # 宣言されているのに注文が永久に板へ残る** (v3 run で t33 の出品が
     # t80 まで生きていた)。
-    market_order_expiry_stage = MarketOrderExpiryStage(market_service=market_service)
+    market_order_expiry_stage = MarketOrderExpiryStage(
+        market_service=market_service,
+        failure_isolator=world_tick_failure_isolator,
+    )
     if scenario.market is not None:
         # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
         # 商人名義で数量有限の注文を置いておくと、売れれば自然に消える。
@@ -6361,6 +6389,7 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         movement_service=movement_service,
         travel_context=travel_context,
+        failure_isolator=world_tick_failure_isolator,
     )
     travel_stage.set_departed_checker(player_perception_policy.is_departed)
 
@@ -6432,6 +6461,7 @@ def create_world_runtime(
         lambda: getattr(runtime, "_trace_recorder", None)
     )
     scenario_event_stage = SpotGraphScenarioEventStageService(
+        failure_isolator=world_tick_failure_isolator,
         scenario_events=scenario.scenario_events,
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -6453,12 +6483,14 @@ def create_world_runtime(
         predicate_trace_emitter=predicate_trace_emitter,
     )
     reactive_object_state_stage = ReactiveObjectStateBindingStageService(
+        failure_isolator=world_tick_failure_isolator,
         bindings=scenario.reactive_object_state_bindings,
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
     )
     sync_action_registry = SynchronizedActionRegistry(world_flag_state)
     sync_resolver_stage = SynchronizedActionResolverStageService(
+        failure_isolator=world_tick_failure_isolator,
         groups=scenario.synchronized_action_groups,
         registry=sync_action_registry,
         world_flag_state=world_flag_state,
@@ -6538,6 +6570,7 @@ def create_world_runtime(
             # されない (= 旧挙動互換)。
         )
         monster_behavior_service = SpotMonsterBehaviorTickService(
+            failure_isolator=world_tick_failure_isolator,
             spot_graph_repository=spot_graph_repo,
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
@@ -6619,6 +6652,7 @@ def create_world_runtime(
                 ))
 
             monster_spawn_service = SpotGraphMonsterSpawnStageService(
+                failure_isolator=world_tick_failure_isolator,
                 slots=tuple(slots),
                 monster_repository=monster_repo,
                 skill_loadout_repository=skill_loadout_repo,
@@ -6685,6 +6719,7 @@ def create_world_runtime(
     )
     death_grace_timer = PlayerDeathGraceTimer()
     death_grace_stage = PlayerDeathGraceTickStage(
+        failure_isolator=world_tick_failure_isolator,
         outcome_registry=outcome_registry,
         grace_timer=death_grace_timer,
         fallen_body_registry=fallen_body_registry,
@@ -6708,6 +6743,7 @@ def create_world_runtime(
         )
 
         player_outcome_rule_stage = PlayerOutcomeRuleStageService(
+            failure_isolator=world_tick_failure_isolator,
             rules=scenario.player_outcome_rules,
             outcome_registry=outcome_registry,
             condition_evaluator=condition_evaluator,
@@ -6750,6 +6786,7 @@ def create_world_runtime(
         # 名前解決される)。runtime = WorldRuntime(...) が直後で実行される
         # 順序になっており、tick 開始までには確実に bound される。
         graph_event_flusher=_flush_graph_events,
+        failure_isolator=world_tick_failure_isolator,
     )
 
     expectation_store = InMemoryExpectationRepository()
@@ -6828,6 +6865,7 @@ def create_world_runtime(
         _context_strategy=_build_context_format_strategy_from_config(config),
         _time_provider=time_provider,
         _simulation_service=simulation_service,
+        _world_tick_failure_isolator=world_tick_failure_isolator,
         _travel_stage=travel_stage,
         _player_outcome_registry=outcome_registry,
         _scenario_event_stage=scenario_event_stage,

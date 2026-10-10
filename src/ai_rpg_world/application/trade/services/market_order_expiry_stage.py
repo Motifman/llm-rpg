@@ -21,6 +21,9 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
@@ -45,7 +48,9 @@ class MarketOrderExpiryStage:
         *,
         market_service: Any,
         command_scope_factory: CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._market = market_service
         self._command_scope_factory = command_scope_factory
 
@@ -65,22 +70,14 @@ class MarketOrderExpiryStage:
                 "市場注文期限切れ用CommandScopeFactoryが未配線です。"
             )
         for order in self._market.expired_orders(current_tick=tick_value):
-            try:
+            # 失敗した注文は rollback で板へ残るため、次 tick でもう一度拾い直せる。
+            with self._failure_isolator.unit(
+                stage="market_order_expiry",
+                tick=WorldTick(tick_value),
+                target_kind="market_order",
+                target_id=getattr(getattr(order, "order_id", None), "value", None),
+            ):
                 self._expire_with_scope(order, tick_value, scope_factory)
-            except CommandPostCommitException:
-                # 状態は確定済みだが、transaction資源の後始末に失敗している。
-                # 通常失敗として握ると、呼び出し側が資源を再利用してしまう。
-                raise
-            except Exception:  # noqa: BLE001
-                # 一件が壊れても、独立した後続注文の返却は続ける。失敗注文は
-                # rollbackで板へ残るため、次tickでもう一度拾い直せる。
-                logger.warning(
-                    "板の期限切れを片付けられなかった "
-                    "(tick=%s order_id=%s)",
-                    tick_value,
-                    getattr(getattr(order, "order_id", None), "value", None),
-                    exc_info=True,
-                )
 
     def _expire_with_scope(
         self,

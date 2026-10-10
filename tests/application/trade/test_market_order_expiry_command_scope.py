@@ -6,8 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
+from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
     MarketOrderExpiryStage,
 )
@@ -57,6 +59,20 @@ def _held(runtime: Any, label: str) -> int:
 
 def _gold(runtime: Any) -> int:
     return runtime._player_status_repo.find_by_id(_PLAYER).gold.value
+
+
+def _traced(runtime: Any) -> CollectingTraceRecorder:
+    recorder = CollectingTraceRecorder()
+    runtime.set_trace_recorder(recorder)
+    return recorder
+
+
+def _skipped_orders(recorder: CollectingTraceRecorder) -> list[Any]:
+    return [
+        event.payload["target_id"]
+        for event in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        if event.payload["stage"] == "market_order_expiry"
+    ]
 
 
 def _stage(runtime: Any):  # noqa: ANN202
@@ -153,7 +169,7 @@ def test_sell_expiry_observation_sees_committed_board_and_inventory() -> None:
 def test_sell_expiry_save_failure_rolls_back_goods_and_board(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """品を返した後の板保存失敗では、品も板も開始前へ戻る。"""
+    """品を返した後の板保存失敗では、品も板も開始前へ戻り、取りやめた注文が trace に残る。"""
     runtime = _runtime()
     market: MarketService = runtime._market_service
     _give(runtime, _HERB)
@@ -172,18 +188,20 @@ def test_sell_expiry_save_failure_rolls_back_goods_and_board(
         if board.find(order.order_id) is None:
             raise RuntimeError("board save failed")
 
+    recorder = _traced(runtime)
     monkeypatch.setattr(store, "save", save_then_fail)
 
     _stage(runtime).run(WorldTick(order.expires_at_tick + 1))
 
     assert store.board().find(order.order_id) == order
     assert _held(runtime, _HERB) == 0
+    assert _skipped_orders(recorder) == [order.order_id.value]
 
 
 def test_buy_expiry_save_failure_rolls_back_gold_and_board(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """goldを返した後の板保存失敗では、残高も板も開始前へ戻る。"""
+    """goldを返した後の板保存失敗では、残高も板も開始前へ戻り、取りやめた注文が trace に残る。"""
     runtime = _runtime()
     market: MarketService = runtime._market_service
     before = _gold(runtime)
@@ -203,6 +221,7 @@ def test_buy_expiry_save_failure_rolls_back_gold_and_board(
         if board.find(order.order_id) is None:
             raise RuntimeError("board save failed")
 
+    recorder = _traced(runtime)
     monkeypatch.setattr(store, "save", save_then_fail)
 
     _stage(runtime).run(WorldTick(order.expires_at_tick + 1))
@@ -210,12 +229,13 @@ def test_buy_expiry_save_failure_rolls_back_gold_and_board(
     assert deposited == before - order.total_gold
     assert store.board().find(order.order_id) == order
     assert _gold(runtime) == deposited
+    assert _skipped_orders(recorder) == [order.order_id.value]
 
 
 def test_failed_order_does_not_stop_later_independent_expiry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """先行注文がrollbackしても、後続注文は独立して返却・削除できる。"""
+    """先行注文がrollbackしても、後続注文は独立して返却・削除でき、取りやめた先行注文だけが trace に残る。"""
     runtime = _runtime()
     market: MarketService = runtime._market_service
     _give(runtime, _HERB)
@@ -243,6 +263,7 @@ def test_failed_order_does_not_stop_later_independent_expiry(
         if board.find(sell.order_id) is None and board.find(buy.order_id) is not None:
             raise RuntimeError("sell expiry failed")
 
+    recorder = _traced(runtime)
     monkeypatch.setattr(store, "save", fail_only_sell)
 
     _stage(runtime).run(WorldTick(sell.expires_at_tick + 1))
@@ -252,6 +273,7 @@ def test_failed_order_does_not_stop_later_independent_expiry(
     assert _held(runtime, _HERB) == 0
     assert gold_after_deposit == gold_after_sell - buy.total_gold
     assert _gold(runtime) == gold_after_sell
+    assert _skipped_orders(recorder) == [sell.order_id.value]
 
 
 def test_full_inventory_commits_awaiting_collection_without_losing_goods() -> None:
@@ -282,7 +304,7 @@ def test_full_inventory_commits_awaiting_collection_without_losing_goods() -> No
 def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """commit済みcleanup失敗では観測後に専用例外を呼び出し元へ返す。"""
+    """commit済みcleanup失敗では、trace の記録先があって isolate でも取りやめず、committed=True で残して観測後に専用例外を呼び出し元へ返す。"""
     runtime = _runtime()
     market: MarketService = runtime._market_service
     runtime._market_board_store.save(MarketBoard.empty())
@@ -304,6 +326,7 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
         raise RuntimeError("market expiry cleanup failed")
 
     monkeypatch.setattr(data_store, "release_uow_transaction", release_then_fail)
+    recorder = _traced(runtime)
 
     with pytest.raises(CommandPostCommitException):
         _stage(runtime).run(WorldTick(order.expires_at_tick + 1))
@@ -311,6 +334,10 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     assert runtime._market_board_store.board().find(order.order_id) is None
     assert _held(runtime, _HERB) == 1
     assert observer.states == [(True, 1)]
+    failures = recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+    assert [(e.payload["stage"], e.payload["committed"]) for e in failures] == [
+        ("market_order_expiry", True)
+    ]
 
 
 def test_public_expiry_notifies_before_preserving_post_commit_failure(

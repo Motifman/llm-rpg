@@ -60,6 +60,9 @@ from ai_rpg_world.application.monster.services.monster_reaction_handler import (
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
@@ -151,7 +154,9 @@ class SpotMonsterBehaviorTickService:
         world_flags_provider: WorldFlagsProvider | None = None,
         spot_interior_repository: ISpotInteriorRepository | None = None,
         command_scope_factory: CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
@@ -215,7 +220,12 @@ class SpotMonsterBehaviorTickService:
         outcomes: list[AttackOutcome] = []
         pack_members_cache: dict[Any, Any] = {}
         for monster_id in monster_ids:
-            with self._command_scope_factory.create() as context:
+            with self._failure_isolator.unit(
+                stage="monster_behavior",
+                tick=current_tick,
+                target_kind="monster",
+                target_id=monster_id.value,
+            ), self._command_scope_factory.create() as context:
                 service = self._for_command(context)
                 outcomes.extend(
                     service._tick_loaded_monsters(

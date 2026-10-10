@@ -36,6 +36,9 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -95,7 +98,9 @@ class SynchronizedActionResolverStageService:
         command_scope_factory: (
             CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort] | None
         ) = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._groups = tuple(groups)
         self._registry = registry
         self._world_flag_state = world_flag_state
@@ -111,7 +116,13 @@ class SynchronizedActionResolverStageService:
                 "synchronized action用CommandScopeFactoryが未配線です。"
             )
         for group in self._groups:
-            self._run_group_in_scope(group, current_tick, factory=factory)
+            with self._failure_isolator.unit(
+                stage="sync_action_resolver",
+                tick=current_tick,
+                target_kind="sync_group",
+                target_id=group.group_id,
+            ):
+                self._run_group_in_scope(group, current_tick, factory=factory)
 
     def set_command_scope_factory(
         self,

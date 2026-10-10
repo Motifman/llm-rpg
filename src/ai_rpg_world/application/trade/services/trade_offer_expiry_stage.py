@@ -30,6 +30,9 @@ from typing import TYPE_CHECKING, Any
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 
@@ -48,7 +51,9 @@ class TradeOfferExpiryStage:
         self,
         *,
         command_scope_factory: CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort] | None = None,
+        failure_isolator: WorldTickFailureIsolator | None = None,
     ) -> None:
+        self._failure_isolator = failure_isolator or WorldTickFailureIsolator.fail_fast()
         self._command_scope_factory = command_scope_factory
 
     def set_command_scope_factory(
@@ -76,7 +81,13 @@ class TradeOfferExpiryStage:
             )
 
         for offer_id in offer_ids:
-            self._expire_one(factory, offer_id, tick_value)
+            with self._failure_isolator.unit(
+                stage="trade_offer_expiry",
+                tick=WorldTick(tick_value),
+                target_kind="trade_offer",
+                target_id=getattr(offer_id, "value", offer_id),
+            ):
+                self._expire_one(factory, offer_id, tick_value)
 
     @staticmethod
     def _expire_one(factory: Any, offer_id: Any, tick_value: int) -> None:

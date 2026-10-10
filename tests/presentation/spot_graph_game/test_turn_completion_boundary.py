@@ -48,6 +48,9 @@ class _RuntimeStub:
             player_outcome_registry=None,
         )
 
+    def current_tick(self) -> int:
+        return 0
+
 
 class _WiringStub:
     """serial / parallel の両入口を成功させ、共有 memory を公開する。"""

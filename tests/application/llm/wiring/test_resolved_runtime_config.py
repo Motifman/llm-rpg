@@ -71,6 +71,28 @@ class TestPromptDatasetCaptureConfig:
         assert cfg.prompt_dataset_capture_enabled is True
         assert cfg.prompt_dataset_capture_failure_policy == 'warn'
 
+class TestWorldTickFailurePolicyConfig:
+    """WORLD_TICK_FAILURE_POLICY が実 run では取りやめ、試験の既定では止める方針に解決されること。"""
+
+    def test_from_mapping_defaults_to_isolate(self) -> None:
+        """runtime_config に書かなければ isolate に解決され、キーを書き忘れた実験設定でも run が止まらない。"""
+        assert ResolvedLlmRuntimeConfig.from_mapping().world_tick_failure_policy == 'isolate'
+
+    def test_fail_fast_can_be_selected(self) -> None:
+        """fail_fast と書けば、例外で止める方針に解決される。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'WORLD_TICK_FAILURE_POLICY': 'fail_fast'})
+        assert cfg.world_tick_failure_policy == 'fail_fast'
+
+    def test_unknown_value_fails_fast(self) -> None:
+        """知らない値は既定へ倒さず、キー名を含む ValueError で止める。"""
+        with pytest.raises(ValueError, match='WORLD_TICK_FAILURE_POLICY'):
+            ResolvedLlmRuntimeConfig.from_mapping(values={'WORLD_TICK_FAILURE_POLICY': 'skip'})
+
+    def test_direct_construction_rejects_unknown_value(self) -> None:
+        """from_mapping を通らない構築でも、知らない値は ValueError で止める。"""
+        with pytest.raises(ValueError, match='fail_fast'):
+            ResolvedLlmRuntimeConfig.for_tests(world_tick_failure_policy='skip')
+
 class TestReasonFirstTwoStepConfig:
     """reason-first 2段階ターンの有効化 flag を単一窓口で解決する。"""
 
