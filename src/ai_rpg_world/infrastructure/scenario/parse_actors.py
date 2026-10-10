@@ -387,6 +387,7 @@ def parse_players(
     player_attribute_specs: PlayerAttributeSpecs,
 ) -> list[PlayerSpawnConfig]:
     spawns: list[PlayerSpawnConfig] = []
+    player_ids = [raw["id"] for raw in players_raw]
     for p in players_raw:
         pid = mapper.register("player", p["id"])
         spot_sid = p["spawn_spot"]
@@ -426,7 +427,7 @@ def parse_players(
             p.get("initial_gold"), owner_id=p["id"],
         )
         knows_at_start = parse_player_knows_at_start(
-            p, owner_id=p["id"], player_ids=[raw["id"] for raw in players_raw],
+            p, owner_id=p["id"], player_ids=player_ids,
         )
         spawns.append(PlayerSpawnConfig(
             string_id=p["id"],
@@ -468,6 +469,7 @@ def parse_player_knows_at_start(
             raise ScenarioLoadError(f"{where} に重複があります: {value!r}")
         known.append(value)
     return tuple(known)
+
 
 def parse_player_initial_gold(raw: Any, *, owner_id: str) -> int:
     """``players[].initial_gold`` を検証する (経済統合 Phase 0)。
