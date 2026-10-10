@@ -144,3 +144,37 @@ class TestConstructorTypeGuards:
             env['capture'].execute(BeingId('x'), 'string-not-path')
         with pytest.raises(TypeError):
             env['restore'].execute('string-not-path')
+
+
+class TestRestoreUseCaseRestartsWorldClock:
+    """restore use case が、回をやり直すときだけ書き換えた payload を store に戻す挙動を保証する。"""
+
+    def _capture_memo_at_tick_90(self, tmp_path: Path) -> Path:
+        env = _make_environment()
+        being = _make_being()
+        env['repo'].save(being)
+        env['memo'].add_by_being(being.being_id, '井戸は北', current_tick=90)
+        path = tmp_path / 'being.json'
+        env['capture'].execute(being.being_id, path)
+        return path
+
+    def test_restart_world_clock_restores_memo_at_tick_zero(self, tmp_path: Path) -> None:
+        """restart_world_clock=True で復元すると、前の回の tick 90 の memo は tick 0 で store に入る。"""
+        path = self._capture_memo_at_tick_90(tmp_path)
+        dst = _make_environment()
+
+        result = dst['restore'].execute(path, restart_world_clock=True)
+
+        assert [m.added_at_tick for m in dst['memo'].list_all_by_being(BeingId('being_w1_p1'))] == [0]
+        assert result.world_clock_restart is not None
+        assert result.world_clock_restart.reset_tick_fields == 1
+
+    def test_without_restart_memo_keeps_its_tick(self, tmp_path: Path) -> None:
+        """restart_world_clock を渡さない続きからの復元は、memo の tick 90 をそのまま戻し、書き換えの報告を持たない。"""
+        path = self._capture_memo_at_tick_90(tmp_path)
+        dst = _make_environment()
+
+        result = dst['restore'].execute(path)
+
+        assert [m.added_at_tick for m in dst['memo'].list_all_by_being(BeingId('being_w1_p1'))] == [90]
+        assert result.world_clock_restart is None
