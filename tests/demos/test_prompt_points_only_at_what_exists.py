@@ -54,15 +54,15 @@ from ai_rpg_world.application.llm.remediation_mapping import (
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
-from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
-    resolver_failure_remediation,
-)
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     EXPECTATIONS_FIELD_NAME,
     GOAL_OUTCOME_FIELD_NAME,
     GOAL_UPDATE_FIELD_NAME,
     SUBJECTIVE_ACTION_FIELD_PROPERTIES,
     assess_situation_definition,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
+    resolver_failure_remediation,
 )
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
