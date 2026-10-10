@@ -246,6 +246,7 @@ spot_map_validator は通路の状態を見ないので、水門・閂・支柱�
 
 相手の存在を伏せるために、シナリオの側で決めること:
 - `initial_state.role` を 2 種類以上にしない、`duty` を使わない (役の人数の内訳や担当が全員に出るため)。チームの所属は `role` ではなく `initial_state.team` で書く
+- 所属のキー `team` を `player_attributes` で `"visibility": "hidden"` と宣言する (本人の「自分の状態」に `team=north` が出ないようにするため)
 - `meeting`、SNS、共有の市場を使わない
 - `death_semantics.announce_globally` を false にし、救助の告知の文から名前を外す (遠くの人への告知は、エンジンの側ですでに名前を出さない)
 - persona、概要、目的に相手のことを書かない
@@ -281,7 +282,7 @@ spot_map_validator は通路の状態を見ないので、水門・閂・支柱�
   | `team_result` で両方 LOSE | どちらのチームも 2 人そろって脱出しなかった (混成で乗った、誰かが倒れたまま全員の結果が決まった)。`END_ON_ALL_DOWN` を有効にした profile (`belief_goal_v4` など) では、全員が動けなくなった外的停止もここに入り、`reason` が「外的停止 END_ON_ALL_DOWN」で始まる |
   | `team_result` が無く、`run_end` の outcome が TIMEOUT で、`last_tick` が `max_world_ticks` に達している | 引き分け |
   | `team_result` が無く、outcome が LLM_ABORTED / INTERRUPTED、または `last_tick` が `max_world_ticks` に届かない TIMEOUT | 勝敗の記録に使わない (障害、中断、tick が進まない不具合) |
-- チームの見え方: チームの名前 (チーム北・チーム南) と相手チームの所属はプロンプトに出ない。本人の「自分の状態」には `team=north` のように自分の所属がそのまま出る。キーと値に呼び名を付ける宣言 (`player_attributes`) は、この欄には効かない。チームという区切りがあり、対になる側がいそうだと本人に伝わるので、相手の存在を伏せる設定としては残った穴になる
+- チームの見え方: チームの名前 (チーム北・チーム南) も所属もプロンプトに出ない。所属のキー `team` は `player_attributes` で `"visibility": "hidden"` と宣言してあり、本人の「自分の状態」にも出ない (design_decisions D1546)。出ると、チームという区切りがあり、対になる側がいそうだと本人に伝わる
 - 回ごとの割り当て (`round_assignment`) は使っていない。枠で入れ替えられるのは入口と `initial_state` だけで、チームごとに違う persona の知識 (北の測量日誌、南の金庫の番号)、目的に書いた仲間の名前、`knows_at_start` は player に結び付いたまま動かない。所属だけを入れ替えると、目的の仲間が相手チームにいる回ができる
 - 試作で代えたもの: 昇降機の定員 3 人は書けない (#1515) ので、乗り場にいる人は何人でも脱出する
 - 試作に置いていないもの: カナリアとガス (R6)、ランプの油 (R7)、井戸と保存食の回復 (R9)、人への攻撃と奪う操作、集会所の掲示板

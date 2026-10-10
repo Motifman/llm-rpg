@@ -23,6 +23,14 @@
     }
   },
   "disabled_tools": [],
+  "player_attributes": {
+    "team": {
+      "display_name": "所属",
+      "visibility": "hidden",
+      "mutable": false,
+      "values": ["north", "south"]
+    }
+  },
   "item_specs": [
     {
       "id": "lamp",

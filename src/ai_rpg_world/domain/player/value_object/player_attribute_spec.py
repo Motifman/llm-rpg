@@ -38,15 +38,18 @@ from ai_rpg_world.domain.player.exception.player_exceptions import (
 
 
 class AttributeVisibility(Enum):
-    """その属性を、本人以外が知っていてよいか。
+    """その属性を、誰が知っていてよいか。
 
-    **二択で始める。** 「誰から見て」を分ける必要が出たら、そのとき広げる。
+    「誰から見て」を分ける必要が出たら、そのとき広げる。
     """
 
     #: 全員が知っている (生業・見た目など)。理由として口に出してよい。
     PUBLIC = "public"
     #: 本人だけが知っている (役割・変装など)。**存在も伏せる。**
     SECRET = "secret"
+    #: 本人も知らない。互いを知らずに始まるチームの所属のように、本人に
+    #: 見えるだけで対になる側の存在が漏れるもの (#1546)。
+    HIDDEN = "hidden"
 
 
 class ConditionSatisfiability(Enum):
@@ -157,6 +160,14 @@ class PlayerAttributeSpecs:
 
     def spec_of(self, name: str) -> PlayerAttributeSpec | None:
         return self.by_name.get(name)
+
+    def hidden_names(self) -> frozenset[str]:
+        """本人の表示からも外す属性の名前。"""
+        return frozenset(
+            name
+            for name, spec in self.by_name.items()
+            if spec.visibility is AttributeVisibility.HIDDEN
+        )
 
     def satisfiability(
         self,

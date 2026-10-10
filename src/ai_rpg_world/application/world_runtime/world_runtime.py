@@ -6151,12 +6151,13 @@ def create_world_runtime(
         ),
         # 手番を記録する効果が書く本人 state の key を、宣言から導出して伏せる。
         # 物体 state と同じ判断 (書く宣言があるなら出さない)。名前を当てにいく
-        # 形には戻さない。
+        # 形には戻さない。`hidden` と宣言した属性も本人に見せない (#1546)。
         hidden_player_state_keys=build_recorded_player_state_tick_keys(
             list(scenario.graph.iter_spot_nodes()),
             scenario.interiors,
             scenario.player_interactions,
-        ),
+        )
+        | scenario.player_attribute_specs.hidden_names(),
         # 変えられない属性を注記へ届ける。宣言の無い世界では空なので、
         # prompt は 1 ビットも変わらない。
         player_attribute_specs=scenario.player_attribute_specs,
