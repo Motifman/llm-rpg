@@ -5182,6 +5182,7 @@ def create_world_runtime(
         expected_result_policy=config.expected_result_policy,
         expectation_argument_enabled=config.expectation_argument_enabled,
         has_goal=_has_goal,
+        limits_actions=scenario.metadata.limits_actions,
     )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
@@ -5245,6 +5246,7 @@ def create_world_runtime(
                     expected_result_policy=config.expected_result_policy,
                     expectation_argument_enabled=config.expectation_argument_enabled,
                     has_goal=_has_goal,
+                    limits_actions=scenario.metadata.limits_actions,
                 )
             )
 

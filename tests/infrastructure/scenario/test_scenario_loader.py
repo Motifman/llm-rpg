@@ -639,6 +639,22 @@ class TestScenarioLoaderMinimal:
         with pytest.raises(ValueError, match="event_removal_message"):
             ScenarioLoader().load_from_dict(scenario)
 
+    def test_limits_actions_defaults_to_true_and_can_be_turned_off(self) -> None:
+        """metadata.limits_actions は省略すると True、false と書けば False になる。"""
+        scenario = _minimal_scenario()
+        scenario["metadata"]["limits_actions"] = False
+
+        assert ScenarioLoader().load_from_dict(_minimal_scenario()).metadata.limits_actions is True
+        assert ScenarioLoader().load_from_dict(scenario).metadata.limits_actions is False
+
+    def test_rejects_non_bool_limits_actions(self) -> None:
+        """metadata.limits_actions に "false" のような文字列を書くと、読み込み時に止める。文字列は常に真になり、書いた意図と食い違うため。"""
+        scenario = _minimal_scenario()
+        scenario["metadata"]["limits_actions"] = "false"
+
+        with pytest.raises(Exception, match="limits_actions"):
+            ScenarioLoader().load_from_dict(scenario)
+
     def test_parses_players(self) -> None:
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert len(result.player_spawns) == 1

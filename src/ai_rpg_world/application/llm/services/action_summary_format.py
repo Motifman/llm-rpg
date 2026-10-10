@@ -96,6 +96,11 @@ ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 #: dispatch が回収して tool schema には出さない。
 CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
 
+#: interact の resolver が、対象名の後ろに続く句 (「で水門を開ける」「に対して殴りかかる」) を
+#: 操作の表示名 (display_label) から作って運ぶ内部キー。前提条件で断られた行も、成功の行と
+#: 同じ書き方にするため。action_name は呼び出しの値で、世界の言葉ではない。
+ACTION_DISPLAY_PHRASE_KEY = "__action_display_phrase"
+
 def project_action_arguments_for_history(
     args: Mapping[str, Any] | None,
     *,
@@ -223,6 +228,9 @@ def _format_memo_list(args: Mapping[str, Any]) -> str:
 def _format_interact(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_label")
     action = _text(args, "action_name")
+    display_phrase = _text(args, ACTION_DISPLAY_PHRASE_KEY)
+    if target and display_phrase:
+        return f"{_quote(target)}{display_phrase}"
     if target and action:
         return f"{_quote(target)}に {action} した"
     if target:

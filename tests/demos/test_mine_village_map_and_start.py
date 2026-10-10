@@ -293,3 +293,16 @@ class TestScenarioDoesNotRevealTheOtherTeam:
         for text in [public] + [p["persona_prompt"] + p.get("objective", "") for p in scenario["players"]]:
             assert "チーム" not in text
             assert "相手" not in text
+
+
+class TestNoDeadlineIsAnnounced:
+    """締め切りを置かない世界なので、行動の総量に限りがあるとエージェントに伝えないことを保証する。"""
+
+    @pytest.mark.parametrize("pid", [1, 2, 3, 4])
+    def test_system_prompt_has_no_action_limit_line(self, runtime, pid) -> None:
+        """4 人の system prompt に「行動の制限」の行と「総量には限り」の文が出ない。3 本目の実 run まで出ていて、時間で圧をかけない設計 (docs/mine_village_scenario_design.md の大きな方針) と食い違っていた。"""
+        system = runtime.build_full_prompt(PlayerId(pid))["messages"][0]["content"]
+
+        assert "【世界の前提】" in system
+        assert "行動の制限" not in system
+        assert "総量には限り" not in system

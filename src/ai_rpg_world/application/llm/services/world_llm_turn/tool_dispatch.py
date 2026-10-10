@@ -42,6 +42,7 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_DISPLAY_PHRASE_KEY,
     ACTION_HISTORY_PROJECTION_KEY,
     CANONICAL_IDENTIFIERS_KEY,
     project_action_arguments_for_history,
@@ -869,6 +870,9 @@ def adapt_executor_handler_with_resolver(
         # raw から作り直していた。届けないと、正規値を報告する resolver を
         # 増やしても何も起きない静かな no-op になる。
         arguments[ACTION_HISTORY_PROJECTION_KEY] = projection
+        display_phrase = resolved.pop(ACTION_DISPLAY_PHRASE_KEY, None)
+        if isinstance(display_phrase, str):
+            arguments[ACTION_DISPLAY_PHRASE_KEY] = display_phrase
         if isinstance(judgment, dict):
             _record_action_name_judgment(
                 judgment,
