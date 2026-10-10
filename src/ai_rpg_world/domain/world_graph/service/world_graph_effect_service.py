@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -73,11 +74,14 @@ class WorldGraphEffectService:
         self,
         loot_table_repository: LootTableRepository | None = None,
         ongoing_condition_resolutions: Mapping[str, tuple[InteractionEffect, ...]] | None = None,
+        random_source: random.Random | None = None,
     ) -> None:
         # PR #1 動的 loot: GIVE_FROM_LOOT_TABLE effect の抽選で使う repository。
         # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
         # 既存 caller は kwarg 省略で従来挙動を維持する。
         self._loot_table_repository = loot_table_repository
+        # GIVE_FROM_LOOT_TABLE の抽選に使う乱数。None ならモジュール全体の乱数。
+        self._random_source = random_source
         self._ongoing_condition_resolutions = dict(
             ongoing_condition_resolutions or {}
         )
@@ -205,6 +209,7 @@ class WorldGraphEffectService:
             acting_player_display_name=acting_player_display_name,
             owned_item_spec_counts=owned_item_spec_counts,
             loot_table_repository=self._loot_table_repository,
+            loot_random_source=self._random_source,
         )
 
         for effect in self._expand_ongoing_condition_resolutions(effects):

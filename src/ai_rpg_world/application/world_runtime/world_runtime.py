@@ -5329,14 +5329,18 @@ def create_world_runtime(
             name=lt_def.name,
         ))
     # effect_service に loot_table_repo を注入。
+    from ai_rpg_world.application.world_runtime.world_random import world_random
     from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
         SpotInteractionService,
     )
     from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
         WorldGraphEffectService,
     )
+
+    _seed = config.scenario_random_seed
     _effect_service = WorldGraphEffectService(
         loot_table_repository=loot_table_repo,
+        random_source=world_random(_seed, round_number, "loot"),
         ongoing_condition_resolutions={
             condition.flag: condition.resolution
             for condition in scenario.ongoing_conditions
@@ -6245,20 +6249,10 @@ def create_world_runtime(
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
     # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
     # Phase D-1: PROBABILITY 条件評価用の random.Random を注入する。
-    # 実験設定に scenario_random_seed があれば seed 注入で再現性を確保、
-    # 無ければ非決定的 (デフォルト random.Random()) で運用する。
-    _scenario_random = (
-        random.Random(config.scenario_random_seed)
-        if config.scenario_random_seed is not None
-        else random.Random()
-    )
-    # 天候は条件評価と消費順を共有しない独立streamにする。一方で比較実験の
-    # 再現性は同じseedから得る必要があるため、文字列namespaceを付けて導出する。
-    _weather_random = (
-        random.Random(f"weather:{config.scenario_random_seed}")
-        if config.scenario_random_seed is not None
-        else random.Random()
-    )
+    # 天候は条件評価と消費順を共有しない別の乱数にする。どちらもシードと回の
+    # 番号から作る (world_random)。シードが無ければ非決定的。
+    _scenario_random = world_random(_seed, round_number, "scenario")
+    _weather_random = world_random(_seed, round_number, "weather")
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
         spot_interior_repository=spot_interior_repo,
@@ -6374,6 +6368,7 @@ def create_world_runtime(
             spot_graph_repository=spot_graph_repo,
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
+            random_source=world_random(_seed, round_number, "attack").random,
             # PR-K: event_publisher は runtime 構築後に pipeline_event_publisher
             # が用意されてから setter で後付け注入する (= needs_decay_stage
             # 等と同じ pattern)。bind 前は致命攻撃で events が積まれても publish
@@ -6384,6 +6379,7 @@ def create_world_runtime(
             monster_repository=monster_repo,
             player_status_repository=player_status_repo,
             attack_orchestrator=monster_attack_orchestrator,
+            random_source=world_random(_seed, round_number, "monster_behavior"),
             world_flags_provider=world_flag_state.as_frozen_set,
             spot_interior_repository=spot_interior_repo,
         )

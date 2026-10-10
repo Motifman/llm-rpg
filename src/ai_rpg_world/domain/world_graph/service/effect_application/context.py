@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -66,6 +67,7 @@ class EffectApplicationState:
     acting_player_display_name: str | None = None
     owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None
     loot_table_repository: LootTableRepository | None = None
+    loot_random_source: random.Random | None = None
 
     def replace_object(self, updated: SpotObject) -> None:
         """interior を差し替え、acting_object と同じ id なら同期する。"""

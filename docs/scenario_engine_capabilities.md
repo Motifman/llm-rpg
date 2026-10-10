@@ -48,7 +48,7 @@
 | 7a | 隠れた決まり (試して初めて分かる) | **部分的** | 試すまで見えない条件: `FLAG_SET`、`PLAYERS_AT_SPOT`、`PLAYER_NEED_AT_LEAST`、HP、所持金、`PUZZLE_INPUT_MATCH`、物体操作の `HAS_ITEM`。`hide_when_flag_preconditions_fail: true` でフラグ条件を満たすまで操作が一覧に出ない | `A/world_graph/spot_graph_current_state_builder.py:266-295`、`A/world_graph/interaction_condition_hint_text.py:97-257`、`D/enum/interaction_condition_visibility.py` | **時間帯・天候・明るさは必ずヒントとして表示される**。物体の state 条件は事前に「いまできない」と出る。**伏せる設定は無い**。`PLAYER_STATE_IS` は操作ごと消えるので「試して失敗する」体験にならない |
 | 7b | 失敗したときに返す文 | **できる** | 前提条件ごとに `failure_message`。`on_failure_observation` で居合わせた人にも見える | `A/llm/services/executors/spot_graph_tool_executor.py:1684-1700` | 書かなければ engine の既定文で、決まりの中身を漏らす場合がある |
 | 8a | ランダム性 | **部分的** | `GIVE_FROM_LOOT_TABLE` (重みつき)、出来事・反応の条件 `PROBABILITY`、状態異常の `chance`、戦闘、天候 | `L/parse_economy.py:50-130` | **操作の前提条件に確率が無い**。抽選表は「何も出ない」を表せない |
-| 8b | シードでの再現 | **部分的** | `SCENARIO_RANDOM_SEED` | `world_runtime.py:6192-6214` | 効くのは `PROBABILITY` 条件と天候だけ。**抽選表と戦闘はモジュール全体の乱数**で、シードが効かない |
+| 8b | シードでの再現 | **できる** (#1529 で追記) | `SCENARIO_RANDOM_SEED`。条件判定・天候・抽選表・攻撃・モンスターの行動の乱数を、用途ごとにシードと回の番号から作る | `A/world_runtime/world_random.py`、design_decisions D1514-3 | 続きからの再開では、抽選表・攻撃・モンスターの行動の乱数は先頭から引き直す。タイル地図の世界の戦闘 (`combat_logic_service.py`) は対象外 |
 | 9 | 情報を持つ物 | **部分的** | `SHOW_MESSAGE` (行為者だけに見える)、`description_variants` (`required_state` / `required_flag`)、`is_visible: false` と `REVEAL_OBJECT`、隠れた `sub_locations`、`discoverable_items` (`explore` で探す)、場所に書く掲示 `WRITE_PLAYER_TEXT`、遠景 `distant_cues`、本人だけが知ること (`persona_prompt`、`objective`、`secret` の属性) | `L/parse_map.py:400-509, 521-531`、`L/parse_economy.py:734-802` | **地図は全員一律**。掲示は 1 枚を上書きする方式 |
 
 ## B. 他者との交流
@@ -99,7 +99,7 @@
 | I-5 | 世界の出来事から人を対象にできない (その場の人へのダメージ、協力した本人への報酬、行為者への遅れた効果) | #1517 |
 | I-6 | 移動に決まりを付けられない (渡ったときの効果、同時に渡る人数) | #1517 |
 | I-7 | 出来事の条件に時間帯が無い。天候の遷移を書けず、天候を変える効果も無い | #1517 |
-| I-8 | 乱数のシードが一部にしか効かない | #1514 |
+| I-8 | 乱数のシードが一部にしか効かない | #1514 (#1529 で対応) |
 | I-9 | 陣営が概念として無い (陣営ごとの勝敗、チーム内の情報、チームの連絡手段) | #1516 |
 | I-10 | 本人の過去の行為を条件にできない | #1517 |
 | I-11 | 約束を記録し、守ったかを判定する仕組みが無い | 優先度を下げた (予期の仕組みで他人についての予期として扱う) |

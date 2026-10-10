@@ -7192,6 +7192,26 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 ---
 
+## D1514-3. 世界の側の乱数は、用途ごとに、シードと回の番号から作る
+
+**何を**: `world_random(seed, round_number, purpose)` (`application/world_runtime/world_random.py`) で、条件判定 (`scenario`)、天候 (`weather`)、抽選表の効果 (`loot`)、runtime が持つ攻撃の判定器 (`attack`)、モンスターの行動 (`monster_behavior`) の乱数を別々に作る。1 回目の `scenario` と `weather` は以前と同じ種 (`seed` と `weather:{seed}`) にする。2 回目以降は `{purpose}:{seed}:round{n}` にする。シードが無ければ非決定的な乱数を返す (Issue #1514)。
+
+**なぜ**: `SCENARIO_RANDOM_SEED` が効くのは条件判定と天候だけで、抽選表 (`LootTableAggregate.roll`) はモジュール全体の乱数、攻撃とモンスターの行動はシードの無い乱数を使っていた。同じシードで回しても、世界の側の結果がそろわなかった。回を重ねる実験 (#1508) では、同じ profile で回しても確率の出来事が回ごとに変わる必要がある。
+
+**決まり**:
+
+- **用途ごとに分ける**: ある用途で引く回数が変わっても、ほかの用途の並びがずれない。天候を条件判定と分けた既存の判断と同じ
+- **1 回目は以前と同じ種**: 回の番号を入れる前の run と、条件判定と天候の結果がそろう
+- **モンスターの行動の中の攻撃は、行動の乱数で引く**: モンスターの行動は command ごとに乱数の状態を控え、失敗したら戻す。その巻き戻しに攻撃の判定も含めるため、`_for_command` が行動の乱数を攻撃の判定器に渡す (以前からの形)。`attack` の乱数を引くのは、プレイヤーの攻撃と、command を通らない経路
+- **`combat_logic_service.py` は触らない**: タイル地図の世界の戦闘で、実験に使う spot graph の世界からは呼ばれない。タイル地図の世界の死亡報酬 (`monster_death_reward_handler.py`)、採集 (`harvest_command_service.py`)、移住 (`monster_lifecycle_survival_coordinator.py`) も同じ理由で触らない
+- **続きからの再開では、新しい乱数は先頭から引き直す**: world snapshot が乱数の状態を持つのは条件判定と天候だけで、`loot`・`attack`・`monster_behavior` は持たない。続きから再開した run は、通しで回した run と、この 3 つの結果がずれる。以前はシードの無い乱数だったので、悪くはなっていない。続きからの再開をまたいでそろえる必要が出たら codec を足す
+
+**どうしないと壊れるか**: 世界の側の乱数がそろわないと、同じシードの 2 本の run の差が、記憶の差か乱数の差かを分けられない。回の番号を混ぜないと、毎回同じ確率の出来事が起き、前兆から学んだのか並びを覚えたのかを分けられない。
+
+**関連**: design_decisions D1514 / D1514-2 / Issue #1508。
+
+---
+
 ## D1520. 会った相手の記録は Being が持ち、環境の encounter には「この観測はもう出した」の判定だけを残す
 
 **何を**: 会った相手の記録を、環境の encounter (`InMemoryEncounterMemory`、世界の snapshot に入る) から、Being の知り合いの記録 (`AcquaintanceRepository`、`being/domain/acquaintance.py`) に移した。鍵は BeingId と、環境の名前と相手の名前の文の組。初めて会ったターン、最後に会ったターン、会った回数を持つ。時計は Being の記憶のターン数。Being の snapshot に入る。環境の encounter には、場所・出来事・初めて見たモンスター・倒れている人を残し、人は書かない (Issue #1520 段 1)。
