@@ -402,6 +402,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_skill_loadout_repository i
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import InMemorySpotGraphRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import InMemorySpotInteriorRepository
+from ai_rpg_world.infrastructure.scenario.models import ScenarioDayNightConfig
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     PlayerSpawnConfig,
@@ -449,7 +450,7 @@ _FALLBACK_MINUTES_PER_TICK = 5
 _MEETING_URGENT_REMAINING_TICKS = 2
 
 
-def _minutes_per_tick(scenario: Any) -> int | None:
+def _minutes_per_tick(scenario: ScenarioLoadResult) -> int | None:
     """1 tick が世界の時計で何分か。
 
     現在時刻の表示 (`深夜 0:05`) と同じ換算を使う。エージェントはその時計を
@@ -458,11 +459,10 @@ def _minutes_per_tick(scenario: Any) -> int | None:
     昼夜サイクルを宣言していない世界は ``_time_label`` と同じ 5 分/tick に
     倒す。時計だけ進んで地図が別単位、という食い違いを作らない。
     """
-    day_night = getattr(scenario, "day_night_config", None)
-    ticks_per_day = getattr(day_night, "ticks_per_day", None) if day_night else None
-    if isinstance(ticks_per_day, int) and ticks_per_day > 0:
-        return (24 * 60) // ticks_per_day
-    return _FALLBACK_MINUTES_PER_TICK
+    day_night = scenario.day_night_config
+    if day_night is None:
+        return _FALLBACK_MINUTES_PER_TICK
+    return (24 * 60) // day_night.cycle.ticks_per_day
 
 
 def _required_task_count(scenario: Any) -> int | None:
@@ -4454,16 +4454,10 @@ class WorldRuntime:
 
     def _ticks_per_day_or_default(self) -> int:
         """day_night_config があればそこから ticks_per_day を取り、無ければ 24。"""
-        cfg = getattr(self.scenario, "day_night_config", None)
+        cfg = self.scenario.day_night_config
         if cfg is None:
             return 24
-        try:
-            cycle = cfg.cycle
-            if cycle is None:
-                return 24
-            return int(cycle.ticks_per_day)
-        except AttributeError:
-            return 24
+        return cfg.cycle.ticks_per_day
 
     def _flush_pending_food_spoiled(self) -> None:
         """day boundary 等で pending 腐敗バッファを 1 件の集約観測として配信する。
@@ -5988,7 +5982,9 @@ def create_world_runtime(
             return frozenset()
         return collect_owned_item_spec_ids_from_inventory(inv, item_repo)
 
-    def _build_phase_label_resolver(day_night_config: Any) -> Any:
+    def _build_phase_label_resolver(
+        day_night_config: ScenarioDayNightConfig | None,
+    ) -> Callable[[str], str | None] | None:
         """シナリオが宣言した昼夜フェーズから「名前 → 呼び名」の解決器を作る。
 
         宣言が無い (昼夜サイクルを使わない世界) なら None を返し、時刻帯ヒントは

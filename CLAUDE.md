@@ -28,7 +28,7 @@
 - tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
 - 見たい trace: 発火、効果判断に必要な値、未発火理由を確認できるか
 
-高コスト run の前には、必要に応じて `smoke_stub` や短い `MAX_WORLD_TICKS` で、profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
+高コスト run の前には、必要に応じて `smoke_stub` や短い `MAX_WORLD_TICKS` で、profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しいシナリオや仕掛けの組み合わせを初めて回す前は、`make fuzz-scenario SCENARIO=...` で、でたらめに行動するスタブを多数のシードで回し、例外と内部番号の漏れが無いことを先に見ます (`docs/design_decisions.md` の D1557)。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
 
 ### 標準コマンド
 
