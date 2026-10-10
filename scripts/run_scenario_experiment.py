@@ -701,6 +701,7 @@ def _drive_scenario(
     snapshot_save_dir: Path | None = None,
     snapshot_load_dir: Path | None = None,
     snapshot_load_mode: str = "continue",
+    round_number: int = 1,
     prompt_dataset_sink: Any | None = None,
 ) -> dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
@@ -735,6 +736,7 @@ def _drive_scenario(
             scenarios_dir=scenarios_dir,
             characters_path=chars,
             runtime_config=runtime_config,
+            round_number=round_number,
         )
         char = mgr.create_character(
             CharacterCreateRequest(name=f"exp-{scenario_path.stem}")
@@ -749,6 +751,16 @@ def _drive_scenario(
         state.llm_wiring.llm_session_run_id = run_id
         # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
+
+        round_assignment = runtime.round_assignment_trace()
+        if round_assignment:
+            recorder.record(
+                TraceEventKind.ROUND_ASSIGNMENT,
+                tick=runtime.current_tick(),
+                round=round_number,
+                seed=runtime_config.scenario_random_seed if runtime_config else None,
+                assignments=round_assignment,
+            )
 
         # Phase 1d viewer: 各プレイヤーの初期位置を position_change として
         # 記録 (from_spot_id=None で「ここから始まった」を表す)。これにより
@@ -1830,6 +1842,7 @@ def main(argv: list[str] | None = None) -> int:
                 snapshot_save_dir=args.snapshot_save_dir,
                 snapshot_load_dir=args.snapshot_load_dir,
                 snapshot_load_mode=snapshot_load_mode,
+                round_number=replay["round"] if replay is not None else 1,
                 prompt_dataset_sink=prompt_dataset_sink,
             )
         finally:

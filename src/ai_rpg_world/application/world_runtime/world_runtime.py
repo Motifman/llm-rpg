@@ -828,6 +828,21 @@ class WorldRuntime:
                 return p.name
         return f"Player-{int(player_id)}"
 
+    def round_assignment_trace(self) -> list[dict[str, Any]]:
+        """round_assignment で player に割り当てた枠を、trace に載せる形で返す (#1514)。"""
+        spawns = {p.string_id: p for p in self.scenario.player_spawns}
+        return [
+            {
+                "player_id": int(spawns[a.player_string_id].player_id),
+                "player_name": spawns[a.player_string_id].name,
+                "group_index": a.group_index,
+                "slot_index": a.slot_index,
+                "spawn_spot": a.spawn_spot,
+                "initial_state": dict(a.initial_state),
+            }
+            for a in self.scenario.round_assignments
+        ]
+
     def current_tick(self) -> int:
         return self._time_provider.get_current_tick().value
 
@@ -4832,6 +4847,7 @@ def create_world_runtime(
     llm_turn_trigger: ILlmTurnTrigger | None = None,
     include_todo_tools: bool | None = None,
     config: ResolvedLlmRuntimeConfig | None = None,
+    round_number: int = 1,
 ) -> WorldRuntime:
     """シナリオ JSON からゲームランタイムを構築する。
 
@@ -4848,6 +4864,8 @@ def create_world_runtime(
             resolve。entrypoint (run_scenario_experiment 等) で既に
             from_mapping() 済みの cfg を渡せば、**run_start trace と
             実 wiring の同一性を構造で保証する**ための引数。
+        round_number: 同じシナリオを繰り返し遊ぶときの回の番号 (#1514)。
+            シナリオの ``round_assignment`` を、シードとこの番号で割り当てる。
     """
     # 引数 cfg が来ていればそれを使う。来ていなければ空設定の既定値で構築する。
     # 実験に意味を持つ設定は環境変数から読まない。
@@ -4859,7 +4877,11 @@ def create_world_runtime(
         config = ResolvedLlmRuntimeConfig.from_mapping()
 
     loader = ScenarioLoader()
-    scenario = loader.load_from_file(scenario_path)
+    scenario = loader.load_from_file(
+        scenario_path,
+        random_seed=config.scenario_random_seed,
+        round_number=round_number,
+    )
 
     fallback_name = (
         scenario.player_spawns[0].name if scenario.player_spawns else "探索者"

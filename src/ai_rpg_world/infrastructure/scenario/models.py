@@ -36,6 +36,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import Scen
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import SynchronizedActionGroup
+from ai_rpg_world.infrastructure.scenario.parse_round_assignment import RoundSlotAssignment
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
 
@@ -581,3 +582,5 @@ class ScenarioLoadResult:
     merchants: tuple[ScenarioMerchantDefinition, ...] = ()
     # 経済統合 Phase 3: 掲示板型の市場。宣言の無い世界には板が無い。
     market: ScenarioMarketConfig | None = None
+    # #1514: round_assignment で player に割り当てた枠。宣言の無い世界では空。
+    round_assignments: tuple[RoundSlotAssignment, ...] = ()
