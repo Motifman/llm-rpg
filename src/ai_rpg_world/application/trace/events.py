@@ -412,6 +412,19 @@ class TraceEventKind:
     # top-level player_id: aggregate が PlayerStatusAggregate のときだけ best-effort で
     # 入る (= どの player の grace 登録/解除・効果適用が失われたかの per-agent 分析用)。
     SIDE_HANDLER_FAILED = "side_handler_failed"
+    # #1558: 世界の tick の段で、1 体 (プレイヤー / モンスター / 出来事 / 段そのもの)
+    # の処理が例外を出した。isolate ではその 1 体だけを取りやめて tick を続け、
+    # fail_fast ではこれを残してから止める。run_end の world_tick_failure_counts と
+    # report.md の件数は、この行の数と一致する。
+    # payload:
+    #   - stage: str (= 段の名前。"travel" / "monster_behavior" / "post_tick.llm_turn_trigger" など)
+    #   - target_kind: str (= "player" | "monster" | "scenario_event" | "stage" など)
+    #   - target_id: int | str | None
+    #   - error_type / error_message (500 字超は切り詰め)
+    #   - error_origin: str | None (= 例外が出た最も内側の "file:line in func")
+    #   - committed: bool (= commit 後の後処理だけが失敗し、状態は確定済み)
+    #   - policy: "isolate" | "fail_fast"
+    WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
     # #1441: 環境の tool の呼び出し 1 件に書かれた予期を積んだ結果。予期の引数が
     # 有効な run で、予期の引数を持つ tool を呼んだ手ごとに 1 件。0 件でも残す。
     # payload:
