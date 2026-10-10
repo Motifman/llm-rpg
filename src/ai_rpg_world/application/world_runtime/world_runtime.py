@@ -177,7 +177,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationEntry,
+    ObservationOutput,
+    SubjectUnknownView,
+)
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
 )
@@ -1921,9 +1925,10 @@ class WorldRuntime:
         # ActionFailedObservationEmitter が aware を発行するため、world_runtime
         # 経路の naive と混ざると EpisodicChunkCoordinator の obs_slice
         # フィルタで TypeError になる。詳細: docs/episodic_memory フォローアップ。
-        appender.append(
+        if not appender.append(
             player_id, output, datetime.now(timezone.utc), self._time_label()
-        )
+        ):
+            return
         scheduler = self._observation_turn_scheduler
         if scheduler is not None:
             scheduler.maybe_schedule(player_id, output)
@@ -6007,12 +6012,13 @@ def create_world_runtime(
         if encounter_memory.lookup(pid, key) is not None:
             return
         encounter_memory.observe(pid, key, _current_tick_provider())
+        def found_prose(name: str) -> str:
+            if is_dead:
+                return f"{name}が倒れているのを見つけた。動かない。"
+            return f"{name}が倒れているのを見つけた。"
+
         name = victim_name or "誰か"
-        prose = (
-            f"{name}が倒れているのを見つけた。動かない。"
-            if is_dead
-            else f"{name}が倒れているのを見つけた。"
-        )
+        prose = found_prose(name)
         # cue が読むのは int の spot_id_value。get_player_spot_id は trace 用の
         # 文字列を返すので使えない。
         body = runtime._fallen_body_registry.find(PlayerId(int(victim_entity_id)))
@@ -6026,6 +6032,15 @@ def create_world_runtime(
         }
         if spot_id_value is not None:
             structured["spot_id_value"] = spot_id_value
+        # 体は見えているので届けるが、会っていない相手なら名前は分からない。
+        if_subject_unknown = (
+            SubjectUnknownView(
+                prose=found_prose("誰か"),
+                structured={k: v for k, v in structured.items() if k != "actor"},
+            )
+            if victim_name
+            else None
+        )
         runtime._emit_observation_directly(
             pid,
             ObservationOutput(
@@ -6035,6 +6050,8 @@ def create_world_runtime(
                 schedules_turn=True,
                 # 死体を見つけたら足は止まる。移動を続けるほうが不自然。
                 breaks_movement=True,
+                subject_name=victim_name or None,
+                if_subject_unknown=if_subject_unknown,
             ),
         )
 

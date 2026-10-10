@@ -6,6 +6,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
     ObservationOutput,
     SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
@@ -49,6 +50,12 @@ def _without_speaker(prose: str, structured: dict[str, Any]) -> SubjectUnknownVi
     return SubjectUnknownView(
         prose=prose,
         structured={k: v for k, v in structured.items() if k not in _SPEAKER_KEYS},
+    )
+
+
+def _without_actor(prose: str, structured: dict[str, Any]) -> SubjectUnknownView:
+    return SubjectUnknownView(
+        prose=prose, structured={k: v for k, v in structured.items() if k != "actor"}
     )
 
 
@@ -196,10 +203,11 @@ class PlayerObservationFormatter:
                 breaks_movement=True,
             )
         victim_same_spot = self._is_same_spot(recipient_id, event.aggregate_id)
+        actor_name = self._context.name_resolver.player_name(event.aggregate_id)
         if victim_same_spot is not True:
             structured = {
                 "type": "player_downed",
-                "actor": self._context.name_resolver.player_name(event.aggregate_id),
+                "actor": actor_name,
                 "killer_visible_to_recipient": False,
                 "proximity": "remote_or_unknown",
             }
@@ -207,11 +215,14 @@ class PlayerObservationFormatter:
                 # 隠密殺人のある世界。倒れた瞬間に全員が知るなら、死体を
                 # 見つける意味も通報する意味も無い。
                 return None
+            # 名前を伏せても、知らない誰かがいることは分かってしまう。
             return ObservationOutput(
                 prose="遠くで誰かが倒れた気配がした。",
                 structured=structured,
                 observation_category="social",
                 schedules_turn=True,
+                subject_name=actor_name,
+                if_subject_unknown=WithheldFromStrangers(),
             )
         # Issue #185: 第三者観測の killer 視認チェック。
         # killer の位置が recipient と同じ spot で、実効照明が身元を見分けられる
@@ -230,11 +241,13 @@ class PlayerObservationFormatter:
             ):
                 lighting = self._context.resolve_effective_lighting(recipient_spot)
                 killer_visible = self._lighting_reveals_killer_to_bystander(lighting)
-        actor_name = self._context.name_resolver.player_name(event.aggregate_id)
-        if killer_visible and killer_name:
-            prose = f"{killer_name}が{actor_name}を倒した。"
-        else:
-            prose = f"{actor_name}が倒れて動かなくなった。"
+        def downed_prose(victim: str) -> str:
+            if killer_visible and killer_name:
+                return f"{killer_name}が{victim}を倒した。"
+            return f"{victim}が倒れて動かなくなった。"
+
+        prose = downed_prose(actor_name)
+        prose_if_unknown = downed_prose(_UNKNOWN_SPEAKER)
         if getattr(
             event,
             "declared_witness_prose_replaces_bystander_prose",
@@ -247,6 +260,7 @@ class PlayerObservationFormatter:
             # 表示しない。行為者本人は目撃配信から除外されるので省かない。
             # structured は分析のため下で通常どおり組み立てる。
             prose = ""
+            prose_if_unknown = ""
         structured = {
             "type": "player_downed",
             "actor": actor_name,
@@ -262,6 +276,8 @@ class PlayerObservationFormatter:
             structured=structured,
             observation_category="social",
             schedules_turn=True,
+            subject_name=actor_name,
+            if_subject_unknown=_without_actor(prose_if_unknown, structured),
         )
 
     @staticmethod
@@ -294,21 +310,32 @@ class PlayerObservationFormatter:
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
         same_spot = self._is_same_spot(recipient_id, event.aggregate_id)
         if same_spot is not True:
-            prose = "遠くで誰かが動けるようになった気配がした。"
-            proximity = "remote_or_unknown"
-        else:
-            prose = f"{actor_name}が復帰しました。"
-            proximity = "same_spot" if same_spot else "remote_or_unknown"
+            structured = {
+                "type": "player_revived",
+                "actor": actor_name,
+                "proximity": "remote_or_unknown",
+            }
+            # 名前を伏せても、知らない誰かがいることは分かってしまう。
+            return ObservationOutput(
+                prose="遠くで誰かが動けるようになった気配がした。",
+                structured=structured,
+                observation_category="social",
+                schedules_turn=True,
+                subject_name=actor_name,
+                if_subject_unknown=WithheldFromStrangers(),
+            )
         structured = {
             "type": "player_revived",
             "actor": actor_name,
-            "proximity": proximity,
+            "proximity": "same_spot",
         }
         return ObservationOutput(
-            prose=prose,
+            prose=f"{actor_name}が復帰しました。",
             structured=structured,
             observation_category="social",
             schedules_turn=True,
+            subject_name=actor_name,
+            if_subject_unknown=_without_actor(f"{_UNKNOWN_SPEAKER}が復帰しました。", structured),
         )
 
     def _is_same_spot(

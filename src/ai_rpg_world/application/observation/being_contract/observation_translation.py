@@ -16,6 +16,8 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
     ObservationOutput,
+    SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -157,10 +159,14 @@ def observation_from_game(
         wants_wake=output.schedules_turn,
         body_if_subject_unknown=(
             output.if_subject_unknown.prose
-            if output.if_subject_unknown is not None
+            if isinstance(output.if_subject_unknown, SubjectUnknownView)
             and subject_name is not UNKNOWN
             and not subject_is_self
             else None
+        ),
+        withheld_if_subject_unknown=(
+            isinstance(output.if_subject_unknown, WithheldFromStrangers)
+            and not subject_is_self
         ),
     )
 

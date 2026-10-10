@@ -27,6 +27,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
     ObservationOutput,
     SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.being.contract import (
     UNKNOWN,
@@ -622,3 +623,40 @@ class TestBodyIfSubjectUnknownFromGame:
 
         assert _translate(hidden_name).body_if_subject_unknown is None
         assert _translate(own).body_if_subject_unknown is None
+
+
+class TestWithheldFromStrangersFromGame:
+    """ゲームの観測が持つ「知らない受け手には届けない」印を、契約の観測に写すことを保証する (#1531)。"""
+
+    def _remote_revive(self) -> ObservationOutput:
+        return ObservationOutput(
+            prose="遠くで誰かが動けるようになった気配がした。",
+            structured={"type": "player_revived", "actor": "カイ", "proximity": "remote_or_unknown"},
+            observation_category="social",
+            schedules_turn=True,
+            subject_name="カイ",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+    def test_mark_becomes_withheld_if_subject_unknown(self) -> None:
+        """届けない印を持つ他者の観測は、withheld_if_subject_unknown が True になり、伏せた本文は持たない。"""
+        observation = _translate(self._remote_revive())
+
+        assert observation.withheld_if_subject_unknown is True
+        assert observation.body_if_subject_unknown is None
+
+    def test_observation_without_mark_is_not_withheld(self) -> None:
+        """印を持たない観測は、withheld_if_subject_unknown が False になる。"""
+        assert _translate(_output(_speech())).withheld_if_subject_unknown is False
+
+    def test_mark_is_not_copied_when_the_subject_is_the_observer(self) -> None:
+        """自分が主体の観測には印を写さない (写すと契約が拒んで観測が失われる)。"""
+        own = ObservationOutput(
+            prose="ノアは救助された。",
+            structured={"type": "player_revived", "actor": "ノア"},
+            observation_category="social",
+            subject_name="ノア",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+        assert _translate(own).withheld_if_subject_unknown is False

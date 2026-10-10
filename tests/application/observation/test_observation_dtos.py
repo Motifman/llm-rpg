@@ -12,6 +12,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
     SubjectUnknownView,
+    WithheldFromStrangers,
 )
 
 
@@ -191,3 +192,31 @@ class TestSubjectUnknownView:
         """話し手の名前と伏せた版は片方だけでは持てず、名前が空でも持てない (TypeError)。"""
         with pytest.raises(TypeError):
             ObservationOutput(prose="x", structured={}, **kwargs)
+
+
+class TestWithheldFromStrangers:
+    """主体を知らない受け手には届けない観測を、主体の名前と組で持てることを保証する。"""
+
+    def _withheld(self) -> ObservationOutput:
+        return ObservationOutput(
+            prose="遠くで誰かが動けるようになった気配がした。",
+            structured={"type": "player_revived", "actor": "ノア"},
+            subject_name="ノア",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+    def test_view_for_unknown_subject_is_nothing(self):
+        """届けない印を持つ観測を主体を知らない受け手の版にすると None になる。"""
+        assert self._withheld().as_subject_unknown() is None
+
+    def test_view_for_known_subject_drops_the_mark(self):
+        """主体を知っている受け手の版は、本文と structured をそのまま残し、印を外す。"""
+        seen = self._withheld().as_subject_known()
+
+        assert seen.structured["actor"] == "ノア"
+        assert (seen.subject_name, seen.if_subject_unknown) == (None, None)
+
+    def test_mark_needs_a_subject_name(self):
+        """届けない印だけを渡し、主体の名前を渡さないと TypeError になる。"""
+        with pytest.raises(TypeError):
+            ObservationOutput(prose="x", structured={}, if_subject_unknown=WithheldFromStrangers())

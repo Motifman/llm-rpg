@@ -104,6 +104,10 @@ class Observation:
 
     ``body_if_subject_unknown`` は、主体を知らない受け手向けに名前を伏せた本文。
     どちらの本文で覚えるかは、受け手の Being が自分の知り合いの記録で決める。
+    ``withheld_if_subject_unknown`` は、主体を知らない受け手には届けない印。
+    名前を伏せても、誰かがいることが分かってしまう観測に付ける。本文が名前を
+    伏せていて ``subject_name`` が不明なら、受け手は主体を知っているか決められ
+    ないので、届けない側へ倒す。
     """
 
     body: str
@@ -118,6 +122,7 @@ class Observation:
 
     wants_wake: bool | None = None
     body_if_subject_unknown: str | None = None
+    withheld_if_subject_unknown: bool = False
 
     def __post_init__(self) -> None:
         require_text(self.body, "body")
@@ -139,6 +144,16 @@ class Observation:
             if self.subject_name is UNKNOWN or self.subject_is_self:
                 raise ContractViolation(
                     "body_if_subject_unknown needs a known subject other than self"
+                )
+        require_bool(self.withheld_if_subject_unknown, "withheld_if_subject_unknown")
+        if self.withheld_if_subject_unknown:
+            if self.subject_is_self:
+                raise ContractViolation(
+                    "withheld_if_subject_unknown needs a subject other than self"
+                )
+            if self.body_if_subject_unknown is not None:
+                raise ContractViolation(
+                    "withheld_if_subject_unknown and body_if_subject_unknown are exclusive"
                 )
 
     def unknown_fields(self) -> tuple[str, ...]:
