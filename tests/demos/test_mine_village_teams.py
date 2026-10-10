@@ -137,7 +137,10 @@ class TestTeamResultsFollowTheLift:
         assert result.team_results == {"north": GameResultEnum.LOSE, "south": GameResultEnum.LOSE}
 
     def test_everyone_escaping_is_a_draw_not_two_wins(self, runtime) -> None:
-        """4 人全員が乗ると両チームが同時に成立し、両方 DRAW になる。両チームが WIN になることは無い。"""
+        """4 人全員が乗ると両チームが同時に成立し、両方 DRAW になる。両チームが WIN になることは無い。
+
+        4 人とも乗れるのは、昇降機の定員 (#1515) を書けないあいだだけ。
+        """
         result = _depart_with(runtime, *_PLAYERS)
 
         assert result.team_results == {"north": GameResultEnum.DRAW, "south": GameResultEnum.DRAW}
@@ -177,19 +180,26 @@ class TestTeamsStayHiddenAtStart:
 
     @pytest.mark.parametrize("viewer", sorted(_PLAYERS))
     def test_start_prompt_shows_neither_the_other_side_nor_team_names(self, runtime, viewer) -> None:
-        """開始時のプロンプト全文とツールに、相手チームの 2 人の名前、相手チームの所属、チームの名前が出ない。自分の所属は「自分の状態」に同じ形で出る。"""
+        """開始時のプロンプト全文とツールに、相手チームの 2 人の名前、相手チームの所属、チームの名前が出ない。仲間の名前と自分の所属は出る。
+
+        自分の所属が `team=north` の形で本人に出るのは、所属のキーを本人の
+        「自分の状態」から伏せる手段が無いあいだの穴 (docs/mine_village_scenario_design.md)。
+        ここでは、相手の所属を探す形が実際のプロンプトの形と同じであることの確認に使う。
+        """
         names = {p["id"]: p["name"] for p in _raw()["players"]}
-        other = "south" if _TEAM_OF[viewer] == "north" else "north"
+        mine = _TEAM_OF[viewer]
+        other = "south" if mine == "north" else "north"
 
         text = _whole_prompt(runtime, viewer)
 
         assert [names[s] for s, t in _TEAM_OF.items() if t == other and names[s] in text] == []
+        assert [names[s] for s, t in _TEAM_OF.items() if t == mine and s != viewer and names[s] not in text] == []
         assert f"team={_TEAM_OF[viewer]}" in text
         assert f"team={other}" not in text
         assert [n for n in _TEAM_NAMES if n in text] == []
 
     def test_team_key_does_not_add_a_faction_count_to_the_briefing(self, runtime) -> None:
-        """所属を書いても、世界の説明に「◯◯ N 人」のような人数の内訳が出ない。"""
+        """所属を書いても、世界の説明に「参加者は 4 人。内訳は …」の行が出ない。役を 2 種類にすると出る行で、何人いる世界かが分かる。"""
         text = _whole_prompt(runtime, "haru")
 
-        assert "2 人" not in text and "4 人" not in text
+        assert "参加者は" not in text
