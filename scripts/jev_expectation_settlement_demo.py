@@ -312,8 +312,9 @@ def _readable(result: dict[str, Any]) -> list[str]:
         latest = (s.get("state") or {}).get("出来事の時系列", [])
         if latest:
             last = latest[-1]
-            for text in last["行動"]:
-                lines.append(f"- 行動: {text[:160]}")
+            # #1568 より前の trace は欄の名前が「行動」。
+            for text in last.get("出来事", last.get("行動", [])):
+                lines.append(f"- 出来事: {text[:160]}")
             for text in last["発言"]:
                 lines.append(f"- 発言: {text[:160]}")
         for name, q in sorted(s.get("questions", {}).items()):
