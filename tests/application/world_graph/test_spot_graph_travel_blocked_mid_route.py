@@ -304,8 +304,8 @@ class TestPassageClosedMidTravel:
             (SpotTravelBlockedReason.PASSAGE_CONDITION, "吊り橋が上がっている。")
         ]
 
-    def test_next_tick_after_blocked_does_nothing(self) -> None:
-        """止まった次の tick には移動の処理も止まった通知も起きない (同じ失敗を繰り返さない)。"""
+    def test_tick_after_blocked_travel_neither_notifies_nor_counts_travel(self) -> None:
+        """止まった次の tick には、止まった通知も到着の通知も移動の計測も起きない (同じ区間を踏み直さない)。"""
         world = _door_world()
         world.start(_S2)
         world.stage.run(WorldTick(1))
@@ -315,7 +315,26 @@ class TestPassageClosedMidTravel:
         world.stage.run(WorldTick(3))
 
         assert len(world.blocked) == 1
+        assert world.arrived == []
+        assert world.committed == [_PLAYER, _PLAYER]
         assert world.spot() == _S1
+
+    def test_can_travel_again_after_the_door_reopens(self) -> None:
+        """止まった後に扉が開けば、同じ行き先への移動をもう一度始めて到着でき、止まった通知は増えない。"""
+        world = _door_world()
+        world.start(_S2)
+        world.stage.run(WorldTick(1))
+        world.close(_C1, Passage.door(DoorStateEnum.LOCKED))
+        world.stage.run(WorldTick(2))
+        world.close(_C1, Passage.door(DoorStateEnum.OPEN))
+
+        world.start(_S2)
+        world.stage.run(WorldTick(3))
+        world.stage.run(WorldTick(4))
+
+        assert world.spot() == _S2
+        assert world.arrived == [_PLAYER]
+        assert len(world.blocked) == 1
 
 
 class TestPassageClosedOnLaterLeg:
@@ -341,10 +360,38 @@ class TestPassageClosedOnLaterLeg:
         assert nav is not None
         assert not nav.is_traveling
         assert nav.current_spot_id == _S2
+        assert nav.route == ()
+        assert world.arrived == []
+        assert world.committed == [_PLAYER]
         assert [
             (b.connection_id, b.from_spot_id, b.to_spot_id, b.destination_spot_id)
             for _, b in world.blocked
         ] == [(_C2, _S2, _S3, _S3)]
+
+
+    def test_closed_first_leg_stops_at_origin_and_reports_once(self) -> None:
+        """2 区間の経路で両方の区間が閉じていても、止まるのは 1 区間目の手前で、通知は 1 回だけ、行き先は最終の場所になる。"""
+        world = _World(
+            _graph(
+                _connection(
+                    _C1, _S1, _S2, name="扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)
+                ),
+                _connection(
+                    _C2, _S2, _S3, name="奥の扉", ticks=0, passage=Passage.door(DoorStateEnum.OPEN)
+                ),
+            )
+        )
+        world.start(_S3)
+        world.close(_C1, Passage.door(DoorStateEnum.LOCKED))
+        world.close(_C2, Passage.door(DoorStateEnum.LOCKED))
+
+        world.stage.run(WorldTick(1))
+
+        assert world.spot() == _S1
+        assert [
+            (b.connection_id, b.from_spot_id, b.to_spot_id, b.destination_spot_id)
+            for _, b in world.blocked
+        ] == [(_C1, _S1, _S2, _S3)]
 
 
 class TestDepartedTravelerBlocked:

@@ -100,7 +100,7 @@ def _gen_heads_into_the_adit_and_haru_opens_gate_a(runtime) -> None:
 class TestBarredFireDoorMidTravel:
     """防火扉を移動中に閂で閉じられた場面を、本物の組み立て経路で再現する。"""
 
-    def test_world_keeps_ticking_and_gen_stays_south(self, runtime) -> None:
+    def test_gen_stays_south_without_exception_when_fire_door_is_barred(self, runtime) -> None:
         """渡る tick に例外を出さず、ゲンは南の坑道で止まり、移動中ではなくなる。"""
         _gen_heads_north_and_haru_bars_the_door(runtime)
 
@@ -132,8 +132,14 @@ class TestBarredFireDoorMidTravel:
         """観測と履歴の文に、閂を掛けたハルの名前と内部の番号が出ない。"""
         _gen_heads_north_and_haru_bars_the_door(runtime)
 
+        observations = _blocked_observations(runtime, _GEN)
         latest = runtime._action_result_store.get_recent(_GEN, 1)[-1]
-        texts = [o.prose for o in _blocked_observations(runtime, _GEN)] + [
+        assert len(observations) == 1
+        assert latest.error_code == "TRAVEL_BLOCKED"
+        texts = [
+            observations[0].prose,
+            observations[0].structured["message"],
+            observations[0].structured["connection_name"],
             latest.action_summary,
             latest.result_summary,
         ]
@@ -159,6 +165,33 @@ class TestBarredFireDoorMidTravel:
         assert payload["destination_spot_name"] == "北の坑道"
 
 
+class _RecordingTurnScheduler:
+    def __init__(self) -> None:
+        self.calls: list[tuple[PlayerId, Any]] = []
+
+    def maybe_schedule(self, player_id: PlayerId, output: Any) -> None:
+        self.calls.append((player_id, output))
+
+
+class TestBlockedTravelerGetsATurn:
+    """止まった本人の観測が、手番を積むスケジューラまで実際に渡ることを保証する。"""
+
+    def test_turn_scheduler_receives_the_blocked_observation_for_gen(self, runtime) -> None:
+        """閂で止まったゲンの手がかりの観測が、手番を積むスケジューラにゲン宛てで 1 回渡る。"""
+        scheduler = _RecordingTurnScheduler()
+        runtime.set_observation_turn_scheduler(scheduler)
+
+        _gen_heads_north_and_haru_bars_the_door(runtime)
+
+        blocked_calls = [
+            (pid, output)
+            for pid, output in scheduler.calls
+            if output.structured.get("type") == "travel_blocked"
+        ]
+        assert [pid for pid, _ in blocked_calls] == [_GEN]
+        assert blocked_calls[0][1].schedules_turn is True
+
+
 class TestFloodedPassageMidTravel:
     """水門で通路が沈んだ場合も、防火扉と同じ扱いになることを保証する。"""
 
@@ -175,3 +208,25 @@ class TestFloodedPassageMidTravel:
             (e.payload["passage_kind"], e.payload["passage_state"])
             for e in _blocked_traces(runtime)
         ] == [("BARRIER", "ACTIVE")]
+
+
+class _FailingBlockedTraceRecorder(_CapturingRecorder):
+    def record(self, kind: str, **kwargs: Any):
+        if kind == TraceEventKind.TRAVEL_BLOCKED:
+            raise RuntimeError("trace sink failed")
+        return super().record(kind, **kwargs)
+
+
+class TestBlockedReportSurvivesTraceFailure:
+    """trace の記録が失敗しても、本人への観測・手番・行動履歴は失われないことを保証する。"""
+
+    def test_observation_and_history_arrive_even_if_trace_fails(self) -> None:
+        """travel_blocked の記録が例外を投げても run は止まらず、ゲンに手がかりの観測と取りやめの行が届く。"""
+        runtime = create_world_runtime(_SCENARIO)
+        runtime.set_trace_recorder(_FailingBlockedTraceRecorder())
+
+        _gen_heads_north_and_haru_bars_the_door(runtime)
+
+        assert len(_blocked_observations(runtime, _GEN)) == 1
+        latest = runtime._action_result_store.get_recent(_GEN, 1)[-1]
+        assert latest.error_code == "TRAVEL_BLOCKED"
