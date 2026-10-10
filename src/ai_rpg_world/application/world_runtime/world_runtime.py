@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.being.being_attachment_resolver import (
+        BeingAttachmentResolver,
+    )
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
@@ -80,6 +83,7 @@ from ai_rpg_world.application.being.expectation.event_delivery import (
 from ai_rpg_world.application.being.expectation.recall_credit import (
     ExpectationRecallCreditReceiver,
 )
+from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.being.recall.belief_recall import SituationBeliefRecall
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
@@ -317,6 +321,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
+from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
+    InMemoryAcquaintanceRepository,
+)
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -704,6 +712,14 @@ class WorldRuntime:
     # 先に組んだ配り手だけが古い store を指したまま分かれる。
     _expectation_store: InMemoryExpectationRepository = field(
         default_factory=InMemoryExpectationRepository, repr=False
+    )
+    # #1520: Being が会った相手の記録。Being の snapshot に入り、世界の
+    # snapshot には入らない。
+    _acquaintance_store: AcquaintanceRepository = field(
+        default_factory=InMemoryAcquaintanceRepository, repr=False
+    )
+    _player_acquaintances: PlayerAcquaintances | None = field(
+        default=None, repr=False
     )
     # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
     _expectation_dispatcher: Any | None = field(default=None, repr=False)
@@ -2979,6 +2995,7 @@ class WorldRuntime:
                 encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
                     "spot", spot_str_id
                 ),
+                acquaintances=self._player_acquaintances,
             )
         if self._episodic_stack is None and self._situation_recall_enabled():
             raise ValueError("SITUATION_BELIEF_RECALL_ENABLED requires the episodic stack")
@@ -4840,6 +4857,23 @@ def _build_persona_resolver(
     return _resolver
 
 
+def _record_meetings_at_spawn(
+    scenario: ScenarioLoadResult, acquaintances: PlayerAcquaintances
+) -> None:
+    """初期配置で同じ場所にいた相手とは、最初から顔を合わせている。
+
+    人が入ってきた観測は配置のあとにしか出ないので、初期配置の同席はここで記録する。
+    """
+    spawns_by_spot: dict[int, list[PlayerSpawnConfig]] = {}
+    for spawn in scenario.player_spawns:
+        spawns_by_spot.setdefault(spawn.spawn_spot_id.value, []).append(spawn)
+    for spawns in spawns_by_spot.values():
+        for spawn in spawns:
+            for other in spawns:
+                if other is not spawn:
+                    acquaintances.record_meeting(PlayerId(spawn.player_id), other.name)
+
+
 def create_world_runtime(
     scenario_path: Path,
     *,
@@ -6555,6 +6589,25 @@ def create_world_runtime(
         graph_event_flusher=_flush_graph_events,
     )
 
+    expectation_store = InMemoryExpectationRepository()
+    acquaintance_store = InMemoryAcquaintanceRepository()
+
+    def _being_id_of(player_id: PlayerId) -> BeingId | None:
+        resolver: BeingAttachmentResolver | None = runtime.aux_being_resolver
+        if resolver is None:
+            return None
+        return resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id)
+
+    player_acquaintances = PlayerAcquaintances(
+        store=acquaintance_store,
+        being_id_of=_being_id_of,
+        turn_reader=expectation_store,
+        environment_name=scenario.metadata.title,
+        names_by_player_id={
+            int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
+        },
+    )
+
     runtime = WorldRuntime(
         scenario=scenario,
         _meeting_enabled=scenario.meeting_enabled,
@@ -6597,6 +6650,7 @@ def create_world_runtime(
             spot_str_id_resolver=lambda spot_int: scenario.id_mapper.get_str(
                 "spot", spot_int
             ),
+            acquaintances=player_acquaintances,
         ),
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
@@ -6604,6 +6658,9 @@ def create_world_runtime(
         _short_term_memory=short_term_memory,
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,
+        _expectation_store=expectation_store,
+        _acquaintance_store=acquaintance_store,
+        _player_acquaintances=player_acquaintances,
         # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
         _context_strategy=_build_context_format_strategy_from_config(config),
         _time_provider=time_provider,
@@ -6661,7 +6718,10 @@ def create_world_runtime(
         buffer=obs_buffer,
         trace_recorder_provider=lambda: runtime._trace_recorder,
         current_tick_provider=runtime.current_tick,
-        observers=[encounter_collector.on_observation],
+        observers=[
+            encounter_collector.on_observation,
+            player_acquaintances.on_observation,
+        ],
     )
     pipeline_event_publisher = PipelineEventPublisher(runtime)
 
@@ -8477,6 +8537,21 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
+    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
+    # 用意に失敗した player は、PlayerAcquaintances が Being 無しとして警告して読み書きしない。
+    runtime._wire_auxiliary_tool_stack()
+    for spawn in scenario.player_spawns:
+        try:
+            runtime._aux_being_provisioning.ensure_attached(
+                PlayerId(int(spawn.player_id))
+            )
+        except Exception:
+            logger.exception(
+                "world_runtime: Being provision failed for player_id=%s "
+                "(この player は会った相手を記録しない)",
+                spawn.player_id,
+            )
+    _record_meetings_at_spawn(scenario, player_acquaintances)
     return runtime
 
 

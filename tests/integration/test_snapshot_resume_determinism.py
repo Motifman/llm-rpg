@@ -43,6 +43,7 @@ from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_s
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -70,7 +71,7 @@ def _make_stack():
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver)
+    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository())
     return (wiring, provisioning)
 
 def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:

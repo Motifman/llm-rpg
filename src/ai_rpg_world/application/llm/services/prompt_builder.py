@@ -216,6 +216,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         encounter_memory_for_recall = episodic.encounter_memory
         encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
         encounter_spot_id_resolver = episodic.encounter_spot_id_resolver
+        acquaintances_for_recall = episodic.acquaintances
+        acquaintance_recent_window_turns = episodic.acquaintance_recent_window_turns
         # U10a (予測誤差統一設計 部品6・pending prediction): store が None なら
         # 機構自体が無効 (= 他の sidecar store と同じ「store の有無で判定」規約)。
         pending_prediction_store = episodic.pending_prediction_store
@@ -425,9 +427,25 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._encounter_memory_for_recall = encounter_memory_for_recall
         self._encounter_recent_window_ticks = encounter_recent_window_ticks
         self._encounter_spot_id_resolver = encounter_spot_id_resolver
+        self._acquaintances_for_recall = acquaintances_for_recall
+        self._acquaintance_recent_window_turns = acquaintance_recent_window_turns
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _recently_met_names(self, player_id: PlayerId) -> tuple[str, ...]:
+        if self._acquaintances_for_recall is None:
+            return ()
+        try:
+            return self._acquaintances_for_recall.recently_met_names(
+                player_id, within_turns=self._acquaintance_recent_window_turns
+            )
+        except Exception:
+            self._logger.warning(
+                "acquaintances.recently_met_names raised; skipping acquaintance cue",
+                exc_info=True,
+            )
+            return ()
 
     def _resolve_encounter_tick(self) -> int | None:
         """PR8 (R5): encounter cue 抽出のための現在 tick を返す。

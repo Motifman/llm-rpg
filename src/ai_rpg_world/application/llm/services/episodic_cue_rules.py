@@ -137,6 +137,7 @@ def build_situation_episodic_cues(
     encounter_current_tick: int | None = None,
     encounter_recent_window_ticks: int = 5,
     encounter_spot_id_resolver: Callable[[str], int] | None = None,
+    recently_met_names: Sequence[str] = (),
 ) -> tuple[EpisodicCue, ...]:
     """
     受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
@@ -161,9 +162,11 @@ def build_situation_episodic_cues(
 
     PR8 (R5): ``encounter_memory`` + ``encounter_player_id`` + ``encounter_current_tick``
     が全て与えられたら、直近 ``encounter_recent_window_ticks`` 以内に encounter
-    した entity / spot / event を ``ENCOUNTER`` source の cue として追加する。
-    構造化 spawn / arrival 観測しか無い場面でも entity / spot cue を立てて、
+    した spot / event を ``ENCOUNTER`` source の cue として追加する。
+    構造化 spawn / arrival 観測しか無い場面でも spot cue を立てて、
     過去 episode が recall されるようにするための経路。
+    ``recently_met_names`` (Being の知り合いの記録で直近に会った相手) は
+    ``ENCOUNTER`` source の entity cue になる。
 
     P2-①: ``include_topic_cues=True`` のときだけ、``semantic_topic_words`` と
     runtime target の表示名から ``topic`` 軸の日本語 cue を足す。これは
@@ -200,6 +203,7 @@ def build_situation_episodic_cues(
                 spot_id_resolver=encounter_spot_id_resolver,
             )
         )
+    collected.extend(_cues_from_recently_met(recently_met_names))
     validated = _validate_and_dedupe(collected)
     if include_topic_cues:
         topic_words = list(semantic_topic_words or ())
@@ -529,9 +533,6 @@ def _cues_from_recent_encounters(
     spot / event から recall cue を立てる。
 
     EncounterKey.kind → EpisodicCue.axis のマッピング:
-      ``player`` → axis=``entity``, value=``actor_{表示名}``
-        (identifier は表示名。観測 structured の actor と同じ
-        ``_coerce_actor_entity`` を通し、同じ人物を同じ cue にする)
       ``spot``   → axis=``place_spot``, value=``{数値 spot_id}``
         (identifier はシナリオの文字列 ID。``spot_id_resolver`` で数値に
         直し、``_cues_from_runtime_place`` の ``str(sid)`` と揃える)
@@ -565,12 +566,7 @@ def _cues_from_recent_encounters(
         if not identifier:
             continue
         kind = key.kind
-        if kind == "player":
-            value = _coerce_actor_entity(identifier)
-            if value is None:
-                continue
-            out.append(EpisodicCue(axis="entity", value=value, source=src))
-        elif kind == "spot":
+        if kind == "spot":
             ident_int = _resolve_encounter_spot_id(identifier, spot_id_resolver)
             if ident_int is None:
                 continue
@@ -590,6 +586,18 @@ def _cues_from_recent_encounters(
                 continue
             out.append(EpisodicCue(axis="action", value=seg, source=src))
         # 未知 kind は (sanitize 経由でも未保証なので) skip
+    return out
+
+
+def _cues_from_recently_met(names: Sequence[str]) -> list[EpisodicCue]:
+    """観測 structured の actor と同じ ``_coerce_actor_entity`` を通し、同じ人物を同じ cue にする。"""
+    out: list[EpisodicCue] = []
+    for name in names:
+        value = _coerce_actor_entity(name)
+        if value is not None:
+            out.append(
+                EpisodicCue(axis="entity", value=value, source=EpisodicCueSource.ENCOUNTER)
+            )
     return out
 
 

@@ -164,7 +164,7 @@ class TestRestartedPayloadRestoresIntoStores:
     """本物の codec が書いた snapshot を書き換えても、store に書き戻せることを保証する。"""
 
     def test_round_trip_through_real_codecs_starts_every_tick_at_zero(self) -> None:
-        """前の回の tick を持つ記録を capture して書き換えると、復元後はどれも tick 0 になる。"""
+        """前の回の tick を持つ記録を capture して書き換えると、復元後はどれも tick 0 になり、Being のターン数で持つ知り合いの記録はそのまま戻る。"""
         from datetime import datetime, timezone
 
         from tests.application.being.test_being_memory_snapshot_coverage import _make_service
@@ -188,6 +188,8 @@ class TestRestartedPayloadRestoresIntoStores:
             being, [AfterglowEntry(episode_id="e3", heading="h", entered_tick=85, source=list(AfterglowSource)[0])]
         )
         src._recall_habituation.replace_all_by_being(being, {"e4": 88})
+        src._acquaintance.record_meeting(being, environment_name="島", name="カイト", turn=12)
+        src._acquaintance.record_meeting(being, environment_name="島", name="カイト", turn=30)
         src._pending_prediction.add_by_being(
             being,
             PendingPrediction(pending_id="p1", text="t", resolution_cues=("spot:12",), tick_from=20, tick_to=25, origin_episode_id="ep", created_tick=15),
@@ -204,5 +206,6 @@ class TestRestartedPayloadRestoresIntoStores:
         assert [e.entered_tick for e in dst._afterglow.get_index(being)] == [0]
         assert dst._recall_habituation.list_all_by_being(being) == {"e4": 0}
         assert dst._pending_prediction.list_all_by_being(being) == []
+        assert dst._acquaintance.list_by_being(being) == src._acquaintance.list_by_being(being)
         assert report.reset_tick_fields == 6
         assert report.dropped_pending_predictions == 1

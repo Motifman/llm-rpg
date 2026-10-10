@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_s
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -55,7 +56,7 @@ def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dic
     recall = InMemoryEpisodicRecallBufferStore()
     journal = InMemoryEpisodicReinterpretationJournalStore()
     episode = InMemorySubjectiveEpisodeStore()
-    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=InMemoryExpectationRepository())
+    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), expectation_store=InMemoryExpectationRepository())
     svc = BeingPersistenceService(being_repository=being_repo, memory_snapshot_service=snapshot_svc)
     return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'recall': recall, 'journal': journal, 'episode': episode})
 
@@ -168,7 +169,7 @@ class TestConstructorTypeGuards:
         recall = InMemoryEpisodicRecallBufferStore()
         journal = InMemoryEpisodicReinterpretationJournalStore()
         episode = InMemorySubjectiveEpisodeStore()
-        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), expectation_store=InMemoryExpectationRepository())
+        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), expectation_store=InMemoryExpectationRepository())
         with pytest.raises(TypeError, match='being_repository'):
             BeingPersistenceService(being_repository='bad', memory_snapshot_service=snap_svc)
 
