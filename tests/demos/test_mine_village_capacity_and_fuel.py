@@ -216,6 +216,14 @@ class TestFuelLedgerPointsToTheSpareCans:
         assert "掘り場" in message
         assert "倉庫" in message
 
+    def test_ledger_is_hidden_in_the_dark_machine_room_without_a_light(self, runtime) -> None:
+        """灯していないカンテラだけで暗い機械室に入ると、帳面は暗くて見えない。読むには灯りが要る。"""
+        _place(runtime, _HARU, "machine_room")
+
+        hidden = set(runtime.build_llm_context(_HARU).tool_runtime_context.dark_hidden_object_names)
+
+        assert "給油の帳面" in hidden
+
     def test_ledger_places_match_where_the_cans_really_are(self) -> None:
         """帳面に書かれた場所と、実際に燃料の缶を出す木箱のある場所が一致する。"""
         raw = _raw()
