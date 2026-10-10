@@ -366,3 +366,31 @@ class TestDepartedTravelerBlocked:
         assert nav is not None
         assert not nav.is_traveling
         assert [b.connection_name for _, b in world.blocked] == ["防火扉"]
+
+
+class TestBlockedObserverFailure:
+    """止まった観察者が失敗しても、移動の取りやめと残りの観察者は失われないことを保証する。"""
+
+    def test_failing_observer_does_not_undo_the_stop_or_skip_later_observers(self) -> None:
+        """先に足した観察者が例外を投げても travel stage は例外を出さず、後の観察者にも届き、本人は止まったままになる。"""
+        world = _door_world()
+
+        def _fail(_pid, _blocked) -> None:
+            raise RuntimeError("observer failed")
+
+        later: list[PlayerId] = []
+        world.stage = SpotGraphTravelStageService(
+            world.player_repo, world.service, world.context
+        )
+        world.stage.add_blocked_observer(_fail)
+        world.stage.add_blocked_observer(lambda pid, _b: later.append(pid))
+        world.start(_S2)
+        world.stage.run(WorldTick(1))
+        world.close(_C1, Passage.door(DoorStateEnum.LOCKED))
+
+        world.stage.run(WorldTick(2))
+
+        assert later == [_PLAYER]
+        nav = world.nav()
+        assert nav is not None
+        assert not nav.is_traveling
