@@ -17,7 +17,6 @@ t33 に出した注文が t80 まで生きていて、値の付け直しまで�
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -37,7 +36,6 @@ if TYPE_CHECKING:
         MarketOrderExpiryResult,
     )
 
-logger = logging.getLogger(__name__)
 
 
 class MarketOrderExpiryStage:
@@ -101,20 +99,22 @@ class MarketOrderExpiryStage:
                     current_tick=tick_value,
                 )
         except CommandPostCommitException:
-            self._notify(result)
+            self._notify(result, tick_value)
             raise
-        self._notify(result)
+        self._notify(result, tick_value)
 
-    def _notify(self, result: MarketOrderExpiryResult | None) -> None:
+    def _notify(self, result: MarketOrderExpiryResult | None, tick_value: int) -> None:
         if result is None:
             return
         try:
             self._market.observe_expiry(result)
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "板の期限切れ観測を配れませんでした (order_id=%s)",
-                result.order.order_id.value,
-                exc_info=True,
+        except Exception as exc:  # noqa: BLE001
+            self._failure_isolator.record_continued_failure(
+                exc,
+                stage="market_order_expiry.observation",
+                tick=WorldTick(tick_value),
+                target_kind="market_order",
+                target_id=result.order.order_id.value,
             )
 
 

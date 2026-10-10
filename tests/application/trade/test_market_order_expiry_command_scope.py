@@ -375,8 +375,9 @@ def test_public_expiry_notifies_before_preserving_post_commit_failure(
 
 
 def test_observation_failure_does_not_undo_committed_expiry() -> None:
-    """確定後観測の失敗は、板の削除と返却を取り消さない。"""
+    """確定後観測の失敗は、板の削除と返却を取り消さず、観測の配信の失敗として trace に残る。"""
     runtime = _runtime()
+    recorder = _traced(runtime)
     market: MarketService = runtime._market_service
     _give(runtime, _HERB)
     order = market.place_sell_order(
@@ -391,6 +392,10 @@ def test_observation_failure_does_not_undo_committed_expiry() -> None:
     _stage(runtime).run(WorldTick(order.expires_at_tick + 1))
 
     assert runtime._market_board_store.board().find(order.order_id) is None
+    assert [
+        (e.payload["stage"], e.payload["target_id"], e.payload["continued"])
+        for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+    ] == [("market_order_expiry.observation", order.order_id.value, True)]
     assert _held(runtime, _HERB) == 1
 
 

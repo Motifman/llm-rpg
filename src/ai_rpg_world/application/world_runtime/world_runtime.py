@@ -6456,6 +6456,7 @@ def create_world_runtime(
     needs_config = scenario.needs_config
     starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
+        failure_isolator=world_tick_failure_isolator,
         starvation_damage_per_tick=starvation_dmg,
         # 空腹と疲労の進み方もシナリオの宣言から取る。**ここで渡し忘れると、
         # 宣言しても既定のまま進む** = 変えたつもりで変わっていない run に

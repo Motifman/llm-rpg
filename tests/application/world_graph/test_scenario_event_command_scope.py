@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from unittest.mock import MagicMock
 
 import pytest
+from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.common.event_delivery import (
@@ -19,7 +20,12 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
     SpotGraphScenarioEventStageService,
 )
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
+)
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
@@ -231,7 +237,10 @@ class _Harness:
     observed_event_types: list[str]
 
 
-def _build(events: tuple[ScenarioEventDef, ...]) -> _Harness:
+def _build(
+    events: tuple[ScenarioEventDef, ...],
+    failure_isolator: WorldTickFailureIsolator | None = None,
+) -> _Harness:
     store = InMemoryDataStore()
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
     for spot_id, name in ((ORIGIN, "origin"), (DESTINATION, "destination")):
@@ -342,6 +351,7 @@ def _build(events: tuple[ScenarioEventDef, ...]) -> _Harness:
         progress_store=progress,
         on_message=record_message,
         command_scope_factory=scope_factory,
+        failure_isolator=failure_isolator,
     )
     return _Harness(
         stage=stage,
@@ -509,8 +519,15 @@ class TestScenarioEventCommandScope:
         assert harness.messages == ["alarm committed"]
 
     def test_message_callback_failure_does_not_change_committed_result(self) -> None:
-        """確定後message観測の失敗は警告に留め、event成功を維持する。"""
-        harness = _build((_event("alarm", full_effects=False),))
+        """isolate で確定後 message 観測が失敗しても event 成功を維持し、通知の失敗を trace に残す。"""
+        recorder = CollectingTraceRecorder()
+        harness = _build(
+            (_event("alarm", full_effects=False),),
+            failure_isolator=WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.ISOLATE,
+                trace_recorder_provider=lambda: recorder,
+            ),
+        )
 
         def fail_message(_event: ScenarioEventDef, _message: str) -> None:
             raise RuntimeError("message failed")
@@ -521,3 +538,7 @@ class TestScenarioEventCommandScope:
 
         assert harness.flags.as_frozen_set() == frozenset({"alarm_flag"})
         assert harness.progress.is_fired("alarm") is True
+        assert [
+            (e.payload["stage"], e.payload["target_id"], e.payload["continued"])
+            for e in recorder.of_kind(TraceEventKind.WORLD_TICK_UNIT_FAILED)
+        ] == [("scenario_event.message", "alarm", True)]
