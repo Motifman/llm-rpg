@@ -4447,7 +4447,7 @@ class WorldRuntime:
             「野いちごが3つ腐った。」 (同 tick 内のみ aggregate)
             → 1 日に渡って 8 個が別 tick で腐ると 8 件の観測が走る
 
-        新 (本 PR): 日 (24 tick) を跨いで pending buffer に貯め、日境界
+        新 (本 PR): 1 日を跨いで pending buffer に貯め、日境界
         または game-end の直前に **1 日分まとめて** flush する:
             「今日は野いちごが5個、椰子の実が2個腐った。」
 
@@ -4457,7 +4457,6 @@ class WorldRuntime:
             return
         # 当日分の buffer に積む。flush は day boundary で行う (下記参照)。
         # field 化済 (#375 後続レビュー対応): 遅延 hasattr 初期化を廃止。
-        # 当日 day index を計算 (cycle が無いシナリオは tick そのまま使う)
         ticks_per_day = self._ticks_per_day_or_default()
         current_day = self.current_tick() // max(1, ticks_per_day)
         # 日が変わっていたら前日分を flush してから新日のバッファに積む
@@ -4480,10 +4479,10 @@ class WorldRuntime:
             entry["instance_ids"].append(int(instance_id.value))
 
     def _ticks_per_day_or_default(self) -> int:
-        """day_night_config があればそこから ticks_per_day を取り、無ければ 24。"""
+        """「今日」の区切りを、エージェントが見ている時計の 1 日にそろえる (#1576)。"""
         cfg = self.scenario.day_night_config
         if cfg is None:
-            return 24
+            return (24 * 60) // _FALLBACK_MINUTES_PER_TICK
         return cfg.cycle.ticks_per_day
 
     def _flush_pending_food_spoiled(self) -> None:

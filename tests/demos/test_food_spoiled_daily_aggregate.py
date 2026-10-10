@@ -175,3 +175,47 @@ class TestEmptyBuffer:
         runtime._simulation_service.tick = MagicMock(return_value=WorldTick(50))
         # 何も raise しない
         runtime.advance_tick()
+
+
+@pytest.fixture
+def runtime_without_day_night():
+    from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+    return create_world_runtime(SCENARIO_PATH.parent / "market_town_v1.json")
+
+
+class TestDayBoundaryWithoutDayNight:
+    """昼夜を宣言しない世界でも、「今日」の区切りが時計の 1 日 (5 分/tick で 288 tick) と一致する (#1576)。"""
+
+    def test_spoilage_within_one_clock_day_is_not_flushed_at_tick_24(
+        self, runtime_without_day_night,
+    ) -> None:
+        """昼夜の無い世界で tick 5 と tick 30 に腐っても、時計ではまだ同じ日なので知らせは届かない。"""
+        runtime = runtime_without_day_night
+        captured = _capture_observations(runtime)
+        runtime.current_tick = lambda: 5  # type: ignore[method-assign]
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 1, "野いちご")])
+
+        runtime.current_tick = lambda: 30  # type: ignore[method-assign]
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 2, "野いちご")])
+
+        food_obs = [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
+        assert food_obs == []
+        assert len(runtime._pending_spoiled[101]["instance_ids"]) == 2
+
+    def test_crossing_tick_288_flushes_the_day(self, runtime_without_day_night) -> None:
+        """昼夜の無い世界で、tick 287 までに腐った分は、tick 288 (時計で翌日 0:00) に進んだときに 1 件にまとめて届く。"""
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        runtime = runtime_without_day_night
+        captured = _capture_observations(runtime)
+        runtime.current_tick = lambda: 287  # type: ignore[method-assign]
+        runtime._append_food_spoiled_batch_observation([_make_spoiled_event(101, 1, "野いちご")])
+        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(287))
+        runtime.advance_tick()
+        assert [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"] == []
+
+        runtime._simulation_service.tick = MagicMock(return_value=WorldTick(288))
+        runtime.advance_tick()
+
+        food_obs = [o for _, o in captured if (o.structured or {}).get("type") == "food_spoiled"]
+        assert food_obs
+        assert "今日は野いちごが1個腐った" in food_obs[0].prose
