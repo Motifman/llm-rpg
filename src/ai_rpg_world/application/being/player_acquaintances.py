@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.being.application.known_people import render_known_people

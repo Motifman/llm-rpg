@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from tests.application.observation.test_observation_recipient_resolver_extended_events import (
     _make_status,
 )
