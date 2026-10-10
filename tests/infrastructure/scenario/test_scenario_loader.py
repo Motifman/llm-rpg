@@ -619,6 +619,26 @@ class TestScenarioLoaderMinimal:
         with pytest.raises(ValueError, match="usage_hint"):
             ScenarioLoader().load_from_dict(scenario)
 
+    def test_parses_item_event_removal_message(self) -> None:
+        """item_specs[].event_removal_message は、持ち物から外れたときに持ち主へ届ける文として読み込まれる。書かなければ空文字。"""
+        scenario = _minimal_scenario()
+        scenario["item_specs"][0]["event_removal_message"] = "鍵が錆びて崩れた。"
+
+        result = ScenarioLoader().load_from_dict(scenario)
+        default = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.item_spec_definitions[0].event_removal_message == "鍵が錆びて崩れた。"
+        assert default.item_spec_definitions[0].event_removal_message == ""
+
+    @pytest.mark.parametrize("value", ["   ", 3])
+    def test_rejects_blank_or_non_string_item_event_removal_message(self, value) -> None:
+        """event_removal_message が空白だけ、または文字列でなければ、シナリオ境界で作家ミスとして弾く。"""
+        scenario = _minimal_scenario()
+        scenario["item_specs"][0]["event_removal_message"] = value
+
+        with pytest.raises(ValueError, match="event_removal_message"):
+            ScenarioLoader().load_from_dict(scenario)
+
     def test_limits_actions_defaults_to_true_and_can_be_turned_off(self) -> None:
         """metadata.limits_actions は省略すると True、false と書けば False になる。"""
         scenario = _minimal_scenario()

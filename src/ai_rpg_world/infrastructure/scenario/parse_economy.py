@@ -477,6 +477,14 @@ def parse_item_specs( items_raw: list[dict[str, Any]], mapper: ScenarioIdMapper,
         usage_hint = usage_hint_raw.strip()
         if "usage_hint" in item and not usage_hint:
             raise ValueError(f"item '{sid}': usage_hint must not be blank")
+        event_removal_message_raw = item.get("event_removal_message", "")
+        if not isinstance(event_removal_message_raw, str):
+            raise ValueError(
+                f"item '{sid}': event_removal_message must be string, got {event_removal_message_raw!r}"
+            )
+        event_removal_message = event_removal_message_raw.strip()
+        if "event_removal_message" in item and not event_removal_message:
+            raise ValueError(f"item '{sid}': event_removal_message must not be blank")
         defs.append(ItemSpecDefinition(
             string_id=sid,
             spec_id=ItemSpecId.create(numeric),
@@ -491,6 +499,7 @@ def parse_item_specs( items_raw: list[dict[str, Any]], mapper: ScenarioIdMapper,
             consume_effect=consume_effect,
             fatigue_recovery=fatigue_recovery,
             usage_hint=usage_hint,
+            event_removal_message=event_removal_message,
         ))
     return defs
 

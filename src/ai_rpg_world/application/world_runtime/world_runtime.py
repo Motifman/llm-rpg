@@ -6354,6 +6354,13 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         monster_repository=monster_repo if scenario.monster_placements else None,
         spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        event_removal_messages={
+            item_def.spec_id.value: item_def.event_removal_message
+            for item_def in scenario.item_spec_definitions
+            if item_def.event_removal_message
+        },
         departed_position_store=departed_position_store,
         departed_player_checker=player_perception_policy.is_departed,
         downed_self_becomes_departed=(

@@ -157,6 +157,7 @@ _DEFAULT_EXPECTED = {
     "PlayerGoldPaidEvent": "_deliver_only_to_the_subject",
     "ItemAddedToInventoryEvent": "_deliver_only_to_the_subject",
     "ItemDroppedFromInventoryEvent": "_deliver_only_to_the_subject",
+    "ItemRemovedFromInventoryEvent": "_deliver_only_to_the_subject",
     "ItemEquippedEvent": "_deliver_only_to_the_subject",
     "ItemUnequippedEvent": "_deliver_only_to_the_subject",
     "InventorySlotOverflowEvent": "_deliver_only_to_the_subject",

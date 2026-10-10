@@ -133,6 +133,8 @@ def plan_item_removals_from_inventory(
 def apply_item_removal_plan(
     inventory: PlayerInventoryAggregate,
     plan: ItemRemovalPlan,
+    *,
+    by_world_event: bool = False,
 ) -> bool:
     """事前計画が現在も有効なら、全対象を一括でインベントリから外す。"""
     slot_ids = tuple(slot_id for slot_id, _item_instance_id in plan)
@@ -150,7 +152,7 @@ def apply_item_removal_plan(
         if inventory.is_item_reserved(expected_item_instance_id):
             return False
     for slot_id, _item_instance_id in plan:
-        inventory.drop_item(slot_id)
+        inventory.remove_item(slot_id, by_world_event=by_world_event)
     return True
 
 
@@ -158,6 +160,8 @@ def remove_items_of_specs_from_inventory(
     inventory: PlayerInventoryAggregate,
     item_spec_ids: tuple[ItemSpecId, ...],
     item_repository: ItemRepository,
+    *,
+    by_world_event: bool = False,
 ) -> bool:
     """指定品目を全量確保できる場合だけ、予約品を避けてまとめて除去する。"""
     plan = plan_item_removals_from_inventory(
@@ -165,7 +169,7 @@ def remove_items_of_specs_from_inventory(
     )
     if plan is None:
         return False
-    return apply_item_removal_plan(inventory, plan)
+    return apply_item_removal_plan(inventory, plan, by_world_event=by_world_event)
 
 
 def remove_one_item_of_spec_from_inventory(

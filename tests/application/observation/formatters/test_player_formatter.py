@@ -31,6 +31,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
@@ -57,6 +58,7 @@ def _make_context(
     spot_repository=None,
     player_profile_repository=None,
     item_repository=None,
+    event_removal_messages=None,
 ) -> ObservationFormatterContext:
     """テスト用の ObservationFormatterContext を生成。"""
     name_resolver = ObservationNameResolver(
@@ -73,6 +75,7 @@ def _make_context(
     return ObservationFormatterContext(
         name_resolver=name_resolver,
         item_repository=item_repository,
+        event_removal_messages=event_removal_messages or {},
     )
 
 
@@ -705,6 +708,67 @@ class TestPlayerObservationFormatterItemAddedToInventory:
         assert out is not None
         assert "何かのアイテム" in out.prose
         assert "入手" in out.prose
+
+
+def _item_repo_with(name: str, spec_id_value: int) -> MagicMock:
+    item_repo = MagicMock()
+    agg = MagicMock()
+    agg.item_spec.name = name
+    agg.item_spec.item_spec_id.value = spec_id_value
+    agg.quantity = 1
+    item_repo.find_by_id.return_value = agg
+    return item_repo
+
+
+def _removed_event(*, by_world_event: bool = False) -> ItemRemovedFromInventoryEvent:
+    return ItemRemovedFromInventoryEvent.create(
+        aggregate_id=PlayerId(1),
+        aggregate_type="PlayerInventoryAggregate",
+        item_instance_id=ItemInstanceId.create(1),
+        by_world_event=by_world_event,
+    )
+
+
+class TestPlayerObservationFormatterItemRemovedFromInventory:
+    """効果・出来事・売買で持ち物から外れた品を、捨てたとは言わずに本人へ伝えることを保証する。"""
+
+    def test_removed_item_is_named_and_not_called_dropped(self):
+        """品の定義に文が無いとき「{品名}が手もとからなくなった。」と伝え、「捨て」と言わない。"""
+        ctx = _make_context(item_repository=_item_repo_with("カンテラの油", 7))
+        formatter = PlayerObservationFormatter(ctx)
+
+        out = formatter.format(_removed_event(), PlayerId(1))
+
+        assert out is not None
+        assert out.prose == "カンテラの油が手もとからなくなった。"
+        assert out.structured == {"type": "item_removed", "item_name": "カンテラの油", "item_spec_id_value": 7}
+        assert out.observation_category == "self_only"
+
+    def test_event_removal_message_replaces_the_default_when_a_world_event_removed_it(self):
+        """シナリオの出来事で外れたとき (by_world_event=True)、品の定義の文 (event_removal_messages) があれば、その文をそのまま伝える。"""
+        ctx = _make_context(
+            item_repository=_item_repo_with("カンテラの灯", 9),
+            event_removal_messages={9: "カンテラの灯が燃え尽きた。"},
+        )
+        formatter = PlayerObservationFormatter(ctx)
+
+        out = formatter.format(_removed_event(by_world_event=True), PlayerId(1))
+
+        assert out is not None
+        assert out.prose == "カンテラの灯が燃え尽きた。"
+
+    def test_event_removal_message_is_not_used_when_an_action_removed_it(self):
+        """人の操作 (奪う・渡す・使う) で外れたときは、品の定義の文があっても既定の文にする。奪われた灯を「燃え尽きた」と伝えないため。"""
+        ctx = _make_context(
+            item_repository=_item_repo_with("カンテラの灯", 9),
+            event_removal_messages={9: "カンテラの灯が燃え尽きた。"},
+        )
+        formatter = PlayerObservationFormatter(ctx)
+
+        out = formatter.format(_removed_event(by_world_event=False), PlayerId(1))
+
+        assert out is not None
+        assert out.prose == "カンテラの灯が手もとからなくなった。"
 
 
 class TestPlayerObservationFormatterPlayerSpoke:

@@ -441,6 +441,7 @@ class SpotGraphScenarioEventStageService:
                     inv,
                     effect_result.item_spec_ids_to_remove,
                     item_repository,
+                    by_world_event=True,
                 )
                 player_inventory_repository.save(inv)
 

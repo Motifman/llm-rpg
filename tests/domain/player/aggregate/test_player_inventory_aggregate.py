@@ -14,6 +14,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemEquipRequestedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.exception.player_exceptions import (
@@ -327,6 +328,27 @@ class TestPlayerInventoryAggregate:
         assert events[0].aggregate_id == aggregate.player_id
         assert events[0].item_instance_id == ItemInstanceId(100)
         assert events[0].slot_id == SlotId(0)
+
+    def test_remove_item_empties_the_slot_and_is_not_a_drop(self):
+        """remove_item で外すと、スロットは空になり、ItemRemovedFromInventoryEvent が 1 件だけ出る。捨てたイベント (ItemDroppedFromInventoryEvent) は出ない。使い切った・燃え尽きた品を「捨てた」と伝えないため。"""
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100, 2: 200})
+
+        aggregate.remove_item(SlotId(0))
+
+        assert aggregate.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert aggregate.get_item_instance_id_by_slot(SlotId(2)) == ItemInstanceId(200)
+        events = aggregate.get_events()
+        assert [type(e) for e in events] == [ItemRemovedFromInventoryEvent]
+        assert events[0].aggregate_id == aggregate.player_id
+        assert events[0].item_instance_id == ItemInstanceId(100)
+
+    def test_remove_item_from_empty_slot_raises(self):
+        """空のスロットを remove_item に渡すと ItemNotInSlotException を投げ、イベントは出ない。"""
+        aggregate = create_test_inventory_aggregate(max_slots=5)
+
+        with pytest.raises(ItemNotInSlotException):
+            aggregate.remove_item(SlotId(0))
+        assert aggregate.get_events() == []
 
     def test_drop_item_from_empty_slot(self):
         """空のスロットからアイテムを捨てようとすると例外が発生すること"""

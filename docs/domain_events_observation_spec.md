@@ -71,7 +71,7 @@ LLM エージェント（プレイヤー）に「誰に」「どのような情�
 | イベント | 観測対象 | 配信先 | 観測内容（例） | 備考 |
 |----------|----------|--------|----------------|------|
 | **ItemAddedToInventoryEvent** | 是 | 本人（aggregate_id = PlayerId） | 「〇〇をN個入手しました」 | アイテム名は Item リポジトリで解決。 |
-| **ItemRemovedFromInventoryEvent** | 条件付き | 本人 | 「〇〇を削除した」 | 収納・取引など。 |
+| **ItemRemovedFromInventoryEvent** | 是 | 本人 | 「〇〇が手もとからなくなった」。シナリオの出来事で外れ、品の定義に `event_removal_message` があればその文 | 効果・出来事・売買・取引の成立で外れたとき。本人が捨てたときは ItemDroppedFromInventoryEvent (design_decisions D1569)。 |
 | **ItemDroppedFromInventoryEvent** | 是 | 本人 | 「〇〇を捨てた」 |  |
 | **ItemEquippedEvent** | 是 | 本人 | 「〇〇を装備した」 |  |
 | **ItemUnequippedEvent** | 是 | 本人 | 「〇〇を外した」 |  |
@@ -318,6 +318,7 @@ LLM エージェント（プレイヤー）に「誰に」「どのような情�
 | **WorldObjectInteractedEvent** | オブジェクトとインタラクションしました | ゲーム用語的 → interaction_type に応じ「宝箱を開けました」「ドアを開きました」「資源を採取しました」等の 5W1H 表現に変更。 |
 | **ItemAddedToInventoryEvent** | アイテムを入手しました | アイテム名・数量 → 「〇〇を N 個入手しました」。 |
 | **ItemDroppedFromInventoryEvent** | アイテムを捨てました | 「〇〇を捨てました」。 |
+| **ItemRemovedFromInventoryEvent** | (観測なし) | 「〇〇が手もとからなくなった。」。出来事で外れ、品の定義に `event_removal_message` があればその文 (例「カンテラの灯が燃え尽きた。」)。 |
 | **ItemEquippedEvent** | アイテムを装備しました | 「〇〇を装備しました」。 |
 | **ItemUnequippedEvent** | アイテムを外しました | 「〇〇を外しました」。 |
 | **InventorySlotOverflowEvent** | インベントリが満杯でアイテムが溢れました | 「インベントリが満杯で〇〇が溢れました」。 |
