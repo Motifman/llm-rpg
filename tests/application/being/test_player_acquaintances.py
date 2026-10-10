@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
@@ -126,3 +128,77 @@ class TestRecentlyMetNames:
 
         assert acquaintances.recently_met_names(ADA, within_turns=2) == ("ノア",)
         assert acquaintances.recently_met_names(ADA, within_turns=6) == ("リオ", "ノア")
+
+    def test_window_boundary_is_inclusive(self) -> None:
+        """最後に会ったターンから現在までがちょうど窓の幅なら含め、1 つ超えたら含めない。"""
+        acquaintances, _, turns = _make()
+        acquaintances.record_meeting(ADA, "ノア")
+        for _ in range(3):
+            turns.advance_turn(BeingId("being_p1"))
+
+        assert acquaintances.recently_met_names(ADA, within_turns=3) == ("ノア",)
+        assert acquaintances.recently_met_names(ADA, within_turns=2) == ()
+
+
+class TestWhoCanBeMet:
+    """会った相手として記録するのはシナリオの参加者だけで、名前の取り違えを起動時に止めることを保証する。"""
+
+    def test_entering_non_participant_is_not_recorded(self) -> None:
+        """参加者に無い名前 (モンスターや、名前を引けなかったときの代わりの名前) が入ってきても、知り合いにしない。"""
+        acquaintances, store, _ = _make()
+
+        acquaintances.on_observation(ADA, _entered("不明なプレイヤー"))
+        acquaintances.on_observation(ADA, _entered("森の狼"))
+
+        assert store.list_by_being(BeingId("being_p1")) == ()
+
+    def test_actor_surrounded_by_spaces_is_the_same_person(self) -> None:
+        """actor の前後に空白があっても、空白を落とした参加者の名前で双方に記録する。"""
+        acquaintances, _, _ = _make()
+
+        acquaintances.on_observation(ADA, _entered("  ノア "))
+
+        assert acquaintances.find(ADA, "ノア") is not None
+        assert acquaintances.find(NOA, "エイダ") is not None
+
+    def test_one_side_failing_does_not_drop_the_other_side(self) -> None:
+        """受け手の Being を引くところで例外が出ても、入ってきた人の側の記録は残る。"""
+
+        def being_id_of(pid: PlayerId) -> BeingId | None:
+            if pid == ADA:
+                raise RuntimeError("being lookup failed")
+            return _being(pid)
+
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=being_id_of,
+            turn_reader=InMemoryExpectationRepository(),
+            environment_name="島",
+            names_by_player_id=NAMES,
+        )
+
+        acquaintances.on_observation(ADA, _entered("ノア"))
+
+        assert acquaintances.find(NOA, "エイダ") is not None
+
+    def test_duplicate_participant_names_are_rejected(self) -> None:
+        """同じ名前の参加者が 2 人いると、名前から人を引けないので作れない。"""
+        with pytest.raises(ValueError):
+            PlayerAcquaintances(
+                store=InMemoryAcquaintanceRepository(),
+                being_id_of=_being,
+                turn_reader=InMemoryExpectationRepository(),
+                environment_name="島",
+                names_by_player_id={1: "ノア", 2: "ノア"},
+            )
+
+    def test_blank_environment_name_is_rejected(self) -> None:
+        """環境の名前が空なら作れない。実行中の観測ごとに記録が欠けるのではなく、起動時に止める。"""
+        with pytest.raises(ValueError):
+            PlayerAcquaintances(
+                store=InMemoryAcquaintanceRepository(),
+                being_id_of=_being,
+                turn_reader=InMemoryExpectationRepository(),
+                environment_name=" ",
+                names_by_player_id=NAMES,
+            )

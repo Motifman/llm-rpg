@@ -139,8 +139,10 @@ class TestPlayerFamiliarityAnnotation:
         assert builder._player_familiarity_annotation(None, "ノア") is None
 
     def test_environment_encounter_alone_gives_no_note(self) -> None:
-        """知り合いの記録を渡さなければ、環境の encounter が揃っていても人に注記を付けない。"""
-        builder = _make_builder(InMemoryEncounterMemory())
+        """環境の encounter に人の記録が残っていても、知り合いの記録を渡さなければ人に注記を付けない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
+        builder = _make_builder(memory)
         assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
 
 

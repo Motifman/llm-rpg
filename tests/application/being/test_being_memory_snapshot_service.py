@@ -286,6 +286,20 @@ class TestRestoreRoundTrip:
         with pytest.raises(BeingMemoryPayloadFormatError):
             dst_svc.restore(being, json.dumps(payload))
 
+    def test_duplicate_acquaintance_is_rejected_before_any_store_is_written(self) -> None:
+        """同じ環境の同じ相手が payload に 2 件あると BeingMemoryPayloadFormatError で拒み、どの store も書き換えない。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['memo'].add_by_being(being, '書かれてはいけない', current_tick=1)
+        payload = json.loads(src_svc.capture(being))
+        met = {'environment_name': '島', 'name': 'ノア', 'first_met_turn': 0, 'last_met_turn': 0, 'met_count': 1}
+        payload['acquaintances'] = [met, dict(met)]
+        (dst_svc, dst_stores) = _make_service()
+        with pytest.raises(BeingMemoryPayloadFormatError):
+            dst_svc.restore(being, json.dumps(payload))
+        assert dst_stores['memo'].list_all_by_being(being) == []
+        assert dst_stores['acquaintances'].list_by_being(being) == ()
+
     def test_reads_capture_stagnation_pressure_once(self) -> None:
         """LOW-1 (敵対的レビュー指摘): capture() が同じ being_id に対して
         stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)

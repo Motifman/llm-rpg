@@ -37,6 +37,14 @@ class PlayerAcquaintances:
         environment_name: str,
         names_by_player_id: Mapping[int, str],
     ) -> None:
+        if not environment_name.strip():
+            raise ValueError("environment_name must be non-blank")
+        names = list(names_by_player_id.values())
+        duplicated = sorted({n for n in names if names.count(n) > 1})
+        if duplicated:
+            raise ValueError(
+                f"participants share a name, so a name cannot tell who met whom: {duplicated}"
+            )
         self._store = store
         self._being_id_of = being_id_of
         self._turn_reader = turn_reader
@@ -87,22 +95,31 @@ class PlayerAcquaintances:
 
         入ってきた本人には自分の到着の観測が届かないので、受け手への観測から
         両方の記録を残す。名前の伏せられた観測では、どちらも相手を見ていない。
+        参加者に無い名前 (モンスター、名前を引けなかったときの代わりの名前) は
+        人として記録しない。
         """
+        structured = output.structured or {}
+        if structured.get("type") != _TYPE_ENTITY_ENTERED_SPOT:
+            return
+        actor = structured.get("actor")
+        if not isinstance(actor, str):
+            return
+        actor = actor.strip()
+        actor_id = self._player_id_by_name.get(actor)
+        recipient_name = self._names_by_player_id.get(recipient.value)
+        if actor_id is None or recipient_name is None:
+            return
+        self._record_safely(recipient, actor)
+        self._record_safely(PlayerId(actor_id), recipient_name)
+
+    def _record_safely(self, player_id: PlayerId, name: str) -> None:
         try:
-            structured = output.structured or {}
-            if structured.get("type") != _TYPE_ENTITY_ENTERED_SPOT:
-                return
-            actor = structured.get("actor")
-            if not isinstance(actor, str) or not actor.strip():
-                return
-            self.record_meeting(recipient, actor)
-            actor_id = self._player_id_by_name.get(actor)
-            recipient_name = self._names_by_player_id.get(recipient.value)
-            if actor_id is not None and recipient_name is not None:
-                self.record_meeting(PlayerId(actor_id), recipient_name)
+            self.record_meeting(player_id, name)
         except Exception:
             _logger.exception(
-                "会った記録を残せなかった (recipient=%s)", recipient.value
+                "会った記録を残せなかった (player_id=%s, name=%s)",
+                player_id.value,
+                name,
             )
 
     def _resolve(self, player_id: PlayerId) -> BeingId | None:

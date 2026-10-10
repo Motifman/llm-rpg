@@ -35,3 +35,38 @@ class TestAcquaintancesAtSpawn:
 
         assert runtime._player_acquaintances.find(kaito, "リン") is None
         assert runtime._player_acquaintances.find(rin, "カイト") is None
+
+
+class TestRestoreOverSpawnRecords:
+    """snapshot を読み込むと、起動時に記録した同席が、保存した知り合いの記録で置き換わることを保証する。"""
+
+    def test_restored_records_replace_spawn_records(self, tmp_path: Path) -> None:
+        """2 回会ったノアだけを知っていた Being を、4 人同席で起動した島に戻すと、知り合いはノアの 1 件で、回数は保存した 2 のままになる。"""
+        from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
+
+        from ai_rpg_world.application.being.experiment_snapshot_session import (
+            ExperimentSnapshotSession,
+        )
+
+        island = _SCENARIOS / "survival_island_v4_coop.json"
+        source = create_world_runtime(island)
+        ada = source.get_player_ids()[0]
+        being_id = source.aux_being_resolver.resolve_being_id(
+            source.aux_being_default_world_id, ada
+        )
+        source._acquaintance_store.replace_all_by_being(being_id, [])
+        source._player_acquaintances.record_meeting(ada, "ノア")
+        source._player_acquaintances.record_meeting(ada, "ノア")
+        ExperimentSnapshotSession(
+            wiring_result=_wiring_stub_from_world_runtime(source),
+            snapshot_dir=tmp_path,
+        ).capture_all([ada])
+
+        restored = create_world_runtime(island)
+        ExperimentSnapshotSession(
+            wiring_result=_wiring_stub_from_world_runtime(restored),
+            snapshot_dir=tmp_path,
+        ).restore_all_from_dir(tmp_path)
+
+        met = restored._acquaintance_store.list_by_being(being_id)
+        assert [(m.name, m.met_count) for m in met] == [("ノア", 2)]
