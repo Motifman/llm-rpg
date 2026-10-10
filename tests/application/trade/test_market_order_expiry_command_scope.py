@@ -9,10 +9,10 @@ from tests.support.overflow_sinks import IGNORE_OVERFLOW
 from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
     MarketOrderExpiryStage,
 )
-from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.trade.services.market_service import MarketService
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,

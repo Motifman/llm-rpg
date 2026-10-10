@@ -57,11 +57,11 @@ from ai_rpg_world.application.monster.services.monster_pack_reinforcement_handle
 from ai_rpg_world.application.monster.services.monster_reaction_handler import (
     MonsterReactionHandler,
 )
-from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
-    WorldTickFailureIsolator,
-)
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
+)
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId

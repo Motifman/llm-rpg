@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
 from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
@@ -14,6 +13,7 @@ from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_servic
 )
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from tests.support.trace_recorders import CollectingTraceRecorder
 
 _SCENARIO = Path("data/scenarios/survival_island_v2_short.json")
 
