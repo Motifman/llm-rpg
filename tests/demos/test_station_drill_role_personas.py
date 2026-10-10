@@ -80,7 +80,9 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
 
     もとは #1115 の分割が**バイトを変えていない**ことを示すために置いた。共通引数の
     説明を system prompt へ寄せた時点で、**意図してバイトが変わった**ので値を更新
-    してある。
+    してある。#1521 で、persona_prompt に【ペルソナ】の見出しが付くようになり
+    (本文が「上記【ペルソナ】」と指す見出しが無かった)、見出しの 1 行ぶん
+    バイトが変わった。
 
     以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
     値を更新するときは、prompt を変えた理由が PR にあるはずなので、それを確かめる
@@ -88,12 +90,12 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "2d1b8bac38e3be1ee53eb832b7373bd1058dc4fd6e57c8d7ae9e74ecfd013379",
-        "sena": "49fc3d18ec846774fb05ba398a6a9fdbbdc23f76b610f2e436fa664699fc0338",
-        "aoi": "5289f54d20517f3ad6ff5ee5dd6c7b00bf2f41198bb35f6836a349768cea3cb5",
-        "hagi": "6533ac30cf95ef5fff58a684e28a1daec2a1dd6b29385dffa8c0c6262b0afd79",
-        "yura": "e8575b4db3016e953d908018e2677b1406857ee923c5c59bab0b207e23031e60",
-        "saki": "93846bbdd13b18cc096bf926883d335308d1f274209a5f66d853ab9f91ce19f1",
+        "mori": "85603e70d90a99c395bab250c874a904167ec2975c1554a683880103353d7531",
+        "sena": "8b81211e9f65109cdbfba36f719f3e9715c3e76eaa76dded10e83cebadf697c0",
+        "aoi": "4bdcbde0de63c8d941bece1caa7dc6604df9f472837e42e09b606dad79e1c688",
+        "hagi": "0a5712de12c7541c00a78fa3e41a286a29cba62b6ff6f486b37953f2cfaf5d91",
+        "yura": "1a432288641e7e057440d6e00ff9a45c9fe9cd464fc341c50eb205d56b435685",
+        "saki": "e518f52836077aa297df6dce35180f0554bcaaf8e89f8bd5ca2595de90f0ac74",
     }
 
     actual_by_string_id = {
