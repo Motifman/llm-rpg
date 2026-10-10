@@ -23,6 +23,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -582,3 +583,24 @@ class TestRulesStayOutOfThePrompt:
 
         assert texts
         assert [t for t in texts if any(p in t for p in places)] == []
+
+
+class TestPromptsUseWorldWordsForGatesAndValve:
+    """水門と弁の操作が、世界に無い A・B・C の区別や設定の番号の名前でプロンプトに出ないことを保証する。"""
+
+    def test_full_prompts_near_the_gates_and_valve_hide_internal_names(self, runtime) -> None:
+        """3 つの水門の前と、灯した機械室に 1 人ずつ立たせ、水門と弁の操作が出ているプロンプトの全文 (本文とツールの定義) に `open_gate_`・`close_gate_`・`set_valve_` が出ない。3 本目の実 run では「「北の坑道の水門」に open_gate_a した」と出ていた。"""
+        lamp = ItemSpecId(runtime.id_mapper.get_int("item_spec", "lamp"))
+        _place(runtime, PlayerId(4), "machine_room")
+        runtime.do_interact_with_item(PlayerId(4), lamp, "light_lamp")
+        for pid, spot in ((_HARU, "north_tunnel"), (_GEN, "south_tunnel"), (PlayerId(2), "mid_junction")):
+            _place(runtime, pid, spot)
+
+        texts = []
+        for pid in (_HARU, PlayerId(2), _GEN, PlayerId(4)):
+            prompt = runtime.build_full_prompt(pid)
+            texts.append("\n".join(str(m.get("content", "")) for m in prompt["messages"]) + json.dumps(prompt["tools"], ensure_ascii=False))
+        full = "\n".join(texts)
+
+        assert "open_gate" in full and "turn_valve_to_one" in full
+        assert [name for name in ("open_gate_", "close_gate_", "set_valve_") if name in full] == []
