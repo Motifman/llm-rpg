@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -52,8 +51,8 @@ def _run_travel_to(executor: SpotGraphToolExecutor, destination: int):
 class TestTravelToMessageHidesSpotIds:
     """travel_to が成功しても失敗しても、エージェントに返る文にスポット番号を含めない。"""
 
-    def test_unreachable_destination_returns_plain_sentence_without_spot_ids(self) -> None:
-        """移動サービスが到達できないと答えたとき、結果の文は「その先へは行けない。」で番号を含まない。"""
+    def test_unreachable_exception_message_reaches_agent_unchanged_with_error_code(self) -> None:
+        """移動サービスの到達不能の例外は、文を変えずに失敗の結果へ写り、error_code が付く。"""
         def _raise_unreachable(*args, **kwargs):
             raise SpotTravelUnreachableException("その先へは行けない。")
 
@@ -77,4 +76,13 @@ class TestTravelToMessageHidesSpotIds:
         result = _run_travel_to(executor, 19)
 
         assert result.success is True
-        assert re.search(r"\d", result.message) is None
+        assert result.message == "目的地へ移動しました。"
+
+    def test_without_spot_graph_repository_success_message_does_not_use_spot_id(self) -> None:
+        """行き先の名前を引く手段が無い構成でも、成功の文に番号を出さず「目的地」と書く。"""
+        executor = _build_executor(runtime=_runtime(do_move=lambda *args, **kwargs: None))
+
+        result = _run_travel_to(executor, 19)
+
+        assert result.success is True
+        assert result.message == "目的地へ移動しました。"

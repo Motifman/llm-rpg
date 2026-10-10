@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -42,8 +43,11 @@ if TYPE_CHECKING:
     )
 
 
-# この文はそのままエージェントに届く。スポット番号も、行き先の名前も、
-# 通れない理由も伏せる。番号はゲームの外の情報で、理由は現地で知るものだから。
+logger = logging.getLogger(__name__)
+
+# 経路が見つからないときの文は、そのままエージェントに届く。スポット番号と
+# 行き先の名前を出さず、どこが塞がっているかも教えない。塞がった場所は
+# 現地へ行って知るもの。番号と区間はログにだけ残す。
 _UNREACHABLE_MESSAGE = "その先へは行けない。"
 
 
@@ -206,6 +210,12 @@ class SpotGraphMovementApplicationService:
             graph, nav.current_spot_id, destination_spot_id
         )
         if not route:
+            logger.info(
+                "移動の経路がありません: player_id=%s from=%s to=%s",
+                player_id,
+                nav.current_spot_id,
+                destination_spot_id,
+            )
             raise SpotTravelUnreachableException(_UNREACHABLE_MESSAGE)
 
         leg_cids = []
@@ -214,6 +224,13 @@ class SpotGraphMovementApplicationService:
             a, b = route[i], route[i + 1]
             conn = graph.find_first_passable_connection_between(a, b)
             if conn is None:
+                logger.warning(
+                    "経路の区間に通れる接続がありません: player_id=%s leg=%s->%s to=%s",
+                    player_id,
+                    a,
+                    b,
+                    destination_spot_id,
+                )
                 raise SpotTravelUnreachableException(_UNREACHABLE_MESSAGE)
             ok, reason = self._navigation.can_pass(conn, owned_item_spec_ids, world_flags)
             if not ok:

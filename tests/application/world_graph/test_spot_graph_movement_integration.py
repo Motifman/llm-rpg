@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
@@ -427,6 +427,27 @@ class TestUnreachableTravelMessageHidesSpotIds:
         with pytest.raises(SpotTravelUnreachableException) as excinfo:
             svc.start_travel_to_spot(
                 PlayerId(1), SpotId.create(19), frozenset(), frozenset()
+            )
+
+        assert str(excinfo.value) == "その先へは行けない。"
+
+    def test_flooded_connection_on_the_only_route_reports_plain_sentence_without_spot_ids(
+        self,
+    ) -> None:
+        """唯一の経路の通路が通れなくなる (水で沈むなど) と、同じ行き先の指定が「その先へは行けない。」で失敗する。"""
+        graph = _line_graph_three_spots()
+        flooded = graph.get_connection(ConnectionId.create(2))
+        graph.set_connection_passage(
+            ConnectionId.create(2), replace(flooded.passage, traversable=False)
+        )
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = _movement_service(graph_repo, player_repo)
+
+        with pytest.raises(SpotTravelUnreachableException) as excinfo:
+            svc.start_travel_to_spot(
+                PlayerId(1), SpotId.create(3), frozenset(), frozenset()
             )
 
         assert str(excinfo.value) == "その先へは行けない。"
