@@ -57,6 +57,9 @@ from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
 )
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailurePolicy,
+)
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_ATTRIBUTION_ENABLED",
@@ -163,6 +166,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
+    "WORLD_TICK_FAILURE_POLICY",
 })
 
 #: 同じ意味を問う候補の件数。過去の snapshot の似た組 96 組で、相方が文字の
@@ -450,6 +454,10 @@ class ResolvedLlmRuntimeConfig:
     # 解決経路を from_mapping の 1 本に固定し、run_start / manifest に残す。
     subjective_episode_db_path: str | None = None
 
+    # 世界の tick の 1 体ぶんの例外を、取りやめて続けるか止めるか (design_decisions D1558)。
+    # 既定が isolate なのは、その場で書いた実験設定がキーを書き忘れても run を捨てないため。
+    world_tick_failure_policy: str = WorldTickFailurePolicy.ISOLATE.value
+
     # ──────────────────────────────────────────────────────────────
     # Invariants
     # ──────────────────────────────────────────────────────────────
@@ -492,6 +500,7 @@ class ResolvedLlmRuntimeConfig:
                 f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. "
                 f"valid: {sorted(_VALID_TOOL_CHOICES)}"
             )
+        WorldTickFailurePolicy.parse(self.world_tick_failure_policy)
         if self.prompt_dataset_capture_failure_policy not in {"fail", "warn"}:
             raise ValueError(
                 "prompt_dataset_capture_failure_policy="
@@ -951,6 +960,12 @@ class ResolvedLlmRuntimeConfig:
         subjective_episode_db_path = _strip_or_none(
             source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
+        try:
+            world_tick_failure_policy = WorldTickFailurePolicy.parse(
+                source.get("WORLD_TICK_FAILURE_POLICY") or WorldTickFailurePolicy.ISOLATE.value
+            ).value
+        except ValueError as exc:
+            raise ValueError(f"WORLD_TICK_FAILURE_POLICY: {exc}") from exc
 
         return cls(
             short_term_memory_kind=short_term_memory_kind,
@@ -1068,6 +1083,7 @@ class ResolvedLlmRuntimeConfig:
             reason_first_two_step_enabled=reason_first_two_step_enabled,
             end_on_all_down=end_on_all_down,
             subjective_episode_db_path=subjective_episode_db_path,
+            world_tick_failure_policy=world_tick_failure_policy,
         )
 
     @classmethod
@@ -1215,6 +1231,7 @@ class ResolvedLlmRuntimeConfig:
             reason_first_two_step_enabled=False,
             end_on_all_down=False,
             subjective_episode_db_path=None,
+            world_tick_failure_policy=WorldTickFailurePolicy.ISOLATE.value,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
