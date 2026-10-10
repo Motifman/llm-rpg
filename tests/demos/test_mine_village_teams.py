@@ -1,0 +1,195 @@
+"""廃坑の山村 (`mine_village_v1`) の勝ち負けが、チーム単位で決まることを保証する。
+
+設計は docs/mine_village_scenario_design.md の「人数と勝ち負け」: チームの 2 人とも
+昇降機で脱出したチームの勝ち。寝返って 1 人だけ脱出しても、その人のチームは負け。
+両方のチームが勝つ結果は無い。チームの書き方は design_decisions D1516。
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "mine_village_v1.json"
+
+_PLAYERS = {"haru": PlayerId(1), "mio": PlayerId(2), "gen": PlayerId(3), "sayo": PlayerId(4)}
+_TEAM_OF = {"haru": "north", "mio": "north", "gen": "south", "sayo": "south"}
+_TEAM_NAMES = ("チーム北", "チーム南")
+_WARM_TICKS = 6
+_SAFE_CODE = "1907"
+
+
+def _raw() -> dict[str, Any]:
+    return json.loads(_SCENARIO.read_text(encoding="utf-8"))
+
+
+@pytest.fixture()
+def runtime():
+    return create_world_runtime(_SCENARIO)
+
+
+def _place(runtime, string_id: str, spot: str) -> None:
+    graph = runtime._spot_graph_repo.find_graph()
+    entity = EntityId.create(int(_PLAYERS[string_id]))
+    graph.unplace_entity(entity)
+    graph.place_entity(entity, SpotId.create(runtime.id_mapper.get_int("spot", spot)))
+    runtime._spot_graph_repo.save(graph)
+
+
+def _act(runtime, string_id: str, spot: str, obj: str, action: str, **params: str) -> None:
+    _place(runtime, string_id, spot)
+    runtime.do_interact(_PLAYERS[string_id], obj, action, interaction_parameters=params or None)
+
+
+def _depart_with(runtime, *riders: str):
+    """ハルが鍵と温まった発電機をそろえ、riders を乗り場に、残りを機械室に置いて昇降機を動かし、次の tick の終了判定を返す。"""
+    _act(runtime, "haru", "company_office", "office_safe", "open_safe", code=_SAFE_CODE)
+    _act(runtime, "haru", "machine_room", "generator", "pour_fuel_can")
+    runtime.advance_tick()
+    _act(runtime, "haru", "machine_room", "generator", "start_generator")
+    for _ in range(_WARM_TICKS + 1):
+        runtime.advance_tick()
+    _act(runtime, "haru", "lift_landing", "lift", "start_lift")
+    for string_id in _PLAYERS:
+        _place(runtime, string_id, "lift_landing" if string_id in riders else "machine_room")
+    runtime.advance_tick()
+    return runtime.check_game_end()
+
+
+def _players_in(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {p["player_string_id"]: p for p in payload["players"]}
+
+
+class TestTeamsAreDeclaredWithoutRoles:
+    """チームの所属を role 以外の欄で書き、勝ち負けをチームの勝利条件だけで決めることを保証する。"""
+
+    def test_each_player_belongs_to_the_team_of_their_entrance(self) -> None:
+        """北の竪坑口から入るハルとミオは team=north、南の横坑口から入るゲンとサヨは team=south を持ち、role は書かない。"""
+        players = {p["id"]: p for p in _raw()["players"]}
+
+        assert {sid: p["initial_state"] for sid, p in players.items()} == {
+            sid: {"team": team} for sid, team in _TEAM_OF.items()
+        }
+
+    def test_both_teams_win_only_when_all_members_escape(self) -> None:
+        """北と南の 2 チームがあり、どちらも勝利条件は「チームの全員が RESCUED」の 1 つだけ。"""
+        teams = _raw()["teams"]
+
+        assert [(t["id"], t["member_state"], t["win"]) for t in teams] == [
+            (team, {"team": team}, [{"type": "ALL_MEMBERS_HAVE_OUTCOME", "outcome": "RESCUED"}])
+            for team in ("north", "south")
+        ]
+
+    def test_game_end_has_no_overall_win_or_lose(self) -> None:
+        """全体の win / lose を置かず、終わりは全員の個人結果が決まったときだけ。締め切りの TICK_LIMIT を置かない。"""
+        assert _raw()["game_end_conditions"] == {"end": [{"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}]}
+
+    def test_runtime_reads_both_teams(self, runtime) -> None:
+        """読み込んだシナリオに、北と南の 2 チームが並ぶ。"""
+        assert [t.team_id for t in runtime.scenario.teams] == ["north", "south"]
+
+
+class TestTeamResultsFollowTheLift:
+    """昇降機が出たときに乗り場にいた人から、チームの勝敗が決まることを保証する。"""
+
+    def test_nothing_is_decided_before_the_lift_departs(self, runtime) -> None:
+        """昇降機が出る前は、4 人とも乗り場にいてもゲームは終わらず、チームの勝敗も無い。"""
+        for string_id in _PLAYERS:
+            _place(runtime, string_id, "lift_landing")
+        runtime.advance_tick()
+
+        result = runtime.check_game_end()
+
+        assert result.is_ended is False
+        assert result.team_results is None
+
+    def test_north_wins_when_both_of_them_escape(self, runtime) -> None:
+        """北の 2 人だけが乗って昇降機が出ると、北が WIN、南が LOSE で終わり、全体の勝敗は無い。"""
+        result = _depart_with(runtime, "haru", "mio")
+
+        assert result.is_ended is True
+        assert result.result is None
+        assert result.team_results == {"north": GameResultEnum.WIN, "south": GameResultEnum.LOSE}
+
+    def test_defector_escapes_but_their_team_loses(self, runtime) -> None:
+        """南のゲンが北の 2 人と乗ると、北が WIN、南は LOSE。ゲンの個人結果は RESCUED で、勝敗は LOSE。"""
+        result = _depart_with(runtime, "haru", "mio", "gen")
+
+        assert result.team_results == {"north": GameResultEnum.WIN, "south": GameResultEnum.LOSE}
+        players = _players_in(runtime.team_result_trace(result))
+        assert (players["gen"]["outcome"], players["gen"]["result"]) == ("RESCUED", "LOSE")
+        assert (players["sayo"]["outcome"], players["sayo"]["result"]) == ("STRANDED", "LOSE")
+
+    def test_mixed_riders_make_every_team_lose(self, runtime) -> None:
+        """北のハルと南のゲンだけが乗ると、どちらのチームも全員そろわず、両チーム LOSE で終わる。"""
+        result = _depart_with(runtime, "haru", "gen")
+
+        assert result.is_ended is True
+        assert result.team_results == {"north": GameResultEnum.LOSE, "south": GameResultEnum.LOSE}
+
+    def test_everyone_escaping_is_a_draw_not_two_wins(self, runtime) -> None:
+        """4 人全員が乗ると両チームが同時に成立し、両方 DRAW になる。両チームが WIN になることは無い。"""
+        result = _depart_with(runtime, *_PLAYERS)
+
+        assert result.team_results == {"north": GameResultEnum.DRAW, "south": GameResultEnum.DRAW}
+
+
+class TestTeamResultIsTraced:
+    """終了時に、チームの勝敗と人ごとの所属・個人結果を trace の team_result に書ける形で返すことを保証する。"""
+
+    def test_payload_names_the_teams_and_who_was_in_each(self, runtime) -> None:
+        """北が勝った回の payload は、チームの名前・勝敗・所属の 2 人と、人ごとの所属・個人結果・勝敗を持つ。"""
+        result = _depart_with(runtime, "haru", "mio")
+
+        payload = runtime.team_result_trace(result)
+
+        teams = {t["team_id"]: t for t in payload["teams"]}
+        assert {tid: (t["name"], t["result"]) for tid, t in teams.items()} == {
+            "north": ("チーム北", "WIN"),
+            "south": ("チーム南", "LOSE"),
+        }
+        assert sorted(teams["north"]["member_player_string_ids"]) == ["haru", "mio"]
+        assert {sid: (p["team_id"], p["outcome"], p["result"]) for sid, p in _players_in(payload).items()} == {
+            "haru": ("north", "RESCUED", "WIN"),
+            "mio": ("north", "RESCUED", "WIN"),
+            "gen": ("south", "STRANDED", "LOSE"),
+            "sayo": ("south", "STRANDED", "LOSE"),
+        }
+
+
+def _whole_prompt(runtime, string_id: str) -> str:
+    prompt = runtime.build_full_prompt(_PLAYERS[string_id])
+    text = "\n".join(str(m.get("content", "")) for m in prompt["messages"])
+    return text + json.dumps(prompt["tools"], ensure_ascii=False)
+
+
+class TestTeamsStayHiddenAtStart:
+    """チームを書いても、相手の存在を伏せる設定とぶつからないことを保証する。"""
+
+    @pytest.mark.parametrize("viewer", sorted(_PLAYERS))
+    def test_start_prompt_shows_neither_the_other_side_nor_team_names(self, runtime, viewer) -> None:
+        """開始時のプロンプト全文とツールに、相手チームの 2 人の名前、相手チームの所属、チームの名前が出ない。自分の所属は「自分の状態」に同じ形で出る。"""
+        names = {p["id"]: p["name"] for p in _raw()["players"]}
+        other = "south" if _TEAM_OF[viewer] == "north" else "north"
+
+        text = _whole_prompt(runtime, viewer)
+
+        assert [names[s] for s, t in _TEAM_OF.items() if t == other and names[s] in text] == []
+        assert f"team={_TEAM_OF[viewer]}" in text
+        assert f"team={other}" not in text
+        assert [n for n in _TEAM_NAMES if n in text] == []
+
+    def test_team_key_does_not_add_a_faction_count_to_the_briefing(self, runtime) -> None:
+        """所属を書いても、世界の説明に「◯◯ N 人」のような人数の内訳が出ない。"""
+        text = _whole_prompt(runtime, "haru")
+
+        assert "2 人" not in text and "4 人" not in text
