@@ -7,6 +7,7 @@ docs/mine_village_map.json。2 チームは互いの存在を知らずに始ま�
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any
@@ -113,7 +114,7 @@ class TestMapFollowsTheSkeleton:
                 start_spot_id=_TEAMS[team]["spawn"],
                 key_spots=tuple(KeySpotRequirement(s, "error") for s in _KEY_SPOTS),
                 strict=True,
-                distance_to_tick_ratio=1.0,
+                distance_to_tick_ratio=2.0,
             ),
         )
 
@@ -129,6 +130,39 @@ class TestMapFollowsTheSkeleton:
         assert result.ok, result.errors
         assert unexpected == []
         assert excused_mismatches == sorted(vertical)
+
+
+def _map_check_script():
+    spec = importlib.util.spec_from_file_location("check_mine_village_map", _REPO / "scripts" / "check_mine_village_map.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestEachTeamCanWinWithinTheRunLimit:
+    """どちらのチームも、開始地点から鍵・燃料・発電機・籠を経て脱出するまでの最短の tick が、実 run の上限 (40) に収まることを保証する。数え方は scripts/check_mine_village_map.py の win_path_ticks。"""
+
+    @pytest.mark.parametrize("path", ["北 (乗り場で鍵を知る)", "北 (鍵と番号を知っている)", "南"])
+    def test_shortest_escape_fits_the_run_limit(self, scenario, path) -> None:
+        """北が乗り場の張り紙で鍵を知ってから事務所へ取りに戻る道も含め、3 通りとも 40 tick 以内に脱出が決まる。"""
+        script = _map_check_script()
+
+        ticks = script.win_path_ticks(scenario["connections"])[path]
+
+        assert ticks <= script.RUN_TICK_LIMIT == 40
+
+    def test_counted_warm_up_matches_the_scenario(self, scenario) -> None:
+        """数え方に入れた発電機を温める tick が、シナリオの「温まった」の出来事の tick と同じ。温める時間を延ばしたら、数え方も直さないと落ちる。"""
+        warm = next(e for e in scenario["scenario_events"] if e["id"] == "generator_warms_up")
+        offset = next(c["ticks_offset"] for c in warm["conditions"] if c["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST")
+
+        assert _map_check_script().WARM_TICKS == offset
+
+    def test_north_discovering_the_key_is_slower_than_south(self, scenario) -> None:
+        """鍵のありかと番号を知っている南のほうが、乗り場で知る北より先に脱出できる。南が先に事務所へ寄る得を残す。"""
+        ticks = _map_check_script().win_path_ticks(scenario["connections"])
+
+        assert ticks["南"] < ticks["北 (乗り場で鍵を知る)"]
 
 
 class TestTeamsStartApartAndUnaware:
