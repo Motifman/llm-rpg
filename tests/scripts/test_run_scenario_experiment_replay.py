@@ -80,6 +80,22 @@ class TestReplayRounds:
 
         assert not (tmp_path / "r2" / "trace.jsonl").exists()
 
+    @pytest.mark.parametrize("previous_replay", [{"round": 0}, {"round": "1"}, "round1"])
+    def test_previous_round_that_is_not_a_positive_integer_stops_before_the_run(
+        self, tmp_path: Path, previous_replay: object
+    ) -> None:
+        """前の回の resolved の replay.round が正の整数でなければ、run を始める前に止める。"""
+        config = _config(tmp_path, snapshot_load_mode="replay")
+        (tmp_path / "prev" / "snapshots").mkdir(parents=True)
+        (tmp_path / "prev" / "experiment.config.resolved.json").write_text(
+            json.dumps({"replay": previous_replay}), encoding="utf-8"
+        )
+
+        with pytest.raises(SystemExit):
+            _run(config, tmp_path / "r2", load_from=tmp_path / "prev")
+
+        assert not (tmp_path / "r2" / "trace.jsonl").exists()
+
     def test_unknown_load_mode_stops_before_the_run(self, tmp_path: Path) -> None:
         """snapshot_load_mode に知らない値を書くと、run を始める前に止める。"""
         config = _config(tmp_path, snapshot_load_mode="repaly")
@@ -112,6 +128,7 @@ class TestReplayStartsTheWorldOver:
 
         assert _events(tmp_path / "r2", "world_snapshot_load") == []
         (loaded,) = _events(tmp_path / "r2", "snapshot_load")
+        assert loaded["payload"]["restored_being_ids"]
         assert loaded["payload"]["load_mode"] == "replay"
         assert loaded["payload"]["world_snapshot_ignored"] is True
         assert [r["being_id"] for r in loaded["payload"]["world_clock_restarts"]] == loaded["payload"]["restored_being_ids"]

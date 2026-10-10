@@ -117,6 +117,22 @@ class TestRestartWorldClockInPayload:
         with pytest.raises(WorldClockRestartCoverageError, match="last_met_tick"):
             restart_world_clock_in_payload(payload)
 
+    @pytest.mark.parametrize("value", [30.0, "30"])
+    def test_unknown_tick_field_as_float_or_string_raises(self, value: object) -> None:
+        """表に無い欄の tick が小数や文字列で書かれていても、書き戻す前に止める。"""
+        payload = _payload(acquaintances=[{"name": "カイト", "last_met_tick": value}])
+
+        with pytest.raises(WorldClockRestartCoverageError, match="last_met_tick"):
+            restart_world_clock_in_payload(payload)
+
+    def test_payload_without_listed_stores_passes_through(self) -> None:
+        """表の store を持たない古い snapshot は、書き換え 0 件でそのまま通る。"""
+        out_json, report = restart_world_clock_in_payload(json.dumps({"schema_version": 1, "memory_turn": [3]}))
+
+        assert json.loads(out_json) == {"schema_version": 1, "memory_turn": [3]}
+        assert report.reset_tick_fields == 0
+        assert report.dropped_pending_predictions == 0
+
 
 def _tick_keys_written_by_codecs() -> dict[str, frozenset[str]]:
     tree = ast.parse(Path(_memory_payload_codecs.__file__).read_text(encoding="utf-8"))

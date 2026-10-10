@@ -89,10 +89,23 @@ def _reset_to_zero(element: Any, path: tuple[str, ...]) -> int:
     return 1
 
 
+def _is_nonzero_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        try:
+            return float(value) != 0
+        except ValueError:
+            return False
+    return False
+
+
 def _nonzero_tick_keys(node: Any) -> Iterator[str]:
     if isinstance(node, dict):
         for key, value in node.items():
-            if "tick" in key and isinstance(value, int) and not isinstance(value, bool) and value != 0:
+            if "tick" in key and _is_nonzero_number(value):
                 yield key
             yield from _nonzero_tick_keys(value)
     elif isinstance(node, list):

@@ -384,6 +384,8 @@ def _resolve_replay_round(
             "previous_scenario_sha256": None,
             "scenario_sha256": scenario_sha256,
         }
+    if not snapshot_load_dir.is_dir():
+        raise ValueError(f"snapshot-load-dir does not exist: {snapshot_load_dir}")
     previous_run_dir = snapshot_load_dir.resolve().parent
     previous_resolved_path = previous_run_dir / "experiment.config.resolved.json"
     if not previous_resolved_path.exists():
@@ -393,11 +395,21 @@ def _resolve_replay_round(
         )
     previous = json.loads(previous_resolved_path.read_text(encoding="utf-8"))
     previous_replay = previous.get("replay")
+    if previous_replay is not None and not isinstance(previous_replay, dict):
+        raise ValueError(
+            f"前の回の replay が object ではありません: {previous_replay!r} ({previous_resolved_path})"
+        )
     previous_round = 1 if previous_replay is None else previous_replay.get("round")
     if isinstance(previous_round, bool) or not isinstance(previous_round, int) or previous_round < 1:
         raise ValueError(
             f"前の回の replay.round が正の整数ではありません: {previous_round!r} "
             f"({previous_resolved_path})"
+        )
+    if previous.get("scenario_sha256") != scenario_sha256:
+        logger.warning(
+            "replay の前の回とシナリオの中身が違います: previous=%s current=%s",
+            previous.get("scenario_sha256"),
+            scenario_sha256,
         )
     return {
         "round": previous_round + 1,
