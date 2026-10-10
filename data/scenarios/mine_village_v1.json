@@ -22,7 +22,9 @@
       "STRANDED": "{player_name}は坑道に取り残された。"
     }
   },
-  "disabled_tools": [],
+  "disabled_tools": [
+    "drop_item"
+  ],
   "player_attributes": {
     "team": {
       "display_name": "所属",
@@ -41,9 +43,41 @@
     {
       "id": "lamp",
       "name": "カンテラ",
-      "description": "油で灯す手提げのカンテラ。暗い坑道でも足もとが見える。",
+      "description": "油を足して灯す手提げのカンテラ。",
       "category": "TOOL",
-      "is_light_source": true
+      "interactions": [
+        {
+          "action_name": "light_lamp",
+          "display_label": "油を足して灯す",
+          "preconditions": [
+            {
+              "condition_type": "HAS_ITEM",
+              "required_item": "lamp_oil",
+              "failure_message": "カンテラに足す油が無い。"
+            }
+          ],
+          "effects": [
+            {
+              "effect_type": "REMOVE_ITEM",
+              "parameters": {
+                "item_spec": "lamp_oil"
+              }
+            },
+            {
+              "effect_type": "GIVE_ITEM",
+              "parameters": {
+                "item_spec": "lamp_flame"
+              }
+            },
+            {
+              "effect_type": "SHOW_MESSAGE",
+              "parameters": {
+                "message": "カンテラに油を足して火を入れた。足もとが明るくなった。"
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "fuel_can",
@@ -111,6 +145,93 @@
           ]
         }
       ]
+    },
+    {
+      "id": "lamp_oil",
+      "name": "カンテラの油",
+      "description": "カンテラに足す油の小瓶。",
+      "category": "TOOL"
+    },
+    {
+      "id": "lamp_flame",
+      "name": "カンテラの灯",
+      "description": "カンテラに灯した火。油が尽きれば消える。",
+      "category": "TOOL",
+      "is_light_source": true
+    },
+    {
+      "id": "torch",
+      "name": "たいまつ",
+      "description": "布を巻いて油を染ませた棒。燃えているあいだは辺りが見える。",
+      "category": "TOOL",
+      "is_light_source": true
+    },
+    {
+      "id": "canary",
+      "name": "カナリアの籠",
+      "description": "小さなカナリアの入った鳥籠。",
+      "category": "TOOL",
+      "interactions": [
+        {
+          "action_name": "watch_canary_a",
+          "display_label": "カナリアの様子を見る",
+          "preconditions": [
+            {
+              "condition_type": "FLAG_NOT_SET",
+              "flag_name": "gas_present",
+              "failure_message": "カナリアは鳴きやんで、籠の底でじっとしている。"
+            }
+          ],
+          "effects": [
+            {
+              "effect_type": "SHOW_MESSAGE",
+              "parameters": {
+                "message": "カナリアは小さくさえずっている。"
+              }
+            }
+          ]
+        },
+        {
+          "action_name": "watch_canary_b",
+          "display_label": "カナリアの様子を見る",
+          "preconditions": [
+            {
+              "condition_type": "FLAG_SET",
+              "flag_name": "gas_present",
+              "failure_message": "カナリアは小さくさえずっている。"
+            }
+          ],
+          "effects": [
+            {
+              "effect_type": "SHOW_MESSAGE",
+              "parameters": {
+                "message": "カナリアが鳴きやんだ。籠の底でじっとしている。"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "well_water",
+      "name": "井戸の水",
+      "description": "井戸から汲んだ冷たい水。",
+      "category": "FOOD",
+      "consume_effect": {
+        "type": "heal_hp",
+        "amount": 8
+      }
+    },
+    {
+      "id": "preserved_food",
+      "name": "保存食",
+      "description": "干した芋と固い餅。",
+      "category": "FOOD",
+      "consume_effect": {
+        "type": "satisfy_need",
+        "need_type": "HUNGER",
+        "amount": 40
+      }
     }
   ],
   "environment": {
@@ -284,7 +405,55 @@
       },
       "is_outdoor": true,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "well_bucket",
+            "name": "井戸の釣瓶",
+            "description": "滑車に掛かった古い釣瓶。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 4,
+              "stock_capacity": 4,
+              "stock_tick": 0,
+              "stock_refill_interval": 6
+            },
+            "interactions": [
+              {
+                "action_name": "draw_water",
+                "display_label": "水を汲む",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "well_bucket",
+                    "required_quantity": 1,
+                    "failure_message": "釣瓶は空のまま上がってきた。底の水が溜まるのを待つしかない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "well_bucket",
+                      "amount": 1
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "well_water"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "冷たい水を汲んだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -345,6 +514,54 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "food_box",
+            "name": "棚の食べ物の箱",
+            "description": "棚に置かれた木の箱。村の人が残していった食べ物が入っている。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 3,
+              "stock_capacity": 3,
+              "stock_tick": 0,
+              "stock_refill_interval": 24
+            },
+            "interactions": [
+              {
+                "action_name": "take_food",
+                "display_label": "保存食を取る",
+                "witness_observation_message": "{actor}が棚の箱から食べ物を取り出した。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "food_box",
+                    "required_quantity": 1,
+                    "failure_message": "箱はいま空だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "food_box",
+                      "amount": 1
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "preserved_food"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "保存食を 1 つ取った。"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -366,7 +583,56 @@
       },
       "is_outdoor": false,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "smithy_rags",
+            "name": "隅の布切れと油の瓶",
+            "description": "鍛冶場の隅に転がった布切れと、油の残った瓶。古い柄も立てかけてある。",
+            "object_type": "OTHER",
+            "state": {
+              "stock": 2,
+              "stock_capacity": 2,
+              "stock_tick": 0,
+              "stock_refill_interval": 0
+            },
+            "interactions": [
+              {
+                "action_name": "make_torch",
+                "display_label": "布切れと油の瓶を使う",
+                "witness_observation_message": "{actor}が鍛冶場の隅で布切れを柄に巻いている。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STOCK_AT_LEAST",
+                    "target_object": "smithy_rags",
+                    "required_quantity": 1,
+                    "failure_message": "使えそうな布切れはもう残っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CONSUME_OBJECT_STOCK",
+                    "parameters": {
+                      "target_object": "smithy_rags",
+                      "amount": 1
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "torch"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "布切れを古い柄に巻きつけて油を染ませ、火打ち石で火を付けた。たいまつになった。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -985,7 +1251,49 @@
       },
       "is_outdoor": false,
       "interior": {
-        "objects": []
+        "objects": [
+          {
+            "id": "canary_hook",
+            "name": "吊るされた鳥籠",
+            "description": "天井の鉤に吊るされた鳥籠。中で何かが動いている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "take_canary",
+                "display_label": "鳥籠を下ろす",
+                "witness_observation_message": "{actor}が天井の鳥籠を下ろした。",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "canary_taken",
+                    "failure_message": "鉤にはもう何も吊るされていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "canary_taken"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "canary"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "鳥籠を下ろした。中で小さなカナリアが身じろぎした。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -1581,6 +1889,11 @@
                 "preconditions": [
                   {
                     "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "gas_present",
+                    "failure_message": "息が苦しい。木箱に手を伸ばす前に、引き返すしかなかった。"
+                  },
+                  {
+                    "condition_type": "FLAG_NOT_SET",
                     "flag_name": "spare_fuel_taken",
                     "failure_message": "木箱はもう空だ。"
                   }
@@ -1607,6 +1920,15 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "gas_tracker",
+            "name": "掘り場の空気",
+            "description": "掘り場に淀む空気。",
+            "object_type": "OTHER",
+            "is_visible": false,
+            "state": {},
+            "interactions": []
           }
         ]
       }
@@ -2264,7 +2586,8 @@
       "spawn_spot": "north_shaft_head",
       "initial_items": [
         "lamp",
-        "fuel_can"
+        "fuel_can",
+        "lamp_oil"
       ],
       "initial_state": {
         "team": "north",
@@ -2281,7 +2604,8 @@
       "name": "ミオ",
       "spawn_spot": "north_shaft_head",
       "initial_items": [
-        "lamp"
+        "lamp",
+        "lamp_oil"
       ],
       "initial_state": {
         "team": "north",
@@ -2298,7 +2622,10 @@
       "name": "ゲン",
       "spawn_spot": "south_adit_mouth",
       "initial_items": [
-        "lamp"
+        "lamp",
+        "lamp_oil",
+        "lamp_oil",
+        "lamp_oil"
       ],
       "initial_state": {
         "team": "south",
@@ -2307,7 +2634,7 @@
       "knows_at_start": [
         "sayo"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。\n\n話し方: ぶっきらぼうな常体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはゲン、この鉱山で働いていた元鉱夫。口数は少ないが、坑道の空気には敏い。家族のサヨと村に戻ってきた。\n\n働いていた頃に、事務所の金庫の番号は 1907 だと覚えた。\n\n坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。\n\n話し方: ぶっきらぼうな常体。",
       "objective": "サヨと二人そろって、坑道の奥の昇降機で外へ出る。"
     },
     {
@@ -2315,7 +2642,10 @@
       "name": "サヨ",
       "spawn_spot": "south_adit_mouth",
       "initial_items": [
-        "lamp"
+        "lamp",
+        "lamp_oil",
+        "lamp_oil",
+        "lamp_oil"
       ],
       "initial_state": {
         "team": "south",
@@ -2324,7 +2654,7 @@
       "knows_at_start": [
         "gen"
       ],
-      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n父から、事務所の金庫の番号は 1907 だと聞いている。\n\n話し方: はきはきした敬体。",
+      "persona_prompt": "冬が近い山あいの廃村に来ている。外へ出る峠道は雪で閉ざされた。外へ出る手段は、村の下に広がる古い坑道の奥にある昇降機だけだという。昇降機は一度しか動かないと聞いている。坑道の中は光が無いと何も見えない。\n\nあなたはサヨ、ゲンの娘。子どもの頃に父の職場だった事務所によく出入りしていた。物覚えがよい。\n\n父から、事務所の金庫の番号は 1907 だと聞いている。\n\n坑道では、カナリアが鳴きやむのはガスの前兆だと教わった。\n\n話し方: はきはきした敬体。",
       "objective": "ゲンと二人そろって、坑道の奥の昇降機で外へ出る。"
     }
   ],
@@ -3301,6 +3631,101 @@
           }
         }
       ]
+    },
+    {
+      "id": "lamp_flames_burn_out",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "TICK_MODULO",
+          "tick_modulo": 16,
+          "tick_phase": 0
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "REMOVE_ITEM",
+          "parameters": {
+            "item_spec": "lamp_flame"
+          }
+        }
+      ]
+    },
+    {
+      "id": "torches_burn_out",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "TICK_MODULO",
+          "tick_modulo": 24,
+          "tick_phase": 0
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "REMOVE_ITEM",
+          "parameters": {
+            "item_spec": "torch"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gas_seeps_in",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "gas_present"
+        },
+        {
+          "condition_type": "PROBABILITY",
+          "probability": 0.08
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "gas_present"
+          }
+        },
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {
+            "target_object": "gas_tracker",
+            "state_key": "since"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gas_clears",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "gas_present"
+        },
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "gas_tracker",
+          "state_key": "since",
+          "ticks_offset": 8
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "gas_present"
+          }
+        }
+      ]
     }
   ],
   "reactive_bindings": {
@@ -3574,5 +3999,8 @@
       ],
       "cooldown_ticks": 3
     }
-  ]
+  ],
+  "needs": {
+    "starvation_damage_per_tick": 1
+  }
 }

@@ -108,22 +108,6 @@ def _owns(runtime, pid: PlayerId, item: str) -> bool:
     return any(int(getattr(s, "value", s)) == spec for s in owned)
 
 
-def _slots(runtime, pid: PlayerId) -> list[tuple[int, str]]:
-    """持ち物の (スロット番号, 品の文字列 ID) の並び。"""
-    inv = runtime._player_inventory_repo.find_by_id(pid)
-    return [
-        (int(slot.value), runtime.id_mapper.get_str("item_spec", runtime._item_repo.find_by_id(iid).item_spec.item_spec_id.value))
-        for slot, iid in inv.iter_occupied_slots()
-    ]
-
-
-def _drop(runtime, pid: PlayerId, *items: str) -> None:
-    """指定した品を足もとに置く。品を指定しなければ全部置く。暗い場所を作るために、灯りを手放させる。"""
-    for slot, item in _slots(runtime, pid):
-        if not items or item in items:
-            runtime.do_drop_item(pid, slot)
-
-
 def _knock_down(runtime, actor: PlayerId, target: PlayerId) -> None:
     """間隔を空けながら、相手が倒れるまで殴る。"""
     for _ in range(_MAX_HP // _DAMAGE):
@@ -573,10 +557,9 @@ class TestTakingThings:
         assert [line for line in seen if "ゲン" in line and "ハル" in line] != []
 
     def test_in_the_dark_no_one_sees_who_took_it(self, runtime) -> None:
-        """灯りの無い機械室で奪うと、見ていたサヨにも奪われたハルにも、奪った人の名前は届かない。"""
+        """誰も灯りを灯していない機械室で奪うと、見ていたサヨにも奪われたハルにも、奪った人の名前は届かない。"""
         for pid in (_HARU, _GEN, _SAYO):
             _place(runtime, pid, "machine_room")
-            _drop(runtime, pid, "lamp")
         before = {p: len(_prose(runtime, p)) for p in (_HARU, _SAYO)}
 
         done, message = _try_on(runtime, _GEN, _HARU, "pickpocket", item="燃料の缶")
@@ -588,10 +571,9 @@ class TestTakingThings:
             assert [line for line in heard if "ゲン" in line] == [], pid
 
     def test_in_the_dark_no_one_sees_who_struck(self, runtime) -> None:
-        """灯りの無い機械室で殴ると、見ていたサヨに殴った人の名前は届かない。"""
+        """誰も灯りを灯していない機械室で殴ると、見ていたサヨに殴った人の名前は届かない。"""
         for pid in (_HARU, _GEN, _SAYO):
             _place(runtime, pid, "machine_room")
-            _drop(runtime, pid, "lamp")
         before = len(_prose(runtime, _SAYO))
 
         _strike(runtime, _GEN, _HARU)

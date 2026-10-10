@@ -13,6 +13,10 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -120,6 +124,15 @@ def _board(runtime, pid: PlayerId) -> None:
 def _open_safe(runtime, pid: PlayerId = _GEN) -> None:
     _act(runtime, pid, "company_office", "office_safe", "open_safe", code=_SAFE_CODE)
 
+
+
+def _clear_gas(runtime) -> None:
+    """掘り場のガスを抜く。ガスは確率で溜まり (R6、test_mine_village_light_gas_and_food.py)、溜まっていると予備の燃料が取れない。燃料の量を見るテストを偶然に左右させないため。"""
+    if "gas_present" in runtime._world_flag_state.as_frozen_set():
+        runtime._world_flag_state.remove(
+            "gas_present",
+            context=WorldFlagMutationContext(source=WorldFlagMutationSource.SCENARIO_EVENT, actor_player_id=None),
+        )
 
 class TestNoiseWakesTheBeastOfThatSector:
     """R5: 区画ごとに音が積もり、閾値に届くとその区画の決まった場所に獣が現れることを保証する。"""
@@ -250,6 +263,7 @@ class TestDistantCuesTellSomeoneIsAhead:
             _ticks(runtime, 1)
         _ticks(runtime, 1)
 
+        _clear_gas(runtime)
         _act(runtime, _HARU, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
         _act(runtime, _HARU, "machine_room", "generator", "pour_fuel_can")
         _ticks(runtime, 1)
@@ -360,6 +374,7 @@ class TestLift:
         for _ in range(2):
             _act(runtime, _HARU, "machine_room", "pump", "run_pump")
             _ticks(runtime, 1)
+        _clear_gas(runtime)
         _act(runtime, _HARU, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
         _act(runtime, _HARU, "machine_room", "generator", "pour_fuel_can")
         _ticks(runtime, 1)

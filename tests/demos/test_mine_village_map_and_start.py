@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -202,18 +203,17 @@ class TestWorldLooksLikeASnowboundMine:
 
         assert "天候: 雪" in text
 
-    def test_lamp_turns_the_dark_mine_dim(self, scenario, runtime) -> None:
-        """地下の機械室で、カンテラを持っていれば薄暗く見え、手放すと暗くなる。"""
+    def test_a_lit_lamp_turns_the_dark_mine_dim(self, scenario, runtime) -> None:
+        """地下の機械室で、灯す前のカンテラでは暗く、油を足して灯すと薄暗く見える。"""
         haru = _player_id(scenario, "haru")
         _place(runtime, haru, "machine_room")
-        with_lamp = _atmosphere_line(runtime, haru)
+        unlit = _atmosphere_line(runtime, haru)
 
-        runtime.do_drop_item(haru, 0)
-        without_lamp = _atmosphere_line(runtime, haru)
+        runtime.do_interact_with_item(haru, ItemSpecId(runtime.id_mapper.get_int("item_spec", "lamp")), "light_lamp")
+        lit = _atmosphere_line(runtime, haru)
 
-        assert "明るさ: 薄暗い" in with_lamp
-        assert "明るさ: 薄暗い" not in without_lamp
-        assert "明るさ: 明るい" not in without_lamp
+        assert "明るさ: 暗い" in unlit
+        assert "明るさ: 薄暗い" in lit
 
 
 class TestScenarioDoesNotRevealTheOtherTeam:
