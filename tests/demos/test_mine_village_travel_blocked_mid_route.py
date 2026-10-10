@@ -78,8 +78,8 @@ def _blocked_traces(runtime) -> list[Any]:
 
 
 def _gen_heads_north_and_haru_bars_the_door(runtime) -> None:
-    """ゲンが防火扉 (2 tick) へ踏み出した tick に、ハルが北側の閂を掛ける。"""
-    _place(runtime, _GEN, "south_tunnel")
+    """ゲンが南の横坑の奥から、南の坑道と防火扉を通って北の坑道へ向かい始めた tick に、ハルが北側の閂を掛ける。ゲンは 1 区間目を渡り終えたところで、閉じた防火扉に行き当たる。"""
+    _place(runtime, _GEN, "south_adit_end")
     _place(runtime, _HARU, "north_tunnel")
     runtime.do_move(_GEN, "north_tunnel")
     runtime.do_interact(_HARU, "fire_door_bar_north", "bar_fire_door_north")
@@ -88,11 +88,11 @@ def _gen_heads_north_and_haru_bars_the_door(runtime) -> None:
 
 
 def _gen_heads_into_the_adit_and_haru_opens_gate_a(runtime) -> None:
-    """ゲンが南の横坑の奥 (3 tick) へ踏み出した tick に、ハルが水門 A を開けて道を沈める。"""
-    _place(runtime, _GEN, "south_tunnel")
+    """ゲンが道具置き場から、南の坑道を通って南の横坑の奥へ向かい始めた tick に、ハルが水門 A を開けて 2 区間目を沈める。"""
+    _place(runtime, _GEN, "tool_store")
     _place(runtime, _HARU, "north_tunnel")
     runtime.do_move(_GEN, "south_adit_end")
-    runtime.do_interact(_HARU, "gate_a", "open_gate_a")
+    runtime.do_interact(_HARU, "gate_a", "open_gate")
     for _ in range(4):
         runtime.advance_tick()
 

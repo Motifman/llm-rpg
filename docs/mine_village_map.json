@@ -196,156 +196,156 @@
       "id": "nsh_hall",
       "from": "north_shaft_head",
       "to": "assembly_hall",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "nsh_pass",
       "from": "north_shaft_head",
       "to": "snow_pass",
-      "travel_ticks": 4
+      "travel_ticks": 2
     },
     {
       "id": "pass_square",
       "from": "snow_pass",
       "to": "village_square",
-      "travel_ticks": 5
+      "travel_ticks": 2
     },
     {
       "id": "hall_square",
       "from": "assembly_hall",
       "to": "village_square",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "hall_store",
       "from": "assembly_hall",
       "to": "storehouse",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "square_well",
       "from": "village_square",
       "to": "well",
-      "travel_ticks": 2
+      "travel_ticks": 1
     },
     {
       "id": "square_store",
       "from": "village_square",
       "to": "storehouse",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "square_smithy",
       "from": "village_square",
       "to": "smithy",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "well_office",
       "from": "well",
       "to": "company_office",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "smithy_office",
       "from": "smithy",
       "to": "company_office",
-      "travel_ticks": 2
+      "travel_ticks": 1
     },
     {
       "id": "smithy_sam",
       "from": "smithy",
       "to": "south_adit_mouth",
-      "travel_ticks": 4
+      "travel_ticks": 2
     },
     {
       "id": "office_sam",
       "from": "company_office",
       "to": "south_adit_mouth",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "store_sam",
       "from": "storehouse",
       "to": "south_adit_mouth",
-      "travel_ticks": 7
+      "travel_ticks": 3
     },
     {
       "id": "north_shaft",
       "from": "north_shaft_head",
       "to": "north_shaft_bottom",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "vertical": true
     },
     {
       "id": "south_adit",
       "from": "south_adit_mouth",
       "to": "south_adit_end",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "vertical": true
     },
     {
       "id": "nsb_ntun",
       "from": "north_shaft_bottom",
       "to": "north_tunnel",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "floods_with": "gate_b"
     },
     {
       "id": "fire_door",
       "from": "north_tunnel",
       "to": "south_tunnel",
-      "travel_ticks": 2,
+      "travel_ticks": 1,
       "barrable": true
     },
     {
       "id": "stun_sab",
       "from": "south_tunnel",
       "to": "south_adit_end",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "floods_with": "gate_a"
     },
     {
       "id": "ntun_rest",
       "from": "north_tunnel",
       "to": "miners_rest",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "stun_tools",
       "from": "south_tunnel",
       "to": "tool_store",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "rest_junction",
       "from": "miners_rest",
       "to": "mid_junction",
-      "travel_ticks": 2
+      "travel_ticks": 1
     },
     {
       "id": "tools_junction",
       "from": "tool_store",
       "to": "mid_junction",
-      "travel_ticks": 2
+      "travel_ticks": 1
     },
     {
       "id": "junction_machine",
       "from": "mid_junction",
       "to": "machine_room",
-      "travel_ticks": 2
+      "travel_ticks": 1
     },
     {
       "id": "junction_gas",
       "from": "mid_junction",
       "to": "gas_chamber",
-      "travel_ticks": 3
+      "travel_ticks": 1
     },
     {
       "id": "junction_shortcut",
       "from": "mid_junction",
       "to": "lower_shortcut",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "floods_with": "gate_c"
     },
     {
@@ -359,33 +359,33 @@
       "id": "shortcut_lift",
       "from": "lower_shortcut",
       "to": "lift_landing",
-      "travel_ticks": 3,
+      "travel_ticks": 1,
       "floods_with": "gate_c"
     },
     {
       "id": "junction_timber",
       "from": "mid_junction",
       "to": "timber_passage",
-      "travel_ticks": 5
+      "travel_ticks": 2
     },
     {
       "id": "timber_lift",
       "from": "timber_passage",
       "to": "lift_landing",
-      "travel_ticks": 4,
+      "travel_ticks": 2,
       "fellable": true
     },
     {
       "id": "rest_machine",
       "from": "miners_rest",
       "to": "machine_room",
-      "travel_ticks": 4
+      "travel_ticks": 2
     },
     {
       "id": "tools_timber",
       "from": "tool_store",
       "to": "timber_passage",
-      "travel_ticks": 5
+      "travel_ticks": 2
     }
   ]
 }
