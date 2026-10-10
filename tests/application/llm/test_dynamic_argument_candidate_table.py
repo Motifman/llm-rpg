@@ -186,7 +186,7 @@ def test_snapshot_covers_meeting_communication_trade_and_management_targets() ->
 
     assert candidates == {
         ("set_sub_location", "sub_location_label"): ["机の下"],
-        ("speak", "target_label"): ["P1"],
+        ("speak", "target_label"): ["ユノ"],
         ("vote", "target_player_label"): ["ユノ", ""],
         ("report_body", "target_player_label"): ["ユノ"],
         ("trade_offer", "target_player_label"): ["ユノ"],
@@ -212,6 +212,45 @@ def test_tend_to_player_uses_the_schema_argument_name() -> None:
     snapshot = build_dynamic_argument_candidate_snapshot(context, {"tend_to_player"})
 
     assert snapshot["entries"][0]["argument"] == "target_player_label"
+
+
+def test_speak_target_candidates_are_names_of_people_in_the_same_place() -> None:
+    """同じ場所にいる人への囁き先の候補は、内部ラベル P1 ではなく名前で出る。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": PlayerToolRuntimeTargetDto(
+                label="P1", kind="spot_graph_player", display_name="ユノ", player_id=2
+            ),
+            "P2": PlayerToolRuntimeTargetDto(
+                label="P2", kind="spot_graph_player", display_name="カイ", player_id=3
+            ),
+        }
+    )
+
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"speak"})
+
+    assert '- speak.target_label: "ユノ", "カイ"' in snapshot["rendered"]
+    assert "P1" not in snapshot["rendered"]
+
+
+def test_whisper_by_name_or_internal_label_is_judged_valid() -> None:
+    """囁き先は、実行時の解決と同じく名前でも内部ラベルでも候補に当たる。"""
+    context = ToolRuntimeContextDto(
+        targets={
+            "P1": PlayerToolRuntimeTargetDto(
+                label="P1", kind="spot_graph_player", display_name="ユノ", player_id=2
+            ),
+        }
+    )
+    snapshot = build_dynamic_argument_candidate_snapshot(context, {"speak"})
+
+    for written in ("ユノ", "P1"):
+        result = evaluate_dynamic_argument_choice(
+            "speak",
+            {"channel": "whisper", "content": "後で話そう", "target_label": written},
+            snapshot,
+        )
+        assert result["status"] == "valid", written
 
 
 def test_snapshot_covers_trade_items_and_merchant_offers() -> None:
