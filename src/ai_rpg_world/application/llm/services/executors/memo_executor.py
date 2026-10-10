@@ -239,10 +239,8 @@ class MemoToolExecutor:
                     success=True,
                     message="未完了のメモはありません。",
                 )
-            lines = [
-                f"- [{short_memo_id(e.id)}] {e.content} (追加: {e.added_at.strftime('%Y-%m-%d %H:%M')})"
-                for e in entries
-            ]
+            # added_at は現実の壁時計なので出さない (#1563)。経過は【進行中のメモ】に世界の時計で出ている。
+            lines = [f"- [{short_memo_id(e.id)}] {e.content}" for e in entries]
             return LlmCommandResultDto(
                 success=True,
                 message="未完了のメモ:\n" + "\n".join(lines),

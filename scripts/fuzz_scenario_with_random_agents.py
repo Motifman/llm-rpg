@@ -99,9 +99,7 @@ class KnownHole:
 
 
 #: 直したら消す。残すと、同じ形が再発しても見逃す。新しい穴が紛れないよう、形はなるべく狭く書く。
-KNOWN_HOLES: tuple[KnownHole, ...] = (
-    KnownHole(1563, "leak", re.compile(r"\(追加: 20\d\d-\d\d-\d\d \d\d:\d\d\)")),
-)
+KNOWN_HOLES: tuple[KnownHole, ...] = ()
 
 
 def classify(finding: FuzzFinding, known_holes: Sequence[KnownHole]) -> FuzzFinding:
