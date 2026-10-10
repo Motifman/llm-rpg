@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -210,9 +211,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                 result = self.wiring.run_phase_b(phase_a)
                 self._account_result(pid_value, result)
 
-    def _turn_unit(self, player_id_value: int):
+    def _turn_unit(self, player_id_value: int) -> AbstractContextManager[None]:
         runtime = self.wiring.runtime
-        isolator = runtime.world_tick_failure_isolator
+        isolator = getattr(runtime, "world_tick_failure_isolator", None)
         if isolator is None:
             isolator = WorldTickFailureIsolator.fail_fast()
         return isolator.unit(

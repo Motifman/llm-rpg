@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
@@ -145,7 +146,9 @@ class SpotGraphTravelStageService:
                     raise
                 self._notify_committed_travel(pid)
 
-    def _player_unit(self, current_tick: WorldTick, player_id: PlayerId):
+    def _player_unit(
+        self, current_tick: WorldTick, player_id: PlayerId
+    ) -> AbstractContextManager[None]:
         return self._failure_isolator.unit(
             stage="travel",
             tick=current_tick,

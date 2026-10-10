@@ -43,6 +43,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.player_interaction_application_service import (
         PlayerInteractionApplicationService,
     )
+    from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+        WorldTickFailureIsolator,
+    )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
         WorldGraphEffectService,
@@ -744,7 +747,7 @@ class WorldRuntime:
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
-    _world_tick_failure_isolator: Any | None = field(default=None, repr=False)
+    _world_tick_failure_isolator: WorldTickFailureIsolator | None = field(default=None, repr=False)
     # trace 用の run 内集計。世界状態ではなく観測値なので snapshot へは載せない。
     _cumulative_travel_ticks_by_player: dict[int, int] = field(
         default_factory=dict, repr=False
@@ -1074,7 +1077,7 @@ class WorldRuntime:
         return self._trace_recorder
 
     @property
-    def world_tick_failure_isolator(self) -> Any | None:
+    def world_tick_failure_isolator(self) -> WorldTickFailureIsolator | None:
         return self._world_tick_failure_isolator
 
     def world_tick_failure_counts(self) -> dict[str, int]:

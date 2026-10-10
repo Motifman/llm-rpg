@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterable
+from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -175,7 +176,9 @@ class SpotGraphScenarioEventStageService:
                         scope_factory=scope_factory,
                     )
 
-    def _event_unit(self, current_tick: WorldTick, event_id: str):
+    def _event_unit(
+        self, current_tick: WorldTick, event_id: str
+    ) -> AbstractContextManager[None]:
         return self._failure_isolator.unit(
             stage="scenario_event",
             tick=current_tick,
