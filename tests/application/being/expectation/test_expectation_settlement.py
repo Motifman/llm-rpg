@@ -177,7 +177,7 @@ class TestOneCallPerTurn:
 
         assert len(harness.port.calls) == 2
         _, questions = harness.port.calls[1]
-        assert set(questions) == {"shape_0", "check_0", "scene_changed"}
+        assert set(questions) == {"shape_0", "check_0", "hearsay_0", "scene_changed"}
         assert isinstance(questions["shape_0"], ChoiceQuestion)
         assert "ノアが干潟から戻る" in questions["shape_0"].instructions
         assert isinstance(questions["check_0"], ChoiceQuestion)
@@ -345,7 +345,7 @@ class TestStateMaterial:
     def test_timeline_keeps_only_recent_turns_and_old_expectation_stays_listed(
         self,
     ) -> None:
-        """時系列は直近の上限ターン分だけを行動と発言に分けて載せ、それより前に書いた予期は書いたターンと文で一覧に残る。"""
+        """時系列は直近の上限ターン分だけを出来事と発言に分けて載せ、それより前に書いた予期は書いたターンと文で一覧に残る。"""
         harness = _Harness(ScriptedJudgmentPort(), timeline_turns=2)
         harness.repository.advance_turn(RIO)
         harness.form("exp-1", "カイが焚き火を起こす", due="夕方まで")
@@ -359,8 +359,8 @@ class TestStateMaterial:
         state, _ = harness.port.calls[-1]
         assert state["本人の名前"] == "リオ"
         assert state["出来事の時系列"] == [
-            {"ターン": "ターン2", "行動": [], "発言": ["カイ「火打ち石はある」"]},
-            {"ターン": "ターン3", "行動": ["ノアが干潟へ向かった"], "発言": []},
+            {"ターン": "ターン2", "出来事": [], "発言": ["カイ「火打ち石はある」"]},
+            {"ターン": "ターン3", "出来事": ["ノアが干潟へ向かった"], "発言": []},
         ]
         assert state["清算待ちの予期"] == [
             {
@@ -742,6 +742,183 @@ class TestMissCarriesWhatHappened:
 
         (settled,) = _settled_events(harness)
         assert settled.what_happened == ("拾いに行く", "流木は無い", "期限の後")
+
+
+class TestHitOnHearsayOnly:
+    """当否の決め手が他の人の発言の中身しかない当たりを、まだ分からないとして記録する挙動を保証する (#1568)。"""
+
+    def _pending(self, harness: _Harness, content: str) -> None:
+        harness.repository.advance_turn(RIO)
+        harness.form("exp-1", content)
+        harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
+
+    def test_each_pending_expectation_gets_hearsay_question_in_same_call(self) -> None:
+        """清算待ちの予期ごとに、当たりの決め手が発言の中身しかないかを Noul で問い、当否の問いと同じ呼び出しに載せる。"""
+        harness = _Harness(ScriptedJudgmentPort({}, {}))
+        self._pending(harness, "北の橋が流されて渡れない")
+
+        harness.turn()
+
+        assert len(harness.port.calls) == 2
+        _, questions = harness.port.calls[1]
+        hearsay = questions["hearsay_0"]
+        assert isinstance(hearsay, NoulQuestion)
+        assert "北の橋が流されて渡れない" in hearsay.instructions
+        assert hearsay.true_means is not None and "発言" in hearsay.true_means
+        assert hearsay.false_means is not None
+
+    def test_hit_backed_only_by_speech_is_recorded_as_undetermined(self) -> None:
+        """当たりと判定されても、決め手が発言の中身しかない確率が閾値を超えれば、2 ターン続けても確定せず清算待ちに残る。"""
+        harness = _Harness(
+            ScriptedJudgmentPort(
+                {},
+                {"check_0": "hit", "hearsay_0": 0.9},
+                {"check_0": "hit", "hearsay_0": 0.9},
+            )
+        )
+        self._pending(harness, "北の橋が流されて渡れない")
+
+        harness.turn(TurnMaterial(speeches=("[朝 8:00] カイが言った: 「北の橋は流された」",)))
+        harness.turn()
+
+        assert harness.status("exp-1") is ExpectationStatus.OPEN
+        assert _settled_events(harness) == []
+
+    def test_downgraded_hit_is_traced_with_judged_verdict_and_probability(self) -> None:
+        """発言だけを決め手に当たりを下げたときは、記録した判定、Jev の判定、発言だけの確率を、その予期の移りとして trace に残す。"""
+        harness = _Harness(
+            ScriptedJudgmentPort({}, {"check_0": "hit", "hearsay_0": 0.9})
+        )
+        self._pending(harness, "北の橋が流されて渡れない")
+
+        harness.turn()
+
+        (check,) = [
+            t
+            for trace in harness.settlements()
+            for t in trace["transitions"]
+            if t["step"] == "check"
+        ]
+        assert (check["verdict"], check["judged_verdict"], check["hearsay_only"]) == (
+            "undetermined",
+            "hit",
+            0.9,
+        )
+
+    def test_hit_at_threshold_is_kept(self) -> None:
+        """発言だけの確率がちょうど閾値 (stub の迷った答え 0.5) のときは当たりのまま記録し、2 ターン続けば確定する。"""
+        harness = _Harness(
+            ScriptedJudgmentPort(
+                {},
+                {"check_0": "hit", "hearsay_0": 0.5},
+                {"check_0": "hit", "hearsay_0": 0.5},
+            )
+        )
+        self._pending(harness, "カイが焚き火を起こす")
+
+        harness.turn(TurnMaterial(actions=("カイが焚き火を起こした",)))
+        harness.turn()
+
+        (settled,) = _settled_events(harness)
+        assert settled.outcome is Outcome.HIT
+
+    def test_miss_is_kept_even_when_speech_is_the_only_cue(self) -> None:
+        """発言だけの確率が高くても、外れの判定は下げずにそのまま記録する。下げるのは当たりだけ。"""
+        harness = _Harness(
+            ScriptedJudgmentPort(
+                {},
+                {"check_0": "miss", "hearsay_0": 0.9},
+                {"check_0": "miss", "hearsay_0": 0.9},
+            )
+        )
+        self._pending(harness, "北の橋が流されて渡れない")
+
+        harness.turn()
+        harness.turn()
+
+        (settled,) = _settled_events(harness)
+        assert settled.outcome is Outcome.MISS
+
+    def test_check_question_says_speech_is_only_what_someone_said(self) -> None:
+        """当否の問いは、発言はその人がそう言ったという事実にすぎず、中身だけで世界の状態の予期を当たりにしないと説明し、反する出来事があれば外れとする。"""
+        harness = _Harness(ScriptedJudgmentPort({}, {}))
+        self._pending(harness, "北の橋が流されて渡れない")
+
+        harness.turn()
+
+        _, questions = harness.port.calls[1]
+        check = questions["check_0"]
+        assert "そう言ったという事実" in check.instructions
+        assert "反する出来事" in check.options["miss"]
+
+    def test_contrary_observation_in_period_reaches_judgment_apart_from_speech(self) -> None:
+        """予期を書いてから清算するまでに届いた反する観測は、発言とは別の出来事の欄で清算の判断に渡る。"""
+        harness = _Harness(ScriptedJudgmentPort({}, {}), timeline_turns=3)
+        self._pending(harness, "北の橋が流されて渡れない")
+
+        harness.turn(
+            TurnMaterial(
+                actions=("[朝 8:00] 遠くで南の吊り橋が軋む音がした。",),
+                speeches=("[朝 8:00] カイが言った: 「北の橋は流された」",),
+            )
+        )
+
+        state, _ = harness.port.calls[1]
+        latest = state["出来事の時系列"][-1]
+        assert latest["出来事"] == ["[朝 8:00] 遠くで南の吊り橋が軋む音がした。"]
+        assert latest["発言"] == ["[朝 8:00] カイが言った: 「北の橋は流された」"]
+
+
+class TestHalTurn9OfMineV1:
+    """mine_v1_003 の T9 のハルの清算の入力を組み直し、ミオの発言だけでは予期が当たりで確定しないことを保証する (#1568)。"""
+
+    _TIMELINE = (
+        TurnMaterial(
+            actions=(
+                "[Day 1 深夜 3:30] ハル: 「北の坑道」に着いた → 「北の坑道」に到着した。ここから次の行動を選べる。",
+                "[Day 1 深夜 3:30] ハル: 「北の坑道の水門」で水門を開ける → 重い把手を回しきると、水門の向こうで水がどっと流れ出す音がした。水はどこかへ落ちていく。",
+            ),
+        ),
+        TurnMaterial(
+            actions=(
+                "[Day 1 深夜 3:30] ミオが北の坑道の水門の「水門を開ける」を試みたが、水門はもう開いている。",
+                "[Day 1 深夜 4:00] 遠くで南の坑道と南の横坑の奥の道が動く音がした。",
+            ),
+        ),
+        TurnMaterial(
+            actions=(
+                "[Day 1 深夜 4:30] ハル: 「北の坑道の水門」で水門を閉じる → 把手を戻すと、水の流れる音がやんだ。",
+            ),
+            speeches=(
+                "[Day 1 深夜 4:00] ミオが言った: 「水門はもう開いてる。下層の近道は水浸しだ。俺が先に詰所のほう、見てくる」",
+            ),
+        ),
+    )
+
+    def test_hit_on_mios_word_alone_does_not_settle(self) -> None:
+        """水門の予期に Jev が 2 ターン続けて当たりを返しても、決め手がミオの発言だけと答えれば確定せず、反する物音は出来事の欄、ミオの言葉は発言の欄で渡る。"""
+        harness = _Harness(
+            ScriptedJudgmentPort(
+                {},
+                {"check_0": "hit", "hearsay_0": 0.9},
+                {"check_0": "hit", "hearsay_0": 0.9},
+            ),
+            timeline_turns=4,
+        )
+        harness.repository.advance_turn(RIO)
+        harness.form("exp-1", "水門が開き、下層の近道が水に浸かって通れなくなる")
+        harness.service.settle_turn(RIO, self_name="ハル", material=self._TIMELINE[0])
+        for material in self._TIMELINE[1:]:
+            harness.repository.advance_turn(RIO)
+            harness.service.settle_turn(RIO, self_name="ハル", material=material)
+
+        state, questions = harness.port.calls[-1]
+        assert harness.status("exp-1") is ExpectationStatus.OPEN
+        assert _settled_events(harness) == []
+        assert "水門が開き、下層の近道が水に浸かって通れなくなる" in questions["hearsay_0"].instructions
+        timeline = state["出来事の時系列"]
+        assert "[Day 1 深夜 4:00] 遠くで南の坑道と南の横坑の奥の道が動く音がした。" in timeline[1]["出来事"]
+        assert timeline[2]["発言"][0].startswith("[Day 1 深夜 4:00] ミオが言った:")
 
 
 def _settled_events(harness: _Harness) -> list[ExpectationSettled]:
