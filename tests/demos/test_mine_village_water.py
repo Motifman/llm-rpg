@@ -51,7 +51,7 @@ _VALVE = {"set_valve_1": "gate_a", "set_valve_2": "gate_c", "set_valve_3": "gate
 #: 仮の値 (設計の「未決」)。水門を閉じてから、溜まった水が自然に引くまでの tick。
 _DRAIN_TICKS = 12
 #: 燃料の缶 1 つで発電機にたまる量と、ポンプ 1 回で使う量。
-_CAN_FUEL = 2
+_CAN_FUEL = 3
 _PUMP_FUEL = 1
 
 
@@ -283,7 +283,7 @@ class TestPumpDrainsWhatTheValveSelects:
         assert _fuel(runtime) == _CAN_FUEL - _PUMP_FUEL
 
     def test_a_second_pump_in_the_same_tick_is_refused(self, runtime) -> None:
-        """燃料が 2 あっても、同じ tick に続けてポンプを動かすと 2 回目は断られ、燃料は 1 だけ減る。燃料のフラグの更新が次の tick になるため。"""
+        """燃料が 2 以上あっても、同じ tick に続けてポンプを動かすと 2 回目は断られ、燃料は 1 だけ減る。燃料のフラグの更新が次の tick になるため。"""
         _fuel_and_start_generator(runtime)
         _act(runtime, _HARU, "machine_room", "pump", "run_pump")
 
@@ -293,9 +293,9 @@ class TestPumpDrainsWhatTheValveSelects:
         assert _fuel(runtime) == _CAN_FUEL - _PUMP_FUEL
 
     def test_pump_stops_working_when_the_fuel_runs_out(self, runtime) -> None:
-        """缶 1 つ分でポンプを 2 回動かすと燃料は 0 になり、3 回目は動かず、燃料も減らない。"""
+        """缶 1 つ分でポンプを `_CAN_FUEL` 回動かすと燃料は 0 になり、次の 1 回は動かず、燃料も減らない。"""
         _fuel_and_start_generator(runtime)
-        for _ in range(2):
+        for _ in range(_CAN_FUEL // _PUMP_FUEL):
             _act(runtime, _HARU, "machine_room", "pump", "run_pump")
             _ticks(runtime, 1)
 
@@ -333,18 +333,7 @@ class TestPumpDrainsWhatTheValveSelects:
 
 
 class TestFuelSupply:
-    """燃料の釣り合い (仮の値): 缶は北の持つ 1 つ、掘り場の 1 つ、倉庫の残りの少ない 1 つで、合わせて 5 つ分になることを保証する。"""
-
-    def test_all_cans_together_fill_five_units(self, runtime) -> None:
-        """掘り場と倉庫の缶を拾い、北の缶と合わせて注ぐと、発電機の燃料は 5 になる。"""
-        _clear_gas(runtime)
-        _act(runtime, _HARU, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
-        _act(runtime, _HARU, "storehouse", "storehouse_crates", "take_small_fuel_can")
-
-        for action in ("pour_fuel_can", "pour_fuel_can", "pour_small_fuel_can"):
-            _act(runtime, _HARU, "machine_room", "generator", action)
-
-        assert _fuel(runtime) == 5
+    """掘り場の予備の燃料の缶が 1 度しか拾えないことを保証する。燃料の合計の釣り合いは test_mine_village_capacity_and_fuel.py が見る。"""
 
     def test_a_crate_gives_its_can_only_once(self, runtime) -> None:
         """掘り場の缶は 1 度しか拾えない。2 度目は断られる。"""
