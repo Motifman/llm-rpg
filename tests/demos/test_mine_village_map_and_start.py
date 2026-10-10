@@ -203,9 +203,9 @@ class TestWorldLooksLikeASnowboundMine:
         assert "天候: 雪" in text
 
     def test_lamp_turns_the_dark_mine_dim(self, scenario, runtime) -> None:
-        """地下の中層の分岐で、カンテラを持っていれば薄暗く見え、手放すと暗くなる。"""
+        """地下の機械室で、カンテラを持っていれば薄暗く見え、手放すと暗くなる。"""
         haru = _player_id(scenario, "haru")
-        _place(runtime, haru, "mid_junction")
+        _place(runtime, haru, "machine_room")
         with_lamp = _atmosphere_line(runtime, haru)
 
         runtime.do_drop_item(haru, 0)
