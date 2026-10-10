@@ -11,7 +11,9 @@ import heapq
 import itertools
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
     KeySpotRequirement,
@@ -23,8 +25,8 @@ MAP_PATH = Path(__file__).resolve().parent.parent / "docs" / "mine_village_map.j
 STARTS = {"北": "north_shaft_head", "南": "south_adit_mouth"}
 KEY_SPOTS = ("lift_landing", "machine_room", "company_office")
 
-# 通路を塞ぐもの。値は塞がる通路の id。
-BLOCKERS = {
+# 通路を塞ぐもの。値は、その通路が塞がるかを返す関数。
+BLOCKERS: dict[str, Callable[[dict[str, Any]], bool]] = {
     "水門A": lambda c: c.get("floods_with") == "gate_a",
     "水門B": lambda c: c.get("floods_with") == "gate_b",
     "水門C": lambda c: c.get("floods_with") == "gate_c",
@@ -33,7 +35,7 @@ BLOCKERS = {
 }
 
 
-def shortest_ticks(connections: list[dict], start: str) -> dict[str, int]:
+def shortest_ticks(connections: list[dict[str, Any]], start: str) -> dict[str, int]:
     adjacency: dict[str, list[tuple[str, int]]] = {}
     for c in connections:
         adjacency.setdefault(c["from"], []).append((c["to"], c["travel_ticks"]))
@@ -79,10 +81,12 @@ def main() -> int:
         skipped_vertical = sorted(
             i.connection
             for i in result.warnings
-            if i.code == "TRAVEL_TICKS_DISTANCE_MISMATCH" and i.connection in vertical
+            if i.code == "TRAVEL_TICKS_DISTANCE_MISMATCH" and i.connection is not None and i.connection in vertical
         )
         if skipped_vertical:
-            print(f"  - (竪坑と横坑の距離の食い違いは、地下を横にずらして描いたためなので除いた: {', '.join(skipped_vertical)})")
+            print(
+                f"  - (竪坑と横坑の距離の食い違いは、地下を横にずらして描いたためなので除いた: {', '.join(skipped_vertical)})"
+            )
 
     print()
     print("## 2. 通路が塞がった状態ごとの、昇降機の乗り場までの tick (行けなければ ×)")
@@ -91,9 +95,7 @@ def main() -> int:
     print("|---|" + "---|" * len(STARTS))
     for size in range(len(BLOCKERS) + 1):
         for combo in itertools.combinations(BLOCKERS, size):
-            open_connections = [
-                c for c in raw["connections"] if not any(BLOCKERS[b](c) for b in combo)
-            ]
+            open_connections = [c for c in raw["connections"] if not any(BLOCKERS[b](c) for b in combo)]
             cells = []
             for start in STARTS.values():
                 best = shortest_ticks(open_connections, start)
