@@ -28,6 +28,10 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
 )
+from ai_rpg_world.application.being.world_clock_restart import (
+    WorldClockRestartReport,
+    restart_world_clock_in_payload,
+)
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotVersionException,
 )
@@ -46,6 +50,7 @@ class RestoreBeingSnapshotResult:
     input_path: Path
     snapshot_version: int
     memory_restored: bool
+    world_clock_restart: WorldClockRestartReport | None = None
 
 
 class RestoreBeingSnapshotFromFileUseCase:
@@ -77,7 +82,12 @@ class RestoreBeingSnapshotFromFileUseCase:
         self._memory = memory_snapshot_service
         self._gateway = file_gateway
 
-    def execute(self, input_path: Path) -> RestoreBeingSnapshotResult:
+    def execute(
+        self,
+        input_path: Path,
+        *,
+        restart_world_clock: bool = False,
+    ) -> RestoreBeingSnapshotResult:
         if not isinstance(input_path, Path):
             raise TypeError(
                 f"input_path must be Path, got {type(input_path).__name__}"
@@ -96,13 +106,8 @@ class RestoreBeingSnapshotFromFileUseCase:
             )
         being_id = BeingId(snapshot.being_id_value)
 
-        # 順序: snapshot を repo に書く先に、memory restore を行うと「Being が
-        # まだ repo に居ない状態で memory が復元される」逆転が起きる。逆に
-        # 「memory 復元失敗 → repo にだけ snapshot が残る」のも好ましくないが、
-        # 設計判断 #15 (= store 跨ぎ atomicity なし) で許容済。silent failure
-        # は禁止 (= 例外を上位に伝播)。
-        self._repo.save_snapshot(snapshot)
-        memory_restored = False
+        payload: str | None = None
+        world_clock_restart: WorldClockRestartReport | None = None
         if snapshot.has_memory_payload:
             # defensive: ``BeingSnapshot.__post_init__`` の不変条件で
             # has_memory_payload=True かつ memory_payload_json=None の状態は
@@ -114,6 +119,19 @@ class RestoreBeingSnapshotFromFileUseCase:
                     "has_memory_payload=True なのに memory_payload_json が None: "
                     f"being_id={being_id.value!r} (BeingSnapshot 不変条件違反)"
                 )
+            # repo に書く前に書き換える。表の漏れで止まったとき、Being だけが
+            # repo に残る状態を作らない。
+            if restart_world_clock:
+                payload, world_clock_restart = restart_world_clock_in_payload(payload)
+
+        # 順序: snapshot を repo に書く先に、memory restore を行うと「Being が
+        # まだ repo に居ない状態で memory が復元される」逆転が起きる。逆に
+        # 「memory 復元失敗 → repo にだけ snapshot が残る」のも好ましくないが、
+        # 設計判断 #15 (= store 跨ぎ atomicity なし) で許容済。silent failure
+        # は禁止 (= 例外を上位に伝播)。
+        self._repo.save_snapshot(snapshot)
+        memory_restored = False
+        if payload is not None:
             self._memory.restore(being_id, payload)
             memory_restored = True
 
@@ -122,6 +140,7 @@ class RestoreBeingSnapshotFromFileUseCase:
             input_path=input_path,
             snapshot_version=snapshot.snapshot_version,
             memory_restored=memory_restored,
+            world_clock_restart=world_clock_restart,
         )
 
 
