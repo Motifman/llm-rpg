@@ -514,10 +514,12 @@ def _interactions(raw: dict[str, Any]):
                 yield obj["id"], interaction
 
 
+#: 操作の前提条件に使ってよい種類。ほかの種類は試す前にヒントとして出る。
+_ALLOWED_PRECONDITIONS = frozenset({"FLAG_SET", "FLAG_NOT_SET", "HAS_ITEM"})
+
+
 class TestRulesStayOutOfThePrompt:
     """決まりがヒントとして漏れないよう、操作の前提条件をフラグと持ち物だけで書いていることを保証する。"""
-
-    _ALLOWED = {"FLAG_SET", "FLAG_NOT_SET", "HAS_ITEM"}
 
     def test_preconditions_use_only_flags_and_items(self) -> None:
         """どの操作の前提条件も、フラグか持ち物だけを見る。時刻・天候・物の状態の条件は試す前にヒントとして出るため使わない。"""
@@ -529,7 +531,7 @@ class TestRulesStayOutOfThePrompt:
             for c in i.get("preconditions", [])
         }
 
-        assert {u for u in used if u[2] not in self._ALLOWED} == set()
+        assert {u for u in used if u[2] not in _ALLOWED_PRECONDITIONS} == set()
         assert used
 
     def test_every_precondition_says_its_own_failure(self) -> None:
