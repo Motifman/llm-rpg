@@ -289,6 +289,7 @@ from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service impo
 )
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
+    SpotTravelBlocked,
 )
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
@@ -321,6 +322,9 @@ from ai_rpg_world.application.world_graph.synchronized_action_registry import (
 )
 from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
     SynchronizedActionResolverStageService,
+)
+from ai_rpg_world.application.world_graph.travel_blocked_message import (
+    travel_blocked_cue,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
@@ -988,6 +992,73 @@ class WorldRuntime:
         player_id_value = int(player_id)
         self._cumulative_travel_ticks_by_player[player_id_value] = (
             self._cumulative_travel_ticks_by_player.get(player_id_value, 0) + 1
+        )
+
+    def _report_travel_blocked(
+        self, player_id: PlayerId, blocked: SpotTravelBlocked
+    ) -> None:
+        """区間が閉じて移動を取りやめたことを、本人の観測・trace・行動履歴に残す。
+
+        到着の行が無いと本人が移動中だと思い込むのと同じで (到着の履歴の
+        hook を参照)、出発の行だけが残ると取りやめたことに気づけない。
+        観測は手番を積むためにも要る。止まった本人は到着の観察者を通らない。
+        観測を最初に出し、trace の記録の失敗は個別に握る。trace の失敗で
+        本人への観測と手番まで失うと、止まったことを知らないまま手番も来ない。
+        """
+        cue = travel_blocked_cue(blocked)
+        self._emit_observation_directly(
+            player_id,
+            ObservationOutput(
+                prose=cue,
+                structured={
+                    "type": "travel_blocked",
+                    "connection_name": blocked.connection_name,
+                    "message": cue,
+                },
+                observation_category="self_only",
+                schedules_turn=True,
+                breaks_movement=False,
+            ),
+        )
+        graph = self._spot_graph_repo.find_graph()
+        from_name = graph.get_spot(blocked.from_spot_id).name
+        to_name = graph.get_spot(blocked.to_spot_id).name
+        destination_name = graph.get_spot(blocked.destination_spot_id).name
+        recorder = self._trace_recorder
+        if recorder is not None:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            try:
+                recorder.record(
+                    TraceEventKind.TRAVEL_BLOCKED,
+                    tick=self.current_tick(),
+                    player_id=int(player_id),
+                    connection_id=blocked.connection_id.value,
+                    connection_name=blocked.connection_name,
+                    passage_kind=blocked.passage_kind,
+                    passage_state=blocked.passage_state,
+                    reason=blocked.reason.value,
+                    condition_message=blocked.condition_message,
+                    from_spot_id=blocked.from_spot_id.value,
+                    from_spot_name=from_name,
+                    to_spot_id=blocked.to_spot_id.value,
+                    to_spot_name=to_name,
+                    destination_spot_id=blocked.destination_spot_id.value,
+                    destination_spot_name=destination_name,
+                )
+            except Exception:
+                logger.exception(
+                    "TRAVEL_BLOCKED trace record failed: player=%s connection=%s",
+                    int(player_id),
+                    blocked.connection_id.value,
+                )
+        self._record_action_result(
+            player_id,
+            f"{blocked.connection_name}の先へ進めず、「{destination_name}」への移動を取りやめた",
+            f"「{from_name}」にとどまっている。ここから次の行動を選べる。",
+            tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            success=False,
+            error_code="TRAVEL_BLOCKED",
         )
 
     def _record_world_spatial_metrics(self, tick: int) -> None:
@@ -6823,6 +6894,7 @@ def create_world_runtime(
     travel_stage.set_on_travel_tick_committed(
         runtime._record_committed_player_travel_tick
     )
+    travel_stage.add_blocked_observer(runtime._report_travel_blocked)
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
