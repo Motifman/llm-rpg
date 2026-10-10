@@ -1030,6 +1030,13 @@ def _drive_scenario(
                 end_check = runtime.check_game_end()
                 if end_check.is_ended:
                     outcome, end_reason = _outcome_and_reason(end_check)
+                    team_result = runtime.team_result_trace(end_check)
+                    if team_result is not None:
+                        recorder.record(
+                            TraceEventKind.TEAM_RESULT,
+                            tick=last_tick,
+                            **team_result,
+                        )
                     if reporter is not None:
                         reporter.message(
                             f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"

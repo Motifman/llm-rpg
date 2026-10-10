@@ -15,7 +15,7 @@ import os
 import random
 import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -364,6 +364,9 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.scenario_team import (
+    decide_team_results,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
@@ -4458,8 +4461,98 @@ class WorldRuntime:
                     "(全員 down または outcome 確定済み)"
                 ),
                 player_outcomes=registry.snapshot(),
+                team_results=(
+                    self._decide_team_results() if self.scenario.teams else None
+                ),
             )
         return self._check_game_end_collective_mode()
+
+    def _decide_team_results(self) -> Mapping[str, GameResultEnum]:
+        """いまの世界で各チームの勝利条件を評価し、チームの勝敗を決める。"""
+        satisfied, _ = self._satisfied_teams()
+        return decide_team_results(self.scenario.teams, satisfied)
+
+    def _satisfied_teams(self) -> tuple[frozenset[str], Mapping[str, str]]:
+        """勝利条件が成立したチームの id と、チームごとの判定の理由を返す。
+
+        成立しなかったチームの理由は、最後に評価した条件の理由 (何が足りないか)。
+        """
+        graph = self._spot_graph_repo.find_graph()
+        flags = self._world_flag_state.as_frozen_set()
+        player_ids = self.get_player_ids()
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        tick = WorldTick(self._tick)
+        player_states = self._collect_player_states(player_ids)
+        player_outcomes = self._collect_player_outcomes(player_ids)
+        satisfied: list[str] = []
+        reasons: dict[str, str] = {}
+        for team in self.scenario.teams:
+            for condition in team.win_conditions:
+                result = self._game_end_evaluator.evaluate(
+                    graph, condition, flags, player_ids, tick,
+                    player_states=player_states,
+                    player_outcomes=player_outcomes,
+                    result_on_match=GameResultEnum.WIN,
+                    team_member_ids=team.member_player_ids,
+                )
+                reasons[team.team_id] = result.reason
+                if result.is_ended:
+                    satisfied.append(team.team_id)
+                    break
+        return frozenset(satisfied), reasons
+
+    def team_result_trace(
+        self, end_result: GameEndResult
+    ) -> dict[str, Any] | None:
+        """終了時のチームの勝敗と個人の結果を、trace の team_result の payload にする。"""
+        from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+            PlayerOutcomeEnum,
+        )
+
+        team_results = end_result.team_results
+        if not end_result.is_ended or team_results is None:
+            return None
+        registry = self._player_outcome_registry
+        _, team_reasons = self._satisfied_teams()
+        team_of: dict[int, str] = {}
+        teams_payload: list[dict[str, Any]] = []
+        for team in self.scenario.teams:
+            result = team_results[team.team_id]
+            teams_payload.append({
+                "team_id": team.team_id,
+                "name": team.name,
+                "result": result.value,
+                "satisfied": result is not GameResultEnum.LOSE,
+                "reason": team_reasons[team.team_id],
+                "member_player_ids": [int(pid) for pid in team.member_player_ids],
+                "member_player_string_ids": [
+                    self.id_mapper.get_str("player", int(pid))
+                    for pid in team.member_player_ids
+                ],
+            })
+            for pid in team.member_player_ids:
+                team_of[int(pid)] = team.team_id
+        players_payload: list[dict[str, Any]] = []
+        for pid in self.get_player_ids():
+            team_id = team_of[int(pid)]
+            outcome = (
+                registry.get_outcome(pid)
+                if registry is not None
+                else PlayerOutcomeEnum.UNRESOLVED
+            )
+            players_payload.append({
+                "player_id": int(pid),
+                "player_string_id": self.id_mapper.get_str("player", int(pid)),
+                "player_name": self.get_player_name(pid),
+                "team_id": team_id,
+                "outcome": outcome.value,
+                "result": team_results[team_id].value,
+            })
+        return {
+            "reason": end_result.reason,
+            "teams": teams_payload,
+            "players": players_payload,
+        }
 
     def _should_end_on_all_down(self) -> bool:
         """END_ON_ALL_DOWN による外的停止が有効かを返す。"""
@@ -4518,6 +4611,22 @@ class WorldRuntime:
         player_outcomes = (
             self._collect_player_outcomes(player_ids) if needs_outcome_inputs else None
         )
+        if self.scenario.teams:
+            # チームの win を end より先に見る。勝ちが決まった tick に end も
+            # 成立していても、勝ったチームを負けにしない。
+            satisfied, team_reasons = self._satisfied_teams()
+            if satisfied:
+                return GameEndResult(
+                    is_ended=True,
+                    result=None,
+                    reason=" / ".join(
+                        f"{team.name}: {team_reasons[team.team_id]}"
+                        for team in self.scenario.teams
+                        if team.team_id in satisfied
+                    ),
+                    player_outcomes=self._collect_player_outcomes(player_ids),
+                    team_results=decide_team_results(self.scenario.teams, satisfied),
+                )
         for wc in self.scenario.win_conditions:
             result = self._game_end_evaluator.evaluate(
                 graph, wc, flags, player_ids, tick,
@@ -4541,6 +4650,13 @@ class WorldRuntime:
                 result_on_match=None,
             )
             if result.is_ended:
+                if self.scenario.teams:
+                    return replace(
+                        result,
+                        team_results=decide_team_results(
+                            self.scenario.teams, frozenset()
+                        ),
+                    )
                 return result
         return GameEndResult(is_ended=False, result=None, reason="ゲーム続行中")
 

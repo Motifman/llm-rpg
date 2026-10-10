@@ -88,6 +88,9 @@ class TestOutcomeAndReason:
             def round_assignment_trace(self) -> list:
                 return []
 
+            def team_result_trace(self, _end_check) -> None:
+                return None
+
             def pop_llm_call_count(self) -> int:
                 return 0
 
@@ -130,6 +133,92 @@ class TestOutcomeAndReason:
         assert summary["outcome"] == "LOSE"
         assert summary["end_reason"] == "インポスター陣営が人数差を作った"
         assert state.llm_wiring.llm_session_run_id == "run034-calibration"
+        events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        assert not [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
+
+    def test_drive_scenario_records_team_result_when_the_game_ends(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """終了した判定結果から runtime が team_result の payload を返すと、その tick で trace に 1 件残る。"""
+        import ai_rpg_world.presentation.spot_graph_game.runtime_manager as manager_module
+
+        payload = {
+            "reason": "北の班: チームの全員が RESCUED になった (2人)",
+            "teams": [{"team_id": "north", "result": "WIN"}],
+            "players": [{"player_id": 1, "team_id": "north", "outcome": "RESCUED", "result": "WIN"}],
+        }
+        end_check = GameEndResult(is_ended=True, result=None, reason=payload["reason"])
+        received: list[GameEndResult] = []
+
+        class FakeRuntime:
+            tick = 0
+
+            def get_player_ids(self):
+                return ()
+
+            def set_trace_recorder(self, recorder) -> None:
+                pass
+
+            def current_tick(self) -> int:
+                return self.tick
+
+            def advance_tick(self) -> None:
+                self.tick += 1
+
+            def check_game_end(self) -> GameEndResult:
+                return end_check
+
+            def round_assignment_trace(self) -> list:
+                return []
+
+            def team_result_trace(self, checked: GameEndResult) -> dict:
+                received.append(checked)
+                return payload
+
+            def pop_llm_call_count(self) -> int:
+                return 0
+
+            def count_traveling_players(self) -> int:
+                return 0
+
+            def shutdown(self, *, timeout: float) -> None:
+                pass
+
+        state = SimpleNamespace(
+            runtime=FakeRuntime(),
+            llm_wiring=SimpleNamespace(
+                prompt_dataset_sink=None,
+                llm_turn_trigger=SimpleNamespace(schedule_turn=lambda _pid: None),
+            ),
+        )
+
+        class FakeManager:
+            def __init__(self, **_kwargs) -> None:
+                self._sessions = {"session": state}
+
+            def create_character(self, _request):
+                return SimpleNamespace(id="character")
+
+            def create_session(self, _request):
+                return SimpleNamespace(session_id="session")
+
+        monkeypatch.setattr(manager_module, "GameRuntimeManager", FakeManager)
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            _drive_scenario(
+                run_id="team-run",
+                scenario_path=tmp_path / "scenario.json",
+                max_world_ticks=5,
+                recorder=recorder,
+                progress=lambda _message: None,
+            )
+
+        events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        team_events = [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
+        assert received == [end_check]
+        assert len(team_events) == 1
+        assert team_events[0]["tick"] == 1
+        assert team_events[0]["payload"] == payload
 
 
 class TestLlmRunHealth:
@@ -1173,3 +1262,45 @@ def _teleport_player(runtime, player_id: int, spot_id: str) -> None:  # noqa: AN
         pass
     graph.place_entity(entity_id, spot)
     runtime._spot_graph_repo.save(graph)
+
+
+class TestTeamResultReachesTheTrace:
+    """2 チームの fixture を実際の runtime で回し、trace.jsonl に team_result が届くことを保証する (#1516)。"""
+
+    def test_defector_run_writes_one_team_result(self, tmp_path: Path) -> None:
+        """北の 2 人と南の 1 人が乗り場にいて 2 tick 目にレバーが倒れると、team_result が 1 件残り、北が WIN、乗った南の人は RESCUED / LOSE になる。"""
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "two_teams_lift.json"
+        raw = json.loads(fixture.read_text(encoding="utf-8"))
+        for player in raw["players"]:
+            if player["id"] in ("north_1", "north_2", "south_1"):
+                player["spawn_spot"] = "lift"
+        raw["scenario_events"] = [{
+            "id": "lever_pulled",
+            "trigger": "ON_TICK",
+            "once": True,
+            "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 2}],
+            "effects": [{"effect_type": "SET_FLAG", "parameters": {"flag_name": "lift_departed"}}],
+        }]
+        scenario_path = tmp_path / "two_teams_lift_auto.json"
+        scenario_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        trace_path = tmp_path / "trace.jsonl"
+
+        with JsonlTraceRecorder(trace_path) as recorder:
+            summary = _drive_scenario(
+                run_id="team-e2e",
+                scenario_path=scenario_path,
+                max_world_ticks=6,
+                recorder=recorder,
+                progress=lambda _message: None,
+                runtime_config=ResolvedLlmRuntimeConfig.for_tests(),
+            )
+
+        events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        [team_event] = [e for e in events if e["kind"] == TraceEventKind.TEAM_RESULT]
+        assert summary["outcome"] == "ENDED"
+        assert {t["team_id"]: t["result"] for t in team_event["payload"]["teams"]} == {
+            "north": "WIN",
+            "south": "LOSE",
+        }
+        players = {p["player_string_id"]: p for p in team_event["payload"]["players"]}
+        assert (players["south_1"]["outcome"], players["south_1"]["result"]) == ("RESCUED", "LOSE")

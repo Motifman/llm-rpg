@@ -7255,3 +7255,33 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 **どうしないと壊れるか**: 環境の encounter に人を残すと、知っている人を Being の記憶で決める段で、環境と Being の 2 か所に会った記録ができてずれる。歩いて入った側に記録しないと、相手のところへ行った側だけが相手を知らないままになる。紹介をシナリオで止められないと、互いを知らずに始まる班 (#1508) が作れない。
 
 **関連**: design_decisions 27 / 52 / Issue #1436 / #1465 / #1508。
+
+---
+
+## D1516. チームの勝敗は `teams[].win` で決め、個人の勝敗は所属チームの勝敗にそろえる。個人結果 (RESCUED など) とは別の軸で残す
+
+**何を**: シナリオの最上位に `teams` を書けるようにした。チームは `id`、`name`、`member_state`、`win` を持つ。`initial_state` が `member_state` に一致する player がそのチームに入る。`win` には終了条件を書き、新しい型 `ALL_MEMBERS_HAVE_OUTCOME` (そのチームの全員が `outcome` の個人結果になった) を `teams[].win` の中でだけ使える。ゲームが終わると、チームごとの勝敗 (`GameEndResult.team_results`) が決まり、trace の `team_result` に、チームごとの勝敗と、人ごとの所属・個人結果・勝敗を 1 件残す (`parse_teams.py`、`scenario_team.py`、Issue #1516)。
+
+**なぜ**: 廃坑の山村 (#1508、`docs/mine_village_scenario_design.md`) は 2 チームが敵対し、「チームの 2 人とも脱出したチームの勝ち。寝返って 1 人だけ脱出しても、その人のチームは負け」。いままでの勝敗は全体で 1 つの WIN / LOSE で、どちらのチームの勝ちかは書いた人の視点で読み替えるしかなかった。回を重ねる実験では、回ごとに誰がどちらのチームで、どのチームが勝ったかを記録できないと、「前の回は負けた」を次の回へ持ち越す場面が作れない。
+
+**決まり**:
+
+- **所属は名簿でなく `member_state` で書く**: `round_assignment` (design_decisions D1514-2) の枠が書き換えるのは `initial_state` なので、枠に `"team": "north"` を書けば回ごとの組み分けがそのまま効く。所属は回の開始時の `initial_state` で決め、回の途中で state が変わっても動かない
+- **全員がちょうど 1 チームに入る**: どのチームにも入らない人、2 チームに入る人がいれば読み込みで止める。勝敗の決まらない人を作らない。真偽値の `true` と数の `1` は別の値として比べる
+- **チームは 2 つ以上**: 1 つだけなら全体の `win` と変わらない
+- **`teams` を書いたら `game_end_conditions.win` / `lose` を置けない**: 誰から見た勝ちかが二重になる。どのチームも勝たずに終わる条件は `game_end_conditions.end` に書き、1 つ以上を必須にする。無いと、どのチームも勝たないまま run が打ち切られ、勝敗が決まらない。`teams` のあるシナリオの `end` には、`FLAG_SET` や `TICK_LIMIT` など世界を見る条件を置ける (`teams` の無いシナリオの `end` は、これまでどおり `ALL_PLAYER_OUTCOMES_RESOLVED` だけ)
+- **既存の条件型は、チームの中でも世界全体を見る**: `teams[].win` に `SURVIVING_PLAYERS_WITH_STATE_AT_MOST` を書いても、数えるのは全員のうち `required_state` を満たす人。チームの人だけを見るのは `ALL_MEMBERS_HAVE_OUTCOME` だけ。既存の型の意味を、置き場所で変えない
+- **`ALL_AT_SPOT` / `ANY_AT_SPOT` は `teams[].win` に置けない**: 「全員が」「誰かが」を「チームの全員が」と読み違える。実際は相手チームの人まで数えるので、`ANY_AT_SPOT` なら相手が着いただけで勝つ。チームの人が場所にいることを勝ちにしたいなら、`player_outcome_rules` で場所にいる人に個人結果を付け、`ALL_MEMBERS_HAVE_OUTCOME` で待つ
+- **待つ個人結果を付ける規則が無ければ止める**: `ALL_MEMBERS_HAVE_OUTCOME` が RESCUED か STRANDED を待つのに、それを付ける `player_outcome_rules` が無ければ読み込みで止める。DEAD と EJECTED は死と会議の投票が付けるので、規則が無くてよい
+- **チームの `win` を `end` より先に見る**: 昇降機が出た tick に「北の 2 人が RESCUED」と「`lift_departed` が立った」が同時に起きても北の勝ちにする
+- **勝つのは高々 1 チーム**: 成立したのが 1 チームならそのチームが WIN、他は LOSE。2 チーム以上が同時に成立したら、成立したチームは DRAW、他は LOSE。どれも成立せず `end` で終わったら全チーム LOSE。`END_ON_ALL_DOWN` の外的停止でも同じ表を作る
+- **個人の勝敗は所属チームの勝敗と同じ**: 個人だけが勝つ・負けることは無い。`PlayerOutcomeEnum` に WON / LOST を足さない。身に何が起きたか (RESCUED / DEAD / STRANDED) と、チームが勝ったかは別の軸で、1 つの値に混ぜると「寝返って脱出したが負け」の片方しか残らない。trace の `team_result` では `outcome` と `result` を並べて残す
+- **全体の勝敗は無い**: `teams` のシナリオでは `GameEndResult.result` は None で、`run_end` の outcome は ENDED になる
+- **チームの名前と、相手チームの所属はプロンプトに出さない**: チームの名前 (`teams[].name`) は trace にだけ出す。所属を書いた `initial_state` のキーは、他の state と同じく本人の「自分の状態」にだけ出て、相手には出ない。相手の存在を伏せる設定 (`knows_at_start`、design_decisions D1520) と矛盾させない。全体告知にもチームを差し込まない
+- **`team_result` は check_game_end で終わったときだけ出す**: `max_world_ticks` に達した、LLM の障害で打ち切った、中断した run では出ない。勝敗は決まっておらず、`run_end` の outcome (TIMEOUT / LLM_ABORTED / INTERRUPTED) で分かる。決まっていない勝敗を LOSE として残さない
+- **チームごとの理由を残す**: `team_result` の `teams[].reason` に、成立した条件の理由か、成立しなかったチームの最後の条件の理由 (「チームの RESCUED は 1/2人」) を入れる。全体の `reason` は終わらせた判定の理由で、同時に成立したら成立したチームの理由を並べる
+- **結果を本人に届けて記憶へ持ち越す経路は、まだ無い**: ゲームが終わると手番の無いまま snapshot を取るので、終了時の観測が記憶に入る経路が無い。別の Issue で扱う
+
+**どうしないと壊れるか**: 個人結果に WON / LOST を混ぜると、寝返った人が脱出したことと、その人のチームが負けたことの片方が消える。所属を名簿で書くと、回ごとの組み分けにシナリオファイルの書き換えが要り、回どうしを同じ世界として比べられない。同時に成立したチームを両方 WIN にすると、「両方のチームが勝つ結果は無い」シナリオで、両方が勝った記録が次の回へ持ち越される。
+
+**関連**: design_decisions D1514-2 / D1520 / Issue #1508 / #1516。

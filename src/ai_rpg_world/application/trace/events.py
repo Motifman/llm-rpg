@@ -197,6 +197,16 @@ class TraceEventKind:
     # spawn_spot と initial_state は割り当てたあとに player が持つ値で、枠に
     # spawn_spot が無ければ宣言どおりの場所が入る。
     ROUND_ASSIGNMENT = "round_assignment"
+    # teams のあるシナリオで、ゲームが終わったときのチームの勝敗と個人の結果
+    # (#1516)。check_game_end で終わった tick に 1 件。teams の無いシナリオでは
+    # 出ない。ゲームが終わる前に run が止まったとき (run_end の outcome が
+    # TIMEOUT / LLM_ABORTED / INTERRUPTED) も出ない。勝敗は決まっていない。
+    # payload: reason / teams: list[{team_id, name, result, satisfied, reason,
+    # member_player_ids, member_player_string_ids}] / players: list[{player_id,
+    # player_string_id, player_name, team_id, outcome, result}]。
+    # result は WIN / LOSE / DRAW で、個人の result は所属チームと同じ。
+    # outcome は PlayerOutcomeEnum の値 (寝返って脱出した人は RESCUED と LOSE)。
+    TEAM_RESULT = "team_result"
     # Phase 9-1 (Issue #470): WorldStateSnapshot (= scenario 全体の world state)
     # の save / load。Being snapshot とは独立に発火 (= 同じ run で両方出る)。
     # WORLD_SNAPSHOT_LOAD payload:

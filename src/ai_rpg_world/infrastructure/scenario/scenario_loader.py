@@ -79,6 +79,10 @@ from ai_rpg_world.infrastructure.scenario.parse_sync_groups import (
     parse_synchronized_action_groups,
     reject_unreachable_synchronized_action_names,
 )
+from ai_rpg_world.infrastructure.scenario.parse_teams import (
+    parse_teams,
+    reject_unreachable_team_outcomes,
+)
 from ai_rpg_world.infrastructure.scenario.parse_world import (
     declared_world_flag_writers,
     parse_day_night_config,
@@ -230,7 +234,14 @@ class ScenarioLoader:
             raw.get("mutually_known_roles"), players
         )
         role_personas = parse_role_personas(raw.get("role_personas"), players)
+        teams = parse_teams(raw.get("teams"), players, mapper)
         raw_end_conditions = raw.get("game_end_conditions", {})
+        if teams and (raw_end_conditions.get("win") or raw_end_conditions.get("lose")):
+            raise ScenarioLoadError(
+                "teams を書いたシナリオでは game_end_conditions.win / lose を"
+                "置けません。勝ちは teams[].win に、どのチームも勝たない終わりは"
+                " game_end_conditions.end に書いてください"
+            )
         win_conds = parse_end_conditions(
             raw_end_conditions.get("win", []), mapper, section="win"
         )
@@ -238,8 +249,16 @@ class ScenarioLoader:
             raw_end_conditions.get("lose", []), mapper, section="lose"
         )
         end_conds = parse_end_conditions(
-            raw_end_conditions.get("end", []), mapper, section="end"
+            raw_end_conditions.get("end", []),
+            mapper,
+            section="team_end" if teams else "end",
         )
+        if teams and not end_conds:
+            raise ScenarioLoadError(
+                "teams を書いたシナリオには game_end_conditions.end を 1 つ以上"
+                "書いてください。どのチームも勝たないまま終わる道が無いと、"
+                "勝敗が決まらないまま run が打ち切られます"
+            )
         initial_flags = tuple(raw.get("initial_flags", []))
         ongoing_conditions = parse_ongoing_conditions(
             raw.get("ongoing_conditions"),
@@ -260,6 +279,7 @@ class ScenarioLoader:
         player_outcome_rules = parse_player_outcome_rules(
             raw.get("player_outcome_rules", []), mapper,
         )
+        reject_unreachable_team_outcomes(teams, player_outcome_rules)
         needs_config = parse_needs_config(raw.get("needs"))
         weather_config = parse_weather_config(raw.get("environment", {}))
         day_night_config = parse_day_night_config(raw.get("environment", {}))
@@ -337,6 +357,7 @@ class ScenarioLoader:
             player_trade_offer_expires_in_ticks=player_trade_offer_expires,
             market=market,
             round_assignments=round_assignments,
+            teams=teams,
             **meeting_tuning,
         )
         validate_feature_consistency(result, raw)
