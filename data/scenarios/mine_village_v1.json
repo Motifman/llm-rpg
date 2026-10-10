@@ -2140,6 +2140,9 @@
         "lamp",
         "fuel_can"
       ],
+      "initial_state": {
+        "team": "north"
+      },
       "knows_at_start": [
         "mio"
       ],
@@ -2153,6 +2156,9 @@
       "initial_items": [
         "lamp"
       ],
+      "initial_state": {
+        "team": "north"
+      },
       "knows_at_start": [
         "haru"
       ],
@@ -2166,6 +2172,9 @@
       "initial_items": [
         "lamp"
       ],
+      "initial_state": {
+        "team": "south"
+      },
       "knows_at_start": [
         "sayo"
       ],
@@ -2179,6 +2188,9 @@
       "initial_items": [
         "lamp"
       ],
+      "initial_state": {
+        "team": "south"
+      },
       "knows_at_start": [
         "gen"
       ],
@@ -2186,9 +2198,35 @@
       "objective": "ゲンと二人そろって、坑道の奥の昇降機で外へ出る。"
     }
   ],
+  "teams": [
+    {
+      "id": "north",
+      "name": "チーム北",
+      "member_state": {
+        "team": "north"
+      },
+      "win": [
+        {
+          "type": "ALL_MEMBERS_HAVE_OUTCOME",
+          "outcome": "RESCUED"
+        }
+      ]
+    },
+    {
+      "id": "south",
+      "name": "チーム南",
+      "member_state": {
+        "team": "south"
+      },
+      "win": [
+        {
+          "type": "ALL_MEMBERS_HAVE_OUTCOME",
+          "outcome": "RESCUED"
+        }
+      ]
+    }
+  ],
   "game_end_conditions": {
-    "win": [],
-    "lose": [],
     "end": [
       {
         "type": "ALL_PLAYER_OUTCOMES_RESOLVED"
