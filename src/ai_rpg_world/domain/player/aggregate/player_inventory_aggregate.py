@@ -17,6 +17,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemEquipRequestedEvent,
+    ItemRemovedFromInventoryEvent,
     ItemReservationCancelledEvent,
     ItemReservedForTradeEvent,
     ItemUnequippedEvent,
@@ -197,12 +198,10 @@ class PlayerInventoryAggregate(AggregateRoot):
         self._inventory_slots[slot_id] = None
         self._reserved_item_ids.remove(item_id)
 
-        # 通常の削除イベントを発行
-        event = ItemDroppedFromInventoryEvent.create(
+        event = ItemRemovedFromInventoryEvent.create(
             aggregate_id=self._player_id,
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=item_id,
-            slot_id=slot_id
         )
         self.add_event(event)
 
@@ -413,6 +412,25 @@ class PlayerInventoryAggregate(AggregateRoot):
             slot_id=slot_id
         )
         self.add_event(event)
+
+    def remove_item(self, slot_id: SlotId, *, by_world_event: bool = False) -> None:
+        """効果・出来事・売買で品を持ち物から外す。本人が捨てたのではないので、捨てたイベントは出さない。"""
+        item_instance_id = self.get_item_instance_id_by_slot(slot_id)
+        if item_instance_id is None:
+            raise ItemNotInSlotException(f"No item in slot {slot_id.value}")
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be removed")
+
+        self._inventory_slots[slot_id] = None
+
+        self.add_event(
+            ItemRemovedFromInventoryEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerInventoryAggregate",
+                item_instance_id=item_instance_id,
+                by_world_event=by_world_event,
+            )
+        )
 
     def remove_item_for_storage(self, item_instance_id: ItemInstanceId) -> None:
         """チェスト等への収納のため、指定アイテムをインベントリから削除する。
