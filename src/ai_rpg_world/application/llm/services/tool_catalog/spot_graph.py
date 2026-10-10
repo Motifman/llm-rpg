@@ -70,7 +70,7 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "行き先スポットの名前 (例: 入口広間)。"
-                    "『現在の状況』の接続先 section では "
+                    "【現在地と周囲】の接続先 section では "
                     "``- 扉 → \"館長書斎\"（通行可）`` のように、"
                     "渡すべき spot 名のみが ``\"\"`` で囲まれて表示される。"
                     "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
@@ -129,7 +129,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
         "各 action には前提条件 (object の状態など) があり、満たさない場合は "
         "``INTERACTION_PRECONDITION_FAILED`` で失敗する "
         "(例: 一度取り尽くした場所をもう一度漁る / 既に開けた箱をまた開ける)。"
-        "利用可能な action_name と現在の object 状態は『現在の状況』section の"
+        "利用可能な action_name と現在の object 状態は【現在地と周囲】section の"
         "各オブジェクト行に出ているので、そこから読み取って渡すこと。"
         "追加入力を要求する action では、各オブジェクト行の action 候補に"
         "必要なキーが『text が要る』のように表示されるため、そのキーを parameters に指定する。"
@@ -147,7 +147,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             "target_label": {
                 "type": "string",
                 "description": (
-                    "対象の名前。『現在の状況』の対象行で、"
+                    "対象の名前。【現在地と周囲】の対象行で、"
                     "渡すべき名前のみが ``\"\"`` で囲まれて表示される。"
                     "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
                     "中身だけ、または quote ごとどちらでも resolver が解釈する)。"
@@ -158,7 +158,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "対象に定義された action_name。"
-                    "『現在の状況』の対象行にある「使える操作」から、"
+                    "【現在地と周囲】の対象行にある「使える操作」から、"
                     "``\"\"`` で囲まれた値をそのまま 1 つ選んで渡す。"
                     "表示名へ言い換えたり、表示に無い名前を推測したりしないこと。"
                 ),
@@ -166,7 +166,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             "parameters": {
                 "type": "object",
                 "description": (
-                    "action が要求する追加入力。必要なキーは『現在の状況』の action 候補に"
+                    "action が要求する追加入力。必要なキーは【現在地と周囲】の action 候補に"
                     "『text が要る』のように表示される（例: {\"text\": \"山頂へ向かった\"}）。"
                     "必要なキーが表示されない action では省略できる。"
                 ),
@@ -270,7 +270,7 @@ USE_ITEM_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "使用するアイテムの名前 (例: 生の魚)。"
-                    "『現在の状況』の「所持アイテム」には "
+                    "【現在地と周囲】の「所持アイテム」には "
                     "``- \"生の魚\" x2 (食料) (腐敗)`` のように、渡すべき"
                     "item 名のみが ``\"\"`` で囲まれて表示される。"
                     "**``\"\"`` 内の値をそのまま渡すこと** (quote 記号は剥がして"
@@ -330,7 +330,7 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": (
                     "落とすアイテムの名前 (例: 流木)。"
-                    "『現在の状況』の「所持アイテム」で ``\"\"`` で囲まれて"
+                    "【現在地と周囲】の「所持アイテム」で ``\"\"`` で囲まれて"
                     "表示された値をそのまま渡す (装飾サフィックスは付けない)。"
                     "同じ種類のアイテムを複数所持している場合 (例: 流木 x2) は、"
                     "そのうち 1 つだけが落とされる。同じ名前が複数あるときは"
@@ -441,7 +441,7 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
             "ground_item_label": {
                 "type": "string",
                 "description": (
-                    "拾うアイテムの名前 (例: 流木)。『現在の状況』の「地面に"
+                    "拾うアイテムの名前 (例: 流木)。【現在地と周囲】の「地面に"
                     "落ちているもの」では ``- \"流木\"`` のように item 名が"
                     "``\"\"`` で囲まれて表示される。**``\"\"`` 内の値をそのまま"
                     "渡すこと**。同じ名前が複数あるときは ``#N`` を含めて指定。"
@@ -591,7 +591,7 @@ REPORT_BODY_DEFINITION = ToolDefinitionDto(
 _TRADE_COMMON = (
     "商人と同じ場所に居るときだけ使える (別の場所からは取引できない)。"
     "取引はその場の第三者に観測される。"
-    "品名と価格は『現在の状況』の「商人:」に出ているものを、"
+    "品名と価格は【現在地と周囲】の「商人:」に出ているものを、"
     "``\"\"`` の中身そのままで指定する。"
     "**give_item と違って部分成功しない**: 数量ぶんすべて成立するか、"
     "1 つも成立せずに失敗するかのどちらかになる。"

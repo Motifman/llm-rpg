@@ -87,7 +87,7 @@ GOAL_UPDATE_FIELD_PROPERTY: dict[str, Any] = {
     "type": ["string", "null"],
     "description": (
         "数日スケールの方針を捨てて立て直すときにだけ書く。"
-        "次の 1 手の意図は intention に書くこと (それはここではない)。"
+        "次の 1 手の意図はここに書かない。"
         "目的を変えることは、これまでの自分の方針を捨てることでもある。"
         "続けるなら書かない (null)。"
     ),
