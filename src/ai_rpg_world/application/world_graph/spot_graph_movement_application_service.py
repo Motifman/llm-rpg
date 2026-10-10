@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.player.services.departed_position_store import (
@@ -24,6 +25,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
     SpotTravelAlreadyInProgressException,
@@ -33,6 +35,7 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import (
     SpotGraphNavigationService,
 )
+from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 
@@ -51,11 +54,32 @@ logger = logging.getLogger(__name__)
 _UNREACHABLE_MESSAGE = "その先へは行けない。"
 
 
+class SpotTravelBlockedReason(Enum):
+    PASSAGE_CLOSED = "passage_closed"
+    PASSAGE_CONDITION = "passage_condition"
+
+
+@dataclass(frozen=True)
+class SpotTravelBlocked:
+    """予約の後に区間が通れなくなり、その手前で移動を取りやめたこと。"""
+
+    connection_id: ConnectionId
+    connection_name: str
+    from_spot_id: SpotId
+    to_spot_id: SpotId
+    destination_spot_id: SpotId
+    passage_kind: str
+    passage_state: str
+    reason: SpotTravelBlockedReason
+    condition_message: str | None
+
+
 @dataclass(frozen=True)
 class SpotTravelTickAdvanceDto:
     """1 ティック進行後の横断結果（観測・ログ用）。"""
 
     entered_spot_ids: tuple[SpotId, ...]
+    blocked: SpotTravelBlocked | None = None
 
 
 class SpotGraphMovementApplicationService:
@@ -286,20 +310,38 @@ class SpotGraphMovementApplicationService:
         crossings, new_nav = nav.advance_one_world_tick()
         entity_id = self.entity_id_for_player(player_id)
         entered: list[SpotId] = []
+        blocked: SpotTravelBlocked | None = None
         for cid, _dest in crossings:
+            connection = graph.get_connection(cid)
+            blocked = self._blocked_crossing(
+                connection,
+                destination_spot_id=nav.route[-1],
+                owned_item_spec_ids=owned_item_spec_ids,
+                world_flags=world_flags,
+            )
+            if blocked is not None:
+                # 本人は区間を渡り切るまで出発側にいるので、ここで止めれば
+                # 出発した場所に戻したのと同じになる。予約を残すと次の tick
+                # にも同じ区間を踏み続ける。
+                new_nav = PlayerSpotNavigationState.at_rest(connection.from_spot_id)
+                logger.info(
+                    "travel blocked: player=%s connection=%s %s->%s destination=%s "
+                    "reason=%s passage=%s/%s",
+                    player_id.value,
+                    cid.value,
+                    connection.from_spot_id.value,
+                    connection.to_spot_id.value,
+                    blocked.destination_spot_id.value,
+                    blocked.reason.value,
+                    blocked.passage_kind,
+                    blocked.passage_state,
+                )
+                break
             if self._is_departed(player_id):
                 if self._departed_position_store is None:
                     raise RuntimeError("departed position store is not wired")
                 if self._departed_position_store.find(player_id) is None:
                     raise RuntimeError(f"去った主体の位置がありません: {player_id}")
-                connection = graph.get_connection(cid)
-                can_pass, reason = self._navigation.can_pass(
-                    connection,
-                    owned_item_spec_ids,
-                    world_flags,
-                )
-                if not can_pass:
-                    raise ConnectionNotPassableException(reason or "通行できません")
                 self._departed_position_store.move(player_id, _dest)
                 entered.append(_dest)
             else:
@@ -318,7 +360,40 @@ class SpotGraphMovementApplicationService:
         player_status_repository.save(player)
         if context is not None:
             context.collect_all(new_events)
-        return SpotTravelTickAdvanceDto(entered_spot_ids=tuple(entered))
+        return SpotTravelTickAdvanceDto(
+            entered_spot_ids=tuple(entered),
+            blocked=blocked,
+        )
+
+    def _blocked_crossing(
+        self,
+        connection: SpotConnection,
+        *,
+        destination_spot_id: SpotId,
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
+    ) -> SpotTravelBlocked | None:
+        ok, message = self._navigation.can_pass(
+            connection, owned_item_spec_ids, world_flags
+        )
+        if ok:
+            return None
+        closed = not connection.passage.traversable
+        return SpotTravelBlocked(
+            connection_id=connection.connection_id,
+            connection_name=connection.name,
+            from_spot_id=connection.from_spot_id,
+            to_spot_id=connection.to_spot_id,
+            destination_spot_id=destination_spot_id,
+            passage_kind=connection.passage.kind.value,
+            passage_state=connection.passage.state,
+            reason=(
+                SpotTravelBlockedReason.PASSAGE_CLOSED
+                if closed
+                else SpotTravelBlockedReason.PASSAGE_CONDITION
+            ),
+            condition_message=None if closed else message,
+        )
 
     def cancel_spot_travel(
         self,
