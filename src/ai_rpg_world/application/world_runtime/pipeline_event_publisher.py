@@ -179,7 +179,8 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
         now = datetime.now(timezone.utc)
         time_label = self._runtime._time_label()
         for pid, output in items:
-            appender.append(pid, output, now, time_label)
+            if not appender.append(pid, output, now, time_label):
+                continue
             scheduler = self._runtime._observation_turn_scheduler
             if scheduler is not None:
                 scheduler.maybe_schedule(pid, output)

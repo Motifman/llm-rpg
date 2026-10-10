@@ -8,6 +8,7 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
+    SubjectUnknownView,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -25,7 +26,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 ObservationObserver = Callable[[PlayerId, ObservationOutput], None]
 # #1520: 受け手の記録に入れる版を選ぶ口。話し手を知っているかは受け手の Being が
 # 決めるので、ObservationAppender は中身を知らずに呼ぶだけにする。
-RecipientView = Callable[[PlayerId, ObservationOutput], ObservationOutput]
+# None を返したら、その受け手には届けない。
+RecipientView = Callable[[PlayerId, ObservationOutput], ObservationOutput | None]
 
 
 class ObservationAppender:
@@ -79,6 +81,7 @@ class ObservationAppender:
         if recipient_view is not None and not callable(recipient_view):
             raise TypeError("recipient_view must be callable or None")
         self._recipient_view = recipient_view
+        self._warned_without_view = False
 
     def append(
         self,
@@ -86,9 +89,9 @@ class ObservationAppender:
         output: ObservationOutput,
         occurred_at: datetime,
         game_time_label: str | None = None,
-    ) -> None:
+    ) -> bool:
         """
-        指定プレイヤーに観測エントリを追加する。
+        指定プレイヤーに観測エントリを追加する。記録しなかったときは False を返す。
         ObservationEntry を構築して buffer.append に委譲し、合わせて trace
         に observation event を記録する (recorder 注入時)。
 
@@ -98,9 +101,17 @@ class ObservationAppender:
         if not isinstance(output, ObservationOutput):
             raise TypeError("output must be ObservationOutput")
         chosen = self._choose_view(player_id, output)
+        if chosen is None:
+            self._record_trace(
+                player_id,
+                output.as_subject_known(),
+                game_time_label,
+                withheld_subject_name=output.subject_name,
+            )
+            return False
         view = output.if_subject_unknown
         hidden = (
-            view is not None
+            isinstance(view, SubjectUnknownView)
             and chosen.prose == view.prose
             and chosen.structured == view.structured
         )
@@ -136,10 +147,23 @@ class ObservationAppender:
                     "skipping (player_id=%s)",
                     int(player_id.value),
                 )
+        return True
 
-    def _choose_view(self, player_id: PlayerId, output: ObservationOutput) -> ObservationOutput:
+    def _choose_view(
+        self, player_id: PlayerId, output: ObservationOutput
+    ) -> ObservationOutput | None:
         """選ぶ口が無い、または選べないときは伏せる側へ倒す。名前は記録に入ったら消せない。"""
         if self._recipient_view is None:
+            if output.if_subject_unknown is not None and not self._warned_without_view:
+                # 配線漏れで、紹介済みの相手の観測まで黙って伏せたり落としたりしないよう知らせる。
+                self._warned_without_view = True
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "recipient_view is not wired; recording the subject-unknown view "
+                    "of %s for every recipient",
+                    output.structured.get("type"),
+                )
             return output.as_subject_unknown()
         try:
             return self._recipient_view(player_id, output)
@@ -169,6 +193,7 @@ class ObservationAppender:
         game_time_label: str | None,
         *,
         hidden_subject_name: str | None = None,
+        withheld_subject_name: str | None = None,
     ) -> None:
         recorder = self._resolve_trace_recorder()
         if recorder is None:
@@ -194,6 +219,10 @@ class ObservationAppender:
             # trace は人が読む記録で、エージェントには届かない。誰の声を伏せたかを残す。
             payload["subject_hidden"] = True
             payload["hidden_subject_name"] = hidden_subject_name
+        if withheld_subject_name is not None:
+            # 受け手には届けていない。trace だけが、届かなかった観測と相手を残す。
+            payload["subject_withheld"] = True
+            payload["hidden_subject_name"] = withheld_subject_name
         try:
             recorder.record(
                 TraceEventKind.OBSERVATION,

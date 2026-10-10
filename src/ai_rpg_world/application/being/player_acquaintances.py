@@ -126,11 +126,15 @@ class PlayerAcquaintances:
             and 0 <= now - a.last_met_turn <= within_turns
         )
 
-    def view_for(self, recipient: PlayerId, output: ObservationOutput) -> ObservationOutput:
-        """受け手の記録に入れる版を選ぶ。記録したあとで相手を知っても、記録は書き換えない。"""
+    def view_for(
+        self, recipient: PlayerId, output: ObservationOutput
+    ) -> ObservationOutput | None:
+        """受け手の記録に入れる版を選ぶ。None は記録しない。記録したあとで相手を知っても、記録は書き換えない。"""
         view = output.if_subject_unknown
         if output.subject_name is None or view is None:
             return output
+        if output.subject_name == self._names_by_player_id.get(recipient.value):
+            return output.as_subject_known()
         try:
             known = self.find(recipient, output.subject_name) is not None
         except Exception:

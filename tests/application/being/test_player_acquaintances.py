@@ -6,6 +6,7 @@ from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintan
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
     SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
@@ -361,3 +362,56 @@ class TestViewForRecipient:
         )
 
         assert acquaintances.view_for(ADA, _heard()).prose.startswith("誰か")
+
+
+def _remote_revive(name: str) -> ObservationOutput:
+    return ObservationOutput(
+        prose="遠くで誰かが動けるようになった気配がした。",
+        structured={"type": "player_revived", "actor": name},
+        observation_category="social",
+        schedules_turn=True,
+        subject_name=name,
+        if_subject_unknown=WithheldFromStrangers(),
+    )
+
+
+class TestViewForWithheld:
+    """主体を知らない受け手には届けない観測を、知り合いの記録で届けるかどうか決めることを保証する。"""
+
+    def test_unknown_subject_is_not_recorded(self) -> None:
+        """知らない相手の遠くの気配は、受け手の記録に入れない (None を返す)。"""
+        acquaintances, _, _ = _make()
+
+        assert acquaintances.view_for(ADA, _remote_revive("ノア")) is None
+
+    def test_known_subject_is_recorded_as_it_is(self) -> None:
+        """紹介された相手の遠くの気配は、structured に名前を残したまま記録する。"""
+        acquaintances, _, _ = _make()
+        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
+
+        seen = acquaintances.view_for(ADA, _remote_revive("ノア"))
+
+        assert seen is not None and seen.structured["actor"] == "ノア"
+
+    def test_own_subject_counts_as_known(self) -> None:
+        """自分が主体の観測は、自分を知り合いとして記録していなくても届く。"""
+        acquaintances, _, _ = _make()
+
+        seen = acquaintances.view_for(ADA, _remote_revive("エイダ"))
+
+        assert seen is not None and seen.structured["actor"] == "エイダ"
+
+    def test_lookup_failure_withholds(self) -> None:
+        """知り合いの記録を引くところで例外が出たら、届けない側へ倒す。"""
+        def broken(_pid: PlayerId) -> BeingId | None:
+            raise RuntimeError("lookup failed")
+
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=broken,
+            turn_reader=InMemoryExpectationRepository(),
+            environment_name="島",
+            names_by_player_id=NAMES,
+        )
+
+        assert acquaintances.view_for(NOA, _remote_revive("リオ")) is None

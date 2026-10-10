@@ -11,6 +11,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
     SubjectUnknownView,
+    WithheldFromStrangers,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.application.observation.services.observation_appender import (
@@ -388,3 +389,91 @@ class TestRecipientView:
         appender.append(PlayerId(7), self._heard(), datetime.now())
 
         assert buffer.get_observations(PlayerId(7))[0].output.prose == "誰かが言った: 「水門」"
+
+
+class TestWithheldView:
+    """主体を知らない受け手に届けない観測を、バッファにも observer にも渡さず、trace にだけ残すことを保証する。"""
+
+    def _remote_revive(self) -> ObservationOutput:
+        return ObservationOutput(
+            prose="遠くで誰かが動けるようになった気配がした。",
+            structured={"type": "player_revived", "actor": "ノア"},
+            observation_category="social",
+            schedules_turn=True,
+            subject_name="ノア",
+            if_subject_unknown=WithheldFromStrangers(),
+        )
+
+    def _recording(self):
+        from ai_rpg_world.application.trace import NullTraceRecorder
+
+        recorder = NullTraceRecorder()
+        recorded = []
+        original_record = recorder.record
+        recorder.record = lambda kind, **kw: recorded.append(original_record(kind, **kw))  # type: ignore[method-assign]
+        return recorder, recorded
+
+    def test_withheld_view_reaches_only_the_trace(self) -> None:
+        """選ぶ口が None を返すと、バッファにも observer にも渡さず False を返し、trace に届けなかった印と相手の名前を残す。"""
+        buffer = DefaultObservationContextBuffer()
+        recorder, recorded = self._recording()
+        observed: list[ObservationOutput] = []
+        appender = ObservationAppender(
+            buffer=buffer,
+            trace_recorder=recorder,
+            observers=[lambda _pid, out: observed.append(out)],
+            recipient_view=lambda _pid, out: out.as_subject_unknown(),
+        )
+
+        delivered = appender.append(PlayerId(7), self._remote_revive(), datetime.now())
+
+        assert delivered is False
+        assert buffer.get_observations(PlayerId(7)) == []
+        assert observed == []
+        assert recorded[0].payload["subject_withheld"] is True
+        assert recorded[0].payload["hidden_subject_name"] == "ノア"
+
+    def test_recorded_observation_returns_true(self) -> None:
+        """記録した観測では True を返し、trace に届けなかった印は付かない。"""
+        recorder, recorded = self._recording()
+        appender = ObservationAppender(
+            buffer=DefaultObservationContextBuffer(),
+            trace_recorder=recorder,
+            recipient_view=lambda _pid, out: out.as_subject_known(),
+        )
+
+        assert appender.append(PlayerId(7), self._remote_revive(), datetime.now()) is True
+        assert "subject_withheld" not in recorded[0].payload
+
+    def test_appender_without_recipient_view_withholds(self) -> None:
+        """選ぶ口を渡していない入口では、届けない印を持つ観測を記録しない。"""
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer)
+
+        assert appender.append(PlayerId(7), self._remote_revive(), datetime.now()) is False
+        assert buffer.get_observations(PlayerId(7)) == []
+
+    def test_appender_without_recipient_view_warns_once(self, caplog) -> None:
+        """選ぶ口を渡していない入口で主体のある観測を伏せたら、配線漏れを 1 回だけ警告する。"""
+        import logging
+
+        appender = ObservationAppender(buffer=DefaultObservationContextBuffer())
+
+        with caplog.at_level(logging.WARNING):
+            appender.append(PlayerId(7), self._remote_revive(), datetime.now())
+            appender.append(PlayerId(8), self._remote_revive(), datetime.now())
+
+        assert [r.message for r in caplog.records].count(
+            "recipient_view is not wired; recording the subject-unknown view of player_revived for every recipient"
+        ) == 1
+
+    def test_failing_recipient_view_withholds(self) -> None:
+        """選ぶ口が例外を出したら、届けない印を持つ観測は記録しない。"""
+        def broken(_pid: PlayerId, _out: ObservationOutput) -> ObservationOutput:
+            raise RuntimeError("view failed")
+
+        buffer = DefaultObservationContextBuffer()
+        appender = ObservationAppender(buffer=buffer, recipient_view=broken)
+
+        assert appender.append(PlayerId(7), self._remote_revive(), datetime.now()) is False
+        assert buffer.get_observations(PlayerId(7)) == []

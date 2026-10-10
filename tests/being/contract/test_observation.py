@@ -207,13 +207,13 @@ class TestClosedContract:
     """観測の欄が契約で閉じていて、環境が欄を足したり後から書き換えたりできないことを保証する。"""
 
     def test_fields_are_exactly_the_contract(self) -> None:
-        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1・主体を知らない受け手向けの本文 1 の 10 個だけである。"""
+        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1・主体を知らない受け手向けの本文と届けない印の 2 の 11 個だけである。"""
         names = {f.name for f in dataclasses.fields(Observation)}
 
         assert names == {
             "body", "route", "time", "subject_is_self",
             "subject_name", "source", "place", "addressed_to_self",
-            "wants_wake", "body_if_subject_unknown",
+            "wants_wake", "body_if_subject_unknown", "withheld_if_subject_unknown",
         }
 
     def test_unexpected_field_cannot_be_added(self) -> None:
@@ -265,5 +265,37 @@ class TestBodyIfSubjectUnknown:
     )
     def test_body_if_subject_unknown_needs_a_known_other_subject(self, overrides) -> None:
         """空の本文、話し手が不明な観測、自分が主体の観測には持たせられない (ContractViolation)。"""
+        with pytest.raises(ContractViolation):
+            Observation(**_fields(**overrides))
+
+
+class TestWithheldIfSubjectUnknown:
+    """主体を知らない受け手には届けない印を、主体が分かる他者の観測にだけ持たせられることを保証する。"""
+
+    def test_defaults_to_false(self) -> None:
+        """省けば False で、主体を知らない受け手にも届く観測になる。"""
+        assert Observation(**_fields()).withheld_if_subject_unknown is False
+
+    def test_is_kept(self) -> None:
+        """True を渡すと、そのまま読める。"""
+        assert Observation(**_fields(withheld_if_subject_unknown=True)).withheld_if_subject_unknown is True
+
+    def test_can_be_set_when_the_body_hides_the_subject(self) -> None:
+        """本文が名前を伏せて主体が不明な観測にも持たせられる (受け手は主体を決められないので届けない側へ倒す)。"""
+        observation = Observation(**_fields(withheld_if_subject_unknown=True, subject_name=UNKNOWN))
+
+        assert observation.withheld_if_subject_unknown is True
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"withheld_if_subject_unknown": 1},
+            {"withheld_if_subject_unknown": True, "subject_is_self": True},
+            {"withheld_if_subject_unknown": True, "body_if_subject_unknown": "誰かが言った"},
+        ],
+        ids=["not_bool", "self_subject", "with_alternate_body"],
+    )
+    def test_needs_another_subject_and_no_alternate_body(self, overrides) -> None:
+        """bool でない値、自分が主体の観測、伏せた本文と一緒の指定は拒む (ContractViolation)。"""
         with pytest.raises(ContractViolation):
             Observation(**_fields(**overrides))

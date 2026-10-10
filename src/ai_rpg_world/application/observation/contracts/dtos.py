@@ -16,6 +16,11 @@ class SubjectUnknownView:
 
 
 @dataclass(frozen=True)
+class WithheldFromStrangers:
+    """主体を知らない受け手には届けない印。名前を伏せても、誰かがいることが分かってしまう観測に付ける。"""
+
+
+@dataclass(frozen=True)
 class ObservationOutput:
     """1イベント分の観測出力（プローズ文と構造化データの両方）。
     observation_category は attention_level によるフィルタで使用する。
@@ -31,7 +36,7 @@ class ObservationOutput:
     # #1520: 話し手を知っているかで描き方が変わる観測だけが持つ。どちらを記録
     # するかは、受け手の Being が知り合いの記録を引いて決める。
     subject_name: str | None = None
-    if_subject_unknown: SubjectUnknownView | None = None
+    if_subject_unknown: SubjectUnknownView | WithheldFromStrangers | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.prose, str):
@@ -51,17 +56,23 @@ class ObservationOutput:
         if self.subject_name is not None:
             if not isinstance(self.subject_name, str) or not self.subject_name.strip():
                 raise TypeError("subject_name must be non-blank str")
-            if not isinstance(self.if_subject_unknown, SubjectUnknownView):
-                raise TypeError("if_subject_unknown must be SubjectUnknownView")
+            if not isinstance(
+                self.if_subject_unknown, (SubjectUnknownView, WithheldFromStrangers)
+            ):
+                raise TypeError(
+                    "if_subject_unknown must be SubjectUnknownView or WithheldFromStrangers"
+                )
 
     def as_subject_known(self) -> "ObservationOutput":
         return replace(self, subject_name=None, if_subject_unknown=None)
 
-    def as_subject_unknown(self) -> "ObservationOutput":
-        """伏せた版を持たない観測は、そのまま返す。"""
+    def as_subject_unknown(self) -> "ObservationOutput | None":
+        """伏せた版を持たない観測は、そのまま返す。届けない観測は None を返す。"""
         view = self.if_subject_unknown
         if view is None:
             return self
+        if isinstance(view, WithheldFromStrangers):
+            return None
         return replace(
             self,
             prose=view.prose,

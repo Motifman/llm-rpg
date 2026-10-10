@@ -8,7 +8,11 @@ import pytest
 # observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
 # observation formatter を直接 import する単体テストでは prompt_builder を先に初期化する。
 from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationOutput,
+    SubjectUnknownView,
+    WithheldFromStrangers,
+)
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
@@ -530,6 +534,96 @@ class TestPlayerObservationFormatterPlayerRevived:
         assert "Victor" not in out.prose
         assert out.schedules_turn is True
         assert out.structured["proximity"] == "remote_or_unknown"
+
+
+class TestBodyStateForRecipientsWhoDoNotKnowTheSubject:
+    """倒れた・復帰した観測が、主体を知らない受け手向けの版を持つことを保証する (#1531)。
+
+    遠くの気配は、名前を伏せても誰かがいることが分かるので届けない。
+    同じ場所の観測は、姿は見えているので「誰か」に伏せて届ける。
+    """
+
+    def _ctx(self, recipient_spot):
+        return TestPlayerObservationFormatterPlayerDownedKillerVisibility()._make_ctx_with_positions(
+            recipient_spot=recipient_spot, killer_spot=SpotId(5), victim_spot=SpotId(5)
+        )
+
+    def _downed(self, killer_player_id=None):
+        return PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=killer_player_id,
+        )
+
+    def _revived(self):
+        return PlayerRevivedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            hp_recovered=50,
+            total_hp=100,
+        )
+
+    def test_remote_downed_is_withheld_from_strangers(self):
+        """別の場所で倒れた気配は、倒れた人の名前と、知らない受け手には届けない印を持つ。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(9))).format(self._downed(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert isinstance(out.if_subject_unknown, WithheldFromStrangers)
+
+    def test_remote_revived_is_withheld_from_strangers(self):
+        """別の場所で動けるようになった気配は、復帰した人の名前と、知らない受け手には届けない印を持つ。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(9))).format(self._revived(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert isinstance(out.if_subject_unknown, WithheldFromStrangers)
+
+    def test_same_spot_downed_hides_the_victim(self):
+        """同じ場所で倒れた観測の伏せた版は「誰か」が倒れたと書き、structured に倒れた人の名前を残さない。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(5))).format(self._downed(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert out.if_subject_unknown == SubjectUnknownView(
+            prose="誰かが倒れて動かなくなった。",
+            structured={
+                "type": "player_downed",
+                "killer_visible_to_recipient": False,
+                "proximity": "same_spot",
+            },
+        )
+
+    def test_same_spot_downed_by_a_visible_killer_hides_only_the_victim(self):
+        """加害者が見えているときの伏せた版は、倒れた人だけを「誰か」にし、加害者の名前と番号は残す。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(5))).format(
+            self._downed(killer_player_id=PlayerId(2)), PlayerId(100)
+        )
+
+        assert isinstance(out.if_subject_unknown, SubjectUnknownView)
+        assert out.if_subject_unknown.prose == "Aliceが誰かを倒した。"
+        assert out.if_subject_unknown.structured["killer_player_id"] == 2
+        assert "actor" not in out.if_subject_unknown.structured
+
+    def test_same_spot_revived_hides_the_actor(self):
+        """同じ場所で復帰した観測の伏せた版は「誰か」が復帰したと書き、structured に復帰した人の名前を残さない。"""
+        out = PlayerObservationFormatter(self._ctx(SpotId(5))).format(self._revived(), PlayerId(100))
+
+        assert out is not None
+        assert out.subject_name == "Victor"
+        assert out.if_subject_unknown == SubjectUnknownView(
+            prose="誰かが復帰しました。",
+            structured={"type": "player_revived", "proximity": "same_spot"},
+        )
+
+    def test_own_downed_and_revived_have_no_alternate_view(self):
+        """自分が倒れた・復帰した観測は、主体を知らない受け手向けの版を持たない。"""
+        formatter = PlayerObservationFormatter(self._ctx(SpotId(5)))
+
+        for event in (self._downed(), self._revived()):
+            out = formatter.format(event, PlayerId(1))
+            assert out is not None
+            assert (out.subject_name, out.if_subject_unknown) == (None, None)
 
 
 class TestPlayerObservationFormatterPlayerLevelUp:
