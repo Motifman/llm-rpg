@@ -167,12 +167,13 @@ class TestRestartedPayloadRestoresIntoStores:
         """前の回の tick を持つ記録を capture して書き換えると、復元後はどれも tick 0 になる。"""
         from datetime import datetime, timezone
 
+        from tests.application.being.test_being_memory_snapshot_coverage import _make_service
+
         from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import RecallSlotEntry
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
         from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
-        from tests.application.being.test_being_memory_snapshot_coverage import _make_service
 
         now = datetime(2026, 10, 10, tzinfo=timezone.utc)
         being = BeingId("ada")
