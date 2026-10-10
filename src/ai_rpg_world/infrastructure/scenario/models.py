@@ -109,6 +109,8 @@ class ItemSpecDefinition:
     # Issue #794 D: item の一般用途。具体的な spot / object 名ではなく、
     # 「どういう用途で、どういう種類の場所が要るか」を作者が書く。
     usage_hint: str = ""
+    # シナリオの出来事で持ち物から外れたとき、持ち主に届ける文。空なら既定の文。
+    event_removal_message: str = ""
 
 
 @dataclass(frozen=True)

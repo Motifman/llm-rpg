@@ -159,10 +159,10 @@ class TestLampOil:
     """R7: カンテラは油を足して灯すと灯りになり、灯は時間で燃え尽き、油は使うと減ることを保証する。"""
 
     def test_south_carries_more_oil_than_north(self, runtime) -> None:
-        """北の 2 人は油を 1 本ずつ、南の 2 人は 3 本ずつ持って始まり、全員カンテラを持つ。"""
+        """北の 2 人は油を 2 本ずつ、南の 2 人は 3 本ずつ持って始まり、全員カンテラを持つ。北の 2 人が機械室と乗り場に分かれても、それぞれ最初と最後に 1 回ずつ灯せる。"""
         oil = {pid: _count(runtime, pid, "lamp_oil") for pid in _NORTH + _SOUTH}
 
-        assert oil == {_HARU: 1, _MIO: 1, _GEN: 3, _SAYO: 3}
+        assert oil == {_HARU: 2, _MIO: 2, _GEN: 3, _SAYO: 3}
         assert all(_owns(runtime, pid, "lamp") for pid in _NORTH + _SOUTH)
 
     def test_an_unlit_lamp_shows_nothing_in_the_dark(self, runtime) -> None:
@@ -182,7 +182,8 @@ class TestLampOil:
         assert "発電機" not in _hidden_in_the_dark(runtime, _GEN)
 
     def test_no_oil_no_light(self, runtime) -> None:
-        """ハルが 1 本きりの油で灯したあとは、もう一度灯そうとしても断られる。"""
+        """ハルが 2 本の油を使って 2 回灯したあとは、もう一度灯そうとしても断られる。"""
+        _use(runtime, _HARU, "lamp", "light_lamp")
         _use(runtime, _HARU, "lamp", "light_lamp")
 
         done, message = _use(runtime, _HARU, "lamp", "light_lamp")
@@ -212,6 +213,38 @@ class TestLampOil:
         assert not result.success
         assert "暗くて見えない" in result.message
         assert _owns(runtime, _HARU, "fuel_can")
+
+    def test_holder_hears_the_flame_burned_out_by_name(self, runtime) -> None:
+        """灯したハルには、灯した tick に「カンテラの灯を入手しました。」、16 tick 目に「カンテラの灯が燃え尽きた。」が届く。品名の無い文と「捨て」の文は届かない。3 本目の実 run では「何かのアイテムを捨てました。」と届き、燃え尽きの決まりを学ぶ手がかりにならなかった。"""
+        _use(runtime, _HARU, "lamp", "light_lamp")
+
+        _ticks(runtime, _LAMP_BURN_TICKS)
+
+        proses = [entry.output.prose for entry in runtime._obs_buffer.get_observations(_HARU)]
+        assert "カンテラの灯を入手しました。" in proses
+        assert "カンテラの灯が燃え尽きた。" in proses
+        assert [p for p in proses if "何かのアイテム" in p or "捨て" in p] == []
+
+    def test_lighting_tells_the_oil_left_the_hand_by_name(self, runtime) -> None:
+        """油を足して灯すと、油が手もとから減ったことが品名つきで届き、「捨て」とは言わない。"""
+        _use(runtime, _GEN, "lamp", "light_lamp")
+
+        proses = [entry.output.prose for entry in runtime._obs_buffer.get_observations(_GEN)]
+        assert "カンテラの油が手もとからなくなった。" in proses
+        assert [p for p in proses if "捨て" in p] == []
+
+    def test_a_stolen_flame_is_not_said_to_have_burned_out(self, runtime) -> None:
+        """灯をゲンに奪われたハルには「カンテラの灯が手もとからなくなった。」が届き、「燃え尽きた」は届かない。燃え尽きの文は、出来事で取り除かれたときだけ使う。"""
+        _use(runtime, _HARU, "lamp", "light_lamp")
+        _place(runtime, _HARU, "village_square")
+        _place(runtime, _GEN, "village_square")
+
+        runtime.do_interact_with_player(_GEN, _HARU, "pickpocket", interaction_parameters={"item": "カンテラの灯"})
+
+        proses = [entry.output.prose for entry in runtime._obs_buffer.get_observations(_HARU)]
+        assert not _owns(runtime, _HARU, "lamp_flame")
+        assert "カンテラの灯が手もとからなくなった。" in proses
+        assert [p for p in proses if "燃え尽き" in p] == []
 
     def test_a_flame_lit_late_burns_out_at_the_same_time_as_the_rest(self, runtime) -> None:
         """灯の燃え尽きは灯した時刻から数えない。10 tick 目に灯した灯も、16 tick 目に消える。たいまつは巻き込まない。"""
@@ -339,7 +372,7 @@ class TestGasAndTheCanary:
 
         def canary_line() -> str:
             text = runtime.build_full_prompt(_HARU)["messages"][1]["content"]
-            return next(line for line in text.splitlines() if "カナリアの籠" in line)
+            return next(line for line in text.splitlines() if '"カナリアの籠" —' in line)
 
         _flag(runtime, "gas_present", False)
         without_gas = canary_line()

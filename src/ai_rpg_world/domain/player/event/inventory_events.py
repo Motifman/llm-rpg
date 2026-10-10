@@ -21,8 +21,10 @@ class ItemAddedToInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggreg
 
 @dataclass(frozen=True)
 class ItemRemovedFromInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
-    """インベントリからアイテムが削除されたイベント"""
+    """効果・出来事・売買でインベントリからアイテムが外れたイベント。本人が捨てたときは ItemDroppedFromInventoryEvent。"""
     item_instance_id: ItemInstanceId
+    # シナリオの出来事 (灯の燃え尽きなど) で外れたか。人の操作で外れたときは False。
+    by_world_event: bool = False
 
 
 @dataclass(frozen=True)

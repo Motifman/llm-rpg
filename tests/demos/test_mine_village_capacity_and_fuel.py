@@ -161,6 +161,17 @@ class TestLiftCapacityIsKnownEarly:
         assert sum(sizes) > _LIFT_CAPACITY
 
 
+class TestBerthTextFitsWhereverItIsCarried:
+    """籠の中の場所の説明が、持ち主がどこにいても事実と食い違わないことを保証する。説明は持ち物に固定で、乗り場を離れた人にも同じ文が出るため。"""
+
+    def test_berth_does_not_say_its_holder_is_inside_the_cage(self) -> None:
+        """説明は「乗り込んでいる」と言わず、籠が上がるときに乗り場にいなければ置いていかれることを書く。3 本目の実 run では、降りずに乗り場を離れた人が、籠の中にいると読んで別の場所から昇降機を動かそうとした。"""
+        berth = next(s for s in _raw()["item_specs"] if s["id"] == "lift_berth")
+
+        assert "乗り込んでいる" not in berth["description"]
+        assert "乗り場を離れていれば、置いていかれる" in berth["description"]
+
+
 class TestFuelBalance:
     """燃料の量で、昇降機を動かす分とポンプに回せる分が釣り合い、使いすぎると昇降機が動かなくなることを保証する。"""
 
