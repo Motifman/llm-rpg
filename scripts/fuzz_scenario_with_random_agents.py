@@ -162,6 +162,42 @@ def scenario_identifiers(scenario_path: Path) -> frozenset[str]:
     return frozenset(found)
 
 
+def scenario_action_names(scenario_path: Path) -> frozenset[str]:
+    """シナリオ JSON に宣言された操作名 (``action_name``)。"""
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            value = node.get("action_name")
+            if isinstance(value, str) and value:
+                found.add(value)
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(json.loads(scenario_path.read_text(encoding="utf-8")))
+    return frozenset(found)
+
+
+def find_action_names_in_action_lines(text: str, action_names: Iterable[str]) -> list[str]:
+    """行動の行のうち、行動の要約 (``[行動]`` から ``→`` まで) に操作名が出ている行を返す (#1564)。
+
+    操作名はツールに渡す値として候補の行や呼び出しの続き行にも出るので、``find_leaks`` では漏れにしない。
+    本人の経験として記憶へ流れる要約の側にだけ出てはいけない (design_decisions 57)。
+    """
+    pattern = _identifier_pattern(action_names)
+    if pattern is None:
+        return []
+    found: list[str] = []
+    for line in text.splitlines():
+        _, marker, rest = line.partition("[行動] ")
+        if marker and pattern.search(rest.split(" → ", 1)[0]):
+            found.append(line.strip())
+    return found
+
+
 def find_leaks(text: str, identifiers: Iterable[str]) -> list[str]:
     """文のうち、内部の番号かシナリオの ID が出ている行を返す。"""
     id_pattern = _identifier_pattern(identifiers)
@@ -292,12 +328,13 @@ def run_random_agents(
     """シナリオを、全員でたらめに行動させて ``max_world_ticks`` まで回す。"""
     result = FuzzResult(scenario=scenario_path.stem, seed=seed, max_world_ticks=max_world_ticks)
     identifiers = scenario_identifiers(scenario_path)
+    action_names = scenario_action_names(scenario_path)
     seen_leaks: set[str] = set()
 
     saved_tick_loop = os.environ.get("SPOT_GRAPH_TICK_LOOP_ENABLED")
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
     try:
-        _drive(scenario_path, seed, max_world_ticks, extra_checks, result, identifiers, seen_leaks)
+        _drive(scenario_path, seed, max_world_ticks, extra_checks, result, identifiers, action_names, seen_leaks)
     finally:
         if saved_tick_loop is None:
             os.environ.pop("SPOT_GRAPH_TICK_LOOP_ENABLED", None)
@@ -314,6 +351,7 @@ def _drive(
     extra_checks: Sequence[TurnCheck],
     result: FuzzResult,
     identifiers: frozenset[str],
+    action_names: frozenset[str],
     seen_leaks: set[str],
 ) -> None:
     from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
@@ -368,7 +406,7 @@ def _drive(
                 if unreadable:
                     result.findings.append(FuzzFinding("unreadable_candidates", tick, unreadable[0]))
                 for text in (*texts, *tool_texts(tools)):
-                    for line in find_leaks(text, identifiers):
+                    for line in (*find_leaks(text, identifiers), *find_action_names_in_action_lines(text, action_names)):
                         shape = leak_shape(line)
                         if shape not in seen_leaks:
                             seen_leaks.add(shape)

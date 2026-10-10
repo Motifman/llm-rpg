@@ -27,5 +27,5 @@ class TestInteractDisplayPhrase:
 
     @pytest.mark.parametrize("label", [None, ""])
     def test_missing_label_gives_none(self, label) -> None:
-        """表示名が引けないときは None を返し、行動の行は従来の「「X」に 〈action_name〉 した」に戻る。"""
+        """表示名が引けないときは None を返し、行動の行は「「X」に働きかけた」に戻る。"""
         assert interact_display_phrase("spot_graph_object", label) is None
