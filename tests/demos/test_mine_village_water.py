@@ -515,7 +515,11 @@ def _interactions(raw: dict[str, Any]):
 
 
 #: 操作の前提条件に使ってよい種類。ほかの種類は試す前にヒントとして出る。金庫の番号の入力は、番号そのものを出さない。
-_ALLOWED_PRECONDITIONS = frozenset({"FLAG_SET", "FLAG_NOT_SET", "HAS_ITEM", "PUZZLE_INPUT_MATCH"})
+#: 籠に乗り込んだかを見る PLAYER_STATE_IS は、乗り込んだ人から操作ごと隠れるだけでヒントを出さない。
+#: 籠の席の残りを見る OBJECT_STOCK_AT_LEAST は「いっぱい」と出るが、籠を見れば分かることで、隠す決まりではない。
+_ALLOWED_PRECONDITIONS = frozenset(
+    {"FLAG_SET", "FLAG_NOT_SET", "HAS_ITEM", "PUZZLE_INPUT_MATCH", "PLAYER_STATE_IS", "OBJECT_STOCK_AT_LEAST"}
+)
 
 
 class TestRulesStayOutOfThePrompt:

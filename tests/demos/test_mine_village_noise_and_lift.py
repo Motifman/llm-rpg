@@ -112,6 +112,11 @@ def _fuel_and_start_generator(runtime) -> None:
     _act(runtime, _HARU, "machine_room", "generator", "start_generator")
 
 
+def _board(runtime, pid: PlayerId) -> None:
+    """乗り場で籠に乗り込む。昇降機の操作盤は籠の中にあり、脱出できるのも乗り込んだ人だけ。"""
+    _act(runtime, pid, "lift_landing", "lift", "board_lift")
+
+
 def _open_safe(runtime, pid: PlayerId = _GEN) -> None:
     _act(runtime, pid, "company_office", "office_safe", "open_safe", code=_SAFE_CODE)
 
@@ -300,11 +305,12 @@ class TestSafeAndKey:
 
 
 class TestLift:
-    """R4 と脱出: 昇降機は起動鍵と温まった発電機と燃料 2 で動き、乗り場にいる人だけが脱出することを保証する。"""
+    """R4 と脱出: 昇降機は起動鍵と温まった発電機と燃料 2 で動き、籠に乗り込んだ人だけが脱出することを保証する。"""
 
     def _ready(self, runtime) -> None:
         _open_safe(runtime, _HARU)
         _fuel_and_start_generator(runtime)
+        _board(runtime, _HARU)
 
     def test_lift_refuses_before_the_generator_warms_up(self, runtime) -> None:
         """鍵と燃料 2 があっても、発電機を動かしてから `_WARM_TICKS` - 1 tick 後は、昇降機は動かない。断る文は、温める必要があることを漏らさない。"""
@@ -328,6 +334,7 @@ class TestLift:
     def test_lift_refuses_without_the_key(self, runtime) -> None:
         """発電機が温まっていても、起動鍵を持っていなければ動かない。"""
         _fuel_and_start_generator(runtime)
+        _board(runtime, _HARU)
         _ticks(runtime, _WARM_TICKS + 1)
 
         outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
@@ -339,6 +346,7 @@ class TestLift:
         """金庫を開けたのが南のゲンでも、鍵を持つゲンが乗り場で動かせば昇降機は動く。開けた人と動かす人は鍵でつながる。"""
         _open_safe(runtime, _GEN)
         _fuel_and_start_generator(runtime)
+        _board(runtime, _GEN)
         _ticks(runtime, _WARM_TICKS)
 
         outcome, _message = _try(runtime, _GEN, "lift_landing", "lift", "start_lift")
@@ -373,10 +381,10 @@ class TestLift:
         assert "揺れただけ" in message
 
     def test_people_on_the_landing_escape_and_the_rest_are_left(self, runtime) -> None:
-        """昇降機を動かすと、乗り場にいたハルとゲンは脱出し、いなかったミオとサヨは取り残され、ゲームが終わる。"""
+        """昇降機を動かすと、籠に乗り込んだハルとゲンは脱出し、乗り込まなかったミオとサヨは取り残され、ゲームが終わる。"""
         self._ready(runtime)
         _ticks(runtime, _WARM_TICKS + 1)
-        _place(runtime, _GEN, "lift_landing")
+        _board(runtime, _GEN)
         _place(runtime, _MIO, "machine_room")
         _place(runtime, _SAYO, "company_office")
 
@@ -443,6 +451,7 @@ class TestNoiseAndLiftLeaveATrace:
         """昇降機が動いたことは、動かしたハルの名で trace に残る。"""
         _open_safe(runtime, _HARU)
         _fuel_and_start_generator(runtime)
+        _board(runtime, _HARU)
         _ticks(runtime, _WARM_TICKS)
         recorder = _CapturingRecorder()
         runtime.set_trace_recorder(recorder)

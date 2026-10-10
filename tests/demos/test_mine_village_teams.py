@@ -17,6 +17,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import InteractionNotAllowedException
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _SCENARIO = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "mine_village_v1.json"
@@ -50,19 +51,36 @@ def _act(runtime, string_id: str, spot: str, obj: str, action: str, **params: st
     runtime.do_interact(_PLAYERS[string_id], obj, action, interaction_parameters=params or None)
 
 
-def _depart_with(runtime, *riders: str):
-    """ハルが鍵と温まった発電機をそろえ、riders を乗り場に、残りを機械室に置いて昇降機を動かし、次の tick の終了判定を返す。"""
+def _ready_the_lift(runtime) -> None:
+    """ハルが起動鍵を手に入れ、発電機に燃料を入れて動かし、温まるまで待つ。"""
     _act(runtime, "haru", "company_office", "office_safe", "open_safe", code=_SAFE_CODE)
     _act(runtime, "haru", "machine_room", "generator", "pour_fuel_can")
     runtime.advance_tick()
     _act(runtime, "haru", "machine_room", "generator", "start_generator")
     for _ in range(_WARM_TICKS + 1):
         runtime.advance_tick()
-    _act(runtime, "haru", "lift_landing", "lift", "start_lift")
-    for string_id in _PLAYERS:
-        _place(runtime, string_id, "lift_landing" if string_id in riders else "machine_room")
+
+
+def _board(runtime, string_id: str) -> None:
+    _act(runtime, string_id, "lift_landing", "lift", "board_lift")
+
+
+def _launch(runtime):
+    """籠に乗っていない人を機械室に置き、籠の中のハルが昇降機を動かして、次の tick の終了判定を返す。"""
+    for string_id, pid in _PLAYERS.items():
+        if runtime._player_status_repo.find_by_id(pid).state.get("aboard") != "yes":
+            _place(runtime, string_id, "machine_room")
+    runtime.do_interact(_PLAYERS["haru"], "lift", "start_lift")
     runtime.advance_tick()
     return runtime.check_game_end()
+
+
+def _depart_with(runtime, *riders: str):
+    """鍵と温まった発電機をそろえ、riders を順に籠に乗り込ませてから昇降機を動かし、次の tick の終了判定を返す。riders の先頭はハル。"""
+    _ready_the_lift(runtime)
+    for string_id in riders:
+        _board(runtime, string_id)
+    return _launch(runtime)
 
 
 def _players_in(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -76,9 +94,8 @@ class TestTeamsAreDeclaredWithoutRoles:
         """北の竪坑口から入るハルとミオは team=north、南の横坑口から入るゲンとサヨは team=south を持ち、role は書かない。"""
         players = {p["id"]: p for p in _raw()["players"]}
 
-        assert {sid: p["initial_state"] for sid, p in players.items()} == {
-            sid: {"team": team} for sid, team in _TEAM_OF.items()
-        }
+        assert {sid: p["initial_state"]["team"] for sid, p in players.items()} == _TEAM_OF
+        assert all("role" not in p["initial_state"] for p in players.values())
 
     def test_both_teams_win_only_when_all_members_escape(self) -> None:
         """北と南の 2 チームがあり、どちらも勝利条件は「チームの全員が RESCUED」の 1 つだけ。"""
@@ -136,14 +153,17 @@ class TestTeamResultsFollowTheLift:
         assert result.is_ended is True
         assert result.team_results == {"north": GameResultEnum.LOSE, "south": GameResultEnum.LOSE}
 
-    def test_everyone_escaping_is_a_draw_not_two_wins(self, runtime) -> None:
-        """4 人全員が乗ると両チームが同時に成立し、両方 DRAW になる。両チームが WIN になることは無い。
+    def test_the_cage_holds_three_so_both_teams_never_escape_together(self, runtime) -> None:
+        """4 人とも乗り込もうとしても、籠の定員 3 人で 4 人目のサヨは乗れず、北が WIN、南が LOSE になる。両チームが同時に成立する回は無い。"""
+        _ready_the_lift(runtime)
+        for string_id in ("haru", "mio", "gen"):
+            _board(runtime, string_id)
 
-        4 人とも乗れるのは、昇降機の定員 (#1515) を書けないあいだだけ。
-        """
-        result = _depart_with(runtime, *_PLAYERS)
+        with pytest.raises(InteractionNotAllowedException, match="いっぱい"):
+            _board(runtime, "sayo")
+        result = _launch(runtime)
 
-        assert result.team_results == {"north": GameResultEnum.DRAW, "south": GameResultEnum.DRAW}
+        assert result.team_results == {"north": GameResultEnum.WIN, "south": GameResultEnum.LOSE}
 
 
 class TestTeamResultIsTraced:
