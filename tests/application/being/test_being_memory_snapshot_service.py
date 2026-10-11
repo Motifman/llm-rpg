@@ -264,13 +264,16 @@ class TestRestoreRoundTrip:
         assert dst_stores['stagnation_pressure'].get_by_being(being) == 0
 
     def test_acquaintances_round_trip(self) -> None:
-        """会った相手の記録は、環境の名前・相手の名前・会ったターン・回数ごと capture → restore で戻る。"""
+        """会った相手の記録は、環境の名前・相手の名前・会ったターン・回数・名前を知ったか (知ったターン) ごと capture → restore で戻る。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         src_stores['acquaintances'].record_meeting(being, environment_name='島', name='ノア', turn=0)
         src_stores['acquaintances'].record_meeting(being, environment_name='島', name='ノア', turn=6)
         src_stores['acquaintances'].record_meeting(being, environment_name='山村', name='リオ', turn=9)
         src_stores['acquaintances'].record_introduction(being, environment_name='山村', name='カイ', turn=9, relation_note='あなたと同じ側')
+        src_stores['acquaintances'].record_meeting(being, environment_name='山村', name='ゲン', turn=10, knows_name=False)
+        src_stores['acquaintances'].record_meeting(being, environment_name='山村', name='サヨ', turn=10, knows_name=False)
+        src_stores['acquaintances'].record_name_learned(being, environment_name='山村', name='サヨ', turn=12)
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
         dst_stores['acquaintances'].record_meeting(being, environment_name='島', name='カイ', turn=1)
@@ -282,7 +285,7 @@ class TestRestoreRoundTrip:
         (src_svc, _) = _make_service()
         being = BeingId('ada')
         payload = json.loads(src_svc.capture(being))
-        payload['acquaintances'] = [{'environment_name': '島', 'name': 'ノア', 'how_known': 'MET', 'known_since_turn': 0, 'relation_note': None, 'met_count': 0, 'first_met_turn': None, 'last_met_turn': None}]
+        payload['acquaintances'] = [{'environment_name': '島', 'name': 'ノア', 'how_known': 'MET', 'known_since_turn': 0, 'name_learned_turn': 0, 'relation_note': None, 'met_count': 0, 'first_met_turn': None, 'last_met_turn': None}]
         (dst_svc, _) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError):
             dst_svc.restore(being, json.dumps(payload))
@@ -293,7 +296,7 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         src_stores['memo'].add_by_being(being, '書かれてはいけない', current_tick=1)
         payload = json.loads(src_svc.capture(being))
-        met = {'environment_name': '島', 'name': 'ノア', 'how_known': 'MET', 'known_since_turn': 0, 'relation_note': None, 'met_count': 1, 'first_met_turn': 0, 'last_met_turn': 0}
+        met = {'environment_name': '島', 'name': 'ノア', 'how_known': 'MET', 'known_since_turn': 0, 'name_learned_turn': 0, 'relation_note': None, 'met_count': 1, 'first_met_turn': 0, 'last_met_turn': 0}
         payload['acquaintances'] = [met, dict(met)]
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError):
@@ -307,6 +310,17 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         payload = json.loads(src_svc.capture(being))
         payload['acquaintances'] = [{'environment_name': '島', 'name': 'ノア', 'first_met_turn': 0, 'last_met_turn': 0, 'met_count': 1}]
+        (dst_svc, _) = _make_service()
+        with pytest.raises(BeingMemoryPayloadFormatError, match='acquaintances'):
+            dst_svc.restore(being, json.dumps(payload))
+
+    def test_acquaintance_without_name_learned_turn_is_rejected(self) -> None:
+        """名前を知ったか (name_learned_turn) の無い古い形式の知り合いは、知っている側へ補わず BeingMemoryPayloadFormatError で拒む。補うと、名前を知らない相手の名前がプロンプトに出る (#1581)。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['acquaintances'].record_meeting(being, environment_name='島', name='ノア', turn=0)
+        payload = json.loads(src_svc.capture(being))
+        del payload['acquaintances'][0]['name_learned_turn']
         (dst_svc, _) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match='acquaintances'):
             dst_svc.restore(being, json.dumps(payload))

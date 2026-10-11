@@ -38,12 +38,15 @@ class Acquaintance:
     同じ人でも環境ごとに名前が違い、別の環境の同じ名前は別の人でありうる。
     ターンは世界の時刻ではなく Being の記憶のターン数で、環境を跨いでも進み続ける。
     紹介されただけでまだ会っていない相手は、会った回数が 0 になる。
+    名前を知らずに会った相手は ``name_learned_turn`` が None で、鍵の名前は
+    プロンプトに出さない (#1581)。
     """
 
     environment_name: str
     name: str
     how_known: HowKnown
     known_since_turn: int
+    name_learned_turn: int | None
     relation_note: str | None = None
     met_count: int = 0
     first_met_turn: int | None = None
@@ -63,6 +66,10 @@ class Acquaintance:
             or self.met_count < 0
         ):
             raise AcquaintanceInvalid("met_count must be int >= 0")
+        if self.name_learned_turn is not None:
+            _require_turn(self.name_learned_turn, "name_learned_turn")
+        if self.how_known is HowKnown.INTRODUCED and self.name_learned_turn != self.known_since_turn:
+            raise AcquaintanceInvalid("an introduction tells the name when introduced")
         if self.met_count == 0:
             if self.first_met_turn is not None or self.last_met_turn is not None:
                 raise AcquaintanceInvalid("met turns must be None before meeting")
@@ -79,16 +86,23 @@ class Acquaintance:
             raise AcquaintanceInvalid("first_met_turn must be >= known_since_turn")
         if self.how_known is HowKnown.MET and self.first_met_turn != self.known_since_turn:
             raise AcquaintanceInvalid("known by meeting must be known at the first meeting")
+        if (
+            self.how_known is HowKnown.MET
+            and self.name_learned_turn is not None
+            and self.name_learned_turn < self.first_met_turn
+        ):
+            raise AcquaintanceInvalid("a name is learned only after meeting")
 
     @classmethod
     def first_meeting(
-        cls, *, environment_name: str, name: str, turn: int
+        cls, *, environment_name: str, name: str, turn: int, knows_name: bool = True
     ) -> Acquaintance:
         return cls(
             environment_name=environment_name,
             name=name,
             how_known=HowKnown.MET,
             known_since_turn=turn,
+            name_learned_turn=turn if knows_name else None,
             met_count=1,
             first_met_turn=turn,
             last_met_turn=turn,
@@ -108,6 +122,7 @@ class Acquaintance:
             name=name,
             how_known=HowKnown.INTRODUCED,
             known_since_turn=turn,
+            name_learned_turn=turn,
             relation_note=relation_note,
         )
 
@@ -123,6 +138,16 @@ class Acquaintance:
             last_met_turn=turn,
         )
 
+    def learned_name(self, *, turn: int) -> Acquaintance:
+        """すでに名前を知っていれば、知ったターンは変えない。"""
+        if self.name_learned_turn is not None:
+            return self
+        return replace(self, name_learned_turn=turn)
+
+    @property
+    def knows_name(self) -> bool:
+        return self.name_learned_turn is not None
+
     @property
     def is_first_meeting(self) -> bool:
         return self.met_count == 1
@@ -131,9 +156,24 @@ class Acquaintance:
 class AcquaintanceRepository(ABC):
     @abstractmethod
     def record_meeting(
-        self, being_id: BeingId, *, environment_name: str, name: str, turn: int
+        self,
+        being_id: BeingId,
+        *,
+        environment_name: str,
+        name: str,
+        turn: int,
+        knows_name: bool = True,
     ) -> Acquaintance:
-        """知らない相手なら会って知った記録を作り、知っている相手なら会った記録に置き換えて返す。"""
+        """知らない相手なら会って知った記録を作り、知っている相手なら会った記録に置き換えて返す。
+
+        ``knows_name`` は新しく作る記録にだけ効く。名前を知った記録は、会い直しても忘れない。
+        """
+
+    @abstractmethod
+    def record_name_learned(
+        self, being_id: BeingId, *, environment_name: str, name: str, turn: int
+    ) -> Acquaintance | None:
+        """会ったことのある相手の名前を知った記録にして返す。会ったことが無ければ何も記録せず None を返す。"""
 
     @abstractmethod
     def record_introduction(
@@ -145,7 +185,7 @@ class AcquaintanceRepository(ABC):
         turn: int,
         relation_note: str | None,
     ) -> Acquaintance:
-        """知らない相手なら紹介された記録を作る。すでに知っている相手の記録は変えずに返す。"""
+        """知らない相手なら紹介された記録を作る。すでに知っている相手は、名前を知らなければ名前を知った記録にして返し、ほかは変えない。"""
 
     @abstractmethod
     def find(

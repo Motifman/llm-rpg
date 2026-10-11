@@ -18,9 +18,9 @@ def _three_players(knows_at_start: Any = None, *, omit: bool = False) -> dict[st
     """最小シナリオを 3 人にし、p1 に knows_at_start を差し込んだ raw dict を返す。"""
     scenario = copy.deepcopy(_minimal_scenario())
     scenario["players"] = [
-        {"id": "p1", "name": "エイダ", "spawn_spot": "room_a", "initial_items": []},
-        {"id": "p2", "name": "ノア", "spawn_spot": "room_a", "initial_items": []},
-        {"id": "p3", "name": "カイ", "spawn_spot": "room_b", "initial_items": []},
+        {"id": "p1", "name": "エイダ", "spawn_spot": "room_a", "initial_items": [], "appearance": "外套の女"},
+        {"id": "p2", "name": "ノア", "spawn_spot": "room_a", "initial_items": [], "appearance": "背の高い男"},
+        {"id": "p3", "name": "カイ", "spawn_spot": "room_b", "initial_items": [], "appearance": "赤い頭巾の人"},
     ]
     if not omit:
         scenario["players"][0]["knows_at_start"] = knows_at_start

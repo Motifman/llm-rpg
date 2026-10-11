@@ -429,6 +429,7 @@ def parse_players(
         knows_at_start = parse_player_knows_at_start(
             p, owner_id=p["id"], player_ids=player_ids,
         )
+        appearance = parse_player_appearance(p, owner_id=p["id"])
         spawns.append(PlayerSpawnConfig(
             string_id=p["id"],
             player_id=pid,
@@ -441,8 +442,78 @@ def parse_players(
             goal_locked=goal_locked,
             initial_gold=initial_gold,
             knows_at_start=knows_at_start,
+            appearance=appearance,
         ))
+    reject_names_strangers_could_learn_without_meeting(spawns)
     return spawns
+
+
+def parse_player_appearance(player: dict[str, Any], *, owner_id: str) -> str | None:
+    """``players[].appearance`` を検証する (#1581)。書かなければ None。"""
+    if "appearance" not in player:
+        return None
+    raw = player["appearance"]
+    if not isinstance(raw, str) or not raw.strip():
+        raise ScenarioLoadError(
+            f"players[{owner_id}].appearance は空でない文字列で書いてください (got {raw!r})"
+        )
+    return raw.strip()
+
+
+def _knows_at_start(spawn: PlayerSpawnConfig, other: PlayerSpawnConfig) -> bool:
+    return spawn.knows_at_start is None or other.string_id in spawn.knows_at_start
+
+
+def reject_names_strangers_could_learn_without_meeting(
+    spawns: Sequence[PlayerSpawnConfig],
+) -> None:
+    """名前を知らない相手を見た目で出せないシナリオと、見た目や文から名前が分かるシナリオを止める (#1581)。
+
+    名前は、記録に入る文で参加者の名前を見た目に置き換えて伏せる。名前が別の人の名前や
+    見た目の一部だと、置き換えが別の人まで巻き込む。
+    """
+    for spawn in spawns:
+        for other in spawns:
+            if other is spawn:
+                continue
+            if spawn.name in other.name:
+                raise ScenarioLoadError(
+                    f"players[{spawn.string_id}].name {spawn.name!r} が "
+                    f"players[{other.string_id}].name {other.name!r} の一部になっています"
+                )
+    appearances: dict[str, str] = {}
+    for spawn in spawns:
+        if spawn.appearance is None:
+            continue
+        if spawn.appearance in appearances:
+            raise ScenarioLoadError(
+                f"players[{spawn.string_id}].appearance {spawn.appearance!r} が "
+                f"players[{appearances[spawn.appearance]}] と同じです"
+            )
+        appearances[spawn.appearance] = spawn.string_id
+        for other in spawns:
+            if other.name in spawn.appearance:
+                raise ScenarioLoadError(
+                    f"players[{spawn.string_id}].appearance に名前 {other.name!r} が入っています"
+                )
+    for spawn in spawns:
+        for other in spawns:
+            if other is spawn or _knows_at_start(spawn, other):
+                continue
+            if other.appearance is None:
+                raise ScenarioLoadError(
+                    f"players[{other.string_id}].appearance がありません。"
+                    f"players[{spawn.string_id}] は最初から名前を知らないので、見た目で出します"
+                )
+            for field, text in (
+                ("persona_prompt", spawn.persona_prompt),
+                ("objective", spawn.objective),
+            ):
+                if text and other.name in text:
+                    raise ScenarioLoadError(
+                        f"players[{spawn.string_id}].{field} に、最初から知らない "
+                        f"{other.name!r} の名前があります"
+                    )
 
 
 def parse_player_knows_at_start(

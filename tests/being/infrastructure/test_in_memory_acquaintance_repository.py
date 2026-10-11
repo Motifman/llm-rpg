@@ -24,6 +24,7 @@ class TestInMemoryAcquaintanceRepository:
             Acquaintance(
                 environment_name="島", name="ノア", how_known=HowKnown.MET,
                 known_since_turn=1, first_met_turn=1, last_met_turn=4, met_count=2,
+                name_learned_turn=1,
             ),
         )
 
@@ -56,6 +57,7 @@ class TestInMemoryAcquaintanceRepository:
         restored = Acquaintance(
             environment_name="島", name="カイ", how_known=HowKnown.MET,
             known_since_turn=0, first_met_turn=0, last_met_turn=5, met_count=3,
+            name_learned_turn=0,
         )
 
         repo.replace_all_by_being(ADA, [restored])
@@ -87,3 +89,45 @@ class TestInMemoryAcquaintanceRepository:
         met = repo.record_meeting(ADA, environment_name="島", name="ノア", turn=3)
 
         assert (met.how_known, met.met_count, met.first_met_turn) == (HowKnown.INTRODUCED, 1, 3)
+
+
+class TestRecordingNames:
+    """InMemoryAcquaintanceRepository が、名前を知らずに会った相手と、あとで名前を知ったことを記録することを保証する (#1581)。"""
+
+    def test_meeting_without_the_name_then_learning_it(self) -> None:
+        """名前を知らずに会った相手の名前を知ると、同じ記録が名前を知った記録に置き換わる。"""
+        repo = InMemoryAcquaintanceRepository()
+        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1, knows_name=False)
+
+        learned = repo.record_name_learned(ADA, environment_name="島", name="ノア", turn=3)
+
+        assert learned is not None and learned.name_learned_turn == 3
+        assert repo.find(ADA, environment_name="島", name="ノア") == learned
+
+    def test_name_of_someone_never_met_is_not_learned(self) -> None:
+        """会ったことの無い相手の名前は、知ったことにせず None を返し、記録も作らない。"""
+        repo = InMemoryAcquaintanceRepository()
+
+        assert repo.record_name_learned(ADA, environment_name="島", name="ノア", turn=3) is None
+        assert repo.list_by_being(ADA) == ()
+
+    def test_meeting_again_does_not_forget_the_name(self) -> None:
+        """名前を知った相手に、名前を知らない扱いでもう一度会っても、名前は知ったまま。"""
+        repo = InMemoryAcquaintanceRepository()
+        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1, knows_name=False)
+        repo.record_name_learned(ADA, environment_name="島", name="ノア", turn=2)
+
+        again = repo.record_meeting(ADA, environment_name="島", name="ノア", turn=4, knows_name=False)
+
+        assert again.knows_name
+
+    def test_introducing_someone_met_without_the_name_teaches_it(self) -> None:
+        """名前を知らずに会った相手を紹介されると、会った記録は保ったまま名前を知り、関係の注記は付かない。"""
+        repo = InMemoryAcquaintanceRepository()
+        repo.record_meeting(ADA, environment_name="島", name="ノア", turn=1, knows_name=False)
+
+        known = repo.record_introduction(
+            ADA, environment_name="島", name="ノア", turn=3, relation_note="あなたと同じ側"
+        )
+
+        assert (known.knows_name, known.name_learned_turn, known.met_count) == (True, 3, 1)

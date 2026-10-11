@@ -17,14 +17,23 @@ class InMemoryAcquaintanceRepository(AcquaintanceRepository):
         self._by_being: dict[BeingId, dict[_Key, Acquaintance]] = {}
 
     def record_meeting(
-        self, being_id: BeingId, *, environment_name: str, name: str, turn: int
+        self,
+        being_id: BeingId,
+        *,
+        environment_name: str,
+        name: str,
+        turn: int,
+        knows_name: bool = True,
     ) -> Acquaintance:
         book = self._by_being.setdefault(being_id, {})
         key = (environment_name, name)
         known = book.get(key)
         met = (
             Acquaintance.first_meeting(
-                environment_name=environment_name, name=name, turn=turn
+                environment_name=environment_name,
+                name=name,
+                turn=turn,
+                knows_name=knows_name,
             )
             if known is None
             else known.met_at(turn=turn)
@@ -45,7 +54,11 @@ class InMemoryAcquaintanceRepository(AcquaintanceRepository):
         key = (environment_name, name)
         known = book.get(key)
         if known is not None:
-            return known
+            # 名前を知らずに会った相手を紹介されたら、名前を知る。関係の注記は紹介でだけ付く
+            # 決まり (D1520) だが、会ったあとの紹介では付けない。
+            named = known.learned_name(turn=turn)
+            book[key] = named
+            return named
         introduced = Acquaintance.introduced(
             environment_name=environment_name,
             name=name,
@@ -54,6 +67,18 @@ class InMemoryAcquaintanceRepository(AcquaintanceRepository):
         )
         book[key] = introduced
         return introduced
+
+    def record_name_learned(
+        self, being_id: BeingId, *, environment_name: str, name: str, turn: int
+    ) -> Acquaintance | None:
+        book = self._by_being.get(being_id, {})
+        key = (environment_name, name)
+        known = book.get(key)
+        if known is None:
+            return None
+        named = known.learned_name(turn=turn)
+        book[key] = named
+        return named
 
     def find(
         self, being_id: BeingId, *, environment_name: str, name: str
