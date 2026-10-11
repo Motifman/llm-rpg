@@ -389,7 +389,7 @@ class TestLift:
         assert outcome == "refused"
 
     def test_lift_refuses_with_too_little_fuel(self, runtime) -> None:
-        """缶 1 つ分の燃料からポンプで燃料が 2 を下回るまで使うと、温まっていても昇降機は動かない。"""
+        """缶 1 つ分の燃料からポンプで燃料が 2 を下回るまで使うと、温まっていても昇降機は動かず、力が抜けたという燃料の文が返る。"""
         self._ready(runtime)
         _ticks(runtime, 1)
         for _ in range((_CAN_FUEL - 1) // _PUMP_FUEL):
@@ -400,7 +400,8 @@ class TestLift:
         outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
 
         assert outcome == "refused"
-        assert "揺れただけ" in message
+        assert message == _LIFT_REFUSAL["short_of_fuel"]
+
 
     def test_people_on_the_landing_escape_and_the_rest_are_left(self, runtime) -> None:
         """昇降機を動かすと、籠に乗り込んだハルとゲンは脱出し、乗り込まなかったミオとサヨは取り残され、ゲームが終わる。"""
@@ -432,6 +433,154 @@ class TestLift:
 
         assert outcome == "refused"
         assert "二度と動かない" in message
+
+
+#: R4 の外れ方: 昇降機が断る場合 → 返る文。足りないものごとに文を分け、どれも答えを名指ししない (Issue #1600)。
+_LIFT_REFUSAL = {
+    "generator_off": "把手を引いても、籠はぴくりとも動かない。",
+    "not_warm": "把手に手応えはあるが、籠は持ち上がらない。奥で機械の唸りがまだ荒く波打っている。",
+    "short_of_fuel": "籠がわずかに浮きかけて、すぐに力が抜けた。",
+}
+
+#: R4 の知らせ: 発電機が温まったとき、そこにいる人に届く出来事。機械室とその隣と、昇降機の乗り場 (Issue #1600)。
+_WARM_NOTICE_EVENTS = {
+    "machine_room": "generator_warm_heard_machine_room",
+    "mid_junction": "generator_warm_heard_mid_junction",
+    "lower_shortcut": "generator_warm_heard_lower_shortcut",
+    "miners_rest": "generator_warm_heard_miners_rest",
+    "lift_landing": "generator_warm_heard_lift_landing",
+}
+
+
+#: 温まったあとも知らせが増えないことを見るために、続けて進める tick 数。
+_TICKS_AFTER_WARM = 3
+
+
+def _warm_notices(runtime, pid: PlayerId) -> list[str]:
+    return [
+        e.output.prose
+        for e in runtime._obs_buffer.get_observations(pid)
+        if e.output.structured.get("event_id") in _WARM_NOTICE_EVENTS.values()
+    ]
+
+
+class TestLiftRefusalTellsWhatIsMissing:
+    """R4: 昇降機の断りの文が、発電機が止まっている・温まっていない・燃料が足りないで分かれ、試して外れた人が何が足りないかを区別できることを保証する。"""
+
+    def test_lift_refuses_with_the_generator_off(self, runtime) -> None:
+        """鍵を持って籠に乗っていても、発電機を動かしていなければ、籠がぴくりとも動かないという文が返る。"""
+        _open_safe(runtime, _HARU)
+        _board(runtime, _HARU)
+
+        outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
+
+        assert outcome == "refused"
+        assert message == _LIFT_REFUSAL["generator_off"]
+
+    def test_lift_refuses_before_warm_with_the_rough_hum(self, runtime) -> None:
+        """燃料 2 以上で発電機を動かしてから `_WARM_TICKS` - 1 tick 後に把手を引くと、唸りがまだ荒いという文が返る。"""
+        _open_safe(runtime, _HARU)
+        _fuel_and_start_generator(runtime)
+        _board(runtime, _HARU)
+        _ticks(runtime, _WARM_TICKS - 1)
+
+        outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
+
+        assert outcome == "refused"
+        assert message == _LIFT_REFUSAL["not_warm"]
+
+    def test_refusals_are_all_different(self) -> None:
+        """3 つの断りの文はどれも違い、発電機が回っている・温まっている・燃料 2 以上のフラグを見る前提条件に、それぞれ 1 つずつ付いている。"""
+        lift = _object(_raw(), "lift_landing", "lift")
+        start = next(i for i in lift["interactions"] if i["action_name"] == "start_lift")
+        by_flag = {p.get("flag_name"): p["failure_message"] for p in start["preconditions"]}
+
+        assert len(set(_LIFT_REFUSAL.values())) == len(_LIFT_REFUSAL)
+        assert {
+            "generator_off": by_flag["generator_running"],
+            "not_warm": by_flag["generator_warm"],
+            "short_of_fuel": by_flag["generator_fuel_2"],
+        } == _LIFT_REFUSAL
+
+    @pytest.mark.parametrize("message", list(_LIFT_REFUSAL.values()))
+    def test_refusal_does_not_name_the_answer(self, message: str) -> None:
+        """断りの文は、温まり・燃料・発電機・準備を名指ししない。外れ方は様子で伝え、答えは書かない。"""
+        assert not any(word in message for word in ("温", "燃料", "発電機", "準備"))
+
+
+class TestGeneratorWarmthIsHeard:
+    """R4: 発電機が温まった tick に、機械室とその隣と昇降機の乗り場にいる人へ、温まったと書かない音の知らせが 1 回届くことを保証する。"""
+
+    @pytest.mark.parametrize("spot", list(_WARM_NOTICE_EVENTS))
+    def test_notice_arrives_exactly_when_warm(self, runtime, spot: str) -> None:
+        """発電機を動かしてから `_WARM_TICKS` - 1 tick では届かず、`_WARM_TICKS` tick 目に、その場所にいる人へ 1 回だけ届く。"""
+        _place(runtime, _GEN, spot)
+        _fuel_and_start_generator(runtime)
+
+        _ticks(runtime, _WARM_TICKS - 1)
+        before = _warm_notices(runtime, _GEN)
+        _ticks(runtime, 1)
+        _ticks(runtime, _TICKS_AFTER_WARM)
+
+        assert before == []
+        assert len(_warm_notices(runtime, _GEN)) == 1
+
+    @pytest.mark.parametrize("spot", ["north_tunnel", "gas_chamber", "village_square", "timber_passage"])
+    def test_notice_does_not_reach_far_places(self, runtime, spot: str) -> None:
+        """機械室の隣でも乗り場でもない場所 (北の坑道、掘り場、廃村の広場、古い支柱の通路) にいる人には届かない。"""
+        _place(runtime, _GEN, spot)
+        _fuel_and_start_generator(runtime)
+
+        _ticks(runtime, _WARM_TICKS + 1)
+
+        assert _warm_notices(runtime, _GEN) == []
+
+    def test_notice_comes_again_after_a_restart(self, runtime) -> None:
+        """燃料が尽きて止まった発電機を動かし直して温まると、機械室の人に知らせがもう一度届く。"""
+        _place(runtime, _GEN, "machine_room")
+        _fuel_and_start_generator(runtime)
+        _ticks(runtime, _WARM_TICKS)
+        for _ in range(_CAN_FUEL // _PUMP_FUEL):
+            _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+            _ticks(runtime, 1)
+        _clear_gas(runtime)
+        _act(runtime, _HARU, "gas_chamber", "spare_fuel_crate", "take_spare_fuel_can")
+        _act(runtime, _HARU, "machine_room", "generator", "pour_fuel_can")
+        _ticks(runtime, 1)
+        _act(runtime, _HARU, "machine_room", "generator", "start_generator")
+
+        _ticks(runtime, _WARM_TICKS)
+
+        assert len(_warm_notices(runtime, _GEN)) == 2
+
+    def test_notices_name_neither_the_answer_nor_anyone(self) -> None:
+        """知らせの文は、温まり・準備・燃料を名指しせず、人の名前の差し込み (`{`) も持たない。"""
+        events = {e["id"]: e for e in _raw()["scenario_events"]}
+        messages = [
+            effect["parameters"]["message"]
+            for event_id in _WARM_NOTICE_EVENTS.values()
+            for effect in events[event_id]["effects"]
+            if effect["effect_type"] == "SHOW_MESSAGE"
+        ]
+
+        assert len(messages) == len(_WARM_NOTICE_EVENTS)
+        assert not any(word in m for m in messages for word in ("温", "準備", "燃料", "{"))
+
+    def test_rough_hum_before_and_settled_hum_after_pair_up(self) -> None:
+        """動かした人には「荒い唸り」が返り、機械室の知らせはその唸りが落ち着いたと伝える。外れの文の「まだ荒く」と対になって学べる。"""
+        events = {e["id"]: e for e in _raw()["scenario_events"]}
+        settled = next(
+            effect["parameters"]["message"]
+            for effect in events[_WARM_NOTICE_EVENTS["machine_room"]]["effects"]
+            if effect["effect_type"] == "SHOW_MESSAGE"
+        )
+        generator = _object(_raw(), "machine_room", "generator")
+        start = next(i for i in generator["interactions"] if i["action_name"] == "start_generator")
+        started = next(e["parameters"]["message"] for e in start["effects"] if e["effect_type"] == "SHOW_MESSAGE")
+
+        assert "荒い唸り" in started
+        assert "荒い唸り" in settled and "落ち着" in settled
+        assert "荒く" in _LIFT_REFUSAL["not_warm"]
 
 
 class _CapturingRecorder(NullTraceRecorder):
@@ -482,11 +631,38 @@ class TestNoiseAndLiftLeaveATrace:
 
         assert _flag_changes(recorder, "lift_departed") == [(True, "spot_interaction", int(_HARU))]
 
+    def test_warm_notice_records_the_tick_and_who_heard_it(self, runtime) -> None:
+        """温まりの知らせは、温まった tick と、届いた人 (乗り場のハル、機械室のゲン) ごとに観測として trace に残り、出来事の id で引ける。"""
+        _fuel_and_start_generator(runtime)
+        started_tick = runtime.current_tick()
+        _place(runtime, _HARU, "lift_landing")
+        _place(runtime, _GEN, "machine_room")
+        recorder = _CapturingRecorder()
+        runtime.set_trace_recorder(recorder)
+
+        _ticks(runtime, _WARM_TICKS + 1)
+
+        heard = sorted(
+            (e.tick, e.player_id, e.payload["structured"]["event_id"])
+            for e in recorder.events
+            if e.kind == TraceEventKind.OBSERVATION
+            and e.payload["structured"].get("event_id") in _WARM_NOTICE_EVENTS.values()
+        )
+        assert heard == [
+            (started_tick + _WARM_TICKS, int(_HARU), _WARM_NOTICE_EVENTS["lift_landing"]),
+            (started_tick + _WARM_TICKS, int(_GEN), _WARM_NOTICE_EVENTS["machine_room"]),
+        ]
+
 
 def _raw() -> dict:
     import json
 
     return json.loads(_SCENARIO.read_text(encoding="utf-8"))
+
+
+def _object(raw: dict, spot_id: str, object_id: str) -> dict:
+    spot = next(s for s in raw["spots"] if s["id"] == spot_id)
+    return next(o for o in spot["interior"]["objects"] if o["id"] == object_id)
 
 
 def _has_key(runtime, pid: PlayerId) -> bool:
