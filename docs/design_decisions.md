@@ -7693,7 +7693,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **何を**:
 
-- `say_inline` を各ツールの handler から外し、dispatch (`wire_missing_spot_graph_tools` の配線) で handler を包む `wrap_with_say_inline` から出す。handler が返った後に `SpotGraphToolExecutor.speak_say_inline` を 1 回呼ぶ。成功、前提条件の失敗、名前の解決の失敗、疲労による拒否のどれでも出す。handler が例外を投げたときも出してから例外を外へ出す
+- `say_inline` を各ツールの handler から外し、dispatch (`wire_missing_spot_graph_tools` の配線) で handler を包む `wrap_with_say_inline` から出す。handler が返った後に `SpotGraphToolExecutor.speak_say_inline` を 1 回呼ぶ。成功、前提条件の失敗、名前の解決の失敗、疲労による拒否のどれでも出す。handler が例外を投げたときも出し、届いたかを例外に載せて外へ出す。例外から失敗の結果を作る `phase_b` が、それを結果文と trace に書き足す
 - 包むのは、ツール定義に `say_inline` を持つツールすべて。名前の一覧はツール定義から作り、手で並べない
 - 包みは resolver の外側に置く。対象の名前を解決できず executor が呼ばれない場合も、発言は届く
 - 発話そのものが断られたとき (speech service が未配線、倒れていて声が出せない、居場所が無い) は、結果文の末尾に「（添えた発言は届かなかった）」と足す。trace の `tool_trace_payload` に `say_inline_spoken` (`true` / `false`) を残す。`say_inline` が無い行動には何も足さない
@@ -7708,12 +7708,16 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **届き方**: 発言は `speak` と同じ経路 (`SpeechChannel.SAY`) で出すので、届く範囲は成功した行動の発言と変わらない。同じ場所の人には全文、隣の場所の人には断片 (design_decisions 130) が届き、話し手の名前の伏せ方も同じになる。`say_inline` は囁きにならないので、囁きの規則はかからない。
 
-**届けないもの**: ツールで選り分けて届けない行動は無い。届かないのは、発話そのものが断られたときだけで、そのときは本人の結果文に出る。
+**届けないもの**: `say_inline` を持つツールで選り分けて届けないものは無い。届けないのは次の 2 つで、どちらも本人の結果文に「（添えた発言は届かなかった）」と出る。
+
+- handler まで届かない行動: 世界に無いツール名 (`UNSUPPORTED_TOOL`)、いまのフェーズで出していないツール (`TOOL_NOT_OFFERED_NOW` など。会議中の `interact` が典型)。行動そのものが世界で起きていないので、それに添えた発言も起きていない扱いにする。会議中の発言には会議の規則があり、出していないツールの引数から抜け道を作らない
+- 発話そのものが断られたとき: speech service が未配線、または `speak` が例外を投げたとき。世界の規則による拒否 (`SpeechCommandException`。倒れていて声が出せない、居場所が決まっていない) は warning、それ以外は不具合として `logger.exception` に残す
 
 **どうしないと壊れるか**:
 
 - handler の中で発言を出すと、dispatch の包みと二重に出る。`tests/application/llm/services/executors/test_spot_graph_say_inline.py` が、handler 単体では発言が出ないことを見る
-- `tests/demos/test_words_said_with_a_refused_action_are_heard.py` が、本番と同じ session で `run_phase_b` から、前提条件・名前の解決・疲労・介抱の 4 通りの失敗で発言が届くこと、断られた行動と成功した行動で聞き手の観測が同じになること、`say_inline` を持つツールがすべて包みを通ることを見る
+- `tests/demos/test_words_said_with_a_refused_action_are_heard.py` が、本番と同じ session で `run_phase_b` から、前提条件・名前の解決・疲労・介抱の 4 通りの失敗で発言が届くこと、断られた行動と成功した行動で聞き手の観測が同じになること、世界に無いツールの発言は出さずに本人へ伝えること、handler が例外で終わったときの扱い、`say_inline` を持つツールがすべて包みを通ることを見る
+- 包む対象は `get_spot_graph_specs` のツール定義から作る。別のカタログに `say_inline` を持つツールを足すと包まれず、上の試験でも見えない。足すときはこの一覧の作り方を広げる
 
 **対象外**: 発言が行動の結果を先取りする問題 (拾えていないのに「見つけました」と言う) は扱わない。発言が届くようになったので、先取りした発言も届く。
 
