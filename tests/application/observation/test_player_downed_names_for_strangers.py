@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
+
 # observation.contracts.interfaces と prompt_builder_config の循環 import を避ける。
 from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
-from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
