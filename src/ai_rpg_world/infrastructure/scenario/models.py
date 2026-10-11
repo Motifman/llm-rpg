@@ -165,6 +165,8 @@ class PlayerSpawnConfig:
     # #1520: 入るときに紹介する相手の player id。None なら自分以外の全員を紹介する。
     # 紹介しなかった相手は、会うまでその Being にとって居ないのと同じになる。
     knows_at_start: tuple[str, ...] | None = None
+    # #1581: 名前を知らない相手に見せる呼び方。最初から全員に知られている人は無くてよい。
+    appearance: str | None = None
 
 
 @dataclass(frozen=True)

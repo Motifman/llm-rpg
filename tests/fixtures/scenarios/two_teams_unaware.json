@@ -22,10 +22,10 @@
     {"id": "pass_to_west", "from": "pass", "to": "camp_west", "name": "西の坂道", "travel_ticks": 1, "is_bidirectional": true}
   ],
   "players": [
-    {"id": "east_1", "name": "ミナト", "spawn_spot": "camp_east", "initial_items": [], "knows_at_start": ["east_2"]},
-    {"id": "east_2", "name": "トウカ", "spawn_spot": "camp_east", "initial_items": [], "knows_at_start": ["east_1"]},
-    {"id": "west_1", "name": "ゲンジ", "spawn_spot": "camp_west", "initial_items": [], "knows_at_start": ["west_2"]},
-    {"id": "west_2", "name": "サヤ", "spawn_spot": "camp_west", "initial_items": [], "knows_at_start": ["west_1"]}
+    {"id": "east_1", "name": "ミナト", "appearance": "青い外套の人", "spawn_spot": "camp_east", "initial_items": [], "knows_at_start": ["east_2"]},
+    {"id": "east_2", "name": "トウカ", "appearance": "弓を背負った人", "spawn_spot": "camp_east", "initial_items": [], "knows_at_start": ["east_1"]},
+    {"id": "west_1", "name": "ゲンジ", "appearance": "髭の濃い大柄な人", "spawn_spot": "camp_west", "initial_items": [], "knows_at_start": ["west_2"]},
+    {"id": "west_2", "name": "サヤ", "appearance": "赤い頭巾の人", "spawn_spot": "camp_west", "initial_items": [], "knows_at_start": ["west_1"]}
   ],
   "game_end_conditions": {
     "lose": {"type": "TICK_LIMIT", "tick_limit": 50}

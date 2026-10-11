@@ -13,12 +13,13 @@ def render_known_people(
     """描くのは、知ったときに決まって変わらない名前と関係の注記だけ。
 
     会った回数のように会うたびに変わるものを描くと、毎ターンのメッセージの
-    この節から後ろのキャッシュが、会うたびに切れる。
+    この節から後ろのキャッシュが、会うたびに切れる。名前を知らずに会った相手は
+    名前を描けないので並べない。
     """
     return "\n".join(
         f"- {a.name}（{a.relation_note}）" if a.relation_note else f"- {a.name}"
         for a in acquaintances
-        if a.environment_name == environment_name
+        if a.environment_name == environment_name and a.knows_name
     )
 
 

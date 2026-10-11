@@ -2667,6 +2667,7 @@
     {
       "id": "haru",
       "name": "ハル",
+      "appearance": "測量具を背負った年かさの人",
       "spawn_spot": "north_shaft_head",
       "initial_items": [
         "lamp",
@@ -2687,6 +2688,7 @@
     {
       "id": "mio",
       "name": "ミオ",
+      "appearance": "工具袋を腰に下げた若い人",
       "spawn_spot": "north_shaft_head",
       "initial_items": [
         "lamp",
@@ -2706,6 +2708,7 @@
     {
       "id": "gen",
       "name": "ゲン",
+      "appearance": "煤けた坑夫の上着を着た初老の男",
       "spawn_spot": "south_adit_mouth",
       "initial_items": [
         "lamp",
@@ -2726,6 +2729,7 @@
     {
       "id": "sayo",
       "name": "サヨ",
+      "appearance": "綿入れを着込んだ若い娘",
       "spawn_spot": "south_adit_mouth",
       "initial_items": [
         "lamp",

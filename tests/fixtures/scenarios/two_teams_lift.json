@@ -47,10 +47,10 @@
     {"id": "lift_to_south", "from": "lift", "to": "camp_south", "name": "南の坂道", "travel_ticks": 1, "is_bidirectional": true}
   ],
   "players": [
-    {"id": "north_1", "name": "ミナト", "spawn_spot": "camp_north", "initial_items": [], "initial_state": {"team": "north"}, "knows_at_start": ["north_2"]},
-    {"id": "north_2", "name": "トウカ", "spawn_spot": "camp_north", "initial_items": [], "initial_state": {"team": "north"}, "knows_at_start": ["north_1"]},
-    {"id": "south_1", "name": "ゲンジ", "spawn_spot": "camp_south", "initial_items": [], "initial_state": {"team": "south"}, "knows_at_start": ["south_2"]},
-    {"id": "south_2", "name": "サヤ", "spawn_spot": "camp_south", "initial_items": [], "initial_state": {"team": "south"}, "knows_at_start": ["south_1"]}
+    {"id": "north_1", "name": "ミナト", "appearance": "青い外套の人", "spawn_spot": "camp_north", "initial_items": [], "initial_state": {"team": "north"}, "knows_at_start": ["north_2"]},
+    {"id": "north_2", "name": "トウカ", "appearance": "弓を背負った人", "spawn_spot": "camp_north", "initial_items": [], "initial_state": {"team": "north"}, "knows_at_start": ["north_1"]},
+    {"id": "south_1", "name": "ゲンジ", "appearance": "髭の濃い大柄な人", "spawn_spot": "camp_south", "initial_items": [], "initial_state": {"team": "south"}, "knows_at_start": ["south_2"]},
+    {"id": "south_2", "name": "サヤ", "appearance": "赤い頭巾の人", "spawn_spot": "camp_south", "initial_items": [], "initial_state": {"team": "south"}, "knows_at_start": ["south_1"]}
   ],
   "teams": [
     {
