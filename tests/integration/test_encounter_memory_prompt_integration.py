@@ -67,6 +67,63 @@ class TestCurrentSpotFamiliarityE2E:
         assert "現在地: 閲覧室 (初めて訪れた)" in section, section
 
 
+def _take_a_turn(runtime, player_id) -> None:
+    """本番と同じ実行の入口 (``run_phase_b``) から、その場で待つ 1 手を実行する。"""
+    from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+    from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+    from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
+
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=StubLlmClient(None),
+    )
+    wiring.run_phase_b(
+        LlmPhaseAResult(
+            player_id=player_id,
+            prompt=runtime.build_full_prompt(player_id),
+            tools_payload=[],
+            tool_call={"name": "wait", "arguments": {"inner_thought": "様子を見る"}},
+            exception=None,
+        )
+    )
+
+
+class TestFirstVisitNoteLastsOneTurn:
+    """「(初めて訪れた)」が着いた最初のターンだけに付くことを保証する (#1596)。"""
+
+    def test_the_note_stays_while_the_first_turn_has_not_run(self) -> None:
+        """着いてから手番を実行するまでは、プロンプトを何度組んでも「(初めて訪れた)」が付く。"""
+        runtime = _create_runtime()
+        kaito = runtime.get_player_ids()[0]
+
+        sections = [_current_state_section(_user_prompt_text(runtime, kaito)) for _ in range(2)]
+
+        assert all("現在地: 入口広間 (初めて訪れた)" in s for s in sections), sections
+
+    def test_the_note_is_gone_on_the_next_turn_at_the_same_spot(self) -> None:
+        """着いた場所で 1 手を実行すると、同じ場所に留まった次のターンの現在地には「(初めて訪れた)」が付かない。"""
+        runtime = _create_runtime()
+        kaito = runtime.get_player_ids()[0]
+
+        _take_a_turn(runtime, kaito)
+
+        section = _current_state_section(_user_prompt_text(runtime, kaito))
+        assert "現在地: 入口広間\n" in section + "\n", section
+        assert "(初めて訪れた)" not in section, section
+
+    def test_another_players_turn_does_not_clear_the_note(self) -> None:
+        """別の player が手番を実行しても、まだ手番を実行していない player の「(初めて訪れた)」は残る。"""
+        runtime = _create_runtime()
+        kaito, rin = runtime.get_player_ids()[:2]
+
+        _take_a_turn(runtime, rin)
+
+        section = _current_state_section(_user_prompt_text(runtime, kaito))
+        assert "現在地: 入口広間 (初めて訪れた)" in section, section
+
+
 class TestNearbyPlayerFamiliarityE2E:
     """別々の場所から始めた二人が顔を合わせると、双方の【現在地と周囲】で相手に「初めて会った」が付く。"""
 
