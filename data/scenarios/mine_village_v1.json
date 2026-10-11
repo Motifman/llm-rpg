@@ -1712,7 +1712,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "把手を引くと、発電機が唸りを上げて回りはじめた。"
+                      "message": "把手を引くと、発電機が荒い唸りを上げて回りはじめた。"
                     }
                   }
                 ]
@@ -2235,13 +2235,18 @@
                   },
                   {
                     "condition_type": "FLAG_SET",
+                    "flag_name": "generator_running",
+                    "failure_message": "把手を引いても、籠はぴくりとも動かない。"
+                  },
+                  {
+                    "condition_type": "FLAG_SET",
                     "flag_name": "generator_warm",
-                    "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                    "failure_message": "把手に手応えはあるが、籠は持ち上がらない。奥で機械の唸りがまだ荒く波打っている。"
                   },
                   {
                     "condition_type": "FLAG_SET",
                     "flag_name": "generator_fuel_2",
-                    "failure_message": "把手を引いても、籠はわずかに揺れただけで動かない。"
+                    "failure_message": "籠がわずかに浮きかけて、すぐに力が抜けた。"
                   },
                   {
                     "condition_type": "HAS_ITEM",
@@ -2937,6 +2942,12 @@
           }
         },
         {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "generator_warm_heard"
+          }
+        },
+        {
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
             "message": "地の底から響いていた機械の唸りが、ふっと途切れた。"
@@ -2969,6 +2980,179 @@
           "effect_type": "SET_FLAG",
           "parameters": {
             "flag_name": "generator_warm"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warm_heard_machine_room",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "machine_room",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "発電機の荒い唸りが、低く落ち着いた響きに変わった。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warm_heard_mid_junction",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "mid_junction",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "近くで響いていた機械の荒い唸りが、低く落ち着いた。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warm_heard_lower_shortcut",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "lower_shortcut",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "近くで響いていた機械の荒い唸りが、低く落ち着いた。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warm_heard_miners_rest",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "miners_rest",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "近くで響いていた機械の荒い唸りが、低く落ち着いた。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warm_heard_lift_landing",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "lift_landing",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "籠の操作盤の奥で、何かが噛み合うような音がした。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generator_warm_heard",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "generator_warm"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "generator_warm_heard"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "generator_warm_heard"
           }
         }
       ]
@@ -4034,7 +4218,7 @@
         {
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
-            "message": "地の底のほうから、機械の低い唸りが響いてきた。"
+            "message": "地の底のほうから、機械の唸りが響いてきた。"
           }
         }
       ]
