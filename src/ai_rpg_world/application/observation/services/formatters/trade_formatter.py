@@ -145,6 +145,7 @@ class TradeObservationFormatter:
                 "role": "seller",
                 "trade_id_value": trade_id,
                 "decliner_player_id": event.decliner_id.value,
+                "decliner_name": decliner_name,
             }
         return ObservationOutput(
             prose=prose,

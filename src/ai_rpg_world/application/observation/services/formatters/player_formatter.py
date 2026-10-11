@@ -198,6 +198,7 @@ class PlayerObservationFormatter:
             # 1 つ増えた瞬間に成り立たなくなる。
             if learns_killer:
                 structured["killer_player_id"] = killer_id
+                structured["killer_name"] = killer_name
             return ObservationOutput(
                 prose=prose,
                 structured=structured,
@@ -274,6 +275,7 @@ class PlayerObservationFormatter:
         # 読む側が増えても同じ秘匿境界を保つため、視認できるときだけ ID を運ぶ。
         if killer_visible:
             structured["killer_player_id"] = killer_id
+            structured["killer_name"] = killer_name
         return ObservationOutput(
             prose=prose,
             structured=structured,
