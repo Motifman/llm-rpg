@@ -1,6 +1,6 @@
 {
   "profile": "memory_jev_mine_v1_v41_thinking",
-  "description": "memory_jev_mine_v1_v41_loop との差は LLM_REASONING_EFFORT=medium の 1 つだけ。thinking ありで、確実に失敗する行動の繰り返しや押し問答が減るかを見る比較用。thinking と tool_choice=required が両立するかは、使う直前に docs/llm_provider_selection.md の手順で確かめる (#96)。",
+  "description": "memory_jev_mine_v1_v41_loop との差は LLM_REASONING_EFFORT=minimal の 1 つだけ。これまでの thinking ありの profile (station_drill_thinking、market_town など) にそろえて minimal にした。thinking ありで、確実に失敗する行動の繰り返しや押し問答が減るかを見る比較用。thinking と tool_choice=required が両立するかは、使う直前に docs/llm_provider_selection.md の手順で確かめる (#96)。",
   "scenario": "data/scenarios/mine_village_v1.json",
   "max_world_ticks": 40,
   "snapshot_save": true,
@@ -43,7 +43,7 @@
     "LLM_EXPECTED_RESULT_POLICY": "off",
     "LLM_IDLE_TIMEOUT_TICKS": 6,
     "LLM_MODEL": "openrouter/deepseek/deepseek-v4.1-flash",
-    "LLM_REASONING_EFFORT": "medium",
+    "LLM_REASONING_EFFORT": "minimal",
     "LLM_TOOL_MODE": "default",
     "LLM_TURN_PARALLEL_WORKERS": 2,
     "MEMO_DISTILL_ENABLED": true,
