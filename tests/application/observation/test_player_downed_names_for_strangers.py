@@ -126,6 +126,23 @@ class TestKillerSeenByABystander:
 
         assert chosen.prose == "ゲンが綿入れを着込んだ若い娘を倒した。"
 
+    def test_killer_is_written_by_appearance_when_the_victim_is_unknown(self) -> None:
+        """会ったことのない人が倒されると被害者は「誰か」と書かれ、名前を知らない倒した人は見た目で書かれる。"""
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
+            turn_reader=InMemoryExpectationRepository(),
+            environment_name="山村",
+            names_by_player_id=NAMES,
+            appearances_by_player_id=LOOKS,
+        )
+        acquaintances.record_meeting(WITNESS, "ゲン")
+
+        chosen = _recorded_by(acquaintances, WITNESS)
+
+        assert chosen.prose == "髭の濃い大柄な人が誰かを倒した。"
+        assert "ゲン" not in str(chosen.structured)
+
     def test_killer_hidden_by_darkness_is_not_named_in_structured(self) -> None:
         """暗くて倒した人を見分けられないとき、structured に倒した人の名前を足さない。"""
         output = _formatter(lighting=LightingEnum.DARK).format(_downed(), WITNESS)
