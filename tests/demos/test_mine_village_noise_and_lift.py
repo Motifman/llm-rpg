@@ -508,6 +508,70 @@ class TestLiftRefusalTellsWhatIsMissing:
         assert not any(word in message for word in ("温", "燃料", "発電機", "準備"))
 
 
+_CONTROLS_INSIDE_THE_CAGE = "操作盤は籠の中にある。乗り込まないと、把手に手が届かない。"
+
+
+def _key_only(runtime) -> None:
+    _open_safe(runtime, _HARU)
+
+
+def _key_and_cold_generator(runtime) -> None:
+    _open_safe(runtime, _HARU)
+    _fuel_and_start_generator(runtime)
+
+
+def _key_and_warm_generator_short_of_fuel(runtime) -> None:
+    _open_safe(runtime, _HARU)
+    _fuel_and_start_generator(runtime)
+    _ticks(runtime, 1)
+    for _ in range((_CAN_FUEL - 1) // _PUMP_FUEL):
+        _act(runtime, _HARU, "machine_room", "pump", "run_pump")
+        _ticks(runtime, 1)
+    _ticks(runtime, _WARM_TICKS + 1)
+
+
+class TestLiftControlsAreInsideTheCage:
+    """昇降機の操作盤が籠の中にあることが、説明文と、籠の外から動かそうとしたときの断りの文から分かることを保証する (Issue #1613)。
+
+    `var/runs/mine_v1_006_r2` では説明文の「脇に操作盤があり」から「外から引ける」と推論され、
+    籠の外で把手を引いた人には鍵の文が先に返って、思い違いが正されなかった。
+    """
+
+    @pytest.mark.parametrize(
+        "prepare",
+        [
+            pytest.param(lambda runtime: None, id="no_key_generator_off"),
+            pytest.param(_key_only, id="key_generator_off"),
+            pytest.param(_key_and_cold_generator, id="key_not_warm"),
+            pytest.param(_key_and_warm_generator_short_of_fuel, id="key_short_of_fuel"),
+        ],
+    )
+    def test_someone_outside_the_cage_is_told_the_controls_are_inside_first(self, runtime, prepare) -> None:
+        """籠に乗り込んでいないハルが把手を引くと、鍵・温まり・燃料のどれが欠けていても、操作盤は籠の中にあるという文が返る。"""
+        prepare(runtime)
+
+        outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
+
+        assert outcome == "refused"
+        assert message == _CONTROLS_INSIDE_THE_CAGE
+
+    def test_lift_description_puts_the_controls_inside_the_cage(self) -> None:
+        """昇降機の説明文で操作盤を書く文は、操作盤が籠の中にあると書き、籠の脇とは書かない。"""
+        description = _object(_raw(), "lift_landing", "lift")["description"]
+        sentence = next(s for s in description.split("。") if "操作盤" in s)
+
+        assert "籠の中" in sentence
+        assert "脇" not in sentence
+
+    def test_every_refusal_of_start_lift_is_a_different_sentence(self) -> None:
+        """昇降機を動かす操作の断りの文はどれも違う。trace の行動の結果に残る文から、どの前提条件で断られたかが分かる。"""
+        lift = _object(_raw(), "lift_landing", "lift")
+        start = next(i for i in lift["interactions"] if i["action_name"] == "start_lift")
+        messages = [p["failure_message"] for p in start["preconditions"]]
+
+        assert len(set(messages)) == len(messages)
+
+
 class TestGeneratorWarmthIsHeard:
     """R4: 発電機が温まった tick に、機械室とその隣と昇降機の乗り場にいる人へ、温まったと書かない音の知らせが 1 回届くことを保証する。"""
 
