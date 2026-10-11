@@ -76,7 +76,7 @@ def _lacks_puzzle_input(
 
 
 def _precondition_refusal(
-    result: PredicateResult, interaction_parameters: dict[str, Any] | None
+    result: PredicateResult[InteractionCondition], interaction_parameters: dict[str, Any] | None
 ) -> InteractionNotAllowedException:
     cond = result.failed_predicate
     refusal_type = (
