@@ -204,6 +204,7 @@ explain_change を使うのは、前と今で同じ所の同じものを見て�
 - 命題 (create.text / revise.text / explain_change.text) は 50 字以内、命題形式 (例: 「タカシは信頼できる」「北の洞窟は危険」)
 - 個別シーンの再話ではなく、一般化された認識を書く
 - 確信度に応じて修飾を変える: 確信 → 言い切り / 仮説 → 「〜かもしれない」
+- evidence の text が推測の言い方 (「〜かもしれない」「〜だろう」「〜と思う」「〜はず」) なら、命題も推測の言い方で書く。推測の evidence をいくつまとめても言い切りにしない
 - プレイヤー・スポット・オブジェクトは必ず固有名詞で書く。P1, OBJ3 のような短縮ラベルは絶対に使わない
 - memo 由来の evidence は「一時的なタスクか、持続する知識か」をあなたが判定する。タスクなら discard、知識なら create/strengthen
 
@@ -290,7 +291,14 @@ source_kind が "hearsay" の evidence は、自分で確かめたことでは�
 ください。同じ話者でも話題によって信じ方を変えてよい (人の評判は疑うが地形情報は
 信じる、など)。自分が実際に体験して得た belief (shortlist の文面が一人称の体験で
 語られているもの) と食い違う伝聞は、伝聞のほうを discard するのが原則です。人づて
-一件で自分の体験を覆さないでください。"""
+一件で自分の体験を覆さないでください。
+伝聞を信じて create するとき、材料が伝聞だけなら、命題に話し手を残すこと (例:
+「ミオによれば、切り替え弁の目盛りが違うと昇降機は動かないかもしれない」)。話した
+人が推測で言ったことは、推測の言い方のまま書く。
+shortlist の hearsay_support_count は、support_count のうち伝聞の件数です。
+【文面の強さを証拠に合わせる】でヘッジを外すかを決めるときは、
+数える支持から hearsay_support_count の分を除くこと。伝聞の支持がいくら増えても、
+それだけを理由に言い切りへ言い直さないでください。"""
 
 
 # #1509: 外れた予期の材料に付く時系列の読み方。予期の清算が無効な run では時系列が
@@ -1067,6 +1075,9 @@ class BeliefConsolidationCoordinator:
             }
             for b in shortlist
         ]
+        if self._hearsay_enabled:
+            for row, b in zip(shortlist_payload, shortlist):
+                row["hearsay_support_count"] = b.hearsay_support_count
         user_content: dict[str, Any] = {
             "current_turn": current_turn,
             "evidence": evidence_payload,
