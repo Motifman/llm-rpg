@@ -102,11 +102,15 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
             event.target_player_id is not None
             and event.target_player_id.value == recipient_id.value
         )
+        target_player_name = (
+            self._resolve_entity_name(event.target_player_id)
+            if event.target_player_id is not None
+            else None
+        )
         if is_target:
             prose = f"{monster_name}があなたを睨み、追跡を始めた。"
-        elif event.target_player_id is not None:
-            target_name = self._resolve_entity_name(event.target_player_id)
-            prose = f"{monster_name}が{target_name}を狙って追跡を始めた。"
+        elif target_player_name is not None:
+            prose = f"{monster_name}が{target_player_name}を狙って追跡を始めた。"
         elif event.target_monster_id is not None:
             target_name = self._context.name_resolver.monster_name_by_monster_id(
                 event.target_monster_id
@@ -123,6 +127,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
                 event.target_player_id.value
                 if event.target_player_id is not None else None
             ),
+            "target_player_name": target_player_name,
             "target_monster_id": (
                 event.target_monster_id.value
                 if event.target_monster_id is not None else None

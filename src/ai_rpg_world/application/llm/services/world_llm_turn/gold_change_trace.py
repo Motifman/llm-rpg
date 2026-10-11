@@ -85,6 +85,7 @@ def wrap_with_gold_change(
         )
 
     _handler.records_gold_change = True  # type: ignore[attr-defined]
+    _handler.__wrapped__ = handler  # type: ignore[attr-defined]
     return _handler
 
 

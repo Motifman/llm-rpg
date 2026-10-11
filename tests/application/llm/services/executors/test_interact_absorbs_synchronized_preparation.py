@@ -15,6 +15,12 @@ import pytest
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
+    wrap_with_say_inline,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
+    adapt_executor_handler,
+)
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
@@ -85,14 +91,18 @@ def _executor(runtime) -> SpotGraphToolExecutor:
 
 
 def _interact(runtime, executor, player_id: PlayerId, object_str_id: str, action: str, **extra):
-    return executor._interact(
-        player_id.value,
+    handler = wrap_with_say_inline(
+        adapt_executor_handler(executor._interact), executor.speak_say_inline
+    )
+    return handler(
+        player_id,
         {
             "object_id": runtime.id_mapper.get_int("object", object_str_id),
             "action_name": action,
             "inner_thought": "弁を受け持つ",
             **extra,
         },
+        None,
     )
 
 

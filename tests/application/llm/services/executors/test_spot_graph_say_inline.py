@@ -4,18 +4,18 @@
 speech_service.speak が SAY channel で呼ばれることを確認する。
 
 設計確認ポイント:
-- speech_service 未注入なら say_inline 指定でも silent (本処理は走る)
+- speech_service 未注入、または speak が断られたら NOT_DELIVERED を返す
 - 200 char 上限を超えると切り詰める
-- 空文字 / 未指定 / 型違反は no-op
-- speech_service.speak が例外を投げても親 action は success 維持 (fail-safe)
+- 空文字 / 未指定 / 型違反は NOTHING_TO_SAY
+- handler 単体は発言を出さない。dispatch の包みが行動の結果を問わず出す (D1601)
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+    SayInlineDelivery,
     SpotGraphToolExecutor,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
@@ -76,49 +76,66 @@ def _build_executor(*, speech_service, runtime=None):
     )
 
 
-class TestSayInlineHelper:
-    """``_maybe_emit_say_inline`` の境界条件 (#404 後続)。"""
+class TestSpeakSayInline:
+    """``speak_say_inline`` が発言を出し、出せたかを返す境界条件を保証する。"""
 
-    def test_speech_service_uninjected_op(self) -> None:
-        """speech_service=None で say_inline 指定 → 例外なく no-op。"""
+    def test_uninjected_speech_service_reports_not_delivered(self) -> None:
+        """speech_service が未注入のとき、例外を投げず NOT_DELIVERED を返す。"""
         executor = _build_executor(speech_service=None)
-        # 例外を投げないことを確認 (return value なし)
-        executor._maybe_emit_say_inline(1, {"say_inline": "hello"})
 
-    def test_does_not_call_say_inline_speak_2(self) -> None:
-        """say inline 未指定なら speak 呼ばれない。"""
+        delivery = executor.speak_say_inline(1, {"say_inline": "hello"})
+
+        assert delivery is SayInlineDelivery.NOT_DELIVERED
+
+    def test_missing_say_inline_does_not_speak(self) -> None:
+        """say_inline が無いとき、speak を呼ばず NOTHING_TO_SAY を返す。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
-        executor._maybe_emit_say_inline(1, {})
+
+        delivery = executor.speak_say_inline(1, {})
+
+        assert delivery is SayInlineDelivery.NOTHING_TO_SAY
         speech.speak.assert_not_called()
 
-    def test_does_not_call_say_inline_empty_string_speak(self) -> None:
-        """say inline 空文字なら speak 呼ばれない。"""
+    def test_blank_say_inline_does_not_speak(self) -> None:
+        """空文字と空白だけの say_inline は、speak を呼ばず NOTHING_TO_SAY を返す。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
-        executor._maybe_emit_say_inline(1, {"say_inline": ""})
-        executor._maybe_emit_say_inline(1, {"say_inline": "   "})
+
+        deliveries = [
+            executor.speak_say_inline(1, {"say_inline": ""}),
+            executor.speak_say_inline(1, {"say_inline": "   "}),
+        ]
+
+        assert deliveries == [SayInlineDelivery.NOTHING_TO_SAY] * 2
         speech.speak.assert_not_called()
 
-    def test_does_not_call_say_inline_speak(self) -> None:
-        """JSON で number 等が混入しても落ちない。"""
+    def test_non_string_say_inline_does_not_speak(self) -> None:
+        """JSON で数値や null が混ざった say_inline は、落ちずに NOTHING_TO_SAY を返す。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
-        executor._maybe_emit_say_inline(1, {"say_inline": 42})  # type: ignore[dict-item]
-        executor._maybe_emit_say_inline(1, {"say_inline": None})
+
+        deliveries = [
+            executor.speak_say_inline(1, {"say_inline": 42}),  # type: ignore[dict-item]
+            executor.speak_say_inline(1, {"say_inline": None}),
+        ]
+
+        assert deliveries == [SayInlineDelivery.NOTHING_TO_SAY] * 2
         speech.speak.assert_not_called()
 
-    def test_say_inline_value_say_channel_speak(self) -> None:
-        """say inline 有効値で SAY channel で speak される。"""
+    def test_valid_say_inline_speaks_on_the_say_channel(self) -> None:
+        """有効な say_inline は宛先なしの SAY channel で speak され、SPOKEN を返す。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
-        executor._maybe_emit_say_inline(1, {"say_inline": "先に行く"})
+
+        delivery = executor.speak_say_inline(1, {"say_inline": "先に行く"})
+
+        assert delivery is SayInlineDelivery.SPOKEN
         speech.speak.assert_called_once()
         cmd = speech.speak.call_args[0][0]
         assert cmd.speaker_player_id == 1
         assert cmd.content == "先に行く"
         assert cmd.channel == SpeechChannel.SAY
-        # whisper 用の target は None (= 同 spot 内 broadcast)
         assert cmd.target_player_id is None
 
     def test_200_char_exactly_speaks_without_truncation(self) -> None:
@@ -126,17 +143,21 @@ class TestSayInlineHelper:
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
         text = "あ" * SAY_INLINE_MAX_LENGTH
-        executor._maybe_emit_say_inline(1, {"say_inline": text})
+
+        executor.speak_say_inline(1, {"say_inline": text})
+
         cmd = speech.speak.call_args[0][0]
         assert cmd.content == text
         assert len(cmd.content) == SAY_INLINE_MAX_LENGTH
 
-    def test_200_char_exceeds(self) -> None:
-        """LLM が schema を無視して長文を返した場合の防御。"""
+    def test_say_inline_over_the_cap_is_truncated(self) -> None:
+        """LLM が schema を無視して 201 字以上を返すと、200 字に切り詰めて発話する。"""
         speech = MagicMock()
         executor = _build_executor(speech_service=speech)
         long_text = "あ" * (SAY_INLINE_MAX_LENGTH + 1)
-        executor._maybe_emit_say_inline(1, {"say_inline": long_text})
+
+        executor.speak_say_inline(1, {"say_inline": long_text})
+
         cmd = speech.speak.call_args[0][0]
         assert len(cmd.content) == SAY_INLINE_MAX_LENGTH
 
@@ -144,16 +165,18 @@ class TestSayInlineHelper:
         """実測の段取り発話が専用ターンへ戻らないよう、上限は speak 中央値 104 字を超える。"""
         assert SAY_INLINE_MAX_LENGTH >= 104
 
-    def test_speak_exception_does_not_fail_parent_action(self) -> None:
-        """fail-safe: travel/give が say_inline 由来で巻き戻るのを防ぐ。"""
+    def test_refused_speak_reports_not_delivered(self) -> None:
+        """speech_service.speak が例外を投げると、例外を外へ出さず NOT_DELIVERED を返す。"""
         speech = MagicMock()
         speech.speak.side_effect = RuntimeError("speech boom")
         executor = _build_executor(speech_service=speech)
-        # 例外を投げないこと
-        executor._maybe_emit_say_inline(1, {"say_inline": "急ぐ"})
 
-    def test_wait_emits_say_inline_after_successful_wait(self) -> None:
-        """wait 成功時、留まりながらの一言が SAY channel で発話される。"""
+        delivery = executor.speak_say_inline(1, {"say_inline": "急ぐ"})
+
+        assert delivery is SayInlineDelivery.NOT_DELIVERED
+
+    def test_wait_handler_alone_does_not_speak(self) -> None:
+        """wait の handler 単体は発言を出さない。発言は dispatch の包みが 1 回だけ出す (D1601)。"""
         speech = MagicMock()
         runtime = MagicMock()
         runtime.do_wait.return_value = 12
@@ -161,42 +184,11 @@ class TestSayInlineHelper:
 
         result = executor._wait(
             1,
-            {
-                "reason": "夜明けを待つ",
-                "say_inline": "夜明けまでここで待とう",
-                "inner_thought": "疲労を抑える",
-            },
+            {"reason": "夜明けを待つ", "say_inline": "夜明けまでここで待とう", "inner_thought": "疲労を抑える"},
         )
 
         assert result.success is True
-        speech.speak.assert_called_once()
-        cmd = speech.speak.call_args[0][0]
-        assert cmd.content == "夜明けまでここで待とう"
-        assert cmd.channel == SpeechChannel.SAY
-
-    def test_explore_emits_say_inline_after_successful_explore(self) -> None:
-        """explore 成功時、探索しながらの報告が SAY channel で発話される。"""
-        speech = MagicMock()
-        runtime = MagicMock()
-        runtime.do_explore.return_value = SimpleNamespace(
-            discovery_descriptions=("流木を見つけた",),
-            has_remaining_discoverable_items=False,
-        )
-        executor = _build_executor(speech_service=speech, runtime=runtime)
-
-        result = executor._explore(
-            1,
-            {
-                "say_inline": "流木があった。火の材料にできる",
-                "inner_thought": "素材を探す",
-            },
-        )
-
-        assert result.success is True
-        speech.speak.assert_called_once()
-        cmd = speech.speak.call_args[0][0]
-        assert cmd.content == "流木があった。火の材料にできる"
-        assert cmd.channel == SpeechChannel.SAY
+        speech.speak.assert_not_called()
 
 
 class TestSayInlineToolDef:
