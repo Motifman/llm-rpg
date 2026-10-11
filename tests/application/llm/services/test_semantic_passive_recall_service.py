@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.services.semantic_passive_recall_service impor
     DEFAULT_RECENCY_TAU_SEC,
     SemanticPassiveRecallService,
     SemanticRecallCandidate,
+    belief_recall_line,
     format_semantic_recall_section,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -57,6 +58,8 @@ def _entry(
     confidence: float = 0.6,
     evidence: tuple = ("ep-1",),
     status: str = "active",
+    support: tuple = (),
+    hearsay_support_count: int = 0,
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
@@ -68,6 +71,8 @@ def _entry(
         importance_score=importance_score,
         tags=tags,
         status=status,
+        support_evidence_ids=support,
+        hearsay_support_count=hearsay_support_count,
     )
 
 
@@ -374,3 +379,64 @@ class TestFormatSemanticRecallSection:
         assert format_semantic_recall_section([first]) != format_semantic_recall_section(
             [first, second]
         )
+
+
+class TestBeliefRecallLineShowsHearsay:
+    """belief_recall_line が、信念の支持のうち人から聞いた話の件数を【関連する学び】の行に出す挙動を保証する (#1602)。"""
+
+    def test_belief_without_hearsay_support_is_shown_as_plain_text(self) -> None:
+        """伝聞の支持が 0 件なら、行は「- 文」だけで出どころの印を付けない。"""
+        entry = _entry(entry_id="s1", text="湿った薪は燃えにくい", support=("e1", "e2"))
+
+        assert belief_recall_line(entry) == "- 湿った薪は燃えにくい"
+
+    def test_belief_supported_only_by_hearsay_is_marked_as_heard(self) -> None:
+        """支持がすべて伝聞なら、文が言い切りでも行の末尾に「(人から聞いた話)」を付ける。"""
+        entry = _entry(
+            entry_id="s1",
+            text="切り替え弁の目盛りが正しくないと昇降機に動力が来ない",
+            support=("e1", "e2", "e3", "e4"),
+            hearsay_support_count=4,
+        )
+
+        assert belief_recall_line(entry) == (
+            "- 切り替え弁の目盛りが正しくないと昇降機に動力が来ない (人から聞いた話)"
+        )
+
+    def test_belief_partly_supported_by_hearsay_shows_how_many_were_heard(self) -> None:
+        """支持の一部が伝聞なら、支持の件数のうち何件が人から聞いた話かを行の末尾に出す。"""
+        entry = _entry(
+            entry_id="s1",
+            text="切り替え弁の目盛りが正しくないと昇降機に動力が来ない",
+            support=("e1", "e2", "e3", "e4", "e5", "e6"),
+            hearsay_support_count=5,
+        )
+
+        assert belief_recall_line(entry) == (
+            "- 切り替え弁の目盛りが正しくないと昇降機に動力が来ない"
+            " (根拠 6 件のうち 5 件は人から聞いた話)"
+        )
+
+    def test_section_marks_hearsay_beliefs(self) -> None:
+        """format_semantic_recall_section も同じ印を付け、伝聞の無い信念には付けない。"""
+        heard = SemanticRecallCandidate(
+            entry=_entry(
+                entry_id="a", text="弁の目盛りが大事", support=("e1",), hearsay_support_count=1
+            ),
+            score=1.0,
+            recency=0.5,
+            importance=0.5,
+            relevance=0.0,
+        )
+        own = SemanticRecallCandidate(
+            entry=_entry(entry_id="b", text="籠は鍵で動く", support=("e2",)),
+            score=0.9,
+            recency=0.5,
+            importance=0.5,
+            relevance=0.0,
+        )
+
+        assert format_semantic_recall_section([heard, own]).splitlines() == [
+            "- 弁の目盛りが大事 (人から聞いた話)",
+            "- 籠は鍵で動く",
+        ]
