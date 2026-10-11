@@ -120,6 +120,15 @@ def _heard(wiring, player_id: PlayerId) -> list[str]:
     return [e.output.prose for e in observations if _WORDS[:10] in e.output.prose]
 
 
+def _delivers_say_inline(handler) -> bool:
+    """handler か、それが包んでいる handler のどれかが発言を出す包みかを返す。"""
+    while handler is not None:
+        if getattr(handler, "delivers_say_inline", False):
+            return True
+        handler = getattr(handler, "__wrapped__", None)
+    return False
+
+
 class TestWordsWithARefusedActionAreHeard:
     """断られた行動に添えた発言が、聞こえる範囲の人に届くことを保証する。"""
 
@@ -262,9 +271,7 @@ class TestEveryToolWithWordsDeliversThem:
             }
 
             unwrapped = {
-                name
-                for name in offering
-                if not getattr(wiring._tool_handlers.get(name), "delivers_say_inline", False)
+                name for name in offering if not _delivers_say_inline(wiring._tool_handlers.get(name))
             }
 
             assert offering

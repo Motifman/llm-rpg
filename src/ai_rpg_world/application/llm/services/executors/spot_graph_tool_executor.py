@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 import copy
 import logging
 from collections.abc import Callable
+from enum import Enum
 from typing import Any
 
 from ai_rpg_world.application.common.command_context_event_publisher import (
@@ -113,6 +114,14 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class SayInlineDelivery(Enum):
+    """行動に添えた発言を出した結果。"""
+
+    NOTHING_TO_SAY = "nothing_to_say"
+    SPOKEN = "spoken"
+    NOT_DELIVERED = "not_delivered"
 
 
 class _UseItemRejected(Exception):
@@ -422,9 +431,6 @@ class SpotGraphToolExecutor:
         # 注入されない構成では drop/pickup ハンドラは「未対応」エラーを返す
         # (後方互換 + minimal wiring 用)。
         self._item_transfer_service = item_transfer_service
-        # 実験 #29 後続: travel_to / give_item / drop_item / pickup_item の
-        # ``say_inline`` パラメータ用に speech_service を保持。未注入なら
-        # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
         self._speech_service = speech_service
         self._use_item_command_scope_factory = use_item_command_scope_factory
         self._tend_to_player_command_scope_factory = (
@@ -615,17 +621,16 @@ class SpotGraphToolExecutor:
         統合方針 (Option B): 既に正しい副作用を全部持っている ``runtime.do_move``
         (start_travel_to_spot + _process_graph_events + 同一 spot 短絡 +
         _record_action_result の scene_boundary + subjective 記録) を単一の
-        真実源として再利用し、新経路が付加した価値 (say_inline / 疲労) だけを
+        真実源として再利用し、新経路が付加した価値 (疲労) だけを
         上乗せする。
 
         処理順:
         1. 疲労 100 block (新経路の価値)
         2. destination_spot_id validation (resolver 後の canonical int)
         3. runtime.do_move — 移動開始 + graph events + record_action_result
-        4. say_inline emit (新経路の価値、旧経路には無かった)
-        5. 疲労 +1 蓄積 (新経路の価値)
-        6. display_name で成功 message 組立 (旧経路と揃える)
-        7. inner_thought 空警告 (旧経路と揃える)
+        4. 疲労 +1 蓄積 (新経路の価値)
+        5. display_name で成功 message 組立 (旧経路と揃える)
+        6. inner_thought 空警告 (旧経路と揃える)
         """
         # PR β: 疲労 limit (100) で重い tool は block。
         blocked = self._is_exhausted_and_block(player_id, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO)
@@ -667,9 +672,6 @@ class SpotGraphToolExecutor:
                 **action_history_projection_kwargs(args),
                 **subjective,
             )
-            # 新経路の付加価値: 行動しながらの一言 (say_inline)。失敗しても
-            # travel 結果は変えない (silent fail-safe)。
-            self._maybe_emit_say_inline(player_id, args)
             # PR β: travel は 1 leg = 1 fatigue。
             self._apply_fatigue_safe(
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.TRAVEL_LEG)
@@ -703,36 +705,30 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _maybe_emit_say_inline(
+    def speak_say_inline(
         self,
         player_id: int,
         args: dict[str, Any],
-    ) -> None:
-        """``say_inline`` (任意短発話) を SAY channel で発火する。
+    ) -> SayInlineDelivery:
+        """``say_inline`` (任意短発話) を SAY channel で出し、届いたかを返す。
 
-        実験 #29 後続: 行動ツールに「行動しながらの一言」を
-        付けられるようにするためのヘルパ。
-
-        条件:
-        - args["say_inline"] が非空 str
-        - speech_service が注入されている
-
-        失敗 (例外 / speech_service 未注入 / 空文字) は全部 silent で、
-        親アクションの結果には影響させない。
+        行動の結果を問わず dispatch が 1 回だけ呼ぶ (D1601)。handler の中では
+        呼ばない。
         """
-        if self._speech_service is None:
-            return
         raw = args.get("say_inline")
         if not isinstance(raw, str):
-            return
+            return SayInlineDelivery.NOTHING_TO_SAY
         content = raw.strip()
         if not content:
-            return
+            return SayInlineDelivery.NOTHING_TO_SAY
+        if self._speech_service is None:
+            logger.warning(
+                "say_inline not delivered: speech_service is not wired (player_id=%s)",
+                player_id,
+            )
+            return SayInlineDelivery.NOT_DELIVERED
         # 文字数上限は tool schema 側で maxLength として宣言済みだが、
-        # 防御的にここでも切り詰める (LLM が JSON を雑に返した場合の保険)。
-        # レビュー反映 (#422 MEDIUM-1): 定数は module-level import に揃えた。
-        # `len()` は Unicode コードポイント基準。サロゲートペア絵文字は
-        # 表示上の文字数とズレる可能性があるが、survival シナリオでは実害なし。
+        # LLM が schema を無視して長文を返した場合に備えてここでも切り詰める。
         if len(content) > SAY_INLINE_MAX_LENGTH:
             logger.debug(
                 "say_inline truncated: player_id=%s len=%d → %d",
@@ -748,16 +744,16 @@ class SpotGraphToolExecutor:
                     target_player_id=None,
                 )
             )
-        except Exception as e:
-            # 親 action は成功扱いを維持する。inline speech 失敗で travel /
-            # give が巻き戻ると LLM 体験が壊れる。
-            # レビュー反映 (#422 MEDIUM-3): silent ではなく debug ログを残し、
-            # デバッグ時に「なぜ say_inline が届かなかったか」を追えるようにする。
-            logger.debug(
-                "say_inline speak failed: player_id=%s err=%s",
-                player_id, str(e),
+        except Exception:
+            # 発話が断られても親 action の結果は変えない。届かなかったことは
+            # 呼び出し側が本人の結果文に書き足す。
+            logger.warning(
+                "say_inline not delivered: speak failed (player_id=%s)",
+                player_id,
                 exc_info=True,
             )
+            return SayInlineDelivery.NOT_DELIVERED
+        return SayInlineDelivery.SPOKEN
 
     def _set_sub_location(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         raw = args.get("sub_location_id")
@@ -799,8 +795,7 @@ class SpotGraphToolExecutor:
         2. discovery_descriptions を組み立て
         3. 発見なしの場合、可視 object 一覧を併記 (F2: LLM が「部屋に何もない」
            と誤解して interact しなくなる癖の対策)
-        4. say_inline emit
-        5. inner_thought 空警告 (旧 handler と揃える)
+        4. inner_thought 空警告 (旧 handler と揃える)
         """
         if self._runtime is None:
             return LlmCommandResultDto(
@@ -844,7 +839,6 @@ class SpotGraphToolExecutor:
                         f"{exhausted_hint}"
                         "(この場所に interactable なオブジェクトは無い)"
                     )
-            self._maybe_emit_say_inline(player_id, args)
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_EXPLORE,
                 args,
@@ -906,10 +900,7 @@ class SpotGraphToolExecutor:
         # 別ツールに用意した入口は 13 run で一度も選ばれなかった。対象行に出ている
         # 名前を interact に渡すのがエージェントの自然な形で、そこに登録層を繋ぐ。
         if action in self._preparable_action_names():
-            result = self._prepare_action(player_id, args, runtime_context)
-            if result.success:
-                self._maybe_emit_say_inline(player_id, args)
-            return result
+            return self._prepare_action(player_id, args, runtime_context)
         if self._runtime is None:
             return LlmCommandResultDto(
                 success=False,
@@ -938,9 +929,6 @@ class SpotGraphToolExecutor:
                 **action_history_projection_kwargs(args),
                 **subjective,
             )
-            # PR-ι: interact しながらの一言 (say_inline)。失敗しても親 action
-            # は success 維持 (silent fail-safe)。
-            self._maybe_emit_say_inline(player_id, args)
             # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
             self._apply_fatigue_safe(
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
@@ -1056,7 +1044,6 @@ class SpotGraphToolExecutor:
             self._apply_fatigue_safe(
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
             )
-            self._maybe_emit_say_inline(player_id, args)
             message = "; ".join(result.messages) if result.messages else "完了"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -1145,7 +1132,6 @@ class SpotGraphToolExecutor:
                 **action_history_projection_kwargs(args),
                 **extract_subjective_action_fields(args),
             )
-            self._maybe_emit_say_inline(player_id, args)
             self._apply_fatigue_safe(
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
             )
@@ -1215,8 +1201,6 @@ class SpotGraphToolExecutor:
                         context
                     )
                     command_executor._use_item_strict_effects = True
-                    # 発話は世界状態の確定後にだけ行う。
-                    command_executor._speech_service = None
                     result = command_executor._execute_use_item_in_scope(
                         player_id,
                         args,
@@ -1233,7 +1217,6 @@ class SpotGraphToolExecutor:
                     stage="command_scope",
                 )
 
-            self._maybe_emit_say_inline(player_id, args)
             return result
 
         return _not_wired_failure("use_item")
@@ -1412,8 +1395,6 @@ class SpotGraphToolExecutor:
                     f"{name}を食べてしまった。腐っていた——胃の奥が灼ける。"
                     f"（{damage} ダメージ。それでも少し空腹は和らいだ）"
                 )
-                # PR-ι: 使いながらの一言 (silent fail-safe)
-                self._maybe_emit_say_inline(player_id, args)
                 return LlmCommandResultDto(
                     success=True,
                     message=base,
@@ -1440,8 +1421,6 @@ class SpotGraphToolExecutor:
             base = f"{name}を使用した。"
             if item_instance.item_spec.consume_effect is not None:
                 base += f"（効果が適用された）"
-            # PR-ι: 使いながらの一言 (silent fail-safe)
-            self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
                 message=base,
@@ -1845,7 +1824,6 @@ class SpotGraphToolExecutor:
                 PlayerId(player_id), slot_id,
                 witness_policy=policy,
             )
-            self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "地面に置いた。"
             return LlmCommandResultDto(
                 success=True, message=msg
@@ -1900,7 +1878,6 @@ class SpotGraphToolExecutor:
                 PlayerId(player_id), ItemInstanceId.create(iid_int),
                 witness_policy=policy,
             )
-            self._maybe_emit_say_inline(player_id, args)
             msg = "; ".join(result.messages) if result.messages else "拾い上げた。"
             return LlmCommandResultDto(
                 success=True, message=msg
@@ -1949,7 +1926,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         target_name = args.get("target_display_name") or "相手"
         return LlmCommandResultDto(
             success=True,
@@ -1991,7 +1967,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         offer = settlement.offer
         return LlmCommandResultDto(
             success=True,
@@ -2034,7 +2009,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         return LlmCommandResultDto(
             success=True,
             message="持ちかけられた取引を断った。相手の品はまた使えるようになる。",
@@ -2164,7 +2138,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         verb = "売った" if selling else "買った"
         message = (
             f"{result.merchant_name}に{result.item_name}を{result.quantity}つ{verb}"
@@ -2248,7 +2221,6 @@ class SpotGraphToolExecutor:
 
         view = service.board_view_for(PlayerId(player_id))
         rows, own_orders = market_entries_from_view(view, service.item_display_name)
-        self._maybe_emit_say_inline(player_id, args)
         return LlmCommandResultDto(
             success=True,
             message=market_board_text(view, service.item_display_name),
@@ -2302,7 +2274,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         item_name = str(args.get("item_label"))
         return LlmCommandResultDto(
             success=True,
@@ -2350,7 +2321,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         breakdown = "、".join(
             f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
             for s in purchase.settlements
@@ -2415,7 +2385,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         item_name = str(args.get("item_label"))
         return LlmCommandResultDto(
             success=True,
@@ -2458,7 +2427,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         breakdown = "、".join(
             f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
             for s in sale.settlements
@@ -2531,7 +2499,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         direction = "下げた" if order.unit_price_gold < before else "上げた"
         return LlmCommandResultDto(
             success=True,
@@ -2576,7 +2543,6 @@ class SpotGraphToolExecutor:
         except Exception as exc:  # noqa: BLE001
             return exception_result(exc)
 
-        self._maybe_emit_say_inline(player_id, args)
         return LlmCommandResultDto(
             success=True,
             message=(
@@ -2602,9 +2568,6 @@ class SpotGraphToolExecutor:
         ``gives_resolved`` の各 entry を順に処理し、結果を 1 行 1 entry の
         サマリ message に集約する。**partial success**: 一部失敗しても残りは
         進行し、success フラグは「1 件でも成功したか」で立つ。
-
-        say_inline は **全 give が終わった後** に 1 度だけ発火する
-        (もし一部成功なら整合性のため発火する)。
 
         エラー処理は domain-specific exception ごとに error_code を分けて
         LLM が次アクションを取れる形にする (PR-α):
@@ -2800,9 +2763,6 @@ class SpotGraphToolExecutor:
                 trace_payload=trace_payload,
             )
 
-        # 1 件でも成功したら success=True とし、say_inline を発火する
-        # (受け渡しが少なくとも 1 件成立したので、行動しながらの一言は自然)
-        self._maybe_emit_say_inline(player_id, args)
         parts = ok_lines + ng_lines
         msg = "give_item 結果:\n" + "\n".join(parts)
         return LlmCommandResultDto(
@@ -2888,8 +2848,6 @@ class SpotGraphToolExecutor:
             base = f"{display_name}に {outcome.damage} のダメージを与えた。"
             if outcome.target_incapacitated:
                 base += " 致命傷で倒した。"
-            # PR-ι: 戦闘中の一言 (silent fail-safe)。「離れろ！」等を仲間に伝える。
-            self._maybe_emit_say_inline(player_id, args)
             # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
             self._apply_fatigue_safe(
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.ATTACK)
@@ -2989,7 +2947,6 @@ class SpotGraphToolExecutor:
             self._recover_fatigue_safe(
                 player_id, _FATIGUE_POLICY.recovery_of(ExertionKind.WAIT)
             )
-            self._maybe_emit_say_inline(player_id, args)
             suffix = f"（理由: {reason}）" if reason else ""
             base = f"しばらく行動を控えて、様子を見た{suffix}"
             return with_inner_thought_empty_warning(
@@ -3114,8 +3071,6 @@ class SpotGraphToolExecutor:
                     command_executor._event_publisher = CommandContextEventPublisher(
                         context
                     )
-                    # 発話はstatusとeventの確定後にだけ行う。
-                    command_executor._speech_service = None
                     result = command_executor._execute_tend_to_player_in_scope(
                         player_id,
                         args,
@@ -3132,7 +3087,6 @@ class SpotGraphToolExecutor:
                     stage="command_scope",
                 )
 
-            self._maybe_emit_say_inline(player_id, args)
             return result
 
         return _not_wired_failure("tend_to_player")
@@ -3252,11 +3206,6 @@ class SpotGraphToolExecutor:
                 f"{display_name} を介抱して意識を取り戻させた。"
                 f"（HP {target.hp.value}/{target.base_stats.max_hp}）"
             )
-            # PR-ι: 介抱しながらの一言 (「大丈夫か！」「起きろ！」など)。
-            # 同 spot の第三者にも SAY として届くので、他プレイヤーが
-            # 「誰かが介抱している」を耳で認識できる (Q3 の直接解消)。
-            # silent fail-safe: speak が例外を投げても親 action は success 維持。
-            self._maybe_emit_say_inline(player_id, args)
             return LlmCommandResultDto(
                 success=True,
                 message=base,
