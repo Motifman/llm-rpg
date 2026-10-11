@@ -327,6 +327,7 @@ class LiteLLMClient(
         openrouter_quantization: str | None = None,
         openrouter_require_params: bool = False,
         reasoning_effort: str = _DEFAULT_REASONING_EFFORT,
+        max_output_tokens: int | None = None,
         wall_cap_seconds: float | None = None,
         rate_limit_retry_attempts: int = _DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS,
         rate_limit_retry_base_sleep: float = _DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP,
@@ -376,6 +377,12 @@ class LiteLLMClient(
         self._reasoning_block: dict[str, Any] | None = _build_reasoning_block(
             self._reasoning_effort
         )
+        # thinking のトークン数も出力の上限に数えられる。OpenRouter の
+        # reasoning.max_tokens は effort と同時に送れず、DeepSeek に効くかも
+        # ドキュメントに無いので、どの provider でも効く top-level で抑える (#1595)。
+        if max_output_tokens is not None and max_output_tokens < 1:
+            raise ValueError("max_output_tokens must be 1 or greater")
+        self._max_output_tokens = max_output_tokens
 
         # OpenRouter は api_base が openrouter ドメインかで判定する。
         # ``extra_body.usage.include=True`` を付けると response.usage.cost に
@@ -659,6 +666,8 @@ class LiteLLMClient(
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
+            if self._max_output_tokens is not None:
+                completion_kw["max_tokens"] = self._max_output_tokens
             if self._is_openrouter_base and session_id is not None:
                 normalized_session_id = session_id.strip()
                 if not normalized_session_id:
