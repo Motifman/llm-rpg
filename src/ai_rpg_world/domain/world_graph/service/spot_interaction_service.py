@@ -467,10 +467,12 @@ class SpotInteractionService:
             return True, None
 
         if t == InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH:
-            if not cond.puzzle_input_key:
+            # 候補の「が要る」は前後の空白を除いたキーを出すので、読むキーもそろえる。
+            input_key = (cond.puzzle_input_key or "").strip()
+            if not input_key:
                 return False, cond.failure_message or "パズル入力キーがありません"
             params = interaction_parameters or {}
-            user_input = params.get(cond.puzzle_input_key)
+            user_input = params.get(input_key)
             expected = cond.required_state or {}
             if "answer" not in expected:
                 return False, cond.failure_message or "パズル答えが設定されていません"
@@ -478,7 +480,7 @@ class SpotInteractionService:
                 # 番号違いの failure_message は「入力して試した」場面を書いている。
                 # キーが無いのは呼び方の誤りなので、直すのに要るキーを名指す (D1591)。
                 return False, (
-                    f"何を入れるか、parameters の {json.dumps(cond.puzzle_input_key, ensure_ascii=False)} "
+                    f"何を入れるか、parameters の {json.dumps(input_key, ensure_ascii=False)} "
                     "で指定してください。"
                 )
             expected_value = expected["answer"]
