@@ -130,10 +130,10 @@ class TestFindingTheDead:
 
 
 class TestAfterMeeting:
-    """会ったあとの相手が倒れたら、遠くの気配も、倒れているのを見つけた観測も名前付きで届くことを保証する。"""
+    """会ったあとの相手が倒れたら、遠くの気配も、倒れているのを見つけた観測も届くことを保証する。"""
 
-    def test_finding_an_acquaintance_lying_there_names_them(self) -> None:
-        """西の野営地でゲンジと会ってから峠に戻ったミナトが、倒れたゲンジのところへ戻ると「ゲンジが倒れているのを見つけた」と残る。"""
+    def test_finding_someone_met_lying_there_describes_them(self) -> None:
+        """西の野営地でゲンジと会ってから峠に戻ったミナトが、倒れたゲンジのところへ戻ると、名前は知らないので見た目で「髭の濃い大柄な人が倒れているのを見つけた」と残る (#1581)。"""
         runtime = create_world_runtime(_SCENARIO)
         ids = _ids_by_name(runtime)
         _walk(runtime, ids["ミナト"], "pass", "camp_west", "pass")
@@ -142,7 +142,7 @@ class TestAfterMeeting:
 
         runtime.build_full_prompt(ids["ミナト"])
 
-        assert "ゲンジが倒れているのを見つけた。" in _recent_events(runtime, ids["ミナト"])
+        assert "髭の濃い大柄な人が倒れているのを見つけた。" in _recent_events(runtime, ids["ミナト"])
 
     def test_remote_acquaintance_going_down_is_felt(self) -> None:
         """西の野営地でゲンジと会ってから峠に戻ったミナトには、ゲンジが倒れると「遠くで誰かが倒れた気配」が届く。"""

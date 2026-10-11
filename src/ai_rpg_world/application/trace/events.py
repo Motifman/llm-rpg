@@ -194,6 +194,9 @@ class TraceEventKind:
     #   - failures: list[{being_id, error}]
     #   - expectation_counts: SNAPSHOT_LOAD と同じ形。保存できた Being ごと
     SNAPSHOT_LOAD = "snapshot_load"
+    # 名前を知らずに会った相手の名前を知った (#1581)。payload: learned_name /
+    # appearance (それまでの呼び方) / how (「名乗り」か「呼びかけ」)。
+    NAME_LEARNED = "name_learned"
     SNAPSHOT_SAVE = "snapshot_save"
     # シナリオの round_assignment で player に割り当てた枠 (#1514)。宣言の無い
     # シナリオでは出ない。payload: round / seed / assignments: list[{player_id,

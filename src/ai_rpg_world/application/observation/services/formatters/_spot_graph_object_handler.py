@@ -590,6 +590,9 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 "quantity": event.quantity,
                 "unit_price": event.unit_price,
                 "old_unit_price": event.old_unit_price,
+                # 本文に出る相手も参加者として書く。受け手が名前を知らなければ、
+                # 記録に入る入口で見た目に置き換わる (#1581)。
+                **({"counterparty": seller} if kind == "bought" else {}),
             },
             observation_category="social",
             # 板の動きで手番は起こさない。知って、次の自分の手番で動けばよい。

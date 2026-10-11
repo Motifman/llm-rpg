@@ -10,6 +10,7 @@
 - ``leak``: エージェントへの文に、内部の番号やシナリオの ID が出た
 - ``check``: シナリオごとに足した検査 (``extra_checks``) が文を返した
 - ``unreadable_candidates``: 候補表にスタブが読み戻せない行があった。でたらめな行動が黙って減る
+- ``stranger_name``: 手番の人が名前を知らない相手の名前が、その人への文に出た (#1581)
 
 漏れは、メッセージの本文とツール定義の説明文の両方で探す。Issue にしてまだ直っていない穴は
 ``KNOWN_HOLES`` に書く。見つけても run を失敗にせず、Issue 番号を添えて出す。
@@ -63,6 +64,7 @@ class TurnView:
 
     tick: int
     texts: tuple[str, ...]
+    player_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,8 @@ class FuzzResult:
     reached_tick: int = 0
     actions: list[FuzzAction] = field(default_factory=list)
     findings: list[FuzzFinding] = field(default_factory=list)
+    #: 名前を知らない相手が、見た目で文に出た手番の数。0 なら ``stranger_name`` の検査は何も見ていない。
+    strangers_seen: int = 0
 
     @property
     def failed(self) -> bool:
@@ -245,6 +249,34 @@ def tool_texts(tools: Sequence[Mapping[str, Any]]) -> list[str]:
 
     walk(list(tools))
     return texts
+
+
+_SESSION_PLAYER = re.compile(r":p(\d+)$")
+
+
+def player_of_session(session_id: object) -> int | None:
+    """LLM 呼び出しの会話 ID の末尾 (``:p<番号>``) から、手番の人を読む。"""
+    match = _SESSION_PLAYER.search(session_id) if isinstance(session_id, str) else None
+    return int(match.group(1)) if match else None
+
+
+def stranger_names_in(
+    texts: Iterable[str], unknown: Mapping[str, str]
+) -> tuple[list[str], bool]:
+    """名前を知らない相手 (名前 → 見た目) の名前が出ている行と、見た目が 1 つでも出ていたかを返す。
+
+    聞いた言葉 (「」の中) に出る名前は、そのまま聞こえてよいので数えない。
+    """
+    found: list[str] = []
+    seen = False
+    for text in texts:
+        for line in text.splitlines():
+            outside = re.sub(r"「[^」]*」|『[^』]*』", "", line)
+            if any(name in outside for name in unknown):
+                found.append(line.strip())
+            if any(look in line for look in unknown.values()):
+                seen = True
+    return found, seen
 
 
 def leak_shape(line: str) -> str:
@@ -402,6 +434,22 @@ def _drive(
             def invoke(self, messages, tools, tool_choice="required", **kwargs):  # type: ignore[override]
                 tick = runtime.current_tick()
                 texts = tuple(str(m.get("content") or "") for m in messages)
+                viewer = player_of_session(kwargs.get("session_id"))
+                if viewer is None:
+                    result.findings.append(FuzzFinding("check", tick, "手番の人を会話 ID から読めず、名前の漏れを確かめられない"))
+                else:
+                    try:
+                        unknown = _unknown_names(runtime, viewer)
+                    except Exception as exc:  # noqa: BLE001
+                        result.findings.append(FuzzFinding("check", tick, f"名前を知らない相手を数えられない: {_describe_exception(exc)}"))
+                        unknown = {}
+                    named, seen = stranger_names_in((*texts, *tool_texts(tools)), unknown)
+                    result.strangers_seen += int(seen)
+                    for line in named:
+                        shape = "stranger:" + leak_shape(line)
+                        if shape not in seen_leaks:
+                            seen_leaks.add(shape)
+                            result.findings.append(FuzzFinding("stranger_name", tick, f"P{viewer}: {line}"))
                 unreadable = unreadable_candidate_lines(texts[-1] if texts else "")
                 if unreadable:
                     result.findings.append(FuzzFinding("unreadable_candidates", tick, unreadable[0]))
@@ -412,7 +460,7 @@ def _drive(
                             seen_leaks.add(shape)
                             result.findings.append(FuzzFinding("leak", tick, line))
                 for check in extra_checks:
-                    for detail in check(TurnView(tick=tick, texts=texts)):
+                    for detail in check(TurnView(tick=tick, texts=texts, player_id=viewer)):
                         result.findings.append(FuzzFinding("check", tick, detail))
                 return random_client.invoke(messages, tools, tool_choice, **kwargs)
 
@@ -441,6 +489,24 @@ def _drive(
             engine_logger.removeHandler(errors)
             engine_logger.setLevel(saved_level)
         result.findings += [FuzzFinding("logged_error", t, d) for t, d in errors.records]
+
+
+def _unknown_names(runtime: Any, viewer: int) -> dict[str, str]:
+    """手番の人が名前を知らない相手の、名前 → 見た目。"""
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+    acquaintances = getattr(runtime, "_player_acquaintances", None)
+    if acquaintances is None:
+        return {}
+    unknown: dict[str, str] = {}
+    for pid in runtime.get_player_ids():
+        if int(pid.value) == viewer:
+            continue
+        name = runtime.get_player_name(pid)
+        call = acquaintances.call_name(PlayerId(viewer), pid)
+        if call != name:
+            unknown[name] = call
+    return unknown
 
 
 def _parse_seeds(text: str) -> list[int]:

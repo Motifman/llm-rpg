@@ -327,6 +327,8 @@ def _format_interaction_action_name_with_hints(
     )
 
 EntityNameResolver = Callable[[int], str]
+# #1581: 見る人 (第 1 引数) が相手 (第 2 引数) を呼ぶ言葉。名前を知らなければ見た目。
+ViewerNameResolver = Callable[[int, int], str]
 WeatherProvider = Callable[[], WeatherState | None]
 WorldFlagsProvider = Callable[[], frozenset[str]]
 OwnedItemSpecIdsProvider = Callable[[int], frozenset[ItemSpecId]]
@@ -373,6 +375,7 @@ class SpotGraphCurrentStateBuilder:
         player_perception_policy: PlayerPerceptionPolicy | None = None,
         departed_position_store: DepartedPositionStore | None = None,
         entity_name_resolver: EntityNameResolver | None = None,
+        viewer_name_resolver: ViewerNameResolver | None = None,
         inventory_builder: Callable[[PlayerId], tuple[Any, ...]] | None = None,
         weather_provider: WeatherProvider | None = None,
         world_flags_provider: WorldFlagsProvider | None = None,
@@ -427,6 +430,7 @@ class SpotGraphCurrentStateBuilder:
         self._player_perception_policy = player_perception_policy
         self._departed_position_store = departed_position_store
         self._entity_name_resolver = entity_name_resolver
+        self._viewer_name_resolver = viewer_name_resolver
         self._inventory_builder = inventory_builder
         self._weather_provider = weather_provider
         self._world_flags_provider = world_flags_provider
@@ -510,6 +514,22 @@ class SpotGraphCurrentStateBuilder:
         finally:
             self._visible_monster_observer = visible_monster_observer
             self._fallen_body_observer = fallen_body_observer
+
+    def _true_name_of(self, entity_id: int, fallback: str) -> str:
+        if self._entity_name_resolver is None:
+            return fallback
+        try:
+            return self._entity_name_resolver(entity_id)
+        except Exception:
+            return fallback
+
+    def _name_seen_by(self, viewer_id: int, other_id: int) -> str:
+        """一覧の名前は、対象の候補と、名前から相手を引く解決の鍵にもなる (#1581)。"""
+        if self._viewer_name_resolver is not None:
+            return self._viewer_name_resolver(viewer_id, other_id)
+        if self._entity_name_resolver is None:
+            return ""
+        return self._entity_name_resolver(other_id)
 
     def _resolve_player_action_entries(
         self,
@@ -1043,7 +1063,9 @@ class SpotGraphCurrentStateBuilder:
                 observer(
                     player_id,
                     int(entry.entity_id),
-                    str(entry.display_name or ""),
+                    # 一覧の名前は見る人の呼び方 (見た目のことがある)。観測は両方の版を
+                    # 持ち、受け手の側で選び直すので、ここでは名前を渡す (#1581)。
+                    self._true_name_of(int(entry.entity_id), str(entry.display_name or "")),
                     bool(entry.is_dead),
                 )
             except Exception:
@@ -1188,7 +1210,7 @@ class SpotGraphCurrentStateBuilder:
             for other_eid in presence.present_entity_ids:
                 if other_eid != eid and self._entity_has_light_source(int(other_eid)):
                     try:
-                        light_bearer_name = self._entity_name_resolver(int(other_eid))
+                        light_bearer_name = self._name_seen_by(player_id, int(other_eid))
                     except Exception:
                         light_bearer_name = None
                     break
@@ -1443,7 +1465,7 @@ class SpotGraphCurrentStateBuilder:
                 name = ""
                 if self._entity_name_resolver is not None:
                     try:
-                        name = self._entity_name_resolver(int(other_eid))
+                        name = self._name_seen_by(player_id, int(other_eid))
                     except Exception:
                         name = f"不明({int(other_eid)})"
                 # PR #347 後続: 同 spot にいる相手が倒れているなら snapshot に

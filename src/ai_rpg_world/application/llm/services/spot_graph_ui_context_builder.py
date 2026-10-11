@@ -690,17 +690,18 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     def _player_familiarity_annotation(
         self,
         viewer_player_id: PlayerId | None,
-        target_display_name: str,
+        target_entity_id: int,
     ) -> str | None:
+        """一覧の名前は見た目のことがあるので、相手はプレイヤー番号で引く (#1581)。"""
         if self._acquaintances is None or viewer_player_id is None:
             return None
-        if not target_display_name:
-            return None
         try:
-            met = self._acquaintances.find(viewer_player_id, target_display_name)
+            met = self._acquaintances.find_player(
+                viewer_player_id, PlayerId(int(target_entity_id))
+            )
         except Exception:
             _logger.exception(
-                "acquaintances.find failed (player=%s)", target_display_name
+                "acquaintances.find_player failed (player=%s)", target_entity_id
             )
             return None
         if met is not None and met.is_first_meeting:
@@ -1014,7 +1015,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     f" 〔{'、'.join(carried)}〕" if carried else " 〔手ぶら〕"
                 )
             familiarity = self._player_familiarity_annotation(
-                viewer_player_id, entry.display_name or ""
+                viewer_player_id, entry.entity_id
             )
             familiarity_suffix = f" {familiarity}" if familiarity else ""
             # PR-FF: 他プレイヤー名を ``""`` で囲む (quote 規約の拡張)。
