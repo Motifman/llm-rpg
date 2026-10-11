@@ -65,8 +65,8 @@ def win_path_ticks(connections: list[dict[str, Any]]) -> dict[str, int]:
     """2 人が分かれて動く、何も塞がっていない地図での、脱出までの最短の tick。
 
     操作は 1 回 1 tick (灯す、引き出しを探る、金庫を開ける、缶を取る、注ぐ、発電機を
-    動かす、乗り込む、昇降機を動かす)。暗い場所で操作する前には灯す。昇降機が動いた
-    次の tick に脱出が決まるので、最後に 1 を足す。
+    動かす、乗り込む、昇降機を動かす)。暗い場所で操作する前には灯す。脱出は昇降機を
+    動かした tick のうちに決まる (design_decisions D1618)。
     """
 
     def d(a: str, b: str) -> int:
@@ -76,7 +76,7 @@ def win_path_ticks(connections: list[dict[str, Any]]) -> dict[str, int]:
     office, machine, lift, gas = "company_office", "machine_room", "lift_landing", "gas_chamber"
 
     def finish(generator_started: int, *ready_at_lift: int) -> int:
-        return max(generator_started + WARM_TICKS, *ready_at_lift) + 1 + 1
+        return max(generator_started + WARM_TICKS, *ready_at_lift) + 1
 
     # 北の 1 人: 持っている缶を機械室で注いで発電機を動かし、乗り場で灯して乗り込む。
     north_generator = d(n, machine) + 3

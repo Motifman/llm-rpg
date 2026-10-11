@@ -41,7 +41,7 @@ class SpotGraphSimulationApplicationService:
         monster_spawn_stage: _SpotGraphTickStage | None = None,
         monster_behavior_stage: _SpotGraphTickStage | None = None,
         food_spoilage_stage: _SpotGraphTickStage | None = None,
-        player_outcome_rule_stage: _SpotGraphTickStage | None = None,
+        player_outcome_rule_stage: _PlayerOutcomeRuleTickStage | None = None,
         death_grace_stage: _SpotGraphTickStage | None = None,
         trade_offer_expiry_stage: _SpotGraphTickStage | None = None,
         market_order_expiry_stage: _SpotGraphTickStage | None = None,
@@ -188,11 +188,9 @@ class SpotGraphSimulationApplicationService:
             # いる方が、次に足す人が忘れにくい**ため。
             self._run_stage("market_order_expiry", self._market_order_expiry_stage, current_tick)
         if self._player_outcome_rule_stage is not None:
-            # プレイヤー個別 outcome の宣言規則を判定する。
-            # 当 tick の travel / interaction が反映された後に走らせる
-            # ことで、「同 tick で summit に着いた → そのまま救助される」
-            # の自然な流れを実現する。DEAD は別経路 (PlayerDownedEvent
-            # ハンドラ) で確定するので、こちらは時間ベースの判定のみ。
+            # 当 tick の移動を反映したあとに判定し、「移動で summit に着いた
+            # tick に、手番より前に救助される」を保つ。手番の中で立った
+            # フラグは、手番のあとの判定 (_run_post_tick_hooks) で拾う。
             self._run_stage("player_outcome_rule", self._player_outcome_rule_stage, current_tick)
         if self._death_grace_stage is not None:
             # Issue #621: ダウン後 30 tick 経過した player を DEAD 確定。
@@ -213,13 +211,17 @@ class SpotGraphSimulationApplicationService:
     def _run_post_tick_hooks(self, current_tick: WorldTick) -> None:
         failures: list[tuple[str, Exception]] = []
         # 順序が重要:
-        #   graph_event_flusher → heartbeat → llm_turn_trigger。
+        #   graph_event_flusher → heartbeat → llm_turn_trigger → player_outcome_rule。
         # PR-N: graph_event_flusher を heartbeat より先に走らせる。tick stage
         # (= monster_behavior / status_effects / needs_decay) で graph に
         # 積まれた events を flush して観測 pipeline に流すと、その観測の
         # schedules_turn=True が heartbeat より先に turn を積む → turn_trigger
         # が拾える。逆順だと heartbeat 後の turn 実行までに events が
         # 観測 buffer に届かない silent failure になる。
+        # player_outcome_rule を手番のあとにもう一度走らせ、手番の中で立った
+        # フラグを、その tick のうちに、そのときの位置で判定する。次の tick に
+        # 回すと、次の tick の移動が先に反映され、籠が上がったあとに乗り場へ
+        # 着いた人まで脱出になる (design_decisions D1618)。
         hooks: tuple[tuple[str, Any, Callable[[Any], None]], ...] = (
             (
                 "graph_event_flusher",
@@ -235,6 +237,11 @@ class SpotGraphSimulationApplicationService:
                 "llm_turn_trigger",
                 self._llm_turn_trigger,
                 lambda hook: hook.run_scheduled_turns(),
+            ),
+            (
+                "player_outcome_rule",
+                self._player_outcome_rule_stage,
+                lambda stage: stage.run_after_turns(current_tick),
             ),
         )
         for hook_name, hook, runner in hooks:
@@ -286,3 +293,7 @@ __all__ = ["SpotGraphSimulationApplicationService"]
 
 class _SpotGraphTickStage(Protocol):
     def run(self, current_tick: WorldTick) -> None: ...
+
+
+class _PlayerOutcomeRuleTickStage(_SpotGraphTickStage, Protocol):
+    def run_after_turns(self, current_tick: WorldTick) -> None: ...
