@@ -30,8 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: 同じ人の呼び出しが続けて失敗したとき、次の tick に回すのをやめる回数。
-#: mine_v1_005 の失敗率 4/118 では偶然 3 回続くのは 1/25,000 程度で、続くなら
-#: 一時的な遅れではない。打ち切ったあとは観測か待ち時間のタイマーで起きる。
+#: 続くなら一時的な遅れではない。根拠は design_decisions D1595。
 MAX_CONSECUTIVE_LLM_FAILURES = 3
 
 @dataclass

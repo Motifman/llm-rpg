@@ -525,13 +525,8 @@ def run_reason_first_phase_a(
                 final=final,
             )
             if final:
-                return _result(
-                    None,
-                    None,
-                    failure_result=reason_first_failed_result(
-                        "REASON_FIRST_STEP_FAILED"
-                    ),
-                )
+                # 評価の不成立ではなく呼び出しの失敗なので、次の tick に回す経路へ渡す (#1595)。
+                return _result(None, exc)
             parent_attempt_id = last_llm_call_id
             continue
 

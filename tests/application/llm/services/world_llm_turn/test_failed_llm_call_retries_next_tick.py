@@ -177,8 +177,8 @@ class TestConsecutiveFailuresStopAtTheLimit:
 
 @pytest.mark.parametrize("workers", [2])
 def test_parallel_wave_also_retries_the_failed_player(workers: int) -> None:
-    """並列の経路 (Phase A を同時に回す) でも、失敗した人だけが次の wave に回る。"""
-    wiring, client, _ = _wiring([_TIMEOUT, _WAIT, _WAIT])
+    """並列の経路 (Phase A を同時に回す) で 2 人のうち 1 人が時間切れになると、その 1 人だけが次の wave でもう一度呼び出される。"""
+    wiring, client, recorder = _wiring([_TIMEOUT, _WAIT, _WAIT])
     wiring.runtime._runtime_config = _with_workers(wiring.runtime._runtime_config, workers)
     wiring.llm_turn_trigger.schedule_turn(_HARU)
     wiring.llm_turn_trigger.schedule_turn(PlayerId(2))
@@ -186,6 +186,8 @@ def test_parallel_wave_also_retries_the_failed_player(workers: int) -> None:
     _run_ticks(wiring, 2)
 
     assert client.calls == 3
+    retried = [e.player_id for e in recorder.of_kind(TraceEventKind.LLM_FAILURE_RETRY)]
+    assert len(retried) == 1 and retried[0] in (1, 2)
 
 
 def _with_workers(cfg: Any, workers: int) -> Any:
