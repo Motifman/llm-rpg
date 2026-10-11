@@ -7615,3 +7615,31 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **残っている穴**: 対人の操作 (`player_interactions`) は、奪う品の名前を `parameters["item"]` から読む (`TARGET_HAS_ITEM` の `item_spec_id_parameter_key` と、`GIVE_ITEM` / `REMOVE_ITEM` の `item_spec_id_parameter`)。同席者の行には「が要る」を出す経路が無く、廃坑の山村は表示名に「(奪う品の名前を item に書く)」と手で書いている。`station_drill` と `survival_island_v4_coop` の `loot_from_downed` は表示名が「持ち物を奪う」だけで、`item` がどこにも出ない。
 
 **関連**: Issue #1591 / #1508、design_decisions 49。
+
+---
+
+## D1595. 呼び出しが失敗した人は次の tick に回し、同じ人の 3 回連続で打ち切る。thinking は出力の上限トークン数で抑える
+
+**何を**:
+
+- 主ターンの呼び出しが例外で落ちた手番 (`LLM_API_FAILED`。時間切れを含む) のあと、`WorldLlmTurnTrigger` はその人を次の tick の pending に戻す。同じ人が 3 回続けて失敗したら戻さず、観測か待ち時間のタイマーに任せる。成功か、ほかの結果を挟むと連続は切れる。打ち切ったあとの失敗は 1 から数え直す
+- 失敗のたびに trace の `llm_failure_retry` を 1 件残す。payload は `consecutive_failures` / `max_consecutive_failures` / `rescheduled` / `error_code`。打ち切った失敗は `rescheduled=False` で見分ける
+- runtime_config の `LLM_MAX_OUTPUT_TOKENS` を、主ターンの呼び出しに top-level の `max_tokens` として送る。書かなければ送らない。送った値は prompt dataset の `request.kwargs` に残る
+
+**なぜ**:
+
+- `var/runs/mine_v1_005` で、95 秒の上限で止まった `litellm.Timeout` が 4 件あった。ミオは T32 の失敗のあと T38 まで動かなかった。失敗した手番は `should_reschedule=False` で返り、しかも手番の直後に待ち時間のタイマーがリセットされるので、起こす観測が届くか 6 tick 経つまで眠っていた
+- 上限を 3 にしたのは、mine_v1_005 の失敗率 4/118 では偶然 3 回続く確率が 1/25,000 程度だから。続くなら一時的な遅れではなく、毎 tick 最大 90 秒ずつ run を止め続ける。run 全体を止める判断は `LlmFailureStreakMonitor` (design_decisions 214) が別に持つ。こちらは 1 人ぶんの手番を戻すかだけを決め、run を止めない
+- 既存の自己 reschedule の連続 (`max_self_reschedule_streak`) には載せない。あちらは `was_no_op=True` で連続が切れる設計で、失敗した手番は `was_no_op=True` なので数えられない
+- `LLM_REASONING_EFFORT=minimal` は「出力の上限の約 1 割を考えに回す」という指定で、上限を送っていないと抑えが効かない。#1590 の試しで、minimal・low・medium のトークン数が段階の順に並ばなかったのと合う
+- OpenRouter の `reasoning.max_tokens` は採らなかった。effort と同時に送れず、直接効くのは Gemini・Anthropic・一部の Qwen で、DeepSeek についてはドキュメントに記載が無い (2026-10-11 に確認)。top-level の `max_tokens` は thinking と出力の合計の上限で、provider を問わず効く
+
+**どうしないと壊れるか**:
+
+- 失敗した人を戻さないと、thinking ありの run で長く考えた人ほど手番を失う。`tests/application/llm/services/world_llm_turn/test_failed_llm_call_retries_next_tick.py` が、実シナリオの runtime で時間切れを起こし、次の wave で呼び出しが起きることと、3 回目で止まることを見張る
+- 上限トークン数の値が prompt dataset に残らないと、上限ありの run となしの run を後から見分けられない。`tests/infrastructure/llm/test_litellm_client_max_output_tokens.py` が本物の記録係で `calls.jsonl` の request を読む
+- 上限で切れた呼び出しは、ツールを返さず「迷い」(`NO_TOOL_CALL`) になる。`memory_jev_mine_v1_v41_thinking_capped` の 4096 は、mine_v1_005 の成功した呼び出し 114 件で最も遅かった毎秒 49 トークンでも 84 秒で収まり、超えていたのは 4 件だった
+
+**対象外**: 行動が成功したのに本人を起こす観測が出ず、6 tick 眠る件 (記憶を思い出すツール、結果の出ない探索など) は、原因が別なので Issue #1597 に切り出した。こちらは本人が手を決める前に手番を失う件で、あちらは手を決めて結果を受け取ったあとに起こされない件。
+
+**関連**: Issue #1595 / #1597 / #1508、design_decisions 7 / 214 / D1582。
