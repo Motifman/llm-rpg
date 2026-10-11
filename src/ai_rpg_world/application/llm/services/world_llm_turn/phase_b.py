@@ -63,6 +63,9 @@ from ai_rpg_world.application.llm.services.world_llm_turn.prompt_capture import 
 from ai_rpg_world.application.llm.services.world_llm_turn.reason_first_trace import (
     record_reason_first_trace,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
+    with_delivery_carried_by,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     coerce_arguments,
     execute_tool,
@@ -267,7 +270,7 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             player_id.value,
             name,
         )
-        result = command_post_commit_result(exc)
+        result = with_delivery_carried_by(command_post_commit_result(exc), exc)
     except Exception as exc:
         # PR 6 (#227 / Agent A #7): 旧コードは stack trace を握りつぶしていた
         # ため、何が起きたか追跡不能だった。logger.exception で trace を残す。
@@ -284,6 +287,7 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             remediation="状況を見直し、別の行動を選んでください。",
             trace_payload={"technical_error_detail": str(exc)},
         )
+        result = with_delivery_carried_by(result, exc)
         infrastructure_failure = True
     # Review HIGH 1 対応: tool が失敗したら travel を復元する。
     # 成功時のみ中断確定。失敗時は「travel 継続中だが今 tick は別行動を

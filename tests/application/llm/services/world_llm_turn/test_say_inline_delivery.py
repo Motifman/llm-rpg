@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor im
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
     NOT_DELIVERED_NOTE,
+    with_delivery_carried_by,
     wrap_with_say_inline,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -94,3 +95,23 @@ class TestWrapWithSayInline:
             wrap_with_say_inline(_raising, speaker)(PlayerId(3), _ARGS, None)
 
         assert speaker.calls == [(3, _ARGS)]
+
+    def test_raising_handler_carries_the_delivery_on_the_exception(self) -> None:
+        """handler が例外を投げ、発話も断られると、例外に NOT_DELIVERED を載せ、例外から作った結果に注記が付く。"""
+
+        def _raising(player_id, arguments, runtime_context):
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError) as caught:
+            wrap_with_say_inline(_raising, _Speaker(SayInlineDelivery.NOT_DELIVERED))(
+                PlayerId(3), _ARGS, None
+            )
+        result = with_delivery_carried_by(_REFUSED, caught.value)
+
+        assert result.message == _REFUSED.message + NOT_DELIVERED_NOTE
+
+    def test_exception_without_a_delivery_leaves_the_result_untouched(self) -> None:
+        """発言の結果を載せていない例外からは、結果に何も足さない。"""
+        result = with_delivery_carried_by(_REFUSED, RuntimeError("boom"))
+
+        assert result is _REFUSED

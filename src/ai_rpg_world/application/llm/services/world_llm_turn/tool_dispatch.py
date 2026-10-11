@@ -67,6 +67,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
+    with_unspoken_say_inline,
     wrap_with_say_inline,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
@@ -1198,7 +1199,8 @@ def execute_tool(
             offered_tools_at_prompt=offered_tools_at_prompt,
         )
         if not_offered is not None:
-            return not_offered
+            # 出していない行動は世界で起きていないので、添えた発言も出さない (D1601)。
+            return with_unspoken_say_inline(not_offered, arguments)
 
     if handler is None:
         # PR-J: LLM の tool 名 typo を救済する 3 層:
@@ -1214,11 +1216,14 @@ def execute_tool(
         )
         # PR-J: should_reschedule は _RESCHEDULE_ERROR_CODES SSOT 経由で
         # 決定する。ハードコードすると将来 policy を変えた時に乖離する。
-        return LlmCommandResultDto(
-            success=False,
-            message=message,
-            error_code="UNSUPPORTED_TOOL",
-            should_reschedule=is_reschedulable_error_code("UNSUPPORTED_TOOL"),
+        return with_unspoken_say_inline(
+            LlmCommandResultDto(
+                success=False,
+                message=message,
+                error_code="UNSUPPORTED_TOOL",
+                should_reschedule=is_reschedulable_error_code("UNSUPPORTED_TOOL"),
+            ),
+            arguments,
         )
     result = handler(player_id, arguments, runtime_context)
     # 個別 handler が should_reschedule を立て忘れても、error_code の

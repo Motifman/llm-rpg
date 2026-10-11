@@ -23,6 +23,9 @@ import pytest
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
+    wrap_with_say_inline,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -255,6 +258,56 @@ class TestTheActorLearnsWhenTheWordsWereNotHeard:
             result = _try_the_safe_with_a_wrong_code(wiring)
 
             assert _NOT_DELIVERED not in result.message
+
+
+class TestWordsOfAnActionThatNeverHappened:
+    """handler まで届かない行動と、handler が例外で終わった行動の発言の扱いを保証する。"""
+
+    def test_words_with_an_unknown_tool_are_not_spoken_and_the_actor_is_told(self) -> None:
+        """世界に無いツールを呼ぶと行動は起きないので、添えた発言はミオに届かず、本人の結果文に届かなかったと出る。"""
+        with TemporaryDirectory() as tmp:
+            wiring = _session(tmp)
+
+            result = _act(wiring, "fly_away", {"say_inline": _WORDS, "inner_thought": "飛ぶ。"})
+
+            assert result.error_code == "UNSUPPORTED_TOOL"
+            assert _NOT_DELIVERED in result.message
+            assert _heard(wiring, _MIO) == []
+
+    def test_words_with_a_crashed_handler_reach_the_same_spot(self) -> None:
+        """handler が例外で終わっても、添えた発言はミオに届き、結果文に届かなかったとは出ない。"""
+        with TemporaryDirectory() as tmp:
+            wiring = _session(tmp)
+            _crash_wait(wiring)
+
+            result = _wait_saying(wiring)
+
+            assert result.error_code == "LLM_TOOL_EXECUTION_FAILED"
+            assert _NOT_DELIVERED not in result.message
+            assert any(f"「{_WORDS}」" in prose for prose in _heard(wiring, _MIO))
+
+    def test_refused_words_with_a_crashed_handler_are_reported_to_the_actor(self) -> None:
+        """handler が例外で終わり、発話も断られると、例外から作った結果文に届かなかったと出る。"""
+        with TemporaryDirectory() as tmp:
+            wiring = _session(tmp)
+            _crash_wait(wiring)
+            refusing = MagicMock()
+            refusing.speak.side_effect = RuntimeError("声が出ない")
+            wiring._spot_graph_executor._speech_service = refusing
+
+            result = _wait_saying(wiring)
+
+            assert result.error_code == "LLM_TOOL_EXECUTION_FAILED"
+            assert _NOT_DELIVERED in result.message
+
+
+def _crash_wait(wiring) -> None:
+    def _crashing(player_id, arguments, runtime_context):
+        raise RuntimeError("wait が壊れた")
+
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_WAIT] = wrap_with_say_inline(
+        _crashing, wiring._spot_graph_executor.speak_say_inline
+    )
 
 
 class TestEveryToolWithWordsDeliversThem:

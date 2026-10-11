@@ -76,6 +76,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.application.speech.exceptions.speech_exceptions import (
+    SpeechCommandException,
+)
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
@@ -744,13 +747,18 @@ class SpotGraphToolExecutor:
                     target_player_id=None,
                 )
             )
-        except Exception:
-            # 発話が断られても親 action の結果は変えない。届かなかったことは
-            # 呼び出し側が本人の結果文に書き足す。
+        except SpeechCommandException as exc:
+            # 倒れていて声が出せないなど、世界の規則で断られた。親 action の
+            # 結果は変えず、届かなかったことは呼び出し側が本人の結果文に書き足す。
             logger.warning(
-                "say_inline not delivered: speak failed (player_id=%s)",
+                "say_inline not delivered: speak refused (player_id=%s): %s",
                 player_id,
-                exc_info=True,
+                exc,
+            )
+            return SayInlineDelivery.NOT_DELIVERED
+        except Exception:
+            logger.exception(
+                "say_inline not delivered: speak failed (player_id=%s)", player_id,
             )
             return SayInlineDelivery.NOT_DELIVERED
         return SayInlineDelivery.SPOKEN
