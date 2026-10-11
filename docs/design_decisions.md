@@ -7593,3 +7593,25 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **今は決めないもの**: thinking と `tool_choice=required` が実 API で両立するか (docs/llm_provider_selection.md、#96)。両立しないと分かったときの扱いは、実 API で確かめてから決める。
 
 **関連**: Issue #1582 / #1508。
+
+---
+
+## D1591. 操作が parameters から読むキーは、前提条件のものも効果のものも「が要る」で出す。キーが無いときは番号違いの文を使わず、キーを名指す
+
+**何を**:
+
+- `required_parameter_hints` は、前提条件 `PUZZLE_INPUT_MATCH` の `puzzle_input_key` と、効果 `WRITE_PLAYER_TEXT` の `text_param_key` (既定は `text`) を、どちらも物体の行の操作の候補に `"code" が要る` の形で出す。同じキーは 1 度だけ出す
+- `PUZZLE_INPUT_MATCH` は、キーが無いか空のとき、シナリオの `failure_message` を使わず、`何を入れるか、parameters の "code" で指定してください。` を返す。キーがあって値が違うときは、これまでどおり `failure_message` を返す
+- `interact` の説明は、表示の形を `『"キー名" が要る』` と書き、特定のキーを例に挙げない。`parameters` の例は「`"text" が要る` と出ていれば」と表示に結び付ける
+
+**なぜ**:
+
+- `var/runs/mine_v1_005` で、金庫の行に番号を渡すキーが出ず、4 人とも説明の例にあった `text` で番号を渡した。返った文は番号違いと同じ「ダイヤルを合わせて把手を引いたが、扉はびくともしない。」で、全員が番号を疑って坑道へ戻った。廃坑の山村の勝ち筋はこの金庫の鍵が要る
+- キーが無いのは世界で起きた出来事ではなく、道具の呼び方の誤り。番号違いの文は「入力して試した」場面を書いているので、起きていないことを伝えてしまう。直すのに要るのはキーの名前で、それを書けるのはエンジンの固定の文だけ。`WRITE_PLAYER_TEXT` が `text` を渡されなかったときと同じ扱いにした
+- 採らなかった案は Issue #1591 のコメントに残した。条件に `missing_input_message` を足す案は、作者が書き忘れると今と同じになり、世界の言葉ではキーの名前を書きにくい。道具の実行側で先に確かめる案は、判定がドメインと二重になり、ドメインを直接呼ぶ経路が区別されないまま残る
+
+**どうしないと壊れるか**: 表示を足さずに試験だけ `{"code": "1907"}` を直書きすると、今回と同じく緑のまま表示の抜けを見逃す。`tests/demos/test_mine_village_safe_code.py` は、プロンプトの金庫の行から「が要る」のキーを読み取って引数を組む。`tests/infrastructure/scenario/test_required_interaction_parameters_are_visible.py` は、全シナリオの `PUZZLE_INPUT_MATCH` と `WRITE_PLAYER_TEXT` の宣言から要るキーを数え、候補の表示に出ているかを見張る。parameters を読む前提条件や効果を足したら、`required_parameter_hints` とこの監査の両方に足す。
+
+**残っている穴**: 対人の操作 (`player_interactions`) は、奪う品の名前を `parameters["item"]` から読む (`TARGET_HAS_ITEM` の `item_spec_id_parameter_key` と、`GIVE_ITEM` / `REMOVE_ITEM` の `item_spec_id_parameter`)。同席者の行には「が要る」を出す経路が無く、廃坑の山村は表示名に「(奪う品の名前を item に書く)」と手で書いている。`station_drill` と `survival_island_v4_coop` の `loot_from_downed` は表示名が「持ち物を奪う」だけで、`item` がどこにも出ない。
+
+**関連**: Issue #1591 / #1508、design_decisions 49。

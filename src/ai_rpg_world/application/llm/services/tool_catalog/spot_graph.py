@@ -132,7 +132,7 @@ INTERACT_DEFINITION = ToolDefinitionDto(
         "利用可能な action_name と現在の object 状態は【現在地と周囲】section の"
         "各オブジェクト行に出ているので、そこから読み取って渡すこと。"
         "追加入力を要求する action では、各オブジェクト行の action 候補に"
-        "必要なキーが『text が要る』のように表示されるため、そのキーを parameters に指定する。"
+        "必要なキーが『\"キー名\" が要る』の形で表示されるため、表示されたキーを parameters に指定する。"
         "物を触りながら同 spot の他者へ短く声をかけたい場合は say_inline に"
         "一言を書ける。"
     ),
@@ -167,7 +167,8 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "object",
                 "description": (
                     "action が要求する追加入力。必要なキーは【現在地と周囲】の action 候補に"
-                    "『text が要る』のように表示される（例: {\"text\": \"山頂へ向かった\"}）。"
+                    "『\"キー名\" が要る』の形で表示される"
+                    "（例: \"text\" が要る と出ていれば {\"text\": \"山頂へ向かった\"}）。"
                     "必要なキーが表示されない action では省略できる。"
                 ),
             },

@@ -258,16 +258,24 @@ for _legacy, _base in _LEGACY_NEGATED_PAIRS.items():
 
 
 def required_parameter_hints(interaction: InteractionDef) -> tuple[str, ...]:
-    """effect 宣言が必須にする interaction parameter を表示用ヒントにする。
+    """前提条件と effect が実行時に parameters から読むキーを表示用ヒントにする。
 
-    ``WRITE_PLAYER_TEXT`` の実行側と同じく ``text_param_key`` の既定値は
-    ``text``。同じキーを要求する effect が複数あっても表示は一度にする。
+    ``PUZZLE_INPUT_MATCH`` は ``puzzle_input_key``、``WRITE_PLAYER_TEXT`` は
+    ``text_param_key`` (既定は ``text``) を読む。同じキーを複数が要求しても
+    表示は一度にする。
     """
+    keys: list[Any] = [
+        cond.puzzle_input_key
+        for cond in interaction.preconditions
+        if cond.condition_type == InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH
+    ]
+    keys += [
+        effect.parameters.get("text_param_key", "text")
+        for effect in interaction.effects
+        if effect.effect_type == InteractionEffectTypeEnum.WRITE_PLAYER_TEXT
+    ]
     hints: list[str] = []
-    for effect in interaction.effects:
-        if effect.effect_type != InteractionEffectTypeEnum.WRITE_PLAYER_TEXT:
-            continue
-        raw_key = effect.parameters.get("text_param_key", "text")
+    for raw_key in keys:
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         hint = f"{quote_tool_argument(raw_key.strip())} が要る"
