@@ -555,7 +555,7 @@ class TestTakingThings:
         assert not _owns(runtime, _GEN, "lift_berth")
 
     def test_in_the_light_the_onlooker_sees_who_took_it(self, runtime) -> None:
-        """明るい村の広場で奪うと、見ていたサヨに奪った人と奪われた人の名前が届く。"""
+        """明るい村の広場で奪うと、見ていたサヨに、奪った仲間のゲンは名前で、名前を知らないハルは見た目で届く。"""
         for pid in (_HARU, _GEN, _SAYO):
             _place(runtime, pid, "village_square")
         before = len(_prose(runtime, _SAYO))
@@ -563,7 +563,8 @@ class TestTakingThings:
         _try_on(runtime, _GEN, _HARU, "pickpocket", item="燃料の缶")
 
         seen = [line for line in _prose(runtime, _SAYO)[before:] if "荷" in line]
-        assert [line for line in seen if "ゲン" in line and "ハル" in line] != []
+        assert [line for line in seen if "ゲン" in line and "測量具を背負った年かさの人" in line] != []
+        assert [line for line in seen if "ハル" in line] == []
 
     def test_in_the_dark_no_one_sees_who_took_it(self, runtime) -> None:
         """誰も灯りを灯していない機械室で奪うと、見ていたサヨにも奪われたハルにも、奪った人の名前は届かない。"""
@@ -600,14 +601,17 @@ class TestHostileActsStayHidden:
     """攻撃と奪う操作を足しても、相手の存在を伏せる設定が崩れないことを保証する。"""
 
     def test_hostile_acts_are_offered_only_on_someone_here(self, runtime) -> None:
-        """同じ場所にいるゲンの行には「殴りかかる」が出て、ゲンが別の場所へ移ると「殴りかかる」は出ない。"""
+        """同じ場所にいるゲンの行 (ハルは名前を知らないので見た目で出る) には「殴りかかる」が出て、ゲンが別の場所へ移ると「殴りかかる」は出ない。"""
         _place(runtime, _HARU, "village_square")
         _place(runtime, _GEN, "village_square")
         together = _prompt_text(runtime, _HARU)
         _place(runtime, _GEN, "smithy")
         apart = _prompt_text(runtime, _HARU)
 
-        assert any("ゲン" in line and "殴りかかる" in line for line in together.splitlines())
+        assert any(
+            "煤けた坑夫の上着を着た初老の男" in line and "殴りかかる" in line
+            for line in together.splitlines()
+        )
         assert "殴りかかる" not in apart
 
     def test_hostile_act_texts_mention_no_beast_or_sector(self) -> None:

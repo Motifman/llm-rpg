@@ -6066,7 +6066,10 @@ def create_world_runtime(
         current = time_provider.get_current_tick().value
         return tuple(
             SpotGraphTradeOfferEntry(
-                offerer_name=_resolve_entity_name(int(offer.offerer_player_id)),
+                # 申し出た人は一覧と同じ呼び方で出す。応じる対象の名前と揃える (#1581)。
+                offerer_name=player_acquaintances.call_name(
+                    PlayerId(player_id), PlayerId(int(offer.offerer_player_id))
+                ),
                 gives_text=_describe_trade_side(offer.gives),
                 asks_text=_describe_trade_side(offer.asks),
                 remaining_ticks=max(0, offer.expires_at_tick - current),
@@ -6220,6 +6223,9 @@ def create_world_runtime(
         player_perception_policy=player_perception_policy,
         departed_position_store=departed_position_store,
         entity_name_resolver=_resolve_entity_name,
+        viewer_name_resolver=lambda viewer_id, other_id: player_acquaintances.call_name(
+            PlayerId(viewer_id), PlayerId(other_id)
+        ),
         inventory_builder=_build_inventory,
         weather_provider=lambda: weather_holder["state"],
         world_flags_provider=world_flag_state.as_frozen_set,
@@ -6841,6 +6847,20 @@ def create_world_runtime(
             return None
         return resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id)
 
+    def _players_share_a_spot(a: PlayerId, b: PlayerId) -> bool:
+        """世界に居ない人 (死んで場所を離れた人など) は、誰とも同じ場所にいない。"""
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            EntityNotInGraphException,
+        )
+
+        graph = spot_graph_repo.find_graph()
+        try:
+            return graph.get_entity_spot(
+                EntityId.create(int(a.value))
+            ) == graph.get_entity_spot(EntityId.create(int(b.value)))
+        except EntityNotInGraphException:
+            return False
+
     player_acquaintances = PlayerAcquaintances(
         store=acquaintance_store,
         being_id_of=_being_id_of,
@@ -6849,6 +6869,14 @@ def create_world_runtime(
         names_by_player_id={
             int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
         },
+        appearances_by_player_id={
+            int(spawn.player_id): spawn.appearance
+            for spawn in scenario.player_spawns
+            if spawn.appearance is not None
+        },
+        co_present=_players_share_a_spot,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
     )
 
     runtime = WorldRuntime(

@@ -274,7 +274,7 @@ class TestTeamsStayHidden:
             assert "北の班" not in text and "南の班" not in text, text
 
     def test_meeting_the_other_side_does_not_reveal_their_team(self) -> None:
-        """北のミナトが南の野営地に入って南の 2 人に会っても、ミナトのプロンプトに南の所属は出ず、南の 2 人のプロンプトにも北の所属は出ない。"""
+        """北のミナトが南の野営地に入って南の 2 人に会っても (名前は知らないので見た目で見える)、ミナトのプロンプトに南の所属は出ず、南の 2 人のプロンプトにも北の所属は出ない。"""
         runtime = _runtime()
         ids = _ids(runtime)
         graph = runtime._spot_graph_repo.find_graph()
@@ -287,7 +287,7 @@ class TestTeamsStayHidden:
         runtime.advance_tick()
 
         minato = _whole_prompt(runtime, ids["north_1"])
-        assert "ゲンジ" in minato and "team=south" not in minato, minato
+        assert "髭の濃い大柄な人" in minato and "team=south" not in minato, minato
         for south in ("south_1", "south_2"):
             text = _whole_prompt(runtime, ids[south])
-            assert "ミナト" in text and "team=north" not in text, text
+            assert "青い外套の人" in text and "team=north" not in text, text

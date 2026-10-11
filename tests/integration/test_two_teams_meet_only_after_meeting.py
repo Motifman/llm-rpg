@@ -53,10 +53,10 @@ class TestBeforeMeeting:
 
 
 class TestAfterMeeting:
-    """顔を合わせたあとは、双方のプロンプトに相手の名前が出ることを保証する。"""
+    """顔を合わせただけでは名前は分からず、互いを見た目で見ることを保証する (#1581)。"""
 
-    def test_walking_into_the_other_camp_lets_both_sides_know(self) -> None:
-        """ミナトが峠を越えて西の野営地に入ると、ミナトの【知っている人】に西の 2 人が加わり、西の 2 人の【知っている人】にミナトが加わる。トウカはまだ西の班を知らない。"""
+    def test_walking_into_the_other_camp_shows_both_sides_by_appearance(self) -> None:
+        """ミナトが西の野営地に入ると、双方の一覧に相手が見た目で並び、【知っている人】は増えず、相手の名前はプロンプトのどこにも出ない。"""
         runtime = create_world_runtime(_SCENARIO)
         ids = _ids_by_name(runtime)
 
@@ -66,22 +66,152 @@ class TestAfterMeeting:
         runtime.advance_until_player_idle(ids["ミナト"])
 
         known = runtime._player_acquaintances.known_people_text
-        assert known(ids["ミナト"]) == "- トウカ\n- ゲンジ\n- サヤ"
-        assert "- ミナト" in known(ids["ゲンジ"])
-        assert "- ミナト" in known(ids["サヤ"])
-        assert all(name not in _whole_prompt(runtime, ids["トウカ"]) for name in _WEST)
-        assert "【知っている人】\n- トウカ\n- ゲンジ\n- サヤ\n" in _whole_prompt(runtime, ids["ミナト"])
+        assert known(ids["ミナト"]) == "- トウカ"
+        assert known(ids["ゲンジ"]) == "- サヤ"
+        minato = _whole_prompt(runtime, ids["ミナト"])
+        genji = _whole_prompt(runtime, ids["ゲンジ"])
+        assert '"髭の濃い大柄な人"' in minato and '"赤い頭巾の人"' in minato
+        assert '"青い外套の人"' in genji
+        assert all(name not in minato for name in _WEST), minato
+        assert "ミナト" not in genji, genji
+
+    def test_self_introduction_switches_to_the_name(self) -> None:
+        """ミナトが名乗ると、聞いたゲンジとサヤの【知っている人】にミナトが加わり、一覧も名前になる。ミナトはまだ 2 人の名前を知らない。"""
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        runtime = create_world_runtime(_SCENARIO)
+        ids = _ids_by_name(runtime)
+        runtime.do_move(ids["ミナト"], "pass")
+        runtime.advance_until_player_idle(ids["ミナト"])
+        runtime.do_move(ids["ミナト"], "camp_west")
+        runtime.advance_until_player_idle(ids["ミナト"])
+
+        runtime.do_speech(ids["ミナト"], "東から来たミナトだ", SpeechChannel.SAY)
+
+        known = runtime._player_acquaintances.known_people_text
+        assert known(ids["ゲンジ"]) == "- サヤ\n- ミナト"
+        assert known(ids["サヤ"]) == "- ゲンジ\n- ミナト"
+        assert '"ミナト"' in _whole_prompt(runtime, ids["ゲンジ"])
+        assert all(name not in _whole_prompt(runtime, ids["ミナト"]) for name in _WEST)
+
+    def test_hearing_a_present_person_called_by_name_teaches_it(self) -> None:
+        """名乗ったミナトの前で、サヤが「ゲンジ」と呼びかけると、ミナトはゲンジの名前を知り、サヤの名前はまだ知らない。"""
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        runtime = create_world_runtime(_SCENARIO)
+        ids = _ids_by_name(runtime)
+        runtime.do_move(ids["ミナト"], "pass")
+        runtime.advance_until_player_idle(ids["ミナト"])
+        runtime.do_move(ids["ミナト"], "camp_west")
+        runtime.advance_until_player_idle(ids["ミナト"])
+
+        runtime.do_speech(ids["サヤ"], "ゲンジ、この人に事情を話して", SpeechChannel.SAY)
+
+        assert runtime._player_acquaintances.known_people_text(ids["ミナト"]) == "- トウカ\n- ゲンジ"
+        text = _whole_prompt(runtime, ids["ミナト"])
+        assert '"ゲンジ"' in text and "サヤ" not in text.replace("「ゲンジ、この人に事情を話して」", "")
+
+
+class TestNamesHeardFromAfar:
+    """呼ばれた人が同じ場所にいない声や、遠くの声からは、名前を知る条件が限られることを保証する。"""
+
+    def _meet_west_then_return(self, runtime, ids) -> None:
+        for spot in ("pass", "camp_west", "pass"):
+            runtime.do_move(ids["ミナト"], spot)
+            runtime.advance_until_player_idle(ids["ミナト"])
+
+    def test_calling_someone_who_is_elsewhere_does_not_teach_the_name(self) -> None:
+        """ミナトがサヤに会ってから峠へ戻ったあと、西の野営地でゲンジが「サヤ」と呼んでも、聞こえた範囲にサヤがいないミナトはサヤの名前を知らない。"""
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        runtime = create_world_runtime(_SCENARIO)
+        ids = _ids_by_name(runtime)
+        self._meet_west_then_return(runtime, ids)
+        runtime.do_move(ids["サヤ"], "pass")
+        runtime.advance_until_player_idle(ids["サヤ"])
+        runtime.do_move(ids["ミナト"], "camp_west")
+        runtime.advance_until_player_idle(ids["ミナト"])
+
+        runtime.do_speech(ids["ゲンジ"], "サヤ、どこへ行った", SpeechChannel.SHOUT)
+
+        assert runtime._player_acquaintances.known_people_text(ids["ミナト"]) == "- トウカ"
+        text = _whole_prompt(runtime, ids["ミナト"]).replace("「サヤ、どこへ行った」", "")
+        assert "サヤ" not in text
+
+    def test_self_introduction_from_afar_by_someone_met_teaches_the_name(self) -> None:
+        """会ったことのあるミナトが峠から名乗って叫ぶと、西の野営地のゲンジは見た目の遠くの声として聞き、名前を知る。"""
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        runtime = create_world_runtime(_SCENARIO)
+        ids = _ids_by_name(runtime)
+        self._meet_west_then_return(runtime, ids)
+
+        runtime.do_speech(ids["ミナト"], "ミナトだ、聞こえるか", SpeechChannel.SHOUT)
+
+        user = runtime.build_full_prompt(ids["ゲンジ"])["messages"][1]["content"]
+        assert "青い外套の人の遠くの声" in user
+        assert runtime._player_acquaintances.known_people_text(ids["ゲンジ"]) == "- サヤ\n- ミナト"
+
+    def test_self_introduction_from_afar_by_someone_never_met_teaches_nothing(self) -> None:
+        """会ったことの無いミナトが峠から名乗って叫んでも、西の野営地のゲンジには「誰か」の声で届き、名前は知らない。"""
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        runtime = create_world_runtime(_SCENARIO)
+        ids = _ids_by_name(runtime)
+        runtime.do_move(ids["ミナト"], "pass")
+        runtime.advance_until_player_idle(ids["ミナト"])
+
+        runtime.do_speech(ids["ミナト"], "ミナトだ、聞こえるか", SpeechChannel.SHOUT)
+
+        assert runtime._player_acquaintances.find(ids["ゲンジ"], "ミナト") is None
+        assert runtime._player_acquaintances.known_people_text(ids["ゲンジ"]) == "- サヤ"
+
+
+class TestNameLearnedTrace:
+    """実 runtime で名前を知ると、trace に name_learned が tick 付きで残ることを保証する。"""
+
+    def test_self_introduction_is_traced_with_tick(self) -> None:
+        """ミナトが西の野営地で名乗ると、聞いたゲンジとサヤの name_learned が、いまの tick と「名乗り」付きで 1 件ずつ残る。"""
+        from ai_rpg_world.application.trace.recorder import NullTraceRecorder
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+
+        events: list[tuple[str, int | None, int | None, dict]] = []
+
+        class _Recorder(NullTraceRecorder):
+            def record(self, kind, *, tick=None, player_id=None, **payload):  # type: ignore[override]
+                events.append((str(kind), tick, player_id, payload))
+                return super().record(kind, tick=tick, player_id=player_id, **payload)
+
+        runtime = create_world_runtime(_SCENARIO)
+        runtime.set_trace_recorder(_Recorder())
+        ids = _ids_by_name(runtime)
+        runtime.do_move(ids["ミナト"], "pass")
+        runtime.advance_until_player_idle(ids["ミナト"])
+        runtime.do_move(ids["ミナト"], "camp_west")
+        runtime.advance_until_player_idle(ids["ミナト"])
+
+        runtime.do_speech(ids["ミナト"], "東から来たミナトだ", SpeechChannel.SAY)
+
+        learned = [e for e in events if e[0] == "name_learned"]
+        assert sorted(e[2] for e in learned) == sorted(
+            int(ids[n].value) for n in ("ゲンジ", "サヤ")
+        )
+        assert all(
+            e[1] == runtime.current_tick()
+            and e[3] == {"learned_name": "ミナト", "appearance": "青い外套の人", "how": "名乗り"}
+            for e in learned
+        )
 
 
 class TestDistantVoice:
-    """会っていない相手の声は「誰か」として記録され、会ったあとの声から名前が付くことを保証する。"""
+    """会っていない相手の声は「誰か」として記録され、会ったあとの声から見た目が付くことを保証する。"""
 
     def _recent_events(self, runtime, player_id) -> str:
         user = runtime.build_full_prompt(player_id)["messages"][1]["content"]
         return user.split("【直近の出来事】", 1)[1].split("【", 1)[0]
 
     def test_unknown_voice_is_someone_and_later_voice_has_a_name(self) -> None:
-        """峠から叫んだミナトの声は、西の野営地のゲンジに「誰かの…声」として届いて名前がプロンプトのどこにも出ない。会ったあとの声には名前が付き、先に記録した行は「誰か」のまま残る。"""
+        """峠から叫んだミナトの声は、西の野営地のゲンジに「誰かの…声」として届いて名前がプロンプトのどこにも出ない。会ったあとの声には見た目が付き、先に記録した行は「誰か」のまま残る。"""
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
         runtime = create_world_runtime(_SCENARIO)
@@ -101,7 +231,7 @@ class TestDistantVoice:
         runtime.do_speech(ids["ミナト"], "ここにいたのか", SpeechChannel.SAY)
 
         events = self._recent_events(runtime, ids["ゲンジ"])
-        assert "ミナトが言った: 「ここにいたのか」" in events
+        assert "青い外套の人が言った: 「ここにいたのか」" in events
         assert _line_with(events, "おーい") == heard
 
 

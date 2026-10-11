@@ -106,7 +106,7 @@ class TestPlayerFamiliarityAnnotation:
         acquaintances.record_meeting(PlayerId(1), "ノア")
         builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
         assert (
-            builder._player_familiarity_annotation(PlayerId(1), "ノア")
+            builder._player_familiarity_annotation(PlayerId(1), 3)
             == "(初めて会った)"
         )
 
@@ -116,34 +116,48 @@ class TestPlayerFamiliarityAnnotation:
         acquaintances.record_meeting(PlayerId(1), "ノア")
         acquaintances.record_meeting(PlayerId(1), "ノア")
         builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
-        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
 
     def test_person_never_met_gets_no_note(self) -> None:
         """会った記録の無い相手には注記を付けない。"""
         builder = SpotGraphUiContextBuilder(acquaintances=_acquaintances())
-        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
 
     def test_meeting_of_another_viewer_does_not_count(self) -> None:
         """別のプレイヤーが会った記録は、見ている側の注記に使わない。"""
         acquaintances = _acquaintances()
         acquaintances.record_meeting(PlayerId(2), "ノア")
         builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
-        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
 
-    def test_blank_name_or_missing_viewer_gets_no_note(self) -> None:
-        """表示名が空のときと、見ている側が分からないときは注記を付けない。"""
+    def test_unknown_player_or_missing_viewer_gets_no_note(self) -> None:
+        """参加者でない番号の相手と、見ている側が分からないときは注記を付けない。"""
         acquaintances = _acquaintances()
         acquaintances.record_meeting(PlayerId(1), "ノア")
         builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
-        assert builder._player_familiarity_annotation(PlayerId(1), "") is None
-        assert builder._player_familiarity_annotation(None, "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), 99) is None
+        assert builder._player_familiarity_annotation(None, 3) is None
+
+    def test_first_meeting_note_survives_being_shown_by_appearance(self) -> None:
+        """名前を知らずに会った相手は、一覧で見た目で書かれても、番号で引くので (初めて会った) が付く (#1581)。"""
+        acquaintances = PlayerAcquaintances(
+            store=InMemoryAcquaintanceRepository(),
+            being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
+            turn_reader=InMemoryExpectationRepository(),
+            environment_name="森",
+            names_by_player_id={1: "エイダ", 2: "カイ", 3: "ノア"},
+            appearances_by_player_id={3: "背の高い男"},
+        )
+        acquaintances.record_meeting(PlayerId(1), "ノア")
+        builder = SpotGraphUiContextBuilder(acquaintances=acquaintances)
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) == "(初めて会った)"
 
     def test_environment_encounter_alone_gives_no_note(self) -> None:
         """環境の encounter に人の記録が残っていても、知り合いの記録を渡さなければ人に注記を付けない。"""
         memory = InMemoryEncounterMemory()
         memory.observe(PlayerId(1), EncounterKey.player("ノア"), 0)
         builder = _make_builder(memory)
-        assert builder._player_familiarity_annotation(PlayerId(1), "ノア") is None
+        assert builder._player_familiarity_annotation(PlayerId(1), 3) is None
 
 
 class TestEncounterEnabledGuard:
