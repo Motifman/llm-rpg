@@ -218,11 +218,26 @@ def format_semantic_recall_section(
         return ""
     lines: list[str] = []
     for cand in sorted(candidates, key=lambda candidate: candidate.entry.entry_id):
-        text = (cand.entry.text or "").strip()
-        if not text:
+        if not (cand.entry.text or "").strip():
             continue
-        lines.append(f"- {text}")
+        lines.append(belief_recall_line(cand.entry))
     return "\n".join(lines)
+
+
+def belief_recall_line(entry: SemanticMemoryEntry) -> str:
+    """【関連する学び】の 1 行。支持に伝聞があれば、その件数を末尾に添える。
+
+    信念をまとめる LLM は伝聞を言い切りの文に書き直すことがある (#1602)。文に頼らず、
+    支持の内訳から聞いた話だと分かるようにする。
+    """
+    line = f"- {(entry.text or '').strip()}"
+    heard = entry.hearsay_support_count
+    if heard <= 0:
+        return line
+    total = len(entry.support_evidence_ids)
+    if heard >= total:
+        return f"{line} (人から聞いた話)"
+    return f"{line} (根拠 {total} 件のうち {heard} 件は人から聞いた話)"
 
 
 __all__ = [
@@ -232,5 +247,6 @@ __all__ = [
     "DEFAULT_WEIGHT_RELEVANCE",
     "SemanticPassiveRecallService",
     "SemanticRecallCandidate",
+    "belief_recall_line",
     "format_semantic_recall_section",
 ]

@@ -22,6 +22,9 @@ from ai_rpg_world.application.being.recall.situation_assembly import (
     assemble_situation,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+    belief_recall_line,
+)
 from ai_rpg_world.application.observation.being_contract import (
     ObservationNotRepresentable,
     Observer,
@@ -137,7 +140,7 @@ def _recall(
     shown = sorted(
         (e for e in result.chosen if e.text.strip()), key=lambda e: e.entry_id
     )
-    text = "\n".join(f"- {e.text.strip()}" for e in shown)
+    text = "\n".join(belief_recall_line(e) for e in shown)
     return payload, text, tuple(e.entry_id for e in shown)
 
 
