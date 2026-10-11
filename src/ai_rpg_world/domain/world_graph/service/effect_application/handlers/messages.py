@@ -4,7 +4,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    InteractionNotAllowedException,
+    InteractionParameterMissingException,
 )
 from ai_rpg_world.domain.world_graph.service.effect_application.context import (
     EffectApplicationState,
@@ -69,7 +69,7 @@ def apply_write_player_text(
     params_in = ctx.interaction_parameters or {}
     raw_text = params_in.get(text_param_key)
     if not isinstance(raw_text, str) or raw_text == "":
-        raise InteractionNotAllowedException(
+        raise InteractionParameterMissingException(
             f"何を書くか {text_param_key} パラメータで指定してください。"
         )
     target = resolve_target_object(ctx.interior, ctx.acting_object, p)

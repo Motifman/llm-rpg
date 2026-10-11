@@ -7686,3 +7686,21 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **対象外**: 行動が成功したのに本人を起こす観測が出ず、6 tick 眠る件 (記憶を思い出すツール、結果の出ない探索など) は、原因が別なので Issue #1597 に切り出した。こちらは本人が手を決める前に手番を失う件で、あちらは手を決めて結果を受け取ったあとに起こされない件。
 
 **関連**: Issue #1595 / #1597 / #1508、design_decisions 7 / 214 / D1582。
+
+---
+
+## D1607. 引数が渡されずに断られた操作は、同じ場所の他の人に失敗として見せない
+
+**何を**: 物体への操作で、parameters から読むキーが無くて断られたとき、ドメインは `InteractionNotAllowedException` の子の `InteractionParameterMissingException` を投げる。いまは前提条件 `PUZZLE_INPUT_MATCH` のキーが無いか空のときと、効果 `WRITE_PLAYER_TEXT` の文字列が無いとき。application 層は、この例外のときだけ `SpotObjectInteractionFailedEvent` を出さない。シナリオの `on_failure_observation` があっても出さない。本人には、これまでどおりツールの結果でキーの案内が返る。
+
+**なぜ**: 目撃者向けの失敗の文は、断られた理由の文をそのまま使って「{actor}が{object}の「{label}」を試みたが、{reason}」と組む。廃坑の山村で、ハルが金庫を `"code"` 無しで開けようとすると、ミオの観測に「…を試みたが、何を入れるか、parameters の "code" で指定してください。」が出ていた。キーが無いのは道具の呼び方の誤りで、世界では何も起きていない (design_decisions D1591)。目撃者はツールの引数名を世界の出来事として読み、記憶に入れる。操作の案内を世界の出来事として読ませないのは design_decisions D1509 と同じ方針。
+
+**見せないことにした理由**: 案内の部分だけを伏せて「…を試みたが、うまくいかなかった」と見せる案は採らなかった。ハルは番号を入れておらず、金庫は動いていない。「試みた」も起きていないことになる。`on_failure_observation` を出さないのも同じ理由で、作者の文は試して失敗した場面を書いている。
+
+**型で分ける**: 理由の文から引数の案内かを見分けると、文面を変えただけで目撃者に漏れる。作者の文を分類のキーにしない方針は Issue #380 (`precondition_failure_kind.py`) と同じ。前提条件の失敗は `failed_condition` を運ぶので、キーが無い失敗かは、条件と parameters から `_lacks_puzzle_input` で判定する。判定は前提条件の評価と同じ関数を使い、二重にしない。子の例外にしたので、`InteractionNotAllowedException` で受けている道具の実行側とループ検出は変わらない。
+
+**どうしないと壊れるか**: parameters からキーを読む前提条件や効果を足したら、キーが無いときに `InteractionParameterMissingException` を投げる。親の例外のままだと、目撃者に案内が漏れる。`tests/demos/test_mine_village_safe_witness_sees_no_parameter_guidance.py` は、実 session でハルが `"code"` 無しで金庫を試すとミオの観測に失敗の文が出ず、番号違いなら出ることを見る。`tests/application/world_graph/test_missing_parameter_failure_is_not_witnessed.py` は、看板の `text` 無しで失敗の観測が出ないことを見る。
+
+**残っている穴**: 対人の操作 (`player_interactions`) で `parameters["item"]` が無いときは、「相手がそれを持っていない」と同じ前提条件の不成立として扱う。対人の操作は目撃者に失敗の観測を出さないので、いまは漏れない。でたらめに行動するスタブ (design_decisions D1557) は、目撃者の観測に出た引数名を漏れとして数えていない。
+
+**関連**: Issue #1607 / #1591 / #380、design_decisions D1591 / D1509 / D1557。

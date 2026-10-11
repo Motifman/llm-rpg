@@ -23,6 +23,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InsufficientEffectItemsException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
+    InteractionParameterMissingException,
     UnknownSpotObjectException,
 )
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
@@ -60,6 +61,34 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     WeatherTypeIsPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+
+
+def _lacks_puzzle_input(
+    cond: InteractionCondition, interaction_parameters: dict[str, Any] | None
+) -> bool:
+    if cond.condition_type != InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH:
+        return False
+    input_key = (cond.puzzle_input_key or "").strip()
+    if not input_key or "answer" not in (cond.required_state or {}):
+        return False
+    user_input = (interaction_parameters or {}).get(input_key)
+    return user_input is None or str(user_input).strip() == ""
+
+
+def _precondition_refusal(
+    result: PredicateResult, interaction_parameters: dict[str, Any] | None
+) -> InteractionNotAllowedException:
+    cond = result.failed_predicate
+    refusal_type = (
+        InteractionParameterMissingException
+        if isinstance(cond, InteractionCondition)
+        and _lacks_puzzle_input(cond, interaction_parameters)
+        else InteractionNotAllowedException
+    )
+    return refusal_type(
+        result.failure_message or "Interaction not allowed",
+        failed_condition=cond,
+    )
 
 
 class SpotInteractionService:
@@ -476,7 +505,7 @@ class SpotInteractionService:
             expected = cond.required_state or {}
             if "answer" not in expected:
                 return False, cond.failure_message or "パズル答えが設定されていません"
-            if user_input is None or str(user_input).strip() == "":
+            if _lacks_puzzle_input(cond, interaction_parameters):
                 # 番号違いの failure_message は「入力して試した」場面を書いている。
                 # キーが無いのは呼び方の誤りなので、直すのに要るキーを名指す (D1591)。
                 return False, (
@@ -832,10 +861,7 @@ class SpotInteractionService:
             interior=interior,
         )
         if not precondition_result.is_satisfied:
-            raise InteractionNotAllowedException(
-                precondition_result.failure_message or "Interaction not allowed",
-                failed_condition=precondition_result.failed_predicate,
-            )
+            raise _precondition_refusal(precondition_result, interaction_parameters)
 
         self._require_effect_item_removals(
             interior=interior,
@@ -936,10 +962,7 @@ class SpotInteractionService:
             interior=interior,
         )
         if not precondition_result.is_satisfied:
-            raise InteractionNotAllowedException(
-                precondition_result.failure_message or "Interaction not allowed",
-                failed_condition=precondition_result.failed_predicate,
-            )
+            raise _precondition_refusal(precondition_result, interaction_parameters)
         self._require_effect_item_removals(
             interior=effect_interior or interior,
             acting_object=None,
