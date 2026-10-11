@@ -110,6 +110,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_EXPECTED_RESULT_POLICY",
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
+    "LLM_MAX_OUTPUT_TOKENS",
     "LLM_MEETING_SERIAL_TURNS",
     "LLM_MODEL",
     "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
@@ -293,6 +294,7 @@ class ResolvedLlmRuntimeConfig:
     llm_api_base: str | None
     llm_request_timeout_seconds: float
     llm_reasoning_effort: str
+    llm_max_output_tokens: int | None
     llm_wall_time_cap_seconds: float | None
     llm_rate_limit_retry_attempts: int
     llm_rate_limit_retry_base_sleep: float
@@ -642,6 +644,9 @@ class ResolvedLlmRuntimeConfig:
         llm_api_base = _strip_or_none(source.get("OPENAI_API_BASE"))
         llm_request_timeout_seconds = _resolve_timeout_seconds(source)
         llm_reasoning_effort = _resolve_reasoning_effort(source)
+        llm_max_output_tokens = _resolve_optional_positive_int(
+            source, "LLM_MAX_OUTPUT_TOKENS"
+        )
         llm_wall_time_cap_seconds = _resolve_optional_positive_float(
             source, "LLM_WALL_TIME_CAP_SECONDS"
         )
@@ -979,6 +984,7 @@ class ResolvedLlmRuntimeConfig:
             llm_api_base=llm_api_base,
             llm_request_timeout_seconds=llm_request_timeout_seconds,
             llm_reasoning_effort=llm_reasoning_effort,
+            llm_max_output_tokens=llm_max_output_tokens,
             llm_wall_time_cap_seconds=llm_wall_time_cap_seconds,
             llm_rate_limit_retry_attempts=llm_rate_limit_retry_attempts,
             llm_rate_limit_retry_base_sleep=llm_rate_limit_retry_base_sleep,
@@ -1117,6 +1123,7 @@ class ResolvedLlmRuntimeConfig:
             llm_api_base=None,
             llm_request_timeout_seconds=90.0,
             llm_reasoning_effort="none",
+            llm_max_output_tokens=None,
             llm_wall_time_cap_seconds=None,
             llm_rate_limit_retry_attempts=3,
             llm_rate_limit_retry_base_sleep=2.0,
@@ -1652,6 +1659,15 @@ def _resolve_non_negative_float(
     if value < 0:
         raise ValueError(f"{key}={value} must be 0 or greater")
     return value
+
+
+def _resolve_optional_positive_int(
+    source: Mapping[str, str], key: str
+) -> int | None:
+    raw = (source.get(key) or "").strip()
+    if not raw:
+        return None
+    return _resolve_positive_int(source, key, default=0)
 
 
 def _resolve_optional_positive_float(

@@ -647,6 +647,26 @@ class TestFormatEventBody:
         assert "干潟は潮が満ちると渡れない" in out
         assert _event_timeline_category(e) == "recall"
 
+    def test_llm_failure_retry_is_system_and_shows_whether_it_was_rescheduled(self) -> None:
+        """llm_failure_retry は LLM 呼び出しの記録と同じシステムに分類され、連続の回数と次の tick に回したかを表示する (#1595)。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind=TraceEventKind.LLM_FAILURE_RETRY,
+            tick=32,
+            player_id=2,
+            payload={
+                "consecutive_failures": 3,
+                "max_consecutive_failures": 3,
+                "rescheduled": False,
+                "error_code": "LLM_API_FAILED",
+            },
+        )
+        out = _format_event_body(e)
+        assert "consecutive_failures=3" in out
+        assert "rescheduled=False" in out
+        assert _event_timeline_category(e) == "system"
+
     def test_situation_belief_recall_with_empty_query_says_it_was_not_searched(self) -> None:
         """問い合わせ文が空の situation_belief_recall は、一致 0 件ではなく、検索しなかったことを表示する。"""
         e = TraceEvent(

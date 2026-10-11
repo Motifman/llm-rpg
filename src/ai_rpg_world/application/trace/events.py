@@ -117,6 +117,10 @@ class TraceEventKind:
     # ``cost_usd`` は OpenRouter 経由時のみ provider 宣告値が乗る (直結 / vLLM では 0.0)。
     # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
     LLM_CALL = "llm_call"
+    # #1595: 呼び出しが失敗した (時間切れを含む) 手番を、次の tick に回したか。
+    # 失敗のたびに 1 件。上限に達して回さなかった失敗は rescheduled=False で残る。
+    # payload: consecutive_failures / max_consecutive_failures / rescheduled / error_code
+    LLM_FAILURE_RETRY = "llm_failure_retry"
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
     # payload: system_chars / objective_chars / known_people_chars / current_state_chars / memos_chars /

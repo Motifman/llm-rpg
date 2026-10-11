@@ -44,6 +44,7 @@ def create_llm_client_from_config(config: ResolvedLlmRuntimeConfig) -> ILLMClien
             openrouter_quantization=config.openrouter_quantization,
             openrouter_require_params=bool(config.openrouter_require_params),
             reasoning_effort=config.llm_reasoning_effort,
+            max_output_tokens=config.llm_max_output_tokens,
             wall_cap_seconds=config.llm_wall_time_cap_seconds,
             rate_limit_retry_attempts=int(config.llm_rate_limit_retry_attempts),
             rate_limit_retry_base_sleep=float(config.llm_rate_limit_retry_base_sleep),

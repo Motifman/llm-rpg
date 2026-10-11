@@ -1419,6 +1419,31 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
     assert TraceEventKind.REASON_FIRST_ACTION_SELECTED in kinds
 
 
+def test_reason_first_step1_exception_twice_is_a_failed_call_retried_next_tick(
+    clean_runtime_env: None,
+) -> None:
+    """step1 の呼び出しが 2 回とも例外で落ちたら、呼び出しの失敗 (LLM_API_FAILED) として返し、その人を次の wave の pending に戻す (#1595)。"""
+    runtime = _ReasonFirstRuntime()
+    client = _SequencedLlmClient(
+        [RuntimeError("timed out"), RuntimeError("timed out")]
+    )
+    wiring = _reason_first_wiring(runtime, client)
+
+    result = wiring.run_turn(PlayerId(1))
+    wiring.llm_turn_trigger._account_result(1, result)
+
+    assert result.error_code == "LLM_API_FAILED"
+    assert 1 in wiring.llm_turn_trigger.pending_player_ids
+    failed = [
+        payload for kind, payload in runtime.trace_recorder.records
+        if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
+    ]
+    assert [(f["reason"], f["final"]) for f in failed] == [
+        ("invoke_exception", False),
+        ("invoke_exception", True),
+    ]
+
+
 def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     clean_runtime_env: None,
 ) -> None:

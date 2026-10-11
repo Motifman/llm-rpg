@@ -7,9 +7,20 @@ thinking あり / なしの比較で、記憶や判断の設定が 1 キーで�
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
-_PROFILES = Path(__file__).resolve().parents[2] / "data" / "experiment_profiles"
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_PROFILES = _REPO_ROOT / "data" / "experiment_profiles"
+sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.run_scenario_experiment import (  # noqa: E402
+    _runtime_config_mapping_from_source,
+)
 
 
 def _load(name: str) -> dict:
@@ -52,6 +63,38 @@ class TestTheThinkingProfileDiffersOnlyInReasoning:
         assert differing == {"profile", "description", "runtime_config"}
 
 
+class TestTheCappedProfileAddsOnlyTheOutputCap:
+    """memory_jev_mine_v1_v41_thinking_capped と thinking の差は出力の上限だけ (#1595)。"""
+
+    def test_only_output_cap_differs_in_runtime_config(self) -> None:
+        """runtime_config の差は LLM_MAX_OUTPUT_TOKENS=4096 の有無だけ。thinking の effort は minimal のまま。"""
+        capped = _load("memory_jev_mine_v1_v41_thinking_capped")
+        thinking = _load("memory_jev_mine_v1_v41_thinking")
+
+        differing = _differing_runtime_keys(capped, thinking)
+
+        assert differing == {"LLM_MAX_OUTPUT_TOKENS": (4096, None)}
+
+    def test_cap_reaches_the_resolved_config(self) -> None:
+        """make experiment と同じ経路で profile を解決すると、llm_max_output_tokens=4096 になる。"""
+        capped = _load("memory_jev_mine_v1_v41_thinking_capped")
+
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values=_runtime_config_mapping_from_source(capped)
+        )
+
+        assert cfg.llm_max_output_tokens == 4096
+
+    def test_only_name_and_description_differ_at_top_level(self) -> None:
+        """トップレベルで違うのは名前と説明と runtime_config だけ。"""
+        capped = _load("memory_jev_mine_v1_v41_thinking_capped")
+        thinking = _load("memory_jev_mine_v1_v41_thinking")
+
+        differing = _differing_top_level_keys(capped, thinking)
+
+        assert differing == {"profile", "description", "runtime_config"}
+
+
 class TestTheLoopProfileAddsOnlyLoopDiagnosis:
     """memory_jev_mine_v1_v41_loop と土台の差は、繰り返しの理由を問う判断だけ。"""
 
@@ -65,11 +108,12 @@ class TestTheLoopProfileAddsOnlyLoopDiagnosis:
         assert differing == {"TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED": (True, None)}
 
     def test_all_three_point_at_the_mine_village(self) -> None:
-        """3 つとも廃坑の山村を 40 tick、snapshot ありで回す。"""
+        """4 つとも廃坑の山村を 40 tick、snapshot ありで回す。"""
         names = (
             "memory_jev_mine_v1_v41",
             "memory_jev_mine_v1_v41_loop",
             "memory_jev_mine_v1_v41_thinking",
+            "memory_jev_mine_v1_v41_thinking_capped",
         )
 
         settings = {

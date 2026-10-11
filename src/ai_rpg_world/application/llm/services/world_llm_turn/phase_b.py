@@ -70,6 +70,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     restore_nav_state,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import (
+    LLM_CALL_FAILED_ERROR_CODE,
     WORLD_ACTION_HESITATION,
     WORLD_ACTION_MOMENTARY_BLANK,
     WORLD_RESULT_HESITATION,
@@ -152,7 +153,7 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
         result = LlmCommandResultDto(
             success=False,
             message=WORLD_RESULT_MOMENTARY_BLANK,
-            error_code="LLM_API_FAILED",
+            error_code=LLM_CALL_FAILED_ERROR_CODE,
             remediation="次に意識が戻ったとき、改めて状況を確かめてください。",
             should_reschedule=False,
             was_no_op=True,
