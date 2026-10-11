@@ -97,6 +97,83 @@ class TestSpotFamiliarityAnnotation:
         assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
 
 
+class TestFirstVisitNoteOnlyOnTheFirstTurn:
+    """実行済みの手番の数を渡すと、「(初めて訪れた)」が着いた最初のターンだけに付くことを保証する (#1596)。"""
+
+    def _builder(self, memory: InMemoryEncounterMemory, turns: dict[int, int]):
+        return SpotGraphUiContextBuilder(
+            encounter_memory=memory,
+            current_tick_provider=lambda: 0,
+            spot_str_id_resolver=lambda i: _SPOT_NAMES[i],
+            executed_turn_provider=lambda pid: turns.get(pid.value, 0),
+        )
+
+    def test_the_note_is_shown_again_until_the_first_turn_runs(self) -> None:
+        """着いたあと手番を実行する前なら、注記を 2 度組んでも 2 度とも「(初めて訪れた)」になる。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 3)
+        builder = self._builder(memory, {1: 4})
+
+        notes = [builder._spot_familiarity_annotation(PlayerId(1), 100) for _ in range(2)]
+
+        assert notes == ["(初めて訪れた)", "(初めて訪れた)"]
+
+    def test_the_note_is_gone_after_one_turn_at_the_spot(self) -> None:
+        """注記を出したあと手番を 1 回実行すると、同じ場所に留まっていても注記は付かない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 3)
+        turns = {1: 4}
+        builder = self._builder(memory, turns)
+        builder._spot_familiarity_annotation(PlayerId(1), 100)
+
+        turns[1] = 5
+
+        assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
+
+    def test_returning_to_a_spot_gets_no_note(self) -> None:
+        """一度離れて戻ってきた場所 (訪れた回数 2) には、戻った最初のターンでも注記は付かない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 9)
+        builder = self._builder(memory, {1: 7})
+
+        assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
+
+    def test_without_a_turn_provider_the_note_stays_while_the_count_is_one(self) -> None:
+        """executed_turn_provider を渡さない構成では、訪れた回数が 1 の間ずっと「(初めて訪れた)」が付く。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
+        builder = _make_builder(memory)
+
+        notes = [builder._spot_familiarity_annotation(PlayerId(1), 100) for _ in range(2)]
+
+        assert notes == ["(初めて訪れた)", "(初めて訪れた)"]
+
+    def test_each_player_keeps_their_own_first_turn(self) -> None:
+        """実行済みの手番の数が違う 2 人が同じ場所に初めて着くと、どちらにも「(初めて訪れた)」が付く。"""
+        memory = InMemoryEncounterMemory()
+        for pid in (PlayerId(1), PlayerId(2)):
+            memory.observe(pid, EncounterKey.spot("forest_clearing"), 3)
+        builder = self._builder(memory, {1: 4, 2: 1})
+
+        notes = [builder._spot_familiarity_annotation(pid, 100) for pid in (PlayerId(1), PlayerId(2))]
+
+        assert notes == ["(初めて訪れた)", "(初めて訪れた)"]
+
+    def test_a_failing_turn_provider_gives_no_note(self) -> None:
+        """実行済みの手番の数が引けないときは、初めてと言い切らず注記を付けない。"""
+        memory = InMemoryEncounterMemory()
+        memory.observe(PlayerId(1), EncounterKey.spot("forest_clearing"), 0)
+        builder = SpotGraphUiContextBuilder(
+            encounter_memory=memory,
+            current_tick_provider=lambda: 0,
+            spot_str_id_resolver=lambda i: _SPOT_NAMES[i],
+            executed_turn_provider=lambda pid: (_ for _ in ()).throw(RuntimeError("no turns")),
+        )
+
+        assert builder._spot_familiarity_annotation(PlayerId(1), 100) is None
+
+
 class TestPlayerFamiliarityAnnotation:
     """``_player_familiarity_annotation`` が、見ている側の Being の知り合いの記録から「初めて会った」を決めることを保証する。"""
 

@@ -6922,6 +6922,7 @@ def create_world_runtime(
                 "spot", spot_int
             ),
             acquaintances=player_acquaintances,
+            executed_turn_provider=lambda pid: runtime._execution_turns.get(int(pid.value), 0),
         ),
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
