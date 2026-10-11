@@ -452,6 +452,10 @@ _WARM_NOTICE_EVENTS = {
 }
 
 
+#: 温まったあとも知らせが増えないことを見るために、続けて進める tick 数。
+_TICKS_AFTER_WARM = 3
+
+
 def _warm_notices(runtime, pid: PlayerId) -> list[str]:
     return [
         e.output.prose
@@ -486,13 +490,17 @@ class TestLiftRefusalTellsWhatIsMissing:
         assert message == _LIFT_REFUSAL["not_warm"]
 
     def test_refusals_are_all_different(self) -> None:
-        """3 つの断りの文はどれも違い、どれも昇降機の前提条件の失敗の文としてシナリオに書かれている。"""
+        """3 つの断りの文はどれも違い、発電機が回っている・温まっている・燃料 2 以上のフラグを見る前提条件に、それぞれ 1 つずつ付いている。"""
         lift = _object(_raw(), "lift_landing", "lift")
         start = next(i for i in lift["interactions"] if i["action_name"] == "start_lift")
-        written = {p["failure_message"] for p in start["preconditions"]}
+        by_flag = {p.get("flag_name"): p["failure_message"] for p in start["preconditions"]}
 
         assert len(set(_LIFT_REFUSAL.values())) == len(_LIFT_REFUSAL)
-        assert set(_LIFT_REFUSAL.values()) <= written
+        assert {
+            "generator_off": by_flag["generator_running"],
+            "not_warm": by_flag["generator_warm"],
+            "short_of_fuel": by_flag["generator_fuel_2"],
+        } == _LIFT_REFUSAL
 
     @pytest.mark.parametrize("message", list(_LIFT_REFUSAL.values()))
     def test_refusal_does_not_name_the_answer(self, message: str) -> None:
@@ -511,7 +519,8 @@ class TestGeneratorWarmthIsHeard:
 
         _ticks(runtime, _WARM_TICKS - 1)
         before = _warm_notices(runtime, _GEN)
-        _ticks(runtime, 1 + 3)
+        _ticks(runtime, 1)
+        _ticks(runtime, _TICKS_AFTER_WARM)
 
         assert before == []
         assert len(_warm_notices(runtime, _GEN)) == 1
