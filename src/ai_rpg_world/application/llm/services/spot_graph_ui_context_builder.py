@@ -448,6 +448,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     ``encounter_memory`` / ``current_tick_provider`` / ``spot_str_id_resolver``
     が 3 つ揃っていれば「現在地」に ``(初めて訪れた)`` を、``acquaintances``
     があれば「同じ場所にいるプレイヤー」に ``(初めて会った)`` を付ける。
+
+    ``executed_turn_provider`` は、その player が実行し終えた手番の数を返す。
+    与えると ``(初めて訪れた)`` は着いた最初のターンだけに付く (#1596)。
+    訪れた回数は着いたときにしか増えないので、回数だけでは留まっている間ずっと
+    1 回目のままになる。
     """
 
     def __init__(
@@ -457,6 +462,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         current_tick_provider: Callable[[], int] | None = None,
         spot_str_id_resolver: Callable[[int], str] | None = None,
         acquaintances: PlayerAcquaintances | None = None,
+        executed_turn_provider: Callable[[PlayerId], int] | None = None,
     ) -> None:
         if encounter_memory is not None and not isinstance(
             encounter_memory, IEncounterMemory
@@ -472,10 +478,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             spot_str_id_resolver
         ):
             raise TypeError("spot_str_id_resolver must be callable or None")
+        if executed_turn_provider is not None and not callable(executed_turn_provider):
+            raise TypeError("executed_turn_provider must be callable or None")
         self._encounter_memory = encounter_memory
         self._current_tick_provider = current_tick_provider
         self._spot_str_id_resolver = spot_str_id_resolver
         self._acquaintances = acquaintances
+        self._executed_turn_provider = executed_turn_provider
+        #: (player, spot) ごとに、初めて「(初めて訪れた)」を出したときの実行済みの手番の数。
+        #: 手番を実行する前なら、プロンプトを組み直しても同じ注記を出す。
+        self._first_visit_shown_at: dict[tuple[int, str], int] = {}
 
     @staticmethod
     def _phase_of(current_state: PlayerCurrentStateDto | None) -> GamePhase:
@@ -681,11 +693,21 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 "encounter_memory.lookup failed (spot=%s)", spot_str_id
             )
             return None
-        if record is None:
+        if record is None or not record.is_first:
             return None
-        if record.is_first:
+        if self._executed_turn_provider is None:
             return "(初めて訪れた)"
-        return None
+        try:
+            turn = self._executed_turn_provider(viewer_player_id)
+        except Exception:
+            _logger.exception(
+                "executed_turn_provider failed (player=%s)", viewer_player_id
+            )
+            return None
+        shown_at = self._first_visit_shown_at.setdefault(
+            (int(viewer_player_id.value), spot_str_id), turn
+        )
+        return "(初めて訪れた)" if shown_at == turn else None
 
     def _player_familiarity_annotation(
         self,
