@@ -34,13 +34,13 @@ class TestTheThinkingProfileDiffersOnlyInReasoning:
     """memory_jev_mine_v1_v41_thinking と _loop の差は reasoning effort だけ。"""
 
     def test_only_reasoning_effort_differs_in_runtime_config(self) -> None:
-        """runtime_config の差は LLM_REASONING_EFFORT の none と medium だけ。"""
+        """runtime_config の差は LLM_REASONING_EFFORT の none と minimal だけ。"""
         thinking = _load("memory_jev_mine_v1_v41_thinking")
         loop = _load("memory_jev_mine_v1_v41_loop")
 
         differing = _differing_runtime_keys(thinking, loop)
 
-        assert differing == {"LLM_REASONING_EFFORT": ("medium", "none")}
+        assert differing == {"LLM_REASONING_EFFORT": ("minimal", "none")}
 
     def test_only_name_and_description_differ_at_top_level(self) -> None:
         """トップレベルで違うのは名前と説明だけ。世界・run 長・snapshot はそろっている。"""
