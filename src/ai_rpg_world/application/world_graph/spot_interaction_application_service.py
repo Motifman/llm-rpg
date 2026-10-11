@@ -82,6 +82,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionActorPlaneNotAllowedException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
+    InteractionParameterMissingException,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
@@ -1382,6 +1383,9 @@ class SpotInteractionApplicationService:
             # 著者の宣言漏れに依存して silent になる。失敗 reason を event
             # に乗せて常に emit し、formatter で prose を組む方針に変更。
             # 同 (actor, object, action, reason) の連発は dedup で抑える。
+            # 引数が無いのは呼び方の誤りで、目撃者に見せる出来事が無い (D1607)。
+            if isinstance(exc, InteractionParameterMissingException):
+                raise
             if emit_failure_observation:
                 self._maybe_emit_failure_observation(
                     interior, object_id, action_name, entity_id, spot_id, graph,
