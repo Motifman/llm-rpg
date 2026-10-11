@@ -7723,7 +7723,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **型で分ける**: 理由の文から引数の案内かを見分けると、文面を変えただけで目撃者に漏れる。作者の文を分類のキーにしない方針は Issue #380 (`precondition_failure_kind.py`) と同じ。前提条件の失敗は `failed_condition` を運ぶので、キーが無い失敗かは、条件と parameters から `_lacks_puzzle_input` で判定する。判定は前提条件の評価と同じ関数を使い、二重にしない。子の例外にしたので、`InteractionNotAllowedException` で受けている道具の実行側とループ検出は変わらない。
 
-**どうしないと壊れるか**: parameters からキーを読む前提条件や効果を足したら、キーが無いときに `InteractionParameterMissingException` を投げる。親の例外のままだと、目撃者に案内が漏れる。`tests/demos/test_mine_village_safe_witness_sees_no_parameter_guidance.py` は、実 session でハルが `"code"` 無しで金庫を試すとミオの観測に失敗の文が出ず、番号違いなら出ることを見る。`tests/application/world_graph/test_missing_parameter_failure_is_not_witnessed.py` は、看板の `text` 無しで失敗の観測が出ないことを見る。
+**どうしないと壊れるか**: parameters からキーを読む前提条件や効果を足したら、キーが無いときに `InteractionParameterMissingException` を投げる。親の例外のままだと、目撃者に案内が漏れる。`tests/demos/test_mine_village_safe_witness_sees_no_parameter_guidance.py` は、実 session でハルが `"code"` 無しで金庫を試すとミオの観測に失敗の文が出ず、番号違いなら出ることを見る。`tests/application/world_graph/test_missing_parameter_failure_is_not_witnessed.py` は、看板の `text` 無しで失敗の観測が出ないことを見る。`tests/domain/world_graph/test_missing_puzzle_input_is_a_distinct_refusal.py` は、キーが無い・空・空白だけのときに子の例外を、番号違いのときに親の例外を投げることを、物体の経路と道具に宿る操作の経路の両方で見る。
 
 **残っている穴**: 対人の操作 (`player_interactions`) で `parameters["item"]` が無いときは、「相手がそれを持っていない」と同じ前提条件の不成立として扱う。対人の操作は目撃者に失敗の観測を出さないので、いまは漏れない。でたらめに行動するスタブ (design_decisions D1557) は、目撃者の観測に出た引数名を漏れとして数えていない。
 
