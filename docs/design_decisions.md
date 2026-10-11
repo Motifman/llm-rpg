@@ -4859,7 +4859,7 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - actorとtargetはscope由来のPlayerStatus repositoryから読み直す
 - 成功時だけstatusと`PlayerRevivedEvent`をcommitし、失敗DTOは内部例外でrollbackする
 - `PlayerRevivedEvent`は確定後に既存pipelineへ渡し、復活済みstatusを観測できる
-- `say_inline`はscope終了後に行い、失敗した介抱を発話しない
+- `say_inline`はscope終了後に行い、~~失敗した介抱を発話しない~~ (design_decisions D1601 で取り消し。失敗した介抱の発言も scope 終了後に出す。発言を出さない理由は確定区間の順序だけで、失敗には当てはまらなかった)
 - FallenBodyとdeath grace timerは判断#196で同じscopeのrollback参加資源となり、
   status遷移と一緒に確定する
 - `SpotGraphToolExecutor._tend_to_player`はscope factory未配線なら`NOT_WIRED`で
@@ -7686,3 +7686,35 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **対象外**: 行動が成功したのに本人を起こす観測が出ず、6 tick 眠る件 (記憶を思い出すツール、結果の出ない探索など) は、原因が別なので Issue #1597 に切り出した。こちらは本人が手を決める前に手番を失う件で、あちらは手を決めて結果を受け取ったあとに起こされない件。
 
 **関連**: Issue #1595 / #1597 / #1508、design_decisions 7 / 214 / D1582。
+
+---
+
+## D1601. 行動に添えた発言は、行動の結果を問わず dispatch で 1 回出す
+
+**何を**:
+
+- `say_inline` を各ツールの handler から外し、dispatch (`wire_missing_spot_graph_tools` の配線) で handler を包む `wrap_with_say_inline` から出す。handler が返った後に `SpotGraphToolExecutor.speak_say_inline` を 1 回呼ぶ。成功、前提条件の失敗、名前の解決の失敗、疲労による拒否のどれでも出す。handler が例外を投げたときも出してから例外を外へ出す
+- 包むのは、ツール定義に `say_inline` を持つツールすべて。名前の一覧はツール定義から作り、手で並べない
+- 包みは resolver の外側に置く。対象の名前を解決できず executor が呼ばれない場合も、発言は届く
+- 発話そのものが断られたとき (speech service が未配線、倒れていて声が出せない、居場所が無い) は、結果文の末尾に「（添えた発言は届かなかった）」と足す。trace の `tool_trace_payload` に `say_inline_spoken` (`true` / `false`) を残す。`say_inline` が無い行動には何も足さない
+- 介抱 (design_decisions 194) も失敗で届ける。scope が閉じてから発言を出す順序は保つ
+
+**なぜ**:
+
+- `var/runs/mine_v1_006` の T17〜T20 で、籠の前の駆け引きの宣言 (ゲンの「サヨ、鍵を差せ」、ミオの「俺もハルと二人で外へ出る約束なんだ」など 5 件) が、前提条件で断られた interact に添えられていて相手に届いていなかった。本人は聞こえた前提で次の行動を選んでいた
+- 原因は 194 ではなく、`say_inline` を入れたときからの形だった。各 handler が成功の経路の最後でだけ発言を出しており、後から足したツールも同じ形を写した。194 の「失敗した介抱を発話しない」もこの形を介抱で保ったものだった
+- 口にしたことと、行動が通ったかは別のことである。籠が動かなくても「鍵を差せ」と言った声は乗り場に響く。意図の表明や交渉の言葉は、行動が断られる場面でこそ要る
+- 各 handler に発言を置き直す案は採らなかった。22 ツールの失敗の `return` すべてに置く必要があり、ツールを足すたびに同じ漏れが起きる
+
+**届き方**: 発言は `speak` と同じ経路 (`SpeechChannel.SAY`) で出すので、届く範囲は成功した行動の発言と変わらない。同じ場所の人には全文、隣の場所の人には断片 (design_decisions 130) が届き、話し手の名前の伏せ方も同じになる。`say_inline` は囁きにならないので、囁きの規則はかからない。
+
+**届けないもの**: ツールで選り分けて届けない行動は無い。届かないのは、発話そのものが断られたときだけで、そのときは本人の結果文に出る。
+
+**どうしないと壊れるか**:
+
+- handler の中で発言を出すと、dispatch の包みと二重に出る。`tests/application/llm/services/executors/test_spot_graph_say_inline.py` が、handler 単体では発言が出ないことを見る
+- `tests/demos/test_words_said_with_a_refused_action_are_heard.py` が、本番と同じ session で `run_phase_b` から、前提条件・名前の解決・疲労・介抱の 4 通りの失敗で発言が届くこと、断られた行動と成功した行動で聞き手の観測が同じになること、`say_inline` を持つツールがすべて包みを通ることを見る
+
+**対象外**: 発言が行動の結果を先取りする問題 (拾えていないのに「見つけました」と言う) は扱わない。発言が届くようになったので、先取りした発言も届く。
+
+**関連**: Issue #1601 / #1508、design_decisions 130 / 194。
