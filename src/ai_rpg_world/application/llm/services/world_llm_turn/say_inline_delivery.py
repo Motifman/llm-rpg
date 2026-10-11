@@ -7,8 +7,9 @@ handler が返った後に 1 か所で出す。設計判断は ``docs/design_dec
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (

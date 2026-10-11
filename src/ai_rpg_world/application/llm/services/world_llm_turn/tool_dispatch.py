@@ -54,6 +54,9 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
     list_destination_labels,
     list_object_labels,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    get_spot_graph_specs,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     filter_definitions_for_escape_llm,
     validate_tool_handler_consistency,
@@ -62,9 +65,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace impo
     build_gold_reader,
     build_roster_reader,
     wrap_with_gold_change,
-)
-from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
-    get_spot_graph_specs,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.say_inline_delivery import (
     with_unspoken_say_inline,
