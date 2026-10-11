@@ -1271,9 +1271,9 @@ class TestLiteLLMClientReasoningEffort:
     """``reasoning_effort`` 引数による reasoning ON/OFF 制御の挙動を保証。
 
     背景: deepseek-v4-flash 等の reasoning model は default で effort=high が
-    乗り、output token を 5-15x 膨らませる。litellm 1.44 の OpenrouterConfig は
-    ``none`` は既存の二重無効化を維持し、有効な effort は top-level 引数へ渡す。
-    無効化 field と有効化引数を同時に送らないことを保証する。
+    乗り、output token を 5-15x 膨らませる。``none`` は既存の二重無効化を維持し、
+    有効な effort は OpenRouter 統一の形で ``extra_body`` に載せる。top-level の
+    ``reasoning_effort`` は LiteLLM のモデル表に無いモデルで送る前に弾かれる (#1582)。
     """
 
     def test_default_reasoning_none_thinking_disabled_injects(
@@ -1310,25 +1310,98 @@ class TestLiteLLMClientReasoningEffort:
             "thinking": {"type": "disabled"},
         }
 
-    def test_high_reasoning_uses_top_level_effort_without_disable_blocks(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh"])
+    def test_enabled_effort_is_sent_in_extra_body_not_top_level_on_invoke(
+        self, effort: str
     ) -> None:
-        """effort=high は top-level に渡し、reasoning/thinking 無効化 field を送らない。"""
-        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="high")
+        """有効な effort を構築時に渡すと、invoke は extra_body の reasoning.effort だけで送り、
+        top-level の reasoning_effort と thinking の無効化を送らない。"""
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4.1-flash",
+            api_key="sk-x",
+            reasoning_effort=effort,
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="required",
+            )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": effort}}
+
+    @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh"])
+    def test_enabled_effort_is_sent_in_extra_body_not_top_level_on_base_kwargs(
+        self, effort: str
+    ) -> None:
+        """有効な effort を構築時に渡すと、completion_base_kwargs も extra_body の
+        reasoning.effort だけを持ち、top-level の reasoning_effort を持たない。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort=effort)
+
         kwargs = client.completion_base_kwargs()
-        assert kwargs["reasoning_effort"] == "high"
+
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": effort}}
+
+    def test_enabled_effort_passes_litellm_param_check_for_unlisted_model(self) -> None:
+        """LiteLLM のモデル表で reasoning 対応と確かめられないモデルに medium を渡しても、
+        invoke が組む引数は LiteLLM の送信前の引数検査で UnsupportedParamsError にならない。"""
+        from litellm.utils import get_optional_params
+
+        model = "openrouter/deepseek/deepseek-v4.1-flash"
+        client = LiteLLMClient(model=model, api_key="sk-x", reasoning_effort="medium")
+        tools = [{"type": "function", "function": {"name": "wait", "parameters": {}}}]
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=tools,
+                tool_choice="required",
+            )
+        kwargs = mock_completion.call_args.kwargs
+        sent_params = {
+            key: kwargs[key]
+            for key in ("tools", "tool_choice", "reasoning_effort", "extra_body")
+            if key in kwargs
+        }
+
+        optional_params = get_optional_params(
+            model="deepseek/deepseek-v4.1-flash",
+            custom_llm_provider="openrouter",
+            **sent_params,
+        )
+
+        assert optional_params["extra_body"]["reasoning"] == {"effort": "medium"}
+
+    def test_empty_string_effort_sends_no_reasoning_field_on_invoke(self) -> None:
+        """reasoning_effort="" のとき、invoke は top-level にも extra_body にも
+        reasoning / thinking の欄を何も送らない。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="")
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(messages=[{"role": "user", "content": "x"}], tools=[])
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
         assert "extra_body" not in kwargs
 
-    def test_empty_string_reasoning_field(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """reasoning_effort="" は古い model 互換用のエスケープハッチ。"""
+    def test_empty_string_effort_sends_no_reasoning_field_on_base_kwargs(self) -> None:
+        """reasoning_effort="" のとき、completion_base_kwargs は reasoning の欄を何も持たない。"""
         client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="")
-        eb = client._build_extra_body()
-        # extra_body 自体が None でなくてもよいが、reasoning/thinking は乗らない
-        if eb is not None:
-            assert "reasoning" not in eb
-            assert "thinking" not in eb
+
+        kwargs = client.completion_base_kwargs()
+
+        assert "reasoning_effort" not in kwargs
+        assert "extra_body" not in kwargs
 
     def test_unknown_effort_raises_value_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1551,19 +1624,63 @@ class TestLiteLLMClientReasoningEffortOverride:
     def _completion_extra_body(self, m_litellm) -> dict:
         return m_litellm.completion.call_args.kwargs["extra_body"]
 
-    def test_invoke_reasoning_effort_override_uses_top_level_argument(self, client):
-        """reasoning_effort='low' は top-level に渡し、無効化 field を同送しない。"""
+    @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh"])
+    def test_invoke_override_with_enabled_effort_uses_extra_body(
+        self, client, effort: str
+    ) -> None:
+        """構築時が none でも、invoke の per-call override に有効な effort を渡すと、
+        extra_body の reasoning.effort だけで送り、無効化の欄と top-level 引数を送らない。"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
             client.invoke(
                 messages=[{"role": "user", "content": "x"}],
                 tools=[],
                 tool_choice="required",
-                reasoning_effort="low",
+                reasoning_effort=effort,
             )
             kwargs = m_litellm.completion.call_args.kwargs
-            assert kwargs["reasoning_effort"] == "low"
-            assert "extra_body" not in kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": effort}}
+
+    def test_base_kwargs_override_with_enabled_effort_uses_extra_body(self, client) -> None:
+        """completion_base_kwargs の per-call override に有効な effort を渡すと、
+        extra_body の reasoning.effort だけを持ち、top-level 引数を持たない。"""
+        kwargs = client.completion_base_kwargs(reasoning_effort="medium")
+
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"reasoning": {"effort": "medium"}}
+
+    def test_invoke_override_with_empty_string_sends_no_reasoning_field(self, client) -> None:
+        """構築時が none でも、invoke の per-call override に空文字を渡すと、
+        その呼び出しは reasoning の欄を何も送らない。"""
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                reasoning_effort="",
+            )
+            kwargs = m_litellm.completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert "extra_body" not in kwargs
+
+    def test_invoke_override_with_none_sends_only_disable_blocks(self) -> None:
+        """構築時が medium でも、invoke の per-call override に none を渡すと、
+        従来の無効化ブロックだけを送る。"""
+        client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="medium")
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                reasoning_effort="none",
+            )
+            kwargs = m_litellm.completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {
+            "reasoning": {"effort": "none", "exclude": True},
+            "thinking": {"type": "disabled"},
+        }
 
     def test_invoke_without_override_keeps_construction_default_None(self, client):
         """reasoning_effort を渡さなければ、構築時の既定 (none) のまま送られる
@@ -1619,8 +1736,8 @@ class TestLiteLLMClientReasoningEffortOverride:
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["messages"] is messages
         assert kwargs["tool_choice"] == "required"
-        assert kwargs["reasoning_effort"] == "minimal"
-        assert "extra_body" not in kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"]["reasoning"] == {"effort": "minimal"}
         metrics = capture_sink.calls[0]["metrics"]
         assert metrics["reasoning_effort"] == "minimal"
         assert metrics["cached_tokens"] == 0

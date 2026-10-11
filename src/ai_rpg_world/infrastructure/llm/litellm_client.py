@@ -110,17 +110,16 @@ _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 # agent turn では reasoning は不要、確定 tool_call が欲しいだけ)。
 #
 # reasoning を止める ``none`` では OpenRouter 統一 envelope と DeepSeek native
-# kill switch を併用する。reasoning を有効にするときは litellm の
-# ``reasoning_effort`` 引数を使い、無効化 field を同時に送らない。
+# kill switch を併用する。reasoning を有効にするときも OpenRouter 統一 envelope
+# (``extra_body`` の ``reasoning.effort``) で渡し、無効化 field を同時に送らない。
+# litellm の top-level ``reasoning_effort`` は、litellm のモデル表で reasoning 対応と
+# 確かめられないモデルを送る前に弾くため使わない (design_decisions D1582)。
 #
 # 値:
 # - `"none"` (default) = reasoning 完全 OFF
 # - `"minimal"` = 最小 budget で reasoning (~10% of max_tokens)
 # - `"low"` / `"medium"` / `"high"` / `"xhigh"` = OpenRouter 標準段階
 # - 空文字 = inject しない (= reasoning フィールド一切付けない / 古い model 互換)
-#
-# 非 reasoning model に対しても付与可だが、provider 側で無視されるはず
-# (OpenAI 経由でも unknown field は silently dropped)。
 _ENV_VAR_REASONING_EFFORT = "LLM_REASONING_EFFORT"
 _DEFAULT_REASONING_EFFORT = "none"  # reasoning OFF が agent turn 用途の安全 default
 
@@ -226,16 +225,19 @@ def _validate_reasoning_effort(
 
 
 def _build_reasoning_block(effort: str) -> dict[str, Any] | None:
-    """検証済みの ``effort`` から reasoning 無効化ブロックを組む。
+    """検証済みの ``effort`` から ``extra_body`` に載せる reasoning ブロックを組む。
 
+    - ``""`` → ``None``。reasoning の欄を何も送らない
     - ``"none"`` → 従来どおり OpenRouter と DeepSeek の両方で明示的に無効化
-    - それ以外 → ``None``。有効な effort は top-level ``reasoning_effort`` へ渡す
+    - それ以外 → OpenRouter 統一 envelope の ``reasoning.effort`` だけを送る
 
     config 経路と invoke の per-call override の両方が本関数を共有し、
-    無効化 field と有効化引数を同時に送らない。
+    無効化 field と有効化 field を同時に送らない。
     """
-    if effort != "none":
+    if effort == "":
         return None
+    if effort != "none":
+        return {"reasoning": {"effort": effort}}
     return {
         # OpenRouter 統一 envelope (primary control path)
         "reasoning": {
@@ -367,10 +369,6 @@ class LiteLLMClient(
             require_params=openrouter_require_params,
         )
 
-        # reasoning model (deepseek-v4-flash 等) に対する effort 制御。
-        # default = "none" (= reasoning 完全 OFF)。
-        # 非 reasoning model でも余計な field が乗るだけで害はない (= provider 側で
-        # silently dropped)。
         self._reasoning_effort = _validate_reasoning_effort(
             reasoning_effort,
             source_label="reasoning_effort",
@@ -584,8 +582,6 @@ class LiteLLMClient(
         }
         if self._api_base is not None:
             base["api_base"] = self._api_base
-        if effective_reasoning_effort not in {"", "none"}:
-            base["reasoning_effort"] = effective_reasoning_effort
         reasoning_override = (
             _NO_REASONING_OVERRIDE
             if reasoning_effort is None
@@ -670,8 +666,6 @@ class LiteLLMClient(
                 if len(normalized_session_id) > 256:
                     raise ValueError("session_id must be 256 characters or fewer")
                 completion_kw["session_id"] = normalized_session_id
-            if effective_reasoning_effort not in {"", "none"}:
-                completion_kw["reasoning_effort"] = effective_reasoning_effort
             extra_body = self._build_extra_body(reasoning_override=reasoning_override)
             if extra_body is not None:
                 completion_kw["extra_body"] = extra_body
