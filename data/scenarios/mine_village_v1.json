@@ -2142,7 +2142,7 @@
           {
             "id": "lift",
             "name": "昇降機",
-            "description": "地上へ続く縦穴に吊られた鉄の籠。籠の入口の上に「定員三名」と刻んだ鉄の札が打ち付けてある。脇に操作盤があり、鍵穴と始動の把手が付いている。鍵穴の下に「起動鍵は鉱山会社の事務所で預かる」と書いた古い張り紙が残っている。",
+            "description": "地上へ続く縦穴に吊られた鉄の籠。籠の入口の上に「定員三名」と刻んだ鉄の札が打ち付けてある。籠の中の奥の壁に操作盤があり、鍵穴と始動の把手が付いている。乗り込まなければ手が届かない。鍵穴の下に「起動鍵は鉱山会社の事務所で預かる」と書いた古い張り紙が残っている。",
             "object_type": "OTHER",
             "state": {
               "used": 0,
@@ -2230,6 +2230,11 @@
                   },
                   {
                     "condition_type": "HAS_ITEM",
+                    "required_item": "lift_berth",
+                    "failure_message": "操作盤は籠の中にある。乗り込まないと、把手に手が届かない。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
                     "required_item": "lift_key",
                     "failure_message": "鍵穴に合う鍵を持っていない。"
                   },
@@ -2247,11 +2252,6 @@
                     "condition_type": "FLAG_SET",
                     "flag_name": "generator_fuel_2",
                     "failure_message": "籠がわずかに浮きかけて、すぐに力が抜けた。"
-                  },
-                  {
-                    "condition_type": "HAS_ITEM",
-                    "required_item": "lift_berth",
-                    "failure_message": "操作盤は籠の中にある。乗り込まないと、把手に手が届かない。"
                   }
                 ],
                 "effects": [
