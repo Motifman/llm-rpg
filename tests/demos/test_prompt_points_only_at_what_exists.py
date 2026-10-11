@@ -83,7 +83,7 @@ _SCENARIO_FILES = (
 #: 『』で囲んでいるが、プロンプトの節や欄を指していない名前。
 _QUOTES_THAT_ARE_NOT_PLACES = {
     "環境音": "listen が受け取る音の種類の呼び名",
-    "text が要る": 'interact の操作候補に付く表示 (`"text" が要る`) の例',
+    '"キー名" が要る': 'interact の操作候補に付く表示 (`"code" が要る`) の形',
 }
 
 _HEADING_LINE = re.compile(r"^【([^】]+)】", re.MULTILINE)

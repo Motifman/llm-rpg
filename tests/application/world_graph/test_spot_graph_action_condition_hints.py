@@ -145,6 +145,71 @@ def test_write_player_text_effect_becomes_required_parameter_hint() -> None:
     assert snap.objects[0].interactions[0].condition_hints == ('"text" が要る',)
 
 
+def _single_object_interior(interaction: InteractionDef) -> SpotInterior:
+    return SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(10),
+                name="金庫",
+                description="ダイヤル式の金庫。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+
+def test_puzzle_input_match_precondition_becomes_required_parameter_hint() -> None:
+    """PUZZLE_INPUT_MATCH は puzzle_input_key の値を必須入力として「"code" が要る」と表示する。"""
+    interaction = InteractionDef(
+        action_name="open_safe",
+        display_label="番号を合わせて金庫を開ける",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH,
+                puzzle_input_key="code",
+                required_state={"answer": "1907"},
+            ),
+        ),
+        effects=(),
+    )
+
+    snap = _build_builder(_single_object_interior(interaction)).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].condition_hints == ('"code" が要る',)
+
+
+def test_puzzle_input_and_text_effect_sharing_a_key_show_the_key_once() -> None:
+    """PUZZLE_INPUT_MATCH と WRITE_PLAYER_TEXT が同じキーを要求するとき、「が要る」は 1 度だけ出る。"""
+    interaction = InteractionDef(
+        action_name="answer_riddle",
+        display_label="合言葉を書く",
+        preconditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH,
+                puzzle_input_key="text",
+                required_state={"answer": "ひらけ"},
+            ),
+        ),
+        effects=(
+            InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+                parameters={},
+            ),
+        ),
+    )
+
+    snap = _build_builder(_single_object_interior(interaction)).build_snapshot(1)
+
+    assert snap is not None
+    assert snap.objects[0].interactions[0].condition_hints == ('"text" が要る',)
+
+
 def test_action_without_required_parameter_effect_has_no_parameter_hint() -> None:
     """必須入力を要求しない action には、存在しないパラメータのヒントを足さない。"""
     interaction = InteractionDef(

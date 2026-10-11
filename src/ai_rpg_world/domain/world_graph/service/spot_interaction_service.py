@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Mapping
 from typing import Any
@@ -473,8 +474,15 @@ class SpotInteractionService:
             expected = cond.required_state or {}
             if "answer" not in expected:
                 return False, cond.failure_message or "パズル答えが設定されていません"
+            if user_input is None or str(user_input).strip() == "":
+                # 番号違いの failure_message は「入力して試した」場面を書いている。
+                # キーが無いのは呼び方の誤りなので、直すのに要るキーを名指す (D1591)。
+                return False, (
+                    f"何を入れるか、parameters の {json.dumps(cond.puzzle_input_key, ensure_ascii=False)} "
+                    "で指定してください。"
+                )
             expected_value = expected["answer"]
-            if user_input is None or str(user_input) != str(expected_value):
+            if str(user_input) != str(expected_value):
                 return False, cond.failure_message or "入力が正しくありません"
             return True, None
 
