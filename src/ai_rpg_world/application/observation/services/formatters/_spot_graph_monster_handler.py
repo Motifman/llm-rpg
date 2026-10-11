@@ -99,6 +99,9 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         monster_name = self._context.name_resolver.monster_name_by_monster_id(
             event.attacker_monster_id
         )
+        target_name = self._context.name_resolver.player_name(
+            PlayerId(event.target_player_id.value)
+        )
         if is_victim:
             if event.target_visible:
                 prose = (
@@ -107,9 +110,6 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
             else:
                 prose = "暗闇から何かに襲われた。"
         else:
-            target_name = self._context.name_resolver.player_name(
-                PlayerId(event.target_player_id.value)
-            )
             prose = f"{monster_name}が{target_name}を攻撃した。"
         if event.target_incapacitated:
             # 倒れた事実は受信者問わず追記。被害者本人に対しては「倒れた」、
@@ -121,6 +121,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
             "attacker_monster_id": event.attacker_monster_id.value,
             "monster_name": monster_name,
             "target_player_id": event.target_player_id.value,
+            "target_name": target_name,
             "damage": event.damage,
             "target_incapacitated": event.target_incapacitated,
             "target_visible": event.target_visible,
