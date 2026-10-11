@@ -67,10 +67,12 @@ class _Env:
         self,
         *beliefs: tuple[str, str],
         goal: str | None = None,
+        hearsay_only: frozenset[str] = frozenset(),
     ) -> None:
         self.recorder = RecordingTraceRecorder()
         self.store = InMemorySemanticMemoryStore()
         for entry_id, text in beliefs:
+            heard = entry_id in hearsay_only
             self.store.add_by_being(
                 BEING,
                 SemanticMemoryEntry(
@@ -81,6 +83,8 @@ class _Env:
                     evidence_episode_ids=("ep-1",),
                     confidence=0.6,
                     created_at=T0,
+                    support_evidence_ids=("e1",) if heard else (),
+                    hearsay_support_count=1 if heard else 0,
                 ),
             )
         self.expectations = InMemoryExpectationRepository()
@@ -244,6 +248,15 @@ class TestRecallOutput:
         assert env.trace()["chosen"][0] == "b-2"
         assert ids == ("b-1", "b-2")
         assert text == "- 満ちてきた水は冷たい\n- 潮が満ちてきたら高台へ行く"
+
+    def test_belief_supported_only_by_hearsay_is_marked_as_heard(self) -> None:
+        """支持がすべて伝聞の信念は、言い切りの文でも「(人から聞いた話)」付きで載る (#1602)。"""
+        env = _Env(("b-crab", "潮が満ちると干潟は渡れない"), hearsay_only=frozenset({"b-crab"}))
+
+        text, ids = env.run([_seen("潮が満ちてきた", 1)])
+
+        assert text == "- 潮が満ちると干潟は渡れない (人から聞いた話)"
+        assert ids == ("b-crab",)
 
     def test_trace_has_the_whole_query_and_what_was_found(self) -> None:
         """trace には、全部の項目をつないだ問い合わせ文、候補の数、引けた信念、載せた信念が残る。"""

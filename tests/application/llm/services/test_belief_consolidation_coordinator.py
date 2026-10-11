@@ -2670,3 +2670,142 @@ class TestMalformedResponseHandling:
         assert len(note_events) == 1
         assert note_events[0].payload["batch_evidence_ids"] == ["e1"]
         assert consolidation_events == []
+
+
+class TestHeardGuessesStayGuesses:
+    """他の人の推測を材料にした信念が、言い切りの世界の決まりとして出ないための入力の組み立てと表示を保証する (#1602)。
+
+    言い切りにするかどうかは LLM の判断なので見ない。LLM に渡る決まりと材料、
+    および LLM が言い切りで作ってしまったときの【関連する学び】の表示を見る。
+    """
+
+    # mine_v1_006 のサヨ (P4) が T34 に信念をまとめたときの材料。どれもミオの推測か依頼。
+    _SAYO_T34_HEARSAY = (
+        ("h1", "発電機が回れば巻き上げ機に動力が来るはずだ。"),
+        ("h2", "親父さんの言う「歯車を噛ませる」は弁の目盛りを合わせることだと思う。"),
+        ("h3", "発電機は回っているのに昇降機へ動力が来ないなら、切り替え弁の目盛りが違うのかもしれない。"),
+        ("h4", "弁を三に合わせて流れを変えてみるので、乗り場で籠が動くか見ていてほしい。"),
+    )
+
+    @classmethod
+    def _sayo_t34(cls, **setup_kwargs: Any) -> _Setup:
+        setup = _build_setup(
+            outcome={
+                "decisions": [
+                    {
+                        "action": "create",
+                        "text": "切り替え弁の目盛りが正しくないと昇降機に動力が来ない",
+                        "importance": 8,
+                        "tags": ["切り替え弁", "昇降機"],
+                        "evidence_ids": [eid for eid, _ in cls._SAYO_T34_HEARSAY],
+                    }
+                ]
+            },
+            **setup_kwargs,
+        )
+        for eid, text in cls._SAYO_T34_HEARSAY:
+            setup.evidence_buffer.append_by_being(
+                setup.being_id,
+                _evidence(
+                    eid,
+                    cue_signature="hearsay:unattributed",
+                    text=text,
+                    source_kind=BeliefEvidenceSourceKind.HEARSAY,
+                    source_speaker="ミオ",
+                ),
+            )
+        return setup
+
+    def test_system_prompt_keeps_speculative_wording_even_without_hearsay(self) -> None:
+        """伝聞が無効でも、材料が推測の言い方なら命題も推測の言い方で書き、推測をいくつ集めても言い切りにしない、という決まりがシステムプロンプトに入る。"""
+        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        system = setup.port.calls[0][0]["content"]
+        assert "命題も推測の言い方で書く" in system
+        assert "推測の evidence をいくつまとめても言い切りにしない" in system
+
+    def test_hearsay_section_asks_to_keep_the_speaker_when_only_hearsay(self) -> None:
+        """伝聞が有効なら、伝聞だけを材料に命題を書くときは話し手を残す、という決まりがシステムプロンプトに入る。"""
+        setup = self._sayo_t34(hearsay_enabled=True)
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        system = setup.port.calls[0][0]["content"]
+        assert "材料が伝聞だけなら、命題に話し手を残す" in system
+
+    def test_hearsay_section_excludes_hearsay_from_hedge_removal(self) -> None:
+        """伝聞が有効なら、ヘッジを外すかを決める支持の件数から伝聞を除く、という決まりがシステムプロンプトに入る。"""
+        setup = self._sayo_t34(hearsay_enabled=True)
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        system = setup.port.calls[0][0]["content"]
+        assert "数える支持から hearsay_support_count の分を除く" in system
+
+    def test_shortlist_carries_hearsay_support_count_when_hearsay_enabled(self) -> None:
+        """伝聞が有効なら、shortlist の各信念に支持のうち伝聞の件数 hearsay_support_count が載る。"""
+        setup = self._sayo_t34(hearsay_enabled=True)
+        setup.semantic_store.add_by_being(
+            setup.being_id,
+            _belief_entry(
+                entry_id="sem-lift",
+                text="ミオによれば昇降機は鍵だけでは動かないかもしれない",
+                tags=("ミオ",),
+                support=("s1", "s2", "s3"),
+                hearsay_support_count=2,
+            ),
+        )
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        user = json.loads(setup.port.calls[0][1]["content"].split("\n", 1)[1])
+        by_id = {b["belief_id"]: b for b in user["shortlist"]}
+        assert by_id["sem-lift"]["support_count"] == 3
+        assert by_id["sem-lift"]["hearsay_support_count"] == 2
+
+    def test_shortlist_omits_hearsay_support_count_when_hearsay_disabled(self) -> None:
+        """伝聞が無効なら、shortlist に hearsay_support_count のキーを載せない。説明していない欄を渡さない。"""
+        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
+        setup.semantic_store.add_by_being(
+            setup.being_id, _belief_entry(entry_id="sem-x", support=("s1",))
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        user = json.loads(setup.port.calls[0][1]["content"].split("\n", 1)[1])
+        assert user["shortlist"]
+        assert all("hearsay_support_count" not in b for b in user["shortlist"])
+
+    def test_sayo_t34_hearsay_reaches_llm_with_speaker_and_wording(self) -> None:
+        """サヨの T34 の材料 4 件は、推測の言い方を残した文のまま、伝聞であることと話し手ミオを添えて LLM に渡る。"""
+        setup = self._sayo_t34(hearsay_enabled=True)
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        user = json.loads(setup.port.calls[0][1]["content"].split("\n", 1)[1])
+        sent = {
+            e["evidence_id"]: (e["text"], e["source_kind"], e["source_speaker"])
+            for e in user["evidence"]
+        }
+        assert sent == {
+            eid: (text, "hearsay", "ミオ") for eid, text in self._SAYO_T34_HEARSAY
+        }
+
+    def test_sayo_t34_belief_written_as_fact_is_shown_as_heard(self) -> None:
+        """LLM がサヨの T34 の材料から言い切りの信念を作っても、【関連する学び】の行には「(人から聞いた話)」が付く。"""
+        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+            belief_recall_line,
+        )
+
+        setup = self._sayo_t34(hearsay_enabled=True)
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        (created,) = setup.semantic_store.list_for_being(setup.being_id)
+        assert belief_recall_line(created) == (
+            "- 切り替え弁の目盛りが正しくないと昇降機に動力が来ない (人から聞いた話)"
+        )
