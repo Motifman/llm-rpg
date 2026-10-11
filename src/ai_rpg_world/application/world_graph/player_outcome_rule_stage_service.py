@@ -82,7 +82,14 @@ class PlayerOutcomeRuleStageService:
         self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
-        """発火条件を満たした規則を評価し、一度限りなら機会を消費する。"""
+        """世界の段の中で、発火条件を満たした規則を評価し、一度限りなら機会を消費する。"""
+        self._run(current_tick, evaluation_point="world_stage")
+
+    def run_after_turns(self, current_tick: WorldTick) -> None:
+        """全員の手番のあとに、手番の中で満たされた規則を同じ tick のうちに評価する。"""
+        self._run(current_tick, evaluation_point="after_turns")
+
+    def _run(self, current_tick: WorldTick, *, evaluation_point: str) -> None:
         if not self._rules:
             return
         scope_factory = self._command_scope_factory
@@ -100,13 +107,14 @@ class PlayerOutcomeRuleStageService:
                 target_kind="player_outcome_rule",
                 target_id=rule.rule_id,
             ):
-                self._run_rule_command(rule, current_tick, scope_factory)
+                self._run_rule_command(rule, current_tick, scope_factory, evaluation_point)
 
     def _run_rule_command(
         self,
         rule: PlayerOutcomeRule,
         current_tick: WorldTick,
         scope_factory: CommandScopeFactoryPort[object],
+        evaluation_point: str,
     ) -> None:
         """ruleの全対象outcomeと一度限り進捗を一緒に確定する。"""
         committed: tuple[_CommittedOutcome, ...] = ()
@@ -117,6 +125,7 @@ class PlayerOutcomeRuleStageService:
                     rule,
                     current_tick,
                     notify_callbacks=False,
+                    evaluation_point=evaluation_point,
                 )
         except CommandPostCommitException:
             self._notify_committed_outcomes(committed)
@@ -133,6 +142,7 @@ class PlayerOutcomeRuleStageService:
         current_tick: WorldTick,
         *,
         notify_callbacks: bool,
+        evaluation_point: str,
     ) -> tuple[tuple[_CommittedOutcome, ...], bool]:
         # 外側の確認は不要なscope生成を避ける高速経路にすぎない。
         # 待機中に別commandが同じonce規則を確定し得るため、資源所有権を
@@ -156,6 +166,7 @@ class PlayerOutcomeRuleStageService:
                 current_tick=current_tick,
                 purpose="player_outcome_trigger",
                 owner_id=rule.rule_id,
+                evaluation_point=evaluation_point,
             )
         if not trigger_result.is_satisfied:
             return (), False
@@ -182,6 +193,7 @@ class PlayerOutcomeRuleStageService:
                     purpose="player_outcome_eligibility",
                     owner_id=rule.rule_id,
                     player_id=player_id.value,
+                    evaluation_point=evaluation_point,
                 )
             if not eligibility_result.is_satisfied:
                 continue

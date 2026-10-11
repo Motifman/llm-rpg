@@ -35,6 +35,7 @@ class ScenarioPredicateTraceEmitter:
         owner_id: str | int,
         owner_index: int | None = None,
         player_id: int | None = None,
+        evaluation_point: str | None = None,
     ) -> None:
         """一度だけ得た評価結果を記録し、trace障害は世界進行へ波及させない。"""
         try:
@@ -76,6 +77,12 @@ class ScenarioPredicateTraceEmitter:
                     }
                     for decision in evaluation.probability_decisions
                 ],
+                # 1 tick に 2 回評価される個人結果の規則だけが渡す (design_decisions D1618)。
+                **(
+                    {"evaluation_point": evaluation_point}
+                    if evaluation_point is not None
+                    else {}
+                ),
             )
         except Exception:
             _logger.warning(
