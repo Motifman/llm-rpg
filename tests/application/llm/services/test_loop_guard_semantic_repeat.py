@@ -243,6 +243,29 @@ class TestAnExactMatchOnTheSameActionIsNotDoubled:
         ] == ["streak"]
 
 
+class TestAnActionRetriedWithNewWordsIsAnExactMatch:
+    """発言だけを変えた同じ操作は完全一致の検出が数え、意味上の検出と警告を重ねないことを保証する (#1594)。"""
+
+    def test_the_same_interaction_with_new_say_inline_is_warned_once_as_an_exact_match(self) -> None:
+        """同じ金庫を say_inline だけ変えて 3 回試し同じ理由で断られると、警告は離れた tick の失敗の 1 件だけで、意味上の判断は exact_match_fired=True で残る。"""
+        buffer = DefaultObservationContextBuffer()
+        recorder = _Recorder()
+        guard = _guard(_Port(repeat_probability=0.95), buffer=buffer, recorder=recorder)
+
+        for said in ("この番号で合わせてみる", "渡し方を変えて試す", "もう一度 1907 だ"):
+            guard.record_and_check(
+                _GAREN, "interact",
+                {"target_label": "金庫", "action_name": "open_safe", "say_inline": said},
+                success=False, error_code="INTERACTION_PRECONDITION_FAILED",
+                result_summary="扉はびくともしない",
+            )
+
+        [warning] = _warnings(buffer)
+        [judgment] = recorder.of(TraceEventKind.TYPED_JUDGMENT, question=SEMANTIC_REPEAT_QUESTION)
+        assert warning.structured["pattern"] == "cross_tick_failure"
+        assert judgment["exact_match_fired"] is True
+
+
 class TestTheDiagnosisAppliesToSemanticRepeats:
     """意味上の繰り返しの警告も、見立て (#1411) を通って文面を選ぶことを保証する。"""
 
