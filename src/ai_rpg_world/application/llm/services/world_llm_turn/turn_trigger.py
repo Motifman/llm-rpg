@@ -13,7 +13,11 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn import (
     settle_expectations_after_turn,
 )
-from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+from ai_rpg_world.application.llm.services.world_llm_turn.types import (
+    LLM_CALL_FAILED_ERROR_CODE,
+    LlmPhaseAResult,
+)
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
     WorldTickFailureIsolator,
 )
@@ -24,6 +28,11 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.world_llm_turn.wiring import WorldLlmWiring
 
 logger = logging.getLogger(__name__)
+
+#: 同じ人の呼び出しが続けて失敗したとき、次の tick に回すのをやめる回数。
+#: mine_v1_005 の失敗率 4/118 では偶然 3 回続くのは 1/25,000 程度で、続くなら
+#: 一時的な遅れではない。打ち切ったあとは観測か待ち時間のタイマーで起きる。
+MAX_CONSECUTIVE_LLM_FAILURES = 3
 
 @dataclass
 class WorldLlmTurnTrigger(ILlmTurnTrigger):
@@ -90,6 +99,8 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
     pending_player_ids: set[int] = field(default_factory=set)
     # 旧名 _turn_counts。pid → 自己 reschedule の連続回数。
     _self_reschedule_streak: dict[int, int] = field(default_factory=dict)
+    max_consecutive_llm_failures: int = MAX_CONSECUTIVE_LLM_FAILURES
+    _llm_failure_streak: dict[int, int] = field(default_factory=dict)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         """外部要因 (他者観測 / arrival / idle timer 等) による起床。
@@ -278,6 +289,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             # should_reschedule=True かつ未到達 → streak を累積して chain 継続
             self._self_reschedule_streak[player_id_value] = current_streak
             self.pending_player_ids.add(player_id_value)
+        self._retry_after_llm_failure(player_id_value, result)
         # #346 Step 3 / #404: per-agent idle timer の last 更新。turn が走った
         # = 「いま活動した」なので heartbeat の沈黙タイマーをリセットする。
         # event 駆動で頻繁に動く player には heartbeat が出なくなり、
@@ -298,6 +310,47 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         self._snapshot_needs_after_turn(player_id_value)
         settle_expectations_after_turn(self.wiring, PlayerId(player_id_value))
         self.wiring.short_term_memory.complete_turn(PlayerId(player_id_value))
+
+    def _retry_after_llm_failure(
+        self, player_id_value: int, result: LlmCommandResultDto
+    ) -> None:
+        """呼び出しが失敗した人を次の tick に回す (#1595)。
+
+        回さないと、本人を起こす観測が届くか待ち時間のタイマーが切れるまで眠る。
+        続けて失敗したら上限で打ち切り、連続を数え直す。
+        """
+        if result.error_code != LLM_CALL_FAILED_ERROR_CODE:
+            self._llm_failure_streak.pop(player_id_value, None)
+            return
+        streak = self._llm_failure_streak.get(player_id_value, 0) + 1
+        rescheduled = streak < self.max_consecutive_llm_failures
+        if rescheduled:
+            self._llm_failure_streak[player_id_value] = streak
+            self.pending_player_ids.add(player_id_value)
+        else:
+            self._llm_failure_streak.pop(player_id_value, None)
+        self._record_trace(
+            TraceEventKind.LLM_FAILURE_RETRY,
+            player_id_value,
+            consecutive_failures=streak,
+            max_consecutive_failures=self.max_consecutive_llm_failures,
+            rescheduled=rescheduled,
+            error_code=result.error_code,
+        )
+
+    def _record_trace(self, kind: str, player_id_value: int, **payload: object) -> None:
+        recorder = getattr(self.wiring.runtime, "trace_recorder", None)
+        if recorder is None:
+            return
+        try:
+            recorder.record(
+                kind,
+                tick=int(self.wiring.runtime.current_tick()),
+                player_id=player_id_value,
+                **payload,
+            )
+        except Exception as exc:
+            self._record_follow_up_failure(exc, f"llm_turn.trace.{kind}", player_id_value)
 
     def _snapshot_needs_after_turn(self, player_id_value: int) -> None:
         """PR-T: turn 終了時に当該 player の現在 need 値を「前回」として保存する
