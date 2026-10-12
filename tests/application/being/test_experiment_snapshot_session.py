@@ -307,44 +307,19 @@ class TestScenarioMetadata:
         assert all(v is None for v in report.metadata_by_being.values())
 
 
-class TestExpectationCounts:
-    """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる予期の件数を、Being ごとに数える挙動を保証する。"""
+class TestMemoryTurns:
+    """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる記憶のターン数を、Being ごとに返す挙動を保証する。"""
 
-    def test_counts_open_closed_undelivered_and_turn_per_being(self, tmp_path: Path) -> None:
-        """清算待ち・終わった予期・未配信の出来事の件数と記憶のターン数を、渡した Being ごとに返す。"""
-        from ai_rpg_world.domain.memory.expectation.aggregate.expectation import Expectation
-        from ai_rpg_world.domain.memory.expectation.value_object.expectation_id import ExpectationId
-        from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import ExpectationOrigin
-        from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
-        from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-            InMemoryExpectationRepository,
-        )
-
-        def expectation(expectation_id: str, holder: BeingId) -> Expectation:
-            return Expectation(expectation_id=ExpectationId(expectation_id), holder=holder, content='箱は空だろう', origin=ExpectationOrigin.WITH_ACTION, likelihood=Likelihood.PROBABLY, formed_at_turn=1, expires_at_turn=3)
-
+    def test_returns_memory_turn_per_given_being(self, tmp_path: Path) -> None:
+        """渡した Being の順に、記憶のターン数を返す。ターンが進んでいない Being は 0。"""
         rio, noa = BeingId('being-rio'), BeingId('being-noa')
-        store = InMemoryExpectationRepository()
-        store.save(expectation('exp-open', rio), [])
-        closed = expectation('exp-closed', rio)
-        store.save(closed, [closed.expire_if_overdue(now_turn=4)])
         (wiring, _) = _make_wiring_stub()
         wiring.memory_turn_clock.advance_turn(rio)
-        wiring.expectation_store = store
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
 
-        counts = session.expectation_counts([rio, noa])
+        turns = session.memory_turns([rio, noa])
 
-        assert counts == [
-            {'being_id': 'being-rio', 'store_wired': True, 'open': 1, 'closed': 1, 'undelivered_events': 1, 'memory_turn': 1},
-            {'being_id': 'being-noa', 'store_wired': True, 'open': 0, 'closed': 0, 'undelivered_events': 0, 'memory_turn': 0},
+        assert turns == [
+            {'being_id': 'being-rio', 'memory_turn': 1},
+            {'being_id': 'being-noa', 'memory_turn': 0},
         ]
-
-    def test_counts_mark_fallback_store_as_not_wired(self, tmp_path: Path) -> None:
-        """予期の store が配線されず空の代用品で動くときは、本当に空だった場合と見分けられるよう store_wired を False にする。"""
-        (wiring, _) = _make_wiring_stub()
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-
-        counts = session.expectation_counts([BeingId('being-rio')])
-
-        assert counts == [{'being_id': 'being-rio', 'store_wired': False, 'open': 0, 'closed': 0, 'undelivered_events': 0, 'memory_turn': 0}]

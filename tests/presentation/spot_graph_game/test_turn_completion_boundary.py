@@ -71,7 +71,6 @@ class _WiringStub:
             turn_cap=10,
             compact_turn_count=5,
         )
-        self.expectation_settlement = None
         self.spoken: list[str] = []
         self.prompt_snapshots: dict[int, str] = {}
         self.system_hashes: dict[int, str] = {}

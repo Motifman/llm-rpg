@@ -227,9 +227,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
-        from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-            InMemoryExpectationRepository,
-        )
 
         repo = InMemoryBeingRepository()
         # episodic_stack 側の attribute 名は EpisodicStack dataclass (実体) と
@@ -256,7 +253,6 @@ class TestExpectedPayloadKeysCoverage:
             _episodic_stack=episodic_stack,
             _goal_journal_store=InMemoryGoalJournalStore(),
             _stagnation_pressure_store=InMemoryStagnationPressureStore(),
-            _expectation_store=InMemoryExpectationRepository(),
             _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),
@@ -429,8 +425,8 @@ class TestSnapshotTraceCarriesExpectationCounts:
         lines = trace_path.read_text(encoding="utf-8").splitlines()
         return [e for e in map(json.loads, lines) if e["kind"] == kind]
 
-    def test_save_and_load_traces_carry_expectation_counts(self, tmp_path: Path) -> None:
-        """保存した Being と復元した Being ごとに、runtime の予期の store を数えた件数 (store_wired=True) が載り、1 手ごとに進んだ記憶のターン数が再開のあとも同じ値で戻る。予期を積む入口 (#1441) がまだ無いので予期と出来事は 0 件。"""
+    def test_save_and_load_traces_carry_memory_turns(self, tmp_path: Path) -> None:
+        """保存した Being と復元した Being ごとに記憶のターン数が載り、1 手ごとに進んだ値が再開のあとも同じ値で戻る。"""
         from scripts.run_scenario_experiment import main
 
         common = ["--profile", "smoke_stub", "--max-world-ticks", "2", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
@@ -441,16 +437,12 @@ class TestSnapshotTraceCarriesExpectationCounts:
         (saved,) = self._events(tmp_path / "first" / "trace.jsonl", "snapshot_save")
         (loaded,) = self._events(tmp_path / "second" / "trace.jsonl", "snapshot_load")
 
-        empty = {"store_wired": True, "open": 0, "closed": 0, "undelivered_events": 0}
         turns: list[dict[str, int]] = []
         for event, ids_key in ((saved, "succeeded_being_ids"), (loaded, "restored_being_ids")):
-            counts = event["payload"]["expectation_counts"]
+            counts = event["payload"]["memory_turns"]
             assert [c["being_id"] for c in counts] == event["payload"][ids_key]
             assert len(counts) > 0
-            assert all(
-                {k: v for k, v in c.items() if k not in ("being_id", "memory_turn")} == empty
-                for c in counts
-            )
+            assert all(set(c) == {"being_id", "memory_turn"} for c in counts)
             turns.append({c["being_id"]: c["memory_turn"] for c in counts})
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())

@@ -124,7 +124,7 @@ def test_game_package_import_is_reported(tmp_path: Path, source: str) -> None:
     "source",
     [
         "from ai_rpg_world.domain.being.value_object.being_id import BeingId\n",
-        "import ai_rpg_world.domain.memory.expectation\n",
+        "import ai_rpg_world.domain.memory.episodic\n",
         "from ai_rpg_world.being.contract import Observation\n",
     ],
 )

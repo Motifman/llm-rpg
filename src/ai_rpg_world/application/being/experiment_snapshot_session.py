@@ -289,15 +289,6 @@ def _empty_stagnation_pressure_store() -> Any:
     return InMemoryStagnationPressureStore()
 
 
-def _empty_expectation_store() -> Any:
-    """#1439 (予期): 予期を作る処理 (#1440) が配線されるまでは、空の in-memory store で代用する (checklist #27)。"""
-    from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-        InMemoryExpectationRepository,
-    )
-
-    return InMemoryExpectationRepository()
-
-
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -510,13 +501,6 @@ class ExperimentSnapshotSession:
             getattr(wiring_result, "stagnation_pressure_store", None)
             or _empty_stagnation_pressure_store()
         )
-        self._expectation_store_wired = (
-            getattr(wiring_result, "expectation_store", None) is not None
-        )
-        expectation_store = (
-            getattr(wiring_result, "expectation_store", None)
-            or _empty_expectation_store()
-        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
         # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
@@ -544,7 +528,6 @@ class ExperimentSnapshotSession:
                 "goal_journal_store",
                 # P-U2: 停滞感 store も同じ監視対象に入れる。
                 "stagnation_pressure_store",
-                "expectation_store",
             )
             if getattr(wiring_result, name, None) is None
         ]
@@ -573,10 +556,8 @@ class ExperimentSnapshotSession:
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,
-            expectation_store=expectation_store,
             memory_turn_clock=wiring_result.memory_turn_clock,
         )
-        self._expectation_store = expectation_store
         self._memory_turn_clock = wiring_result.memory_turn_clock
         self._gateway = BeingSnapshotFileGateway()
         self._capture_use_case = CaptureBeingSnapshotToFileUseCase(
@@ -607,29 +588,15 @@ class ExperimentSnapshotSession:
     def snapshot_dir(self) -> Path:
         return self._snapshot_dir
 
-    def expectation_counts(self, being_ids: Sequence[BeingId]) -> list[dict[str, Any]]:
-        """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる、Being ごとの予期の件数。
-
-        ``store_wired`` が False なら空の代用品を数えている。件数 0 が、本当に
-        予期が無かったのか配線が無かったのかを trace から見分けるため。
-        """
-        counts: list[dict[str, Any]] = []
-        for being_id in being_ids:
-            expectations = self._expectation_store.list_all_by_being(being_id)
-            open_count = len(self._expectation_store.list_open_by_being(being_id))
-            counts.append(
-                {
-                    "being_id": being_id.value,
-                    "store_wired": self._expectation_store_wired,
-                    "open": open_count,
-                    "closed": len(expectations) - open_count,
-                    "undelivered_events": len(
-                        self._expectation_store.list_undelivered_by_being(being_id)
-                    ),
-                    "memory_turn": self._memory_turn_clock.current_turn(being_id),
-                }
-            )
-        return counts
+    def memory_turns(self, being_ids: Sequence[BeingId]) -> list[dict[str, Any]]:
+        """SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に載せる、Being ごとの記憶のターン数。"""
+        return [
+            {
+                "being_id": being_id.value,
+                "memory_turn": self._memory_turn_clock.current_turn(being_id),
+            }
+            for being_id in being_ids
+        ]
 
     # ---- Phase 9-1: world snapshot ----------------------------------------
     def capture_world(

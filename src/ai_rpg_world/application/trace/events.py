@@ -194,9 +194,8 @@ class TraceEventKind:
     # SNAPSHOT_LOAD payload:
     #   - directory: str (= --snapshot-load-dir)
     #   - restored_count: int (= 成功した Being 数)
-    #   - expectation_counts: list[{being_id, store_wired, open, closed,
-    #     undelivered_events, memory_turn}] (= 復元した Being ごとの予期の件数と
-    #     記憶のターン数。store_wired=False は空の代用品を数えたことを示す)
+    #   - memory_turns: list[{being_id, memory_turn}] (= 復元した Being ごとの
+    #     記憶のターン数)
     #   - source_scenario: str | None (= snapshot 内に書かれていた元シナリオ名。
     #     現 scenario と異なる場合は cross-scenario transfer)
     #   - load_mode: "continue" | "replay" (#1514。replay は記憶だけを持ち越す)
@@ -208,7 +207,7 @@ class TraceEventKind:
     #   - succeeded_count: int
     #   - failed_count: int
     #   - failures: list[{being_id, error}]
-    #   - expectation_counts: SNAPSHOT_LOAD と同じ形。保存できた Being ごと
+    #   - memory_turns: SNAPSHOT_LOAD と同じ形。保存できた Being ごと
     SNAPSHOT_LOAD = "snapshot_load"
     # 名前を知らずに会った相手の名前を知った (#1581)。payload: learned_name /
     # appearance (それまでの呼び方) / how (「名乗り」か「呼びかけ」)。
@@ -461,85 +460,6 @@ class TraceEventKind:
     #     の失敗で、取りやめるものが無く続けた。target_kind は失敗した後処理の種類)
     #   - policy: "isolate" | "fail_fast"
     WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
-    # #1441: 環境の tool の呼び出し 1 件に書かれた予期を積んだ結果。予期の引数が
-    # 有効な run で、予期の引数を持つ tool を呼んだ手ごとに 1 件。0 件でも残す。
-    # payload:
-    #   - being_id: str | None
-    #   - turn: int | None (= 本人のターン数。予期の作られたターン)
-    #   - tool: str
-    #   - argument_present: bool (= 引数そのものがあったか。空の配列なら True)
-    #   - formed_count: int
-    #   - formed: list[{expectation_id, what, when, likelihood}]
-    #   - rejected: list[{index, reason, raw}] (= 積まなかった予期。index は配列の
-    #     中の位置で、引数ごと配列でなければ None。reason は "not_a_list" |
-    #     "not_an_object" | "missing_what" | "invalid_when" | "invalid_likelihood")
-    #   - context_found: bool (= そのターンのプロンプトの信念と想起を台帳から引けたか。
-    #     False なら下の 2 つは「0 件だった」ではなく「分からない」)
-    #   - beliefs_in_mind / episodes_in_mind: list[str] (= そのターンのプロンプトに
-    #     載った信念と、想起したエピソード)
-    #   - skipped_reason: str | None ("no_acting_being" | "forming_failed")
-    #   - error: str | None (= forming_failed のときの例外の型と文。保存の途中で
-    #     失敗したら、formed にはそれまでに保存し終えた予期が載る)
-    EXPECTATION_FORMED = "expectation_formed"
-    # #1440: 予期の清算を試みたターン 1 件。Jev を呼ばなかったターンも残す。
-    # 判断が見たものは判断の trace に残すので、Jev に渡した state もそのまま載せる。
-    # payload:
-    #   - being_id: str
-    #   - turn: int (= 本人のターン数)
-    #   - judged: bool (= Jev を呼んだか)
-    #   - skipped_reason: str | None ("nothing_to_judge" | "judgment_unavailable" |
-    #     "settlement_failed" | "no_acting_being")
-    #   - unavailable_reason: str | None (= 縮退したときの error_code と文)
-    #   - state: dict | None (= Jev に渡した state)
-    #   - questions: dict[str, {kind, expectation_id, content, ground_id}] (= 質問の
-    #     名前と対象の予期。kind は "shape" | "check" | "ground" | "scene"。ground_id は
-    #     根拠の問いが指す信念かエピソードの ID で、それ以外は None)
-    #   - answers: dict[str, {value, probabilities, confidence, latency_ms, source}]
-    #   - transitions: list[{expectation_id, step, verdict, event, status_after}]
-    #     (step は "overdue" | "over_capacity" | "shape" | "check")
-    #   - grounds: list (#1484。形を問うた予期ごとに 1 件。形を問わないターンは空)
-    #     - expectation_id / content
-    #     - beliefs_in_mind / episodes_in_mind: list[str] (= 予期を書いたときに頭にあった ID)
-    #     - asked: list[{question, kind, id, text, probability}] (kind は "belief" |
-    #       "episode"。probability は判断が得られなかったターンでは None)
-    #     - omitted: list[{kind, id, reason}] (= 問わなかったもの。reason は
-    #       "over_limit" | "text_not_found" | "text_read_failed: <例外>")
-    #     - judged: bool (= このターンに根拠が決まったか。縮退したターンは False で、
-    #       次のターンに形と一緒に問い直す)
-    #     - beliefs / episodes: list[str] (= 根拠と判断したもの。judged が False なら空)
-    EXPECTATION_SETTLEMENT = "expectation_settlement"
-    # #1440: 予期の出来事 1 件を受け取る側へ配った結果。配り直すたびに 1 件増える。
-    # payload:
-    #   - being_id: str
-    #   - event_id: str (= 「予期の ID@ターン」。配り直しても同じ)
-    #   - event_type: str
-    #   - outcome: str ("delivered" | "no_receivers" | "failed" | "gave_up")
-    #     (no_receivers は受け取る側が 1 つも無く、配信済みの印だけ付けたもの)
-    #   - attempts: int (= この run で配ろうとした回数。再開すると 0 から数え直す)
-    #   - receiver_count: int
-    #   - receivers: list[str] (= 登録された受け取る側の型名。#1443)
-    #   - reason: str (= failed / gave_up のときだけ。例外の型と文)
-    EXPECTATION_EVENT_DELIVERY = "expectation_event_delivery"
-    # #1443: 確定した予期 1 件を、受け取る側が記憶の材料にした結果。受け取る側
-    # ごと、受け取るたびに 1 件。確定以外の出来事では残さない。
-    # payload:
-    #   - being_id: str
-    #   - event_id: str
-    #   - expectation_id: str
-    #   - receiver: str ("belief_evidence" | "recall_credit" | "chunk_note")
-    #   - outcome: str ("hit" | "miss")
-    #   - likelihood: str
-    #   - result: str ("appended" | "already_received" | "skipped")
-    #   - skipped_reason: str (= skipped のときだけ。例 "no_grounding_beliefs"。
-    #     #1484 より前の run では "no_beliefs_in_mind" / "no_episodes_in_mind")
-    #   - belief_evidence のとき: evidence_id / source_kind / salience / belief_ids
-    #     (= 根拠の信念。#1484 より前の run では頭にあった信念すべて)
-    #     / what_happened_lines (= 材料に付けた時系列の行数。当たりは 0)
-    #     / what_happened_truncated (= 上限で切り詰めたか。#1509 より前の run には無い)
-    #   - recall_credit のとき: episode_ids (= 根拠のエピソード) / credit
-    #     ("hit_count" | "miss_stamp")
-    #     / stamped_recalls (= miss_stamp で書き添えた想起の件数。処理済みなら 0)
-    EXPECTATION_MATERIAL = "expectation_material"
 
 
 @dataclass(frozen=True)

@@ -34,7 +34,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
@@ -61,7 +60,7 @@ def _make_environment():
     recall = InMemoryEpisodicRecallBufferStore()
     journal = InMemoryEpisodicReinterpretationJournalStore()
     episode = InMemorySubjectiveEpisodeStore()
-    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), expectation_store=InMemoryExpectationRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
     restore = RestoreBeingSnapshotFromFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
