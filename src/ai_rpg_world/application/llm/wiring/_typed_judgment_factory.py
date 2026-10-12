@@ -26,6 +26,7 @@ import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCallSink
 from ai_rpg_world.application.llm.ports.typed_judgment_port import ITypedJudgmentPort
 from ai_rpg_world.application.llm.services.typed_judgment_stub import (
     DeterministicTypedJudgmentPort,
@@ -49,6 +50,7 @@ def create_typed_judgment_port_from_config(
     config: ResolvedLlmRuntimeConfig,
     *,
     env: Mapping[str, str] | None = None,
+    aux_call_sink: AuxLlmCallSink | None = None,
 ) -> ITypedJudgmentPort | None:
     """解決済み設定に応じて型付き判断ポートを組む。``off`` なら None。
 
@@ -58,6 +60,7 @@ def create_typed_judgment_port_from_config(
     Args:
         config: 解決済み設定
         env: キーを読む環境。省略時は ``os.environ``
+        aux_call_sink: Jev への 1 回ごとの記録先 (#1617)
 
     Raises:
         ValueError: ``provider=jev`` なのに使えるキーが無いとき
@@ -84,6 +87,7 @@ def create_typed_judgment_port_from_config(
         endpoint=config.typed_judgment_endpoint,
         model=config.typed_judgment_model,
         timeout_seconds=config.typed_judgment_timeout_seconds,
+        aux_call_sink=aux_call_sink,
     )
 
 
