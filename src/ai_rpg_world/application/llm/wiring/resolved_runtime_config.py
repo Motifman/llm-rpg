@@ -158,7 +158,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SITUATION_BELIEF_RECALL_NARROWER",
     "STAGNATION_PRESSURE_ENABLED",
     "STAGNATION_REASONING_ENABLED",
-    "STATE_COLLAPSE_EVIDENCE_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
@@ -440,7 +439,6 @@ class ResolvedLlmRuntimeConfig:
     error_gated_encoding_enabled: bool = False
     pending_prediction_enabled: bool = False
     hearsay_enabled: bool = False
-    state_collapse_evidence_enabled: bool = False
 
     # Goal / stagnation 系。
     goal_store_enabled: bool = False
@@ -653,7 +651,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_short_term_memory_turn_window,
             resolve_stagnation_pressure_enabled,
             resolve_stagnation_reasoning_enabled,
-            resolve_state_collapse_evidence_enabled,
             resolve_unconscious_context_enabled,
         )
 
@@ -986,9 +983,6 @@ class ResolvedLlmRuntimeConfig:
         error_gated_encoding_enabled = resolve_error_gated_encoding_enabled(env=source)
         pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
         hearsay_enabled = resolve_hearsay_enabled(env=source)
-        state_collapse_evidence_enabled = resolve_state_collapse_evidence_enabled(
-            env=source
-        )
         goal_store_enabled = resolve_goal_store_enabled(env=source)
         goal_revision_enabled = resolve_goal_revision_enabled(env=source)
         goal_reflect_enabled = resolve_goal_reflect_enabled(env=source)
@@ -1142,7 +1136,6 @@ class ResolvedLlmRuntimeConfig:
             error_gated_encoding_enabled=error_gated_encoding_enabled,
             pending_prediction_enabled=pending_prediction_enabled,
             hearsay_enabled=hearsay_enabled,
-            state_collapse_evidence_enabled=state_collapse_evidence_enabled,
             goal_store_enabled=goal_store_enabled,
             goal_revision_enabled=goal_revision_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
@@ -1296,7 +1289,6 @@ class ResolvedLlmRuntimeConfig:
             error_gated_encoding_enabled=False,
             pending_prediction_enabled=False,
             hearsay_enabled=False,
-            state_collapse_evidence_enabled=False,
             goal_store_enabled=False,
             goal_revision_enabled=False,
             goal_reflect_enabled=False,
