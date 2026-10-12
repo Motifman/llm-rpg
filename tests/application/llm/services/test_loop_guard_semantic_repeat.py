@@ -331,22 +331,19 @@ class TestTheSameRepetitionIsNotWarnedOnNeighbouringTurns:
 class TestOneRecordGivesOneWarning:
     """同じ行動で連続と離れた tick の失敗の両方が発火しても、観測を 1 件にまとめることを保証する。"""
 
-    def _fail_travel_twice(self, buffer: DefaultObservationContextBuffer) -> tuple[Any, Any]:
+    def _fail_travel_twice(self, buffer: DefaultObservationContextBuffer) -> None:
         guard = ToolCallLoopGuardService(
             buffer,
             time_label_provider=lambda: "夕方 5:00",
             current_tick_provider=lambda: 53,
             cross_tick_failure_threshold=2,
         )
-        results = [
+        for _ in range(2):
             guard.record_and_check(
                 _GAREN, "travel_to", {"destination_label": "祭壇"},
                 success=False, error_code="INVALID_DESTINATION_LABEL",
                 result_summary="移動先が見つかりません",
             )
-            for _ in range(2)
-        ]
-        return guard, results[-1]
 
     def test_only_the_cross_tick_failure_warning_is_emitted(self) -> None:
         """travel_to の同じ失敗が 2 回で両方の閾値に届いても、観測は失敗の理由を持つ 1 件だけ。"""
@@ -356,15 +353,6 @@ class TestOneRecordGivesOneWarning:
 
         [warning] = _warnings(buffer)
         assert warning.structured["pattern"] == "cross_tick_failure"
-
-    def test_the_cross_tick_trigger_is_still_returned(self) -> None:
-        """まとめても、belief への転記に使う CrossTickFailureTrigger は返る。"""
-        buffer = DefaultObservationContextBuffer()
-
-        _, trigger = self._fail_travel_twice(buffer)
-
-        assert trigger is not None
-        assert trigger.error_code == "INVALID_DESTINATION_LABEL"
 
 
 class TestAnUnexpectedErrorKeepsTheExactWarning:

@@ -145,7 +145,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "PROMPT_SECTION_ORDER",
     "RECALL_HIT_BOOST_ENABLED",
     "REASON_FIRST_TWO_STEP_ENABLED",
-    "SALIENCE_STRUCTURED_FAILURE_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
     "SEMANTIC_PASSIVE_TOP_K",
@@ -431,7 +430,6 @@ class ResolvedLlmRuntimeConfig:
     situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
-    salience_structured_failure_enabled: bool = False
     memo_distill_enabled: bool = False
     unconscious_context_enabled: bool = False
     error_driven_reinterpretation_enabled: bool = False
@@ -642,7 +640,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_pending_prediction_enabled,
             resolve_prediction_context_id_enabled,
             resolve_recall_hit_boost_enabled,
-            resolve_salience_structured_failure_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
             resolve_semantic_search_enabled,
@@ -964,9 +961,6 @@ class ResolvedLlmRuntimeConfig:
             "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
             default=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
         )
-        salience_structured_failure_enabled = (
-            resolve_salience_structured_failure_enabled(env=source)
-        )
         memo_distill_enabled = resolve_memo_distill_enabled(env=source)
         memo_tools_enabled = resolve_memo_tools_enabled(env=source)
         try:
@@ -1128,7 +1122,6 @@ class ResolvedLlmRuntimeConfig:
             situation_belief_recall_narrower=situation_belief_recall_narrower,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
-            salience_structured_failure_enabled=salience_structured_failure_enabled,
             memo_distill_enabled=memo_distill_enabled,
             unconscious_context_enabled=unconscious_context_enabled,
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
@@ -1281,7 +1274,6 @@ class ResolvedLlmRuntimeConfig:
             situation_belief_recall_narrower=CHAR_BIGRAM_BM25,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
-            salience_structured_failure_enabled=False,
             memo_distill_enabled=True,
             unconscious_context_enabled=False,
             error_driven_reinterpretation_enabled=False,
