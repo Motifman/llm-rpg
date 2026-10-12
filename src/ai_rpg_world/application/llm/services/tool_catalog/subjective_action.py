@@ -5,9 +5,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from ai_rpg_world.application.being.expectation.likelihood_labels import (
-    LIKELIHOOD_LABELS,
-)
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
     ToolDefinitionDto,
@@ -152,67 +149,6 @@ def with_goal_update_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
     )
 
 
-EXPECTATIONS_FIELD_NAME = "expectations"
-EXPECTATION_WHAT_MAX_CHARS = 300
-EXPECTATIONS_FIELD_PROPERTY: dict[str, Any] = {
-    "type": "array",
-    "description": (
-        "この行動のあとに起きると思うことを、いくつでも書く。"
-        "他の人がどうするか、世界がどうなるか、この行動の結果どうなるか。"
-        "自分がこれから何をするかではなく、何が起きるかを書く。"
-        "1 件には見込みを 1 つだけ書き、「A か B か」のようにどう転んでも当たる形にしない。"
-        "思いつかなければ空の配列にする。"
-    ),
-    "items": {
-        "type": "object",
-        "properties": {
-            "what": {
-                "type": "string",
-                "description": "起きると思うこと。",
-                "minLength": 1,
-                "maxLength": EXPECTATION_WHAT_MAX_CHARS,
-            },
-            "when": {
-                "type": ["string", "null"],
-                "description": (
-                    "いつ頃起きるか。時期でも条件でもよい"
-                    " (「すぐ」「今夜」「焚き火がついたら」)。分からなければ null。"
-                ),
-            },
-            "likelihood": {
-                "type": "string",
-                "description": "どのくらい確かだと思うか。",
-                "enum": list(LIKELIHOOD_LABELS.values()),
-            },
-        },
-        "required": ["what", "likelihood"],
-    },
-}
-
-
-def with_expectations_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
-    """環境の tool に予期の引数 ``expectations`` を必須で足した定義を返す (#1441)。
-
-    必須にするのは、毎回「何が起きると思うか」を考えさせるため。空の配列は許す。
-    """
-    if not isinstance(definition, ToolDefinitionDto):
-        raise TypeError("definition must be ToolDefinitionDto")
-    parameters = deepcopy(definition.parameters)
-    properties = dict(parameters.get("properties") or {})
-    properties[EXPECTATIONS_FIELD_NAME] = deepcopy(EXPECTATIONS_FIELD_PROPERTY)
-    parameters["properties"] = properties
-    required = list(parameters.get("required") or [])
-    if EXPECTATIONS_FIELD_NAME not in required:
-        required.append(EXPECTATIONS_FIELD_NAME)
-    parameters["required"] = required
-    return ToolDefinitionDto(
-        name=definition.name,
-        description=definition.description,
-        parameters=parameters,
-        category=definition.category,
-    )
-
-
 def assess_situation_definition() -> ToolDefinitionDto:
     """reason-first の評価段階で使う ``assess_situation`` 定義を返す。
 
@@ -259,7 +195,7 @@ def strip_reason_first_action_subjective_schema(
 
     2 段階ターンでは ``inner_thought`` を ``assess_situation`` で先に生成し、
     行動 tool には書かせない。一方で
-    ``goal_update`` / ``goal_outcome`` / ``expectations`` は行動に紐づくので残す。
+    ``goal_update`` / ``goal_outcome`` は行動に紐づくので残す。
     """
     if not isinstance(definition, ToolDefinitionDto):
         raise TypeError("definition must be ToolDefinitionDto")

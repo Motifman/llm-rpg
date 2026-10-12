@@ -180,22 +180,6 @@ def _fallback_persona_block(display_name: str) -> str:
     ).build(persona)
 
 
-def _expectations_rule_line(enabled: bool) -> str:
-    """予期の引数を書かせる行動ルール行 (#1441)。無効なら空文字で、prompt は変わらない。
-
-    2 段階ターンでも同じ行にする。予期は行動を選んだあとの 2 段目に書くので、
-    どちらのターンでも「行動の tool」に書くことになる。
-    """
-    if not enabled:
-        return ""
-    return (
-        "- 行動の tool では `expectations` に、この行動のあとに起きると思うことを、"
-        "いつ頃か・どのくらい確かかを添えて書く"
-        "（他の人がどうするか、世界がどうなるか。自分がこれから何をするかではない。"
-        "思いつかなければ空でよい。後で実際に起きたことと照らし合わせる）。"
-    )
-
-
 def _past_events_rule(
     *, relevant_memories_shown: bool, active_recall_offered: bool
 ) -> str:
@@ -291,7 +275,6 @@ def build_world_system_prompt(
     enable_string_seed_of_thought: bool = False,
     tool_schema_mode: str = "legacy",
     has_goal: bool = True,
-    expectation_argument_enabled: bool = False,
     limits_actions: bool = True,
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
@@ -317,10 +300,6 @@ def build_world_system_prompt(
     enable_string_seed_of_thought:
         True のとき、ツール選択に String Seed of Thought（ランダム文字列の操作結果を n で割った余りで
         辞書順ツール列のインデックスを決める）を追記する。n は当該リクエストで渡される全ツール数。
-
-    expectation_argument_enabled:
-        ``True`` のとき、予期の引数 ``expectations`` を書く指示行を 行動ルール に
-        追加する (#1441)。
 
     episode_index_shown / episode_recall_offered:
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
@@ -358,10 +337,6 @@ def build_world_system_prompt(
             "続く user 文面に【現在の目的】section があれば参照してよいが、"
             "無ければ自分の関心・状況・ペルソナに従って過ごす。"
         )
-    # 予期の引数を出すときだけ行を足す。出さないときは先頭に改行も付けず、
-    # prompt を変えない (prefix cache 不変)。
-    expectations_rule = _expectations_rule_line(expectation_argument_enabled)
-    expectations_rule_block = f"\n{expectations_rule}" if expectations_rule else ""
     subjective_rule = (
         "- 2段階ターンでは、まず `assess_situation` で `inner_thought` に、"
         "上記【ペルソナ】の口調に揃えた **あなた自身の頭の中の独白** を短い一文で必ず含める。"
@@ -400,7 +375,7 @@ def build_world_system_prompt(
 
 【行動ルール】
 - 世界と相互作用する唯一の手段は、tool call である。
-{subjective_rule}{expectations_rule_block}
+{subjective_rule}
 - 1 回の応答で選べる tool は 1 つだけである。
 - ラベル（接続先・オブジェクト・相手プレイヤー等）は、続きの文面内の「現在地と周囲」等に表示されたものだけを使う。
 - 行動は条件を満たさないと拒否されることがある。各オブジェクトに表示された操作の中から選ぶこと。
