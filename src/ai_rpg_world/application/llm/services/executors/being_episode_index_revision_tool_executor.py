@@ -52,8 +52,11 @@ class BeingEpisodeIndexRevisionToolExecutor:
         return {TOOL_NAME_EPISODE_REVISE_INDEX: self._run}
 
     def _run(self, acting: ActingBeing, arguments: dict[str, Any]) -> LlmCommandResultDto:
-        base: dict[str, Any] = {"being_id": acting.being_id.value, "handle": arguments.get("handle")}
         handle = arguments.get("handle")
+        base: dict[str, Any] = {
+            "being_id": acting.being_id.value,
+            "handle": handle if isinstance(handle, str) else None,
+        }
         raw = {key: arguments.get(key) for key in _TEXT_KEYS}
         if not isinstance(handle, str) or not handle.strip() or not all(
             isinstance(v, str) and v.strip() for v in raw.values()

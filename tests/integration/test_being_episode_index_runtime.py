@@ -370,6 +370,34 @@ class TestMemoFromAnEpisode:
         assert memo.provenance is not None
         assert memo.provenance.source_from == episode.handle
 
+    def test_an_episode_that_sank_out_of_the_index_is_still_accepted(self) -> None:
+        """目次の件数から外れた (沈んだ) エピソードの呼び名でも、その Being の記録にあれば出どころとして受け付ける。"""
+        runtime, _ = _runtime("newest_first", BEING_EPISODE_INDEX_LIMIT="1", **_MEMO_BOOK)
+        pid = runtime.get_player_ids()[0]
+        sunk = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
+        _write(runtime, pid, 2, summary="火を起こした", written_turn=1)
+
+        _turn(
+            runtime,
+            pid,
+            "wait",
+            {
+                "memo": [
+                    {
+                        "do": "add",
+                        "kind": "fact",
+                        "text": "浜は北に続いている",
+                        "source": "episode",
+                        "certainty": "guess",
+                        "from": sunk.handle,
+                    }
+                ]
+            },
+        )
+
+        [memo] = runtime._being_memo_store.get(_being_of(runtime, pid)).memos
+        assert memo.provenance is not None and memo.provenance.source_from == sunk.handle
+
 
 class TestTheDisabledProfile:
     """目次を出さない設定 (既定) では、区画もツールもシステムプロンプトの説明も出ないことを保証する。"""

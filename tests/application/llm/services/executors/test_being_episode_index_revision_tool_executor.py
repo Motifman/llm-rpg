@@ -15,6 +15,9 @@ from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
+from ai_rpg_world.domain.being.exception.being_exceptions import (
+    EpisodeConflictException,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
     MemoryTurnReader,
@@ -52,8 +55,13 @@ def _episode() -> Episode:
     )
 
 
-def _executor(turn: int = 5):
-    repository = InMemoryEpisodeRepository()
+class _RefusingRepository(InMemoryEpisodeRepository):
+    def save(self, being_id: BeingId, episode: Episode) -> None:
+        raise EpisodeConflictException("refused")
+
+
+def _executor(turn: int = 5, repository: InMemoryEpisodeRepository | None = None):
+    repository = repository or InMemoryEpisodeRepository()
     episode = _episode()
     repository.add(ADA, episode)
     recorder = _Recorder()
@@ -139,6 +147,17 @@ class TestRevisingTheIndex:
         assert (result.success, result.error_code) == (False, "INVALID_ARGUMENT")
         assert repository.find_by_handle(ADA, episode.handle) == episode
         assert [(p["outcome"], p["reject_reason"]) for p in _traces(recorder)] == [("rejected", "malformed")]
+
+
+    def test_a_refused_save_is_reported_as_a_failure(self) -> None:
+        """保存がドメインの決まりで断られたら、手番を止めずに INVALID_STATE を返し、失敗の型を trace に残す。"""
+        executor, _, recorder, episode = _executor(repository=_RefusingRepository())
+
+        result = _run(executor, {"handle": episode.handle, "about": "金庫を開けた", "recall_when": "箱を見たとき"})
+
+        assert (result.success, result.error_code) == (False, "INVALID_STATE")
+        [payload] = _traces(recorder)
+        assert (payload["outcome"], payload["error_type"]) == ("failed", "EpisodeConflictException")
 
 
 class TestRevisionTrace:
