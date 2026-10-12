@@ -172,6 +172,8 @@ TOOL_NAME_MEMORY_RECALL_BY_HANDLE = TOOL_NAME_PREFIX_MEMORY + "recall_by_handle"
 # #1623: 【思い出せる出来事】の目次から、呼び名で本文を呼び出す。古いエピソード
 # (memory_recall_by_handle) とは別の記録 (being/domain/episode.py) を引く。
 TOOL_NAME_EPISODE_RECALL = "episode_recall"
+# #1623: 呼び出した本文と目次が合わなかったときに、本人が目次を直す。
+TOOL_NAME_EPISODE_REVISE_INDEX = "episode_revise_index"
 TOOL_NAME_ASSESS_SITUATION = "assess_situation"
 TOOL_NAME_SPOT_GRAPH_TRAVEL_TO = TOOL_NAME_PREFIX_SPOT_GRAPH + "travel_to"
 TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION = TOOL_NAME_PREFIX_SPOT_GRAPH + "set_sub_location"

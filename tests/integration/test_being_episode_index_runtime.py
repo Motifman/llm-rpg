@@ -12,7 +12,10 @@ import pytest
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
     DefaultActionResultStore,
 )
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
+)
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
@@ -260,6 +263,142 @@ class TestRecallingInATurn:
         assert stored is not None and stored.recall_count == 1
 
 
+class _ScriptedClient(_PromptCaptureClient):
+    def __init__(self, name: str, arguments: dict[str, Any]) -> None:
+        super().__init__()
+        self.name = name
+        self.arguments = arguments
+
+    def invoke(self, messages, tools, tool_choice="required", **kwargs):
+        super().invoke(messages, tools, tool_choice, **kwargs)
+        return {"name": self.name, "arguments": self.arguments}
+
+
+def _turn(runtime, pid: PlayerId, name: str, arguments: dict[str, Any]):
+    return _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=_ScriptedClient(name, arguments),
+        typed_judgment_port=ScriptedJudgmentPort(),
+    ).run_turn(pid)
+
+
+class TestRevisingTheIndexInATurn:
+    """目次を直すツールが目次を出す設定で出て、手番で選ぶと次の目次に直した文が出ることを保証する。"""
+
+    def test_the_revision_tool_is_offered_with_the_index(self) -> None:
+        """目次を出す設定では、呼び出しのツールと並んで目次を直すツールが出る。"""
+        runtime, _ = _runtime("recalled_rises_to_top")
+        pid = runtime.get_player_ids()[0]
+
+        _, _, tools = _first_turn(runtime, pid)
+
+        assert {TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX} <= _tool_names(tools)
+
+    def test_a_revised_index_shows_in_the_next_prompt(self) -> None:
+        """手番で目次を直すと、次のプロンプトの【思い出せる出来事】にその行が直した文で出る。"""
+        runtime, recorder = _runtime("recalled_rises_to_top")
+        pid = runtime.get_player_ids()[0]
+        episode = _write(runtime, pid, 1, summary="火を起こした")
+
+        result = _turn(
+            runtime,
+            pid,
+            TOOL_NAME_EPISODE_REVISE_INDEX,
+            {"handle": episode.handle, "about": "湿った流木で火を起こした", "recall_when": "雨の日に火が要るとき"},
+        )
+        _, user, _ = _first_turn(runtime, pid)
+
+        assert result.success is True
+        assert _section(user)[0].startswith(
+            f"[{episode.handle}] 湿った流木で火を起こした — 思い出すとき: 雨の日に火が要るとき"
+        )
+        revisions = [p for k, _, p in recorder.events if k == TraceEventKind.EPISODE_INDEX_REVISION]
+        assert [p["before"]["about"] for p in revisions] == ["火を起こした"]
+
+
+_MEMO_BOOK = {"BEING_MEMO_ENABLED": "1", "MEMO_TOOLS_ENABLED": "false", "MEMO_DISTILL_ENABLED": "false"}
+
+
+class TestMemoFromAnEpisode:
+    """目次を出す設定では、メモの「分かったこと」の出どころにエピソードの呼び名を選べることを保証する。"""
+
+    def test_the_memo_argument_offers_the_episode_source_with_the_index(self) -> None:
+        """目次とメモ帳の両方を出す設定では、引数 memo の出どころの選択肢に episode が入る。"""
+        runtime, _ = _runtime("recalled_rises_to_top", **_MEMO_BOOK)
+        pid = runtime.get_player_ids()[0]
+
+        _, _, tools = _first_turn(runtime, pid)
+
+        assert "episode = 思い出したエピソードから" in json.dumps(tools, ensure_ascii=False)
+
+    def test_the_memo_argument_does_not_offer_it_without_the_index(self) -> None:
+        """メモ帳だけを出し目次を出さない設定では、出どころの選択肢に episode が入らない。"""
+        runtime, _ = _runtime(None, **_MEMO_BOOK)
+        pid = runtime.get_player_ids()[0]
+
+        _, _, tools = _first_turn(runtime, pid)
+
+        assert "episode = 思い出したエピソードから" not in json.dumps(tools, ensure_ascii=False)
+
+    def test_a_fact_from_an_episode_is_written_with_its_handle(self) -> None:
+        """行動に添えた memo で、出どころをエピソードにして呼び名を書くと、その呼び名つきの「分かったこと」が入る。"""
+        runtime, _ = _runtime("recalled_rises_to_top", **_MEMO_BOOK)
+        pid = runtime.get_player_ids()[0]
+        episode = _write(runtime, pid, 1, summary="火を起こした")
+
+        _turn(
+            runtime,
+            pid,
+            "wait",
+            {
+                "memo": [
+                    {
+                        "do": "add",
+                        "kind": "fact",
+                        "text": "湿った流木は火が付きにくい",
+                        "source": "episode",
+                        "certainty": "sure",
+                        "from": episode.handle,
+                    }
+                ]
+            },
+        )
+
+        [memo] = runtime._being_memo_store.get(_being_of(runtime, pid)).memos
+        assert memo.provenance is not None
+        assert memo.provenance.source_from == episode.handle
+
+    def test_an_episode_that_sank_out_of_the_index_is_still_accepted(self) -> None:
+        """目次の件数から外れた (沈んだ) エピソードの呼び名でも、その Being の記録にあれば出どころとして受け付ける。"""
+        runtime, _ = _runtime("newest_first", BEING_EPISODE_INDEX_LIMIT="1", **_MEMO_BOOK)
+        pid = runtime.get_player_ids()[0]
+        sunk = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
+        _write(runtime, pid, 2, summary="火を起こした", written_turn=1)
+
+        _turn(
+            runtime,
+            pid,
+            "wait",
+            {
+                "memo": [
+                    {
+                        "do": "add",
+                        "kind": "fact",
+                        "text": "浜は北に続いている",
+                        "source": "episode",
+                        "certainty": "guess",
+                        "from": sunk.handle,
+                    }
+                ]
+            },
+        )
+
+        [memo] = runtime._being_memo_store.get(_being_of(runtime, pid)).memos
+        assert memo.provenance is not None and memo.provenance.source_from == sunk.handle
+
+
 class TestTheDisabledProfile:
     """目次を出さない設定 (既定) では、区画もツールもシステムプロンプトの説明も出ないことを保証する。"""
 
@@ -275,4 +414,5 @@ class TestTheDisabledProfile:
         whole = system + user + json.dumps(tools, ensure_ascii=False)
         assert _HEADING not in whole
         assert TOOL_NAME_EPISODE_RECALL not in whole
+        assert TOOL_NAME_EPISODE_REVISE_INDEX not in whole
         assert [k for k, _, _ in recorder.events if k == TraceEventKind.EPISODE_INDEX_SHOWN] == []
