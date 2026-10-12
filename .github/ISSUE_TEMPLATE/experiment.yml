@@ -27,7 +27,7 @@ body:
     id: profile
     attributes:
       label: 実験 profile
-      placeholder: belief_goal_full
+      placeholder: memory_jev_mine_v1_v41_thinking_capped_being_memory
     validations:
       required: true
 

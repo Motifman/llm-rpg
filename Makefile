@@ -25,7 +25,7 @@ help:
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - experiment-relay と等価 (名前で参照されているため残す)"
-	@echo "  make experiment [EXPERIMENT_PROFILE=belief_goal_full] [OUT=...]"
+	@echo "  make experiment [EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory] [OUT=...]"
 	@echo "                                - profile に固定した汎用シナリオ実験"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make fuzz-scenario [SCENARIO=...] [SEEDS=0-19] [FUZZ_TICKS=40]"
@@ -114,9 +114,9 @@ experiment-relay-cloud:
 # trace.jsonl + report.md + trace.html を出力する。
 #
 # 使い方:
-#   make experiment EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/foo-001
+#   make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory OUT=var/runs/foo-001
 #   make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
-#   make experiment EXPERIMENT_PROFILE=ablation_base SCENARIO=data/scenarios/foo.json
+#   make experiment EXPERIMENT_PROFILE=smoke_stub SCENARIO=data/scenarios/foo.json
 #
 # 引数 (= make 変数):
 #   EXPERIMENT_PROFILE
@@ -132,7 +132,7 @@ experiment-relay-cloud:
 #   PUBLISH         1 で gist 自動 publish (= --publish-gist)
 #   OPENAI_API_KEY  実 LLM 接続用の秘密情報。profile には書かない。
 MAX_WORLD_TICKS ?=
-EXPERIMENT_PROFILE ?= belief_goal_full
+EXPERIMENT_PROFILE ?= memory_jev_mine_v1_v41_thinking_capped_being_memory
 EXPERIMENT_CONFIG ?=
 experiment:
 	@if [ -n "$(EXPERIMENT_PROFILE)" ] && [ -n "$(EXPERIMENT_CONFIG)" ]; then \

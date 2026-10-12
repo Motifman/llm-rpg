@@ -7,8 +7,11 @@
 サヨ T20 は「The instructions mention 能動想起 but no tool」と探し回った。
 
 `tests/demos/test_disabled_tools_vanish_from_the_prompt.py` と同じ形で見張る。
-記憶の部品を全部有効にした profile から 1 つずつ止め、システムプロンプト・
+記憶の部品を全部有効にした設定から 1 つずつ止め、システムプロンプト・
 1 ターン目の user 文面・ツール定義のどこにも、その部品の名前が出ないことを確かめる。
+
+全部入りの設定は、新しい記憶の profile に、比べた全部入りの run (mine_v1_006、
+profile は #1631 で退役) が入れていた古い部品を戻して作る。
 """
 
 from __future__ import annotations
@@ -28,8 +31,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmW
 
 _ROOT = Path(__file__).resolve().parents[2]
 _PROFILES = _ROOT / "data" / "experiment_profiles"
-_FULL_PROFILE = "memory_jev_mine_v1_v41_thinking_capped"
-_MEMO_ONLY_PROFILE = "memory_jev_mine_v1_v41_thinking_capped_memo_only"
+_BEING_MEMORY_PROFILE = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 
 #: 記憶の部品とは関係の無い差し替え。実 LLM と実 API を呼ばず、型付き判断は
 #: 台本どおりに答える代役にする。
@@ -41,7 +43,42 @@ _OFFLINE = {
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED": "false",
 }
 
-#: 元の profile が止めている能動想起と【関連する学び】、目次つきのエピソードも
+#: 新しい記憶の profile が止めていて、全部入りの run が入れていた古い記憶の部品。
+#: メモ帳は今のメモの道具と並べられないので止める。
+_OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
+    "BELIEF_ATTRIBUTION_ENABLED": "true",
+    "BELIEF_CONSOLIDATION_ENABLED": "true",
+    "BELIEF_CREATE_GATE_ENABLED": "true",
+    "BELIEF_EVIDENCE_ENABLED": "true",
+    "EPISODIC_RECALL_ENABLED": "true",
+    "ERROR_DRIVEN_REINTERPRETATION_ENABLED": "true",
+    "ERROR_GATED_ENCODING_ENABLED": "true",
+    "EXPECTATION_ARGUMENT_ENABLED": "true",
+    "EXPECTATION_SETTLEMENT_ENABLED": "true",
+    "GOAL_REFLECT_ENABLED": "true",
+    "GOAL_REVISION_ENABLED": "true",
+    "GOAL_STAGNATION_EVIDENCE_ENABLED": "true",
+    "GOAL_STORE_ENABLED": "true",
+    "HEARSAY_ENABLED": "true",
+    "LLM_AFTERGLOW_ENABLED": "true",
+    "LLM_EPISODIC_ENABLED": "true",
+    "LLM_EPISODIC_RECALL_HABITUATION_ENABLED": "true",
+    "LLM_EPISODIC_RECALL_SLOT_ENABLED": "true",
+    "LLM_EPISODIC_SUBJECTIVE_ENABLED": "true",
+    "MEMO_DISTILL_ENABLED": "true",
+    "MEMO_TOOLS_ENABLED": "true",
+    "PENDING_PREDICTION_ENABLED": "true",
+    "PREDICTION_CONTEXT_ID_ENABLED": "true",
+    "RECALL_HIT_BOOST_ENABLED": "true",
+    "SEMANTIC_LLM_GIST_ENABLED": "true",
+    "SITUATION_BELIEF_RECALL_ENABLED": "true",
+    "STAGNATION_PRESSURE_ENABLED": "true",
+    "STAGNATION_REASONING_ENABLED": "true",
+    "UNCONSCIOUS_CONTEXT_ENABLED": "true",
+    "BEING_MEMO_ENABLED": "false",
+}
+
+#: 全部入りの run も止めていた能動想起と【関連する学び】、目次つきのエピソードも
 #: 有効にして、全部入りにする。
 _ALL_MEMORY_PARTS = {
     "SEMANTIC_SEARCH_ENABLED": "true",
@@ -223,9 +260,16 @@ def _first_turn_prompt(scenario: str, mapping: dict[str, str]) -> str:
 
 
 def _full_prompt_with(overrides: dict[str, str]) -> str:
-    scenario, mapping = _profile_mapping(_FULL_PROFILE)
+    scenario, mapping = _profile_mapping(_BEING_MEMORY_PROFILE)
     return _first_turn_prompt(
-        scenario, {**mapping, **_OFFLINE, **_ALL_MEMORY_PARTS, **overrides}
+        scenario,
+        {
+            **mapping,
+            **_OFFLINE,
+            **_OLD_MEMORY_PARTS_OF_THE_FULL_RUN,
+            **_ALL_MEMORY_PARTS,
+            **overrides,
+        },
     )
 
 
@@ -249,14 +293,20 @@ class TestNoDisabledMemoryPartIsNamedAnywhere:
 
         assert [name for name in vanished if name in prompt] == []
 
-    def test_the_memo_only_profile_names_no_memory_part_but_memo(self) -> None:
-        """エピソードと想起を止めた profile では、メモ以外の記憶の部品の名前がどこにも出ない。"""
-        scenario, mapping = _profile_mapping(_MEMO_ONLY_PROFILE)
+    def test_the_being_memory_profile_names_only_the_memo_book_and_the_index(self) -> None:
+        """新しい記憶の profile では、メモ帳と目次つきのエピソードの名前だけが出て、古い記憶の部品の名前はどこにも出ない。"""
+        scenario, mapping = _profile_mapping(_BEING_MEMORY_PROFILE)
 
         prompt = _first_turn_prompt(scenario, {**mapping, **_OFFLINE})
 
         named = {name for name in _ALL_NAMES if name in prompt}
-        assert named == {_ACTIVE_MEMOS, *_MEMO_TOOLS}
+        assert named == {
+            _EPISODE_INDEX,
+            _EPISODE_RECALL,
+            _EPISODE_REVISE_INDEX,
+            *_MEMO_BOOK_NAMES,
+            _MEMO_EPISODE_SOURCE,
+        }
 
 
 class TestTheMemoBookReplacesTheOldMemo:

@@ -12,11 +12,7 @@ from ai_rpg_world.application.trace import (
     JsonlTraceRecorder,
     TraceEventKind,
 )
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -781,10 +777,6 @@ class TestExperimentProfileManifest:
     """実験 profile/config が解決済み成果物として保存されることを保証する。"""
 
     _HISTORICAL_DEEPSEEK_PROFILES = (
-        "belief_goal_full",
-        "ablation_base",
-        "belief_goal_memo_ab_keep_memo",
-        "belief_goal_memo_ab_hide_memo",
         "station_drill",
         "station_drill_lean",
     )
@@ -799,16 +791,6 @@ class TestExperimentProfileManifest:
                 / f"{profile_name}.json"
             ).read_text(encoding="utf-8")
         )
-
-    def test_belief_profiles_keep_active_search_tools_off_for_memo_ab(self) -> None:
-        """belief_goal_full と ablation_base は能動検索 2 tool を意図して OFF に揃える。"""
-        for profile_name in ("belief_goal_full", "ablation_base"):
-            profile = self._load_profile(profile_name)
-            runtime_config = profile["runtime_config"]
-
-            assert runtime_config["SEMANTIC_SEARCH_ENABLED"] is False
-            assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
-            assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
 
     def test_station_drill_lean_captures_prompts_without_episodic_memory(self) -> None:
         """lean profile は記憶を有効化せず prompt dataset を警告方針で保存する。"""
@@ -993,35 +975,8 @@ class TestExperimentProfileManifest:
         )
         assert cfg.llm_session_id_enabled is False
 
-    def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
-        """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
-        base = self._load_profile("belief_goal_memo_ab_keep_memo")
-        new_profile = self._load_profile("belief_goal_v4")
-        expected = dict(base)
-        expected["profile"] = "belief_goal_v4"
-        expected["description"] = (
-            "v4 の標準的な観察 run。memo tool と記憶・信念・目的・停滞系を有効化する。"
-        )
-        expected["runtime_config"] = dict(base["runtime_config"])
-        expected["runtime_config"]["LLM_MODEL"] = (
-            "openrouter/deepseek/deepseek-v4-flash-0731"
-        )
-        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Cloudflare"
-
-        assert base["runtime_config"]["LLM_MODEL"] == (
-            "openrouter/deepseek/deepseek-v4-flash"
-        )
-        assert base["runtime_config"]["OPENROUTER_PROVIDER"] == "DeepSeek"
-        assert new_profile == expected
-
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(
-            _runtime_config_mapping_from_source(new_profile)
-        )
-        assert cfg.llm_model == "openrouter/deepseek/deepseek-v4-flash-0731"
-        assert cfg.openrouter_provider == "Cloudflare"
-
     def test_historical_deepseek_profiles_keep_original_model_routing(self) -> None:
-        """過去 run の意図を記録する既存6 profile は旧版と DeepSeek の組み合わせを保つ。"""
+        """過去 run の意図を記録する既存 2 profile は旧版と DeepSeek の組み合わせを保つ。"""
         for profile_name in self._HISTORICAL_DEEPSEEK_PROFILES:
             runtime_config = self._load_profile(profile_name)["runtime_config"]
 
@@ -1029,68 +984,6 @@ class TestExperimentProfileManifest:
                 "openrouter/deepseek/deepseek-v4-flash"
             ), profile_name
             assert runtime_config["OPENROUTER_PROVIDER"] == "DeepSeek", profile_name
-
-    def test_memo_ab_profiles_differ_only_by_memo_tool_exposure(self) -> None:
-        """memo A/B の2腕は MEMO_TOOLS_ENABLED 以外の runtime_config を揃える。"""
-        keep = self._load_profile("belief_goal_memo_ab_keep_memo")
-        hide = self._load_profile("belief_goal_memo_ab_hide_memo")
-        keep_config = keep["runtime_config"]
-        hide_config = hide["runtime_config"]
-
-        differing_keys = {
-            key
-            for key in set(keep_config) | set(hide_config)
-            if keep_config.get(key) != hide_config.get(key)
-        }
-
-        assert differing_keys == {"MEMO_TOOLS_ENABLED"}
-        assert keep_config["MEMO_TOOLS_ENABLED"] is True
-        assert hide_config["MEMO_TOOLS_ENABLED"] is False
-
-    def test_memo_ab_profiles_use_v4_scenario_for_run003_comparison(self) -> None:
-        """memo A/B の2腕は run 003 と同じ v4 scenario を明示し、上書き忘れを防ぐ。"""
-        for profile_name in (
-            "belief_goal_memo_ab_keep_memo",
-            "belief_goal_memo_ab_hide_memo",
-        ):
-            profile = self._load_profile(profile_name)
-
-            assert profile["scenario"] == "data/scenarios/survival_island_v4_coop.json"
-
-    def test_memo_ab_profiles_render_mountain_view_from_hidden_cove(self) -> None:
-        """memo A/B の profile から組んだ runtime は、拠点の隠し入江で山影を見せる。"""
-        for profile_name in (
-            "belief_goal_memo_ab_keep_memo",
-            "belief_goal_memo_ab_hide_memo",
-        ):
-            profile = self._load_profile(profile_name)
-            cfg = ResolvedLlmRuntimeConfig.from_mapping(
-                _runtime_config_mapping_from_source(profile)
-            )
-            runtime = create_world_runtime(
-                _REPO_ROOT / profile["scenario"],
-                config=cfg,
-            )
-            player_id = PlayerId(1)
-            _teleport_player(runtime, int(player_id.value), "hidden_cove")
-
-            text = runtime.build_llm_context(player_id).current_state_text
-
-            assert "切り立った山影が見える" in text
-
-    def test_memo_ab_profiles_keep_active_search_tools_off(self) -> None:
-        """memo A/B では能動検索 2 tool を false に保ち、既存の episodic recall だけを残す。"""
-        for profile_name in (
-            "belief_goal_memo_ab_keep_memo",
-            "belief_goal_memo_ab_hide_memo",
-        ):
-            profile = self._load_profile(profile_name)
-            runtime_config = profile["runtime_config"]
-
-            assert runtime_config["SEMANTIC_SEARCH_ENABLED"] is False
-            assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
-            assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
-            assert runtime_config["MEMO_DISTILL_ENABLED"] is True
 
     def test_smoke_stub_does_not_set_active_search_tool_flags(self) -> None:
         """smoke_stub は能動検索 2 tool を明示せず、既定 false のままにする。"""
@@ -1255,19 +1148,6 @@ class TestExperimentProfileManifest:
         assert payload["llm_api_key"] is None
         assert "sk-secret" not in rendered
         assert "***" not in rendered
-
-
-def _teleport_player(runtime, player_id: int, spot_id: str) -> None:  # noqa: ANN001
-    """prompt 確認用に player の位置だけを spot graph 上で移す。"""
-    graph = runtime._spot_graph_repo.find_graph()
-    entity_id = EntityId.create(player_id)
-    spot = SpotId.create(runtime.id_mapper.get_int("spot", spot_id))
-    try:
-        graph.unplace_entity(entity_id)
-    except Exception:
-        pass
-    graph.place_entity(entity_id, spot)
-    runtime._spot_graph_repo.save(graph)
 
 
 class TestTeamResultReachesTheTrace:

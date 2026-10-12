@@ -22,7 +22,7 @@
 
 - run id: `var/runs/...` に使う名前
 - run の型: 探索 / 観察 / 比較
-- profile: `belief_goal_full` / `ablation_base` / `smoke_stub`
+- profile: `memory_jev_mine_v1_v41_thinking_capped_being_memory` / `smoke_stub`
 - モデルと provider: 新しい profile を作るときや前回の run から日が空いたときは、[docs/llm_provider_selection.md](docs/llm_provider_selection.md) の手順で `tool_choice=required` が通るかなどを使う直前に確かめる。provider の対応状況は予告なく変わる
 - scenario: profile 既定を使うか、`SCENARIO=...` で一時上書きするか
 - tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
@@ -34,21 +34,18 @@
 
 ```bash
 # 普段の本命観察 run。profile 内の scenario / max_world_ticks を使う。
-make experiment EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
+make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory OUT=var/runs/<run_id>
 
 # 実 LLM を呼ばず、低コストで profile / fail-fast / trace 配線を確認する。
 make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
 
-# 比較土台。belief_goal_full から停滞 reasoning を落とした profile。
-make experiment EXPERIMENT_PROFILE=ablation_base OUT=var/runs/<run_id>
-
 # scenario だけ一時的に変える。profile ファイル自体は書き換えない。
-make experiment EXPERIMENT_PROFILE=belief_goal_full \
+make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory \
     SCENARIO=data/scenarios/survival_island_v3_coop.json \
     OUT=var/runs/<run_id>
 
 # tick 数だけ短くして低コスト確認する。
-make experiment EXPERIMENT_PROFILE=belief_goal_full \
+make experiment EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory \
     MAX_WORLD_TICKS=5 \
     OUT=var/runs/<run_id>
 
@@ -57,8 +54,8 @@ make experiment EXPERIMENT_PROFILE= EXPERIMENT_CONFIG=path/to/experiment.json \
     OUT=var/runs/<run_id>
 
 # snapshot を保存して、別 run で再開する。
-make experiment-with-snapshot EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
-make experiment-resume EXPERIMENT_PROFILE=belief_goal_full \
+make experiment-with-snapshot EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory OUT=var/runs/<run_id>
+make experiment-resume EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory \
     OUT=var/runs/<run_id>_resume \
     SNAPSHOT_LOAD_DIR=var/runs/<run_id>/snapshots
 ```
