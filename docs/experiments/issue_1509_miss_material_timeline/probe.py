@@ -47,12 +47,12 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
 from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn import (
     without_tool_names,
 )
+from ai_rpg_world.being.domain.memory_turn_clock import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
     ExpectationSettled,
-)
-from ai_rpg_world.being.domain.memory_turn_clock import (
-    MemoryTurnReader,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import Outcome
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_event_id import (
