@@ -86,7 +86,9 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     メッセージの【知っている人】に移したので、【同じ局面にいる者】の節のぶん
     バイトが変わった。#1616 で、記憶の指示が出ている欄とツールだけを指すように
     なり、記憶の部品を有効にしないこの世界では【関連する記憶】と能動想起の文の
-    ぶんバイトが変わった。
+    ぶんバイトが変わった。#1612 で、行動に添える一言には結果ではなくこれから
+    することを書くよう【独白と一言の書き方】に 1 文足したので、そのぶんバイトが
+    変わった。
 
     以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
     値を更新するときは、prompt を変えた理由が PR にあるはずなので、それを確かめる
@@ -94,12 +96,12 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "d0546525e97e2ad7ecbad200a738b394b61f411e90824032620a60d56f49bda5",
-        "sena": "0891c0bb068163225f25132edcaa44d8ec4ef48bc984887b79d7e48d051b2a48",
-        "aoi": "e3f8362ce2d2ee7df092b63dd389e2c50979a236ae6e84c5663e40f8a19e8ec0",
-        "hagi": "0fdfa70ec1a9500241e011fa6d47136ee6f4e8bd7b75b4f4be0e2f457918db32",
-        "yura": "f8facae373400d31517332324f7678b25e1e0e9cb91cedc6052c130098aefd10",
-        "saki": "d65c206dc7a9b710ae9d563e33ca9ded192f20d17ee8e3b958dc97279f813b5a",
+        "mori": "4543998d083ed0f391ca716c3cd439ec5d99bd1517a956747b527ca478ad0b80",
+        "sena": "414b192d5127a2a9f5e56c4f8e04e8fe1af83db7ac98bbcfc98dd39e241f430f",
+        "aoi": "787c6016a812fd76d778d821a4e5d4739aa58c1dd5c65aa63c73c8d423c17768",
+        "hagi": "51560442eb604138ef8843fbe06fea9b3f81bbf8ccc8c6f2360c79b2331b6590",
+        "yura": "2b1ee73bfffe9af942c6cad9e2354b9b65a74dc0095e2b39173d477fe4fedbf6",
+        "saki": "bcc5b6849ec50fb7036fe76352271238742dbf5a05b5a40a2d4c82b846ff852a",
     }
 
     actual_by_string_id = {
