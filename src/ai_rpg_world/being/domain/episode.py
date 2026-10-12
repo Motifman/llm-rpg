@@ -86,12 +86,7 @@ class IndexRevision:
 
 @dataclass(frozen=True, kw_only=True)
 class Episode:
-    """1 件で集約の根になる。
-
-    持ち主の BeingId は持たない。保存の側が Being ごとに分ける。
-    ターンは世界の時刻ではなく Being の記憶のターン数で、環境を跨いでも進み続ける。
-    本文は作ったあと変えない。目次を直すと、前の版を ``index_history`` に残す。
-    """
+    """ターンは世界の時刻ではなく Being の記憶のターン数で、環境を跨いでも進み続ける。"""
 
     episode_id: str
     handle: str

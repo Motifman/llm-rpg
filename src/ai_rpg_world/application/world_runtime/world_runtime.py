@@ -712,8 +712,7 @@ class WorldRuntime:
     _player_acquaintances: PlayerAcquaintances | None = field(
         default=None, repr=False
     )
-    # #1623: Being が書いた目次つきのエピソード。知り合いの記録と同じく Being の
-    # snapshot に入り、世界の snapshot には入らない。
+    # #1623: 知り合いの記録と同じく、世界の snapshot には入らない。
     _being_episode_store: EpisodeRepository = field(
         default_factory=InMemoryEpisodeRepository, repr=False
     )

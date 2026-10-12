@@ -7876,6 +7876,10 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **例外の合わせ方**: 手本の `acquaintance.py` は `AcquaintanceInvalid(ValueError)` を投げているが、CLAUDE.md の「ドメイン層では組み込み例外ではなくドメイン例外を投げる」に合わない。エピソードは `domain/being/exception/being_exceptions.py` に `EpisodeValidationException` / `EpisodeConflictException` / `EpisodeNotFoundException` を足し、`BeingDomainException` とカテゴリ例外の多重継承にした。snapshot の codec では、予期の codec と同じく `DomainException` を `ValueError` に包み、`BeingMemoryPayloadFormatError` として見せる。`acquaintance.py` はこの PR では直していない
 
+**書き戻しを保存の側で確かめる理由**: `frozen` は代入を防ぐだけで、本文を変えた別のインスタンスや、目次の履歴を消した版も作れる。`save` は `Episode.follows` で、記録の版から呼び出しと目次の直しだけで行き着ける版か (本文・書いた時・環境の名前・呼び名が同じ、回数が減らない、前の履歴を先頭に含む) を確かめ、違えば `EpisodeConflictException` で止める
+
+**この PR より前の snapshot は読めない**: `being_episodes` の欄が無い payload は、知り合いの記録を足したときと同じく形式エラーで拒む。空として補うと、欄を書き忘れた payload と見分けられない。design_decisions 6 (後方互換を過度に守らない) に従う。前の snapshot から再開したい run は、この PR を含む main で 1 回目から回し直す
+
 **どうしないと壊れるか**: 呼び名の長さを ID から計算し直す処理を足すと、読み込み直したあとに呼び名が別の記録を指す。呼び名を扱う処理は、エピソードが持つ `handle` を使う。エピソードを足すときは、その Being がもう使っている呼び名を `Episode.write(taken_handles=...)` に渡す。渡し忘れると `add` が `EpisodeConflictException` で止める
 
 **関連**: Issue #1623 / #1621、design_decisions 3 / 27、design_decisions D1520 (知り合いの記録)。
