@@ -21,7 +21,7 @@ class TestFromEnvDefaults:
     def test_empty_config_default_resolve(self) -> None:
         """空設定で default に resolve。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.short_term_memory_kind == 'sliding_window'
+        assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_scheduler_mode == 'thread_pool'
         assert cfg.prompt_section_order == 'stable_to_volatile'
         assert cfg.llm_client_kind == 'stub'
@@ -446,10 +446,10 @@ class TestFromMappingIgnoresOsEnviron:
 
     def test_values_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """values 省略時も os environ を読まない。"""
-        monkeypatch.setenv('SHORT_TERM_MEMORY_KIND', 'rolling_summary')
+        monkeypatch.setenv('SHORT_TERM_MEMORY_KIND', 'sliding_window')
         monkeypatch.setenv('PROMPT_SECTION_ORDER', 'legacy')
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
-        assert cfg.short_term_memory_kind == 'sliding_window'
+        assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.prompt_section_order == 'stable_to_volatile'
 
     def test_subjective_episode_db_path_os_environ_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
