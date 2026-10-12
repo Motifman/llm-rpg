@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCallSink
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 
@@ -15,7 +16,11 @@ if TYPE_CHECKING:
 _VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
 
 
-def create_llm_client_from_config(config: ResolvedLlmRuntimeConfig) -> ILLMClient:
+def create_llm_client_from_config(
+    config: ResolvedLlmRuntimeConfig,
+    *,
+    aux_call_sink: AuxLlmCallSink | None = None,
+) -> ILLMClient:
     """解決済み設定に応じて ILLMClient 実装を返す。
 
     引数は必ず ``ResolvedLlmRuntimeConfig``。フィールドは直接参照する
@@ -48,5 +53,6 @@ def create_llm_client_from_config(config: ResolvedLlmRuntimeConfig) -> ILLMClien
             wall_cap_seconds=config.llm_wall_time_cap_seconds,
             rate_limit_retry_attempts=int(config.llm_rate_limit_retry_attempts),
             rate_limit_retry_base_sleep=float(config.llm_rate_limit_retry_base_sleep),
+            aux_call_sink=aux_call_sink,
         )
     return StubLlmClient()

@@ -54,6 +54,9 @@ for p in (_REPO_ROOT, _REPO_ROOT / "src"):
     if s not in sys.path:
         sys.path.insert(0, s)
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import (  # noqa: E402
+    AuxLlmComponent,
+)
 from ai_rpg_world.application.trace import (  # noqa: E402
     JsonlTraceRecorder,
     TraceEventKind,
@@ -1248,6 +1251,106 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
     return counts
 
 
+_AUX_COMPONENT_LABELS: dict[str, str] = {
+    AuxLlmComponent.EPISODE_SUBJECTIVE.value: "主観の書き込み",
+    AuxLlmComponent.EPISODIC_REINTERPRETATION.value: "エピソードの再解釈",
+    AuxLlmComponent.SEMANTIC_GIST.value: "意味記憶の要旨",
+    AuxLlmComponent.BELIEF_CONSOLIDATION.value: "信念の統合",
+    AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
+    AuxLlmComponent.SHORT_TERM_LONG_SUMMARY.value: "短期記憶の長い要約",
+    AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
+    AuxLlmComponent.TYPED_JUDGMENT.value: "Jev の型付き判断",
+}
+
+
+def _sum_or_unavailable(values: list[Any], *, money: bool) -> str:
+    """None は応答に無かった値。0 に潰すと無料・0 トークンと読めるので、回数を添える (#1617)。"""
+    known = [v for v in values if v is not None]
+    missing = len(values) - len(known)
+    if values and not known:
+        return "取れない"
+    total = sum(known)
+    shown = f"${total:.4f}" if money else str(int(total))
+    return f"{shown} + 取れない {missing} 回" if missing else shown
+
+
+def _billable(payload: Mapping[str, Any], key: str) -> bool:
+    """応答が届かず失敗した回は値が無くて当然なので、「取れない」に数えない。"""
+    return bool(payload.get("success")) or payload.get(key) is not None
+
+
+def _llm_cost_row(label: str, calls: list[Any]) -> str:
+    payloads = [e.payload for e in calls]
+    failures = sum(1 for p in payloads if not p.get("success"))
+    latency_sec = sum(int(p.get("wall_latency_ms") or 0) for p in payloads) / 1000.0
+    prompt, completion, cost = (
+        _sum_or_unavailable(
+            [p.get(key) for p in payloads if _billable(p, key)], money=key == "cost_usd"
+        )
+        for key in ("prompt_tokens", "completion_tokens", "cost_usd")
+    )
+    return (
+        f"| {label} | {len(payloads)} | {failures} | {prompt} | {completion} | "
+        f"{cost} | {latency_sec:.1f} |"
+    )
+
+
+def _known_cost(calls: list[Any]) -> float:
+    return sum(float(e.payload["cost_usd"]) for e in calls if e.payload.get("cost_usd") is not None)
+
+
+def _llm_cost_header_line(llm_calls: list[Any], aux_calls: list[Any]) -> str:
+    action_cost = _known_cost(llm_calls)
+    aux_cost = _known_cost(aux_calls)
+    line = (
+        f"- 費用 (取れた分の合計): ${action_cost + aux_cost:.4f} = "
+        f"行動 ${action_cost:.4f} + 記憶の部品と Jev ${aux_cost:.4f}"
+    )
+    missing = sum(
+        1
+        for e in llm_calls + aux_calls
+        if e.payload.get("cost_usd") is None and _billable(e.payload, "cost_usd")
+    )
+    return f"{line}。費用が取れない呼び出し {missing} 回" if missing else line
+
+
+def _llm_cost_lines(
+    llm_calls: list[Any], aux_calls: list[Any], aux_record_failures: list[Any]
+) -> list[str]:
+    """行動の呼び出しと、記憶の部品・Jev の呼び出しを部品ごとに分けた表 (#1617)。"""
+    by_component: dict[str, list[Any]] = {}
+    for event in aux_calls:
+        by_component.setdefault(str(event.payload.get("component")), []).append(event)
+    order = [c.value for c in AuxLlmComponent]
+    components = sorted(
+        by_component, key=lambda c: (order.index(c) if c in order else len(order), c)
+    )
+    lines = [
+        "## LLM 呼び出しの回数と費用",
+        "",
+        "費用は provider が応答に載せた値 (OpenRouter の usage.cost)。"
+        "記憶の部品と Jev は、応答に無かった値を「取れない」とし、0 として足さない。"
+        "行動の呼び出しは、応答に費用が無くても 0 で記録される (llm_call の決まり)。",
+        "",
+        "| 呼び出し | 回数 | 失敗 | 入力トークン | 出力トークン | 費用 (USD) | 待ち時間の合計 (秒) |",
+        "|---|---|---|---|---|---|---|",
+        _llm_cost_row("行動", llm_calls),
+    ]
+    for component in components:
+        label = _AUX_COMPONENT_LABELS.get(component, component)
+        lines.append(_llm_cost_row(f"{label} ({component})", by_component[component]))
+    lines.append("")
+    if not aux_calls:
+        lines.append("- 記憶の部品と Jev の呼び出し: 0 件")
+    if aux_record_failures:
+        failed = Counter(str(e.payload.get("component")) for e in aux_record_failures)
+        breakdown = ", ".join(f"{c}={n}" for c, n in sorted(failed.items()))
+        lines.append(f"- 記録できなかった呼び出し: {breakdown} (この回数は上の表に入っていない)")
+    if not aux_calls or aux_record_failures:
+        lines.append("")
+    return lines
+
+
 def _world_tick_failure_lines(summary: dict[str, Any]) -> list[str]:
     """世界の tick で例外を出した処理 (取りやめと後処理の失敗) の件数を、冒頭の要約に出す行 (design_decisions D1558)。"""
     label = "- 世界の tick で例外を出した処理 (のべ)"
@@ -1281,6 +1384,8 @@ def _build_report(
     memo_hints: list[Any] = []
     position_changes: list[Any] = []
     llm_calls: list[Any] = []
+    aux_calls: list[Any] = []
+    aux_record_failures: list[Any] = []
     consolidation_actions: Counter[str] = Counter()
     by_player: dict[int, dict[str, int]] = {}
     for e in events:
@@ -1302,6 +1407,10 @@ def _build_report(
             position_changes.append(e)
         elif e.kind == TraceEventKind.LLM_CALL:
             llm_calls.append(e)
+        elif e.kind == TraceEventKind.AUX_LLM_CALL:
+            aux_calls.append(e)
+        elif e.kind == TraceEventKind.AUX_LLM_CALL_RECORD_FAILED:
+            aux_record_failures.append(e)
         pid = e.player_id
         if pid is None:
             continue
@@ -1354,8 +1463,10 @@ def _build_report(
         lines.append(
             f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)"
         )
+    lines.append(_llm_cost_header_line(llm_calls, aux_calls))
     lines.extend(_world_tick_failure_lines(summary))
     lines.append("")
+    lines.extend(_llm_cost_lines(llm_calls, aux_calls, aux_record_failures))
     if llm_failures:
         lines.append("## LLM 呼び出しの失敗内訳")
         lines.append("")
