@@ -5998,7 +5998,7 @@ trace の窓と渡した窓を同じにする。見立て用の直近 5 件 (`Re
 
 **関連**: #222 / #232 / #1411 / #1412。
 
-目的の同乗フィールド (`goal_update` / `goal_outcome`) は、目的の見直し (`GOAL_REVISION_ENABLED`) と一緒に、記憶の部品の撤去 (#1631) の #PRNUM で消した。要約の前に落とす処理も一緒に消えた。
+目的の同乗フィールド (`goal_update` / `goal_outcome`) は、目的の見直し (`GOAL_REVISION_ENABLED`) と一緒に、記憶の部品の撤去 (#1631) の #1664 で消した。要約の前に落とす処理も一緒に消えた。
 
 ## 234. Jev の閾値は、誤ったときに行動が実行される問いにだけ残す
 
@@ -6179,7 +6179,7 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 **関連**: #5 / #234 / P8。
 
 目的の達成 hint (`TYPED_JUDGMENT_GOAL_HINT_ENABLED` / `_MIN_PROBABILITY`) は、記憶の部品の撤去 (#1631) の #1657 で消した。
-hint が勧めていた `goal_outcome` も、目的の見直し (`GOAL_REVISION_ENABLED`) と一緒に #PRNUM で消した。
+hint が勧めていた `goal_outcome` も、目的の見直し (`GOAL_REVISION_ENABLED`) と一緒に #1664 で消した。
 
 ## D1439. 予期の状態の変化と、その出来事を、同じ保存の単位で残す
 
