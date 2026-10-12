@@ -7495,7 +7495,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: design_decisions D1558、Issue #1507 / #1558。
 
-状態崩壊の証拠の書き起こし (`needs_decay.state_collapse_evidence`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。段の名前の付け方の例としてだけ残す。
+状態崩壊の証拠の書き起こし (`needs_decay.state_collapse_evidence`) は、記憶の部品の撤去 (#1631) の #1642 で消した。段の名前の付け方の例としてだけ残す。
 
 ---
 

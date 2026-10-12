@@ -110,7 +110,7 @@ codex CRITICAL 反映: 旧「相①」を **副作用の致命度で 3 つに分
 - **対象**: `PlayerDownedStateCollapseEvidenceHandler`、`SpotArrivalEncounterHandler`
   (`spot_arrival_encounter_handler.py:76-83` が自ら握る)、encounter familiarity、
   補助 memory など、失敗してもゲーム状態の整合を壊さない副作用。
-  `PlayerDownedStateCollapseEvidenceHandler` は記憶の部品の撤去 (#1631) の #__PR__ で消した。
+  `PlayerDownedStateCollapseEvidenceHandler` は記憶の部品の撤去 (#1631) の #1642 で消した。
 - **例外方針**: 握って継続。ただし **warning/trace に必ず残す** (静かな失敗にしない)。
 - **順序契約**: `SpotArrivalEncounterHandler` は best-effort だが、**post-tick hook
   内で heartbeat/llm_turn_trigger より前** という順序制約あり (graph_event_flusher で
