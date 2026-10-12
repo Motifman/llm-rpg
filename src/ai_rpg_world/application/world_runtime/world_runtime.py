@@ -709,9 +709,6 @@ class WorldRuntime:
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
     )
-    # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする
-    # 一発ラッチ。transient (session 内制御信号) なので snapshot 非対象。
-    _stagnation_reasoning_latch: Any | None = field(default=None, repr=False)
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
@@ -2781,139 +2778,6 @@ class WorldRuntime:
             breaks_movement=False,
         )
         self._emit_observation_directly(player_id, output)
-        # 案A (band-gated thinking): 停滞 (stalled/misaligned) の気づきが実際に
-        # 注入された「その場」で熟考ラッチを arm する。cap を通った注入だけが
-        # ここに来るので、鼓動 (stall_min_interval) をそのまま熟考の間引きに
-        # 流用できる。次行動の run_phase_a が band==strong を条件に consume する。
-        # achieved (前進) では焚かない。latch が無い (flag OFF) ときは no-op。
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is not None and verdict in ("stalled", "misaligned"):
-            latch.arm(player_id)
-
-    def _resolve_stagnation_band_value(self, player_id: PlayerId) -> str:
-        """player の停滞感カウンタ → band を best-effort で解決する (案A 用)。
-
-        store / being resolver / being が欠けるときは none に縮退する
-        (熟考しない = 安全側)。表出側の closure と役割は同じだが、行動経路の
-        consumer が別なので小さなヘルパとして独立させる。
-        """
-        from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-            STAGNATION_PRESSURE_BAND_NONE,
-            resolve_stagnation_pressure_band,
-        )
-
-        store = getattr(self, "_stagnation_pressure_store", None)
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if store is None or resolver is None or world_id is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        return resolve_stagnation_pressure_band(store.get_by_being(being_id))
-
-    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> str | None:
-        """案A: この行動で reasoning (熟考) を焚くべきか判断し effort or None を返す。
-
-        敵対的レビュー HIGH 2 対応: ここは**決定のみ**で、ラッチの消費も trace も
-        しない (副作用は invoke 成功後の ``commit_turn_reasoning_engaged`` に寄せる)。
-        停滞ラッチを peek し (= 「停滞注入直後の 1 行動」判定)、band==strong のとき
-        だけ effort を返す。band が strong 未満なら焚かないので、古いラッチをここで
-        畳んで残さない (「注入直後の 1 行動」の意味を保つ)。flag OFF (ラッチ未構築)
-        のときは何もせず None。
-
-        invoke が失敗して commit されなかった場合、strong のラッチは armed のまま
-        残るため次行動で再挑戦でき、熟考機会を焼失させない。
-        """
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is None:
-            return None
-        if not latch.is_armed(player_id):
-            return None
-        from ai_rpg_world.domain.memory.goal.service.stagnation_reasoning_policy import (
-            resolve_stagnation_reasoning_effort,
-        )
-
-        band = self._resolve_stagnation_band_value(player_id)
-        effort = resolve_stagnation_reasoning_effort(band, fresh_reflect=True)
-        if effort is None:
-            # band < strong: 焚かないので古いフラグをここで畳む (次行動に持ち越さない)。
-            latch.consume(player_id)
-        return effort
-
-    def commit_turn_reasoning_engaged(
-        self, player_id: PlayerId, effort: str
-    ) -> None:
-        """案A: 熟考付き行動 (invoke) が成立した後に呼ぶ。ラッチを消費し
-        ``AGENT_REASONING_ENGAGED`` trace を 1 件残す。
-
-        敵対的レビュー HIGH 2 対応: ラッチ消費と trace を invoke 成功後まで遅らせる
-        ことで、(1) invoke 失敗時に熟考の一発権を焼失させず、(2) trace の意味を
-        「実際に行動選択へ投入された熟考」に一致させる (tool-calling 経路では思考
-        本文は返らないので、同 tick の LLM metrics の reasoning_tokens と突き合わせて
-        「どれだけ熟考したか」を見る)。
-        """
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is None:
-            return
-        # 防御: ラッチが立っていなければ (= 既に消費済み / 経路不整合) trace を
-        # 出さない。二重 commit や想定外の呼び出しで「熟考していないのに engaged」
-        # の偽陽性を出さないためのガード。通常経路では resolve が effort を返した
-        # 直後に呼ばれるので armed のはず。
-        if not latch.consume(player_id):
-            return
-        band = self._resolve_stagnation_band_value(player_id)
-        self._emit_agent_reasoning_engaged_trace(player_id, band, effort)
-
-    def abandon_turn_reasoning(self, player_id: PlayerId) -> None:
-        """案A 餓死ループ修正: 熟考ターンの invoke が失敗 (例外 / tool_call なし)
-        したときに呼ぶ。熟考の一発権 (latch) を消費して「同条件での再試行」を止める。
-
-        これをしないと、詰まった (band=strong) agent の熟考リクエストが失敗し続ける
-        たびに latch が armed のまま残り、毎行動 same-condition で失敗を繰り返して
-        餓死する (実 run v3coop_stagnation_002 で P3 が tick42 以降 38 連続失敗)。
-        reasoning は実行成立していないので AGENT_REASONING_ENGAGED trace は出さない。
-        """
-        latch = getattr(self, "_stagnation_reasoning_latch", None)
-        if latch is None:
-            return
-        latch.consume(player_id)
-
-    def _emit_agent_reasoning_engaged_trace(
-        self, player_id: PlayerId, band: str, effort: str
-    ) -> None:
-        """案A: 熟考を焚いた事実 (いつ・なぜ) を trace に残す。recorder 不在なら no-op。"""
-        recorder = getattr(self, "_trace_recorder", None)
-        if recorder is None:
-            return
-        being_id_value: str | None = None
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is not None and world_id is not None:
-            being_id = resolver.resolve_being_id(world_id, player_id)
-            if being_id is not None:
-                being_id_value = being_id.value
-        try:
-            from ai_rpg_world.application.trace.events import TraceEventKind
-
-            recorder.record(
-                TraceEventKind.AGENT_REASONING_ENGAGED,
-                tick=self.current_tick(),
-                player_id=player_id.value,
-                being_id=being_id_value,
-                band=band,
-                effort=effort,
-                trigger="fresh_reflect",
-            )
-        except Exception:
-            # 敵対的レビュー LOW: これは実験の効果測定用 trace なので、記録失敗を
-            # debug で握ると穴が見えにくい。turn は壊さないが warning で気づける
-            # ようにする。
-            logger.warning(
-                "AGENT_REASONING_ENGAGED trace record failed for player_id=%s; skipping",
-                player_id.value,
-                exc_info=True,
-            )
 
     def _reflect_objective_provider(self, player_id: PlayerId) -> str | None:
         """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
@@ -7991,9 +7855,8 @@ def create_world_runtime(
         build_episodic_stack,
     )
     # 敵対的レビュー HIGH 1: 「episodic を前提にする機能群」の fail-fast を親 gate の
-    # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) / P-U2 (STAGNATION_PRESSURE) / 案A
-    # (STAGNATION_REASONING) はいずれも episodic pipeline (固着パス / 停滞感 store /
-    # 熟考ラッチ) の内側でしか配線されない。従来これらの相互ガードは
+    # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) / P-U2 (STAGNATION_PRESSURE) は
+    # いずれも episodic pipeline (固着パス / 停滞感 store) の内側でしか配線されない。従来これらの相互ガードは
     # `if config.episodic_enabled:` の内側にあったため、LLM_EPISODIC_ENABLED を
     # 立て忘れたまま各 flag を ON にすると、ブロックごと skip されて fail-fast すら
     # 走らず「flag は立てたのに機能が一生動かず警告も出ない」静かな失敗になっていた
@@ -8006,7 +7869,6 @@ def create_world_runtime(
                 config.goal_stagnation_evidence_enabled
             ),
             "STAGNATION_PRESSURE_ENABLED": config.stagnation_pressure_enabled,
-            "STAGNATION_REASONING_ENABLED": config.stagnation_reasoning_enabled,
         }
         _on_but_orphaned = [
             name for name, enabled in _episodic_dependent_flags.items() if enabled
@@ -8106,7 +7968,6 @@ def create_world_runtime(
             log_goal_reflect_enabled_state,
             log_goal_stagnation_evidence_enabled_state,
             log_stagnation_pressure_enabled_state,
-            log_stagnation_reasoning_enabled_state,
         )
 
         _goal_reflect_enabled = config.goal_reflect_enabled
@@ -8118,10 +7979,6 @@ def create_world_runtime(
         # P-U2 (停滞感 store): reflect verdict を停滞感カウンタに畳み込むか。
         _stagnation_pressure_enabled = config.stagnation_pressure_enabled
         log_stagnation_pressure_enabled_state(_stagnation_pressure_enabled)
-        # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動に
-        # reasoning を焚くか。
-        _stagnation_reasoning_enabled = config.stagnation_reasoning_enabled
-        log_stagnation_reasoning_enabled_state(_stagnation_reasoning_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
@@ -8152,22 +8009,6 @@ def create_world_runtime(
                 "OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
                 "reflect verdict を停滞感カウンタに畳み込む経路が丸ごと動かない "
                 "(静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
-            )
-        # 案A fail-fast: band-gated thinking は band (STAGNATION_PRESSURE) と
-        # reflect 注入 (= ラッチ武装, GOAL_REFLECT) の両方に依存する。どちらか
-        # 欠けると「flag を ON にしたのに熟考が一生焚かれず警告も出ない」静かな
-        # 失敗になるため起動時に弾く。
-        if _stagnation_reasoning_enabled and not _stagnation_pressure_enabled:
-            raise ValueError(
-                "STAGNATION_REASONING_ENABLED=1 だが STAGNATION_PRESSURE_ENABLED が "
-                "OFF のため band (strong 判定) が供給されず、熟考ゲートが一生発火"
-                "しない (静かな失敗)。STAGNATION_PRESSURE_ENABLED=1 も設定してください。"
-            )
-        if _stagnation_reasoning_enabled and not _goal_reflect_enabled:
-            raise ValueError(
-                "STAGNATION_REASONING_ENABLED=1 だが GOAL_REFLECT_ENABLED が OFF の"
-                "ため reflect 注入 (= 熟考ラッチの武装トリガ) が起きず、熟考ゲートが"
-                "一生発火しない (静かな失敗)。GOAL_REFLECT_ENABLED=1 も設定してください。"
             )
         # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
         # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
@@ -8283,16 +8124,6 @@ def create_world_runtime(
             )
 
             runtime._stagnation_pressure_store = InMemoryStagnationPressureStore()
-        # 案A (band-gated thinking): ON のときだけラッチを構築する。
-        # ``_emit_reflect_observation`` が停滞注入時に arm し、run_phase_a が
-        # 次行動で consume する。transient なので snapshot には載せない。
-        runtime._stagnation_reasoning_latch = None
-        if _stagnation_reasoning_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
-                InMemoryStagnationReasoningLatch,
-            )
-
-            runtime._stagnation_reasoning_latch = InMemoryStagnationReasoningLatch()
         if config.episodic_subjective_enabled:
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,

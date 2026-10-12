@@ -56,7 +56,6 @@ def resolve_reason_first_gate(
 
     - loop_guard が直前に警告を注入した
     - 直近 2 件の action result が同一失敗
-    - stagnation band が strong
 
     callable は PR-3/4 の契約テスト用 override として残す。実 run では
     ``ResolvedLlmRuntimeConfig.reason_first_two_step_enabled`` 由来の bool を使う。
@@ -80,8 +79,6 @@ def resolve_reason_first_gate(
         return ReasonFirstGateDecision(True, "loop_guard_warning")
     if has_recent_same_failure(wiring, player_id):
         return ReasonFirstGateDecision(True, "recent_same_failure")
-    if is_stagnation_reason_first_armed(wiring, player_id):
-        return ReasonFirstGateDecision(True, "stagnation_strong")
     return ReasonFirstGateDecision(False, "no_trigger")
 
 def has_recent_same_failure(wiring: WorldLlmWiring, player_id: PlayerId) -> bool:
@@ -119,51 +116,6 @@ def action_failure_key(entry: Any) -> tuple[str, str, str] | None:
     if not tool_name or not error_code or not identity:
         return None
     return (tool_name, error_code, identity)
-
-def is_stagnation_reason_first_armed(wiring: WorldLlmWiring, player_id: PlayerId) -> bool:
-    """停滞 reflect 注入直後の一発ラッチと band strong が揃ったときだけ True。
-
-    band-gated reasoning と同じ入力を使うが、band だけを見ると停滞中の
-    毎 turn で reason-first が発火してしまう。ここでは既存ラッチも peek し、
-    「reflect 注入直後の 1 行動だけ」に頻度を揃える。
-    """
-
-    latch = getattr(wiring.runtime, "_stagnation_reasoning_latch", None)
-    is_armed = getattr(latch, "is_armed", None)
-    if not callable(is_armed):
-        return False
-    try:
-        armed = bool(is_armed(player_id))
-    except Exception:
-        logger.exception("reason-first gate: stagnation latch check failed")
-        return False
-    if not armed:
-        return False
-    resolver = getattr(wiring.runtime, "_resolve_stagnation_band_value", None)
-    if not callable(resolver):
-        return False
-    try:
-        return str(resolver(player_id)) == "strong"
-    except Exception:
-        logger.exception("reason-first gate: stagnation band resolution failed")
-        return False
-
-def consume_stagnation_reason_first_latch(wiring: WorldLlmWiring, player_id: PlayerId) -> None:
-    """reason-first が停滞ラッチを使ったとき、一発権を消費する。
-
-    reason-first 経路では ``resolve_turn_reasoning_effort`` を呼ばないため、
-    band-gated reasoning 側の commit/abandon 消費に乗らない。ここで消費し、
-    strong band が続いても同じ reflect から毎 turn 2段階へ入らないようにする。
-    """
-
-    latch = getattr(wiring.runtime, "_stagnation_reasoning_latch", None)
-    consume = getattr(latch, "consume", None)
-    if not callable(consume):
-        return
-    try:
-        consume(player_id)
-    except Exception:
-        logger.exception("reason-first gate: stagnation latch consume failed")
 
 def build_tools_payload(
     wiring: WorldLlmWiring, player_id: PlayerId, *, tool_schema_mode: str = "legacy"
@@ -240,15 +192,9 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
     # tools_payload から function name を抽出する (= OpenAI function calling
     # 形式の "type":"function" 構造から function.name を読む)。
     metrics_sink = build_llm_metrics_sink(wiring, player_id, tool_names=tool_names)
-    # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動
-    # だけ reasoning を焚く。flag OFF / 対象外なら None (= 既定のまま reasoning
-    # OFF・プロンプト byte 不変)。判断と AGENT_REASONING_ENGAGED trace は runtime
-    # 側に閉じ込め、ここは effort を invoke に橋渡しし、失敗時の降格を扱う。
-    reasoning_effort = wiring.runtime.resolve_turn_reasoning_effort(player_id)
     last_llm_call_id: str | None = None
 
     def _invoke(
-        effort: Any,
         *,
         attempt_index: int,
         parent_attempt_id: str | None = None,
@@ -264,7 +210,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             player_id=player_id,
             prompt=prompt,
             tool_choice=tool_choice,
-            reasoning_effort=effort,
+            reasoning_effort=None,
             attempt_index=attempt_index,
             parent_attempt_id=parent_attempt_id,
             phase="one_step",
@@ -274,7 +220,7 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             last_llm_call_id = prompt_capture_context.context.llm_call_id
         invoke_kwargs = {
             "metrics_sink": metrics_sink,
-            "reasoning_effort": effort,
+            "reasoning_effort": None,
             **llm_session_kwargs(wiring, player_id),
         }
         if prompt_capture_context is not None:
@@ -297,39 +243,13 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             llm_call_id=last_llm_call_id,
         )
 
-    def _fallback_without_reasoning() -> LlmPhaseAResult:
-        # 餓死ループ修正: 熟考ターンが失敗 (例外 / tool_call なし) したら latch を
-        # 消費して「同条件での再試行」を止め、reasoning なしで 1 回だけ降格再試行
-        # して行動を成立させる。これをしないと詰まった agent が毎行動 same-condition
-        # で失敗し続けて餓死する (実 run v3coop_stagnation_002 の P3)。
-        wiring.runtime.abandon_turn_reasoning(player_id)
-        try:
-            parent = last_llm_call_id
-            return _result(
-                _invoke(None, attempt_index=1, parent_attempt_id=parent),
-                None,
-            )
-        except Exception as exc:  # noqa: BLE001 — 降格後も失敗なら通常の失敗として詰める
-            logger.exception(
-                "Phase A fallback (reasoning なし) invoke failed for player_id=%s",
-                player_id.value,
-            )
-            return _result(None, exc)
-
     try:
-        tool_call = _invoke(reasoning_effort, attempt_index=0)
+        tool_call = _invoke(attempt_index=0)
     except Exception as exc:  # KeyboardInterrupt / SystemExit / GeneratorExit は伝播
-        if reasoning_effort is None:
-            logger.exception(
-                "Phase A llm invoke failed for player_id=%s", player_id.value
-            )
-            return _result(None, exc)
-        logger.warning(
-            "Phase A reasoning invoke failed for player_id=%s; "
-            "latch を消費し reasoning なしで降格再試行する",
-            player_id.value, exc_info=True,
+        logger.exception(
+            "Phase A llm invoke failed for player_id=%s", player_id.value
         )
-        return _fallback_without_reasoning()
+        return _result(None, exc)
 
     if tool_choice == "auto" and tool_call is None:
         # auto では文章回答が返り得る。最初の失敗を即 no-op にせず、同じ
@@ -343,7 +263,6 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
         try:
             parent = last_llm_call_id
             tool_call = _invoke(
-                reasoning_effort,
                 attempt_index=1,
                 parent_attempt_id=parent,
                 messages_override=retry_messages,
@@ -355,23 +274,6 @@ def run_phase_a(wiring: WorldLlmWiring, player_id: PlayerId) -> LlmPhaseAResult:
             )
             return _result(None, exc)
 
-    if (
-        tool_choice == "required"
-        and reasoning_effort is not None
-        and tool_call is None
-    ):
-        # 熟考ターンだが tool_call なし (NO_TOOL_CALL)。commit せず降格再試行。
-        logger.warning(
-            "Phase A reasoning turn returned no tool_call for player_id=%s; "
-            "latch を消費し reasoning なしで降格再試行する",
-            player_id.value,
-        )
-        return _fallback_without_reasoning()
-
-    # 案A HIGH 2: 熟考付き行動が「成立した後にだけ」ラッチを消費し
-    # AGENT_REASONING_ENGAGED trace を残す (成立 = 例外なし かつ tool_call あり)。
-    if reasoning_effort is not None and tool_call is not None:
-        wiring.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
     return _result(tool_call, None)
 
 def run_reason_first_phase_a(
@@ -425,8 +327,6 @@ def run_reason_first_phase_a(
         action_phase_tool_count=len(action_tool_names),
         retry_limit=1,
     )
-    if gate_reason == "stagnation_strong":
-        consume_stagnation_reason_first_latch(wiring, player_id)
 
     def _result(
         tool_call: dict[str, Any] | None,
