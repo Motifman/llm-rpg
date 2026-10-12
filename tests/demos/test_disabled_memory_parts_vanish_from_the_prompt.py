@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.application.being.expectation.support import ScriptedJudgmentPort
 
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
@@ -24,7 +25,6 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from tests.application.being.expectation.support import ScriptedJudgmentPort
 
 _ROOT = Path(__file__).resolve().parents[2]
 _PROFILES = _ROOT / "data" / "experiment_profiles"
