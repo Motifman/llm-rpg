@@ -13,7 +13,7 @@
   正しい。変わり方の信念は作ってほしくない
 
 使い方:
-    uv run python scripts/belief_state_change_probe.py --reps 5 --out /tmp/probe.json
+    uv run python scripts/belief_state_change_probe.py --profile station_drill --reps 5 --out /tmp/probe.json
 """
 
 from __future__ import annotations
@@ -253,7 +253,9 @@ def run_scene(scene: Scene, client: LiteLLMClient) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", default="belief_goal_full")
+    parser.add_argument(
+        "--profile", required=True, help="信念を固める処理を有効にした profile の名前 (例: station_drill)"
+    )
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--max-calls", type=int, default=50)
     parser.add_argument("--out", type=Path)

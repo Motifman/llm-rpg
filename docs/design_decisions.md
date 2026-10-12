@@ -1038,6 +1038,8 @@ HIDDEN) で制御する案。物理的にその場に居る者が「消えた人
 既存条件なので true のまま維持する。能動検索・関連探索は、後でまとまりとして
 評価するときに profile で再度有効化する。
 
+**その後**: `belief_goal_full` と `ablation_base` は、古い記憶の部品を使う profile として Issue #1631 で退役させた。過去の run の結果は `var/runs` に残る。
+
 ## 34. memo A/B は「蒸留ありの手帳」と「手帳なし」を比較する
 
 v4 第3回 run では `memo_add` / `memo_done` / `memo_list` が全行動の約15%を
@@ -1063,6 +1065,8 @@ memo A/B の scenario は `survival_island_v4_coop.json` に固定する。v4 �
 比較可能性を保つためであり、v3 には position / area / distant cue が無く #35 の
 「拠点から山影が見える」変更が効かないためである。run 時の `SCENARIO=` 上書きには
 頼らず、profile を読めば実験条件が分かる状態にする。
+
+**その後**: memo A/B の 2 profile と `belief_goal_v4` は、Issue #1631 で退役させた。memo A/B の結果は `var/runs/v4coop_memo_keep_004` と `v4coop_memo_hide_005` に残る。
 
 ## 35. `is_outdoor` 未宣言の屋内扱いは validator で見える化する
 
@@ -1182,6 +1186,8 @@ DeepSeek V4 Flash の 2026-07-31 更新版は、新しい `belief_goal_v4` profi
 - Cloudflare の cache read 単価は DeepSeek 公式の10倍だが、run 004 の実測量では
   200 tick あたり約 0.10 USD の増加に収まる。速度、prompt 単価、completion 単価、
   キャッシュ動作は同等だったため許容した。
+
+**その後**: `belief_goal_v4` は、古い記憶の部品を使う profile として Issue #1631 で退役させた。版固定 ID と、実呼び出しで確かめる手順は残る (docs/llm_provider_selection.md)。
 
 **どうしないと壊れるか**:
 
@@ -7871,9 +7877,11 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **プレフィックスキャッシュ**: どちらの値も設定と起動時の配線だけで決まり、run 中は変わらない。design_decisions 1 は保たれる。
 
-**どうしないと壊れるか**: 記憶の欄やツールの名前をシステムプロンプトやツールの説明に書くときは、その欄やツールが出ているかを見て書き分ける。`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` が、全部入りの profile から記憶の部品を 1 つずつ止め、1 ターン目のシステムプロンプト・user 文面・ツール定義のどこにも名前が出ないことを見る。正の対照として、全部入りでどの名前が出るかも固定している。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` と違って、名前の表はツールの一覧から自動では作らない。記憶の欄やツールを足したら、`_ALL_NAMES` と `_DISABLED_PARTS` に足す。
+**どうしないと壊れるか**: 記憶の欄やツールの名前をシステムプロンプトやツールの説明に書くときは、その欄やツールが出ているかを見て書き分ける。`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` が、全部入りの設定から記憶の部品を 1 つずつ止め、1 ターン目のシステムプロンプト・user 文面・ツール定義のどこにも名前が出ないことを見る。正の対照として、全部入りでどの名前が出るかも固定している。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` と違って、名前の表はツールの一覧から自動では作らない。記憶の欄やツールを足したら、`_ALL_NAMES` と `_DISABLED_PARTS` に足す。
 
 **関連**: Issue #1616 / #1587 / #1621、design_decisions 1 / 44。
+
+**その後**: 全部入りの profile (`memory_jev_mine_v1_v41_thinking_capped`) とメモだけの profile は Issue #1631 で退役させた。試験は、新しい記憶の profile に全部入りの run が入れていた古い部品を戻して全部入りの設定を作る。退役前の profile と、止める部品ごとの 1 ターン目のプロンプトが一致することを確かめてから置き換えた。
 
 ---
 

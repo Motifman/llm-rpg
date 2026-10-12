@@ -329,7 +329,7 @@ spot_map_validator は通路の状態を見ないので、水門・閂・支柱�
   | run の記録 | 読み |
   |---|---|
   | `team_result` で片方が WIN | そのチームの勝ち |
-  | `team_result` で両方 LOSE | どちらのチームも 2 人そろって脱出しなかった (混成で乗った、誰かが倒れたまま全員の結果が決まった)。`END_ON_ALL_DOWN` を有効にした profile (`belief_goal_v4` など) では、全員が動けなくなった外的停止もここに入り、`reason` が「外的停止 END_ON_ALL_DOWN」で始まる |
+  | `team_result` で両方 LOSE | どちらのチームも 2 人そろって脱出しなかった (混成で乗った、誰かが倒れたまま全員の結果が決まった)。`END_ON_ALL_DOWN` を有効にした profile (`memory_jev_mine_v1_v41_thinking_capped_being_memory` など) では、全員が動けなくなった外的停止もここに入り、`reason` が「外的停止 END_ON_ALL_DOWN」で始まる |
   | `team_result` が無く、`run_end` の outcome が TIMEOUT で、`last_tick` が `max_world_ticks` に達している | 引き分け |
   | `team_result` が無く、outcome が LLM_ABORTED / INTERRUPTED、または `last_tick` が `max_world_ticks` に届かない TIMEOUT | 勝敗の記録に使わない (障害、中断、tick が進まない不具合) |
 - チームの見え方: チームの名前 (チーム北・チーム南) も所属もプロンプトに出ない。所属のキー `team` は `player_attributes` で `"visibility": "hidden"` と宣言してあり、本人の「自分の状態」にも出ない (design_decisions D1546)。出ると、チームという区切りがあり、対になる側がいそうだと本人に伝わる
