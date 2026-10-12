@@ -54,9 +54,6 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     offered_tools_from_payload,
 )
-from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn import (
-    form_expectations_from_call,
-)
 from ai_rpg_world.application.llm.services.world_llm_turn.memo_turn import (
     apply_memo_from_call,
 )
@@ -213,15 +210,6 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             tool_name=name,
             injected_fields=sorted(phase_a.subjective_overrides.keys()),
         )
-    # 実行の前に積む。成功した行動の記録 (do_*) がプロンプトの信念と想起の台帳を
-    # 消費するので、そのあとでは頭にあった信念を引けない。
-    form_expectations_from_call(
-        wiring,
-        player_id,
-        tool_name=name,
-        arguments=arguments,
-        tools_payload=phase_a.tools_payload,
-    )
     # Phase 1d: ACTION 自動 trace (実行前)。runtime に trace_recorder が
     # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない world_runtime
     # 専用 wiring のための補完。

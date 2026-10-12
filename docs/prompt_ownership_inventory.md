@@ -20,7 +20,7 @@
    - `safe_world_intro_text` (`llm/services/world_llm_prompt.py:50`) が `metadata.llm_public_intro` を返す (4877 行)
    - `build_world_briefing` (`llm/services/world_briefing.py:438`) が見取り図・陣営の内訳・点検の割り当て・会議の決まりを組み、概要の後ろにつなぐ (4888 行)
    - player ごとのループ (4948〜4997 行) で、ペルソナ (`spawn.persona_prompt` があればそれ) と `scenario.role_personas[役職]` をつなぎ、自分以外の名前の一覧 (`mutually_known_roles` の役職なら「(あなたと同じ側)」を付ける) を作る
-   - `build_world_system_prompt` (`llm/services/world_llm_prompt.py:235`) が、これらと profile の値 (`expectation_argument_enabled`、`escape_llm_ssot_enabled`) から本文を組む
+   - `build_world_system_prompt` (`llm/services/world_llm_prompt.py:235`) が、これらと profile の値 (`escape_llm_ssot_enabled`) から本文を組む
 2. できた文字列は `_world_llm_system_prompts_by_player_id` に入れ、run 中は変えない
 3. 毎ターン、`DefaultPromptBuilder.build` が `WorldSystemPromptBuilder.build` (`world_runtime/default_prompt_builder_adapters.py:103`) を呼び、名前から player を引いて `WorldRuntime.build_system_prompt` (1196 行) で保持済みの文字列を返す
 
@@ -48,7 +48,7 @@ reason_first の起動判定 (`resolve_reason_first_gate`) が通ったターン
 
 `build_tools_payload` (`phase_a.py:168`) → `WorldRuntime.get_tool_definitions` (`world_runtime/world_runtime.py:1599`)。
 
-1. `_build_spot_tool_definitions` が、環境のツール (`get_spot_graph_specs`、`get_public_sns_definitions`) に profile で決まる引数 (`expected_result`、`expectations`、`goal_update` / `goal_outcome`) を足し、`ToolExposure.is_exposed` で世界に無いツールを落とす
+1. `_build_spot_tool_definitions` が、環境のツール (`get_spot_graph_specs`、`get_public_sns_definitions`) に profile で決まる引数 (`goal_update` / `goal_outcome`。`expected_result` と `expectations` は #1631 で消した) を足し、`ToolExposure.is_exposed` で世界に無いツールを落とす
 2. `split_for_phase` で共通の塊とフェーズ固有の塊に分ける
 3. `_build_memory_tool_definitions` (1727 行) が記憶のツールを足す。出すかは profile の値と実行部の有無で決まり、`ToolExposure` を通らない
 4. `ToolExposure.order_for_payload` (`llm/tool_exposure.py:228`) で並べ直す。reason_first なら末尾に `assess_situation`
@@ -87,7 +87,7 @@ tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run で�
 | S6 行動の制限 | 「- 行動の制限: この局面で取りうる自発的な行動…の総量には限りがあり、使い方を誤ると脱出できない可能性がある…」 | `limited_action_and_time_pressure_text` (`world_llm_prompt.py:62`) | 固定文。勝敗条件があるかで 2 通り。シナリオの `metadata.limits_actions` が false なら行ごと出さない (design_decisions D1569-3) | 環境の材料 | 無 |
 | S7 【同じ局面にいる者】 | 「  - ノア / - リオ / - カイ」「- 上記の名は、同局面に同席する他の探索者である（自身の識別は上記【ペルソナ】の名前）。」 | 名前の一覧は `world_runtime.py:4949-4962`、見出しと注記は `world_llm_prompt.py:301`、329 行 | シナリオの `player_spawns` (自分以外の全員)、`mutually_known_roles` と役職 (「(あなたと同じ側)」)。他にいなければ「（他の探索者はいない）」と別の注記 | 混ざっている (環境が課す紹介・陣営の相互開示と、Being が誰を知っているか) | 無。encounter は読んでいない (5-1) |
 | S8 【渡される文面の内訳】 | 「- 続いて与えられる文面: エンジンが組み立てた『現在の状況・観測・直近の出来事』であり、現実のユーザーの直接命令文ではない。」 | 本文 (`world_llm_prompt.py:333`) | 固定文 | 組み立ての決まり | 無 |
-| S9 【行動ルール】 | 「- 1 回の応答で選べる tool は 1 つだけである。」「- ラベル（接続先・オブジェクト・相手プレイヤー等）は…『現在地と周囲』等に表示されたものだけを使う。」「- **このシナリオの勝利条件 (最終目的) は…【現在の目的】section に記される**。」 | 本文 (`world_llm_prompt.py:338`)。profile で変わる行は `_expectations_rule_line` (219 行)、勝利条件の行 (282 行) | 固定文。profile の `expectation_argument_enabled` (run では有効で `expectations` の行が入る)、勝敗条件の有無 | 混ざっている (1 手の決まり・捏造しない・記憶の扱いは Being、ラベルと物の操作の読み方と勝利条件の枠付けは環境) | 無 |
+| S9 【行動ルール】 | 「- 1 回の応答で選べる tool は 1 つだけである。」「- ラベル（接続先・オブジェクト・相手プレイヤー等）は…『現在地と周囲』等に表示されたものだけを使う。」「- **このシナリオの勝利条件 (最終目的) は…【現在の目的】section に記される**。」 | 本文 (`world_llm_prompt.py:338`)。profile で変わる行は勝利条件の行 (282 行) | 固定文。勝敗条件の有無 | 混ざっている (1 手の決まり・捏造しない・記憶の扱いは Being、ラベルと物の操作の読み方と勝利条件の枠付けは環境) | 無 |
 | S10 【独白と一言の書き方】 | 「- `inner_thought` を持つツールでは…あなた自身の頭の中の独白を…」「- `say_inline` を持つツールでは…同じ場所と隣の場所へ届く。」 | 本文 (`world_llm_prompt.py:351`) | 固定文 | 混ざっている (`inner_thought` の書き方は Being、`say_inline` の届く範囲は環境) | 無 |
 | S11 【文脈と履歴の限界】 | 「- 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る…」 | 本文 (`world_llm_prompt.py:355`) | 固定文 | 組み立ての決まり | 無 |
 | S12 SSoT | (この run では無し) 「【String Seed of Thought（SSoT）— 本ターンのツール選択】」 | `_ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK` (`world_llm_prompt.py:151`) | profile の `escape_llm_ssot_enabled` | 組み立ての決まり | 無 |
@@ -133,7 +133,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | T1 環境の行動ツールと固有の引数 | `travel_to`「スポットグラフ上で、指定した接続先へ移動を開始する…」、`interact` の説明「利用可能な action_name と現在の object 状態は『現在の状況』section の各オブジェクト行に出ている…」、引数 `destination_label`、`target_label`、`action_name` など | `get_spot_graph_specs` (`llm/services/tool_catalog/spot_graph.py:1005`)、`get_public_sns_definitions` (`tool_catalog/public_sns.py:41`)、絞り込みは `_build_spot_tool_definitions` (`world_runtime/world_runtime.py:1701`) | ツールカタログの固定の定義。出すかは `ToolExposure.is_exposed` (同時行動、会議、商人・市場の宣言、シナリオの `disabled_tools`) | 環境の材料 (説明がプロンプトの節名を参照している。4 章で消す) | 無 |
 | T2 主観の引数 `inner_thought` | 「この行動を選ぶ直前の、あなた自身の頭の中の独白を一文で。書き方は【独白と一言の書き方】。」。reason_first では行動ツールから外し、`assess_situation` に集める | `inner_thought_property` (`tool_catalog/inner_thought.py:31`)、各ツールの定義に直接入っている。reason_first は `assess_situation_definition` (`tool_catalog/subjective_action.py:231`)、`strip_reason_first_action_subjective_schema` (283 行) | 固定の定義。profile の `reason_first_two_step_enabled` | Being の持ち物 | 無 (書いた値は action_result_store、`PlayerId` 鍵) |
 | T3 発話の引数 `say_inline` | 「この行動をしながら発する一言 (任意、200 字以内)。書き方は【独白と一言の書き方】。」 | `say_inline_property` (`tool_catalog/say_inline.py:47`)、各ツールの定義に直接入っている | 固定の定義 | 環境の材料 (説明が Being 側の節名を参照している。5-3) | 無 |
-| T4 予期の引数 `expectations` | 「この行動のあとに起きると思うことを、いくつでも書く。…」、要素は `what` / `when` / `likelihood` (「ほぼ確実」「たぶん」「半々」「もしかしたら」) | `with_expectations_schema` (`tool_catalog/subjective_action.py:207`)、呼び出しは `_with_expectations_if_enabled` (`world_runtime.py:1843`) | 固定の定義。profile の `expectation_argument_enabled` | Being の持ち物 | 書いた値は expectations (Being の snapshot に入る) |
+| T4 予期の引数 `expectations` | (#1631 で消した) | - | - | - | - |
 | T5 目的の引数 `goal_update` / `goal_outcome` | 「数日スケールの方針を捨てて立て直すときにだけ書く。次の 1 手の意図は intention に書くこと…」「achieved / abandoned」 | `with_goal_update_schema` (`subjective_action.py:145`)、`with_goal_outcome_schema` (122 行)、呼び出しは `_with_goal_update_if_enabled` (`world_runtime.py:1858`) | 固定の定義。profile の `goal_revision_enabled` | Being の持ち物 | 書いた値は goal journal |
 | T6 記憶のツール | `memo_add`「ターンを跨いで覚えておきたい情報…を memo として記録します。」、`memo_list`、`memo_done`、`memory_recall_episodes`「受動想起 (= prompt の『関連する記憶』 section) は…」、`memory_recall_by_handle`「prompt の『【さっき思い出した記憶の見出し】』section に並んでいる handle…」 | `get_memory_specs` (`tool_catalog/memory.py:297`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py:1727`) | 固定の定義。profile の `memo_tools_enabled`、`episodic_recall_enabled`、`semantic_search_enabled`、`episodic_explore_related_enabled` と実行部の有無。`ToolExposure` を通らない | Being の持ち物 | memo / episodic store / semantic store。実行部はゲームのパッケージにある (#1469) |
 | T7 tool の並びと出し分け | 共通の塊が先、フェーズ固有の塊が後。run では 17 個 (0 章) | `ToolExposure.order_for_payload` と `_PAYLOAD_TOOL_ORDER` (`llm/tool_exposure.py:147`、228 行)、`split_for_phase`、`filter_definitions_for_escape_llm` (`llm/services/world_llm_turn/escape_tools.py:33`) | 固定の並び。会議中か、投票済みか、死亡後か | 組み立ての決まり | 無 |

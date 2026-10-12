@@ -14,9 +14,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai_rpg_world.application.being.expectation.forming import (
-    ExpectationFormingService,
-)
 from ai_rpg_world.application.being.expectation.grounds import (
     MemoryStoreInMindTextReader,
 )
@@ -166,10 +163,6 @@ class WorldLlmWiring:
     expectation_settlement: ExpectationSettlementService | None = field(
         default=None, init=False
     )
-    #: 行動に書かれた予期を積む口 (#1441)。profile が求めなければ None。
-    expectation_forming: ExpectationFormingService | None = field(
-        default=None, init=False
-    )
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
@@ -268,7 +261,6 @@ class WorldLlmWiring:
         #: being ごとに、目的の達成を問わなかった理由のうち最後に trace に残したもの。問うたら消す (#1448)。
         self.goal_hint_last_skipped_reason: dict[str, str] = {}
         self.expectation_settlement = self._build_expectation_settlement()
-        self.expectation_forming = self._build_expectation_forming()
         if self.typed_judgment_port is not None:
             self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
         # Issue #264 後続 B1: speech_say の audience resolver。
@@ -520,18 +512,6 @@ class WorldLlmWiring:
             semantic_store=getattr(stack, "semantic_memory_store", None),
             episode_store=getattr(stack, "episode_store", None),
             journal_store=getattr(stack, "reinterpretation_journal", None),
-        )
-
-    def _build_expectation_forming(self) -> ExpectationFormingService | None:
-        """profile が予期の引数を求めたときだけ組む (#1441)。"""
-        config = getattr(self.runtime, "_runtime_config", None)
-        if config is None or not config.expectation_argument_enabled:
-            return None
-        return ExpectationFormingService(
-            self.runtime._expectation_store,
-            turn_reader=self.runtime._memory_turn_clock,
-            undated_term_turns=int(config.expectation_undated_term_turns),
-            dated_term_turns=int(config.expectation_dated_term_turns),
         )
 
     def _time_label(self) -> str:
