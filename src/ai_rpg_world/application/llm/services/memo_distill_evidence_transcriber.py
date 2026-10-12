@@ -139,7 +139,6 @@ class MemoDistillEvidenceTranscriber:
             episode_ids=(anchor_episode.episode_id,),
             cue_signature=MEMO_DISTILL_CUE_SIGNATURE,
             text=text,
-            # 一撃学習経路 (salience=high) は chunk 主観補完 LLM 専用に残す。
             # memo_done は反復も驚きの大小も持たないルールベースの転記
             # なので常に low。
             salience=BELIEF_EVIDENCE_SALIENCE_LOW,
