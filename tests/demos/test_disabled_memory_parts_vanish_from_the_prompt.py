@@ -68,7 +68,6 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "PREDICTION_CONTEXT_ID_ENABLED": "true",
     "RECALL_HIT_BOOST_ENABLED": "true",
     "SEMANTIC_LLM_GIST_ENABLED": "true",
-    "SITUATION_BELIEF_RECALL_ENABLED": "true",
     "STAGNATION_PRESSURE_ENABLED": "true",
     "STAGNATION_REASONING_ENABLED": "true",
     "UNCONSCIOUS_CONTEXT_ENABLED": "true",
@@ -184,7 +183,7 @@ _DISABLED_PARTS = [
         id="every_active_recall_tool",
     ),
     pytest.param(
-        {"SEMANTIC_PASSIVE_TOP_K": "0", "SITUATION_BELIEF_RECALL_ENABLED": "false"},
+        {"SEMANTIC_PASSIVE_TOP_K": "0"},
         (_LEARNED,),
         id="learned",
     ),

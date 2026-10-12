@@ -1715,7 +1715,8 @@ def _event_timeline_category(e: TraceEvent) -> str:
         TraceEventKind.EPISODIC_CHUNK_WRITTEN,
         TraceEventKind.EPISODIC_RECALL,
         "semantic_passive_recall",
-        TraceEventKind.SITUATION_BELIEF_RECALL,
+        # 状況の項目から引く想起 (#1414) は #1631 で消した。過去の run の trace を読むために残す。
+        "situation_belief_recall",
     }:
         return "recall"
     if kind.startswith("belief_"):
@@ -2041,7 +2042,7 @@ def _format_event_body(e: TraceEvent) -> str:
         return f"semantic recall: {cand_count} candidates" + (
             f" / top_k={esc(top_k)}" if top_k is not None else ""
         ) + first_part
-    if kind == TraceEventKind.SITUATION_BELIEF_RECALL:
+    if kind == "situation_belief_recall":
         if payload.get("failed"):
             return f"situation recall failed: {esc(short(str(payload['failed']), 90))}"
         if payload.get("query") == "":
