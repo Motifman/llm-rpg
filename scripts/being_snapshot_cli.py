@@ -151,6 +151,9 @@ def _build_stack(
     from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
         InMemoryEpisodeRepository,
     )
+    from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
+        InMemoryMemoBookRepository,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
         InMemoryExpectationRepository,
     )
@@ -178,6 +181,7 @@ def _build_stack(
         stagnation_pressure_store=InMemoryStagnationPressureStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
+        being_memo_store=InMemoryMemoBookRepository(),
         expectation_store=InMemoryExpectationRepository(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
@@ -234,7 +238,7 @@ def cmd_save(args: argparse.Namespace) -> int:
     logger.warning(
         "recall_slot / afterglow / habituation / expectations (with their "
         "undelivered events and memory turn) / acquaintances / being "
-        "episodes are in-memory sidecars and "
+        "episodes / being memo book are in-memory sidecars and "
         "are NOT captured via this CLI. The resulting snapshot will have "
         "those layers empty."
     )

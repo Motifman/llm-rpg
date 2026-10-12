@@ -338,11 +338,15 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
+from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
+    InMemoryMemoBookRepository,
 )
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -718,6 +722,10 @@ class WorldRuntime:
     )
     # #1626: profile で書き起こしを有効にしたときだけ create_world_runtime が組む。
     _player_episode_writing: Any | None = field(default=None, repr=False)
+    # #1628: エピソードと同じく、世界の snapshot には入らない。
+    _being_memo_store: MemoBookRepository = field(
+        default_factory=InMemoryMemoBookRepository, repr=False
+    )
     # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
     _expectation_dispatcher: Any | None = field(default=None, repr=False)
     # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする

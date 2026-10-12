@@ -418,13 +418,14 @@ class ExperimentSnapshotSession:
     ) -> None:
         # **必須** store: 「これがなければ snapshot 自体が意味を持たない」もの。
         # being_repository / resolver はないと that's that.
-        # 知り合いの記録と目次つきのエピソードは runtime が常に持つ。空で代用すると、
+        # 知り合いの記録・目次つきのエピソード・メモ帳は runtime が常に持つ。空で代用すると、
         # 再開した Being が会った相手や書いた記憶を忘れたまま、配線漏れと見分けられない。
         required_fields = (
             "being_repository",
             "being_attachment_resolver",
             "acquaintance_store",
             "being_episode_store",
+            "being_memo_store",
         )
         missing_required = [
             name
@@ -569,6 +570,7 @@ class ExperimentSnapshotSession:
             stagnation_pressure_store=stagnation_pressure_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
+            being_memo_store=wiring_result.being_memo_store,
             expectation_store=expectation_store,
         )
         self._expectation_store = expectation_store
