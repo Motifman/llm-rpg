@@ -112,7 +112,6 @@ class EpisodicChunkCoordinator:
         current_tick_provider: Callable[[], int | None] | None = None,
         subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
         belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        error_gated_boundary_enabled: bool = False,
         pending_prediction_store: PendingPredictionRepository | None = None,
         pending_prediction_enabled: bool = False,
     ) -> None:
@@ -181,8 +180,6 @@ class EpisodicChunkCoordinator:
                 raise TypeError(
                     "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
                 )
-        if not isinstance(error_gated_boundary_enabled, bool):
-            raise TypeError("error_gated_boundary_enabled must be bool")
         # U10a (予測誤差統一設計 部品6・pending prediction / default None =
         # flag OFF 相当): flag OFF なら従来通り何もしない (「配線と有効化の
         # 分離」)。
@@ -194,10 +191,6 @@ class EpisodicChunkCoordinator:
             )
         if not isinstance(pending_prediction_enabled, bool):
             raise TypeError("pending_prediction_enabled must be bool")
-        # U8 (予測誤差統一設計 部品2a / default False = flag OFF): True のとき
-        # だけ decide_chunk_boundary に誤差ゲート境界条項を評価させる。False
-        # (既定) では境界挙動は U8 導入前と完全一致する。
-        self._error_gated_boundary_enabled = error_gated_boundary_enabled
         self._pending_prediction_store = pending_prediction_store
         self._pending_prediction_enabled = pending_prediction_enabled
         self._belief_evidence_transcriber = belief_evidence_transcriber
@@ -515,7 +508,6 @@ class EpisodicChunkCoordinator:
             encoding_input,
             hints=hints,
             explicit_segment_close=explicit_segment_close,
-            error_gated_boundary_enabled=self._error_gated_boundary_enabled,
         )
         # ハードキャップ: 長走で境界判定が常時 False を返し続けると bucket が
         # 無制限に肥える silent failure になる。bucket が hard_cap を超えたら、

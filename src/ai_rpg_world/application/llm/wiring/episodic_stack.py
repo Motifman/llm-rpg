@@ -458,12 +458,6 @@ def build_episodic_stack(
     recall_hit_boost_enabled: bool = False,
     recall_hit_boost_strength: int = 0,
     recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
-    # U8 (予測誤差統一設計 部品2a・誤差ゲート付き境界 / default False =
-    # flag OFF): True のとき chunk_coordinator が decide_chunk_boundary に
-    # この flag を伝播し、構造的な予測ミス (成功予測→失敗 / error_code 付き
-    # 失敗) を境界候補にする。False (既定) では境界挙動は U8 導入前と完全
-    # 一致する。
-    error_gated_boundary_enabled: bool = False,
     # U10a (予測誤差統一設計 部品6・pending prediction / default False =
     # flag OFF): True のとき pending prediction store (in-memory) を構築し、
     # chunk_coordinator (同期経路の書込み) に配線する。非同期 scheduler 経路
@@ -695,7 +689,6 @@ def build_episodic_stack(
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
         belief_evidence_transcriber=belief_evidence_transcriber,
-        error_gated_boundary_enabled=error_gated_boundary_enabled,
         # U10a (pending prediction): 同期経路用。非同期経路 (scheduler) は
         # pending_prediction_store 確定後に呼び出し側 (world_runtime.py) が
         # set_pending_prediction_store で差し込む。
