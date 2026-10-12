@@ -41,11 +41,14 @@ _OFFLINE = {
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED": "false",
 }
 
-#: 元の profile が止めている能動想起と【関連する学び】も有効にして、全部入りにする。
+#: 元の profile が止めている能動想起と【関連する学び】、目次つきのエピソードも
+#: 有効にして、全部入りにする。
 _ALL_MEMORY_PARTS = {
     "SEMANTIC_SEARCH_ENABLED": "true",
     "EPISODIC_EXPLORE_RELATED_ENABLED": "true",
     "SEMANTIC_PASSIVE_TOP_K": "3",
+    "BEING_EPISODE_WRITING_ENABLED": "true",
+    "BEING_EPISODE_INDEX_ORDER": "recalled_rises_to_top",
 }
 
 #: 記憶の部品ごとの、本文に出てはいけない名前。
@@ -61,6 +64,8 @@ _RECALL_BY_HANDLE = "memory_recall_by_handle"
 _EXPLORE_RELATED = "memory_explore_related"
 _SEARCH_SEMANTIC = "memory_search_semantic"
 _MEMO_TOOLS = ("memo_add", "memo_list", "memo_done")
+_EPISODE_INDEX = "思い出せる出来事"
+_EPISODE_RECALL = "episode_recall"
 #: メモ帳 (#1628) の欄、システムプロンプトの説明、環境の tool の引数。
 _MEMO_BOOK = "【メモ】"
 _MEMO_RULES = "【メモの書き方】"
@@ -80,6 +85,8 @@ _ALL_NAMES = (
     _EXPLORE_RELATED,
     _SEARCH_SEMANTIC,
     *_MEMO_TOOLS,
+    _EPISODE_INDEX,
+    _EPISODE_RECALL,
     *_MEMO_BOOK_NAMES,
 )
 
@@ -158,6 +165,11 @@ _DISABLED_PARTS = [
         {"EXPECTATION_ARGUMENT_ENABLED": "false"},
         (_EXPECTATIONS,),
         id="expectations",
+    ),
+    pytest.param(
+        {"BEING_EPISODE_INDEX_ORDER": "off"},
+        (_EPISODE_INDEX, _EPISODE_RECALL),
+        id="episode_index",
     ),
 ]
 

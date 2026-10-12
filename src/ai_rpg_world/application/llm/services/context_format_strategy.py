@@ -4,6 +4,7 @@ import logging
 from collections.abc import Mapping
 
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
+from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
 
 # 順序ポリシー識別子。実験で A/B 比較できるよう constructor で切替可能。
 # 詳細根拠は docs/memory_system/short_term_memory_design.md §5。
@@ -44,6 +45,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     5. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
     6. **【関連する学び】** — learned_text (semantic top-K)
     7. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
+    7b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
     8. **【進行中のメモ】** — active_memos_text
     9. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
@@ -93,6 +95,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         prediction_feedback_text: str = "",
         pending_predictions_text: str = "",
         known_people_text: str = "",
+        episode_index_text: str = "",
         being_memo_text: str = "",
     ) -> str:
         for name, value in (
@@ -108,6 +111,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("prediction_feedback_text", prediction_feedback_text),
             ("pending_predictions_text", pending_predictions_text),
             ("known_people_text", known_people_text),
+            ("episode_index_text", episode_index_text),
             ("being_memo_text", being_memo_text),
         ):
             if not isinstance(value, str):
@@ -127,6 +131,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 prediction_feedback_text=prediction_feedback_text,
                 pending_predictions_text=pending_predictions_text,
                 known_people_text=known_people_text,
+                episode_index_text=episode_index_text,
                 being_memo_text=being_memo_text,
             )
         return _format_stable_to_volatile(
@@ -142,6 +147,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             prediction_feedback_text=prediction_feedback_text,
             pending_predictions_text=pending_predictions_text,
             known_people_text=known_people_text,
+            episode_index_text=episode_index_text,
             being_memo_text=being_memo_text,
         )
 
@@ -228,6 +234,11 @@ def _emit_current_state(sections: list[str], current_state_text: str) -> None:
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
     ])
+
+
+def _emit_episode_index(sections: list[str], episode_index_text: str) -> None:
+    if episode_index_text.strip():
+        sections.extend(["", EPISODE_INDEX_HEADING, episode_index_text.rstrip()])
 
 
 def _emit_being_memo(sections: list[str], being_memo_text: str) -> None:
@@ -335,6 +346,7 @@ def _format_stable_to_volatile(
     prediction_feedback_text: str,
     pending_predictions_text: str = "",
     known_people_text: str = "",
+    episode_index_text: str = "",
     being_memo_text: str = "",
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
@@ -450,6 +462,11 @@ def _format_stable_to_volatile(
             "",
         ])
 
+    # 7b. 思い出せる出来事 (エピソードの目次、#1623)。書き起こしと呼び出しのときだけ
+    # 変わるので、毎ターン伸びる直近の出来事より後ろ、メモより前に置く。
+    if episode_index_text.strip():
+        sections.extend([EPISODE_INDEX_HEADING, episode_index_text.rstrip(), ""])
+
     # 8. 進行中のメモ (high-volatile、空なら省略)
     if active_memos_text.strip():
         sections.extend([
@@ -487,6 +504,7 @@ def _format_legacy(
     prediction_feedback_text: str,
     pending_predictions_text: str = "",
     known_people_text: str = "",
+    episode_index_text: str = "",
     being_memo_text: str = "",
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
@@ -509,5 +527,6 @@ def _format_legacy(
     _emit_pending_predictions(sections, pending_predictions_text)
     _emit_recent_events(sections, recent_events_text)
     _emit_relevant_memories(sections, relevant_memories_text)
+    _emit_episode_index(sections, episode_index_text)
 
     return "\n".join(sections)

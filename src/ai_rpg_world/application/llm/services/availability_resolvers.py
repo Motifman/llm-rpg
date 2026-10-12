@@ -100,6 +100,16 @@ class MemoryRecallByHandleAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
+class EpisodeRecallAvailabilityResolver(IAvailabilityResolver):
+    """目次つきのエピソードの呼び出し (#1623)。目次が空でも呼べて、思い出せないと返る。"""
+
+    def is_available(
+        self,
+        context: PlayerCurrentStateDto | None,
+    ) -> bool:
+        return True
+
+
 class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
 

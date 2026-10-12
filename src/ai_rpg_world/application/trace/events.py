@@ -214,6 +214,16 @@ class TraceEventKind:
     # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /
     # 失敗なら error_type と error、飛ばしたなら skip_reason。
     EPISODE_WRITING = "episode_writing"
+    # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
+    # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /
+    # shown_handles (出した呼び名、出した順)。
+    EPISODE_INDEX_SHOWN = "episode_index_shown"
+    # エピソードを呼び出した (#1623)。呼び出しのツールの 1 回ごとに 1 件。
+    # payload: being_id / outcome (recalled / rejected / failed) / requested (渡した呼び名) /
+    # recalled なら turn と results: list[{handle, found, recall_count}]、
+    # rejected なら reject_reason (malformed / too_many) と max_handles、
+    # failed なら error_type と error。
+    EPISODE_RECALL = "episode_recall"
     SNAPSHOT_SAVE = "snapshot_save"
     # シナリオの round_assignment で player に割り当てた枠 (#1514)。宣言の無い
     # シナリオでは出ない。payload: round / seed / assignments: list[{player_id,

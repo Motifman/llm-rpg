@@ -8,6 +8,7 @@ from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder impor
     PERSONA_HEADING,
     PersonaPromptFragmentBuilder,
 )
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
 from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioMetadata
@@ -279,6 +280,21 @@ def _history_limit_rule(
     return "過去を語る必要があれば、能動想起の手段で取り出してから語ること。"
 
 
+def _episode_index_rule(*, shown: bool, recall_offered: bool) -> str:
+    """【思い出せる出来事】の読み方 (#1623)。出ていない欄とツールを指さない (#1616)。"""
+    if not shown:
+        return ""
+    recall = (
+        f"本文は `{TOOL_NAME_EPISODE_RECALL}` で呼び名を指定して思い出したときだけ読める。"
+        if recall_offered
+        else ""
+    )
+    return (
+        "\n- 【思い出せる出来事】は、自分が昔の出来事を書き残した記憶の目次である。"
+        f"{recall}目次の一行だけから細部を補わない。"
+    )
+
+
 def _memo_rules(enabled: bool) -> str:
     """メモ帳の分類の意味と書き方 (#1628)。無効なら空文字で、prompt は変わらない。
 
@@ -316,6 +332,8 @@ def build_world_system_prompt(
     has_goal: bool = True,
     expectation_argument_enabled: bool = False,
     limits_actions: bool = True,
+    episode_index_shown: bool = False,
+    episode_recall_offered: bool = False,
     being_memo_enabled: bool = False,
 ) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
@@ -347,6 +365,9 @@ def build_world_system_prompt(
         ``True`` のとき、予期の引数 ``expectations`` を書く指示行を 行動ルール に
         追加する (#1441)。``expected_result`` とは設定で併用させない。
 
+    episode_index_shown / episode_recall_offered:
+        【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
+        どちらも ``False`` (既定) なら prompt は変わらない。
     being_memo_enabled:
         ``True`` のとき【メモの書き方】を足す (#1628)。``False`` (既定) なら prompt は変わらない。
 
@@ -442,7 +463,7 @@ def build_world_system_prompt(
 - `say_inline` を持つツールでは、その行動をしながら一言を添えられる (任意、200 字以内)。同じ場所と隣の場所へ届く。報告・相談・呼びかけ・確認は、発話専用のターンを使わずここに書く方が、時間を無駄にしない。空なら発話しない。
 
 【文脈と履歴の限界】
-- 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る（全履歴の写しではない）。{history_limit_rule}
+- 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る（全履歴の写しではない）。{history_limit_rule}{_episode_index_rule(shown=episode_index_shown, recall_offered=episode_recall_offered)}
 {_memo_rules(being_memo_enabled)}"""
     if enable_string_seed_of_thought:
         return body.rstrip() + "\n\n" + _ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK + "\n"

@@ -152,6 +152,8 @@ class PromptSectionProviders:
     # #1520: Being が描いた【知っている人】。system prompt ではなく毎ターンの
     # メッセージの、目的の直後に置く。
     known_people_text_provider: Callable[[PlayerId], str] | None = None
+    # #1623: エピソードの目次【思い出せる出来事】。目次を出す設定では空でも文を返す。
+    episode_index_text_provider: Callable[[PlayerId], str] | None = None
     memo_store: MemoRepository | None = None
     # #1628: Being のメモ帳。毎ターン同じ位置に、空の分類の見出しも含めて出す。
     being_memo_text_provider: Callable[[PlayerId], str] | None = None

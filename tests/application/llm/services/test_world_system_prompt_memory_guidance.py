@@ -80,3 +80,39 @@ class TestMemoryGuidanceNamesOnlyWhatIsOffered:
 
         assert "ペルソナから想像で補わず" in prompt
         assert "「思い出せない」と素直に伝える" in prompt
+
+
+def _build_with_index(*, shown: bool, recall_offered: bool) -> str:
+    return build_world_system_prompt(
+        world_title="テスト世界",
+        persona_block="【ペルソナ】名前: エイダ",
+        safe_intro="周囲を観察しながら暮らす世界。",
+        relevant_memories_shown=False,
+        active_recall_offered=False,
+        episode_index_shown=shown,
+        episode_recall_offered=recall_offered,
+    )
+
+
+class TestEpisodeIndexGuidanceNamesOnlyWhatIsOffered:
+    """【思い出せる出来事】の読み方の文が、欄と呼び出しのツールのそれぞれの有無に合わせて書き分けられることを保証する (#1623)。"""
+
+    def test_with_both_the_prompt_names_the_section_and_the_tool(self) -> None:
+        """欄もツールも出ているとき、目次であることと、本文は episode_recall で読むことを書く。"""
+        prompt = _build_with_index(shown=True, recall_offered=True)
+
+        assert "【思い出せる出来事】は、自分が昔の出来事を書き残した記憶の目次である。" in prompt
+        assert "本文は `episode_recall` で呼び名を指定して思い出したときだけ読める。" in prompt
+
+    def test_without_the_tool_the_prompt_never_names_it(self) -> None:
+        """欄は出ているがツールが出ていないとき、欄の説明だけを書き、ツールの名前を出さない。"""
+        prompt = _build_with_index(shown=True, recall_offered=False)
+
+        assert "【思い出せる出来事】" in prompt
+        assert "episode_recall" not in prompt
+
+    def test_without_the_section_the_prompt_is_unchanged(self) -> None:
+        """欄を出さない設定では、既定のまま組んだプロンプトとバイト単位で同じになる。"""
+        assert _build_with_index(shown=False, recall_offered=False) == _build(
+            relevant_memories_shown=False, active_recall_offered=False
+        )
