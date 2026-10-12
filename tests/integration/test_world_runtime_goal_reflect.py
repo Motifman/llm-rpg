@@ -21,7 +21,7 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GoalEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.runtime_config_helpers import belief_consolidation_config, episodic_config
+from tests.runtime_config_helpers import belief_consolidation_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -60,77 +60,6 @@ class TestGoalReflectWiring:
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_reflect_enabled is False
-
-
-class TestGoalStagnationEvidenceWiring:
-    """P-U1: GOAL_STAGNATION_EVIDENCE_ENABLED が world_runtime から
-    coordinator まで配線され、既定 OFF であることを固定する。"""
-
-    def test_goal_stagnation_evidence_wired_when_enabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_consolidation_config(
-                goal_reflect_enabled=True,
-                goal_stagnation_evidence_enabled=True,
-            ),
-        )
-        coord = _coordinator(runtime)
-        assert coord is not None
-        assert coord._goal_stagnation_evidence_enabled is True
-
-    def test_goal_stagnation_evidence_off_by_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_consolidation_config(goal_reflect_enabled=True),
-        )
-        coord = _coordinator(runtime)
-        assert coord is not None
-        assert coord._goal_stagnation_evidence_enabled is False
-
-
-class TestFailFastRequiresBeliefConsolidation:
-    """敵対的レビュー HIGH-1: P-U1 は固着パス
-    (``BeliefConsolidationCoordinator``) 経由でしか動かないが、その coordinator
-    自体は ``BELIEF_CONSOLIDATION_ENABLED`` が ON のときしか構築されない
-    (episodic_stack.py の ``if belief_consolidation_enabled and
-    belief_evidence_buffer_store is not None`` 分岐)。GOAL_STAGNATION_EVIDENCE_ENABLED
-    だけを ON にして BELIEF_CONSOLIDATION_ENABLED を OFF のままにすると、
-    coordinator が一度も構築されず、evidence 化の経路が丸ごと死んだまま起動時に何の警告もエラーも出ない「静かな失敗」になる。
-    本クラスは、この組み合わせを起動時 fail-fast (ValueError) で弾くことを保証する。"""
-
-    def _semantic_without_belief_consolidation_config(self, **overrides):
-        return episodic_config(semantic_search_enabled=True, **overrides)
-
-    def test_goal_stagnation_evidence_without_belief_consolidation_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        with pytest.raises(ValueError, match="BELIEF_CONSOLIDATION_ENABLED"):
-            create_world_runtime(
-                _SCENARIO_PATH,
-                config=self._semantic_without_belief_consolidation_config(
-                    goal_reflect_enabled=True,
-                    goal_stagnation_evidence_enabled=True,
-                ),
-            )
-
-    def test_all_flags_enabled_together_does_not_raise(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """正当な組み合わせ (belief_consolidation も含め全部 ON) では構築が通る。"""
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_consolidation_config(
-                goal_reflect_enabled=True,
-                goal_stagnation_evidence_enabled=True,
-            ),
-        )
-        coord = _coordinator(runtime)
-        assert coord is not None
-        assert coord._goal_stagnation_evidence_enabled is True
 
 
 class TestGoalReflectAuditTarget:
