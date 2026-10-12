@@ -189,7 +189,7 @@ reason-first 側も band だけでは発火させず、既存の `_stagnation_re
 ため、`stagnation_strong` gate で 2 段階へ入った時点でラッチを消費する。これにより「2 段階 +
 reasoning 付き 1 段階」の二重発火と、strong band 継続中の毎 turn 2 段階発火を避ける。
 
-> 停滞 band strong の発火条件 (`stagnation_strong`) は、熟考ラッチ (`STAGNATION_REASONING_ENABLED`) と一緒に、記憶の部品の撤去 (#1631) の #__PR__ で消した。いまの発火条件は loop_guard の警告と、直近 2 件の同じ失敗だけ。
+> 停滞 band strong の発火条件 (`stagnation_strong`) は、熟考ラッチ (`STAGNATION_REASONING_ENABLED`) と一緒に、記憶の部品の撤去 (#1631) の #1659 で消した。いまの発火条件は loop_guard の警告と、直近 2 件の同じ失敗だけ。
 
 実装上の分岐面は Phase A に閉じる。reason-first の step2 action arguments へ step1 の
 `inner_thought` / `expected_result` を内部注入し、Phase B 以降 (tool 実行 / ActionResult /
