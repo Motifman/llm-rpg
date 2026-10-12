@@ -137,6 +137,9 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     create_text_candidate_narrower,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
+    with_memo_schema,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.memory import (
     ACTIVE_RECALL_TOOL_NAMES,
     get_memory_specs,
@@ -1850,8 +1853,10 @@ class WorldRuntime:
         """
         spot = [
             self._with_goal_update_if_enabled(
-                self._with_expectations_if_enabled(
-                    self._with_expected_result_if_enabled(defn)
+                self._with_being_memo_if_enabled(
+                    self._with_expectations_if_enabled(
+                        self._with_expected_result_if_enabled(defn)
+                    )
                 )
             )
             for defn in [*(d for d, _ in get_spot_graph_specs()), *get_public_sns_definitions()]
@@ -2013,6 +2018,50 @@ class WorldRuntime:
         ):
             return definition
         return with_expectations_schema(definition)
+
+    def _being_memo_enabled(self) -> bool:
+        return bool(getattr(self._runtime_config, "being_memo_enabled", False))
+
+    def memo_episode_source_offered(self) -> bool:
+        """メモの出どころにエピソードの呼び名を選ばせるか (#1628)。
+
+        目次をプロンプトに出すまで (#1621 の PR 4)、本人はエピソードの呼び名を知る手段が
+        無い。選ばせると、知らない呼び名を書いて外されるだけになる。
+        """
+        return False
+
+    def _with_being_memo_if_enabled(
+        self, definition: ToolDefinitionDto
+    ) -> ToolDefinitionDto:
+        """メモ帳が有効なら、環境の tool に ``memo`` を足す (#1628)。
+
+        付ける範囲は予期の引数と同じで、記憶の tool と ``assess_situation`` には付けない。
+        run 全体で同じ定義を出すので、ターンをまたいで変わらない。
+        """
+        if not self._being_memo_enabled():
+            return definition
+        return with_memo_schema(
+            definition, episode_source_offered=self.memo_episode_source_offered()
+        )
+
+    def being_memo_text(self, player_id: PlayerId) -> str:
+        """【メモ】の本体。本人の Being が引けなければ空文字で、欄を出さない。"""
+        from ai_rpg_world.being.application.memo_book_text import format_memo_book
+
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return ""
+        return format_memo_book(
+            self._being_memo_store.get(acting.being_id),
+            current_environment_name=self.environment_name_for(player_id),
+        )
+
+    def environment_name_for(self, player_id: PlayerId) -> str:
+        from ai_rpg_world.application.observation.being_contract import (
+            environment_entry_for_player,
+        )
+
+        return environment_entry_for_player(self.scenario, player_id).environment_name
 
     def _with_goal_update_if_enabled(
         self, definition: ToolDefinitionDto
@@ -3108,6 +3157,9 @@ class WorldRuntime:
                 pid, self._resolve_player_objective_text(pid, resolved_objective_text)
             ),
             memo_store=self._todo_store if self._memo_tools_enabled() else None,
+            being_memo_text_provider=(
+                self.being_memo_text if self._being_memo_enabled() else None
+            ),
             known_people_text_provider=(
                 self._player_acquaintances.known_people_text
                 if self._player_acquaintances is not None
@@ -5323,6 +5375,7 @@ def create_world_runtime(
             enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
             expected_result_policy=config.expected_result_policy,
             expectation_argument_enabled=config.expectation_argument_enabled,
+            being_memo_enabled=config.being_memo_enabled,
             has_goal=_has_goal,
             limits_actions=scenario.metadata.limits_actions,
         )

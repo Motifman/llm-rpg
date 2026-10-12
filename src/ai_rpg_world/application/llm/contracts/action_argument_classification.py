@@ -47,6 +47,8 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "destination_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # expectations: 予期は清算と「前回の予測と実際」(#1442) で扱い、呼び出し行には出さない。
     "expectations": ActionArgumentDisplayKind.OMIT,
+    # memo: メモ帳への書き込みは【メモ】に出るので、呼び出し行には出さない (#1628)。
+    "memo": ActionArgumentDisplayKind.OMIT,
     # expected_result: 直後の [予測: ...] 行に同じ値を表示済み。
     "expected_result": ActionArgumentDisplayKind.OMIT,
     # give_item.gives: item_label / target_player_label を持つ配列を JSON のまま渡す。

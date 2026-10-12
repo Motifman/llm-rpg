@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     DEFAULT_SIMILARITY_THRESHOLD,
     MemoCompletionHint,
     MemoCompletionHintService,
+    PendingTodo,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -175,3 +176,43 @@ class TestMemoCompletionHintToHintText:
 def test_default_similarity_threshold() -> None:
     """既定閾値が [0,1] 範囲内であること。"""
     assert 0.0 <= DEFAULT_SIMILARITY_THRESHOLD <= 1.0
+
+
+class TestHintForMemoBookTodos:
+    """メモ帳のやること (#1628) にも同じ判定で済んだかを知らせ、消し方は引数 memo で示すことを保証する。"""
+
+    def _service(self, todos: list[PendingTodo]) -> MemoCompletionHintService:
+        return MemoCompletionHintService(pending_todos=lambda being_id: todos)
+
+    def test_matching_todo_gets_a_hint_with_its_handle(self) -> None:
+        """行動と結果がやることの文を含めば、そのやることの呼び名と、memo の remove で消す案内を返す。"""
+        todo = PendingTodo(id="3f2a7b9c-1d2e-4f00-8a00-000000000001", content="事務所で鍵を取る", handle="m_3f2a7b")
+
+        hint = self._service([todo]).detect(BeingId("ada"), "事務所で鍵を取る", "鍵を手に入れた").hint
+
+        assert hint is not None and hint.memo == todo
+        assert hint.to_hint_text() == (
+            "\n\n[hint] やること「事務所で鍵を取る」(m_3f2a7b) は済んだかもしれません (類似度 1.00)。"
+            "済んだなら memo の remove で消してください。"
+        )
+
+    def test_unrelated_todo_gets_no_hint(self) -> None:
+        """行動と結果がやることと重ならなければ、知らせない。"""
+        todo = PendingTodo(id="3f2a7b9c-1d2e-4f00-8a00-000000000001", content="事務所で鍵を取る", handle="m_3f2a7b")
+
+        assert self._service([todo]).detect(BeingId("ada"), "井戸で水を汲む", "水が汲めた").hint is None
+
+    def test_both_sources_at_once_are_rejected(self) -> None:
+        """今のメモの store とメモ帳のやることを両方渡すと TypeError を投げる。どちらを見るかが決まらないため。"""
+        with pytest.raises(TypeError):
+            MemoCompletionHintService(InMemoryMemoStore(), pending_todos=lambda being_id: [])
+
+    def test_excluded_todo_gets_no_hint(self) -> None:
+        """問わないと渡したやることは、行動と重なっても知らせない。"""
+        todo = PendingTodo(id="3f2a7b9c-1d2e-4f00-8a00-000000000001", content="事務所で鍵を取る", handle="m_3f2a7b")
+
+        detection = self._service([todo]).detect(
+            BeingId("ada"), "事務所で鍵を取る", "鍵を手に入れた", excluded_ids={todo.id}
+        )
+
+        assert detection.hint is None

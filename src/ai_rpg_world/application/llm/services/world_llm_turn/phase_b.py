@@ -57,6 +57,9 @@ from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
 from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn import (
     form_expectations_from_call,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.memo_turn import (
+    apply_memo_from_call,
+)
 from ai_rpg_world.application.llm.services.world_llm_turn.prompt_capture import (
     record_prompt_dataset_turn_result,
 )
@@ -312,6 +315,14 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
     # 目的の判断には memo の hint を混ぜない。混ぜると、行動の結果でなく別の hint を
     # 材料に達成を判断する。
     message_before_hints = result.message
+    # 済んだかの知らせより先に当てる。同じ行動で消したやることを、済んだのではと問わないため。
+    memo_call = apply_memo_from_call(
+        wiring,
+        player_id,
+        tool_name=name,
+        arguments=arguments,
+        tools_payload=phase_a.tools_payload,
+    )
     # PR 5 (#227): memo 完了 hint で result.message を augment する。
     # memo_* ツール自身の実行直後は hint を出さない (冗長 / 自己参照ループ
     # 防止)。本家経路 (LlmAgentOrchestrator._maybe_augment_with_memo_hint)
@@ -330,8 +341,12 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             # LLM が memo_done を呼んだか」を trace 経由で追える。
             acting = wiring.runtime._acting_being_for(player_id)
             if acting is not None:
+                # 同じ行動で足したやることは問わない。足した行動の文と重なるのは当然で、済んだ印ではない。
                 detection = wiring.memo_completion_hint_service.detect(
-                    acting.being_id, action_summary, result.message
+                    acting.being_id,
+                    action_summary,
+                    result.message,
+                    excluded_ids=memo_call.added_memo_ids,
                 )
                 # #1322: 問うた memo ごとの判断を、採否に関わらず残す。採用分
                 # だけ残すと、hint が減った run を見て「意味判定が厳しすぎる」と
@@ -375,6 +390,8 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
         trace_recorder=trace_recorder,
         current_tick=current_tick,
     )
+    if memo_call.feedback:
+        result = dataclass_replace(result, message=result.message + memo_call.feedback)
     skip_duplicate_action_log = result.success and name in (
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
         TOOL_NAME_SPOT_GRAPH_INTERACT,
