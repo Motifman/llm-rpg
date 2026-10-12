@@ -3961,6 +3961,10 @@ class WorldRuntime:
         """人を対象にした操作で、品名を相手の所持品から意味で読み替える判断を注入する (D1641)。"""
         self._player_interaction_service.set_item_name_rescue(rescue)
 
+    @property
+    def target_item_name_rescue(self) -> Any | None:
+        return self._player_interaction_service.item_name_rescue
+
     def do_interact_with_player(
         self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
         *,

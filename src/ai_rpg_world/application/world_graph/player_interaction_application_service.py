@@ -299,6 +299,10 @@ class PlayerInteractionApplicationService:
         """品名を意味で読み替える判断を後付けで注入する。未注入なら名前の重なりだけで当てる。"""
         self._item_name_rescue = rescue
 
+    @property
+    def item_name_rescue(self) -> ItemNameRescuer | None:
+        return self._item_name_rescue
+
     def set_trace_recorder(self, recorder: Any, current_tick_provider: Any) -> None:
         self._trace_recorder = recorder
         self._trace_tick_provider = current_tick_provider
