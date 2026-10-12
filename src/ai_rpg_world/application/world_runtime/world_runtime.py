@@ -98,6 +98,7 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
     ActionArgumentClassificationError,
     unclassified_action_argument_names,
 )
+from ai_rpg_world.application.llm.contracts.aux_llm_call import AuxLlmCallSink
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     LlmUiContextDto,
@@ -780,6 +781,9 @@ class WorldRuntime:
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
+    # 記憶の部品と Jev の呼び出しの記録先 (#1617)。runtime の外で組む Jev も
+    # ここを通すので、create_world_runtime 以外で組んだ runtime では None。
+    _aux_llm_call_sink: Any = field(default=None, repr=False)
     _world_tick_failure_isolator: WorldTickFailureIsolator | None = field(default=None, repr=False)
     # trace 用の run 内集計。世界状態ではなく観測値なので snapshot へは載せない。
     _cumulative_travel_ticks_by_player: dict[int, int] = field(
@@ -5066,6 +5070,7 @@ def _build_short_term_memory(
     world_character: CharacterPromptInput | None,
     persona_block: str,
     event_store: UnifiedRecentEventStore,
+    aux_llm_call_sink: AuxLlmCallSink | None,
     on_compacted: Callable[[PlayerId, Sequence[Any]], None] | None = None,
 ) -> IShortTermMemory:
     """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
@@ -5128,7 +5133,7 @@ def _build_short_term_memory(
     persona_resolver = None
     if cfg.llm_client_kind == "litellm":
         try:
-            client = create_llm_client_from_config(cfg)
+            client = create_llm_client_from_config(cfg, aux_call_sink=aux_llm_call_sink)
         except Exception:
             logger.exception("LLM client factory failed; short-term LLM services disabled")
             client = None
@@ -5217,7 +5222,9 @@ def _expectation_event_receivers(
     return tuple(receivers)
 
 
-def _build_belief_create_gate(config: ResolvedLlmRuntimeConfig) -> Any | None:
+def _build_belief_create_gate(
+    config: ResolvedLlmRuntimeConfig, *, aux_llm_call_sink: AuxLlmCallSink
+) -> Any | None:
     """profile が求めたときだけ、信念を作る前の判断を組む (#1453)。
 
     判断ポートは runtime_manager が組むものと別の instance になる。エピソード
@@ -5235,7 +5242,9 @@ def _build_belief_create_gate(config: ResolvedLlmRuntimeConfig) -> Any | None:
         create_typed_judgment_port_from_config,
     )
 
-    port = create_typed_judgment_port_from_config(config)
+    port = create_typed_judgment_port_from_config(
+        config, aux_call_sink=aux_llm_call_sink
+    )
     # config の不変条件が provider=off を弾いている。届いたら解決経路が割れている。
     assert port is not None
     return BeliefCreateGate(
@@ -5326,7 +5335,9 @@ def _build_player_episode_writing(
 
     completion: EpisodeWritingCompletion
     if cfg.llm_client_kind == "litellm":
-        client = create_llm_client_from_config(cfg)
+        client = create_llm_client_from_config(
+            cfg, aux_call_sink=runtime._aux_llm_call_sink
+        )
         if not isinstance(client, EpisodeWritingCompletion):
             raise RuntimeError(
                 "BEING_EPISODE_WRITING_ENABLED needs an LLM client that can write episodes"
@@ -5400,6 +5411,14 @@ def create_world_runtime(
     )
     _record_after_commit_failure = world_tick_failure_isolator.after_commit_failure_observer(
         tick_provider=lambda: runtime.current_tick(),
+    )
+    from ai_rpg_world.application.llm.services.aux_llm_call_trace_sink import (
+        AuxLlmCallTraceSink,
+    )
+
+    aux_llm_call_sink = AuxLlmCallTraceSink(
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
     )
 
     loader = ScenarioLoader()
@@ -6678,6 +6697,7 @@ def create_world_runtime(
         world_character=world_character,
         persona_block=persona_block,
         event_store=recent_event_store,
+        aux_llm_call_sink=aux_llm_call_sink,
         # runtime はこのあとで組むが、畳むのは tick が始まってからなので間に合う。
         on_compacted=(
             (lambda pid, entries: runtime._write_compacted_episodes(pid, entries))
@@ -7166,6 +7186,7 @@ def create_world_runtime(
 
     runtime = WorldRuntime(
         scenario=scenario,
+        _aux_llm_call_sink=aux_llm_call_sink,
         _meeting_enabled=scenario.meeting_enabled,
         _interaction_cooldown_store=interaction_cooldown_store,
         _game_phase_store=game_phase_store,
@@ -8589,7 +8610,9 @@ def create_world_runtime(
             from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
             try:
-                _client = create_llm_client_from_config(config)
+                _client = create_llm_client_from_config(
+                    config, aux_call_sink=aux_llm_call_sink
+                )
             except Exception:
                 logger.exception("LLM client factory failed; subjective service disabled")
                 _client = None
@@ -8767,7 +8790,9 @@ def create_world_runtime(
                 )
 
                 try:
-                    _gist_client = create_llm_client_from_config(config)
+                    _gist_client = create_llm_client_from_config(
+                        config, aux_call_sink=aux_llm_call_sink
+                    )
                 except Exception:
                     logger.exception(
                         "LLM client factory failed; semantic gist disabled"
@@ -8795,7 +8820,9 @@ def create_world_runtime(
             )
 
             try:
-                _reinterp_client = create_llm_client_from_config(config)
+                _reinterp_client = create_llm_client_from_config(
+                    config, aux_call_sink=aux_llm_call_sink
+                )
             except Exception:
                 logger.exception(
                     "LLM client factory failed; episodic reinterpretation disabled"
@@ -8820,7 +8847,9 @@ def create_world_runtime(
             from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
             try:
-                _belief_consolidation_client = create_llm_client_from_config(config)
+                _belief_consolidation_client = create_llm_client_from_config(
+                    config, aux_call_sink=aux_llm_call_sink
+                )
             except Exception:
                 logger.exception(
                     "LLM client factory failed; belief consolidation disabled"
@@ -8896,7 +8925,9 @@ def create_world_runtime(
             # 構築される。
             belief_consolidation_enabled=_belief_consolidation_enabled,
             belief_consolidation_completion=_belief_consolidation_completion,
-            belief_create_gate=_build_belief_create_gate(config),
+            belief_create_gate=_build_belief_create_gate(
+                config, aux_llm_call_sink=aux_llm_call_sink
+            ),
             # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
             belief_attribution_enabled=_belief_attribution_enabled,
             # P4 (reflect): 固着 LLM に目的への前進評価を足す。監査対象の目的文と
