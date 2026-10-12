@@ -224,6 +224,12 @@ class TraceEventKind:
     # rejected なら reject_reason (malformed / too_many) と max_handles、
     # failed なら error_type と error。
     EPISODE_RECALL = "episode_recall"
+    # エピソードの目次を直した (#1623)。目次を直すツールの 1 回ごとに 1 件。
+    # payload: being_id / outcome (revised / rejected / failed) / handle /
+    # revised なら turn・before と after ({about, recall_when})・truncated
+    # ({鍵: 切り詰める前の長さ})、rejected なら reject_reason (malformed / unknown_handle)、
+    # failed なら error_type と error。
+    EPISODE_INDEX_REVISION = "episode_index_revision"
     SNAPSHOT_SAVE = "snapshot_save"
     # シナリオの round_assignment で player に割り当てた枠 (#1514)。宣言の無い
     # シナリオでは出ない。payload: round / seed / assignments: list[{player_id,

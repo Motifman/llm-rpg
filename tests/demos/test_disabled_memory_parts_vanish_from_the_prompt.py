@@ -66,6 +66,9 @@ _SEARCH_SEMANTIC = "memory_search_semantic"
 _MEMO_TOOLS = ("memo_add", "memo_list", "memo_done")
 _EPISODE_INDEX = "思い出せる出来事"
 _EPISODE_RECALL = "episode_recall"
+_EPISODE_REVISE_INDEX = "episode_revise_index"
+#: メモの出どころの「エピソードから」。メモ帳と目次の両方を出すときだけ出る。
+_MEMO_EPISODE_SOURCE = "episode = 思い出したエピソードから"
 #: メモ帳 (#1628) の欄、システムプロンプトの説明、環境の tool の引数。
 _MEMO_BOOK = "【メモ】"
 _MEMO_RULES = "【メモの書き方】"
@@ -87,7 +90,9 @@ _ALL_NAMES = (
     *_MEMO_TOOLS,
     _EPISODE_INDEX,
     _EPISODE_RECALL,
+    _EPISODE_REVISE_INDEX,
     *_MEMO_BOOK_NAMES,
+    _MEMO_EPISODE_SOURCE,
 )
 
 #: 全部入りのとき、1 ターン目のプロンプトに出る名前。
@@ -104,6 +109,7 @@ _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _LEARNED,
     _PENDING_PREDICTIONS,
     *_MEMO_BOOK_NAMES,
+    _MEMO_EPISODE_SOURCE,
 }
 
 #: 全部入りの今のメモを、メモ帳に置き換える差分。
@@ -168,7 +174,7 @@ _DISABLED_PARTS = [
     ),
     pytest.param(
         {"BEING_EPISODE_INDEX_ORDER": "off"},
-        (_EPISODE_INDEX, _EPISODE_RECALL),
+        (_EPISODE_INDEX, _EPISODE_RECALL, _EPISODE_REVISE_INDEX),
         id="episode_index",
     ),
 ]
@@ -264,4 +270,10 @@ class TestTheMemoBookReplacesTheOldMemo:
 
         assert named == (
             _ADVERTISED_WHEN_ALL_ENABLED - {_ACTIVE_MEMOS, *_MEMO_TOOLS}
-        ) | set(_MEMO_BOOK_NAMES)
+        ) | {*_MEMO_BOOK_NAMES, _MEMO_EPISODE_SOURCE}
+
+    def test_without_the_index_the_memo_book_offers_no_episode_source(self) -> None:
+        """メモ帳に置き換えたうえで目次を止めると、メモの出どころの「エピソードから」も消える。"""
+        prompt = _full_prompt_with({**_MEMO_BOOK_INSTEAD, "BEING_EPISODE_INDEX_ORDER": "off"})
+
+        assert _MEMO_EPISODE_SOURCE not in prompt

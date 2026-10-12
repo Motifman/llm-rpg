@@ -87,6 +87,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
@@ -339,6 +340,9 @@ class WorldLlmWiring:
             # #1623: 定義は目次を出す設定でだけ get_tool_definitions が出す。
             TOOL_NAME_EPISODE_RECALL: self._make_auxiliary_tool_handler(
                 TOOL_NAME_EPISODE_RECALL
+            ),
+            TOOL_NAME_EPISODE_REVISE_INDEX: self._make_auxiliary_tool_handler(
+                TOOL_NAME_EPISODE_REVISE_INDEX
             ),
         }
         # #344 配線漏れ修正: spot_graph_use_item / attack / give_item /

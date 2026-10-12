@@ -101,7 +101,7 @@ class MemoryRecallByHandleAvailabilityResolver(IAvailabilityResolver):
 
 
 class EpisodeRecallAvailabilityResolver(IAvailabilityResolver):
-    """目次つきのエピソードの呼び出し (#1623)。目次が空でも呼べて、思い出せないと返る。"""
+    """目次つきのエピソードの呼び出しと目次の直し (#1623)。目次が空でも呼べて、記憶が無いと返る。"""
 
     def is_available(
         self,

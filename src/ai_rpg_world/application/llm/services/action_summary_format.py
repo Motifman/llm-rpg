@@ -30,6 +30,7 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
@@ -449,6 +450,7 @@ INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
         TOOL_NAME_MEMORY_RECALL_EPISODES,
         TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
         TOOL_NAME_EPISODE_RECALL,
+        TOOL_NAME_EPISODE_REVISE_INDEX,
     }
 )
 

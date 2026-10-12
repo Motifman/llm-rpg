@@ -25,6 +25,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
@@ -33,6 +34,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
+from ai_rpg_world.being.domain.episode import INDEX_TEXT_MAX_LENGTH
 
 #: システムプロンプトが「能動想起」と呼ぶツール。1 つも出ていない設定では、
 #: 本文は能動想起を勧めない (#1616)。
@@ -339,6 +341,38 @@ def episode_recall_definition(max_handles: int) -> ToolDefinitionDto:
     )
 
 
+EPISODE_REVISE_INDEX_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_EPISODE_REVISE_INDEX,
+    description=(
+        "【思い出せる出来事】の目次の一行 (どんな記憶か・どんな時に思い出すか) を書き直す。"
+        "呼び出した本文が目次の書き方と合っていなかったとき、"
+        "思い出すべき場面が目次に書いた場面と違ったときに使う。"
+        "本文は変わらず、前の目次も消えずに残る。"
+        f"about と recall_when はそれぞれ {INDEX_TEXT_MAX_LENGTH} 字まで。"
+        "世界の出来事は起こさない。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "handle": {
+                "type": "string",
+                "description": "直したい記憶の、【思い出せる出来事】の行の先頭にある ep_ で始まる呼び名。",
+            },
+            "about": {
+                "type": "string",
+                "description": "どんな記憶か。",
+            },
+            "recall_when": {
+                "type": "string",
+                "description": "どんな時に思い出すとよいか。「金庫や鍵の話が出たとき」のように場面で書く。",
+            },
+        },
+        "required": ["handle", "about", "recall_when"],
+    },
+    category=ToolCategory.META_COGNITIVE,
+)
+
+
 def get_memo_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo 系ツールの (definition, resolver) 一覧を返す。"""
     return [
@@ -361,6 +395,7 @@ def get_memory_specs(
     episodic_recall_enabled: bool = False,
     recall_by_handle_enabled: bool = False,
     episode_recall_max_handles: int | None = None,
+    episode_index_revision_enabled: bool = False,
 ) -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """memo および任意で memory_explore_related / memory_search_semantic /
     memory_recall_episodes を返す。
@@ -377,6 +412,7 @@ def get_memory_specs(
 
     ``episode_recall_max_handles`` を渡すと、目次つきのエピソードの呼び出し
     ``episode_recall`` をその上限で出す (#1623)。None なら出さない。
+    ``episode_index_revision_enabled`` は、その目次を直す ``episode_revise_index``。
     """
     if memo_enabled is None:
         memo_enabled = todo_enabled
@@ -411,6 +447,8 @@ def get_memory_specs(
                 EpisodeRecallAvailabilityResolver(),
             )
         )
+    if episode_index_revision_enabled:
+        specs.append((EPISODE_REVISE_INDEX_DEFINITION, EpisodeRecallAvailabilityResolver()))
     return specs
 
 
@@ -426,6 +464,7 @@ __all__ = [
     "TODO_ADD_DEFINITION",
     "TODO_LIST_DEFINITION",
     "TODO_COMPLETE_DEFINITION",
+    "EPISODE_REVISE_INDEX_DEFINITION",
     "episode_recall_definition",
     "get_memo_specs",
     "get_memory_specs",

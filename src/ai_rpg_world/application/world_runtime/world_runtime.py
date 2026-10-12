@@ -176,6 +176,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_mon
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
@@ -728,6 +729,7 @@ class WorldRuntime:
     _player_episode_writing: Any | None = field(default=None, repr=False)
     # #1623: profile で目次を出す設定にしたときだけ create_world_runtime が組む。
     _being_episode_recall_tool_executor: Any | None = field(default=None, repr=False)
+    _being_episode_index_revision_tool_executor: Any | None = field(default=None, repr=False)
     # #1628: エピソードと同じく、世界の snapshot には入らない。
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
@@ -1494,6 +1496,7 @@ class WorldRuntime:
                 episodic_recall_enabled=True,
                 recall_by_handle_enabled=True,
                 episode_recall_max_handles=1,
+                episode_index_revision_enabled=True,
             )
         )
         definitions.append(
@@ -1922,6 +1925,12 @@ class WorldRuntime:
         ):
             assert cfg is not None
             episode_recall_max_handles = cfg.being_episode_recall_max_handles
+        episode_index_revision_enabled = self._resolve_requested_memory_tool_enabled(
+            requested=self._episode_index_enabled(),
+            executor=self._being_episode_index_revision_tool_executor,
+            tool_name=TOOL_NAME_EPISODE_REVISE_INDEX,
+            flag_name="BEING_EPISODE_INDEX_ORDER",
+        )
         return [
             defn
             for defn, _ in get_memory_specs(
@@ -1934,6 +1943,7 @@ class WorldRuntime:
                     self._memory_recall_by_handle_tool_executor is not None
                 ),
                 episode_recall_max_handles=episode_recall_max_handles,
+                episode_index_revision_enabled=episode_index_revision_enabled,
             )
         ]
 
@@ -2099,10 +2109,9 @@ class WorldRuntime:
     def memo_episode_source_offered(self) -> bool:
         """メモの出どころにエピソードの呼び名を選ばせるか (#1628)。
 
-        目次をプロンプトに出すまで (#1621 の PR 4)、本人はエピソードの呼び名を知る手段が
-        無い。選ばせると、知らない呼び名を書いて外されるだけになる。
+        本人が呼び名を知るのは【思い出せる出来事】からなので、目次を出す設定でだけ選ばせる (#1623)。
         """
-        return False
+        return self._episode_index_enabled()
 
     def _with_being_memo_if_enabled(
         self, definition: ToolDefinitionDto
@@ -2615,6 +2624,8 @@ class WorldRuntime:
             _merge_handlers(self._memory_recall_by_handle_tool_executor.get_handlers())
         if self._being_episode_recall_tool_executor is not None:
             _merge_handlers(self._being_episode_recall_tool_executor.get_handlers())
+        if self._being_episode_index_revision_tool_executor is not None:
+            _merge_handlers(self._being_episode_index_revision_tool_executor.get_handlers())
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(
@@ -9109,6 +9120,9 @@ def create_world_runtime(
         )
     _record_meetings_at_spawn(scenario, player_acquaintances)
     if config.being_episode_index_order != "off":
+        from ai_rpg_world.application.llm.services.executors.being_episode_index_revision_tool_executor import (
+            BeingEpisodeIndexRevisionToolExecutor,
+        )
         from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
             BeingEpisodeRecallToolExecutor,
         )
@@ -9119,6 +9133,14 @@ def create_world_runtime(
             max_handles=config.being_episode_recall_max_handles,
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=lambda: runtime.current_tick(),
+        )
+        runtime._being_episode_index_revision_tool_executor = (
+            BeingEpisodeIndexRevisionToolExecutor(
+                repository=runtime._being_episode_store,
+                turn_reader=expectation_store,
+                trace_recorder_provider=lambda: runtime._trace_recorder,
+                current_tick_provider=lambda: runtime.current_tick(),
+            )
         )
     if config.being_episode_writing_enabled:
         runtime._player_episode_writing = _build_player_episode_writing(
