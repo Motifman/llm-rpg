@@ -6,7 +6,6 @@ U2 (証拠台帳統一設計 §2 / semantic_learning_consolidation_design.md
 
 - ``PREDICTION_ERROR``: chunk 主観補完 LLM が ``prediction_error`` を
   非 None で埋めたとき (本 PR U2 で転記を配線する唯一の source)
-- ``MEMO_DISTILL``: memo_done / memo 容量溢れ (U5 で配線予定)
 - ``FAMILIARITY``: 既存クラスタ検出の転用 (U3 で配線予定)
 - ``CONFIRMATION``: 学びを信じて行動し当たった (U4 で配線予定)
 - ``PENDING_RESOLUTION``: 保留中の予測 (約束) の履行/破棄清算 (U10 で配線予定)
@@ -21,7 +20,6 @@ class BeliefEvidenceSourceKind(str, Enum):
     """``BeliefEvidence.source_kind`` に入る発生源の種別。"""
 
     PREDICTION_ERROR = "prediction_error"
-    MEMO_DISTILL = "memo_distill"
     FAMILIARITY = "familiarity"
     CONFIRMATION = "confirmation"
     PENDING_RESOLUTION = "pending_resolution"

@@ -683,13 +683,6 @@ class WorldRuntime:
     )
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     _todo_tool_executor: TodoToolExecutor | None = field(default=None, repr=False)
-    # U5 (MEMO_DISTILL): memo_done → BeliefEvidence 転記の transcriber。
-    # ``_todo_tool_executor`` は ``set_trace_recorder`` 等で作り直される
-    # (lazy 再構築) ため、transcriber を setter で 1 度差し込むだけだと
-    # 作り直しで静かに失われる (実験 run で MEMO_DISTILL evidence が 0 件に
-    # なる silent failure の原因)。runtime 側に保持し、``_wire_auxiliary_tool_stack``
-    # が executor を作り直すたびに再適用する。型は circular import 回避で Any。
-    _memo_distill_transcriber: Any | None = field(default=None, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -2347,16 +2340,6 @@ class WorldRuntime:
             current_tick_provider=self.current_tick,
             trace_recorder=self._trace_recorder,
         )
-        # U5 (MEMO_DISTILL): executor を作り直したら memo_distill transcriber を
-        # 再適用する。これがないと set_trace_recorder 等の作り直し経路で
-        # transcriber が静かに失われる (実験 run で memo→evidence 蒸留が
-        # 0 件になっていた原因)。create_world_runtime が transcriber を
-        # 構築して runtime._memo_distill_transcriber に格納した後の作り直しで
-        # 効く (初回 wire 時点では None なので no-op)。
-        if self._memo_distill_transcriber is not None:
-            self._todo_tool_executor.set_memo_distill_transcriber(
-                self._memo_distill_transcriber
-            )
         self._wire_memory_recall_executor_if_possible()
 
     def _wire_memory_recall_executor_if_possible(self) -> None:
@@ -8277,7 +8260,6 @@ def create_world_runtime(
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
             log_error_driven_reinterpretation_enabled_state,
-            log_memo_distill_enabled_state,
             log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
             log_unconscious_context_enabled_state,
@@ -8380,12 +8362,6 @@ def create_world_runtime(
                 "ため reflect 注入 (= 熟考ラッチの武装トリガ) が起きず、熟考ゲートが"
                 "一生発火しない (静かな失敗)。GOAL_REFLECT_ENABLED=1 も設定してください。"
             )
-        # U5: MEMO_DISTILL 転記 (default ON)。memo を手帳で終わらせず
-        # semantic evidence へ蒸留するため、明示 OFF でだけ止める。
-        # 他 3 flag 同様、同じ evidence
-        # buffer を共有するので ON なら buffer store を作る条件に加える。
-        _memo_distill_enabled = config.memo_distill_enabled
-        log_memo_distill_enabled_state(_memo_distill_enabled)
         # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
         # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
         # 使わない = 読み取り専用の追加コンテキストなので buffer store 条件には
@@ -8470,7 +8446,6 @@ def create_world_runtime(
         if (
             _belief_evidence_enabled
             or _belief_consolidation_enabled
-            or _memo_distill_enabled
         ):
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
                 InMemoryBeliefEvidenceBufferStore,
@@ -8903,33 +8878,6 @@ def create_world_runtime(
             _unconscious_context_semantic_recall_holder[0] = SemanticPassiveRecallService(
                 runtime._episodic_stack.semantic_memory_store,
             )
-
-        # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、
-        # _todo_tool_executor が構築済なら post-hoc に差し込む。まだなら
-        # _wire_auxiliary_tool_stack が組むときに適用する。executor 自身が memo_done
-        # 成功時に record_from_memo を呼ぶ。episode_store は
-        # build_episodic_stack が確定させた共有 store。
-        if _memo_distill_enabled and belief_evidence_buffer_store is not None:
-            from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
-                MemoDistillEvidenceTranscriber,
-            )
-
-            memo_distill_transcriber = MemoDistillEvidenceTranscriber(
-                belief_evidence_buffer_store,
-                runtime._episodic_stack.episode_store,
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-                current_tick_provider=runtime.current_tick,
-                memory_turn_reader=runtime._memory_turn_clock,
-            )
-            # runtime に保持し、_wire_auxiliary_tool_stack が executor を初めて組む
-            # ときも、作り直すとき (set_trace_recorder 等) も適用されるようにする。
-            # これがないと build 後の set_trace_recorder で transcriber が
-            # 静かに失われていた (memo_done 28 件に対し evidence 0 件)。
-            runtime._memo_distill_transcriber = memo_distill_transcriber
-            if runtime._todo_tool_executor is not None:
-                runtime._todo_tool_executor.set_memo_distill_transcriber(
-                    memo_distill_transcriber
-                )
 
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止

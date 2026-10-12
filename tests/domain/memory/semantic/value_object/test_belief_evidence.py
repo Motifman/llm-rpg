@@ -46,7 +46,6 @@ class TestBeliefEvidenceSourceKindEnum:
     def test_all_source_kinds_are_reserved(self) -> None:
         expected = {
             "prediction_error",
-            "memo_distill",
             "familiarity",
             "confirmation",
             "pending_resolution",
