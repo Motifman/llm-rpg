@@ -34,6 +34,8 @@ class _ResultStub:
     should_reschedule: bool = False
     was_no_op: bool = False
     error_code: str | None = None
+    # should_reschedule=True は失敗でしか返らない。成功のあとに回す経路 (#1597) は別に試す。
+    success: bool = False
 
 
 def _make_trigger(max_streak: int = 5) -> _WorldLlmTurnTrigger:

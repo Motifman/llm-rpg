@@ -74,6 +74,8 @@ class LlmCommandResultDto:
     should_reschedule: bool = False
     was_no_op: bool = False
     omit_result_in_prompt: bool = False
+    # 成功しても次の tick に手番を回さず、起こされるまで休む。立てるのは wait だけ (#1597)。
+    rests_until_woken: bool = False
     # trace にだけ載せる追加構造情報。LLM prompt / action_result_store へは
     # 流さない。例: batch tool の部分成功件数。
     trace_payload: dict[str, Any] | None = None
@@ -97,6 +99,8 @@ class LlmCommandResultDto:
             raise TypeError("was_no_op must be bool")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
+        if not isinstance(self.rests_until_woken, bool):
+            raise TypeError("rests_until_woken must be bool")
         if self.trace_payload is not None and not isinstance(self.trace_payload, dict):
             raise TypeError("trace_payload must be dict or None")
 

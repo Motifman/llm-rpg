@@ -2963,6 +2963,7 @@ class SpotGraphToolExecutor:
                 LlmCommandResultDto(
                     success=True,
                     message=base,
+                    rests_until_woken=True,
                 ),
             )
         except Exception as e:
