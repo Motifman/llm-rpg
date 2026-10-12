@@ -25,8 +25,10 @@ from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryM
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
+from ai_rpg_world.being.domain.memo_book import MemoBook, MemoCertainty, MemoKind, MemoProvenance, MemoSource
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
+from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -79,8 +81,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     stagnation_pressure = InMemoryStagnationPressureStore()
     acquaintances = InMemoryAcquaintanceRepository()
     being_episodes = InMemoryEpisodeRepository()
-    svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=belief_evidence, recall_success_store=success, pending_prediction_store=pending_prediction, goal_journal_store=goal_journal, stagnation_pressure_store=stagnation_pressure, acquaintance_store=acquaintances, being_episode_store=being_episodes, expectation_store=InMemoryExpectationRepository())
-    return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'recall': recall, 'journal': journal, 'episode': episode, 'belief_evidence': belief_evidence, 'success': success, 'pending_prediction': pending_prediction, 'goal_journal': goal_journal, 'stagnation_pressure': stagnation_pressure, 'acquaintances': acquaintances, 'being_episodes': being_episodes})
+    being_memo = InMemoryMemoBookRepository()
+    svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=belief_evidence, recall_success_store=success, pending_prediction_store=pending_prediction, goal_journal_store=goal_journal, stagnation_pressure_store=stagnation_pressure, acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, expectation_store=InMemoryExpectationRepository())
+    return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'recall': recall, 'journal': journal, 'episode': episode, 'belief_evidence': belief_evidence, 'success': success, 'pending_prediction': pending_prediction, 'goal_journal': goal_journal, 'stagnation_pressure': stagnation_pressure, 'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo})
 
 def _populate(stores: dict[str, object], being_id: BeingId) -> None:
     """5 store に最小サンプルデータを書き込む。"""
@@ -392,6 +395,64 @@ class TestRestoreRoundTrip:
         assert dst_stores['memo'].list_all_by_being(being) == []
         assert dst_stores['being_episodes'].list_by_being(being) == ()
 
+    def _memo_book(self) -> MemoBook:
+        heard = MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from='ミオ')
+        book = MemoBook.empty().add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='事務所で鍵を取る', provenance=None, turn=2, environment_name='水門の町')
+        book = book.add(memo_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', kind=MemoKind.FACT, text='弁の目盛りが関係するかも', provenance=heard, turn=4, environment_name='廃坑の山村')
+        book = book.add(memo_id='91c0de00-1d2e-4f00-8a00-000000000003', kind=MemoKind.FACT, text='籠は 3 人まで', provenance=MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from='ep_a07c33'), turn=5, environment_name='廃坑の山村', known_episode_handles={'ep_a07c33'})
+        book = book.add(memo_id='5be41200-1d2e-4f00-8a00-000000000004', kind=MemoKind.PERSON, text='ミオは水門に詳しい', provenance=None, turn=6, environment_name='水門の町')
+        return book.edit('m_3f2a7b', text='事務所の金庫で鍵を取る', turn=7)
+
+    def test_being_memo_book_round_trips_with_every_field(self) -> None:
+        """メモ帳は、呼び名 (伸ばした呼び名も)・分類・文・出どころ (誰から・どのエピソードから)・確かさ・書いた時・書き換えた時・環境の名前ごと、書いた順のまま capture → restore で戻り、戻す先にあったメモは残らない。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['being_memo'].save(being, self._memo_book())
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+        dst_stores['being_memo'].save(being, MemoBook.empty().add(memo_id='aa11bb22-1d2e-4f00-8a00-000000000005', kind=MemoKind.TODO, text='消えるはず', provenance=None, turn=1, environment_name='島'))
+        dst_svc.restore(being, payload_json)
+        restored = dst_stores['being_memo'].get(being)
+        assert restored == self._memo_book()
+        assert [m.handle for m in restored.memos] == ['m_3f2a7b', 'm_3f2a7bc', 'm_91c0de', 'm_5be412']
+
+    def test_empty_memo_book_round_trips_as_empty(self) -> None:
+        """メモが 1 件も無い Being を capture → restore すると、戻す先のメモ帳も空になる。"""
+        (src_svc, _) = _make_service()
+        being = BeingId('ada')
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+        dst_stores['being_memo'].save(being, self._memo_book())
+        dst_svc.restore(being, payload_json)
+        assert json.loads(payload_json)['being_memo_book'] == []
+        assert dst_stores['being_memo'].get(being) == MemoBook.empty()
+
+    def test_memo_book_beyond_the_limit_is_rejected_before_any_store_is_written(self) -> None:
+        """やることが 6 件ある payload は、上限で切らずに BeingMemoryPayloadFormatError で拒み、どの store も書き換えない。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['memo'].add_by_being(being, '書かれてはいけない', current_tick=1)
+        src_stores['being_memo'].save(being, self._memo_book())
+        payload = json.loads(src_svc.capture(being))
+        todo = payload['being_memo_book'][0]
+        payload['being_memo_book'] += [dict(todo, memo_id=f'{n:06x}aa-1d2e-4f00-8a00-000000000000', handle=f'm_{n:06x}') for n in range(5)]
+        (dst_svc, dst_stores) = _make_service()
+        with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
+            dst_svc.restore(being, json.dumps(payload))
+        assert dst_stores['memo'].list_all_by_being(being) == []
+        assert dst_stores['being_memo'].get(being) == MemoBook.empty()
+
+    def test_memo_without_handle_is_rejected(self) -> None:
+        """呼び名 (handle) の無いメモは、ID から作り直さず BeingMemoryPayloadFormatError で拒む。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['being_memo'].save(being, self._memo_book())
+        payload = json.loads(src_svc.capture(being))
+        del payload['being_memo_book'][1]['handle']
+        (dst_svc, _) = _make_service()
+        with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
+            dst_svc.restore(being, json.dumps(payload))
+
     def test_reads_capture_stagnation_pressure_once(self) -> None:
         """LOW-1 (敵対的レビュー指摘): capture() が同じ being_id に対して
         stagnation_pressure_store.get_by_being を 2 回 (空 list 判定用と値取得用)
@@ -612,21 +673,21 @@ class TestRestoreValidation:
     def test_memo_element_id_missing_raises_format_error(self) -> None:
         """list 要素内の dict key 欠落は KeyError ではなく FormatError に wrap される。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [{'content': 'no id'}], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [{'content': 'no id'}], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='memo'):
             svc.restore(BeingId('ada'), bad)
 
     def test_unknown_enum_value_raises_format_error(self) -> None:
         """memory_link の link_type が未知値なら FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [{'link_id': 'x', 'player_id': 1, 'episode_id_a': 'a', 'episode_id_b': 'b', 'link_type': 'UNKNOWN_TYPE', 'strength': 0.5, 'co_activation_count': 1, 'created_at': '2026-06-14T12:00:00+00:00', 'last_activated_at': '2026-06-14T12:00:00+00:00', 'decay_rate': 0.001}], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [{'link_id': 'x', 'player_id': 1, 'episode_id_a': 'a', 'episode_id_b': 'b', 'link_type': 'UNKNOWN_TYPE', 'strength': 0.5, 'co_activation_count': 1, 'created_at': '2026-06-14T12:00:00+00:00', 'last_activated_at': '2026-06-14T12:00:00+00:00', 'decay_rate': 0.001}], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='memory_links'):
             svc.restore(BeingId('ada'), bad)
 
     def test_required_key_list_raises_format_error(self) -> None:
         """required key の値が list でないと FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': 'not-list', 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': 'not-list', 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='must be list'):
             svc.restore(BeingId('ada'), bad)
 
@@ -654,7 +715,7 @@ class TestConstructor:
             InMemoryStagnationPressureStore,
         )
         with pytest.raises(TypeError, match='memo_store'):
-            BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), expectation_store=InMemoryExpectationRepository())
+            BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), expectation_store=InMemoryExpectationRepository())
 
     def test_stagnation_pressure_store_raises_type_error(self) -> None:
         """P-U2: stagnation_pressure_store が StagnationPressureRepository で
@@ -675,4 +736,4 @@ class TestConstructor:
             InMemoryPendingPredictionStore,
         )
         with pytest.raises(TypeError, match='stagnation_pressure_store'):
-            BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store='bad', acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), expectation_store=InMemoryExpectationRepository())
+            BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store='bad', acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), expectation_store=InMemoryExpectationRepository())

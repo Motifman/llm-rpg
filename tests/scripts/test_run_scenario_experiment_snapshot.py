@@ -218,6 +218,9 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
             InMemoryEpisodeRepository,
         )
+        from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
+            InMemoryMemoBookRepository,
+        )
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
@@ -253,6 +256,7 @@ class TestExpectedPayloadKeysCoverage:
             _expectation_store=InMemoryExpectationRepository(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),
+            _being_memo_store=InMemoryMemoBookRepository(),
         )
 
     def _fallback_logs(

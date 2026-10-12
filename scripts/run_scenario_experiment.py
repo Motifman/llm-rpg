@@ -688,6 +688,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         expectation_store=expectation_store,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
+        being_memo_store=getattr(runtime, "_being_memo_store", None),
     )
 
 

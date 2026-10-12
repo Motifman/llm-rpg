@@ -46,6 +46,13 @@ if TYPE_CHECKING:
 
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, IndexRevision
+from ai_rpg_world.being.domain.memo_book import (
+    Memo,
+    MemoCertainty,
+    MemoKind,
+    MemoProvenance,
+    MemoSource,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
@@ -1029,3 +1036,47 @@ def dict_to_being_episode(data: dict[str, Any]) -> Episode:
         )
     except DomainException as exc:
         raise ValueError(f"invalid being episode payload: {exc}") from exc
+
+
+def being_memo_to_dict(memo: Memo) -> dict[str, Any]:
+    provenance = memo.provenance
+    return {
+        "memo_id": memo.memo_id,
+        "handle": memo.handle,
+        "kind": memo.kind.value,
+        "text": memo.text,
+        "provenance": None
+        if provenance is None
+        else {
+            "source": provenance.source.value,
+            "certainty": provenance.certainty.value,
+            "source_from": provenance.source_from,
+        },
+        "written_turn": memo.written_turn,
+        "edited_turn": memo.edited_turn,
+        "environment_name": memo.environment_name,
+    }
+
+
+def dict_to_being_memo(data: dict[str, Any]) -> Memo:
+    """呼び名は ID から作り直さない (エピソードと同じ理由)。"""
+    try:
+        provenance = data["provenance"]
+        return Memo(
+            memo_id=data["memo_id"],
+            handle=data["handle"],
+            kind=MemoKind(data["kind"]),
+            text=data["text"],
+            provenance=None
+            if provenance is None
+            else MemoProvenance(
+                source=MemoSource(provenance["source"]),
+                certainty=MemoCertainty(provenance["certainty"]),
+                source_from=provenance["source_from"],
+            ),
+            written_turn=data["written_turn"],
+            edited_turn=data["edited_turn"],
+            environment_name=data["environment_name"],
+        )
+    except DomainException as exc:
+        raise ValueError(f"invalid being memo payload: {exc}") from exc
