@@ -115,6 +115,24 @@ class EpisodeNotFoundException(BeingDomainException, NotFoundException):
     error_code = "BEING.EPISODE_NOT_FOUND"
 
 
+class MemoValidationException(BeingDomainException, ValidationException):
+    """メモやメモ帳が決まり (空でない、長さの上限、分類と出どころの組み合わせ、呼び名、ターンの並び) を満たさない。"""
+
+    error_code = "BEING.MEMO_VALIDATION"
+
+
+class MemoLimitReachedException(BeingDomainException, BusinessRuleException):
+    """分類ごとの件数の上限に達したメモ帳に、同じ分類のメモを足そうとした。"""
+
+    error_code = "BEING.MEMO_LIMIT_REACHED"
+
+
+class MemoNotFoundException(BeingDomainException, NotFoundException):
+    """書き換えや消す対象の呼び名が、メモ帳に無い。"""
+
+    error_code = "BEING.MEMO_NOT_FOUND"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -128,4 +146,7 @@ __all__ = [
     "EpisodeConflictException",
     "EpisodeNotFoundException",
     "EpisodeValidationException",
+    "MemoLimitReachedException",
+    "MemoNotFoundException",
+    "MemoValidationException",
 ]
