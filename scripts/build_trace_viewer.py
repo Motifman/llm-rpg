@@ -164,6 +164,7 @@ def collect_players(
 _EVENT_TIMELINE_HIDDEN_KINDS = frozenset({
     "prompt_section_breakdown",
     "llm_call",
+    "aux_llm_call",
 })
 
 _EVENT_FILTER_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
@@ -1726,6 +1727,8 @@ def _event_timeline_category(e: TraceEvent) -> str:
         "side_handler_failed",
         "SIDE_HANDLER_FAILED",
         "llm_call",
+        TraceEventKind.AUX_LLM_CALL,
+        TraceEventKind.AUX_LLM_CALL_RECORD_FAILED,
         TraceEventKind.LLM_FAILURE_RETRY,
         TraceEventKind.OWN_ACTION_FOLLOW_UP,
         "snapshot_save",

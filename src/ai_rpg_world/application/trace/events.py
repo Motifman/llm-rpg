@@ -123,6 +123,15 @@ class TraceEventKind:
     # ``cost_usd`` は OpenRouter 経由時のみ provider 宣告値が乗る (直結 / vLLM では 0.0)。
     # τ_sim の設定根拠データ + scenario ごとの cost 評価に使う。
     LLM_CALL = "llm_call"
+    # 行動を決める呼び出し以外の LLM 呼び出し 1 回ぶん (#1617)。記憶の部品と Jev。
+    # llm_call と分けるのは、行動の費用と混ぜず、連続失敗の監視にも数えないため。
+    # payload: component (AuxLlmComponent の値) / model / wall_latency_ms /
+    # success / error_code / prompt_tokens / completion_tokens / cached_tokens /
+    # cost_usd / question_names (Jev の問いの名前)。
+    # 応答に無かった値は null。とくに Jev の cost_usd は null で「取れない」を表す。
+    AUX_LLM_CALL = "aux_llm_call"
+    # aux_llm_call を書けなかった。payload: component / error_type。
+    AUX_LLM_CALL_RECORD_FAILED = "aux_llm_call_record_failed"
     # #1595: 呼び出しが失敗した (時間切れを含む) 手番を、次の tick に回したか。
     # 失敗のたびに 1 件。上限に達して回さなかった失敗は rescheduled=False で残る。
     # payload: consecutive_failures / max_consecutive_failures / rescheduled / error_code
