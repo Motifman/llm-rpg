@@ -35,7 +35,7 @@ Noul なら意味で判定できる (#1322)。判断を持たない run は従�
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
@@ -95,6 +95,15 @@ def _memo_coverage_ratio(memo_content: str, haystack: str) -> float:
 
 
 @dataclass(frozen=True)
+class PendingTodo:
+    """メモ帳のやること 1 件 (#1628)。判定は ``MemoEntry`` と同じく ``id`` と ``content`` を見る。"""
+
+    id: str
+    content: str
+    handle: str
+
+
+@dataclass(frozen=True)
 class MemoCompletionHint:
     """検出された hint。result_summary への append 用テキストも保持。
 
@@ -104,7 +113,7 @@ class MemoCompletionHint:
         source: ``overlap`` なら文字の重なりの割合、``judgment`` なら確率
     """
 
-    memo: MemoEntry
+    memo: MemoEntry | PendingTodo
     similarity: float
     source: str = SOURCE_OVERLAP
 
@@ -117,6 +126,13 @@ class MemoCompletionHint:
         # 重なりの割合と確率を同じ語で呼ばない。当人に見せる文なので、数の
         # 意味が違うことは言葉で分かる必要がある。
         measure = "確度" if self.source == SOURCE_JUDGMENT else "類似度"
+        if isinstance(self.memo, PendingTodo):
+            # 自動では消さない。済んだかを決めるのは本人。
+            return (
+                f"\n\n[hint] やること「{self.memo.content}」({self.memo.handle}) "
+                f"は済んだかもしれません ({measure} {self.similarity:.2f})。"
+                "済んだなら memo の remove で消してください。"
+            )
         return (
             f"\n\n[hint] memo「{self.memo.content}」(id: {short_memo_id(self.memo.id)}) "
             f"を達成した可能性があります ({measure} {self.similarity:.2f})。"
@@ -169,13 +185,16 @@ class MemoCompletionHintService:
 
     def __init__(
         self,
-        memo_store: MemoRepository,
+        memo_store: MemoRepository | None = None,
         *,
+        pending_todos: Callable[[BeingId], Sequence[PendingTodo]] | None = None,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         judgment_port: ITypedJudgmentPort | None = None,
         min_probability: float = DEFAULT_MIN_PROBABILITY,
     ) -> None:
-        if not isinstance(memo_store, MemoRepository):
+        if (memo_store is None) == (pending_todos is None):
+            raise TypeError("exactly one of memo_store or pending_todos is required")
+        if memo_store is not None and not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
         if not isinstance(similarity_threshold, (int, float)):
             raise TypeError("similarity_threshold must be a number")
@@ -186,6 +205,7 @@ class MemoCompletionHintService:
         if not 0.0 < float(min_probability) <= 1.0:
             raise ValueError("min_probability must be in (0, 1]")
         self._memo_store = memo_store
+        self._pending_todos = pending_todos
         self._threshold = float(similarity_threshold)
         #: 公開するのは、配線が組まれたかを外から確かめられるようにするため。
         self.judgment_port = judgment_port
@@ -196,12 +216,22 @@ class MemoCompletionHintService:
         being_id: BeingId,
         action_summary: str,
         result_summary: str,
+        *,
+        excluded_ids: Collection[str] = (),
     ) -> MemoHintDetection:
-        """未完了 memo のうち、達成した可能性が最も高い 1 件の hint を返す。"""
+        """未完了 memo のうち、達成した可能性が最も高い 1 件の hint を返す。
+
+        ``excluded_ids`` の memo は問わない。
+        """
+        pending: Sequence[MemoEntry | PendingTodo] = (
+            self._memo_store.list_uncompleted_by_being(being_id)
+            if self._memo_store is not None
+            else self._pending_todos(being_id)  # type: ignore[misc]
+        )
         memos = [
             memo
-            for memo in self._memo_store.list_uncompleted_by_being(being_id)
-            if (memo.content or "").strip()
+            for memo in pending
+            if (memo.content or "").strip() and memo.id not in excluded_ids
         ]
         haystack = f"{action_summary}\n{result_summary}".strip()
         if not memos or not haystack:
@@ -223,7 +253,7 @@ class MemoCompletionHintService:
             )
 
     def _by_overlap(
-        self, memos: list[MemoEntry], haystack: str
+        self, memos: list[MemoEntry | PendingTodo], haystack: str
     ) -> MemoCompletionHint | None:
         best: MemoCompletionHint | None = None
         for memo in memos:
@@ -238,14 +268,14 @@ class MemoCompletionHintService:
 
     def _by_judgment(
         self,
-        memos: list[MemoEntry],
+        memos: list[MemoEntry | PendingTodo],
         action_summary: str,
         result_summary: str,
     ) -> MemoHintDetection:
         assert self.judgment_port is not None
         # 質問のキーは連番にする。memo の内部 ID をキーにすると、答えを引く
         # ためだけに ID が state 側の語彙へ混ざりやすい (設計原則 1)。
-        by_key: dict[str, MemoEntry] = {
+        by_key: dict[str, MemoEntry | PendingTodo] = {
             f"{QUESTION_NAME}_{index}": memo for index, memo in enumerate(memos)
         }
         questions = {
@@ -321,6 +351,7 @@ __all__ = [
     "MemoCompletionHintService",
     "MemoCompletionJudgment",
     "MemoHintDetection",
+    "PendingTodo",
     "QUESTION_NAME",
     "SOURCE_JUDGMENT",
     "SOURCE_OVERLAP",

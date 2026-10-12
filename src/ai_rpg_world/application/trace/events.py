@@ -37,6 +37,12 @@ class TraceEventKind:
     MEMO_ADD = "memo_add"
     MEMO_DONE = "memo_done"
     MEMO_HINT = "memo_hint"
+    # #1628: 環境の tool の引数 memo を読んだ 1 回。引数を書かなかった呼び出しでは出さない。
+    # payload: being_id / turn / tool / environment_name /
+    #   applied: list[{index, do, handle, kind, text, provenance}] (消した操作は消したメモ) /
+    #   rejected: list[{index, reason, raw, detail}] (形が崩れた操作と、メモ帳が受け付けなかった操作) /
+    #   skipped_reason: "no_acting_being" | "writing_failed" | None / error
+    BEING_MEMO = "being_memo"
     # #1319: 型付きの判断 (Noul / Choice / Score) を引いた 1 件。
     # payload: question / original / chosen / probability / confidence /
     # min_confidence / accepted / latency_ms / source / unavailable_reason。

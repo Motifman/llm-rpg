@@ -208,8 +208,12 @@ class IContextFormatStrategy(ABC):
         pending_predictions_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
+        being_memo_text: str = "",
     ) -> str:
         """user prompt に入れる文脈テキストを返す。
+
+        ``being_memo_text`` は Being のメモ帳を整形した【メモ】の本体 (#1628)。
+        空なら section を出さない。
 
         ``known_people_text`` は Being が描いた【知っている人】の本体。空なら
         section を出さない (#1520)。

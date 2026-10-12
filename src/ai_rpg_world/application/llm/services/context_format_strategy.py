@@ -96,6 +96,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         pending_predictions_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
+        being_memo_text: str = "",
     ) -> str:
         for name, value in (
             ("current_state_text", current_state_text),
@@ -111,6 +112,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("pending_predictions_text", pending_predictions_text),
             ("known_people_text", known_people_text),
             ("episode_index_text", episode_index_text),
+            ("being_memo_text", being_memo_text),
         ):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
@@ -130,6 +132,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 pending_predictions_text=pending_predictions_text,
                 known_people_text=known_people_text,
                 episode_index_text=episode_index_text,
+                being_memo_text=being_memo_text,
             )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
@@ -145,6 +148,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             pending_predictions_text=pending_predictions_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
+            being_memo_text=being_memo_text,
         )
 
 
@@ -235,6 +239,11 @@ def _emit_current_state(sections: list[str], current_state_text: str) -> None:
 def _emit_episode_index(sections: list[str], episode_index_text: str) -> None:
     if episode_index_text.strip():
         sections.extend(["", EPISODE_INDEX_HEADING, episode_index_text.rstrip()])
+
+
+def _emit_being_memo(sections: list[str], being_memo_text: str) -> None:
+    if being_memo_text.strip():
+        sections.extend(["", "【メモ】", being_memo_text.rstrip()])
 
 
 def _emit_active_memos(sections: list[str], active_memos_text: str) -> None:
@@ -338,6 +347,7 @@ def _format_stable_to_volatile(
     pending_predictions_text: str = "",
     known_people_text: str = "",
     episode_index_text: str = "",
+    being_memo_text: str = "",
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
@@ -464,6 +474,13 @@ def _format_stable_to_volatile(
             active_memos_text.strip(),
             "",
         ])
+    # 8b. メモ帳 (#1628)。進行中のメモと同じ位置。両方を出す設定は起動前に止めている。
+    if being_memo_text.strip():
+        sections.extend([
+            "【メモ】",
+            being_memo_text.rstrip(),
+            "",
+        ])
 
     # 9. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([
@@ -488,6 +505,7 @@ def _format_legacy(
     pending_predictions_text: str = "",
     known_people_text: str = "",
     episode_index_text: str = "",
+    being_memo_text: str = "",
 ) -> str:
     """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
 
@@ -504,6 +522,7 @@ def _format_legacy(
     _emit_mid_summary(sections, mid_summary_text)
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
+    _emit_being_memo(sections, being_memo_text)
     _emit_prediction_feedback(sections, prediction_feedback_text)
     _emit_pending_predictions(sections, pending_predictions_text)
     _emit_recent_events(sections, recent_events_text)

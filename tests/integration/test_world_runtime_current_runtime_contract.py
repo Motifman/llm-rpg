@@ -3035,7 +3035,7 @@ def test_phase_b_records_memo_hint_trace(
     wiring = _wiring_for_contract_runtime(runtime)
 
     class _StubHintService:
-        def detect(self, being_id, action_summary, message):
+        def detect(self, being_id, action_summary, message, *, excluded_ids=()):
             # #1322: detect は検出結果を返す。hint の有無とは別に、問うた判断と
             # 縮退の理由を同じ戻り値で運ぶ。
             return SimpleNamespace(

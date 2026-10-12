@@ -40,6 +40,7 @@ from ai_rpg_world.application.llm.services.loop_diagnosis import LoopDiagnosis
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     DEFAULT_MIN_PROBABILITY,
     MemoCompletionHintService,
+    PendingTodo,
 )
 from ai_rpg_world.application.llm.services.semantic_repeat_detector import (
     SemanticRepeatDetector,
@@ -101,6 +102,8 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceResolver,
 )
+from ai_rpg_world.being.domain.memo_book import MemoKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
@@ -237,24 +240,29 @@ class WorldLlmWiring:
                     "MemoCompletionHintService will be disabled",
                     exc_info=True,
                 )
+        min_probability = float(
+            getattr(
+                runtime_config,
+                "typed_judgment_memo_min_probability",
+                DEFAULT_MIN_PROBABILITY,
+            )
+        )
+        self.memo_completion_hint_service: MemoCompletionHintService | None = None
         if memo_tools_enabled and memo_store is not None:
             # #1322: profile が型付き判断を求めていれば、文字の重なりでなく
             # 意味で完了を判定する。求めていなければ従来の重なり判定で動く。
-            self.memo_completion_hint_service: MemoCompletionHintService | None = (
-                MemoCompletionHintService(
-                    memo_store=memo_store,
-                    judgment_port=self.typed_judgment_port,
-                    min_probability=float(
-                        getattr(
-                            runtime_config,
-                            "typed_judgment_memo_min_probability",
-                            DEFAULT_MIN_PROBABILITY,
-                        )
-                    ),
-                )
+            self.memo_completion_hint_service = MemoCompletionHintService(
+                memo_store=memo_store,
+                judgment_port=self.typed_judgment_port,
+                min_probability=min_probability,
             )
-        else:
-            self.memo_completion_hint_service = None
+        elif bool(getattr(runtime_config, "being_memo_enabled", False)):
+            # #1628: メモ帳のやることにも同じ判定を使う。自動では消さない。
+            self.memo_completion_hint_service = MemoCompletionHintService(
+                pending_todos=self._pending_todos,
+                judgment_port=self.typed_judgment_port,
+                min_probability=min_probability,
+            )
         self.goal_completion_hint_service = self._build_goal_completion_hint_service()
         #: being ごとに、目的の達成を問わなかった理由のうち最後に trace に残したもの。問うたら消す (#1448)。
         self.goal_hint_last_skipped_reason: dict[str, str] = {}
@@ -428,6 +436,14 @@ class WorldLlmWiring:
             threshold=float(config.typed_judgment_semantic_repeat_min_probability),
             trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
         )
+
+    def _pending_todos(self, being_id: BeingId) -> list[PendingTodo]:
+        book = self.runtime._being_memo_store.get(being_id)
+        return [
+            PendingTodo(id=m.memo_id, content=m.text, handle=m.handle)
+            for m in book.memos
+            if m.kind is MemoKind.TODO
+        ]
 
     def _build_goal_completion_hint_service(self) -> GoalCompletionHintService | None:
         """profile が目的の hint を求めたときだけ組む (#1448)。
