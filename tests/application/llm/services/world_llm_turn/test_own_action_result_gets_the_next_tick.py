@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -171,7 +172,7 @@ def _write_hal_episode(session: _Session) -> Episode:
 
 
 def _gaps(turns: list[tuple[int, str]]) -> list[int]:
-    return [later[0] - earlier[0] for earlier, later in zip(turns, turns[1:])]
+    return [later[0] - earlier[0] for earlier, later in pairwise(turns)]
 
 
 class TestSucceededActionWithoutObservationGetsTheNextTick:
