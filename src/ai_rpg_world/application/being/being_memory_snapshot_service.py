@@ -148,9 +148,6 @@ from ai_rpg_world.domain.memory.expectation.service.require_restorable import (
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
 )
-from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
-    StagnationPressureRepository,
-)
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
@@ -284,9 +281,6 @@ class BeingMemorySnapshotService:
         "pending_predictions",
         # P5 (目的層): 目的 journal の per-Being state (belief journal と同型)。
         "goal_journal",
-        # P-U2 (停滞感 store): 停滞感カウンタの per-Being state。scalar な
-        # ため list 1 要素 (0 なら空 list) で運ぶ (他 key と同じ list 規約に揃える)。
-        "stagnation_pressure_count",
         # #1439: 予期は状態をそのまま保存して戻す。未配信の出来事と記憶の
         # ターン数も同じ store が持つので、3 key を同じ単位で書き戻す。
         "expectations",
@@ -313,7 +307,6 @@ class BeingMemorySnapshotService:
         recall_success_store: IEpisodicRecallSuccessStore,
         pending_prediction_store: PendingPredictionRepository,
         goal_journal_store: GoalJournalRepository,
-        stagnation_pressure_store: StagnationPressureRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
@@ -371,10 +364,6 @@ class BeingMemorySnapshotService:
             )
         if not isinstance(goal_journal_store, GoalJournalRepository):
             raise TypeError("goal_journal_store must be GoalJournalRepository")
-        if not isinstance(stagnation_pressure_store, StagnationPressureRepository):
-            raise TypeError(
-                "stagnation_pressure_store must be StagnationPressureRepository"
-            )
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
         if not isinstance(being_episode_store, EpisodeRepository):
@@ -398,7 +387,6 @@ class BeingMemorySnapshotService:
         self._recall_success = recall_success_store
         self._pending_prediction = pending_prediction_store
         self._goal_journal = goal_journal_store
-        self._stagnation_pressure = stagnation_pressure_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
@@ -493,14 +481,6 @@ class BeingMemorySnapshotService:
                 for e in self._goal_journal.list_all_by_being(being_id)
             ],
         }
-        # P-U2 (停滞感 store): 停滞感カウンタ。0 は空 list (= 他 store の
-        # 「空状態 = 空 list」規約に揃える)。LOW-1 (敵対的レビュー指摘):
-        # get_by_being を条件式と値の両方で 2 回呼んでいたのを 1 度読んだ値に
-        # 束ねる形に直した (挙動は不変)。
-        stagnation_pressure_count = self._stagnation_pressure.get_by_being(being_id)
-        payload["stagnation_pressure_count"] = (
-            [stagnation_pressure_count] if stagnation_pressure_count else []
-        )
         payload["expectations"] = [
             expectation_to_dict(e)
             for e in self._expectation.list_all_by_being(being_id)
@@ -674,23 +654,6 @@ class BeingMemorySnapshotService:
             dict_to_goal_entry,
             "goal_journal",
         )
-        # P-U2 (停滞感 store): カウンタのデコード。list が空なら 0、要素があれば
-        # 先頭値を採用する (capture 側は常に 0 or 1 要素で emit するため)。
-        stagnation_pressure_raw = payload["stagnation_pressure_count"]
-        if len(stagnation_pressure_raw) > 1:
-            raise BeingMemoryPayloadFormatError(
-                "payload['stagnation_pressure_count'] must have at most 1 element, "
-                f"got {len(stagnation_pressure_raw)}"
-            )
-        try:
-            stagnation_pressure_count = (
-                int(stagnation_pressure_raw[0]) if stagnation_pressure_raw else 0
-            )
-        except (TypeError, ValueError) as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload['stagnation_pressure_count'][0] is malformed: {exc!r}"
-            ) from exc
-
         expectations = _decode_list(
             payload["expectations"], dict_to_expectation, "expectations"
         )
@@ -797,10 +760,6 @@ class BeingMemorySnapshotService:
         )
         # P5 (目的層): 目的 journal の bulk overwrite。
         self._goal_journal.replace_all_by_being(being_id, goal_entries)
-        # P-U2 (停滞感 store): カウンタの bulk overwrite。
-        self._stagnation_pressure.replace_all_by_being(
-            being_id, stagnation_pressure_count
-        )
         self._expectation.replace_all_by_being(
             being_id,
             expectations=expectations,
