@@ -16,14 +16,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.chunk_encoding import SettledMissedExpectation
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolRuntimeContextDto
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallRetrievalService,
-)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
@@ -35,7 +30,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -60,7 +54,6 @@ class TestChunkCoordinatorTraceEmission:
     def _build_coord(self, *, recorder=None, tick: int=5, chunk_subjective_fields_service=None):
         from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
         from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-        from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         buffer = DefaultObservationContextBuffer()
         sliding = DefaultSlidingWindowMemory()
@@ -185,30 +178,6 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
             def complete_episode_subjective_json(self, messages: list) -> dict:
                 return {'interpreted': 'I', 'recall_text': 'R', 'prediction_error': prediction_error}
         return EpisodicChunkSubjectiveFieldsService(_StubPort())
-
-    def test_prediction_error_id_prediction_outcome_rendered(self) -> None:
-        """確定して外れた予期について prediction error が書かれた瞬間に、id 付きで PREDICTION OUTCOME が出る。"""
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        service = self._build_service_with_prediction_error('鍵がかかっていた')
-        (coord, buffer, action_store, episode_store) = self._build_coord(recorder=recorder, chunk_subjective_fields_service=service)
-        pid = PlayerId(1)
-        coord.note_settled_miss(being_id, SettledMissedExpectation(event_id='exp-1@2', content='扉が開く', likelihood=Likelihood.PROBABLY))
-        t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
-        action_store.append(pid, action_summary='wait1', result_summary='ok', occurred_at=t0, prediction_context_id='predctx-xyz')
-        coord.after_action_recorded(pid, being_id)
-        buffer.append(pid, ObservationEntry(occurred_at=datetime(2026, 5, 1, 12, 0, 30, tzinfo=timezone.utc), output=ObservationOutput(prose='salient event', structured={'type': 'x'}, observation_category='social', breaks_movement=True), game_time_label=None))
-        action_store.append(pid, action_summary='wait2', result_summary='ok', occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc), prediction_context_id='predctx-xyz')
-        coord.after_action_recorded(pid, being_id)
-        action_store.append(pid, action_summary='move', result_summary='ok', occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc), scene_boundary=True)
-        coord.after_action_recorded(pid, being_id)
-        outcomes = [e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME]
-        assert len(outcomes) == 1
-        ev = outcomes[0]
-        assert ev.player_id == 1
-        assert ev.payload['prediction_error'] == '鍵がかかっていた'
-        assert ev.payload['prediction_context_ids'] == ['predctx-xyz']
-        assert ev.payload['episode_id']
 
     def test_chunk_subjective_fields_service_uninjected_prediction_outcome_not_rendered(self) -> None:
         """同期 merge 自体が走らない (= scheduler 経路のみ使う構成) なら

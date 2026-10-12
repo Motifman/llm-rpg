@@ -27,7 +27,6 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
     summarize_observation_boundary_hints,
 )
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    SettledMissedExpectation,
     build_chunk_encoding_input,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
@@ -206,11 +205,6 @@ class EpisodicChunkCoordinator:
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: dict[int, list[ActionResultEntry]] = {}
-        # 外れたで確定した予期を、次に閉じる chunk の主観補完に渡すまで持つ (#1443)。
-        # 開いている chunk と同じく run の中だけで持つ。受け取り済みの ID も同じ
-        # 寿命で持ち、配り直しで同じ外れを別の chunk に二度渡さない。
-        self._settled_misses: dict[BeingId, list[SettledMissedExpectation]] = {}
-        self._received_miss_event_ids: set[str] = set()
         # 長走時の保険: decide_chunk_boundary が「もう少し溜めよう」を返し続
         # けた場合、bucket が際限なく肥える silent failure を防ぐためのハード
         # キャップ。境界判定の閾値を上回る規模になったら強制的に chunk を
@@ -221,23 +215,6 @@ class EpisodicChunkCoordinator:
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-
-    def note_settled_miss(
-        self, being_id: BeingId, missed: SettledMissedExpectation
-    ) -> bool:
-        """外れたで確定した予期を、次に閉じる chunk の主観補完へ渡すために持つ。
-
-        受け取り済みの出来事の ID なら持たずに False を返す。
-        """
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if not isinstance(missed, SettledMissedExpectation):
-            raise TypeError("missed must be SettledMissedExpectation")
-        if missed.event_id in self._received_miss_event_ids:
-            return False
-        self._received_miss_event_ids.add(missed.event_id)
-        self._settled_misses.setdefault(being_id, []).append(missed)
-        return True
 
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode_store への put を episode.being_id 経路で発行する。"""
@@ -330,7 +307,6 @@ class EpisodicChunkCoordinator:
         boundary_reason: str,
         action_count: int,
         observation_count: int,
-        settled_miss_event_ids: list[str],
     ) -> None:
         """``EPISODIC_CHUNK_WRITTEN`` を trace に記録する (失敗は握りつぶす)。"""
         recorder = self._resolve_trace_recorder()
@@ -365,7 +341,6 @@ class EpisodicChunkCoordinator:
                 recall_text_snippet=recall_text[:120],
                 action_count=action_count,
                 observation_count=observation_count,
-                settled_miss_event_ids=settled_miss_event_ids,
             )
         except Exception:
             # trace 失敗で chunk 書き込みパスを止めない方針を維持しつつ、
@@ -501,7 +476,6 @@ class EpisodicChunkCoordinator:
             # U10b: 窓が開いた約束を補完プロンプトに載せて「果たされたか」を
             # 判定させる。flag OFF / 該当なしのときは空 (= 導入前と一致)。
             active_pending_predictions=self._active_pending_predictions_for(being_id),
-            settled_missed_expectations=tuple(self._settled_misses.get(being_id, ())),
         )
         hints = summarize_observation_boundary_hints(encoding_input.observations)
         decision = decide_chunk_boundary(
@@ -599,14 +573,5 @@ class EpisodicChunkCoordinator:
             boundary_reason=decision.reason.value,
             action_count=len(chunk_actions_sorted),
             observation_count=len(obs_slice_sorted),
-            settled_miss_event_ids=[
-                m.event_id for m in encoding_input.settled_missed_expectations
-            ],
         )
         self._chunk_actions[key] = []
-        handed = encoding_input.settled_missed_expectations
-        remaining = self._settled_misses.get(being_id, [])[len(handed):]
-        if remaining:
-            self._settled_misses[being_id] = remaining
-        else:
-            self._settled_misses.pop(being_id, None)

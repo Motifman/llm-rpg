@@ -12,7 +12,6 @@
 """
 from __future__ import annotations
 
-import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -21,7 +20,6 @@ import pytest
 from tests.memory_turn_helpers import ZERO_TURN
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    SettledMissedExpectation,
     build_chunk_encoding_input,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
@@ -37,10 +35,8 @@ from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedu
 )
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
-from ai_rpg_world.domain.memory.expectation.value_object.likelihood import Likelihood
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -155,30 +151,6 @@ class TestInlineScheduler:
         filled = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FILLED]
         assert len(filled) == 1
         assert len(filled[0].payload['recall_text_snippet']) <= 120
-
-    def test_u1_prediction_error_prediction_outcome_id_rendered(self) -> None:
-        """chunk を構成する action の prediction_context_id が重複排除で乗り、
-        確定して外れた予期について LLM が書いた prediction_error がそのまま payload に乗る。"""
-        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
-        act1 = ActionResultEntry(occurred_at=t, action_summary='扉を開けた', result_summary='鍵がかかっていた', tool_name='interact', prediction_context_id='predctx-aaa')
-        act2 = ActionResultEntry(occurred_at=t, action_summary='別の扉を開けた', result_summary='開いた', tool_name='interact', prediction_context_id='predctx-aaa')
-        missed = SettledMissedExpectation(event_id='exp-1@3', content='扉が開く', likelihood=Likelihood.PROBABLY)
-        enc = build_chunk_encoding_input(PlayerId(7), (), (act1, act2), settled_missed_expectations=(missed,))
-        (being_id, resolver, world_id) = _provision_scheduler(7)
-        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=being_id)
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        port = _StubPort(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '開くと思ったら鍵がかかっていた'})
-        recorder = NullTraceRecorder()
-        events = _capture(recorder)
-        scheduler = InlineEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, trace_recorder_provider=lambda : recorder)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        outcomes = [e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME]
-        assert len(outcomes) == 1
-        ev = outcomes[0]
-        assert ev.payload['episode_id'] == draft.episode_id
-        assert ev.payload['prediction_error'] == '開くと思ったら鍵がかかっていた'
-        assert ev.payload['prediction_context_ids'] == ['predctx-aaa']
 
     def test_u1_prediction_error_none_context_id_prediction_outcome_rendered(self) -> None:
         """予測どおり (None) でも in-context id があれば「判定は走った」事実を

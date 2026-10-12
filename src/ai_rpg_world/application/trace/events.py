@@ -97,9 +97,7 @@ class TraceEventKind:
     # EPISODIC_CHUNK_WRITTEN: ``EpisodicChunkCoordinator`` が境界を閉じて
     # SubjectiveEpisode を 1 件 store に書いた瞬間。
     # payload: episode_id / boundary_reason / cues (canonical list) /
-    # recall_text_snippet / action_count / observation_count /
-    # settled_miss_event_ids (= この chunk の主観補完に渡した、外れたで確定した
-    # 予期の出来事の ID。#1443)
+    # recall_text_snippet / action_count / observation_count
     EPISODIC_CHUNK_WRITTEN = "episodic_chunk_written"
     # EPISODIC_RECALL: ``DefaultPromptBuilder._run_passive_recall`` が
     # passive recall を実行した瞬間。
