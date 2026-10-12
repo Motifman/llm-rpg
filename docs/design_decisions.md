@@ -7932,7 +7932,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **目次を直すツールとメモとのつながり**: design_decisions D1623-3 に分けて書いた
 
-**どうしないと壊れるか**: 記憶の欄やツールを足したら、`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` の `_ALL_NAMES` と `_DISABLED_PARTS` に足す (design_decisions D1616)。この PR で【思い出せる出来事】と `episode_recall` を足した。名前は `memory_recall_episodes` の部分文字列にならない形にした。部分文字列だと、片方を止めても他方の名前で緑になる
+**どうしないと壊れるか**: 記憶の欄やツールを足したら、`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` の `_ALL_NAMES` と `_DISABLED_PARTS` に足す (design_decisions D1616)。この PR で【思い出せる出来事】と `episode_recall` を足した。呼び出しの結果は環境で起きたことではないので、観測への変換では Being 自身の記録として拒む。拒む道具は `memo_` / `memory_` の頭で見分けていて、`episode_recall` はその頭を持たないため、`observation_translation.py` の `_AGENT_SIDE_TOOLS` に名前を足した。頭を持たない記憶のツールを足すときは、ここにも足す。`tests/application/observation/being_contract/test_observation_translation.py` がカタログの全道具を見張るが、関数で作る定義は手で足す必要がある。名前は `memory_recall_episodes` の部分文字列にならない形にした。部分文字列だと、片方を止めても他方の名前で緑になる
 
 **関連**: Issue #1623 / #1621 / #1626、design_decisions 1 / 10 / D1616 / D1623 / D1626 / D1628。
 

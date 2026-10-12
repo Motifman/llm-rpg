@@ -13,6 +13,9 @@ import ai_rpg_world.application.llm.services.tool_catalog as tool_catalog
 from ai_rpg_world.application.llm import tool_constants
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
+from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+    episode_recall_definition,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     assess_situation_definition,
 )
@@ -571,7 +574,7 @@ class TestAgentSideToolResult:
 
 
 def _catalogued_tool_definitions() -> dict[str, ToolCategory]:
-    """道具のカタログのモジュールにある定義と、関数で作る assess_situation の分類を集める。"""
+    """道具のカタログのモジュールにある定義と、関数で作る assess_situation と episode_recall の分類を集める。"""
     found: dict[str, ToolCategory] = {}
     for module_info in pkgutil.iter_modules(tool_catalog.__path__):
         module = importlib.import_module(f"{tool_catalog.__name__}.{module_info.name}")
@@ -580,6 +583,8 @@ def _catalogued_tool_definitions() -> dict[str, ToolCategory]:
                 found[value.name] = value.category
     assess = assess_situation_definition(expected_result_policy="off")
     found[assess.name] = assess.category
+    recall = episode_recall_definition(max_handles=1)
+    found[recall.name] = recall.category
     return found
 
 
