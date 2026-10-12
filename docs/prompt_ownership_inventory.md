@@ -48,7 +48,7 @@ reason_first の起動判定 (`resolve_reason_first_gate`) が通ったターン
 
 `build_tools_payload` (`phase_a.py:168`) → `WorldRuntime.get_tool_definitions` (`world_runtime/world_runtime.py:1599`)。
 
-1. `_build_spot_tool_definitions` が、環境のツール (`get_spot_graph_specs`、`get_public_sns_definitions`) に profile で決まる引数 (`goal_update` / `goal_outcome`。`expected_result` と `expectations` は #1631 で消した) を足し、`ToolExposure.is_exposed` で世界に無いツールを落とす
+1. `_build_spot_tool_definitions` が、環境のツール (`get_spot_graph_specs`、`get_public_sns_definitions`) に profile で決まる引数を足し (`goal_update` / `goal_outcome`、`expected_result`、`expectations` は #1631 で消した)、`ToolExposure.is_exposed` で世界に無いツールを落とす
 2. `split_for_phase` で共通の塊とフェーズ固有の塊に分ける
 3. `_build_memory_tool_definitions` (1727 行) が記憶のツールを足す。出すかは profile の値と実行部の有無で決まり、`ToolExposure` を通らない
 4. `ToolExposure.order_for_payload` (`llm/tool_exposure.py:228`) で並べ直す。reason_first なら末尾に `assess_situation`
@@ -100,7 +100,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 | 部分 | 中身 | 作る場所 | 材料の出どころ | 分類 | Being がいま持つか |
 |---|---|---|---|---|---|
-| U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` (`world_runtime/world_runtime.py:2907`) → `_resolve_objective_via_goal_store` (2499 行)、`_resolve_player_objective_text` (2400 行) | シナリオの `metadata.llm_objective_text` か `players[].objective`。goal journal に無ければ最初に入れ、以後は goal journal の active な目的を描く | 混ざっている (環境が課す目的と、Being が `goal_update` で立て直した目的) | goal journal (`GoalEntry.player_id: int` と `created_tick` が残る) |
+| U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` (`world_runtime/world_runtime.py:2907`) → `_resolve_objective_via_goal_store` (2499 行)、`_resolve_player_objective_text` (2400 行) | シナリオの `metadata.llm_objective_text` か `players[].objective`。goal journal に無ければ最初に入れ、以後は goal journal の active な目的を描く | 混ざっている (環境が課す目的と、Being が `goal_update` で立て直した目的。`goal_update` は #1631 で消した) | goal journal (`GoalEntry.player_id: int` と `created_tick` が残る) |
 | U2 【自己像と世界観】 | 「私について: 私は難破船から生き延びた探索者。…」「この世界について: …」 | `SummarizingShortTermMemory.get_long_summary_text` (`llm/services/summarizing_short_term_memory.py:318`) | 短期記憶の L5 要約。profile の `short_term_memory_kind=rolling_summary` のときだけ。run では 206 中 7 呼び出し | Being の持ち物 | 無 (整数の player 鍵) |
 | U3 【最近の流れ】 | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」「  未解決: …」 | `get_mid_summary_text` (同 330 行)、行の形は 742 行 | 短期記憶の L4 要約。U2 と同じ profile | Being の持ち物 | 無 (整数の player 鍵) |
 | U4 観測の行 | 「- [Day 1 深夜 5:30] カイが言った: 「…」」「- [Day 1 6:00] 朝になった。」「- [Day 1 6:00] 〈森の小道〉の向こうから、カイの遠くの声が聞こえる: 「…」」 | `format_observation_line_for_recent_events` (`llm/contracts/chunk_encoding.py:80`)。遠くの声の文は `player_formatter.py:474` (`observation/services/formatters/`) | 環境のイベントを観測パイプラインが本文にしたもの。`UnifiedRecentEventStore` に積まれる | 混ざっている (環境の観測と、遠くの声で話者の名前を出すかという誰を知っているかの判断) | 無 (`PlayerId` 鍵) |
@@ -134,7 +134,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | T2 主観の引数 `inner_thought` | 「この行動を選ぶ直前の、あなた自身の頭の中の独白を一文で。書き方は【独白と一言の書き方】。」。reason_first では行動ツールから外し、`assess_situation` に集める | `inner_thought_property` (`tool_catalog/inner_thought.py:31`)、各ツールの定義に直接入っている。reason_first は `assess_situation_definition` (`tool_catalog/subjective_action.py:231`)、`strip_reason_first_action_subjective_schema` (283 行) | 固定の定義。profile の `reason_first_two_step_enabled` | Being の持ち物 | 無 (書いた値は action_result_store、`PlayerId` 鍵) |
 | T3 発話の引数 `say_inline` | 「この行動をしながら発する一言 (任意、200 字以内)。書き方は【独白と一言の書き方】。」 | `say_inline_property` (`tool_catalog/say_inline.py:47`)、各ツールの定義に直接入っている | 固定の定義 | 環境の材料 (説明が Being 側の節名を参照している。5-3) | 無 |
 | T4 予期の引数 `expectations` | (#1631 で消した) | - | - | - | - |
-| T5 目的の引数 `goal_update` / `goal_outcome` | 「数日スケールの方針を捨てて立て直すときにだけ書く。次の 1 手の意図は intention に書くこと…」「achieved / abandoned」 | `with_goal_update_schema` (`subjective_action.py:145`)、`with_goal_outcome_schema` (122 行)、呼び出しは `_with_goal_update_if_enabled` (`world_runtime.py:1858`) | 固定の定義。profile の `goal_revision_enabled` | Being の持ち物 | 書いた値は goal journal |
+| T5 目的の引数 `goal_update` / `goal_outcome` | (#1631 で消した) | - | - | - | - |
 | T6 記憶のツール | `memo_add`「ターンを跨いで覚えておきたい情報…を memo として記録します。」、`memo_list`、`memo_done`、`memory_recall_episodes`「受動想起 (= prompt の『関連する記憶』 section) は…」、`memory_recall_by_handle`「prompt の『【さっき思い出した記憶の見出し】』section に並んでいる handle…」 | `get_memory_specs` (`tool_catalog/memory.py:297`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py:1727`) | 固定の定義。profile の `memo_tools_enabled`、`episodic_recall_enabled`、`semantic_search_enabled`、`episodic_explore_related_enabled` と実行部の有無。`ToolExposure` を通らない | Being の持ち物 | memo / episodic store / semantic store。実行部はゲームのパッケージにある (#1469) |
 | T7 tool の並びと出し分け | 共通の塊が先、フェーズ固有の塊が後。run では 17 個 (0 章) | `ToolExposure.order_for_payload` と `_PAYLOAD_TOOL_ORDER` (`llm/tool_exposure.py:147`、228 行)、`split_for_phase`、`filter_definitions_for_escape_llm` (`llm/services/world_llm_turn/escape_tools.py:33`) | 固定の並び。会議中か、投票済みか、死亡後か | 組み立ての決まり | 無 |
 

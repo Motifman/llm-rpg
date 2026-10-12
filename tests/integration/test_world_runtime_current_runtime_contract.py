@@ -822,30 +822,6 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     assert "expected_result" not in properties
 
 
-def test_reason_first_tool_mode_preserves_goal_revision_fields(
-    clean_runtime_env: None,
-) -> None:
-    """reason_first でも goal_update / goal_outcome は行動 tool から落とさない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            goal_store_enabled=True,
-            goal_revision_enabled=True,
-        )
-    )
-
-    explore = _tool_by_name_from(
-        runtime.get_tool_definitions(
-            tool_schema_mode="reason_first",
-            for_every_player=True,
-        ),
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    )
-
-    assert "goal_update" in explore.parameters["properties"]
-    assert "goal_outcome" in explore.parameters["properties"]
-
-
 def _reason_first_success_client() -> _SequencedLlmClient:
     return _SequencedLlmClient(
         [

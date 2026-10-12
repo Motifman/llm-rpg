@@ -380,14 +380,6 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             free_text_argument_names=free_text_argument_names,
             **extract_subjective_action_fields(arguments),
         )
-    # P6 (目的の見直し): world-action tool の引数に非 null の goal_update が
-    # あれば goal store に反映する (GOAL_REVISION_ENABLED OFF / goal store 無し
-    # なら no-op)。書き込みゲート (トリガターン限定) は無い。
-    apply_goal_update = getattr(
-        wiring.runtime, "apply_goal_update_if_present", None
-    )
-    if callable(apply_goal_update):
-        apply_goal_update(player_id, arguments)
     if trace_recorder is not None:
         try:
             trace_payload = action_result_extra_trace_payload(

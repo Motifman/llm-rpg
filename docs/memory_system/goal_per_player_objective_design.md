@@ -24,6 +24,8 @@
 `GOAL_REVISION_ENABLED` を両方 true にしている。つまり目的の見直し (G2) は
 配線されている。それでも既存 run の trace は次のとおり。
 
+> 目的の見直し (`GOAL_REVISION_ENABLED`) と、表の 2 つの trace (`goal_revision_rejected` / `goal_resolution`) は、記憶の部品の撤去 (#1631) の #PRNUM で消した。
+
 | run | tick | `goal_revision_rejected` | 内 `reason=locked` | `goal_resolution` (成功) |
 |---|---|---|---|---|
 | v4coop_reasonfirst_001 | 184 | 1 | 1 | 0 |

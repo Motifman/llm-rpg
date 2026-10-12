@@ -53,10 +53,6 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "expected_result": ActionArgumentDisplayKind.OMIT,
     # give_item.gives: item_label / target_player_label を持つ配列を JSON のまま渡す。
     "gives": ActionArgumentDisplayKind.IDENTIFIER_JSON,
-    # goal_outcome: achieved / abandoned / null の列挙値と完全一致が必要。
-    "goal_outcome": ActionArgumentDisplayKind.IDENTIFIER_JSON,
-    # goal_update: 数日スケールの目的を書き直す自由記述。
-    "goal_update": ActionArgumentDisplayKind.FREE_TEXT,
     # pickup_item.ground_item_label: 現在状態に出た地面アイテム名と完全一致が必要。
     "ground_item_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # episode_revise_index.recall_when: 思い出す場面を書き直す自由記述。
@@ -111,7 +107,6 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
 _FREE_TEXT_ARGUMENT_PLACEHOLDERS: Mapping[str, str] = {
     "about": "話題",
     "content": "本文",
-    "goal_update": "目的",
     "parameters": "本文",
     "query": "検索語",
     "reason": "理由",

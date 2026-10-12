@@ -61,10 +61,10 @@ class Observer:
     seconds_per_tick: float | None
 
 
-# 目的の振り返り・改訂は Being が自分で立てた判断を書き戻したもの、ループ警告は
+# 目的の振り返りは Being が自分で立てた判断を書き戻したもの、ループ警告は
 # エージェント側の自己監視で、どちらも環境から届く観測ではない。経路の 5 つの
 # どれにも当たらないので、選択肢を足さずに変換を拒む。
-_BEING_INNER_RECORD_TYPES: Final = frozenset({"goal_reflect", "goal_revision"})
+_BEING_INNER_RECORD_TYPES: Final = frozenset({"goal_reflect"})
 
 # メモ・記憶・状況評価の道具は、Being が自分の記録を読み書きするもので、環境に働きかけない。
 # 結果の文 (「メモを追加しました（ID: …）」など) を自分の行動の結果として写すと、記憶の

@@ -176,6 +176,8 @@
 
 ### P6 — `goal_update` の常時露出と目的改訂 (2026-07-12 全面改訂)
 
+> P6 は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #PRNUM で消した。
+
 > **初版 (トリガターンのみ schema 露出) は撤回**。`docs/design_decisions.md`
 > 設計判断 #1「system prompt と tool list は tick 間で byte 不変」に反する
 > (実測: schema 変化で `cached_tokens=0`)。初版の「頻度が低いので許容」は
@@ -237,6 +239,8 @@
 - 不確実性 (中): P4 と同根 (判定の質)。追加分は小さい
 
 ### P8 — 目的の清算 (2026-07-12 改訂: `goal_outcome` 自己申告方式)
+
+> P8 (`goal_outcome` と清算の信念の証拠) は、P6 と一緒に #PRNUM で消した。
 
 > 初版の引き金 (reflect の達成判定 → **見直しターン**で本人が achieved に
 > する) は、P6 再設計で見直しターンが消えたため宙に浮いた (実装からの
