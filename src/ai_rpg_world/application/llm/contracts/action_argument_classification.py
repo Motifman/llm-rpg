@@ -57,6 +57,8 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "goal_update": ActionArgumentDisplayKind.FREE_TEXT,
     # pickup_item.ground_item_label: 現在状態に出た地面アイテム名と完全一致が必要。
     "ground_item_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # episode_recall.handles: 【思い出せる出来事】の呼び名の配列を JSON のまま渡す。
+    "handles": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # memory_* handle: 想起結果が発行した handle と完全一致が必要。
     "handle": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # inner_thought: 直後の「心の声:」行に同じ値を表示済み。

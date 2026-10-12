@@ -172,6 +172,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_mon
     LlmFailureStreakMonitor,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
@@ -722,6 +723,8 @@ class WorldRuntime:
     )
     # #1626: profile で書き起こしを有効にしたときだけ create_world_runtime が組む。
     _player_episode_writing: Any | None = field(default=None, repr=False)
+    # #1623: profile で目次を出す設定にしたときだけ create_world_runtime が組む。
+    _being_episode_recall_tool_executor: Any | None = field(default=None, repr=False)
     # #1628: エピソードと同じく、世界の snapshot には入らない。
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
@@ -1487,6 +1490,7 @@ class WorldRuntime:
                 semantic_search_enabled=True,
                 episodic_recall_enabled=True,
                 recall_by_handle_enabled=True,
+                episode_recall_max_handles=1,
             )
         )
         definitions.append(
@@ -1904,6 +1908,15 @@ class WorldRuntime:
             tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
             flag_name="SEMANTIC_SEARCH_ENABLED",
         )
+        episode_recall_max_handles = None
+        if self._resolve_requested_memory_tool_enabled(
+            requested=self._episode_index_enabled(),
+            executor=self._being_episode_recall_tool_executor,
+            tool_name=TOOL_NAME_EPISODE_RECALL,
+            flag_name="BEING_EPISODE_INDEX_ORDER",
+        ):
+            assert cfg is not None
+            episode_recall_max_handles = cfg.being_episode_recall_max_handles
         return [
             defn
             for defn, _ in get_memory_specs(
@@ -1915,6 +1928,7 @@ class WorldRuntime:
                 recall_by_handle_enabled=(
                     self._memory_recall_by_handle_tool_executor is not None
                 ),
+                episode_recall_max_handles=episode_recall_max_handles,
             )
         ]
 
@@ -1961,6 +1975,66 @@ class WorldRuntime:
             for definition in self.get_tool_definitions(for_every_player=True)
         }
         return relevant_memories_shown, bool(offered & ACTIVE_RECALL_TOOL_NAMES)
+
+    def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
+        """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
+
+        ツールは #1616 と同じく、実際に出すツールの一覧から決める。純スポットグラフの
+        経路では、目次が出ていても記憶のツールは隠れる。
+        """
+        offered = {
+            definition.name
+            for definition in self.get_tool_definitions(for_every_player=True)
+        }
+        return self._episode_index_enabled(), TOOL_NAME_EPISODE_RECALL in offered
+
+    def _episode_index_enabled(self) -> bool:
+        return getattr(self._runtime_config, "being_episode_index_order", "off") != "off"
+
+    def episode_index_text(self, player_id: PlayerId) -> str:
+        """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
+
+        本人の Being が引けなければ空文字で、欄を出さない。
+        """
+        from ai_rpg_world.application.observation.being_contract import (
+            environment_entry_for_player,
+        )
+        from ai_rpg_world.being.application.episode_index_text import (
+            format_episode_index,
+        )
+        from ai_rpg_world.being.domain.episode_index_selection import (
+            NewestFirst,
+            RecalledRisesToTop,
+        )
+
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return ""
+        cfg = self._runtime_config
+        assert cfg is not None
+        order = cfg.being_episode_index_order
+        selection = {"newest_first": NewestFirst, "recalled_rises_to_top": RecalledRisesToTop}[order]()
+        episodes = self._being_episode_store.list_by_being(acting.being_id)
+        shown = selection.select(episodes, limit=cfg.being_episode_index_limit)
+        try:
+            self._trace_recorder.record(
+                TraceEventKind.EPISODE_INDEX_SHOWN,
+                tick=self.current_tick(),
+                player_id=int(player_id.value),
+                being_id=acting.being_id.value,
+                order=order,
+                limit=cfg.being_episode_index_limit,
+                total_count=len(episodes),
+                shown_handles=[e.handle for e in shown],
+            )
+        except Exception:
+            logger.exception("trace recorder.record raised for EPISODE_INDEX_SHOWN; skipping")
+        return format_episode_index(
+            shown,
+            current_environment_name=environment_entry_for_player(
+                self.scenario, player_id
+            ).environment_name,
+        )
 
     def _memo_tools_enabled(self) -> bool:
         """memo ツールを LLM に露出する設定か。
@@ -2490,6 +2564,8 @@ class WorldRuntime:
         # PR-D: recall_by_handle も同じ aux 経路で動かす。
         if self._memory_recall_by_handle_tool_executor is not None:
             _merge_handlers(self._memory_recall_by_handle_tool_executor.get_handlers())
+        if self._being_episode_recall_tool_executor is not None:
+            _merge_handlers(self._being_episode_recall_tool_executor.get_handlers())
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(
@@ -3112,6 +3188,9 @@ class WorldRuntime:
                 self._player_acquaintances.known_people_text
                 if self._player_acquaintances is not None
                 else None
+            ),
+            episode_index_text_provider=(
+                self.episode_index_text if self._episode_index_enabled() else None
             ),
         )
         limits = PromptLimits(
@@ -5312,7 +5391,12 @@ def create_world_runtime(
     # 記憶の指示は、組み上がった runtime が実際に出す欄とツールに合わせる (#1616)。
     # そのため組み立ては runtime を作り終えたあと (この関数の末尾) で行う。
     def _world_system_prompt(
-        persona: str, *, relevant_memories_shown: bool, active_recall_offered: bool
+        persona: str,
+        *,
+        relevant_memories_shown: bool,
+        active_recall_offered: bool,
+        episode_index_shown: bool,
+        episode_recall_offered: bool,
     ) -> str:
         return build_world_system_prompt(
             world_title=scenario.metadata.title,
@@ -5325,6 +5409,8 @@ def create_world_runtime(
             expectation_argument_enabled=config.expectation_argument_enabled,
             has_goal=_has_goal,
             limits_actions=scenario.metadata.limits_actions,
+            episode_index_shown=episode_index_shown,
+            episode_recall_offered=episode_recall_offered,
         )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
@@ -8969,6 +9055,18 @@ def create_world_runtime(
             player_id, environment_entry_for_player(scenario, player_id)
         )
     _record_meetings_at_spawn(scenario, player_acquaintances)
+    if config.being_episode_index_order != "off":
+        from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
+            BeingEpisodeRecallToolExecutor,
+        )
+
+        runtime._being_episode_recall_tool_executor = BeingEpisodeRecallToolExecutor(
+            repository=runtime._being_episode_store,
+            turn_reader=expectation_store,
+            max_handles=config.being_episode_recall_max_handles,
+            trace_recorder_provider=lambda: runtime._trace_recorder,
+            current_tick_provider=lambda: runtime.current_tick(),
+        )
     if config.being_episode_writing_enabled:
         runtime._player_episode_writing = _build_player_episode_writing(
             config,
@@ -8995,16 +9093,23 @@ def create_world_runtime(
     relevant_memories_shown, active_recall_offered = (
         runtime._memory_parts_named_in_system_prompt()
     )
+    episode_index_shown, episode_recall_offered = (
+        runtime._episode_index_parts_named_in_system_prompt()
+    )
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
         relevant_memories_shown=relevant_memories_shown,
         active_recall_offered=active_recall_offered,
+        episode_index_shown=episode_index_shown,
+        episode_recall_offered=episode_recall_offered,
     )
     runtime._world_llm_system_prompts_by_player_id = {
         player_id: _world_system_prompt(
             persona,
             relevant_memories_shown=relevant_memories_shown,
             active_recall_offered=active_recall_offered,
+            episode_index_shown=episode_index_shown,
+            episode_recall_offered=episode_recall_offered,
         )
         for player_id, persona in personas_by_player_id.items()
     }

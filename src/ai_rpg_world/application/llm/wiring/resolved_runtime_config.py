@@ -61,7 +61,15 @@ from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
     WorldTickFailurePolicy,
 )
 
+#: off は目次を出さない。ほかは being/domain/episode_index_selection.py の並べ方。
+BEING_EPISODE_INDEX_ORDERS = frozenset({"off", "recalled_rises_to_top", "newest_first"})
+_DEFAULT_BEING_EPISODE_INDEX_LIMIT = 10
+_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES = 3
+
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
+    "BEING_EPISODE_INDEX_LIMIT",
+    "BEING_EPISODE_INDEX_ORDER",
+    "BEING_EPISODE_RECALL_MAX_HANDLES",
     "BEING_EPISODE_WRITING_ENABLED",
     "BELIEF_ATTRIBUTION_ENABLED",
     "BELIEF_CANDIDATE_NARROWER",
@@ -415,6 +423,11 @@ class ResolvedLlmRuntimeConfig:
     # #1626: 短期記憶を畳むときと run の終わりに、目次つきのエピソードを書き起こす。
     # 古いエピソード (episodic_enabled / episodic_subjective_enabled) とは別のスイッチ。
     being_episode_writing_enabled: bool = False
+    # #1623: 目次の並べ方 (off なら目次も呼び出しのツールも出さない)・載せる件数 N・
+    # 1 回に呼び出せる件数 M。
+    being_episode_index_order: str = "off"
+    being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
+    being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
     situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
@@ -522,6 +535,16 @@ class ResolvedLlmRuntimeConfig:
             # 書き起こしを呼ぶ口は畳んで要約する短期記憶にしか無く、ほかの種類では一度も呼ばれない。
             raise ValueError(
                 "BEING_EPISODE_WRITING_ENABLED requires SHORT_TERM_MEMORY_KIND=rolling_summary"
+            )
+        if self.being_episode_index_order not in BEING_EPISODE_INDEX_ORDERS:
+            raise ValueError(
+                f"BEING_EPISODE_INDEX_ORDER={self.being_episode_index_order!r} must be one of "
+                f"{sorted(BEING_EPISODE_INDEX_ORDERS)}"
+            )
+        if self.being_episode_index_order != "off" and not self.being_episode_writing_enabled:
+            # 書き起こしが無いと、目次はいつまでも空のまま呼び出しのツールだけが出る。
+            raise ValueError(
+                "BEING_EPISODE_INDEX_ORDER requires BEING_EPISODE_WRITING_ENABLED=1"
             )
         self._validate_expectation_settlement()
         if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
@@ -914,6 +937,17 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"BEING_EPISODE_WRITING_ENABLED: {exc}") from exc
+        being_episode_index_order = (
+            _strip_or_none(source.get("BEING_EPISODE_INDEX_ORDER")) or "off"
+        )
+        being_episode_index_limit = _resolve_positive_int(
+            source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
+        )
+        being_episode_recall_max_handles = _resolve_positive_int(
+            source,
+            "BEING_EPISODE_RECALL_MAX_HANDLES",
+            default=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
+        )
         situation_belief_recall_narrower = (
             _strip_or_none(source.get("SITUATION_BELIEF_RECALL_NARROWER")) or CHAR_BIGRAM_BM25
         )
@@ -1080,6 +1114,9 @@ class ResolvedLlmRuntimeConfig:
             belief_candidate_narrower=belief_candidate_narrower,
             situation_belief_recall_enabled=situation_belief_recall_enabled,
             being_episode_writing_enabled=being_episode_writing_enabled,
+            being_episode_index_order=being_episode_index_order,
+            being_episode_index_limit=being_episode_index_limit,
+            being_episode_recall_max_handles=being_episode_recall_max_handles,
             situation_belief_recall_narrower=situation_belief_recall_narrower,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
@@ -1230,6 +1267,9 @@ class ResolvedLlmRuntimeConfig:
             belief_candidate_narrower=CHAR_BIGRAM_BM25,
             situation_belief_recall_enabled=False,
             being_episode_writing_enabled=False,
+            being_episode_index_order="off",
+            being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
+            being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             situation_belief_recall_narrower=CHAR_BIGRAM_BM25,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,

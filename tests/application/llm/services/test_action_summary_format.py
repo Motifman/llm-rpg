@@ -45,6 +45,7 @@ def _all_declared_tool_names() -> set[str]:
             recall_by_handle_enabled=True,
             episodic_explore_related_enabled=True,
             semantic_search_enabled=True,
+            episode_recall_max_handles=3,
         )
     }
     return spot | memory
