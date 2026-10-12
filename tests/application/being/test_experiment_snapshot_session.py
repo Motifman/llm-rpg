@@ -27,6 +27,7 @@ from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryM
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
+from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
@@ -42,7 +43,7 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository())
+    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository())
     return (wiring, provisioning)
 
 class TestConstructorGuards:
@@ -53,6 +54,13 @@ class TestConstructorGuards:
         (wiring, _) = _make_wiring_stub()
         wiring.being_repository = None
         with pytest.raises(RuntimeError, match='being_repository'):
+            ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
+
+    def test_being_episode_store_missing_raises_runtime_error(self, tmp_path: Path) -> None:
+        """目次つきのエピソードの store が無い wiring では、空の store で代用せず RuntimeError で止まる。代用すると、再開した Being が書いた記憶を忘れたことと配線漏れが見分けられない。"""
+        (wiring, _) = _make_wiring_stub()
+        wiring.being_episode_store = None
+        with pytest.raises(RuntimeError, match='being_episode_store'):
             ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
 
     def test_memo_store_missing_empty_fallback_works(self, tmp_path: Path) -> None:

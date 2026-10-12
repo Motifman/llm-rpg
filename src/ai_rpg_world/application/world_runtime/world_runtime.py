@@ -337,8 +337,12 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 )
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
+    InMemoryEpisodeRepository,
 )
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -707,6 +711,11 @@ class WorldRuntime:
     )
     _player_acquaintances: PlayerAcquaintances | None = field(
         default=None, repr=False
+    )
+    # #1623: Being が書いた目次つきのエピソード。知り合いの記録と同じく Being の
+    # snapshot に入り、世界の snapshot には入らない。
+    _being_episode_store: EpisodeRepository = field(
+        default_factory=InMemoryEpisodeRepository, repr=False
     )
     # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
     _expectation_dispatcher: Any | None = field(default=None, repr=False)

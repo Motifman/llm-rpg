@@ -148,6 +148,9 @@ def _build_stack(
     from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
         InMemoryAcquaintanceRepository,
     )
+    from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
+        InMemoryEpisodeRepository,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
         InMemoryExpectationRepository,
     )
@@ -174,6 +177,7 @@ def _build_stack(
         # P-U2: CLI 経由の単発 dump では停滞感 store も in-memory で足りる。
         stagnation_pressure_store=InMemoryStagnationPressureStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
+        being_episode_store=InMemoryEpisodeRepository(),
         expectation_store=InMemoryExpectationRepository(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
@@ -229,7 +233,8 @@ def cmd_save(args: argparse.Namespace) -> int:
     # 状態を取りこぼしていることがユーザに伝わるよう、明示的に warning を残す。
     logger.warning(
         "recall_slot / afterglow / habituation / expectations (with their "
-        "undelivered events and memory turn) are in-memory sidecars and "
+        "undelivered events and memory turn) / acquaintances / being "
+        "episodes are in-memory sidecars and "
         "are NOT captured via this CLI. The resulting snapshot will have "
         "those layers empty."
     )
