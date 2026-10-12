@@ -317,6 +317,8 @@
 
 ### U8 — 誤差ゲート付き符号化 (境界 + 解像度)
 
+> 2b (解像度) は #1646、2a (境界) とキー `ERROR_GATED_ENCODING_ENABLED` は #1651 で消した (#1631)。
+
 - 触る場所:
   - 2a: `application/llm/chunk_boundary/rules.py:155-278` に 1 条項追加 —
     bucket 内 action に「成功予測 (expected_result あり) → success=False」

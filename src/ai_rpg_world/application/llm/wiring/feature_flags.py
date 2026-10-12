@@ -760,49 +760,6 @@ def log_recall_hit_boost_enabled_state(enabled: bool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
-# 誤差ゲート付き符号化: 境界 (2a) + 解像度 (2b) (U8)
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_ERROR_GATED_ENCODING_ENABLED = "ERROR_GATED_ENCODING_ENABLED"
-
-
-def resolve_error_gated_encoding_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """chunk の区切りを時間やイベント数ではなく予測誤差で決めるか
-    (予測誤差統一設計 部品2、U8)。
-
-    ``ERROR_GATED_ENCODING_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    OFF (既定) のとき:
-    - ``decide_chunk_boundary`` に U8 で足した条項 (成功を予測していたのに
-      失敗 / error_code 付き失敗があれば境界候補にする) は一切評価されず、
-      境界挙動は U8 導入前と完全一致する
-
-    ON にすると:
-    - bucket 内に構造的な予測ミスがあれば (MIN_ACTIONS_FOR_CLOSE 到達後・
-      scene 境界系の判定の後、観測件数閾値の前というルール順で) chunk 境界の
-      候補になる (``ChunkBoundaryReason.PREDICTION_ERROR_SALIENT``)
-
-    詳細は docs/memory_system/prediction_error_unified_memory_design.md
-    「部品 2: 誤差ゲート付き符号化」節、
-    docs/memory_system/prediction_error_unified_implementation_plan.md の
-    U8 節。
-    """
-    return _parse_bool_env(ENV_ERROR_GATED_ENCODING_ENABLED, env=env, default=False)
-
-
-def log_error_gated_encoding_enabled_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_ERROR_GATED_ENCODING_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
 # pending prediction (約束・遅延予測) (U10a)
 # ──────────────────────────────────────────────────────────────────
 
