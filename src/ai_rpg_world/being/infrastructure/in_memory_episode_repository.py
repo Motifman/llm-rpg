@@ -42,9 +42,9 @@ class InMemoryEpisodeRepository(EpisodeRepository):
         known = book.get(episode.episode_id)
         if known is None:
             raise EpisodeNotFoundException(f"no episode {episode.episode_id!r} for {being_id}")
-        if known.handle != episode.handle:
+        if not episode.follows(known):
             raise EpisodeConflictException(
-                f"handle of {episode.episode_id!r} must stay {known.handle!r}, got {episode.handle!r}"
+                f"{episode.episode_id!r} is not a later version of the saved episode"
             )
         book[episode.episode_id] = episode
 

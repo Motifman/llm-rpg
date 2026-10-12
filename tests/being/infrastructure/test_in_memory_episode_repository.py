@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
@@ -129,6 +131,44 @@ class TestInMemoryEpisodeRepository:
         with pytest.raises(EpisodeConflictException):
             repo.save(ADA, renamed)
         assert repo.list_by_being(ADA) == (FIRST,)
+
+    @pytest.mark.parametrize(
+        "changes",
+        [
+            {"body": "書き換えた本文"},
+            {"written_turn": 4},
+            {"environment_name": "島"},
+        ],
+        ids=["body", "written_turn", "environment_name"],
+    )
+    def test_save_that_changes_what_was_written_is_rejected(self, changes: dict[str, object]) -> None:
+        """本文・書いた時・環境の名前のどれかを変えた版を書き戻すと EpisodeConflictException を投げ、記録は変わらない。"""
+        repo = InMemoryEpisodeRepository()
+        repo.add(ADA, FIRST)
+
+        with pytest.raises(EpisodeConflictException):
+            repo.save(ADA, dataclasses.replace(FIRST, **changes))
+        assert repo.list_by_being(ADA) == (FIRST,)
+
+    def test_save_that_drops_index_history_is_rejected(self) -> None:
+        """目次の履歴から前の版を消した版を書き戻すと EpisodeConflictException を投げ、履歴は残る。"""
+        repo = InMemoryEpisodeRepository()
+        revised = FIRST.with_revised_index(EpisodeIndex(summary="番号を見つけた", recall_when="数字のとき"), turn=6)
+        repo.add(ADA, revised)
+
+        with pytest.raises(EpisodeConflictException):
+            repo.save(ADA, dataclasses.replace(revised, index=INDEX, index_history=()))
+        assert repo.list_by_being(ADA) == (revised,)
+
+    def test_save_that_lowers_recall_count_is_rejected(self) -> None:
+        """呼び出された回数を減らした版を書き戻すと EpisodeConflictException を投げ、回数は変わらない。"""
+        repo = InMemoryEpisodeRepository()
+        recalled = FIRST.recalled_at(turn=5).recalled_at(turn=6)
+        repo.add(ADA, recalled)
+
+        with pytest.raises(EpisodeConflictException):
+            repo.save(ADA, FIRST.recalled_at(turn=7))
+        assert repo.list_by_being(ADA) == (recalled,)
 
     def test_replace_all_overwrites_the_being(self) -> None:
         """全部を書き戻すと、その Being の記録が渡した並びに置き換わり、前の記録は残らない。"""
