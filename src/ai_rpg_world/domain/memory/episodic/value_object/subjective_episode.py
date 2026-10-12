@@ -87,12 +87,8 @@ class SubjectiveEpisode:
     # 増やさず、既存の主観文付与で interpreted / recall_text と同じ pass で
     # 書かせる方針のため、未指定や空文字も None として畳み込む Optional に保つ。
     heading: str | None = None
-    # U6 (予測誤差統一設計 / salience + STRUCTURED_FAILURE): 「このキャラに
-    # とって予測が大きく外れた / 初めての重大事」かどうかを chunk 主観補完
-    # LLM が一度だけ判定するフィールド。heading と同じく既存の主観文付与
-    # pass に相乗りさせ、新規 LLM コールは増やさない。heading と違って
-    # 「値が無い」状態は表現しない (常に low/high のどちらか) ため、Optional
-    # ではなく既定値 "low" を持つ必須フィールドにする。
+    # salience を判定する部品は消し、いまは常に "low"。保存形式に残っている
+    # ので、古いエピソードを消すとき (#1631) に一緒に消す。
     salience: str = "low"
     # U10a (予測誤差統一設計 部品6・pending prediction): chunk 主観補完 LLM が
     # 「この chunk に将来の約束・見込みが含まれるか」を判定した抽出結果。

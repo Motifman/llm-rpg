@@ -25,9 +25,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
     BeliefEvidenceSourceKind,
 )
 
-# salience: low | high (high = 即時固着候補。設計上は chunk 主観補完 LLM が
-# 書き込み時に一度だけ判定する想定だが、U2 時点ではその LLM フィールドが
-# 未配線 (U6 で追加予定) なので、転記側は常に "low" を渡す。
+# salience: low | high (high = 即時固着候補)。
 BELIEF_EVIDENCE_SALIENCE_LOW = "low"
 BELIEF_EVIDENCE_SALIENCE_HIGH = "high"
 _VALID_SALIENCE_VALUES = frozenset(

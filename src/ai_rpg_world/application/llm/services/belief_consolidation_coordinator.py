@@ -233,8 +233,8 @@ decisions は次のいずれかの形の要素からなる配列:
 
 # U4 (予測誤差統一設計 部品3 / attribution + CONFIRMATION): BELIEF_ATTRIBUTION_ENABLED
 # が OFF のときは CONFIRMATION evidence が一切生成されないため、この追記は
-# 死んだ指示 (無意味なトークン増) になる。U6 salience 節と同じ作法で、flag ON の
-# ときだけ文字列追記(置換)して足す。OFF のときは pre-U4 の system prompt と
+# 死んだ指示 (無意味なトークン増) になる。flag ON のときだけ文字列追記(置換)
+# して足す。OFF のときは pre-U4 の system prompt と
 # byte 一致することを保証する (U1 で確立した flag 規律)。
 _CONFIRMATION_ANCHOR = "- evidence: 予測が外れた経験・繰り返し検出された親密度クラスタ等、学習の素材 1 件。cue_signature はその状況を表す決定論キー (例 \"tool:explore|spot:浜辺\")。text は素材の内容。"
 _CONFIRMATION_INSTRUCTION = (

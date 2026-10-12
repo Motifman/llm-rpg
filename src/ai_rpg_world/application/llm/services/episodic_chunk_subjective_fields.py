@@ -83,37 +83,12 @@ prediction_error は、ユーザメッセージに「## 確定して外れた予
 入力に無い人物・場所・アイテム・結果・成否を新たに創作しない。
 キューや observed の事実と矛盾しない表現にする。"""
 
-# U6 (予測誤差統一設計 / salience): SALIENCE_STRUCTURED_FAILURE_ENABLED が
-# OFF のときは既定 prompt を byte 不変に保つため、salience 節は文字列
-# 追記(置換)で組み立てる。既存定数 _SYSTEM_EPISODE_SUBJECTIVE_JSON はテスト
-# 資産 (past-tense regression test 等) が直接参照しているため変更しない。
-_SALIENCE_KEY_LIST_OLD = "キーは次の 4 つ: interpreted, recall_text, prediction_error, heading。"
-_SALIENCE_KEY_LIST_NEW = "キーは次の 5 つ: interpreted, recall_text, prediction_error, heading, salience。"
-_SALIENCE_INSTRUCTION = """
-
-salience は "low" または "high" のいずれか。high は「このキャラにとって
-予測が大きく外れた / 初めての重大事」だけに使う判定で、日常的な出来事や
-軽い驚きは low にする。判断に迷ったら low にする。"""
-
-# U8 (予測誤差統一設計 部品2b: 誤差ゲート付き符号化 / 解像度): recall_text の
-# 長さ指示を salience 連動にする。ERROR_GATED_ENCODING_ENABLED が OFF のとき、
-# または salience_enabled 自体が OFF のときは元の一律の長さ指示のまま
-# (byte 不変)。ON のときだけこの文字列で置換する。LLM は同一呼び出し内で
-# salience を判定してから長さを選ぶ (追加 LLM 呼び出しは発生しない)。
-_RECALL_LENGTH_INSTRUCTION_OLD = (
-    "250〜450 字程度で、当時の感情・見立て・手触りを含める。"
-)
-_RECALL_LENGTH_INSTRUCTION_NEW = (
-    "salience の判定結果に応じた長さで、当時の感情・見立て・手触りを含める。"
-    "salience=high (予測が大きく外れた/初めての重大事) なら250〜450字程度で"
-    "詳しく書き、salience=low (予測どおり/日常的) なら80〜150字程度の簡潔な"
-    "定型に近い形にする。"
-)
+_BASE_KEY_LIST = "キーは次の 4 つ: interpreted, recall_text, prediction_error, heading。"
 
 
 # U7 (予測誤差統一設計 / 無意識コンテキスト): UNCONSCIOUS_CONTEXT_ENABLED が
-# OFF のときは system prompt を byte 不変に保つため、salience と同じ「文字列
-# 追記」方式で組み立てる。新しい JSON キーは増やさない (interpreted /
+# OFF のときは system prompt を byte 不変に保つため、「文字列追記」方式で
+# 組み立てる。新しい JSON キーは増やさない (interpreted /
 # recall_text / prediction_error の判定基準を変えるだけの指示追記)。
 _UNCONSCIOUS_CONTEXT_INSTRUCTION = """
 
@@ -125,16 +100,10 @@ _UNCONSCIOUS_CONTEXT_INSTRUCTION = """
 ならない。当該節が無い場合はこの指示を無視してよい。"""
 
 
-# U10a (予測誤差統一設計 部品6・pending prediction): salience と独立な
-# もう 1 つの追加フィールド。key list の数字は salience_enabled の有無で
-# ベースが変わるため、両方の組み合わせ (4→5 / 5→6) を別々の定数で持つ。
+# U10a (予測誤差統一設計 部品6・pending prediction): 追加フィールド。
 _PENDING_KEY_LIST_BASE_NEW = (
     "キーは次の 6 つ: interpreted, recall_text, prediction_error, heading, "
     "pending_prediction, pending_resolutions。"
-)
-_PENDING_KEY_LIST_WITH_SALIENCE_NEW = (
-    "キーは次の 7 つ: interpreted, recall_text, prediction_error, heading, "
-    "salience, pending_prediction, pending_resolutions。"
 )
 _PENDING_PREDICTION_INSTRUCTION = """
 
@@ -304,45 +273,20 @@ def _normalize_heard_claims(
 
 def _build_system_prompt(
     *,
-    salience_enabled: bool,
     unconscious_context_enabled: bool = False,
-    error_gated_encoding_enabled: bool = False,
     pending_prediction_enabled: bool = False,
     hearsay_enabled: bool = False,
 ) -> str:
-    """salience 節 / 無意識コンテキスト節 / 誤差ゲート付き解像度指示 /
-    pending prediction 節を条件付きで足した system prompt を組み立てる。
+    """無意識コンテキスト節 / pending prediction 節 / 伝聞節を条件付きで足した
+    system prompt を組み立てる。
 
     全 flag が OFF のときは ``_SYSTEM_EPISODE_SUBJECTIVE_JSON`` をそのまま返す
     (= 既定 prompt が byte 不変であることをここで保証する)。
-
-    U8 の解像度指示 (recall_text 長さの salience 連動) は salience_enabled が
-    True のときだけ意味を持つ (salience 自体が無ければ連動先が無い)。
-    salience_enabled=False のときは error_gated_encoding_enabled の値に関わらず
-    元の一律長さ指示のまま。
     """
-    if not salience_enabled:
-        base = _SYSTEM_EPISODE_SUBJECTIVE_JSON
-    else:
-        assert _SALIENCE_KEY_LIST_OLD in _SYSTEM_EPISODE_SUBJECTIVE_JSON
-        with_new_keys = _SYSTEM_EPISODE_SUBJECTIVE_JSON.replace(
-            _SALIENCE_KEY_LIST_OLD, _SALIENCE_KEY_LIST_NEW
-        )
-        if error_gated_encoding_enabled:
-            assert _RECALL_LENGTH_INSTRUCTION_OLD in with_new_keys
-            with_new_keys = with_new_keys.replace(
-                _RECALL_LENGTH_INSTRUCTION_OLD, _RECALL_LENGTH_INSTRUCTION_NEW
-            )
-        base = with_new_keys + _SALIENCE_INSTRUCTION
+    base = _SYSTEM_EPISODE_SUBJECTIVE_JSON
     if pending_prediction_enabled:
-        key_list_old = _SALIENCE_KEY_LIST_NEW if salience_enabled else _SALIENCE_KEY_LIST_OLD
-        key_list_new = (
-            _PENDING_KEY_LIST_WITH_SALIENCE_NEW
-            if salience_enabled
-            else _PENDING_KEY_LIST_BASE_NEW
-        )
-        assert key_list_old in base
-        base = base.replace(key_list_old, key_list_new) + _PENDING_PREDICTION_INSTRUCTION
+        assert _BASE_KEY_LIST in base
+        base = base.replace(_BASE_KEY_LIST, _PENDING_KEY_LIST_BASE_NEW) + _PENDING_PREDICTION_INSTRUCTION
     if hearsay_enabled:
         base = base + _HEARD_CLAIMS_INSTRUCTION
     if unconscious_context_enabled:
@@ -489,23 +433,6 @@ def _merge_picks(
     return llm_value if llm_value is not None else fallback
 
 
-_VALID_SALIENCE_VALUES = ("low", "high")
-
-
-def _normalize_salience(raw: Any) -> str:
-    """LLM 出力の salience を "low"/"high" に正規化する。
-
-    欠損・非 str・不正な値 (typo 等) は全て "low" に倒す (parse 失敗時は
-    「一撃学習を起動しない」= 安全側に倒れる方針)。
-    """
-    if not isinstance(raw, str):
-        return "low"
-    normalized = raw.strip().lower()
-    if normalized in _VALID_SALIENCE_VALUES:
-        return normalized
-    return "low"
-
-
 # LLM が返す tick offset の妥当上限と最小窓幅。chunk 主観補完 LLM には
 # 「今から何 tick 後か」だけを書かせているが、LLM は tick の尺度を知らず、
 # 「夕方」を分 (1440) のような巨大値で返すことがある (L2 replay で観測)。
@@ -641,41 +568,30 @@ class EpisodicChunkSubjectiveFieldsService:
         self,
         completion: IEpisodicChunkSubjectiveCompletionPort,
         *,
-        salience_enabled: bool = False,
         unconscious_context_provider: Callable[[int, Sequence[EpisodicCue]], str] | None = None,
         unconscious_context_enabled: bool = False,
-        error_gated_encoding_enabled: bool = False,
         pending_prediction_enabled: bool = False,
         hearsay_enabled: bool = False,
     ) -> None:
         if not isinstance(completion, IEpisodicChunkSubjectiveCompletionPort):
             raise TypeError("completion must implement IEpisodicChunkSubjectiveCompletionPort")
-        if not isinstance(salience_enabled, bool):
-            raise TypeError("salience_enabled must be bool")
         if unconscious_context_provider is not None and not callable(
             unconscious_context_provider
         ):
             raise TypeError("unconscious_context_provider must be callable or None")
         if not isinstance(unconscious_context_enabled, bool):
             raise TypeError("unconscious_context_enabled must be bool")
-        if not isinstance(error_gated_encoding_enabled, bool):
-            raise TypeError("error_gated_encoding_enabled must be bool")
         if not isinstance(pending_prediction_enabled, bool):
             raise TypeError("pending_prediction_enabled must be bool")
         if not isinstance(hearsay_enabled, bool):
             raise TypeError("hearsay_enabled must be bool")
         self._completion = completion
-        self._salience_enabled = salience_enabled
         # U7 (予測誤差統一設計 / 無意識コンテキスト): 「配線 (wire) と有効化
         # (enable) の分離」規約に従い、provider は常に受け取れるが
         # unconscious_context_enabled が False の間は一切呼び出さない
         # (= 未注入時と完全に同一の挙動)。
         self._unconscious_context_provider = unconscious_context_provider
         self._unconscious_context_enabled = unconscious_context_enabled
-        # U8 (予測誤差統一設計 部品2b / default False = flag OFF): True のとき
-        # だけ recall_text の長さ指示を salience 連動に差し替える。False
-        # (既定) では U6 導入時の一律長さ指示のまま (byte 不変)。
-        self._error_gated_encoding_enabled = error_gated_encoding_enabled
         # U10a (予測誤差統一設計 部品6・pending prediction / default False =
         # flag OFF): True のときだけ pending_prediction キーを system prompt に
         # 足し、応答を PendingPredictionDraft として episode に載せる。False
@@ -733,15 +649,8 @@ class EpisodicChunkSubjectiveFieldsService:
         )
         _extra_sample = _pending_sample + _hearsay_sample
         response_format = (
-            (
-                '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
-                f'"heading": "...", "salience": "low"{_extra_sample}}}'
-            )
-            if self._salience_enabled
-            else (
-                '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
-                f'"heading": "..."{_extra_sample}}}'
-            )
+            '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
+            f'"heading": "..."{_extra_sample}}}'
         )
         unconscious_context_text = self._resolve_unconscious_context_text(draft)
         user_sections = [
@@ -793,9 +702,7 @@ class EpisodicChunkSubjectiveFieldsService:
             {
                 "role": "system",
                 "content": _build_system_prompt(
-                    salience_enabled=self._salience_enabled,
                     unconscious_context_enabled=self._unconscious_context_enabled,
-                    error_gated_encoding_enabled=self._error_gated_encoding_enabled,
                     pending_prediction_enabled=self._pending_prediction_enabled,
                     hearsay_enabled=self._hearsay_enabled,
                 ),
@@ -806,7 +713,6 @@ class EpisodicChunkSubjectiveFieldsService:
         recall_llm: str | None = None
         pred_err_llm: str | None = None
         heading_llm: str | None = None
-        salience: str = "low"
         pending_prediction_draft: PendingPredictionDraft | None = None
         pending_resolution_verdicts: tuple[PendingResolutionVerdict, ...] = ()
         heard_claims: tuple[HeardClaim, ...] = ()
@@ -824,11 +730,6 @@ class EpisodicChunkSubjectiveFieldsService:
                 # 失敗時 / 欠落時は None に倒し、SubjectiveEpisode に渡る前に
                 # 30 文字へ切り詰める (後続テストで保証)。
                 heading_llm = _normalize_heading(raw_obj.get("heading"))
-                # U6: flag OFF のときは LLM が誤って salience を返しても無視
-                # し、episode.salience は常に "low" のまま (= 導入前と同一
-                # 挙動を保証する)。
-                if self._salience_enabled:
-                    salience = _normalize_salience(raw_obj.get("salience"))
                 # U10a: flag OFF のときは LLM が誤って pending_prediction を
                 # 返しても無視し、episode.pending_prediction_draft は常に
                 # None のまま (= 導入前と同一挙動を保証する)。
@@ -879,7 +780,6 @@ class EpisodicChunkSubjectiveFieldsService:
             recall_text=recall_text,
             prediction_error=prediction_error,
             heading=heading_llm,
-            salience=salience,
             pending_prediction_draft=pending_prediction_draft,
             pending_resolution_verdicts=pending_resolution_verdicts,
             heard_claims=heard_claims,

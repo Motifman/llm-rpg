@@ -701,7 +701,6 @@ class WorldRuntime:
     _prepare_action_command_scope_factory: Any | None = field(default=None, repr=False)
     _death_grace_timer: Any | None = field(default=None, repr=False)
     _downed_incident_log: Any | None = field(default=None, repr=False)
-    _structured_failure_transcriber: Any | None = field(default=None, repr=False)
     # P5 (目的層): GOAL_STORE_ENABLED ON のときだけ構築される goal journal store。
     # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
@@ -8331,7 +8330,6 @@ def create_world_runtime(
             log_memo_distill_enabled_state,
             log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
-            log_salience_structured_failure_enabled_state,
             log_unconscious_context_enabled_state,
         )
 
@@ -8432,20 +8430,9 @@ def create_world_runtime(
                 "ため reflect 注入 (= 熟考ラッチの武装トリガ) が起きず、熟考ゲートが"
                 "一生発火しない (静かな失敗)。GOAL_REFLECT_ENABLED=1 も設定してください。"
             )
-        # U6: salience 判定 + STRUCTURED_FAILURE 転記 (default OFF)。他 2 flag
-        # 同様、同じ evidence buffer を共有するので ON なら buffer store を作る
-        # 条件に加える。
-        _salience_structured_failure_enabled = (
-            config.salience_structured_failure_enabled
-        )
-        log_salience_structured_failure_enabled_state(
-            _salience_structured_failure_enabled
-        )
         # U8 (予測誤差統一設計 部品2・誤差ゲート付き符号化 / default OFF):
-        # 境界 (2a, chunk_coordinator へ伝播) + 解像度 (2b, 下の subjective
-        # service 構築時に salience_enabled と合わせて評価) を一括ゲートする。
-        # evidence buffer とは無関係な独立 flag なので buffer store 条件には
-        # 加えない。
+        # 境界 (2a, chunk_coordinator へ伝播) をゲートする。evidence buffer とは
+        # 無関係な独立 flag なので buffer store 条件には加えない。
         _error_gated_encoding_enabled = config.error_gated_encoding_enabled
         log_error_gated_encoding_enabled_state(_error_gated_encoding_enabled)
         # U5: MEMO_DISTILL 転記 (default ON)。memo を手帳で終わらせず
@@ -8560,7 +8547,6 @@ def create_world_runtime(
         if (
             _belief_evidence_enabled
             or _belief_consolidation_enabled
-            or _salience_structured_failure_enabled
             or _memo_distill_enabled
         ):
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
@@ -8677,17 +8663,10 @@ def create_world_runtime(
                         ),
                         long_summary_text_provider=_long_summary_text_provider,
                     )
-                # U6: flag OFF なら salience_enabled=False (= system prompt が
-                # 導入前と byte 同一)。
-                # U8 (部品2b): error_gated_encoding_enabled は
-                # salience_enabled が False のときは無効化される (連動先の
-                # salience が存在しないため。_build_system_prompt 側で保証)。
                 _subjective_service = EpisodicChunkSubjectiveFieldsService(
                     _client,
-                    salience_enabled=_salience_structured_failure_enabled,
                     unconscious_context_provider=_unconscious_context_provider,
                     unconscious_context_enabled=_unconscious_context_enabled,
-                    error_gated_encoding_enabled=_error_gated_encoding_enabled,
                     pending_prediction_enabled=_pending_prediction_enabled,
                     hearsay_enabled=_hearsay_enabled,
                 )
@@ -9016,34 +8995,10 @@ def create_world_runtime(
                 runtime._episodic_stack.semantic_memory_store,
             )
 
-        # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り
-        # runtime に公開する。runtime_manager (presentation 層) が
-        # tool_call_loop_guard.record_and_check() の戻り値
-        # (CrossTickFailureTrigger) を見て being_id を解決し、本 transcriber
-        # を呼ぶ (= loop_guard 自身は being 解決ロジックを持たない設計)。
-        # episode_store は build_episodic_stack が確定させた共有 store
-        # (subjective 未配線時も内部で新規生成されるため必ず非 None)。
-        runtime._structured_failure_transcriber = None
-        if _salience_structured_failure_enabled and belief_evidence_buffer_store is not None:
-            from ai_rpg_world.application.llm.services.structured_failure_evidence_transcriber import (
-                StructuredFailureEvidenceTranscriber,
-            )
-
-            runtime._structured_failure_transcriber = (
-                StructuredFailureEvidenceTranscriber(
-                    belief_evidence_buffer_store,
-                    runtime._episodic_stack.episode_store,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                    memory_turn_reader=runtime._memory_turn_clock,
-                )
-            )
-
         # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、
         # _todo_tool_executor が構築済なら post-hoc に差し込む。まだなら
         # _wire_auxiliary_tool_stack が組むときに適用する。executor 自身が memo_done
-        # 成功時に record_from_memo を呼ぶ (loop_guard 経由の STRUCTURED_FAILURE
-        # と異なり presentation 層の仲介は不要)。episode_store は
+        # 成功時に record_from_memo を呼ぶ。episode_store は
         # build_episodic_stack が確定させた共有 store。
         if _memo_distill_enabled and belief_evidence_buffer_store is not None:
             from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (

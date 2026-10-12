@@ -37,7 +37,6 @@ def _runtime():
         _SCENARIO_PATH,
         config=belief_consolidation_config(
             memo_distill_enabled=True,
-            salience_structured_failure_enabled=True,
         ),
     )
 
@@ -52,7 +51,7 @@ class TestMemoryTurnReaderWiring:
         assert isinstance(runtime._memory_turn_clock, MemoryTurnClock)
 
     def test_all_evidence_and_belief_makers_read_the_runtime_counter(self) -> None:
-        """固める処理・クラスタ昇格・予測の外れ・memo・同じ失敗の繰り返しの転記が、どれも runtime の数え手を読む。"""
+        """固める処理・クラスタ昇格・伝聞・memo の転記が、どれも runtime の数え手を読む。"""
         runtime = _runtime()
         counter = runtime._memory_turn_clock
         stack = runtime._episodic_stack
@@ -62,7 +61,6 @@ class TestMemoryTurnReaderWiring:
             "promotion": stack.episodic_semantic_promotion.memory_turn_reader,
             "hearsay": stack.chunk_coordinator._belief_evidence_transcriber._memory_turn_reader,
             "memo_distill": runtime._memo_distill_transcriber._memory_turn_reader,
-            "structured_failure": runtime._structured_failure_transcriber._memory_turn_reader,
         }
 
         assert {name: reader is counter for name, reader in readers.items()} == {

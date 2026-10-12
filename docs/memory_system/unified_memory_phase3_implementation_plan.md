@@ -94,6 +94,7 @@ R1 クリーン追試 n=2 ──成功率──> (低ければ PR-G 凍結解除
 - フラグ: 既定 OFF (`STATE_COLLAPSE_EVIDENCE_ENABLED` 仮)、R2 で ON — 第 2 期の慣例どおり
 - 試験: down 遷移 → evidence 1 件 (salience high) / 同一 tick 内の重複防止 / フラグ OFF で no-op
 - 撤去: 記憶の部品の撤去 (#1631) の #1642 で、書き起こしとフラグを消した
+- 撤去: 繰り返した失敗の書き起こし (`structured_failure_evidence_transcriber`) も #1646 で消した
 
 **PR-E: #621 系 down/revive trace event の欠落調査 → 修正** — **完了 (#710 マージ済み)**
 
