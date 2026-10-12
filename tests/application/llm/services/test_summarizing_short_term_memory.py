@@ -1251,3 +1251,59 @@ class TestGetOldestEntryDatetimeMixedTimezones:
         assert oldest is not None
         # UTC として比較した最古 (= naive 側を UTC 扱いした 06-01 00:00)
         assert oldest.replace(tzinfo=None) == datetime(2026, 6, 1)
+
+
+class TestRollingSummaryCompactionListener:
+    """SummarizingShortTermMemory が畳んだ範囲を、要約とは別に聞き手へ渡すことを保証する。"""
+
+    def test_listener_receives_exactly_the_compacted_entries(self) -> None:
+        """畳むとき、聞き手には畳んだ古いターンの出来事だけが、要約に渡すものと同じ並びで渡る。"""
+        received: list[tuple[PlayerId, list[str]]] = []
+        mem = SummarizingShortTermMemory(
+            turn_cap=4,
+            compact_turn_count=2,
+            on_compacted=lambda pid, entries: received.append(
+                (pid, [e.payload.output.prose for e in entries])
+            ),
+        )
+
+        for turn in range(4):
+            mem.append(_PID, _obs(f"turn-{turn}", seq=turn))
+            mem.complete_turn(_PID)
+
+        assert received == [(_PID, ["turn-0", "turn-1"])]
+
+    def test_listener_is_not_called_before_the_cap(self) -> None:
+        """ターン数が上限に届くまでは、聞き手を呼ばない。"""
+        received: list[object] = []
+        mem = SummarizingShortTermMemory(
+            turn_cap=4, compact_turn_count=2, on_compacted=lambda pid, entries: received.append(entries)
+        )
+
+        for turn in range(3):
+            mem.append(_PID, _obs(f"turn-{turn}", seq=turn))
+            mem.complete_turn(_PID)
+
+        assert received == []
+
+    def test_listener_failure_does_not_stop_the_summary(self) -> None:
+        """聞き手が例外を投げても、要約は作られ、complete_turn は例外を出さない。"""
+
+        def _broken(pid: PlayerId, entries: object) -> None:
+            raise RuntimeError("boom")
+
+        mem = SummarizingShortTermMemory(turn_cap=2, compact_turn_count=1, on_compacted=_broken)
+        mem.append(_PID, _obs("turn-0"))
+        mem.complete_turn(_PID)
+        mem.complete_turn(_PID)
+
+        assert len(mem._mid_generations(_PID.value)) == 1
+
+    def test_uncompacted_entries_include_the_open_turn(self) -> None:
+        """まだ畳んでいない分は、閉じたターンと、まだ閉じていないターンの出来事を古い順に含む。"""
+        mem = SummarizingShortTermMemory(turn_cap=4, compact_turn_count=2)
+        mem.append(_PID, _obs("closed"))
+        mem.complete_turn(_PID)
+        mem.append(_PID, _obs("open"))
+
+        assert [e.payload.output.prose for e in mem.uncompacted_entries(_PID)] == ["closed", "open"]
