@@ -115,6 +115,12 @@ class EpisodeNotFoundException(BeingDomainException, NotFoundException):
     error_code = "BEING.EPISODE_NOT_FOUND"
 
 
+class EpisodeWritingResponseException(BeingDomainException, ValidationException):
+    """エピソードの書き起こしの応答が、決めた形になっていない。"""
+
+    error_code = "BEING.EPISODE_WRITING_RESPONSE"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -128,4 +134,5 @@ __all__ = [
     "EpisodeConflictException",
     "EpisodeNotFoundException",
     "EpisodeValidationException",
+    "EpisodeWritingResponseException",
 ]

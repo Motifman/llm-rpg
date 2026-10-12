@@ -68,6 +68,9 @@ class _Runtime:
     def count_traveling_players(self) -> int:
         return 0
 
+    def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
+        return None
+
     def shutdown(self, *, timeout: float) -> None:
         return None
 

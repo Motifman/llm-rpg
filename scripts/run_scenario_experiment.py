@@ -1069,6 +1069,13 @@ def _drive_scenario(
         # 確実に元に戻った状態でここに到達する (= main() 以降の Ctrl+C は
         # 通常通り KeyboardInterrupt を raise する)。
 
+        # #1626: 環境を離れるので、まだ畳まれていない出来事からエピソードを書く。
+        # 書いたエピソードを snapshot に入れるため、保存より前に置く。LLM が使えずに
+        # 終わった run では、呼んでも失敗が並ぶだけなので書かずに理由を残す。
+        runtime.write_episodes_on_leaving(
+            skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None
+        )
+
         # Phase 6: snapshot save。**runtime.shutdown より前** に行う理由:
         # async LLM scheduler の drain が終わると episode_store に最後の
         # 主観文 episode が書き込まれる可能性があるが、その後に capture
