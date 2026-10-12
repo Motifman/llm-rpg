@@ -6200,7 +6200,7 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 **関連**: design_decisions 27 (per-Being store の snapshot 配線) / Issue #1436 / #1440 (配信と配り直し)。
 
 **その後**: 記憶のターン数は、予期の保存先から Being 側の時計 (`MemoryTurnClock`、
-`being/domain/memory_turn_clock.py`) に移した (Issue #1631)。古い記憶の部品を消すと予期も消える
+`being/domain/memory_turn_clock.py`) に移した (Issue #1631、PR #1643)。古い記憶の部品を消すと予期も消える
 が、ターン数は新しい記憶 (エピソードの書き起こし、目次、メモ帳、知り合いの記録) も読むため。
 snapshot のキー `memory_turn` は変えていない。予期の保存先は、復元のときに一緒に戻すターン数を
 `require_restorable` で確かめるためだけに受け取り、持たない。
