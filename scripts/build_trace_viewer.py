@@ -1727,6 +1727,7 @@ def _event_timeline_category(e: TraceEvent) -> str:
         "SIDE_HANDLER_FAILED",
         "llm_call",
         TraceEventKind.LLM_FAILURE_RETRY,
+        TraceEventKind.OWN_ACTION_FOLLOW_UP,
         "snapshot_save",
         "snapshot_load",
         "world_snapshot_save",

@@ -667,6 +667,21 @@ class TestFormatEventBody:
         assert "rescheduled=False" in out
         assert _event_timeline_category(e) == "system"
 
+    def test_own_action_follow_up_is_system_and_shows_why(self) -> None:
+        """own_action_follow_up は失敗の回し直しと同じシステムに分類され、次の tick に回したかとその理由を表示する (#1597)。"""
+        e = TraceEvent(
+            seq=1,
+            timestamp="t",
+            kind=TraceEventKind.OWN_ACTION_FOLLOW_UP,
+            tick=31,
+            player_id=1,
+            payload={"rescheduled": False, "reason": "rest_chosen"},
+        )
+        out = _format_event_body(e)
+        assert "rescheduled=False" in out
+        assert "reason=rest_chosen" in out
+        assert _event_timeline_category(e) == "system"
+
     def test_situation_belief_recall_with_empty_query_says_it_was_not_searched(self) -> None:
         """問い合わせ文が空の situation_belief_recall は、一致 0 件ではなく、検索しなかったことを表示する。"""
         e = TraceEvent(
