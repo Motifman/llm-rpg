@@ -9,9 +9,9 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from tests.runtime_config_helpers import runtime_config
 
 from ai_rpg_world.application.trace import TraceEventKind
-from tests.runtime_config_helpers import runtime_config
 
 _REPO = Path(__file__).resolve().parents[3]
 _SCENARIO = _REPO / "data" / "scenarios" / "forbidden_library_demo.json"
