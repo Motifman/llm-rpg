@@ -7857,3 +7857,25 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 記憶の欄やツールの名前をシステムプロンプトやツールの説明に書くときは、その欄やツールが出ているかを見て書き分ける。`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` が、全部入りの profile から記憶の部品を 1 つずつ止め、1 ターン目のシステムプロンプト・user 文面・ツール定義のどこにも名前が出ないことを見る。正の対照として、全部入りでどの名前が出るかも固定している。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` と違って、名前の表はツールの一覧から自動では作らない。記憶の欄やツールを足したら、`_ALL_NAMES` と `_DISABLED_PARTS` に足す。
 
 **関連**: Issue #1616 / #1587 / #1621、design_decisions 1 / 44。
+
+---
+
+## D1623. 目次つきのエピソードは、ゲームから切り離した別の型で持ち、呼び名は重なったときに新しい側だけを伸ばす
+
+**何を**:
+
+- `being/domain/episode.py` に `Episode` (1 件で集約の根) と `EpisodeIndex` (目次の値)、`IndexRevision` (直す前の目次と直したターン) を置く。今の `SubjectiveEpisode` とは別の型で、場所・人・物の番号も、持ち主の `BeingId` も持たない。持ち主は保存の側 (`EpisodeRepository`) が Being ごとに分ける
+- 本文は 400 字まで、目次の 2 つの文は 40 字まで、どれも空や空白だけは不可。超えた文はドメイン層が受け付けず `EpisodeValidationException` を投げる。切り詰めはアプリケーション層の仕事にする (Issue #1623 の決めたこと)
+- 本文は作ったあと変えない (`frozen`)。目次を直すと、前の版を直したターンと一緒に `index_history` に足す。呼び出すと回数が 1 増え、最後に呼び出したターンが記録される。ターンはどれも Being の記憶のターン数で、戻ることは許さない
+- 目次に載せる分の選び方は `EpisodeIndexSelection` (一覧と N を受け取り、表示する順に返す) で、最初の実装は書いた時の新しい順 (`NewestFirst`)。同じターンなら後から足した方を先に出す
+- `InMemoryEpisodeRepository` を足し、`BeingMemorySnapshotService` の `being_episodes` に配線した (design_decisions 27 の 4 手順)。`WorldRuntime._being_episode_store` が常に持ち、`ExperimentSnapshotSession` では必須の store にした。SQLite の実装は作っていない。手本の知り合いの記録も in-memory だけで、Being の記憶は snapshot で持ち越すため
+
+**呼び名を ID だけから毎回作らない理由**: 呼び名は `ep_` と ID (区切りの `-` を除いた 16 進) の先頭 6 文字で、同じ Being の中で重なったら 1 文字ずつ伸ばす。伸ばすのは後から足した側だけにした。前からある側も伸ばすと、プロンプトの履歴に残った `ep_3f2a7b` が指す先が変わる (design_decisions 3 のラベルが変わって混乱した問題と同じ形)。どちらが後かは足した順で決まり、ID だけでは決まらない。そこで呼び名をエピソードに持たせ、snapshot にもそのまま入れる。読み込むときは ID から作り直さず、呼び名の無い payload は拒む。作り直すと、伸ばした呼び名が 6 文字に戻り、前からある呼び名と重なる。エピソードの側では「呼び名は `ep_` + ID の先頭 6 文字以上」だけを不変条件として確かめる。Issue #1623 は「今の `afterglow_store.py` と同じ作り方」と書いているが、今の `make_afterglow_handle` は常に 6 文字で伸ばさない。重なりは引くときに新しい方を選んで済ませている
+
+**ID を UUID に限る理由**: 呼び名を作る文字を 16 進に揃えるため。大文字の UUID も拒む。同じ ID から大文字と小文字の 2 通りの呼び名ができないようにするため
+
+**例外の合わせ方**: 手本の `acquaintance.py` は `AcquaintanceInvalid(ValueError)` を投げているが、CLAUDE.md の「ドメイン層では組み込み例外ではなくドメイン例外を投げる」に合わない。エピソードは `domain/being/exception/being_exceptions.py` に `EpisodeValidationException` / `EpisodeConflictException` / `EpisodeNotFoundException` を足し、`BeingDomainException` とカテゴリ例外の多重継承にした。snapshot の codec では、予期の codec と同じく `DomainException` を `ValueError` に包み、`BeingMemoryPayloadFormatError` として見せる。`acquaintance.py` はこの PR では直していない
+
+**どうしないと壊れるか**: 呼び名の長さを ID から計算し直す処理を足すと、読み込み直したあとに呼び名が別の記録を指す。呼び名を扱う処理は、エピソードが持つ `handle` を使う。エピソードを足すときは、その Being がもう使っている呼び名を `Episode.write(taken_handles=...)` に渡す。渡し忘れると `add` が `EpisodeConflictException` で止める
+
+**関連**: Issue #1623 / #1621、design_decisions 3 / 27、design_decisions D1520 (知り合いの記録)。
