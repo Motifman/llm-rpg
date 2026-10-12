@@ -756,6 +756,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         )
         episode_index_text = self._call_text_provider(
             self._episode_index_text_provider, player_id, "episode_index_text_provider"
+        )
         being_memo_text = self._call_text_provider(
             self._being_memo_text_provider, player_id, "being_memo_text_provider"
         )
