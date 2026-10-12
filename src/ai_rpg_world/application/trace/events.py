@@ -327,18 +327,6 @@ class TraceEventKind:
     # payload: cue_id / player_id / spot_id / direction / distance_band /
     # schedules_turn
     DISTANT_CUE_DELIVERED = "distant_cue_delivered"
-    # 案A (band-gated thinking): 停滞感 band が strong の局面で、停滞 reflect の
-    # 注入直後の行動に限り reasoning (熟考) を有効化した瞬間。「いつ・なぜ熟考を
-    # 焚いたか」を trace から追えるようにする (tool-calling 経路では思考本文は
-    # 返らないので、この event と同 tick の LLM metrics の reasoning_tokens を
-    # 突き合わせて「どれだけ熟考したか」を見る)。
-    # payload:
-    #   - player_id: int
-    #   - being_id: str | None
-    #   - band: str (発火時の停滞感 band。基本 "strong")
-    #   - effort: str (開いた reasoning 予算。例 "low")
-    #   - trigger: str (発火契機。"fresh_reflect")
-    AGENT_REASONING_ENGAGED = "agent_reasoning_engaged"
     # reason-first 2段階ターン: 行動前評価を named tool_call で先に取り、
     # その評価を行動 tool 引数へ内部注入してから実行する経路の観測点。
     # STARTED: 2段階経路を開始した瞬間。

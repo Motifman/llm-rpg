@@ -720,7 +720,7 @@ class BeliefConsolidationCoordinator:
         except Exception:
             # 敵対的レビュー LOW: これは案1 の効果測定用 trace なので、記録失敗を
             # debug で握ると穴が見えにくい。turn/buffer 追記は壊さないが warning で
-            # 気づけるようにする (AGENT_REASONING_ENGAGED の握りと方針を揃える)。
+            # 気づけるようにする。
             _logger.warning(
                 "trace recorder.record raised for BELIEF_EVIDENCE "
                 "(goal stagnation); skipping",
