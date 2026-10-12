@@ -1274,13 +1274,21 @@ def _sum_or_unavailable(values: list[Any], *, money: bool) -> str:
     return f"{shown} + 取れない {missing} 回" if missing else shown
 
 
+def _billable(payload: Mapping[str, Any], key: str) -> bool:
+    """応答が届かず失敗した回は値が無くて当然なので、「取れない」に数えない。"""
+    return bool(payload.get("success")) or payload.get(key) is not None
+
+
 def _llm_cost_row(label: str, calls: list[Any]) -> str:
     payloads = [e.payload for e in calls]
     failures = sum(1 for p in payloads if not p.get("success"))
     latency_sec = sum(int(p.get("wall_latency_ms") or 0) for p in payloads) / 1000.0
-    prompt = _sum_or_unavailable([p.get("prompt_tokens") for p in payloads], money=False)
-    completion = _sum_or_unavailable([p.get("completion_tokens") for p in payloads], money=False)
-    cost = _sum_or_unavailable([p.get("cost_usd") for p in payloads], money=True)
+    prompt, completion, cost = (
+        _sum_or_unavailable(
+            [p.get(key) for p in payloads if _billable(p, key)], money=key == "cost_usd"
+        )
+        for key in ("prompt_tokens", "completion_tokens", "cost_usd")
+    )
     return (
         f"| {label} | {len(payloads)} | {failures} | {prompt} | {completion} | "
         f"{cost} | {latency_sec:.1f} |"
@@ -1298,7 +1306,11 @@ def _llm_cost_header_line(llm_calls: list[Any], aux_calls: list[Any]) -> str:
         f"- 費用 (取れた分の合計): ${action_cost + aux_cost:.4f} = "
         f"行動 ${action_cost:.4f} + 記憶の部品と Jev ${aux_cost:.4f}"
     )
-    missing = sum(1 for e in llm_calls + aux_calls if e.payload.get("cost_usd") is None)
+    missing = sum(
+        1
+        for e in llm_calls + aux_calls
+        if e.payload.get("cost_usd") is None and _billable(e.payload, "cost_usd")
+    )
     return f"{line}。費用が取れない呼び出し {missing} 回" if missing else line
 
 

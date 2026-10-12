@@ -1049,7 +1049,10 @@ class LiteLLMClient(
         if self._aux_call_sink is None:
             return
         try:
-            prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
+            tokens: tuple[int | None, int | None, int | None] = (None, None, None)
+            if getattr(response, "usage", None) is not None:
+                tokens = self._extract_token_usage(response)
+            prompt_tokens, completion_tokens, cached_tokens = tokens
             self._aux_call_sink.record(
                 AuxLlmCall(
                     component=component,

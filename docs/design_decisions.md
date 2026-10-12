@@ -8020,9 +8020,11 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **`llm_call` に混ぜない理由**: 混ぜると、行動の費用と記憶の費用が分けられない。さらに `llm_call` は連続失敗で run を止める監視 (`LlmMetricsTraceSink._notify_failure_monitor`) と progress の呼び出し数に数えられている。記憶の部品の失敗で run が止まるのは、この Issue の「記録の失敗で run を止めない」に反する
 
-**応答に無い値を None にする理由**: Jev の Decisions endpoint は課金額もトークン数も返さない (`docs/experiments/issue_1429_candidate_table_comparison.md`)。0 で埋めると、report で「無料だった」と読める。LiteLLM の記憶の部品も、`usage.cost` が無ければ None にする (OpenAI 直結や vLLM)。report は取れた分だけを足し、取れなかった回数を添える。行動の `llm_call` は今の決まりのまま 0.0 で残すので、表の説明文にそう書いた
+**応答に無い値を None にする理由**: Jev の Decisions endpoint は課金額もトークン数も返さない (`docs/experiments/issue_1429_candidate_table_comparison.md`)。0 で埋めると、report で「無料だった」と読める。LiteLLM の記憶の部品も、`usage.cost` が無ければ費用を None に、`usage` そのものが無ければトークン数も None にする (OpenAI 直結や vLLM)。report は取れた分だけを足し、取れなかった回数を添える。ただし応答が届かず失敗した回は、値が無くて当然なので「取れない」に数えない。課金されていない回と、課金額が分からない回を混ぜないため。行動の `llm_call` は今の決まりのまま 0.0 で残すので、表の説明文にそう書いた
 
-**記録の失敗**: sink の例外は呼び出し側 (`LiteLLMClient` / Jev アダプタ) が握り、記憶の部品の結果は変えない。trace への書き込みが失敗したら、部品名と例外の型だけの `aux_llm_call_record_failed` を書く。report はその回数を「記録できなかった呼び出し」として表の外に出す
+**記録の失敗**: sink の例外は呼び出し側 (`LiteLLMClient` / Jev アダプタ) が握り、記憶の部品の結果は変えない。trace への書き込みが失敗したら、部品名と例外の型だけの `aux_llm_call_record_failed` を書く。report はその回数を「記録できなかった呼び出し」として表の外に出す。recorder が差し込まれる前の呼び出しは、どちらも残らない。今は run の開始前に記憶の部品を呼ぶ経路は無い
+
+**trace viewer**: `aux_llm_call` は `llm_call` と同じく性能計測なので、イベントログからは隠す。`aux_llm_call_record_failed` は隠さない
 
 **player_id を残さない理由**: 記憶の部品の入口 (completion port) は誰のための呼び出しかを受け取らない。部品ごとの費用を比べる目的には部品名で足りる。誰の呼び出しかが要るときは、同じ tick の `short_term_summary_generated` や `episode_writing` などの部品側の trace と突き合わせる
 

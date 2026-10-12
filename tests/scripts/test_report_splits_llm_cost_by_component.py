@@ -155,6 +155,21 @@ class TestUnavailableCostIsNotShownAsZero:
         ) in lines
 
 
+    def test_failed_call_without_response_is_not_counted_as_unavailable(self, tmp_path: Path) -> None:
+        """応答が届かず失敗した呼び出しは、費用が無くても「取れない」に数えない (課金されていない回と、課金額が分からない回を混ぜない)。"""
+        lines = _report(
+            tmp_path,
+            [
+                _action(success=True, prompt=1, completion=1, cost=0.003, latency_ms=1),
+                _aux("episode_writing", prompt=10, completion=5, cost=0.001, latency_ms=1000),
+                _aux("episode_writing", success=False, prompt=None, completion=None, cost=None, latency_ms=500),
+            ],
+        )
+
+        assert "| エピソードの書き起こし (episode_writing) | 2 | 1 | 10 | 5 | $0.0010 | 1.5 |" in lines
+        assert "- 費用 (取れた分の合計): $0.0040 = 行動 $0.0030 + 記憶の部品と Jev $0.0010" in lines
+
+
 class TestMissingRecordsAreVisible:
     """記録できなかった呼び出しと、呼び出しが無かったことが report から読めることを保証する。"""
 

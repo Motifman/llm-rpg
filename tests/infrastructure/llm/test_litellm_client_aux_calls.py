@@ -118,6 +118,18 @@ class TestEachComponentLeavesOneRecord:
         assert sink.calls[0].cost_usd is None
 
 
+    def test_response_without_usage_records_tokens_as_none_not_zero(self) -> None:
+        """応答に usage が無いとき、トークン数は 0 ではなく None で残る (usage を返さない provider で 0 トークンと読ませない)。"""
+        sink = _Sink()
+        client = _client(sink)
+        with patch(_LITELLM) as m_litellm:
+            m_litellm.completion.return_value = _response('{"ok": true}', usage=None)
+            client.complete_short_term_summary_json([{"role": "user", "content": "x"}])
+
+        call = sink.calls[0]
+        assert (call.prompt_tokens, call.completion_tokens, call.cached_tokens) == (None, None, None)
+
+
 class TestFailedCallsAreRecordedToo:
     """失敗した呼び出しも記録に残し、呼び出し元への例外は変えないことを保証する。"""
 
@@ -135,6 +147,7 @@ class TestFailedCallsAreRecordedToo:
         assert call.component is AuxLlmComponent.EPISODE_WRITING
         assert call.success is False
         assert call.error_code == exc_info.value.error_code == "LLM_API_CALL_FAILED"
+        assert (call.prompt_tokens, call.cost_usd) == (None, None)
 
     def test_invalid_json_records_failure_with_tokens_already_spent(self) -> None:
         """応答が JSON でないとき、success=False と error_code に加え、使ったトークンと費用も残す。"""
