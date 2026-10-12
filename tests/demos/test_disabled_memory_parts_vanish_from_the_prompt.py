@@ -51,7 +51,6 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "BELIEF_EVIDENCE_ENABLED": "true",
     "EPISODIC_RECALL_ENABLED": "true",
     "ERROR_DRIVEN_REINTERPRETATION_ENABLED": "true",
-    "EXPECTATION_ARGUMENT_ENABLED": "true",
     "EXPECTATION_SETTLEMENT_ENABLED": "true",
     "GOAL_REFLECT_ENABLED": "true",
     "GOAL_REVISION_ENABLED": "true",
@@ -134,9 +133,13 @@ _ALL_NAMES = (
 #: メモ帳は今のメモの道具と並べられない (設定で止める) ので、全部入りには入らない。
 #: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
 #: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
+#:
+#: 予期の引数 ``expectations`` は #1631 で消したので、全部入りでも出ない。名前の表に
+#: 残し、どの組み合わせでもプロンプトに戻ってこないことを見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _LEARNED,
     _PENDING_PREDICTIONS,
+    _EXPECTATIONS,
     *_MEMO_BOOK_NAMES,
     _MEMO_EPISODE_SOURCE,
 }
@@ -194,11 +197,6 @@ _DISABLED_PARTS = [
         {"PENDING_PREDICTION_ENABLED": "false"},
         (_PENDING_PREDICTIONS,),
         id="pending_predictions",
-    ),
-    pytest.param(
-        {"EXPECTATION_ARGUMENT_ENABLED": "false"},
-        (_EXPECTATIONS,),
-        id="expectations",
     ),
 ]
 

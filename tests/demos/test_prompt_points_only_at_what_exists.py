@@ -55,7 +55,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    EXPECTATIONS_FIELD_NAME,
     GOAL_OUTCOME_FIELD_NAME,
     GOAL_UPDATE_FIELD_NAME,
     SUBJECTIVE_ACTION_FIELD_PROPERTIES,
@@ -134,7 +133,7 @@ def _property_names(schema: Any) -> set[str]:
 def _argument_names_the_code_knows() -> set[str]:
     """どこかのツールが受け取りうる引数の名前。いま渡しているかは問わない。"""
     names = set(SUBJECTIVE_ACTION_FIELD_PROPERTIES)
-    names |= {GOAL_UPDATE_FIELD_NAME, GOAL_OUTCOME_FIELD_NAME, EXPECTATIONS_FIELD_NAME}
+    names |= {GOAL_UPDATE_FIELD_NAME, GOAL_OUTCOME_FIELD_NAME}
     names |= _property_names(assess_situation_definition().parameters)
     for definition, _ in get_spot_graph_specs():
         names |= _property_names(definition.parameters)
