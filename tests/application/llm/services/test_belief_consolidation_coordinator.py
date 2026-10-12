@@ -100,7 +100,6 @@ def _build_setup(
     completion: Any = _UNSET,
     belief_attribution_enabled: bool = False,
     goal_reflect_enabled: bool = False,
-    hearsay_enabled: bool = False,
     expectation_what_happened_enabled: bool = False,
     objective_text_provider: Any = None,
     reflect_observation_sink: Any = None,
@@ -135,7 +134,6 @@ def _build_setup(
         high_salience_batch_cap=high_salience_batch_cap,
         belief_attribution_enabled=belief_attribution_enabled,
         goal_reflect_enabled=goal_reflect_enabled,
-        hearsay_enabled=hearsay_enabled,
         expectation_what_happened_enabled=expectation_what_happened_enabled,
         objective_text_provider=objective_text_provider,
         reflect_observation_sink=reflect_observation_sink,
@@ -2070,7 +2068,6 @@ class TestHearsaySupportWeightApplication:
                     }
                 ]
             },
-            hearsay_enabled=True,
         )
         setup.evidence_buffer.append_by_being(
             setup.being_id,
@@ -2107,7 +2104,6 @@ class TestHearsaySupportWeightApplication:
                     {"action": "strengthen", "belief_id": "sem-b", "evidence_ids": ["e1"]}
                 ]
             },
-            hearsay_enabled=True,
         )
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(
@@ -2158,7 +2154,6 @@ class TestHearsayWeightPreservedOnReviseContradict:
                     }
                 ]
             },
-            hearsay_enabled=True,
         )
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
@@ -2183,7 +2178,6 @@ class TestHearsayWeightPreservedOnReviseContradict:
                     {"action": "contradict", "belief_id": "sem-d", "evidence_ids": ["e1"]}
                 ]
             },
-            hearsay_enabled=True,
         )
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
@@ -2195,72 +2189,17 @@ class TestHearsayWeightPreservedOnReviseContradict:
         assert updated.confidence == pytest.approx(compute_belief_confidence(4, 1, 0, 4))
 
 
-class TestHearsaySpeakerShortlist:
-    """P10: 伝聞 evidence の話者 (source_speaker) についての人物 belief が、cue
-    スコアに関わらず必ず shortlist に載ること (話者を信じるかの判断材料)。"""
+class TestHearsayLeftInTheBuffer:
+    """伝聞の部品を消したあと (#1631)、古い snapshot から読んだ HEARSAY evidence が buffer に残っていても、話者を特別扱いしないことを保証する。"""
 
-    def test_speaker_belief_is_forced_into_shortlist(self) -> None:
-        """cue が話者と無関係でも、話者名が text/tags に現れる人物 belief は
-        shortlist に強制搭載される。"""
+    def test_speaker_belief_is_not_forced_into_shortlist(self) -> None:
+        """batch に話者付きの HEARSAY evidence があっても、話者名を含む belief は cue が一致しなければ shortlist に載らない。"""
         speaker_belief = _belief_entry(
             entry_id="sem-rio",
             text="リオは人の話をちゃんと聞かない",
             tags=("リオ",),
         )
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=True)
-        setup.semantic_store.add_by_being(setup.being_id, speaker_belief)
-        setup.evidence_buffer.append_by_being(
-            setup.being_id,
-            _evidence(
-                "e1",
-                cue_signature="spot:12",  # 話者と無関係な cue
-                source_kind=BeliefEvidenceSourceKind.HEARSAY,
-                source_speaker="リオ",
-            ),
-        )
-
-        shortlist = setup.coordinator._build_shortlist(
-            setup.being_id,
-            tuple(setup.evidence_buffer.list_all_by_being(setup.being_id)),
-        )
-
-        assert "sem-rio" in {b.belief_id for b in shortlist}
-
-    def test_non_speaker_belief_forced(self) -> None:
-        """話者名を含まない belief は (cue も一致しなければ) 強制搭載されない。"""
-        other = _belief_entry(
-            entry_id="sem-other",
-            text="エイダは頼りになる",
-            tags=("エイダ",),
-        )
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=True)
-        setup.semantic_store.add_by_being(setup.being_id, other)
-        setup.evidence_buffer.append_by_being(
-            setup.being_id,
-            _evidence(
-                "e1",
-                cue_signature="spot:12",
-                source_kind=BeliefEvidenceSourceKind.HEARSAY,
-                source_speaker="リオ",
-            ),
-        )
-
-        shortlist = setup.coordinator._build_shortlist(
-            setup.being_id,
-            tuple(setup.evidence_buffer.list_all_by_being(setup.being_id)),
-        )
-
-        assert "sem-other" not in {b.belief_id for b in shortlist}
-
-    def test_speaker_belief_forced_when_flag_off(self) -> None:
-        """flag OFF なら、batch に HEARSAY evidence が残留していても話者強制は
-        発火しない (flag OFF = pre-P10 挙動一致を batch 残留物に依存せず保証)。"""
-        speaker_belief = _belief_entry(
-            entry_id="sem-rio",
-            text="リオは人の話をちゃんと聞かない",
-            tags=("リオ",),
-        )
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
+        setup = _build_setup(outcome={"decisions": []})
         setup.semantic_store.add_by_being(setup.being_id, speaker_belief)
         setup.evidence_buffer.append_by_being(
             setup.being_id,
@@ -2279,14 +2218,9 @@ class TestHearsaySpeakerShortlist:
 
         assert "sem-rio" not in {b.belief_id for b in shortlist}
 
-
-class TestSystemPromptHearsayGating:
-    """P10: 伝聞節の system prompt 追記が hearsay_enabled に連動すること
-    (OFF なら pre-P10 と byte 一致)。"""
-
-    def test_hearsay_section_absent_when_flag_off(self) -> None:
-        """flag OFF なら伝聞節が system prompt に出ない。"""
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
+    def test_system_prompt_has_no_hearsay_section(self) -> None:
+        """固着の system prompt に伝聞節が出ない。"""
+        setup = _build_setup(outcome={"decisions": []})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
         setup.coordinator.flush_player(setup.player_id, setup.being_id)
@@ -2294,81 +2228,6 @@ class TestSystemPromptHearsayGating:
         system_message = setup.port.calls[0][0]["content"]
         assert "hearsay" not in system_message
         assert "伝聞" not in system_message
-
-    def test_hearsay_section_present_when_flag_on(self) -> None:
-        """flag ON なら伝聞節が system prompt に出る。"""
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=True)
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        system_message = setup.port.calls[0][0]["content"]
-        assert "hearsay" in system_message
-        assert "伝聞" in system_message
-
-    def test_system_prompt_byte_identical_pre_p10_when_flag_off(self) -> None:
-        """flag OFF のとき system prompt が pre-P10 定数と byte 一致する。"""
-        from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
-            _SYSTEM_BELIEF_CONSOLIDATION_JSON,
-        )
-
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        system_message = setup.port.calls[0][0]["content"]
-        assert system_message == _SYSTEM_BELIEF_CONSOLIDATION_JSON
-
-
-class TestHearsayEvidencePayloadSpeaker:
-    """P10 回帰: evidence payload に source_speaker が載ること。
-
-    _HEARSAY_INSTRUCTION は「source_speaker がその話者」と LLM に約束しているが、
-    配線 (_build_messages) が実際にそのキーを渡していないと、話者ごとの文脈信頼
-    判断が構造的に不可能になる (予測誤差記憶システムの横断レビュー C-1)。
-    """
-
-    def test_hearsay_evidence_payload_includes_source_speaker(self) -> None:
-        """HEARSAY evidence (source_speaker="リオ") を含む batch を flush すると、
-        completion port に渡る user メッセージの JSON に
-        ``"source_speaker": "リオ"`` が含まれる。"""
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=True)
-        setup.evidence_buffer.append_by_being(
-            setup.being_id,
-            _evidence(
-                "e1",
-                source_kind=BeliefEvidenceSourceKind.HEARSAY,
-                source_speaker="リオ",
-            ),
-        )
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        user_message = setup.port.calls[0][1]["content"]
-        payload = json.loads(user_message.split("\n", 1)[1])
-        evidence_payload = payload["evidence"][0]
-        assert evidence_payload["source_speaker"] == "リオ"
-
-    def test_non_hearsay_evidence_payload_omits_source_speaker_key(self) -> None:
-        """source_speaker を持たない (None の) evidence では、payload に
-        ``source_speaker`` キー自体が載らない (ノイズを避けるため非 None のときだけ
-        条件付きで足す)。"""
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=True)
-        setup.evidence_buffer.append_by_being(
-            setup.being_id,
-            _evidence(
-                "e1",
-                source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR,
-            ),
-        )
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        user_message = setup.port.calls[0][1]["content"]
-        payload = json.loads(user_message.split("\n", 1)[1])
-        evidence_payload = payload["evidence"][0]
-        assert "source_speaker" not in evidence_payload
 
 
 class TestMissWhatHappenedReachesConsolidation:
@@ -2716,9 +2575,9 @@ class TestHeardGuessesStayGuesses:
             )
         return setup
 
-    def test_system_prompt_keeps_speculative_wording_even_without_hearsay(self) -> None:
-        """伝聞が無効でも、材料が推測の言い方なら命題も推測の言い方で書き、推測をいくつ集めても言い切りにしない、という決まりがシステムプロンプトに入る。"""
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
+    def test_system_prompt_keeps_speculative_wording(self) -> None:
+        """材料が推測の言い方なら命題も推測の言い方で書き、推測をいくつ集めても言い切りにしない、という決まりがシステムプロンプトに入る。"""
+        setup = _build_setup(outcome={"decisions": []})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
         setup.coordinator.flush_player(setup.player_id, setup.being_id)
@@ -2727,48 +2586,9 @@ class TestHeardGuessesStayGuesses:
         assert "命題も推測の言い方で書く" in system
         assert "推測の evidence をいくつまとめても言い切りにしない" in system
 
-    def test_hearsay_section_asks_to_keep_the_speaker_when_only_hearsay(self) -> None:
-        """伝聞が有効なら、伝聞だけを材料に命題を書くときは話し手を残す、という決まりがシステムプロンプトに入る。"""
-        setup = self._sayo_t34(hearsay_enabled=True)
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        system = setup.port.calls[0][0]["content"]
-        assert "材料が伝聞だけなら、命題に話し手を残す" in system
-
-    def test_hearsay_section_excludes_hearsay_from_hedge_removal(self) -> None:
-        """伝聞が有効なら、ヘッジを外すかを決める支持の件数から伝聞を除く、という決まりがシステムプロンプトに入る。"""
-        setup = self._sayo_t34(hearsay_enabled=True)
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        system = setup.port.calls[0][0]["content"]
-        assert "数える支持から hearsay_support_count の分を除く" in system
-
-    def test_shortlist_carries_hearsay_support_count_when_hearsay_enabled(self) -> None:
-        """伝聞が有効なら、shortlist の各信念に支持のうち伝聞の件数 hearsay_support_count が載る。"""
-        setup = self._sayo_t34(hearsay_enabled=True)
-        setup.semantic_store.add_by_being(
-            setup.being_id,
-            _belief_entry(
-                entry_id="sem-lift",
-                text="ミオによれば昇降機は鍵だけでは動かないかもしれない",
-                tags=("ミオ",),
-                support=("s1", "s2", "s3"),
-                hearsay_support_count=2,
-            ),
-        )
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        user = json.loads(setup.port.calls[0][1]["content"].split("\n", 1)[1])
-        by_id = {b["belief_id"]: b for b in user["shortlist"]}
-        assert by_id["sem-lift"]["support_count"] == 3
-        assert by_id["sem-lift"]["hearsay_support_count"] == 2
-
-    def test_shortlist_omits_hearsay_support_count_when_hearsay_disabled(self) -> None:
-        """伝聞が無効なら、shortlist に hearsay_support_count のキーを載せない。説明していない欄を渡さない。"""
-        setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
+    def test_shortlist_omits_hearsay_support_count(self) -> None:
+        """shortlist に hearsay_support_count のキーを載せない。説明していない欄を渡さない。"""
+        setup = _build_setup(outcome={"decisions": []})
         setup.semantic_store.add_by_being(
             setup.being_id, _belief_entry(entry_id="sem-x", support=("s1",))
         )
@@ -2780,28 +2600,13 @@ class TestHeardGuessesStayGuesses:
         assert user["shortlist"]
         assert all("hearsay_support_count" not in b for b in user["shortlist"])
 
-    def test_sayo_t34_hearsay_reaches_llm_with_speaker_and_wording(self) -> None:
-        """サヨの T34 の材料 4 件は、推測の言い方を残した文のまま、伝聞であることと話し手ミオを添えて LLM に渡る。"""
-        setup = self._sayo_t34(hearsay_enabled=True)
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        user = json.loads(setup.port.calls[0][1]["content"].split("\n", 1)[1])
-        sent = {
-            e["evidence_id"]: (e["text"], e["source_kind"], e["source_speaker"])
-            for e in user["evidence"]
-        }
-        assert sent == {
-            eid: (text, "hearsay", "ミオ") for eid, text in self._SAYO_T34_HEARSAY
-        }
-
     def test_sayo_t34_belief_written_as_fact_is_shown_as_heard(self) -> None:
         """LLM がサヨの T34 の材料から言い切りの信念を作っても、【関連する学び】の行には「(人から聞いた話)」が付く。"""
         from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
             belief_recall_line,
         )
 
-        setup = self._sayo_t34(hearsay_enabled=True)
+        setup = self._sayo_t34()
 
         setup.coordinator.flush_player(setup.player_id, setup.being_id)
 

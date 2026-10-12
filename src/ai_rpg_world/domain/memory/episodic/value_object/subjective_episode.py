@@ -35,9 +35,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import (
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import (
     EpisodicCue,
 )
-from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import (
-    HeardClaim,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPredictionDraft,
     PendingResolutionVerdict,
@@ -106,11 +103,6 @@ class SubjectiveEpisode:
     # chunk 完了点で PENDING_RESOLUTION evidence に転記し store から除いた後は
     # 用済みになる。snapshot / codec には含めない (復元時は常に空タプル)。
     pending_resolution_verdicts: tuple[PendingResolutionVerdict, ...] = ()
-    # P9 (伝聞): chunk 主観補完 LLM が「この期間に他者が語った、世界や人に
-    # ついての主張」を抽出した結果。pending_prediction_draft と同じ **一時的な
-    # スクラッチフィールド** で、chunk 完了点で HEARSAY evidence に転記した後は
-    # 用済みになる。snapshot / codec には含めない (復元時は常に空タプル)。
-    heard_claims: tuple[HeardClaim, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):
@@ -195,12 +187,6 @@ class SubjectiveEpisode:
                 raise TypeError(
                     f"pending_resolution_verdicts[{idx}] must be PendingResolutionVerdict"
                 )
-
-        if not isinstance(self.heard_claims, tuple):
-            raise TypeError("heard_claims must be tuple[HeardClaim, ...]")
-        for idx, claim in enumerate(self.heard_claims):
-            if not isinstance(claim, HeardClaim):
-                raise TypeError(f"heard_claims[{idx}] must be HeardClaim")
 
 
 __all__ = ["SubjectiveEpisode"]

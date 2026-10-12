@@ -75,7 +75,7 @@ DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.WRITE_PLAYER_TEXT: EffectVisibility.PUBLIC_OBSERVABLE,
     # 看板を読む行為そのものは他者に観測されない (SHOW_MESSAGE と同じ扱い)。
     # 読んだ内容を他者に広めるかどうかは、読んだ本人が speech で発話するかに
-    # 委ねる (= 伝聞抽出の入口は speech 側であり、この effect ではない)。
+    # 委ねる。
     InteractionEffectTypeEnum.SHOW_PLAYER_TEXT: EffectVisibility.ACTOR_DIRECT,
 }
 

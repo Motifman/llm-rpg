@@ -65,9 +65,6 @@ from ai_rpg_world.application.llm.services.belief_create_gate import (
     BeliefCreateReview,
 )
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
-    belief_matches_cue_tokens as _shared_belief_matches_cue_tokens,
-)
-from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_goal_stagnation_cue_signature as _build_goal_stagnation_cue_signature,
 )
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
@@ -275,32 +272,6 @@ reflect は belief を作らない (意識に「気づき」を返すだけ)。�
 - どの判断も確信が持てない"""
 
 
-# P10 (伝聞の固着判断): HEARSAY_ENABLED が ON のときだけ足す節。伝聞 evidence
-# (source_kind が "hearsay") は他の evidence と同列に batch に載り、shortlist には
-# 話者についての人物 belief も載せている (下記 _build_shortlist)。話者を信じるか
-# どうかを数値ではなく文脈判断させるための指示 (設計メモ §2 ステップ 3)。OFF の
-# ときは伝聞 evidence 自体が生成されないので、この追記は死んだ指示になる。
-_HEARSAY_INSTRUCTION = """
-
-【伝聞 (hearsay) の扱い】
-source_kind が "hearsay" の evidence は、自分で確かめたことではなく他者の発言から
-得た主張です (source_speaker がその話者)。伝聞は自分の体験より弱い証拠として扱って
-ください。shortlist にはその話者についての人物 belief も載せています。話者について
-自分が知っていること (例:「あいつは人の話を聞かない」「地形には詳しい」) を踏まえ、
-その主張を信じる (create / strengthen) か、鵜呑みにせず捨てる (discard) かを判断して
-ください。同じ話者でも話題によって信じ方を変えてよい (人の評判は疑うが地形情報は
-信じる、など)。自分が実際に体験して得た belief (shortlist の文面が一人称の体験で
-語られているもの) と食い違う伝聞は、伝聞のほうを discard するのが原則です。人づて
-一件で自分の体験を覆さないでください。
-伝聞を信じて create するとき、材料が伝聞だけなら、命題に話し手を残すこと (例:
-「ミオによれば、切り替え弁の目盛りが違うと昇降機は動かないかもしれない」)。話した
-人が推測で言ったことは、推測の言い方のまま書く。
-shortlist の hearsay_support_count は、support_count のうち伝聞の件数です。
-【文面の強さを証拠に合わせる】でヘッジを外すかを決めるときは、
-数える支持から hearsay_support_count の分を除くこと。伝聞の支持がいくら増えても、
-それだけを理由に言い切りへ言い直さないでください。"""
-
-
 # #1509: 外れた予期の材料に付く時系列の読み方。予期の清算が無効な run では時系列が
 # 付かないので、ON のときだけ足す。関係の無い出来事を除く判断は規則にせず、ここで
 # LLM に任せる。言い切りの抑えは既存の確信度の指示 (支持の数) だけでは効かなかった。
@@ -323,10 +294,9 @@ def _build_belief_consolidation_system_prompt(
     *,
     attribution_enabled: bool,
     goal_reflect_enabled: bool = False,
-    hearsay_enabled: bool = False,
     expectation_what_happened_enabled: bool = False,
 ) -> str:
-    """CONFIRMATION 節 / reflect 節 / 伝聞節 / 外れた予期の節を条件付きで足した system prompt を組む。
+    """CONFIRMATION 節 / reflect 節 / 外れた予期の節を条件付きで足した system prompt を組む。
 
     全 flag OFF のときは ``_SYSTEM_BELIEF_CONSOLIDATION_JSON`` をそのまま返す
     (= 既定 prompt が byte 不変であることをここで保証する)。
@@ -337,8 +307,6 @@ def _build_belief_consolidation_system_prompt(
         prompt = prompt.replace(_CONFIRMATION_ANCHOR, _CONFIRMATION_INSTRUCTION)
     if goal_reflect_enabled:
         prompt = prompt + _REFLECT_INSTRUCTION
-    if hearsay_enabled:
-        prompt = prompt + _HEARSAY_INSTRUCTION
     if expectation_what_happened_enabled:
         if _WHAT_HAPPENED_ANCHOR not in prompt:
             raise ValueError("system prompt lost the anchor for what_happened")
@@ -393,7 +361,6 @@ class BeliefConsolidationCoordinator:
         current_tick_provider: Any | None = None,
         belief_attribution_enabled: bool = False,
         goal_reflect_enabled: bool = False,
-        hearsay_enabled: bool = False,
         expectation_what_happened_enabled: bool = False,
         objective_text_provider: Callable[[PlayerId], str | None] | None = None,
         reflect_observation_sink: Callable[[PlayerId, str, str], None] | None = None,
@@ -433,8 +400,6 @@ class BeliefConsolidationCoordinator:
             raise TypeError("belief_attribution_enabled must be bool")
         if not isinstance(goal_reflect_enabled, bool):
             raise TypeError("goal_reflect_enabled must be bool")
-        if not isinstance(hearsay_enabled, bool):
-            raise TypeError("hearsay_enabled must be bool")
         if not isinstance(expectation_what_happened_enabled, bool):
             raise TypeError("expectation_what_happened_enabled must be bool")
         if not isinstance(goal_stagnation_evidence_enabled, bool):
@@ -508,10 +473,6 @@ class BeliefConsolidationCoordinator:
         # (OFF = pre-U4 と byte 一致)。P4: goal_reflect も同様に flag ON で reflect
         # 節を足す (OFF なら reflect の指示は一切出ない)。
         self._goal_reflect_enabled = goal_reflect_enabled
-        # P10: ON のときだけ伝聞節を system prompt に足し、shortlist に話者 belief を
-        # 載せる。OFF なら伝聞 evidence 自体が生成されないので、節も話者 belief 強制も
-        # 死んだ経路になる (= pre-P10 と byte / 挙動一致)。
-        self._hearsay_enabled = hearsay_enabled
         self._objective_text_provider = objective_text_provider
         self._reflect_observation_sink = reflect_observation_sink
         self._stall_min_interval_turns = stall_min_interval_turns
@@ -528,7 +489,6 @@ class BeliefConsolidationCoordinator:
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
-            hearsay_enabled=hearsay_enabled,
             expectation_what_happened_enabled=expectation_what_happened_enabled,
         )
         self._turn_counts: dict[int, int] = defaultdict(int)
@@ -957,35 +917,6 @@ class BeliefConsolidationCoordinator:
         forced_ids: set[str] = set()
         for evidence in batch:
             forced_ids.update(getattr(evidence, "in_context_belief_ids", ()) or ())
-        # P10: 伝聞 evidence の話者についての人物 belief を必ず shortlist に載せる。
-        # 話者を信じるかの判断 (設計メモ §2 ステップ 3) は話者 belief が見えないと
-        # できないので、cue スコアに頼らず in_context と同格で強制する。話者名は
-        # 自然文の belief text/tags に現れるので、cue トークン照合を名前で再利用する
-        # (信頼を数値で持たない §4 方針。名前が belief に無ければ何も足さない)。
-        # flag で明示ガードする: OFF で resume した run に、ON 時代の未 drain な
-        # HEARSAY evidence が buffer 残留していても (buffer は snapshot 永続化される)
-        # 話者強制を発火させない。「hearsay_enabled=False = pre-P10 と挙動一致」を
-        # batch 残留物に依存せず保証する。
-        speaker_names = tuple(
-            sorted(
-                {
-                    s.strip().lower()
-                    for e in batch
-                    if e.source_kind == BeliefEvidenceSourceKind.HEARSAY
-                    and isinstance(getattr(e, "source_speaker", None), str)
-                    and (s := e.source_speaker) is not None
-                    and s.strip()
-                }
-            )
-            if self._hearsay_enabled
-            else set()
-        )
-        if speaker_names:
-            for belief in active_beliefs:
-                if _shared_belief_matches_cue_tokens(
-                    belief.tags, belief.text, speaker_names
-                ):
-                    forced_ids.add(belief.belief_id)
         # forced_id を entry_id として引き、その belief_id の現在の active entry に
         # 解決する。entry_id 索引に無ければ (= 既に forced_id 自体が belief_id か、
         # 削除済みの未知 id) forced_id をそのまま belief_id とみなす。解決先が
@@ -1029,14 +960,7 @@ class BeliefConsolidationCoordinator:
 
     @staticmethod
     def _build_evidence_payload_entry(evidence: BeliefEvidence) -> dict[str, Any]:
-        """evidence 1 件を prompt payload の dict に変換する。
-
-        P10 回帰修正: ``_HEARSAY_INSTRUCTION`` は「source_kind が hearsay の
-        evidence には source_speaker がその話者」と LLM に約束しているが、
-        payload に ``source_speaker`` が無いと話者ごとの文脈信頼判断が構造的に
-        不可能になる。HEARSAY 以外は常に None なので、ノイズを避けるため
-        非 None のときだけキーを載せる。
-        """
+        """evidence 1 件を prompt payload の dict に変換する。"""
         payload: dict[str, Any] = {
             "evidence_id": evidence.evidence_id,
             "source_kind": evidence.source_kind.value,
@@ -1046,8 +970,6 @@ class BeliefConsolidationCoordinator:
             "episode_ids": list(evidence.episode_ids),
             "observed_turn": evidence.observed_turn,
         }
-        if evidence.source_speaker is not None:
-            payload["source_speaker"] = evidence.source_speaker
         if evidence.what_happened:
             payload["what_happened"] = list(evidence.what_happened)
         return payload
@@ -1075,9 +997,6 @@ class BeliefConsolidationCoordinator:
             }
             for b in shortlist
         ]
-        if self._hearsay_enabled:
-            for row, b in zip(shortlist_payload, shortlist):
-                row["hearsay_support_count"] = b.hearsay_support_count
         user_content: dict[str, Any] = {
             "current_turn": current_turn,
             "evidence": evidence_payload,

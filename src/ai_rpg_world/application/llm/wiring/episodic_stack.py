@@ -366,11 +366,6 @@ def build_episodic_stack(
     current_tick_provider: Callable[[], Any] | None = None,
     chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
     persona_block_provider: Callable[[PlayerId], str] | None = None,
-    # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者が本人かどうかを
-    # 判定するための本人名 provider。persona_block_provider と同じ
-    # player_id 引きの形。未指定なら本人名チェックは縮退し従来通り通す
-    # (chunk_coordinator 側のコメント参照)。
-    player_name_provider: Callable[[PlayerId], str] | None = None,
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
     episode_store: EpisodicEpisodeRepository | None = None,
     semantic_enabled: bool = False,
@@ -445,11 +440,6 @@ def build_episodic_stack(
     # 発火しないため、coordinator 側で組み合わせ不整合を起動時 fail-fast で弾く。
     stagnation_pressure_enabled: bool = False,
     stagnation_pressure_store: Any | None = None,
-    # P10 (伝聞の固着判断 / default False = flag OFF): True のとき固着 LLM に
-    # 伝聞節を出し、shortlist に話者 belief を載せる。HEARSAY 由来の支持は
-    # confidence を半分に数える。OFF なら伝聞 evidence 自体が生成されないので
-    # (P9 の HEARSAY_ENABLED が同時に OFF)、節も話者強制も死んだ経路になる。
-    hearsay_enabled: bool = False,
     # #1509: 外れた予期の材料が持つ時系列の読み方を固着 LLM に足す。
     expectation_what_happened_enabled: bool = False,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
@@ -507,8 +497,6 @@ def build_episodic_stack(
     - ``chunk_subjective_fields_service``: 同期 LLM 補完経路 (旧来)。
       ``subjective_completion_scheduler`` と排他
     - ``persona_block_provider``: player_id → persona text の dict 引き
-    - ``player_name_provider``: player_id → 本人名の dict 引き (H-2)。
-      heard_claims の話者が本人自身のときに弾くための照合キーとして使う
     - ``subjective_completion_scheduler``: 非同期 LLM 補完経路 (#310 推奨)。
       scheduler と stack で同じ ``episode_store`` を共有することが整合性条件
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
@@ -611,9 +599,6 @@ def build_episodic_stack(
                 # (OFF = 導入前と挙動一致)。
                 stagnation_pressure_enabled=stagnation_pressure_enabled,
                 stagnation_pressure_store=stagnation_pressure_store,
-                # P10: ON のときだけ固着 prompt に伝聞節を足し、shortlist に話者
-                # belief を載せる (OFF = pre-P10 と byte / 挙動一致)。
-                hearsay_enabled=hearsay_enabled,
                 expectation_what_happened_enabled=expectation_what_happened_enabled,
                 create_gate=belief_create_gate,
             )
@@ -690,14 +675,6 @@ def build_episodic_stack(
     noun_matcher = build_scenario_noun_matcher(
         scenario=scenario, graph=graph, spot_interior_repo=spot_interior_repo
     )
-    # P9 (伝聞): heard_claim の対象を拾う noun matcher は scenario からここで
-    # 構築される。transcriber は world_runtime 側で先に組まれるため、後から
-    # 注入する (未注入だと伝聞 cue が常に空になる)。attach は冪等で害がないので
-    # HEARSAY_ENABLED の有無に関わらず行う (OFF なら heard_claims 自体が空)。
-    if belief_evidence_transcriber is not None and hasattr(
-        belief_evidence_transcriber, "attach_noun_matcher"
-    ):
-        belief_evidence_transcriber.attach_noun_matcher(noun_matcher)
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
         short_term_memory=short_term_memory,
@@ -714,7 +691,6 @@ def build_episodic_stack(
         chunk_subjective_fields_service=chunk_subjective_fields_service,
         subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
-        player_name_provider=player_name_provider,
         # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
