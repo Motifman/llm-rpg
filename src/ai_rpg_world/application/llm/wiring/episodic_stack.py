@@ -423,12 +423,6 @@ def build_episodic_stack(
     goal_reflect_enabled: bool = False,
     objective_text_provider: Any | None = None,
     reflect_observation_sink: Any | None = None,
-    # P-U1 (目的停滞の evidence 化 / default False = flag OFF): True のとき
-    # reflect の stalled/misaligned verdict を goal: 軸の高 salience
-    # PREDICTION_ERROR evidence として buffer に積む。goal_reflect_enabled が
-    # False だと reflect 自体が発火しないため、coordinator 側で組み合わせ
-    # 不整合を起動時 fail-fast で弾く。
-    goal_stagnation_evidence_enabled: bool = False,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
     # True のとき chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻み、reinterpretation_coordinator が誤差専用
@@ -573,9 +567,6 @@ def build_episodic_stack(
                 goal_reflect_enabled=goal_reflect_enabled,
                 objective_text_provider=objective_text_provider,
                 reflect_observation_sink=reflect_observation_sink,
-                # P-U1: ON のときだけ stalled/misaligned の reflect verdict を
-                # goal: 軸の evidence に変換する (OFF = 導入前と挙動一致)。
-                goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
                 create_gate=belief_create_gate,
             )
     elif episode_store is None:

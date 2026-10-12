@@ -7798,31 +7798,6 @@ def create_world_runtime(
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
     )
-    # 敵対的レビュー HIGH 1: 「episodic を前提にする機能群」の fail-fast を親 gate の
-    # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) は episodic pipeline (固着パス)
-    # の内側でしか配線されない。従来これらの相互ガードは
-    # `if config.episodic_enabled:` の内側にあったため、LLM_EPISODIC_ENABLED を
-    # 立て忘れたまま各 flag を ON にすると、ブロックごと skip されて fail-fast すら
-    # 走らず「flag は立てたのに機能が一生動かず警告も出ない」静かな失敗になっていた
-    # (本 PR 群が売りにする「起動時 fail-fast」に正面から反する)。episodic 前提の
-    # flag が 1 つでも ON なら、親 gate に入る前にここで LLM_EPISODIC_ENABLED を要求
-    # して落とす。
-    if not config.episodic_enabled:
-        _episodic_dependent_flags = {
-            "GOAL_STAGNATION_EVIDENCE_ENABLED": (
-                config.goal_stagnation_evidence_enabled
-            ),
-        }
-        _on_but_orphaned = [
-            name for name, enabled in _episodic_dependent_flags.items() if enabled
-        ]
-        if _on_but_orphaned:
-            raise ValueError(
-                f"{', '.join(_on_but_orphaned)}=1 だが LLM_EPISODIC_ENABLED が OFF の"
-                "ため episodic pipeline (固着パス) が丸ごと"
-                "構築されず、これらの機能が一生動かない (静かな失敗)。"
-                "LLM_EPISODIC_ENABLED=1 も設定してください。"
-            )
     # prompt dataset は記憶機能ではないが、各行へ安定した being_id を保存する。
     # episodic の親 gate に入れると lean profile では最初の LLM 呼び出しまで
     # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
@@ -7909,38 +7884,15 @@ def create_world_runtime(
         # P4 (reflect): 固着パスに目的への前進評価を足すか。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_goal_reflect_enabled_state,
-            log_goal_stagnation_evidence_enabled_state,
         )
 
         _goal_reflect_enabled = config.goal_reflect_enabled
         log_goal_reflect_enabled_state(_goal_reflect_enabled)
-        # P-U1 (目的停滞の evidence 化): reflect の stalled/misaligned verdict を
-        # goal: 軸の evidence に変換するか。
-        _goal_stagnation_evidence_enabled = config.goal_stagnation_evidence_enabled
-        log_goal_stagnation_evidence_enabled_state(_goal_stagnation_evidence_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
         _belief_consolidation_enabled = config.belief_consolidation_enabled
         log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
-        # 敵対的レビュー HIGH-1 fail-fast: P-U1 (goal_stagnation_evidence) は
-        # BeliefConsolidationCoordinator (固着パス) 経由でしか動かないが、その coordinator 自体は
-        # belief_consolidation_enabled が ON のときしか構築されない
-        # (episodic_stack.py の `if belief_consolidation_enabled and
-        # belief_evidence_buffer_store is not None` 分岐)。coordinator
-        # コンストラクタ内の fail-fast (goal_reflect_enabled 必須等) は
-        # coordinator が実際に構築されたときにしか働かないため、それより前の
-        # ここで相互ガードしないと「flag を ON にしたのに coordinator が
-        # 一度も作られず、evidence 化が一生 0 のまま、警告すら出ない」
-        # 静かな失敗になる (本 PR 群が売りにする「起動時 fail-fast で弾く」に
-        # 正面から反する)。
-        if _goal_stagnation_evidence_enabled and not _belief_consolidation_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED "
-                "が OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
-                "reflect の stalled/misaligned verdict を evidence 化する経路が丸ごと"
-                "動かない (静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
-            )
         # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
         # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
         # 使わない = 読み取り専用の追加コンテキストなので buffer store 条件には
@@ -8369,9 +8321,6 @@ def create_world_runtime(
             goal_reflect_enabled=_goal_reflect_enabled,
             objective_text_provider=runtime._reflect_objective_provider,
             reflect_observation_sink=runtime._emit_reflect_observation,
-            # P-U1 (目的停滞の evidence 化): ON のときだけ stalled/misaligned の
-            # reflect verdict を goal: 軸の高 salience evidence に変換する。
-            goal_stagnation_evidence_enabled=_goal_stagnation_evidence_enabled,
             # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled

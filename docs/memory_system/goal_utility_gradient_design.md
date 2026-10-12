@@ -74,6 +74,8 @@ reflect は設計上わざと弱い。プロンプト指示 (`belief_consolidati
 
 ## 3. 案1 (中核・合意済み) — 目的に自動の鼓動誤差を与える
 
+> 案1 (`GOAL_STAGNATION_EVIDENCE_ENABLED`。停滞の振り返りを `goal:` 軸の信念の証拠にする部品) は、記憶の部品の撤去 (#1631) の #1663 で消した。
+
 現状の G4 は自己申告清算 (`goal_outcome`) だが、
 [goal_layer_design_active_inference.md](./goal_layer_design_active_inference.md) §2/§4.4 の
 原案は「**目的を選好的 pending prediction として保持し、期限で自動清算**」だった。これを起動する。
