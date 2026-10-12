@@ -214,7 +214,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         # service=None または top_k=0 なら prompt §「【関連する学び】」は出ない。
         semantic_passive_recall = episodic.semantic_passive_recall
         semantic_passive_top_k = episodic.semantic_passive_top_k
-        situation_recall = episodic.situation_recall
         # PR8 (R5): encounter memory を recall cue 源にする。注入時のみ動く。
         encounter_memory_for_recall = episodic.encounter_memory
         encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
@@ -313,14 +312,6 @@ class DefaultPromptBuilder(IPromptBuilder):
                 )
         if semantic_passive_top_k < 0:
             raise ValueError("semantic_passive_top_k must be 0 or greater")
-        if situation_recall is not None:
-            from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
-                SituationRecallSources,
-            )
-            if not isinstance(situation_recall, SituationRecallSources):
-                raise TypeError("situation_recall must be SituationRecallSources or None")
-            if semantic_passive_top_k < 1:
-                raise ValueError("situation_recall requires semantic_passive_top_k >= 1")
         if memo_store is not None and not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
@@ -435,7 +426,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
         self._semantic_passive_top_k = semantic_passive_top_k
-        self._situation_recall = situation_recall
         # PR8 (R5)
         self._encounter_memory_for_recall = encounter_memory_for_recall
         self._encounter_recent_window_ticks = encounter_recent_window_ticks
@@ -731,7 +721,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             action_results=action_results,
             ui_context=ui_context,
             current_state_dto=current_state_dto,
-            player_name=player_info.player_name,
         )
 
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
@@ -942,28 +931,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         action_results: list[Any],
         ui_context: Any,
         current_state_dto: Any | None = None,
-        player_name: str | None = None,
     ) -> tuple[str, tuple[str, ...]]:
-        if self._situation_recall is not None:
-            if player_name is None:
-                raise TypeError("player_name is required for situation recall")
-            # 状況の想起の部品は application.llm.services を import するので、ここで遅れて読む。
-            from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
-                run_situation_belief_recall,
-            )
-
-            return run_situation_belief_recall(
-                self,
-                self._situation_recall,
-                player_id=player_id,
-                being_id=being_id,
-                player_name=player_name,
-                place_name=(
-                    None if current_state_dto is None else current_state_dto.current_spot_name
-                ),
-                observations=observations,
-                action_results=action_results,
-            )
         return run_semantic_passive_recall(
             self,
             player_id=player_id,
