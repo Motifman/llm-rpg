@@ -3,7 +3,9 @@ recall_buffer stamp + 誤差専用 framing の配線を end-to-end で確認す�
 
 ``ERROR_DRIVEN_REINTERPRETATION_ENABLED`` フラグが ``create_world_runtime`` を
 通して、再解釈 coordinator (``EpisodicReinterpretationCoordinator``) に届く
-ことを固定する。確定した予期を想起へ返す受け取る側 (#1443) は #1631 で消した。
+ことを固定する。確定した予期を想起へ返す受け取る側 (#1443) は #1631 で消した。外れを想起に
+書き添える書き手はもう無いので、このフラグを有効にしても書き添えは起きない。再解釈を消す段で、
+フラグと一緒に消す。
 
 LLM は呼ばない (stub client)。flag は default OFF (共通規約 §0) なので
 各テストで明示的に ON にする。

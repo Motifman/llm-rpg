@@ -59,3 +59,7 @@ uv run python scripts/expectation_belief_material_compare.py judge --run-dir ../
 - 確からしさがすべて「たぶん」なので、ほぼ確実の外れを強い材料にする分岐は通っていない
 - 組み直しの予期は `expected_result` の 1 手 1 件で、#1441 の書かせ方 (1 手に複数件、確からしさ付き) とは違う
 - 窓は 8 手で、窓の終わりで暫定のまま残った 11 件は、続きを組み直せば確定しうる
+
+## その後
+
+この実験が使った予期の清算と受け取る側、scripts は Issue #1631 で消した。再現するには、消す前の commit を checkout して回す。

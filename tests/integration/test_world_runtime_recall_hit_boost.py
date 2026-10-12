@@ -4,7 +4,8 @@
 
 ``RECALL_HIT_BOOST_ENABLED`` フラグが ``create_world_runtime`` を通して、
 passive_recall retrieval service に届くことを固定する。確定した予期を想起へ
-返す受け取る側 (#1443) は #1631 で消した。
+返す受け取る側 (#1443) は #1631 で消した。的中の回数を足す書き手はもう無いので、このフラグを
+有効にしても回数は増えない。想起の部品を消す段で、フラグと一緒に消す。
 
 LLM は呼ばない (stub client)。flag は default OFF (共通規約 §0) なので
 各テストで明示的に ON にする。
