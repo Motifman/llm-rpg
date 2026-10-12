@@ -41,8 +41,13 @@ def _answer(chosen: str | None, *, accepted: bool = False, confident_no_match: b
     )
 
 
+_WORLD_NAMES = frozenset({"昇降機の起動鍵", "燃料の缶", "物置の鍵", "カンテラ", "カンテラの油"})
+
+
 def _resolve(written: str, held: tuple[HeldItem, ...], rescue: _Rescue | None = None):
-    return resolve_target_item_name(written, held, rescue=rescue, action_name="pickpocket")
+    return resolve_target_item_name(
+        written, held, rescue=rescue, action_name="pickpocket", world_item_names=_WORLD_NAMES,
+    )
 
 
 class TestExactAndPartialNames:
@@ -100,6 +105,26 @@ class TestExactAndPartialNames:
         _resolve("起動鍵", (_LIFT_KEY, _FUEL_CAN), rescue)
 
         assert rescue.calls == []
+
+
+class TestOfficialNamesOfOtherItems:
+    """書かれた名前が、相手の持っていない別の品の正式な名前であるとき。"""
+
+    def test_the_official_name_of_another_item_is_not_read_as_a_part(self) -> None:
+        """相手が「カンテラの油」だけを持つとき、「カンテラ」と書いても油には当てず「持っていない」になる。"""
+        oil = HeldItem(ItemSpecId(5), "カンテラの油", "油。")
+
+        result = _resolve("カンテラ", (oil,))
+
+        assert (result.outcome, result.spec_id) == (ItemNameOutcome.ABSENT, None)
+
+    def test_the_official_name_of_another_item_is_not_judged(self) -> None:
+        """正式な名前が書かれたときは、その品を指していると読み、意味の判断を問わない。"""
+        rescue = _Rescue(_answer("昇降機の起動鍵", accepted=True))
+
+        result = _resolve("燃料の缶", (_LIFT_KEY,), rescue)
+
+        assert (result.outcome, rescue.calls) == (ItemNameOutcome.ABSENT, [])
 
 
 class TestNoMatchingItem:

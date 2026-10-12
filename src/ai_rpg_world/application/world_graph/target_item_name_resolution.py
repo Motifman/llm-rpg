@@ -81,10 +81,15 @@ def resolve_target_item_name(
     *,
     rescue: ItemNameRescuer | None,
     action_name: str,
+    world_item_names: frozenset[str] = frozenset(),
 ) -> TargetItemNameResolution:
     wired = rescue is not None
     key = _normalized(written)
     exact = _distinct([h for h in held if _normalized(h.name) == key])
+    if not exact and key in {_normalized(n) for n in world_item_names}:
+        # 正式な名前が書かれたなら、その品を指している。「カンテラ」で
+        # 「カンテラの油」を奪うと、本人の意図と違う物を動かす。
+        return TargetItemNameResolution(written, ItemNameOutcome.ABSENT, rescue_wired=wired)
     partial = exact or _distinct(
         [h for h in held if key and (key in _normalized(h.name) or _normalized(h.name) in key)]
     )
