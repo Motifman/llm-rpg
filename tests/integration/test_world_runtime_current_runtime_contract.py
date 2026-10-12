@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -259,6 +260,7 @@ class _ContractRuntime:
         self.action_results: list[dict] = []
         self.trace_recorder = None
         self._runtime_config = ResolvedLlmRuntimeConfig.for_tests()
+        self._player_life_query = SimpleNamespace(can_take_turn=lambda player_id: True)
 
     def build_full_prompt(
         self, player_id: PlayerId, *, action_instruction: str | None = None

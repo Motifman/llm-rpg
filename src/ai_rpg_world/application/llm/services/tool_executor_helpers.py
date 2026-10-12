@@ -5,6 +5,7 @@ ToolCommandMapper およびサブマッパー（executors）から共有する�
 失敗時の error_code と remediation 付き LlmCommandResultDto を組み立てる。
 """
 
+from dataclasses import replace
 from typing import Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -57,14 +58,7 @@ def with_inner_thought_empty_warning(
         return result
     if not _is_inner_thought_arg_empty(arguments):
         return result
-    return LlmCommandResultDto(
-        success=result.success,
-        message=_INNER_THOUGHT_EMPTY_WARNING_PREFIX + result.message,
-        error_code=result.error_code,
-        remediation=result.remediation,
-        should_reschedule=result.should_reschedule,
-        was_no_op=result.was_no_op,
-    )
+    return replace(result, message=_INNER_THOUGHT_EMPTY_WARNING_PREFIX + result.message)
 
 
 def unknown_tool(message: str) -> LlmCommandResultDto:

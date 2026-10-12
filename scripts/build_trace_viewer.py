@@ -1730,6 +1730,7 @@ def _event_timeline_category(e: TraceEvent) -> str:
         TraceEventKind.AUX_LLM_CALL,
         TraceEventKind.AUX_LLM_CALL_RECORD_FAILED,
         TraceEventKind.LLM_FAILURE_RETRY,
+        TraceEventKind.OWN_ACTION_FOLLOW_UP,
         "snapshot_save",
         "snapshot_load",
         "world_snapshot_save",
