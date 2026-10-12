@@ -42,7 +42,7 @@ class ILLMClient(ABC):
         wall_latency + token usage を埋め、stub 系は best-effort で実装する。
 
         ``reasoning_effort`` が渡されたら、その 1 呼び出しだけ reasoning (熟考) の
-        予算段階を上書きする (案A: band-gated thinking)。``None`` なら既定のまま。
+        予算段階を上書きする。``None`` なら既定のまま。
         stub 系は無視してよい。
 
         ``prompt_capture_context`` が渡されたら、実装側は実際に外部 LLM 境界へ渡した

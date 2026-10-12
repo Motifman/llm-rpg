@@ -529,8 +529,7 @@ class LiteLLMClient(
 
         ``reasoning_override`` に何か渡された場合 (sentinel 以外)、構築時の既定
         ``self._reasoning_block`` の代わりにその値を使う (``None`` を渡せば「この
-        呼び出しは reasoning を一切 inject しない」を意味する)。案A の per-call
-        band-gated thinking がここを通る。
+        呼び出しは reasoning を一切 inject しない」を意味する)。
 
         どれも要らないときは None を返す (= extra_body を一切渡さない)。
         """
@@ -636,7 +635,7 @@ class LiteLLMClient(
         sink に流す (実験 #356: τ_sim 設定根拠 + scenario cost 評価用)。
 
         ``reasoning_effort`` を渡すと、その 1 呼び出しだけ構築時の既定 (env) を
-        上書きして reasoning の effort を変える (案A: band-gated thinking)。``None``
+        上書きして reasoning の effort を変える。``None``
         なら既定のまま (既存挙動)。未知値は ``ValueError``。tool-calling 経路では
         reasoning 本文は返らないが、reasoning_token 数は usage 経由で metrics に載る。
 
@@ -837,7 +836,7 @@ class LiteLLMClient(
         best-effort で取り出す。reasoning model が思考に使ったトークン数。
 
         tool-calling 経路では reasoning 本文は返らないが、このトークン数は usage に
-        残るので「実際に何回・どれだけ熟考したか」の観測点になる (案A の trace 用)。
+        残るので「実際に何回・どれだけ熟考したか」の観測点になる。
         取れない provider では 0 に縮退する (例外を投げない)。
         """
         try:

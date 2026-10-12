@@ -33,7 +33,7 @@ class LlmCallMetrics:
             Anthropic は ``usage.cache_read_input_tokens`` で返す
         reasoning_tokens: reasoning model が思考に使ったトークン数
             (``usage.completion_tokens_details.reasoning_tokens``)。reasoning OFF /
-            非 reasoning model / 未対応 provider では 0。案A (band-gated thinking) で
+            非 reasoning model / 未対応 provider では 0。
             「実際にどれだけ熟考したか」の観測点になる (tool-calling 経路では思考
             本文は返らないため、このトークン数が発火の証拠になる)
         tps: tokens per second (= completion_tokens / wall_seconds)。
@@ -46,9 +46,8 @@ class LlmCallMetrics:
             「なぜ失敗したか」が分からない (例: 400 の本文
             "Thinking mode does not support this tool_choice") ため、trace から
             事後診断できるように残す。
-        reasoning_effort: この呼び出しで指定した reasoning の effort (案A の
-            熟考ターンなら "low" 等、通常ターンは None)。熟考ターンと通常ターンを
-            trace で区別し、reasoning 指定が失敗と相関するかを見るため。
+        reasoning_effort: この呼び出しで上書きした reasoning の effort。上書き
+            しない呼び出しは None。reasoning 指定が失敗と相関するかを見るため。
         tool_choice: この呼び出しの tool_choice ("required" / "auto" 等)。
             reasoning との組合せ起因の provider 拒否を trace から切り分けるため。
             named tool_choice の場合は OpenAI 形式の dict をそのまま保持する。
