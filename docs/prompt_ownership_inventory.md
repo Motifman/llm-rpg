@@ -115,9 +115,9 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U13 【進行中のメモ】 | 「- [memo_718918…] [tick=11, 経過 13 tick] 狼煙に必要な物: …」 | `_build_active_memos_text` (`prompt_builder.py:971`) → `format_active_memos` (`llm/services/active_memos_formatter.py:19`) | memo store と世界の tick。profile の `memo_tools_enabled` | Being の持ち物 | memo (表示の時計が世界の tick) |
 | U14 現在地の塊 | 「現在地: 高地の泉 (初めて訪れた)」「  山の中腹に湧く泉。…」「雰囲気: …」「天候: 弱い晴れ（屋外）」「現在時刻: Day 1 12:00」「時刻帯: 昼」 | `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`)、注記は `_annotate_current_spot_familiarity` (`llm/services/spot_graph_ui_context_builder.py:628`)。死亡後の【いまの存在状態】は同 529 行 | 世界の snapshot (spot の名前と説明、眺望、天候、時刻、会議の状況、点検の進み具合、残り行動量、自分の状態)。「(初めて訪れた)」は encounter | 混ざっている (環境の描写と、行った場所の記録) | 無 (encounter はシナリオの spot ID と `PlayerId` の鍵) |
 | U15 この場で働きかけられるもの | 「接続先:」「  - "山麓への道" → "山麓"（通行可）」「オブジェクト:」「  - "湧水の口" (今は汲めない・時間を置けば戻る) — …」「      いまできない: 湧水を汲む → "drink_water"（…）」「同じ場所に居るモンスター: (このスポットにモンスターはいない)」 | `SpotGraphUiContextBuilder` の `_build_connection_section` (720 行)、`_build_object_section` (801 行)、`_build_monster_section` (1078 行)、地面のアイテム・商人・市場・所持金・取引の節 | 世界の snapshot とシナリオの物と操作。商人などはシナリオで宣言したときだけ | 環境の材料 | 無 |
-| U16 同じ場所にいるプレイヤー | 「同じ場所にいるプレイヤー: (倒れていない相手には give_item で所持品を直接渡せる)」「  - "エイダ" (何か手詰まりの様子) (初めて会った)」 | `_build_entity_section` (`spot_graph_ui_context_builder.py:927`)、注記は `_player_familiarity_annotation` (687 行)、停滞感は `_format_stagnation_suffix` (208 行) | 世界の snapshot (その場の人、倒れているか、倒れた人の持ち物、人に使える操作)、encounter (「(初めて会った)」)、相手の stagnation_pressure | 混ざっている (環境の在室と、Being が誰を知っているか、他人の停滞感) | 無 (encounter は `PlayerId` と名前の鍵)。停滞感は相手の Being の store |
+| U16 同じ場所にいるプレイヤー | 「同じ場所にいるプレイヤー: (倒れていない相手には give_item で所持品を直接渡せる)」「  - "エイダ" (初めて会った)」 | `_build_entity_section` (`spot_graph_ui_context_builder.py:927`)、注記は `_player_familiarity_annotation` (687 行) | 世界の snapshot (その場の人、倒れているか、倒れた人の持ち物、人に使える操作)、encounter (「(初めて会った)」) | 混ざっている (環境の在室と、Being が誰を知っているか) | 無 (encounter は `PlayerId` と名前の鍵) |
 | U17 所持アイテム | 「所持アイテム:」「  - "火打ち石" — 枯れ葉に火を移すための火打ち石。 (火を起こす道具。…)」 | `_build_inventory_section` (`spot_graph_ui_context_builder.py:1346`) | 世界の所持品とシナリオのアイテム定義 | 環境の材料 | 無 |
-| U18 身体の状態 | 「身体の状態:」「  HP: 良好（100/100）」「  空腹: 少し（24/100）、前回 +1」「  → 何かが前に進んでいない気がする。」 | `_build_needs_section` (`spot_graph_ui_context_builder.py:1134`)、状態効果の節 (1170 行) | 世界の HP・空腹・疲労と前回からの差。最後の行は自分の stagnation_pressure。profile の `stagnation_pressure_enabled` | 混ざっている (環境の身体の状態と、Being の停滞感) | 停滞感だけ stagnation_pressure |
+| U18 身体の状態 | 「身体の状態:」「  HP: 良好（100/100）」「  空腹: 少し（24/100）、前回 +1」 | `_build_needs_section` (`spot_graph_ui_context_builder.py:1134`)、状態効果の節 (1170 行) | 世界の HP・空腹・疲労と前回からの差 | 環境の材料 | 無 |
 | U19 【現在地と周囲】の中の節の順とフェーズ別の出し分け | 自由時間は接続先 → オブジェクト → その場の人 → モンスター → … → 所持アイテム → 身体の状態。会議中は人・所持品・身体だけ | `prompt_section_layout.py` の `FREE_ROAM_SECTIONS` / `MEETING_SECTIONS` / `sections_for` (157 行) | 固定の並び | 組み立ての決まり | 無 |
 | U20 【現在選べる対象引数】 | 「- travel_to.destination_label: "川の上流", "山麓", "墜落機の残骸"」「※ 一覧にあることは操作の成功を保証しない。…」 | `render_dynamic_argument_candidate_table` (`llm/services/dynamic_argument_candidates.py:342`)、差し込みは `inject_dynamic_argument_candidate_table` (363 行) | U14〜U18 を作るときに集めた対象 (`tool_runtime_context`) と、いま出しているツールの名前 | 環境の材料 | 無 |
 | U21 指示の前の知らせ | (この run では無し) 【公開 SNS】の画面、【進行中の異常】、【時間の経過】 | `build_full_prompt` (`world_runtime.py:3033-3046`) が `_public_sns_screen_text` (3085 行)、`_format_ongoing_conditions` (3093 行)、`_format_time_since_last_gathering` (3107 行) を行動指示の前につなぐ | 公開 SNS の画面、シナリオの `ongoing_conditions` と世界のフラグ、会議の区間 | 環境の材料 | 無 |
@@ -188,7 +188,6 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 関連する学び | semantic store | — |
 | 関連する記憶・見出し | episodic / afterglow / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
 | 進行中のメモ | memo | 表示の `tick=…, 経過 … tick` を Being のターン数に替える |
-| 自分の停滞感 | stagnation_pressure | Being が自分の節に描く。環境の画面には返さない |
 | 記憶ツールと主観の引数 | 引数と記憶ツール | ツールの実行部はゲームのパッケージにある (#1469) |
 
 ### 3-2. 足りないもの
@@ -255,7 +254,6 @@ encounter はいま、環境の判定にも使われている (確認)。
 | 目的 | `GoalEntry.player_id: int`、`created_tick` |
 | system prompt | 実装の語「SlidingWindow」 |
 | 人格 | ゲームの効果名「heal_hp 50」(シナリオの文。直すのはシナリオ側) |
-| その場にいる人・自分の停滞感 | Being の内部状態 (停滞感) を環境の画面が読み、相手の画面に出している。逆向きの漏れ |
 
 環境側の不具合として見つけた 4 件は #1521 にした (話しかける相手の候補が内部ラベル、実在しない【ペルソナ】の参照、`goal_update` の説明の `intention`、`destination_label` の説明の節名)。
 
