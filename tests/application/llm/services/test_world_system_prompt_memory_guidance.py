@@ -116,3 +116,28 @@ class TestEpisodeIndexGuidanceNamesOnlyWhatIsOffered:
         assert _build_with_index(shown=False, recall_offered=False) == _build(
             relevant_memories_shown=False, active_recall_offered=False
         )
+
+
+def _build_with_memo() -> str:
+    return build_world_system_prompt(
+        world_title="テスト世界",
+        persona_block="【ペルソナ】名前: エイダ",
+        safe_intro="周囲を観察しながら暮らす世界。",
+        relevant_memories_shown=False,
+        active_recall_offered=False,
+        being_memo_enabled=True,
+    )
+
+
+class TestMemoRulesAskWhoToldYou:
+    """【メモの書き方】が、人から聞いたことには誰から聞いたかを書くよう指示することを保証する (#1621)。
+
+    確認の run (`var/runs/mine_v1_008_check`) で、4 人とも最初の手番で from の無い heard の
+    メモを書いて外された。from の決まりは tool の説明にしか無かった。
+    """
+
+    def test_heard_fact_rule_names_who_told_you(self) -> None:
+        """分かったことの行に、人から聞いたなら誰から聞いたかも書くことが書かれている。"""
+        prompt = _build_with_memo()
+
+        assert "人から聞いたなら誰から聞いたかも書く" in prompt

@@ -32,10 +32,12 @@ def memo_field_property(*, episode_source_offered: bool) -> dict[str, Any]:
     sources = [MemoSource.SELF.value, MemoSource.HEARD.value]
     source_text = "self = 自分で確かめた、heard = 人から聞いた"
     from_text = "heard なら誰から聞いたか"
+    episode_note = ""
     if episode_source_offered:
         sources.append(MemoSource.EPISODE.value)
         source_text += "、episode = 思い出したエピソードから"
         from_text += "、episode ならそのエピソードの呼び名 (ep_ で始まる)"
+        episode_note = "エピソードの呼び名は【思い出せる出来事】にある呼び名だけ書ける。無ければ episode は選ばない。"
     return {
         "type": "array",
         "description": (
@@ -45,7 +47,7 @@ def memo_field_property(*, episode_source_offered: bool) -> dict[str, Any]:
             "分類は todo = やること (これからすること)、fact = 分かったこと (世界について分かったこと)、"
             "person = 人について (誰のことかは文の中に書く)。"
             f"fact には source ({source_text}) と certainty (sure = 確か、guess = 推測) も書き、"
-            f"{from_text}を from に書く。"
+            f"{from_text}を from に書く。{episode_note}"
             '書き換える: {"do": "edit", "id": "m_…", "text": 新しい文}。fact なら source と certainty も書き直せる。'
             '消す: {"do": "remove", "id": "m_…"}。やることが済んだら消す。'
             f"文は {MEMO_TEXT_MAX_LENGTH} 字まで。件数の上限は {_LIMITS_TEXT} で、"

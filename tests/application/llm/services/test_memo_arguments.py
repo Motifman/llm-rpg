@@ -227,3 +227,14 @@ class TestMemoSchema:
 
         assert memo["items"]["properties"]["source"]["enum"] == ["self", "heard", "episode"]
         assert "ep_" in memo["description"]
+
+    def test_episode_source_is_limited_to_handles_in_the_index(self) -> None:
+        """エピソードを出どころに出す設定では、【思い出せる出来事】にある呼び名だけを書き、無ければ episode を選ばないと説明する。
+
+        確認の run (`var/runs/mine_v1_008_check`) で、エピソードがまだ無い回に episode を選び、
+        呼び名の代わりに ep_? と書いて外された。
+        """
+        memo = with_memo_schema(self._definition(), episode_source_offered=True).parameters["properties"]["memo"]
+
+        assert "【思い出せる出来事】にある呼び名だけ書ける" in memo["description"]
+        assert "無ければ episode は選ばない" in memo["description"]
