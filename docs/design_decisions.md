@@ -7867,7 +7867,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 - `being/domain/episode.py` に `Episode` (1 件で集約の根) と `EpisodeIndex` (目次の値)、`IndexRevision` (直す前の目次と直したターン) を置く。今の `SubjectiveEpisode` とは別の型で、場所・人・物の番号も、持ち主の `BeingId` も持たない。持ち主は保存の側 (`EpisodeRepository`) が Being ごとに分ける
 - 本文は 400 字まで、目次の 2 つの文は 40 字まで、どれも空や空白だけは不可。超えた文はドメイン層が受け付けず `EpisodeValidationException` を投げる。切り詰めはアプリケーション層の仕事にする (Issue #1623 の決めたこと)
 - 本文は作ったあと変えない (`frozen`)。目次を直すと、前の版を直したターンと一緒に `index_history` に足す。呼び出すと回数が 1 増え、最後に呼び出したターンが記録される。ターンはどれも Being の記憶のターン数で、戻ることは許さない
-- 目次に載せる分の選び方は `EpisodeIndexSelection` (一覧と N を受け取り、表示する順に返す) で、最初の実装は書いた時の新しい順 (`NewestFirst`)。同じターンなら後から足した方を先に出す
+- 目次に載せる分の選び方は `EpisodeIndexSelection` (一覧と N を受け取り、表示する順に返す)。実装は 2 つ。書いた時の新しい順 (`NewestFirst`) と、書いた時と最後に呼び出した時のうち新しいほうの順 (`RecalledRisesToTop`、Issue #1623 の追記で最初に使うと決めた並べ方)。どちらも同じターンなら後から足した方を先に出す。どちらを使うかと N は profile から組み立ての段で選ぶ (PR 4)
+- 呼び出しは `recall_episodes` (`being/domain/episode_recall.py`) で、呼び名をまとめて受け取り、渡した順に呼び名ごとの結果を返す。知らない呼び名は `episode=None` を返し、記録を増やさない。1 回の呼び出しで同じ呼び名を 2 回渡しても 1 度だけ数える。どれか 1 件でもターンが決まりに合わなければ、どれも書き戻さない。途中まで書き戻すと、ツールが失敗を返したのに回数だけ増えた記憶が残る。件数の上限 M は profile の値なので、ツールの側で確かめる (PR 4)
 - `InMemoryEpisodeRepository` を足し、`BeingMemorySnapshotService` の `being_episodes` に配線した (design_decisions 27 の 4 手順)。`WorldRuntime._being_episode_store` が常に持ち、`ExperimentSnapshotSession` では必須の store にした。SQLite の実装は作っていない。手本の知り合いの記録も in-memory だけで、Being の記憶は snapshot で持ち越すため
 
 **呼び名を ID だけから毎回作らない理由**: 呼び名は `ep_` と ID (区切りの `-` を除いた 16 進) の先頭 6 文字で、同じ Being の中で重なったら 1 文字ずつ伸ばす。伸ばすのは後から足した側だけにした。前からある側も伸ばすと、プロンプトの履歴に残った `ep_3f2a7b` が指す先が変わる (design_decisions 3 のラベルが変わって混乱した問題と同じ形)。どちらが後かは足した順で決まり、ID だけでは決まらない。そこで呼び名をエピソードに持たせ、snapshot にもそのまま入れる。読み込むときは ID から作り直さず、呼び名の無い payload は拒む。作り直すと、伸ばした呼び名が 6 文字に戻り、前からある呼び名と重なる。エピソードの側では「呼び名は `ep_` + ID の先頭 6 文字以上」だけを不変条件として確かめる。Issue #1623 は「今の `afterglow_store.py` と同じ作り方」と書いているが、今の `make_afterglow_handle` は常に 6 文字で伸ばさない。重なりは引くときに新しい方を選んで済ませている
