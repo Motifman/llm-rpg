@@ -162,6 +162,8 @@ Issue は「`_interact` / `_interact_with_player` を最優先」としていた
 
 ## 4. A: 証拠の文面から error_code を消す
 
+> 書き起こし器と言い換え表 (`failure_repeat_phrasing`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。
+
 ### 何が悪いか
 
 `structured_failure_evidence_transcriber.py:120` が `error_code` を日本語文に
