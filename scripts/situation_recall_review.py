@@ -1,6 +1,7 @@
 """状況の想起で載った信念が場面に合っているかを、人が当否を付けられる表にし、手法ごとに数える (#1454)。
 
 ``situation_recall_probe.py`` の結果から、場面ごとに、比べた手法のどれかが載せた信念を重ねずに並べる。
+probe と状況の想起は #1631 で消した。過去の結果の JSON を読み直すためだけに残す。
 行には通し番号を振り、当否は番号で結びつける。当否は Claude と人で別のファイルに持つ。
 
 - ``items``: 結果から行を作る。並びを変えると当否の番号がずれるので、既存の行は ``--overwrite`` が無ければ上書きしない
@@ -39,7 +40,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-#: 体の危険の語。situation_recall_probe.py と同じ。
+#: 体の危険の語。消した situation_recall_probe.py と同じだった。
 _DANGER = re.compile(r"攻撃|怪我|血|痛|危|倒れ|瀕死|HP|空腹|飢|毒|噛|襲")
 _LABELS = ("Y", "?", "N")
 
