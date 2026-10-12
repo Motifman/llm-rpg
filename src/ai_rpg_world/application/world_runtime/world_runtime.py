@@ -1919,21 +1919,20 @@ class WorldRuntime:
             tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
             flag_name="SEMANTIC_SEARCH_ENABLED",
         )
+        episode_index_revision_enabled = self._episode_index_enabled()
         episode_recall_max_handles = None
-        if self._resolve_requested_memory_tool_enabled(
-            requested=self._episode_index_enabled(),
-            executor=self._being_episode_recall_tool_executor,
-            tool_name=TOOL_NAME_EPISODE_RECALL,
-            flag_name="BEING_EPISODE_INDEX_ORDER",
-        ):
+        if episode_index_revision_enabled:
+            if (
+                self._being_episode_recall_tool_executor is None
+                or self._being_episode_index_revision_tool_executor is None
+            ):
+                raise ToolExposureConfigurationError(
+                    f"{TOOL_NAME_EPISODE_RECALL} and {TOOL_NAME_EPISODE_REVISE_INDEX} are "
+                    "always offered (#1631), but their executors are not wired; build the "
+                    "runtime with create_world_runtime"
+                )
             assert cfg is not None
             episode_recall_max_handles = cfg.being_episode_recall_max_handles
-        episode_index_revision_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=self._episode_index_enabled(),
-            executor=self._being_episode_index_revision_tool_executor,
-            tool_name=TOOL_NAME_EPISODE_REVISE_INDEX,
-            flag_name="BEING_EPISODE_INDEX_ORDER",
-        )
         return [
             defn
             for defn, _ in get_memory_specs(
@@ -1997,8 +1996,7 @@ class WorldRuntime:
     def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
         """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
 
-        ツールは #1616 と同じく、実際に出すツールの一覧から決める。純スポットグラフの
-        経路では、目次が出ていても記憶のツールは隠れる。
+        ツールは #1616 と同じく、実際に出すツールの一覧から決める。
         """
         offered = {
             definition.name
@@ -2007,7 +2005,9 @@ class WorldRuntime:
         return self._episode_index_enabled(), TOOL_NAME_EPISODE_RECALL in offered
 
     def _episode_index_enabled(self) -> bool:
-        return getattr(self._runtime_config, "being_episode_index_order", "off") != "off"
+        # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
+        # 記憶のツールを隠す純スポットグラフでは、呼び出せない目次を出さない。
+        return self._runtime_config is not None and self._include_todo_tools
 
     def episode_index_text(self, player_id: PlayerId) -> str:
         """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
@@ -2021,7 +2021,6 @@ class WorldRuntime:
             format_episode_index,
         )
         from ai_rpg_world.being.domain.episode_index_selection import (
-            NewestFirst,
             RecalledRisesToTop,
         )
 
@@ -2030,8 +2029,7 @@ class WorldRuntime:
             return ""
         cfg = self._runtime_config
         assert cfg is not None
-        order = cfg.being_episode_index_order
-        selection = {"newest_first": NewestFirst, "recalled_rises_to_top": RecalledRisesToTop}[order]()
+        selection = RecalledRisesToTop()
         episodes = self._being_episode_store.list_by_being(acting.being_id)
         shown = selection.select(episodes, limit=cfg.being_episode_index_limit)
         try:
@@ -2040,7 +2038,7 @@ class WorldRuntime:
                 tick=self.current_tick(),
                 player_id=int(player_id.value),
                 being_id=acting.being_id.value,
-                order=order,
+                order="recalled_rises_to_top",
                 limit=cfg.being_episode_index_limit,
                 total_count=len(episodes),
                 shown_handles=[e.handle for e in shown],
@@ -5342,7 +5340,7 @@ def _build_player_episode_writing(
         )
         if not isinstance(client, EpisodeWritingCompletion):
             raise RuntimeError(
-                "BEING_EPISODE_WRITING_ENABLED needs an LLM client that can write episodes"
+                "episode writing needs an LLM client that can write episodes"
             )
         completion = client
     else:
@@ -6701,11 +6699,7 @@ def create_world_runtime(
         event_store=recent_event_store,
         aux_llm_call_sink=aux_llm_call_sink,
         # runtime はこのあとで組むが、畳むのは tick が始まってからなので間に合う。
-        on_compacted=(
-            (lambda pid, entries: runtime._write_compacted_episodes(pid, entries))
-            if config.being_episode_writing_enabled
-            else None
-        ),
+        on_compacted=lambda pid, entries: runtime._write_compacted_episodes(pid, entries),
     )
     action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
@@ -8971,40 +8965,38 @@ def create_world_runtime(
             player_id, environment_entry_for_player(scenario, player_id)
         )
     _record_meetings_at_spawn(scenario, player_acquaintances)
-    if config.being_episode_index_order != "off":
-        from ai_rpg_world.application.llm.services.executors.being_episode_index_revision_tool_executor import (
-            BeingEpisodeIndexRevisionToolExecutor,
-        )
-        from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
-            BeingEpisodeRecallToolExecutor,
-        )
+    from ai_rpg_world.application.llm.services.executors.being_episode_index_revision_tool_executor import (
+        BeingEpisodeIndexRevisionToolExecutor,
+    )
+    from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
+        BeingEpisodeRecallToolExecutor,
+    )
 
-        runtime._being_episode_recall_tool_executor = BeingEpisodeRecallToolExecutor(
+    runtime._being_episode_recall_tool_executor = BeingEpisodeRecallToolExecutor(
+        repository=runtime._being_episode_store,
+        turn_reader=memory_turn_clock,
+        max_handles=config.being_episode_recall_max_handles,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    runtime._being_episode_index_revision_tool_executor = (
+        BeingEpisodeIndexRevisionToolExecutor(
             repository=runtime._being_episode_store,
             turn_reader=memory_turn_clock,
-            max_handles=config.being_episode_recall_max_handles,
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=lambda: runtime.current_tick(),
         )
-        runtime._being_episode_index_revision_tool_executor = (
-            BeingEpisodeIndexRevisionToolExecutor(
-                repository=runtime._being_episode_store,
-                turn_reader=memory_turn_clock,
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-                current_tick_provider=lambda: runtime.current_tick(),
-            )
-        )
-    if config.being_episode_writing_enabled:
-        runtime._player_episode_writing = _build_player_episode_writing(
-            config,
-            runtime=runtime,
-            turn_reader=memory_turn_clock,
-            persona_of=_build_persona_resolver(
-                scenario=scenario,
-                world_character=world_character,
-                persona_block=persona_block,
-            ),
-        )
+    )
+    runtime._player_episode_writing = _build_player_episode_writing(
+        config,
+        runtime=runtime,
+        turn_reader=memory_turn_clock,
+        persona_of=_build_persona_resolver(
+            scenario=scenario,
+            world_character=world_character,
+            persona_block=persona_block,
+        ),
+    )
 
     # disabled_tools の名前が実在するかを、ここで確かめる。
     #

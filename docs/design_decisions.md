@@ -7935,6 +7935,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1626 / #1621 / #1623、design_decisions 10 / 54 / 55 / 87 / D1623。
 
+**その後**: `BEING_EPISODE_WRITING_ENABLED` は Issue #1631 で消し、書き起こしは常に入る形にした。短期記憶の既定を `rolling_summary` にし、`sliding_window` は起動時に拒む (design_decisions D1631)。
+
 ---
 
 ## D1623-2. エピソードの目次は空でも【思い出せる出来事】として毎ターン出し、呼び名で本文を呼び出す
@@ -7963,6 +7965,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1623 / #1621 / #1626、design_decisions 1 / 10 / D1616 / D1623 / D1626 / D1628。
 
+**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。 記憶のツールを隠す純スポットグラフ (`LLM_TOOL_MODE=pure_spot_graph`) では、呼び出せない目次を出さない。
+
 ---
 
 ## D1623-3. 目次は本人が専用のツールで直し、目次を出す設定ではメモの出どころにエピソードを選ばせる
@@ -7983,6 +7987,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 目次を直すツールの結果も、呼び出しと同じく `_AGENT_SIDE_TOOLS` に名前を足して、観測に写さない (design_decisions D1623-2)。目次を直すツールを止める設定を足すときは、`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` に行を足す。メモの出どころの「エピソードから」は、メモ帳と目次の両方を出すときだけ出る。総当たりの試験は、メモ帳に置き換えた正の対照でこの説明が出ることと、目次を止めると消えることを見ている
 
 **関連**: Issue #1623 / #1628 / #1621、design_decisions D1616 / D1623 / D1623-2 / D1626 / D1628 / D1628-2。
+
+**その後**: 目次は Issue #1631 で常に出す形になったので、メモ帳を出す設定では、出どころにエピソードを常に選べる。
 
 ---
 
@@ -8171,3 +8177,5 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 既定が `sliding_window` のまま新しい記憶を標準にすると、短期記憶の種類を書かない設定 (多くの試験) が、起動時の検査で止まるか、書き起こしの無いまま走る。
 
 **関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。
+
+**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。

@@ -112,18 +112,10 @@ class TestShortTermMemoryConfigVsRuntime:
         runtime = _build_runtime()
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
-    def test_sliding_window_default_short_term_memory(self) -> None:
-        """sliding window 明示 でも DefaultSlidingWindowMemory。"""
-        from ai_rpg_world.application.llm.services.sliding_window_memory import (
-            DefaultSlidingWindowMemory,
-        )
-
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="sliding_window"
-            )
-        )
-        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
+    def test_sliding_window_is_rejected_before_the_runtime_is_built(self) -> None:
+        """sliding window を明示すると、エピソードの書き起こしを呼べないので設定の時点で止まる (#1631)。"""
+        with pytest.raises(ValueError, match="SHORT_TERM_MEMORY_KIND must be rolling_summary"):
+            ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind="sliding_window")
 
     def test_rolling_summary_builds_summarizing_short_term_memory(self) -> None:
         """PR #439 silent failure 再発防止の核心 assert。"""
@@ -138,14 +130,10 @@ class TestShortTermMemoryConfigVsRuntime:
         )
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
-    @pytest.mark.parametrize("kind", ["sliding_window", "rolling_summary"])
-    def test_turn_window_settings_reach_both_memory_implementations(
-        self, kind: str
-    ) -> None:
-        """profile の cap / 畳む数は短期記憶の実装差に関わらず配線される。"""
+    def test_turn_window_settings_reach_the_memory(self) -> None:
+        """profile の cap / 畳む数が短期記憶に配線される。"""
         runtime = _build_runtime(
             ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind=kind,
                 short_term_memory_turn_cap=12,
                 short_term_memory_turn_compact_count=4,
             )

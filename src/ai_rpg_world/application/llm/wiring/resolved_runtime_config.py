@@ -61,16 +61,12 @@ from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
     WorldTickFailurePolicy,
 )
 
-#: off は目次を出さない。ほかは being/domain/episode_index_selection.py の並べ方。
-BEING_EPISODE_INDEX_ORDERS = frozenset({"off", "recalled_rises_to_top", "newest_first"})
 _DEFAULT_BEING_EPISODE_INDEX_LIMIT = 10
 _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES = 3
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BEING_EPISODE_INDEX_LIMIT",
-    "BEING_EPISODE_INDEX_ORDER",
     "BEING_EPISODE_RECALL_MAX_HANDLES",
-    "BEING_EPISODE_WRITING_ENABLED",
     "BEING_MEMO_ENABLED",
     "BELIEF_ATTRIBUTION_ENABLED",
     "BELIEF_CANDIDATE_NARROWER",
@@ -203,7 +199,7 @@ class ResolvedLlmRuntimeConfig:
 
     Attributes:
         # === Short-term memory (Phase 2) ===
-        short_term_memory_kind: ``"sliding_window"`` | ``"rolling_summary"``
+        short_term_memory_kind: ``"rolling_summary"`` だけ。``"sliding_window"`` は起動時に拒む (D1631)
         short_term_memory_scheduler_mode: ``"inline"`` | ``"thread_pool"``
 
         # === Prompt section ordering (Phase 0) ===
@@ -416,12 +412,7 @@ class ResolvedLlmRuntimeConfig:
     belief_candidate_narrower: str = CHAR_BIGRAM_BM25
     # #1414: 【関連する学び】を状況の項目から引く。件数は semantic_passive_top_k。
     situation_belief_recall_enabled: bool = False
-    # #1626: 短期記憶を畳むときと run の終わりに、目次つきのエピソードを書き起こす。
-    # 古いエピソード (episodic_enabled / episodic_subjective_enabled) とは別のスイッチ。
-    being_episode_writing_enabled: bool = False
-    # #1623: 目次の並べ方 (off なら目次も呼び出しのツールも出さない)・載せる件数 N・
-    # 1 回に呼び出せる件数 M。
-    being_episode_index_order: str = "off"
+    # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
     situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
@@ -521,23 +512,11 @@ class ResolvedLlmRuntimeConfig:
             )
         self._validate_belief_create_gate()
         self._validate_situation_belief_recall()
-        if (
-            self.being_episode_writing_enabled
-            and self.short_term_memory_kind != "rolling_summary"
-        ):
-            # 書き起こしを呼ぶ口は畳んで要約する短期記憶にしか無く、ほかの種類では一度も呼ばれない。
+        if self.short_term_memory_kind != "rolling_summary":
+            # エピソードの書き起こし (#1626) を呼ぶ口は畳んで要約する短期記憶にしか無い。
+            # 書き起こしは常に入るので、ほかの種類では目次が黙って空のまま走る (D1631)。
             raise ValueError(
-                "BEING_EPISODE_WRITING_ENABLED requires SHORT_TERM_MEMORY_KIND=rolling_summary"
-            )
-        if self.being_episode_index_order not in BEING_EPISODE_INDEX_ORDERS:
-            raise ValueError(
-                f"BEING_EPISODE_INDEX_ORDER={self.being_episode_index_order!r} must be one of "
-                f"{sorted(BEING_EPISODE_INDEX_ORDERS)}"
-            )
-        if self.being_episode_index_order != "off" and not self.being_episode_writing_enabled:
-            # 書き起こしが無いと、目次はいつまでも空のまま呼び出しのツールだけが出る。
-            raise ValueError(
-                "BEING_EPISODE_INDEX_ORDER requires BEING_EPISODE_WRITING_ENABLED=1"
+                "SHORT_TERM_MEMORY_KIND must be rolling_summary: episode writing is always on"
             )
         self._validate_expectation_settlement()
         if self.being_memo_enabled and self.memo_tools_enabled:
@@ -924,15 +903,6 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"SITUATION_BELIEF_RECALL_ENABLED: {exc}") from exc
-        try:
-            being_episode_writing_enabled = _parse_truthy(
-                source.get("BEING_EPISODE_WRITING_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"BEING_EPISODE_WRITING_ENABLED: {exc}") from exc
-        being_episode_index_order = (
-            _strip_or_none(source.get("BEING_EPISODE_INDEX_ORDER")) or "off"
-        )
         being_episode_index_limit = _resolve_positive_int(
             source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
         )
@@ -1103,8 +1073,6 @@ class ResolvedLlmRuntimeConfig:
             belief_create_gate_enabled=belief_create_gate_enabled,
             belief_candidate_narrower=belief_candidate_narrower,
             situation_belief_recall_enabled=situation_belief_recall_enabled,
-            being_episode_writing_enabled=being_episode_writing_enabled,
-            being_episode_index_order=being_episode_index_order,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             situation_belief_recall_narrower=situation_belief_recall_narrower,
@@ -1147,7 +1115,7 @@ class ResolvedLlmRuntimeConfig:
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="sliding_window",
+                semantic_passive_top_k=3,
             )
         """
         defaults: dict[str, Any] = dict(
@@ -1252,8 +1220,6 @@ class ResolvedLlmRuntimeConfig:
             belief_create_gate_enabled=False,
             belief_candidate_narrower=CHAR_BIGRAM_BM25,
             situation_belief_recall_enabled=False,
-            being_episode_writing_enabled=False,
-            being_episode_index_order="off",
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             situation_belief_recall_narrower=CHAR_BIGRAM_BM25,

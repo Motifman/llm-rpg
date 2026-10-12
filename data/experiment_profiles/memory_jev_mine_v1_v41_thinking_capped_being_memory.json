@@ -6,9 +6,7 @@
   "snapshot_save": true,
   "runtime_config": {
     "BEING_EPISODE_INDEX_LIMIT": 10,
-    "BEING_EPISODE_INDEX_ORDER": "recalled_rises_to_top",
     "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
-    "BEING_EPISODE_WRITING_ENABLED": true,
     "BEING_MEMO_ENABLED": true,
     "BELIEF_ATTRIBUTION_ENABLED": false,
     "BELIEF_CONSOLIDATION_ENABLED": false,

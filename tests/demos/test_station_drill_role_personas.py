@@ -88,7 +88,8 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     なり、記憶の部品を有効にしないこの世界では【関連する記憶】と能動想起の文の
     ぶんバイトが変わった。#1612 で、行動に添える一言には結果ではなくこれから
     することを書くよう【独白と一言の書き方】に 1 文足したので、そのぶんバイトが
-    変わった。
+    変わった。#1631 で、目次つきのエピソードが設定で止められない標準になり、
+    【思い出せる出来事】と `episode_recall` を説明する 1 行ぶんバイトが変わった。
 
     以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
     値を更新するときは、prompt を変えた理由が PR にあるはずなので、それを確かめる
@@ -96,12 +97,12 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "4543998d083ed0f391ca716c3cd439ec5d99bd1517a956747b527ca478ad0b80",
-        "sena": "414b192d5127a2a9f5e56c4f8e04e8fe1af83db7ac98bbcfc98dd39e241f430f",
-        "aoi": "787c6016a812fd76d778d821a4e5d4739aa58c1dd5c65aa63c73c8d423c17768",
-        "hagi": "51560442eb604138ef8843fbe06fea9b3f81bbf8ccc8c6f2360c79b2331b6590",
-        "yura": "2b1ee73bfffe9af942c6cad9e2354b9b65a74dc0095e2b39173d477fe4fedbf6",
-        "saki": "bcc5b6849ec50fb7036fe76352271238742dbf5a05b5a40a2d4c82b846ff852a",
+        "mori": "0aec73af588a5848f9a18f1eaaacfb4522ddbcaf2b0fe1b78134c192fe571a30",
+        "sena": "165e463986a953efda08c9368ebaf08ca12bccd4f96748be50a9575c9e589062",
+        "aoi": "be41f85fce5652f643c34f771212fcc19a0a8ad5f1a06facf6a8025e82acf588",
+        "hagi": "84836f670ef33ba121d82e30151793de0ca01e10fc3744fe67596f172faebd62",
+        "yura": "ea25e0849eb722380925ccbc7f3b67a519f01463176965a20a761ac335d882af",
+        "saki": "9107b0e647e9a1f226944846620fcac439da824515a9c50dda918f65d4c8fb36",
     }
 
     actual_by_string_id = {
