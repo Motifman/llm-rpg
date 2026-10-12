@@ -154,8 +154,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_API_KEY_ENV",
     "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
     "TYPED_JUDGMENT_ENDPOINT",
-    "TYPED_JUDGMENT_GOAL_HINT_ENABLED",
-    "TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY",
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
     "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
@@ -241,10 +239,6 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_semantic_repeat_min_probability: 繰り返しと見なす確率の閾値。
             警告が待機へ押すのを避けるため高めに置く
         typed_judgment_semantic_repeat_window: 判断に渡す直近の行動の件数
-        typed_judgment_goal_hint_enabled: 行動の結果のあと、未達成の目的が達成
-            されたかを問い、可能性が高ければ hint を添える (#1448)。**既定は off**。
-            目的の改訂 (goal_outcome) が無い run では入らない
-        typed_judgment_goal_hint_min_probability: 目的の hint を出す確率の閾値
         expectation_settlement_enabled: ターンの終わりに、予期の形と当否を Jev に
             問うて清算する (#1440)。**既定は off**。判断の provider が要る
         expectation_settlement_max_open: 清算の問いに載せる清算待ちの予期の上限。
@@ -324,8 +318,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_semantic_repeat_enabled: bool
     typed_judgment_semantic_repeat_min_probability: float
     typed_judgment_semantic_repeat_window: int
-    typed_judgment_goal_hint_enabled: bool
-    typed_judgment_goal_hint_min_probability: float
     expectation_settlement_enabled: bool
     expectation_settlement_max_open: int
     expectation_settlement_timeline_turns: int
@@ -748,17 +740,6 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
             default=_DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW,
         )
-        try:
-            typed_judgment_goal_hint_enabled = _parse_truthy(
-                source.get("TYPED_JUDGMENT_GOAL_HINT_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"TYPED_JUDGMENT_GOAL_HINT_ENABLED: {exc}") from exc
-        typed_judgment_goal_hint_min_probability = _resolve_ratio_with_default(
-            source,
-            "TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY",
-            default=_DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY,
-        )
         if typed_judgment_semantic_repeat_window < 2:
             raise ValueError(
                 "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater"
@@ -1014,10 +995,6 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_semantic_repeat_min_probability
             ),
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
-            typed_judgment_goal_hint_enabled=typed_judgment_goal_hint_enabled,
-            typed_judgment_goal_hint_min_probability=(
-                typed_judgment_goal_hint_min_probability
-            ),
             expectation_settlement_enabled=expectation_settlement_enabled,
             expectation_settlement_max_open=expectation_settlement_max_open,
             expectation_settlement_timeline_turns=expectation_settlement_timeline_turns,
@@ -1154,10 +1131,6 @@ class ResolvedLlmRuntimeConfig:
             ),
             typed_judgment_semantic_repeat_window=(
                 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
-            ),
-            typed_judgment_goal_hint_enabled=False,
-            typed_judgment_goal_hint_min_probability=(
-                _DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY
             ),
             expectation_settlement_enabled=False,
             expectation_settlement_max_open=_DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN,
@@ -1374,12 +1347,6 @@ _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 #: 0.86 以上だった。警告が待機へ押すのを避けるため、非繰り返しの最大から離して置く。
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY = 0.8
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW = 4
-
-#: 過去 run の行動と結果に本人の目的を当てた 23 件で測った
-#: (scripts/jev_goal_completion_hint_demo.py)。達成していない 14 件の最大は 0.18 で、
-#: 達成した 9 件は 0.9 / 0.9 / 0.82 / 0.68 と 0.35 以下に割れた。0.7 では明らかな
-#: 達成 (渡す目的で 2 件とも渡せた、0.68) を落とすので、未達の最大から離して 0.5 に置く。
-_DEFAULT_TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY = 0.5
 
 #: 清算待ちの上限の暫定値。#1436 の試しで DeepSeek は 1 ターンに平均 2.9 件の予期を
 #: 書き、形の判定で 15% ほどが外れた。数ターン分を抱えられる値に置き、予期を積む
