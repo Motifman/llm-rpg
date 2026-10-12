@@ -44,12 +44,16 @@ class TestBeingStackWithoutOldMemoExecutor:
         assert resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id) == before
 
     def test_auxiliary_tool_without_old_memo_executor_reports_unsupported_tool(self) -> None:
-        """古いメモの実行器を組まない runtime で古いメモのツールを呼ぶと、止まらずに未対応のツールとして返す。"""
+        """古いメモの実行器を組まない runtime で古いメモのツールを呼ぶと、止まらずに未対応のツールとして返す。実行器があれば同じ呼び出しは通る。"""
         runtime = create_world_runtime(_SCENARIO)
         player_id = runtime.get_player_ids()[0]
+        with_executor = runtime.run_llm_auxiliary_tool(
+            player_id, "memo_add", {"content": "鍵を探す"}
+        )
         runtime._todo_tool_executor = None
         runtime._wire_auxiliary_tool_stack = runtime._wire_being_stack  # type: ignore[method-assign]
 
         result = runtime.run_llm_auxiliary_tool(player_id, "memo_add", {"content": "鍵を探す"})
 
+        assert with_executor.success
         assert (result.success, result.error_code) == (False, "UNSUPPORTED_TOOL")

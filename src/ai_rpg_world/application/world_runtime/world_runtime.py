@@ -2513,8 +2513,7 @@ class WorldRuntime:
 
     @property
     def aux_being_resolver(self) -> Any:
-        """``_aux_being_resolver`` の公開。``_wire_being_stack`` を呼んでいないと None。
-        """
+        """``_aux_being_resolver`` の公開。``_wire_being_stack`` を呼んでいないと None。"""
         return getattr(self, "_aux_being_resolver", None)
 
     @property
@@ -9119,8 +9118,8 @@ def create_world_runtime(
                 current_tick_provider=runtime.current_tick,
                 memory_turn_reader=runtime._memory_turn_clock,
             )
-            # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
-            # 作り直しても (set_trace_recorder 等) 再適用されるようにする。
+            # runtime に保持し、_wire_auxiliary_tool_stack が executor を初めて組む
+            # ときも、作り直すとき (set_trace_recorder 等) も適用されるようにする。
             # これがないと build 後の set_trace_recorder で transcriber が
             # 静かに失われていた (memo_done 28 件に対し evidence 0 件)。
             runtime._memo_distill_transcriber = memo_distill_transcriber
