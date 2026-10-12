@@ -204,7 +204,6 @@ class IContextFormatStrategy(ABC):
         learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
-        prediction_feedback_text: str = "",
         pending_predictions_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",

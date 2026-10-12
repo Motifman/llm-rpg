@@ -45,7 +45,7 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "content": ActionArgumentDisplayKind.FREE_TEXT,
     # travel_to.destination_label: 現在状態に出た場所名と完全一致が必要。
     "destination_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
-    # expectations: 予期は清算と「前回の予測と実際」(#1442) で扱い、呼び出し行には出さない。
+    # expectations: 予期は清算で扱い、呼び出し行には出さない。
     "expectations": ActionArgumentDisplayKind.OMIT,
     # memo: メモ帳への書き込みは【メモ】に出るので、呼び出し行には出さない (#1628)。
     "memo": ActionArgumentDisplayKind.OMIT,

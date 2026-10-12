@@ -51,7 +51,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -744,13 +743,19 @@ def test_being_provisioning_failure_stops_runtime_creation(
     assert "provision boom" in str(excinfo.value.__cause__)
 
 
-def test_expected_result_policy_off_exposes_no_prediction_field(
+def test_no_tool_or_system_prompt_offers_the_prediction_field(
     clean_runtime_env: None,
 ) -> None:
-    """U2 後続 v0: policy off (既定) では expected_result が schema にも prompt にも出ない。"""
-    runtime = _create_runtime()  # for_tests default = off
-    explore = _tool_by_name(runtime, TOOL_NAME_SPOT_GRAPH_EXPLORE)
-    assert "expected_result" not in explore.parameters["properties"]
+    """行動ごとの結果の予想 expected_result は #1631 で消したので、どのツールの schema にも system prompt にも出ない。"""
+    runtime = _create_runtime()
+    for mode in ("legacy", "reason_first"):
+        for definition in runtime.get_tool_definitions(
+            tool_schema_mode=mode, for_every_player=True
+        ):
+            assert "expected_result" not in definition.parameters.get("properties", {}), (
+                mode,
+                definition.name,
+            )
     player_id = runtime.get_player_ids()[0]
     system = "\n".join(
         m.get("content", "")
@@ -760,59 +765,11 @@ def test_expected_result_policy_off_exposes_no_prediction_field(
     assert "expected_result" not in system
 
 
-def test_expected_result_policy_optional_exposes_field_not_required(
-    clean_runtime_env: None,
-) -> None:
-    """v0: optional で対象4ツールに expected_result が出るが required にならない。非対象には出ない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="optional")
-    )
-    for name in (
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-        TOOL_NAME_SPOT_GRAPH_WAIT,
-    ):
-        defn = _tool_by_name(runtime, name)
-        assert "expected_result" in defn.parameters["properties"], name
-        assert "expected_result" not in defn.parameters.get("required", []), name
-    # 非対象 tool (listen) には露出しない = 露出範囲 = 記録配線範囲
-    listen = _tool_by_name(runtime, TOOL_NAME_SPOT_GRAPH_LISTEN)
-    assert "expected_result" not in listen.parameters["properties"]
-    # prompt にも予測ルール行が出る
-    player_id = runtime.get_player_ids()[0]
-    system = "\n".join(
-        m.get("content", "")
-        for m in runtime.build_full_prompt(player_id).get("messages", [])
-        if m.get("role") == "system"
-    )
-    assert "expected_result" in system
-
-
-def test_expected_result_policy_required_makes_field_required(
-    clean_runtime_env: None,
-) -> None:
-    """v0: required で対象4ツールの required に expected_result が入る。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
-    )
-    for name in (
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-        TOOL_NAME_SPOT_GRAPH_WAIT,
-    ):
-        defn = _tool_by_name(runtime, name)
-        assert "expected_result" in defn.parameters["required"], name
-
-
 def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fields(
     clean_runtime_env: None,
 ) -> None:
     """reason_first toolset だけ assess_situation を足し、行動 tool の主観入力を外す。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
-    )
+    runtime = _create_runtime()
 
     legacy_names = [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
     reason_first_tools = runtime.get_tool_definitions(
@@ -827,8 +784,7 @@ def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fie
     assert reason_first_names[:-1] == legacy_names
 
     assess = _tool_by_name_from(reason_first_tools, TOOL_NAME_ASSESS_SITUATION)
-    assert "inner_thought" in assess.parameters["required"]
-    assert "expected_result" in assess.parameters["required"]
+    assert assess.parameters["required"] == ["inner_thought"]
 
     explore = _tool_by_name_from(reason_first_tools, TOOL_NAME_SPOT_GRAPH_EXPLORE)
     assert "inner_thought" not in explore.parameters["properties"]
@@ -889,7 +845,6 @@ def test_reason_first_tool_mode_preserves_goal_revision_fields(
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
-            expected_result_policy="required",
             goal_store_enabled=True,
             goal_revision_enabled=True,
         )
@@ -1501,9 +1456,7 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     clean_runtime_env: None,
 ) -> None:
     """reason_first の予測は内部注入後、legacy と同じ action 記録経路で保存される。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
-    )
+    runtime = _create_runtime()
     runtime.reason_first_two_step_enabled = lambda player_id: True
     player_id = runtime.get_player_ids()[0]
     client = _SequencedLlmClient(
@@ -1541,9 +1494,10 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     assert "【現在選べる対象引数】" in action_user
     final_instruction = (
         "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-        "inner_thought / expected_result は再生成しない。"
+        "inner_thought は再生成しない。"
     )
     assert action_user.endswith(final_instruction)
+    assert "expected_result" not in action_user
     assert action_user.index("【行動前の状況評価】") < action_user.index(
         "【現在選べる対象引数】"
     )
@@ -1552,17 +1506,11 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     )
 
 
-@pytest.mark.parametrize("expected_result_policy", ["off", "optional"])
 def test_reason_first_without_assessment_prediction_records_none_through_shared_path(
     clean_runtime_env: None,
-    expected_result_policy: str,
 ) -> None:
     """reason_first でも予測が無い評価なら、共有 action 記録経路の expected_result は None のまま。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            expected_result_policy=expected_result_policy
-        )
-    )
+    runtime = _create_runtime()
     runtime.reason_first_two_step_enabled = lambda player_id: True
     player_id = runtime.get_player_ids()[0]
     client = _SequencedLlmClient(
