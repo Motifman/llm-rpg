@@ -361,3 +361,21 @@ class TestTheSessionGetsTheGoalHint:
         """目的の改訂が無効で goal_outcome が tool に出ていないのに hint を有効にすると、session を作る時点で ValueError になる。"""
         with pytest.raises(ValueError, match="TYPED_JUDGMENT_GOAL_HINT_ENABLED"):
             list(_session_wiring(self._config(goal_revision_enabled=False)))
+
+
+class TestTheItemNameRescueReachesThePlayerInteractions:
+    """人を対象にした操作の品名の読み替えに、判断が注入されることを保証する (#1641)。"""
+
+    def test_the_runtime_can_rescue_item_names_when_the_profile_asks_for_judgment(self) -> None:
+        """provider が判断を求めていれば、runtime は品名を選び直す口を持ち、閾値は対象名と同じ 0.85。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            rescue = wiring.runtime.target_item_name_rescue
+            assert rescue is not None
+            assert rescue.min_confidence == 0.85
+
+    def test_the_runtime_has_no_item_name_rescue_by_default(self) -> None:
+        """profile が求めなければ、runtime は品名を意味で選び直さない (**正の対照**)。"""
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
+            assert wiring.runtime.target_item_name_rescue is None

@@ -61,6 +61,9 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     WeatherTypeIsPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.unresolved_item_name import (
+    unresolved_item_name_message,
+)
 
 
 def _lacks_puzzle_input(
@@ -352,8 +355,13 @@ class SpotInteractionService:
             if spec_id is None:
                 # 実行時指定なのに参照キーが無い = 「相手の持ち物にその名前が
                 # 見当たらなかった」。前提条件の不成立として返す。
+                unresolved = (
+                    unresolved_item_name_message(interaction_parameters)
+                    if t == InteractionConditionTypeEnum.TARGET_HAS_ITEM
+                    else None
+                )
                 return False, (
-                    cond.failure_message or "相手はそれを持っていない"
+                    unresolved or cond.failure_message or "相手はそれを持っていない"
                 )
             common_result = self._predicate_evaluator.evaluate(
                 ItemSpecOwnedPredicate(spec_id),
