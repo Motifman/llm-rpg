@@ -244,6 +244,8 @@ class MemoBook:
         memo = self._require(handle)
         _require_known_episode(provenance, known_episode_handles)
         _require_turn(turn, "turn")
+        if memo.edited_turn is not None and turn < memo.edited_turn:
+            raise MemoValidationException("turn must not go back before the last edit")
         edited = replace(
             memo,
             text=text,

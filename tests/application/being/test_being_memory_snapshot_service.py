@@ -442,6 +442,19 @@ class TestRestoreRoundTrip:
         assert dst_stores['memo'].list_all_by_being(being) == []
         assert dst_stores['being_memo'].get(being) == MemoBook.empty()
 
+    def test_memo_book_with_the_same_handle_twice_is_rejected(self) -> None:
+        """同じ呼び名のメモが payload に 2 件あると、どちらかを選ばずに BeingMemoryPayloadFormatError で拒む。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['being_memo'].save(being, self._memo_book())
+        payload = json.loads(src_svc.capture(being))
+        twin = dict(payload['being_memo_book'][3], memo_id='5be41211-1d2e-4f00-8a00-000000000009')
+        payload['being_memo_book'].append(twin)
+        (dst_svc, dst_stores) = _make_service()
+        with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
+            dst_svc.restore(being, json.dumps(payload))
+        assert dst_stores['being_memo'].get(being) == MemoBook.empty()
+
     def test_memo_without_handle_is_rejected(self) -> None:
         """呼び名 (handle) の無いメモは、ID から作り直さず BeingMemoryPayloadFormatError で拒む。"""
         (src_svc, src_stores) = _make_service()

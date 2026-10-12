@@ -7895,7 +7895,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 - 分類は「やること」「分かったこと」「人について」。件数の上限はそれぞれ 5 件・10 件・5 件 (`KIND_LIMITS`)。上限を超えて足そうとすると `MemoLimitReachedException`。上限は複数のメモにまたがる決まりなので、メモ帳が自分で守る。並べたメモ帳を直接作る経路 (snapshot から戻すとき) でも、`MemoBook.__post_init__` が上限・ID と呼び名の重なりを確かめる
 - 出どころと確かさは「分かったこと」にだけ持たせ、ほかの分類で持たせると `MemoValidationException`。人から聞いたなら誰から、エピソードからなら `ep_` で始まる呼び名が要る。エピソードの呼び名は、`add` / `edit` に渡した `known_episode_handles` の中にあるものに限る。エピソードは別の集約なので、メモ帳は保存を引かず、呼ぶ側が知っている呼び名を渡す (`Episode.write` の `taken_handles` と同じ形)
 - 文は空不可、60 字まで。超えた文はドメイン層が受け付けない
-- 書き換えは文と、分かったことなら出どころを置き換える。出どころを渡さなければ前のまま。書き換えた時を記録し、書いた時より前には戻せない。消すと記録からも消え、消したメモを返す (trace に何を消したかを残すため)
+- 書き換えは文と、分かったことなら出どころを置き換える。出どころを渡さなければ前のまま。書き換えた時を記録し、書いた時と前に書き換えた時より前には戻せない。消すと記録からも消え、消したメモを返す (trace に何を消したかを残すため)
 - 呼び名は `m_` と ID の先頭 6 文字。重なったら後から足した側だけを伸ばす (design_decisions D1623 と同じ理由)
 - `InMemoryMemoBookRepository` を足し、`BeingMemorySnapshotService` の `being_memo_book` に配線した (design_decisions 27 の 4 手順)。`WorldRuntime._being_memo_store` が常に持ち、`ExperimentSnapshotSession` では必須の store にした。SQLite は作らない (#1625 で保存の形を決める)
 

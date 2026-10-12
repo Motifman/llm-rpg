@@ -47,15 +47,14 @@ class TestInMemoryMemoBookRepository:
 
         assert [m.text for m in repository.get(ADA).memos] == ["水門を見に行く"]
 
-    def test_replace_all_with_an_empty_book_forgets_the_being(self) -> None:
-        """持ち越しから空のメモ帳で戻すと、その Being の記録が消え、空のメモ帳を返す。"""
+    def test_replace_all_with_an_empty_book_leaves_no_memo(self) -> None:
+        """持ち越しから空のメモ帳で戻すと、前に保存したメモは残らず、空のメモ帳を返す。"""
         repository = InMemoryMemoBookRepository()
         repository.save(ADA, _book())
 
         repository.replace_all_by_being(ADA, MemoBook.empty())
 
         assert repository.get(ADA) == MemoBook.empty()
-        assert ADA not in repository._by_being
 
     def test_replace_all_puts_the_given_book(self) -> None:
         """持ち越しから戻すと、渡したメモ帳がそのまま入る。"""

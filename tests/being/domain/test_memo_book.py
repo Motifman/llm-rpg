@@ -267,6 +267,14 @@ class TestEditingAMemo:
             _add(MemoBook.empty(), turn=5).edit("m_3f2a7b", text="鍵を取る", turn=4)
 
 
+    def test_edit_before_the_last_edit_is_rejected(self) -> None:
+        """前に書き換えた時より前のターンで書き換えると MemoValidationException を投げる。"""
+        book = _add(MemoBook.empty(), turn=5).edit("m_3f2a7b", text="鍵を取る", turn=8)
+
+        with pytest.raises(MemoValidationException):
+            book.edit("m_3f2a7b", text="鍵を二つ取る", turn=6)
+
+
 class TestRemovingAMemo:
     """MemoBook.remove が、呼び名で選んだメモを記録から消し、消したメモを返すことを保証する。"""
 
