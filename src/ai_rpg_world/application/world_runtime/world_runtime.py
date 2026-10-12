@@ -137,15 +137,15 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     create_text_candidate_narrower,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
+    with_memo_schema,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.memory import (
     ACTIVE_RECALL_TOOL_NAMES,
     get_memory_specs,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.public_sns import get_public_sns_definitions
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
-from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
-    with_memo_schema,
-)
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     GOAL_OUTCOME_ABANDONED,
     GOAL_OUTCOME_ACHIEVED,
