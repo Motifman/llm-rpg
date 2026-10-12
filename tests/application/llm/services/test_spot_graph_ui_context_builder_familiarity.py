@@ -30,14 +30,14 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 _SPOT_NAMES = {100: "forest_clearing", 200: "summit"}
 
@@ -46,7 +46,7 @@ def _acquaintances() -> PlayerAcquaintances:
     return PlayerAcquaintances(
         store=InMemoryAcquaintanceRepository(),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-        turn_reader=InMemoryExpectationRepository(),
+        turn_reader=InMemoryMemoryTurnClock(),
         environment_name="森",
         names_by_player_id={1: "エイダ", 2: "カイ", 3: "ノア"},
     )
@@ -220,7 +220,7 @@ class TestPlayerFamiliarityAnnotation:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="森",
             names_by_player_id={1: "エイダ", 2: "カイ", 3: "ノア"},
             appearances_by_player_id={3: "背の高い男"},

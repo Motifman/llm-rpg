@@ -120,12 +120,12 @@ class TestMemoryTurn:
         """エージェントが 2 手打つと、予期の store にある Being のターン数は 0 から 2 になる。"""
         runtime, wiring, _ = _game(enabled=False)
         being = _being(runtime)
-        before = runtime._expectation_store.current_turn(being)
+        before = runtime._memory_turn_clock.current_turn(being)
 
         _move(wiring)
         _move(wiring)
 
-        assert (before, runtime._expectation_store.current_turn(being)) == (0, 2)
+        assert (before, runtime._memory_turn_clock.current_turn(being)) == (0, 2)
 
     def test_expectation_formed_during_a_move_gets_that_turn_and_shape_is_asked(
         self,
@@ -139,7 +139,7 @@ class TestMemoryTurn:
 
         phase_a = wiring.run_phase_a(_ME)
         result = wiring.run_phase_b(phase_a)
-        turn = store.current_turn(being)
+        turn = runtime._memory_turn_clock.current_turn(being)
         store.save(_expectation(being, turn, "カイが焚き火を起こす"), [])
         wiring.llm_turn_trigger._account_result(_ME.value, result)
 
@@ -158,7 +158,7 @@ class TestTurnMaterial:
         runtime, wiring, _ = _game(port=port)
         being = _being(runtime)
         store = runtime._expectation_store
-        store.advance_turn(being)
+        runtime._memory_turn_clock.advance_turn(being)
         store.save(_expectation(being, 1, "カイが焚き火を起こす"), [])
         runtime._obs_buffer.append(
             _ME,
@@ -188,7 +188,7 @@ class TestTurnMaterial:
         runtime, wiring, _ = _game(port=port)
         being = _being(runtime)
         store = runtime._expectation_store
-        store.advance_turn(being)
+        runtime._memory_turn_clock.advance_turn(being)
         store.save(_expectation(being, 1, "カイが返事をする"), [])
         wiring.llm_client = StubLlmClient(
             {"name": TOOL_NAME_SPEECH, "arguments": {"content": "火はある?"}}
@@ -382,7 +382,7 @@ class TestSettlementWiring:
             ),
         )
         store = runtime._expectation_store
-        store.advance_turn(being)
+        runtime._memory_turn_clock.advance_turn(being)
         store.save(
             Expectation(
                 expectation_id=ExpectationId("exp-1"),
@@ -407,20 +407,24 @@ class TestSettlementWiring:
         assert expectation.snapshot().grounds == ExpectationGrounds(beliefs=("sem-drill",))
 
     def test_settlement_dispatcher_and_turn_share_one_store(self) -> None:
-        """清算・配り手・1 手ごとのターン数・snapshot が拾う store は、runtime の予期の store 1 つを指す。手を打つと、その 1 つのターン数だけが進む。"""
+        """清算・配り手・snapshot が拾う予期の store は runtime の 1 つを指し、清算と snapshot が読む時計も runtime の 1 つを指す。手を打つと、その時計のターン数だけが進む。"""
         from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
         runtime, wiring, _ = _game()
         store = runtime._expectation_store
+        clock = runtime._memory_turn_clock
         settlement = wiring.expectation_settlement
         assert settlement is not None
 
         _move(wiring)
 
+        stub = _wiring_stub_from_world_runtime(runtime)
         assert settlement._repository is store
         assert runtime._expectation_dispatcher._repository is store
-        assert _wiring_stub_from_world_runtime(runtime).expectation_store is store
-        assert store.current_turn(_being(runtime)) == 1
+        assert stub.expectation_store is store
+        assert settlement._turn_reader is clock
+        assert stub.memory_turn_clock is clock
+        assert clock.current_turn(_being(runtime)) == 1
 
     def test_snapshot_stub_picks_up_the_runtime_store(self) -> None:
         """実験の snapshot が拾う配線は runtime の予期の store そのものを指し、空の代用品に落ちない (store_wired が真になる)。"""

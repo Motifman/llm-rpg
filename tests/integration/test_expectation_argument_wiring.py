@@ -158,7 +158,7 @@ class TestToolDefinitions:
         _move(wiring)
         _move(wiring)
 
-        assert runtime._expectation_store.current_turn(_being(runtime)) == 2
+        assert runtime._memory_turn_clock.current_turn(_being(runtime)) == 2
         after = json.dumps(
             [d.parameters for d in runtime.get_tool_definitions(player_id=_ME)],
             ensure_ascii=False,

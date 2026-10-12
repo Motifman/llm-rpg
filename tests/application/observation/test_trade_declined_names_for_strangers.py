@@ -21,13 +21,13 @@ from ai_rpg_world.application.observation.services.formatters.trade_formatter im
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import TradeDeclinedEvent
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 SELLER = PlayerId(1)
 DECLINER = PlayerId(2)
@@ -48,7 +48,7 @@ def _acquaintances() -> PlayerAcquaintances:
     acquaintances = PlayerAcquaintances(
         store=InMemoryAcquaintanceRepository(),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-        turn_reader=InMemoryExpectationRepository(),
+        turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",
         names_by_player_id=NAMES,
         appearances_by_player_id=LOOKS,

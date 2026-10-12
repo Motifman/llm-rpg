@@ -60,6 +60,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     TypedJudgmentUnavailableException,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
     Expectation,
@@ -148,6 +149,7 @@ class ExpectationSettlementService:
         self,
         repository: ExpectationRepository,
         *,
+        turn_reader: MemoryTurnReader,
         judgment_port: ITypedJudgmentPort,
         dispatcher: ExpectationEventDispatcher,
         max_open: int,
@@ -159,6 +161,8 @@ class ExpectationSettlementService:
     ) -> None:
         if not isinstance(repository, ExpectationRepository):
             raise TypeError("repository must be ExpectationRepository")
+        if not isinstance(turn_reader, MemoryTurnReader):
+            raise TypeError("turn_reader must be MemoryTurnReader")
         if not isinstance(judgment_port, ITypedJudgmentPort):
             raise TypeError("judgment_port must be ITypedJudgmentPort")
         if not isinstance(dispatcher, ExpectationEventDispatcher):
@@ -181,6 +185,7 @@ class ExpectationSettlementService:
             if value < 1:
                 raise ValueError(f"{name} must be 1 or greater")
         self._repository = repository
+        self._turn_reader = turn_reader
         self._port = judgment_port
         self._dispatcher = dispatcher
         self._max_open = max_open
@@ -211,7 +216,7 @@ class ExpectationSettlementService:
         """
         if not isinstance(material, TurnMaterial):
             raise TypeError("material must be TurnMaterial")
-        current = _Turn(turn=self._repository.current_turn(being_id), material=material)
+        current = _Turn(turn=self._turn_reader.current_turn(being_id), material=material)
         try:
             return self._settle(being_id, self_name, current, tick, player_id)
         except Exception as exc:

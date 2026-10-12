@@ -51,6 +51,9 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (  # noq
     ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind  # noqa: E402
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (  # noqa: E402
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (  # noqa: E402
     BELIEF_EVIDENCE_SALIENCE_LOW,
@@ -65,9 +68,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId  # noqa: E402
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient  # noqa: E402
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (  # noqa: E402
-    InMemoryExpectationRepository,
-)
 
 _BEING = BeingId("being_w1_p1")
 _PLAYER = PlayerId(1)
@@ -203,7 +203,7 @@ def _entry(entry_id: str, text: str, tags: tuple[str, ...], support: int, turn: 
 def run_scene(scene: Scene, client: LiteLLMClient) -> dict[str, Any]:
     semantic = InMemorySemanticMemoryStore()
     buffer = InMemoryBeliefEvidenceBufferStore()
-    turns = InMemoryExpectationRepository()
+    turns = InMemoryMemoryTurnClock()
     for _ in range(scene.evidence_turn + 1):
         turns.advance_turn(_BEING)
     recorder = _Recorder()

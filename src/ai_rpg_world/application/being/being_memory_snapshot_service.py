@@ -118,6 +118,7 @@ from ai_rpg_world.application.llm.services.episodic_recall_success_store import 
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
 from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationException
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
@@ -317,6 +318,7 @@ class BeingMemorySnapshotService:
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
         expectation_store: ExpectationRepository,
+        memory_turn_clock: MemoryTurnClock,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -381,6 +383,8 @@ class BeingMemorySnapshotService:
             raise TypeError("being_memo_store must be MemoBookRepository")
         if not isinstance(expectation_store, ExpectationRepository):
             raise TypeError("expectation_store must be ExpectationRepository")
+        if not isinstance(memory_turn_clock, MemoryTurnClock):
+            raise TypeError("memory_turn_clock must be MemoryTurnClock")
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
@@ -399,6 +403,7 @@ class BeingMemorySnapshotService:
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
         self._expectation = expectation_store
+        self._memory_turn_clock = memory_turn_clock
 
     def capture(self, being_id: BeingId) -> str:
         """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -504,7 +509,7 @@ class BeingMemorySnapshotService:
             undelivered_expectation_event_to_dict(u)
             for u in self._expectation.list_undelivered_by_being(being_id)
         ]
-        memory_turn = self._expectation.current_turn(being_id)
+        memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
         payload["acquaintances"] = [
             acquaintance_to_dict(a) for a in self._acquaintance.list_by_being(being_id)
@@ -802,6 +807,7 @@ class BeingMemorySnapshotService:
             undelivered_events=undelivered_expectation_events,
             turn=memory_turn,
         )
+        self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
         self._being_memo.replace_all_by_being(being_id, being_memo_book)

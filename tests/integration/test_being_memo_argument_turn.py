@@ -71,7 +71,7 @@ class TestMemoArgumentInATurn:
         acting = runtime._acting_being_for(_ME)
         assert result.success
         assert (memo.kind, memo.text) == (MemoKind.TODO, "事務所で鍵を取る")
-        assert memo.written_turn == runtime._expectation_store.current_turn(acting.being_id)
+        assert memo.written_turn == runtime._memory_turn_clock.current_turn(acting.being_id)
         assert memo.environment_name == runtime.environment_name_for(_ME)
 
     def test_a_broken_operation_is_returned_but_the_others_land(self) -> None:

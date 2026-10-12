@@ -47,6 +47,9 @@ from ai_rpg_world.application.trace import (  # noqa: E402
     TraceEvent,
     TraceEventKind,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (  # noqa: E402
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (  # noqa: E402
     Expectation,
@@ -172,10 +175,12 @@ def replay(
     name, moves = _moves(trace_path, player_id)
     being = BeingId(f"replay-{player_id}")
     repository = InMemoryExpectationRepository()
+    clock = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     receiver = _CollectingReceiver()
     service = ExpectationSettlementService(
         repository,
+        turn_reader=clock,
         judgment_port=port,
         dispatcher=ExpectationEventDispatcher(
             repository, receivers=(receiver,), max_attempts=3,
@@ -187,7 +192,7 @@ def replay(
     )
     window = moves[start : start + turns]
     for move in window:
-        turn = repository.advance_turn(being)
+        turn = clock.advance_turn(being)
         expected = (move.arguments.get("expected_result") or "").strip()
         if expected:
             repository.save(
@@ -238,16 +243,17 @@ def shape_controls(port: ITypedJudgmentPort) -> dict[str, Any]:
     """対照の文を 1 ターンにまとめて書いたことにして、形の問いを 1 回だけ問う。"""
     being = BeingId("replay-controls")
     repository = InMemoryExpectationRepository()
+    clock = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     service = ExpectationSettlementService(
-        repository, judgment_port=port,
+        repository, turn_reader=clock, judgment_port=port,
         dispatcher=ExpectationEventDispatcher(
             repository, receivers=(), max_attempts=3,
             trace_recorder_provider=lambda: recorder,
         ),
         max_open=8, timeline_turns=4, trace_recorder_provider=lambda: recorder,
     )
-    turn = repository.advance_turn(being)
+    turn = clock.advance_turn(being)
     for index, (content, _) in enumerate(SHAPE_CONTROLS):
         repository.save(
             Expectation(

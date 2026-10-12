@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
     Expectation,
@@ -64,11 +65,14 @@ class ExpectationFormingService:
         self,
         repository: ExpectationRepository,
         *,
+        turn_reader: MemoryTurnReader,
         undated_term_turns: int,
         dated_term_turns: int,
     ) -> None:
         if not isinstance(repository, ExpectationRepository):
             raise TypeError("repository must be ExpectationRepository")
+        if not isinstance(turn_reader, MemoryTurnReader):
+            raise TypeError("turn_reader must be MemoryTurnReader")
         for name, value in (
             ("undated_term_turns", undated_term_turns),
             ("dated_term_turns", dated_term_turns),
@@ -78,6 +82,7 @@ class ExpectationFormingService:
             if value < 1:
                 raise ValueError(f"{name} must be 1 or greater")
         self._repository = repository
+        self._turn_reader = turn_reader
         self._undated_term_turns = undated_term_turns
         self._dated_term_turns = dated_term_turns
 
@@ -98,7 +103,7 @@ class ExpectationFormingService:
         """
         if not written:
             return []
-        turn = self._repository.current_turn(being_id)
+        turn = self._turn_reader.current_turn(being_id)
         prefix = f"{being_id.value}:t{turn}:"
         if any(
             e.expectation_id.value.startswith(prefix)

@@ -1,4 +1,4 @@
-"""InMemoryExpectationRepository が、予期と未配信の出来事と記憶のターン数を Being ごとに同じ保存の単位で持つ挙動を保証する。"""
+"""InMemoryExpectationRepository が、予期と未配信の出来事を Being ごとに同じ保存の単位で持つ挙動を保証する。"""
 
 from __future__ import annotations
 
@@ -17,9 +17,6 @@ from ai_rpg_world.domain.memory.expectation.event.expectation_events import (
 from ai_rpg_world.domain.memory.expectation.exception.expectation_exception import (
     ExpectationEventNotFoundException,
     ExpectationValidationException,
-)
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-    MemoryTurnReader,
 )
 from ai_rpg_world.domain.memory.expectation.value_object.check import Check
 from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import (
@@ -174,44 +171,6 @@ class TestClosingRequiresItsEvent:
         assert _ids(repo.list_all_by_being(RIO)) == ["exp-1"]
 
 
-class TestMemoryTurn:
-    """記憶のターン数が Being ごとに 0 から 1 手ずつ進む挙動を保証する。"""
-
-    def test_turn_starts_at_zero(self) -> None:
-        """一度も手を受け取っていない Being のターン数は 0。"""
-        repo = InMemoryExpectationRepository()
-
-        assert repo.current_turn(RIO) == 0
-
-    def test_each_advance_moves_turn_by_one(self) -> None:
-        """1 手を受け取るたびにターン数が 1 進み、進めたあとの値を返す。"""
-        repo = InMemoryExpectationRepository()
-
-        advanced = [repo.advance_turn(RIO) for _ in range(3)]
-
-        assert advanced == [1, 2, 3]
-        assert repo.current_turn(RIO) == 3
-
-    def test_turn_is_counted_per_being(self) -> None:
-        """ある Being の手は、別の Being のターン数を進めない。"""
-        repo = InMemoryExpectationRepository()
-
-        repo.advance_turn(RIO)
-
-        assert repo.current_turn(NOA) == 0
-
-    def test_turn_can_be_read_through_memory_turn_reader(self) -> None:
-        """予期の保存先は MemoryTurnReader として渡せ、その口から進めたあとのターン数が読める。"""
-        repo = InMemoryExpectationRepository()
-        repo.advance_turn(RIO)
-        repo.advance_turn(RIO)
-
-        reader: MemoryTurnReader = repo
-
-        assert isinstance(reader, MemoryTurnReader)
-        assert reader.current_turn(RIO) == 2
-
-
 class TestUndeliveredEvents:
     """予期の集約が返した出来事を、ID 付きの未配信として予期と同じ保存の単位で残す挙動を保証する。"""
 
@@ -312,15 +271,14 @@ class TestUndeliveredEvents:
 
 
 class TestReplaceAllByBeing:
-    """snapshot の復元で、Being の予期・未配信の出来事・ターン数をまとめて置き換える挙動を保証する。"""
+    """snapshot の復元で、Being の予期と未配信の出来事をまとめて置き換える挙動を保証する。"""
 
     def test_replace_overwrites_previous_state(self) -> None:
-        """置き換えると、それまでの予期と未配信の出来事とターン数は残らない。"""
+        """置き換えると、それまでの予期と未配信の出来事は残らない。"""
         repo = InMemoryExpectationRepository()
         expectation = _expectation()
         missed = expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
         repo.save(expectation, [missed])
-        repo.advance_turn(RIO)
 
         repo.replace_all_by_being(
             RIO,
@@ -331,15 +289,13 @@ class TestReplaceAllByBeing:
 
         assert _ids(repo.list_all_by_being(RIO)) == ["exp-9"]
         assert repo.list_undelivered_by_being(RIO) == []
-        assert repo.current_turn(RIO) == 17
 
     def test_failed_replace_keeps_previous_state(self) -> None:
-        """別の Being が持つ予期で置き換えようとすると ExpectationValidationException を投げ、それまでの予期・未配信の出来事・ターン数をそのまま残す。"""
+        """別の Being が持つ予期で置き換えようとすると ExpectationValidationException を投げ、それまでの予期と未配信の出来事をそのまま残す。"""
         repo = InMemoryExpectationRepository()
         expectation = _expectation()
         missed = expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
         repo.save(expectation, [missed])
-        repo.advance_turn(RIO)
 
         with pytest.raises(ExpectationValidationException, match="being-noa"):
             repo.replace_all_by_being(
@@ -353,7 +309,6 @@ class TestReplaceAllByBeing:
             expectation.snapshot()
         ]
         assert [u.event for u in repo.list_undelivered_by_being(RIO)] == [missed]
-        assert repo.current_turn(RIO) == 1
 
     def test_replace_with_negative_turn_raises(self) -> None:
         """負のターン数で置き換えようとすると ExpectationValidationException を投げる。"""

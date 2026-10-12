@@ -24,14 +24,14 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 SPOT = SpotId(1)
 WITNESS = PlayerId(1)
@@ -75,7 +75,7 @@ def _acquaintances() -> PlayerAcquaintances:
     acquaintances = PlayerAcquaintances(
         store=InMemoryAcquaintanceRepository(),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-        turn_reader=InMemoryExpectationRepository(),
+        turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",
         names_by_player_id=NAMES,
         appearances_by_player_id=LOOKS,
@@ -132,7 +132,7 @@ class TestKillerSeenByABystander:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="山村",
             names_by_player_id=NAMES,
             appearances_by_player_id=LOOKS,

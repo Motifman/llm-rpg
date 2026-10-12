@@ -27,6 +27,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     TypedJudgmentUnavailableException,
 )
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
     Expectation,
@@ -102,11 +103,13 @@ class _Harness:
         receiver_failures: int = 0,
     ) -> None:
         self.repository = InMemoryExpectationRepository()
+        self.clock = InMemoryMemoryTurnClock()
         self.recorder = RecordingTraceRecorder()
         self.receiver = _Receiver(receiver_failures)
         self.port = port
         self.service = ExpectationSettlementService(
             self.repository,
+            turn_reader=self.clock,
             judgment_port=port,
             dispatcher=ExpectationEventDispatcher(
                 self.repository,
@@ -126,7 +129,7 @@ class _Harness:
         self, expectation_id: str, content: str, *, due: str | None = None
     ) -> None:
         """いまのターンに予期を作って保存する。予期を積む入口 (#1441) の代わり。"""
-        turn = self.repository.current_turn(RIO)
+        turn = self.clock.current_turn(RIO)
         self.repository.save(
             Expectation(
                 expectation_id=ExpectationId(expectation_id),
@@ -142,7 +145,7 @@ class _Harness:
         )
 
     def turn(self, material: TurnMaterial = QUIET) -> Any:
-        self.repository.advance_turn(RIO)
+        self.clock.advance_turn(RIO)
         return self.service.settle_turn(RIO, self_name="リオ", material=material)
 
     def status(self, expectation_id: str) -> ExpectationStatus:
@@ -167,10 +170,10 @@ class TestOneCallPerTurn:
     def test_new_and_pending_expectations_are_asked_in_one_call(self) -> None:
         """このターンに書いた予期と清算待ちの予期があるターンは、形の問い・清算の問い・場面の問いを 1 回の呼び出しで問う。"""
         harness = _Harness(ScriptedJudgmentPort({}, {}))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-old", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-new", "ノアが干潟から戻る")
 
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
@@ -197,7 +200,7 @@ class TestOneCallPerTurn:
     def test_check_question_explains_unmet_precondition_as_undetermined(self) -> None:
         """清算の問いの「まだ分からない」は、予期の前提や条件がまだ起きていない場合を含むと説明する。"""
         harness = _Harness(ScriptedJudgmentPort({}, {}))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "焚き火がついた後、エイダが手記を説明する")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -214,7 +217,7 @@ class TestApplyingJudgments:
     def test_own_action_shape_is_not_asked_next_turn(self) -> None:
         """形の判定が「本人の行動」の予期は外され、次のターンの清算の問いに入らない。"""
         harness = _Harness(ScriptedJudgmentPort({"shape_0": "own_action"}, {}))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "リオが川沿いへ出発する")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -228,7 +231,7 @@ class TestApplyingJudgments:
         harness = _Harness(
             ScriptedJudgmentPort({}, {"check_0": "hit"}, {"check_0": "hit"})
         )
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -246,7 +249,7 @@ class TestApplyingJudgments:
     def test_trace_records_state_answers_and_transitions(self) -> None:
         """Jev を呼んだターンは、渡した state、質問ごとの答えと確率、予期ごとの状態の移りを 1 件の trace に残す。"""
         harness = _Harness(ScriptedJudgmentPort({"shape_0": "true_either_way"}))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "カイが来るか、来ないか")
 
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
@@ -273,7 +276,7 @@ class TestApplyingJudgments:
 
 
 def _settle_exp1_by_two_hits(harness: _Harness) -> None:
-    harness.repository.advance_turn(RIO)
+    harness.clock.advance_turn(RIO)
     harness.form("exp-1", "カイが焚き火を起こす")
     harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
     harness.turn()
@@ -325,11 +328,11 @@ class TestDeliveryThroughSettlement:
             ),
             receiver_failures=1,
         )
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
         harness.turn()
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-2", "ノアが戻る")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -347,7 +350,7 @@ class TestStateMaterial:
     ) -> None:
         """時系列は直近の上限ターン分だけを出来事と発言に分けて載せ、それより前に書いた予期は書いたターンと文で一覧に残る。"""
         harness = _Harness(ScriptedJudgmentPort(), timeline_turns=2)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "カイが焚き火を起こす", due="夕方まで")
         harness.service.settle_turn(
             RIO, self_name="リオ", material=TurnMaterial(actions=("リオが薪を拾った",))
@@ -374,10 +377,10 @@ class TestStateMaterial:
     def test_state_has_no_ids_and_no_integers(self) -> None:
         """state には予期の ID も Being の ID も入らず、ターンも文で書くので整数が 1 つも入らない。"""
         harness = _Harness(ScriptedJudgmentPort())
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-old", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-new", "ノアが戻る")
 
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
@@ -414,11 +417,11 @@ class TestCapacityAndDeadline:
             ),
             max_open=2,
         )
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-due", "二日後にカイと会う", due="二日後")
         harness.form("exp-old", "ノアが戻る")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-mid", "雨が降る")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -456,7 +459,7 @@ class TestCapacityAndDeadline:
                 _shaped(harness.repository, expectation_id, turn), []
             )
         for _ in range(4):
-            harness.repository.advance_turn(RIO)
+            harness.clock.advance_turn(RIO)
 
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -466,7 +469,7 @@ class TestCapacityAndDeadline:
     def test_overdue_expectation_is_closed_and_not_asked(self) -> None:
         """期限のターンを過ぎた予期は問う前に閉じ、清算の問いに入れない。"""
         harness = _Harness(ScriptedJudgmentPort())
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.repository.save(
             Expectation(
                 expectation_id=ExpectationId("exp-1"),
@@ -501,10 +504,10 @@ class TestUnavailableJudgment:
                 {},
             )
         )
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-old", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-new", "ノアが戻る")
         before = [e.snapshot() for e in harness.repository.list_all_by_being(RIO)]
 
@@ -528,7 +531,7 @@ class TestUnavailableJudgment:
                 TypedJudgmentUnavailableException("timeout"), {"shape_0": "own_action"}
             )
         )
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "リオが川沿いへ出発する")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -541,7 +544,7 @@ class TestUnavailableJudgment:
     def test_failure_after_closing_by_deadline_traces_closed_expectations(self) -> None:
         """問う前に期限で予期を閉じたあとで Jev が想定外の例外を投げると、閉じた予期と理由を trace に残し、保存済みの出来事を配ってから例外を投げ直す。"""
         harness = _Harness(ScriptedJudgmentPort({}, RuntimeError("bug")))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.repository.save(
             Expectation(
                 expectation_id=ExpectationId("exp-due"),
@@ -570,10 +573,10 @@ class TestUnavailableJudgment:
     def test_one_unusable_answer_keeps_every_expectation(self) -> None:
         """新しい予期と清算待ちの予期を同じターンに問い、片方の答えだけが選択肢に無い値でも、どちらの予期の状態も変えない。"""
         harness = _Harness(_BrokenAnswerPort({"check_0": "certainly"}))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-old", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-new", "ノアが戻る")
         before = [e.snapshot() for e in harness.repository.list_all_by_being(RIO)]
 
@@ -603,7 +606,7 @@ class TestUnavailableJudgment:
     ) -> None:
         """選択肢に無い答えや欠けた答えは判定として使わず、Jev の例外と同じく状態を変えずに理由を trace に残す。"""
         harness = _Harness(_BrokenAnswerPort(answers))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "カイが焚き火を起こす")
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -650,7 +653,7 @@ class TestMissCarriesWhatHappened:
 
     def _form_after_a_quiet_turn(self, harness: _Harness) -> None:
         harness.turn(TurnMaterial(actions=("書く前の出来事",)))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "流木を入手できる")
         harness.service.settle_turn(
             RIO,
@@ -734,7 +737,7 @@ class TestMissCarriesWhatHappened:
     def test_miss_settled_by_expiry_also_carries_timeline(self) -> None:
         """期限を過ぎて暫定の外れで確定した出来事も、書いたターンから確定したターンまでの時系列を運ぶ。"""
         harness = _Harness(ScriptedJudgmentPort({}, {"check_0": "miss"}), timeline_turns=20)
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.repository.save(
             Expectation(
                 expectation_id=ExpectationId("exp-1"),
@@ -760,7 +763,7 @@ class TestHitOnHearsayOnly:
     """当否の決め手が他の人の発言の中身しかない当たりを、まだ分からないとして記録する挙動を保証する (#1568)。"""
 
     def _pending(self, harness: _Harness, content: str) -> None:
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", content)
         harness.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
@@ -917,11 +920,11 @@ class TestHalTurn9OfMineV1:
             ),
             timeline_turns=4,
         )
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.form("exp-1", "水門が開き、下層の近道が水に浸かって通れなくなる")
         harness.service.settle_turn(RIO, self_name="ハル", material=self._TIMELINE[0])
         for material in self._TIMELINE[1:]:
-            harness.repository.advance_turn(RIO)
+            harness.clock.advance_turn(RIO)
             harness.service.settle_turn(RIO, self_name="ハル", material=material)
 
         state, questions = harness.port.calls[-1]

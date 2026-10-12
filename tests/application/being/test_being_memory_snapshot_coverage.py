@@ -14,6 +14,7 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 
 
 class TestValidateSnapshotPayloadCoverage:
@@ -46,7 +47,7 @@ class TestValidateSnapshotPayloadCoverage:
         """両集合が空でも例外を投げない (= minimal wiring セーフ)。"""
         _validate_snapshot_payload_coverage(emitted_keys=set(), expected_keys=set())
 
-def _make_service(expectation_store=None):
+def _make_service(expectation_store=None, memory_turn_clock=None):
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
     from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
@@ -72,7 +73,7 @@ def _make_service(expectation_store=None):
     )
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
     from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
-    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), expectation_store=expectation_store or InMemoryExpectationRepository())
+    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), expectation_store=expectation_store or InMemoryExpectationRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock())
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -168,7 +169,7 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
-        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository())
+        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         provisioning.ensure_attached(PlayerId(1))
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         with pytest.raises(SnapshotCoverageError):
