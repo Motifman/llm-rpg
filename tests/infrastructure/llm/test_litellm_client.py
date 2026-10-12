@@ -793,6 +793,27 @@ class TestLiteLLMClientJsonCompletion:
         }
         assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
 
+    def test_episode_writing_json_completion_sends_messages_without_thinking(self) -> None:
+        """エピソードの書き起こしは json_object で送り、agent turn の熟考を継承せず止め、応答を dict で返す (#1626)。"""
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-dummy",
+            reasoning_effort="minimal",
+        )
+        messages = [{"role": "user", "content": "書き残してください"}]
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_json_content_response('{"episodes": []}')
+            result = client.complete_episode_writing_json(messages)
+
+        kwargs = mock_completion.call_args.kwargs
+        assert result == {"episodes": []}
+        assert kwargs["messages"] == messages
+        assert kwargs["response_format"] == {"type": "json_object"}
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
+
     def test_reinterpretation_json_completion_extracts_after_think_tag(self, client):
         """thinking 系モデルの思考タグ後にある JSON を抽出する。"""
         content = (

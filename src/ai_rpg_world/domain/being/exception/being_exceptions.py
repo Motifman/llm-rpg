@@ -115,6 +115,12 @@ class EpisodeNotFoundException(BeingDomainException, NotFoundException):
     error_code = "BEING.EPISODE_NOT_FOUND"
 
 
+class EpisodeWritingResponseException(BeingDomainException, ValidationException):
+    """エピソードの書き起こしの応答が、決めた形になっていない。"""
+
+    error_code = "BEING.EPISODE_WRITING_RESPONSE"
+
+
 class MemoValidationException(BeingDomainException, ValidationException):
     """メモやメモ帳が決まり (空でない、長さの上限、分類と出どころの組み合わせ、呼び名、ターンの並び) を満たさない。"""
 
@@ -146,6 +152,7 @@ __all__ = [
     "EpisodeConflictException",
     "EpisodeNotFoundException",
     "EpisodeValidationException",
+    "EpisodeWritingResponseException",
     "MemoLimitReachedException",
     "MemoNotFoundException",
     "MemoValidationException",

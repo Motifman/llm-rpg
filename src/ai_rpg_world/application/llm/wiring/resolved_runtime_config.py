@@ -62,6 +62,7 @@ from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
 )
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
+    "BEING_EPISODE_WRITING_ENABLED",
     "BELIEF_ATTRIBUTION_ENABLED",
     "BELIEF_CANDIDATE_NARROWER",
     "BELIEF_CANDIDATE_TOP_K",
@@ -411,6 +412,9 @@ class ResolvedLlmRuntimeConfig:
     belief_candidate_narrower: str = CHAR_BIGRAM_BM25
     # #1414: 【関連する学び】を状況の項目から引く。件数は semantic_passive_top_k。
     situation_belief_recall_enabled: bool = False
+    # #1626: 短期記憶を畳むときと run の終わりに、目次つきのエピソードを書き起こす。
+    # 古いエピソード (episodic_enabled / episodic_subjective_enabled) とは別のスイッチ。
+    being_episode_writing_enabled: bool = False
     situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
@@ -511,6 +515,14 @@ class ResolvedLlmRuntimeConfig:
             )
         self._validate_belief_create_gate()
         self._validate_situation_belief_recall()
+        if (
+            self.being_episode_writing_enabled
+            and self.short_term_memory_kind != "rolling_summary"
+        ):
+            # 書き起こしを呼ぶ口は畳んで要約する短期記憶にしか無く、ほかの種類では一度も呼ばれない。
+            raise ValueError(
+                "BEING_EPISODE_WRITING_ENABLED requires SHORT_TERM_MEMORY_KIND=rolling_summary"
+            )
         self._validate_expectation_settlement()
         if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
             raise ValueError(
@@ -896,6 +908,12 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"SITUATION_BELIEF_RECALL_ENABLED: {exc}") from exc
+        try:
+            being_episode_writing_enabled = _parse_truthy(
+                source.get("BEING_EPISODE_WRITING_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"BEING_EPISODE_WRITING_ENABLED: {exc}") from exc
         situation_belief_recall_narrower = (
             _strip_or_none(source.get("SITUATION_BELIEF_RECALL_NARROWER")) or CHAR_BIGRAM_BM25
         )
@@ -1061,6 +1079,7 @@ class ResolvedLlmRuntimeConfig:
             belief_create_gate_enabled=belief_create_gate_enabled,
             belief_candidate_narrower=belief_candidate_narrower,
             situation_belief_recall_enabled=situation_belief_recall_enabled,
+            being_episode_writing_enabled=being_episode_writing_enabled,
             situation_belief_recall_narrower=situation_belief_recall_narrower,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
@@ -1210,6 +1229,7 @@ class ResolvedLlmRuntimeConfig:
             belief_create_gate_enabled=False,
             belief_candidate_narrower=CHAR_BIGRAM_BM25,
             situation_belief_recall_enabled=False,
+            being_episode_writing_enabled=False,
             situation_belief_recall_narrower=CHAR_BIGRAM_BM25,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,

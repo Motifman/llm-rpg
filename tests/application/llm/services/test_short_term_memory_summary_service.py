@@ -338,8 +338,26 @@ class TestShortTermMemorySummaryServicePromptStructure:
 
         system = port.captured[0][0]["content"]
         assert hashlib.sha256(system.encode()).hexdigest() == (
-            "f160da6f45354d6e9e0cd70e654a3d5fb9c37a25c9eb380a7c7b664ed1a1d347"
+            "cf8f7a46eb2d4eb04c25fdf70163899cd5088ce6fc07bdadb437c45ed84e1560"
         )
+
+    def test_relations_and_world_rules_are_left_to_the_memo(self) -> None:
+        """関係性の判断と世界ルールの一般化を書かせない理由は、メモに任せるためと指示する。"""
+        port = _StubPort(response={
+            "compressed_activity": "ok",
+            "emotional_summary": "",
+            "unresolved": [],
+        })
+        ShortTermMemorySummaryService(port).generate(
+            player_name="ハル",
+            persona_block="",
+            events=[_action_event("配線を直した")],
+            compacted_turn_count=1,
+        )
+
+        system = port.captured[0][0]["content"]
+        assert "関係性の判断 (それはメモに任せる)" in system
+        assert "長期記憶" not in system
 
 
 class TestShortTermMemorySummaryServiceErrors:
