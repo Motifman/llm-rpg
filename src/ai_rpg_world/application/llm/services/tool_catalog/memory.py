@@ -32,6 +32,15 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
 
+#: システムプロンプトが「能動想起」と呼ぶツール。1 つも出ていない設定では、
+#: 本文は能動想起を勧めない (#1616)。
+ACTIVE_RECALL_TOOL_NAMES = frozenset({
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+})
+
 MEMO_ADD_DESCRIPTION = (
     "ターンを跨いで覚えておきたい情報 (目標 / 戦略 / 観察 / 約束など) を memo として記録します。"
     "書いた memo は memo_done で閉じるまで毎ターン表示されます。"
@@ -237,7 +246,7 @@ MEMORY_RECALL_EPISODES_DEFINITION = ToolDefinitionDto(
 # memory_recall_episodes が自由文検索なのに対し、これは prompt 上の handle を
 # 直接受け取って「今ぼんやり覚えてる中のこれを詳しく」と取り出す経路。
 # 取り出した episode は slot に再注入されるため、しばらく鮮明に浮かぶ状態が続く。
-MEMORY_RECALL_BY_HANDLE_DESCRIPTION = (
+_MEMORY_RECALL_BY_HANDLE_DESCRIPTION_HEAD = (
     "prompt の「【さっき思い出した記憶の見出し】」section に並んでいる handle "
     "(例: ``ep_3f2a7b``) を指定して、その出来事の本文 (recall_text) を引き戻すツール。"
     "\n\n"
@@ -254,9 +263,18 @@ MEMORY_RECALL_BY_HANDLE_DESCRIPTION = (
     "該当する見出しが既に消えていた場合は「もう忘れました」と返る。\n"
     "\n"
     "# 注意\n"
-    "- 自由文での検索は ``memory_recall_episodes`` を使う。本ツールは prompt 上に "
+)
+_MEMORY_RECALL_BY_HANDLE_DESCRIPTION_TAIL = "- 世界状態は変えない (= 思い出すだけ)。"
+MEMORY_RECALL_BY_HANDLE_DESCRIPTION = (
+    _MEMORY_RECALL_BY_HANDLE_DESCRIPTION_HEAD
+    + "- 自由文での検索は ``memory_recall_episodes`` を使う。本ツールは prompt 上に "
     "見えている handle 専用。\n"
-    "- 世界状態は変えない (= 思い出すだけ)。"
+    + _MEMORY_RECALL_BY_HANDLE_DESCRIPTION_TAIL
+)
+MEMORY_RECALL_BY_HANDLE_WITHOUT_FREE_TEXT_DESCRIPTION = (
+    _MEMORY_RECALL_BY_HANDLE_DESCRIPTION_HEAD
+    + "- 本ツールは prompt 上に見えている handle 専用。\n"
+    + _MEMORY_RECALL_BY_HANDLE_DESCRIPTION_TAIL
 )
 
 MEMORY_RECALL_BY_HANDLE_PARAMETERS = {
@@ -276,6 +294,13 @@ MEMORY_RECALL_BY_HANDLE_PARAMETERS = {
 MEMORY_RECALL_BY_HANDLE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
     description=MEMORY_RECALL_BY_HANDLE_DESCRIPTION,
+    parameters=MEMORY_RECALL_BY_HANDLE_PARAMETERS,
+    category=ToolCategory.META_COGNITIVE,
+)
+
+MEMORY_RECALL_BY_HANDLE_WITHOUT_FREE_TEXT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    description=MEMORY_RECALL_BY_HANDLE_WITHOUT_FREE_TEXT_DESCRIPTION,
     parameters=MEMORY_RECALL_BY_HANDLE_PARAMETERS,
     category=ToolCategory.META_COGNITIVE,
 )
@@ -336,7 +361,9 @@ def get_memory_specs(
     if recall_by_handle_enabled:
         specs.append(
             (
-                MEMORY_RECALL_BY_HANDLE_DEFINITION,
+                MEMORY_RECALL_BY_HANDLE_DEFINITION
+                if episodic_recall_enabled
+                else MEMORY_RECALL_BY_HANDLE_WITHOUT_FREE_TEXT_DEFINITION,
                 MemoryRecallByHandleAvailabilityResolver(),
             )
         )
@@ -344,6 +371,7 @@ def get_memory_specs(
 
 
 __all__ = [
+    "ACTIVE_RECALL_TOOL_NAMES",
     "MEMORY_SEARCH_SEMANTIC_DEFINITION",
     "MEMORY_RECALL_EPISODES_DEFINITION",
     "MEMO_ADD_DEFINITION",

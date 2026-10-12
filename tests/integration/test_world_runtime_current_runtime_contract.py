@@ -8,6 +8,7 @@ today's behavior before further runtime convergence work.
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import re
 from collections.abc import Mapping
@@ -1732,16 +1733,14 @@ def test_memory_tool_flag_true_without_memory_stack_fails_fast(
     tool_name: str,
     env_name: str,
 ) -> None:
-    """露出フラグ true なのに前提 executor が無い構成は、黙って無効化せず起動時に落とす。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=False,
-            **{flag_name: True},
-        )
+    """露出フラグ true なのに前提 executor が無い構成は、黙って無効化せず create_world_runtime の時点で落とす。"""
+    config = ResolvedLlmRuntimeConfig.for_tests(
+        episodic_enabled=False,
+        **{flag_name: True},
     )
 
     with pytest.raises(RuntimeError) as exc_info:
-        runtime.get_tool_definitions(for_every_player=True)
+        _create_runtime(config)
 
     message = str(exc_info.value)
     assert env_name in message
@@ -1751,18 +1750,16 @@ def test_memory_tool_flag_true_without_memory_stack_fails_fast(
 def test_memory_explore_related_flag_true_without_afterglow_fails_fast(
     clean_runtime_env: None,
 ) -> None:
-    """memory_explore_related は prompt の handle を解決するため、afterglow 無しでは露出しない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            episodic_explore_related_enabled=True,
-            recall_slot_enabled=True,
-            afterglow_enabled=False,
-        )
+    """memory_explore_related は prompt の handle を解決するため、afterglow 無しで有効にすると create_world_runtime の時点で落ちる。"""
+    config = ResolvedLlmRuntimeConfig.for_tests(
+        episodic_enabled=True,
+        episodic_explore_related_enabled=True,
+        recall_slot_enabled=True,
+        afterglow_enabled=False,
     )
 
     with pytest.raises(RuntimeError) as exc_info:
-        runtime.get_tool_definitions(for_every_player=True)
+        _create_runtime(config)
 
     message = str(exc_info.value)
     assert "EPISODIC_EXPLORE_RELATED_ENABLED" in message
@@ -1772,12 +1769,14 @@ def test_memory_explore_related_flag_true_without_afterglow_fails_fast(
 def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
     clean_runtime_env: None,
 ) -> None:
-    """露出設定の不整合は runtime_manager の整合性検証でも警告に丸めず起動を止める。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=False,
-            semantic_search_enabled=True,
-        )
+    """露出設定の不整合は runtime_manager の整合性検証でも警告に丸めず起動を止める。
+
+    不整合な設定では create_world_runtime が先に落ちる (#1616) ので、整った runtime を
+    作ってから設定だけを差し替え、runtime_manager の検証まで届かせる。
+    """
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=False))
+    runtime._runtime_config = dataclasses.replace(
+        runtime._runtime_config, semantic_search_enabled=True
     )
 
     with pytest.raises(RuntimeError) as exc_info:

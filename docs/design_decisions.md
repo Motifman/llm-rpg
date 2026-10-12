@@ -7835,3 +7835,25 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **残っている穴**: tick の外から手番を回す入口が 1 つ残っている。`presentation/spot_graph_game/runtime_manager.py` の `run_scheduled_llm_turns` (`POST /api/sessions/{session_id}/llm-turns`) は `turn_trigger.run_scheduled_turns()` を直接呼ぶので、そこで立ったフラグは手番のあとの判定を通らず、次の tick の世界の段で、移動のあとに判定される。セッションは `data/scenarios` のどのシナリオでも作れるので、廃坑の山村でこの入口を呼べば Issue #1618 と同じことが起きる。ただし、この入口を呼ぶものはリポジトリに無く、入口を足したとき (2026-04-25) から削除済みの `frontend/` まで含めて一度も無い。実験は `make experiment` から tick を回し、`spot_graph_game` のサーバも `tick_loop` が `advance_tick` を呼んで tick の中で手番を回すので、どちらも手番のあとの判定を通る。呼ぶものが無いので配線は足していない。呼ぶものを足すときは、手番のあとに `run_after_turns` を呼ぶ配線を足すか、入口を消す。
 
 **関連**: Issue #1618 / #621 / #1508、design_decisions 43、`docs/mine_village_scenario_design.md` の「温める時間 (R4) と昇降機」。
+
+---
+
+## D1616. システムプロンプトの記憶の指示は、組み上がった runtime が実際に出す欄とツールから書き分ける
+
+**何を**:
+
+- `build_world_system_prompt` は `relevant_memories_shown` と `active_recall_offered` を既定値なしで受け取る。【関連する記憶】と能動想起のそれぞれの有無で、「確かな記憶」の文と【文脈と履歴の限界】の文を 4 通りに書き分ける。両方ある設定の文は、これまでとバイト単位で同じ
+- 2 つの値は `create_world_runtime` の末尾で、組み上がった runtime から決める (`WorldRuntime._memory_parts_named_in_system_prompt`)。【関連する記憶】は episodic stack に受動想起があるか。能動想起は `get_tool_definitions(for_every_player=True)` に `ACTIVE_RECALL_TOOL_NAMES` のどれかが入っているか。そのためシステムプロンプトの組み立ても関数の末尾へ移した
+- `memory_recall_by_handle` の説明は、`memory_recall_episodes` も出す設定でだけ「自由文での検索は `memory_recall_episodes` を使う」と書く
+
+**なぜ**: `var/runs/mine_v1_007_memo` (profile `memory_jev_mine_v1_v41_thinking_capped_memo_only`、エピソードと想起を止めた設定) のシステムプロンプトが、「【関連する記憶】または能動想起で取り出した内容だけが確かな記憶」「【関連する記憶】が空のときは能動想起の手段を試す」を指示し続けた。この run では欄もツールも出ていない。サヨ T20 は「The instructions mention 能動想起 but no tool」と探し、ゲン T20・T23、サヨ T26 も同じように探した。記憶を比べる run で、記憶なしの条件が無い手段を探すことに手番を使うと、比較が濁る。CLAUDE.md の「プロンプト本文にツール名を書くときは、必ず露出判断を通す」と同じ穴で、欄の名前にも同じ扱いが要る。
+
+**設定値ではなくツールの一覧から決める理由**: 能動想起のツールは、設定と実行器の有無の両方がそろったときに出る。`memory_recall_by_handle` には設定が無く、見出しと想起スロットの store がそろったときだけ出る。`LLM_TOOL_MODE` の純スポットグラフでは、記憶のツールが丸ごと隠れる。設定から推すと、これらの経路で本文と一覧がずれる。一覧は design_decisions 44 の入口が決めたものなので、本文もそれを読む。
+
+**既定値を置かない理由**: 置くと、渡し忘れた呼び出しが「両方ある」文へ黙って戻り、無い欄とツールをまた探させる。
+
+**プレフィックスキャッシュ**: どちらの値も設定と起動時の配線だけで決まり、run 中は変わらない。design_decisions 1 は保たれる。
+
+**どうしないと壊れるか**: 記憶の欄やツールの名前をシステムプロンプトやツールの説明に書くときは、その欄やツールが出ているかを見て書き分ける。`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` が、全部入りの profile から記憶の部品を 1 つずつ止め、1 ターン目のシステムプロンプト・user 文面・ツール定義のどこにも名前が出ないことを見る。正の対照として、全部入りでどの名前が出るかも固定している。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` と違って、名前の表はツールの一覧から自動では作らない。記憶の欄やツールを足したら、`_ALL_NAMES` と `_DISABLED_PARTS` に足す。
+
+**関連**: Issue #1616 / #1587 / #1621、design_decisions 1 / 44。

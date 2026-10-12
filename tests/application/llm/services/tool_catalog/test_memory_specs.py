@@ -5,6 +5,7 @@ from __future__ import annotations
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
 
@@ -112,3 +113,25 @@ class TestRecallByHandleSpec:
         desc = MEMORY_RECALL_BY_HANDLE_DEFINITION.description
         assert "さっき思い出した記憶の見出し" in desc
         assert "ep_" in desc
+
+    def test_description_recommends_free_text_recall_only_when_it_is_offered(
+        self,
+    ) -> None:
+        """memory_recall_episodes も出すときだけ、説明が自由文の検索にそれを勧める。出さないときは名前が説明に出ない (#1616)。"""
+        def by_handle_description(*, episodic_recall_enabled: bool) -> str:
+            specs = get_memory_specs(
+                recall_by_handle_enabled=True,
+                episodic_recall_enabled=episodic_recall_enabled,
+            )
+            return next(
+                d.description
+                for d, _ in specs
+                if d.name == TOOL_NAME_MEMORY_RECALL_BY_HANDLE
+            )
+
+        assert "memory_recall_episodes" in by_handle_description(
+            episodic_recall_enabled=True
+        )
+        assert "memory_recall_episodes" not in by_handle_description(
+            episodic_recall_enabled=False
+        )

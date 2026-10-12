@@ -40,6 +40,8 @@ def _everything_the_model_reads() -> str:
     system prompt へ寄せたので、schema だけを見る検査は「消えた」と誤判定する。
     """
     system = build_world_system_prompt(
+        relevant_memories_shown=True,
+        active_recall_offered=True,
         world_title="町",
         persona_block="【ペルソナ】あなたは焼き手だ。",
         safe_intro="市場のある町。",

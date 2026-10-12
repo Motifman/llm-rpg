@@ -137,7 +137,10 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     create_text_candidate_narrower,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
+from ai_rpg_world.application.llm.services.tool_catalog.memory import (
+    ACTIVE_RECALL_TOOL_NAMES,
+    get_memory_specs,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.public_sns import get_public_sns_definitions
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
@@ -1923,6 +1926,23 @@ class WorldRuntime:
                 "episodic/semantic prerequisites or turn the flag off."
         )
         return True
+
+    def _memory_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
+        """システムプロンプトが指してよい (【関連する記憶】, 能動想起) を返す (#1616)。
+
+        能動想起は設定値からではなく、実際に LLM へ出すツールの一覧から決める。
+        設定から推すと、純スポットグラフで記憶ツールを隠した経路や、実行器の有無で
+        出し分ける ``memory_recall_by_handle`` で、本文と一覧がずれる。
+        """
+        relevant_memories_shown = (
+            self._episodic_stack is not None
+            and self._episodic_stack.passive_recall is not None
+        )
+        offered = {
+            definition.name
+            for definition in self.get_tool_definitions(for_every_player=True)
+        }
+        return relevant_memories_shown, bool(offered & ACTIVE_RECALL_TOOL_NAMES)
 
     def _memo_tools_enabled(self) -> bool:
         """memo ツールを LLM に露出する設定か。
@@ -5176,16 +5196,24 @@ def create_world_runtime(
     )
     if briefing:
         safe_intro = f"{safe_intro}\n\n{briefing}" if safe_intro else briefing
-    system_prompt_text = build_world_system_prompt(
-        world_title=scenario.metadata.title,
-        persona_block=persona_block,
-        safe_intro=safe_intro,
-        enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
-        expected_result_policy=config.expected_result_policy,
-        expectation_argument_enabled=config.expectation_argument_enabled,
-        has_goal=_has_goal,
-        limits_actions=scenario.metadata.limits_actions,
-    )
+
+    # 記憶の指示は、組み上がった runtime が実際に出す欄とツールに合わせる (#1616)。
+    # そのため組み立ては runtime を作り終えたあと (この関数の末尾) で行う。
+    def _world_system_prompt(
+        persona: str, *, relevant_memories_shown: bool, active_recall_offered: bool
+    ) -> str:
+        return build_world_system_prompt(
+            world_title=scenario.metadata.title,
+            persona_block=persona,
+            safe_intro=safe_intro,
+            relevant_memories_shown=relevant_memories_shown,
+            active_recall_offered=active_recall_offered,
+            enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
+            expected_result_policy=config.expected_result_policy,
+            expectation_argument_enabled=config.expectation_argument_enabled,
+            has_goal=_has_goal,
+            limits_actions=scenario.metadata.limits_actions,
+        )
 
     # Issue #264 第16回実験 fix: シナリオに player_spawns がある場合、
     # 各 player に persona を埋めた system prompt を個別に構築する。
@@ -5205,7 +5233,7 @@ def create_world_runtime(
     #   - それ以外は fallback persona (= スポーン名から生成された最小ペルソナ)
     #   - 誰を知っているかは system prompt に書かない。入るときの紹介として
     #     Being に渡し、毎ターンのメッセージの【知っている人】に出す (#1520)
-    system_prompts_by_player_id: dict[int, str] = {}
+    personas_by_player_id: dict[int, str] = {}
     if scenario.player_spawns:
         # world_character に一致する spawn を特定
         world_spawn: PlayerSpawnConfig | None = None
@@ -5239,18 +5267,7 @@ def create_world_runtime(
             role_persona = scenario.role_personas.get(viewer_role)
             if role_persona:
                 this_persona = f"{this_persona}\n\n{role_persona}"
-            system_prompts_by_player_id[int(spawn.player_id)] = (
-                build_world_system_prompt(
-                    world_title=scenario.metadata.title,
-                    persona_block=this_persona,
-                    safe_intro=safe_intro,
-                    enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
-                    expected_result_policy=config.expected_result_policy,
-                    expectation_argument_enabled=config.expectation_argument_enabled,
-                    has_goal=_has_goal,
-                    limits_actions=scenario.metadata.limits_actions,
-                )
-            )
+            personas_by_player_id[int(spawn.player_id)] = this_persona
 
     data_store = InMemoryDataStore()
 
@@ -6951,8 +6968,6 @@ def create_world_runtime(
         # monster placements の無いシナリオでは両方とも None のまま。
         _monster_repo=monster_repo if scenario.monster_placements else None,
         _attack_orchestrator=monster_attack_orchestrator,
-        _world_llm_system_prompt=system_prompt_text,
-        _world_llm_system_prompts_by_player_id=system_prompts_by_player_id,
         _include_todo_tools=(
             include_todo_tools
             if include_todo_tools is not None
@@ -8402,7 +8417,7 @@ def create_world_runtime(
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
-                # 由来の fallback persona になっている system_prompts_by_player_id
+                # 由来の fallback persona になっている personas_by_player_id
                 # と同じ規則で組み立てる。
                 _persona_by_pid: dict[int, str] = {}
                 if len(scenario.player_spawns) > 1 and world_character is not None:
@@ -8848,6 +8863,22 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
+    relevant_memories_shown, active_recall_offered = (
+        runtime._memory_parts_named_in_system_prompt()
+    )
+    runtime._world_llm_system_prompt = _world_system_prompt(
+        persona_block,
+        relevant_memories_shown=relevant_memories_shown,
+        active_recall_offered=active_recall_offered,
+    )
+    runtime._world_llm_system_prompts_by_player_id = {
+        player_id: _world_system_prompt(
+            persona,
+            relevant_memories_shown=relevant_memories_shown,
+            active_recall_offered=active_recall_offered,
+        )
+        for player_id, persona in personas_by_player_id.items()
+    }
     return runtime
 
 
