@@ -24,11 +24,11 @@ from ai_rpg_world.being.application.episode_writing import (
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
     InMemoryEpisodeRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 ADA = PlayerId(1)
 ADA_BEING = BeingId("being_p1")
@@ -89,7 +89,7 @@ def _item(**overrides: str) -> dict[str, str]:
 
 def _make(completion: _Completion, *, being: BeingId | None = ADA_BEING):
     repository = InMemoryEpisodeRepository()
-    turns = InMemoryExpectationRepository()
+    turns = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     writing = PlayerEpisodeWriting(
         writer=EpisodeWriter(completion, repository),

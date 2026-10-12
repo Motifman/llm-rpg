@@ -21,10 +21,8 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.being.domain.memo_book import KIND_LIMITS, MemoBook, MemoKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from tests.application.being.expectation.support import (
-    RecordingTraceRecorder,
-    ScriptedJudgmentPort,
-)
+from tests.judgment_helpers import ScriptedJudgmentPort
+from tests.trace_helpers import RecordingTraceRecorder
 
 _DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _ME = PlayerId(1)
@@ -71,7 +69,7 @@ class TestMemoArgumentInATurn:
         acting = runtime._acting_being_for(_ME)
         assert result.success
         assert (memo.kind, memo.text) == (MemoKind.TODO, "事務所で鍵を取る")
-        assert memo.written_turn == runtime._expectation_store.current_turn(acting.being_id)
+        assert memo.written_turn == runtime._memory_turn_clock.current_turn(acting.being_id)
         assert memo.environment_name == runtime.environment_name_for(_ME)
 
     def test_a_broken_operation_is_returned_but_the_others_land(self) -> None:

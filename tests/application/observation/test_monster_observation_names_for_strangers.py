@@ -21,6 +21,9 @@ from ai_rpg_world.application.observation.services.formatters.spot_graph_formatt
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -31,9 +34,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 GRAPH_ID = SpotGraphId.create(1)
 SPOT = SpotId(1)
@@ -66,7 +66,7 @@ def _acquaintances() -> PlayerAcquaintances:
     acquaintances = PlayerAcquaintances(
         store=InMemoryAcquaintanceRepository(),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-        turn_reader=InMemoryExpectationRepository(),
+        turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",
         names_by_player_id=NAMES,
         appearances_by_player_id=LOOKS,

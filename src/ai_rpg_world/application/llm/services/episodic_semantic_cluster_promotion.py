@@ -35,6 +35,9 @@ from ai_rpg_world.application.llm.services.semantic_gist_service import (
     SemanticGistResult,
     SemanticGistService,
 )
+from ai_rpg_world.being.domain.memory_turn_clock import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
@@ -42,9 +45,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     effective_link_strength,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-    MemoryTurnReader,
-)
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )

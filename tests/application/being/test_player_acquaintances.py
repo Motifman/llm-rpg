@@ -12,11 +12,11 @@ from ai_rpg_world.being.contract import EnvironmentEntry, Introduction
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 ADA = PlayerId(1)
 NOA = PlayerId(2)
@@ -28,9 +28,9 @@ def _being(pid: PlayerId) -> BeingId | None:
     return BeingId(f"being_p{pid.value}") if pid.value in NAMES else None
 
 
-def _make() -> tuple[PlayerAcquaintances, InMemoryAcquaintanceRepository, InMemoryExpectationRepository]:
+def _make() -> tuple[PlayerAcquaintances, InMemoryAcquaintanceRepository, InMemoryMemoryTurnClock]:
     store = InMemoryAcquaintanceRepository()
-    turns = InMemoryExpectationRepository()
+    turns = InMemoryMemoryTurnClock()
     acquaintances = PlayerAcquaintances(
         store=store,
         being_id_of=_being,
@@ -177,7 +177,7 @@ class TestWhoCanBeMet:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=being_id_of,
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
             names_by_player_id=NAMES,
         )
@@ -192,7 +192,7 @@ class TestWhoCanBeMet:
             PlayerAcquaintances(
                 store=InMemoryAcquaintanceRepository(),
                 being_id_of=_being,
-                turn_reader=InMemoryExpectationRepository(),
+                turn_reader=InMemoryMemoryTurnClock(),
                 environment_name="島",
                 names_by_player_id={1: "ノア", 2: "ノア"},
             )
@@ -203,7 +203,7 @@ class TestWhoCanBeMet:
             PlayerAcquaintances(
                 store=InMemoryAcquaintanceRepository(),
                 being_id_of=_being,
-                turn_reader=InMemoryExpectationRepository(),
+                turn_reader=InMemoryMemoryTurnClock(),
                 environment_name=" ",
                 names_by_player_id=NAMES,
             )
@@ -356,7 +356,7 @@ class TestViewForRecipient:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=broken,
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
             names_by_player_id=NAMES,
         )
@@ -409,7 +409,7 @@ class TestViewForWithheld:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=broken,
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
             names_by_player_id=NAMES,
         )
@@ -453,7 +453,7 @@ class TestKnowsPlayer:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=broken,
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="島",
             names_by_player_id=NAMES,
         )

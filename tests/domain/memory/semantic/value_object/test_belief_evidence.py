@@ -46,13 +46,11 @@ class TestBeliefEvidenceSourceKindEnum:
     def test_all_source_kinds_are_reserved(self) -> None:
         expected = {
             "prediction_error",
-            "structured_failure",
             "memo_distill",
             "familiarity",
             "confirmation",
             "pending_resolution",
             "hearsay",  # P9 (伝聞)
-            "state_collapse",  # PR-D (状態破綻)
         }
         actual = {member.value for member in BeliefEvidenceSourceKind}
         assert actual == expected

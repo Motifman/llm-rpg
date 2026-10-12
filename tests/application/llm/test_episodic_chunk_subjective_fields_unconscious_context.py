@@ -2,14 +2,14 @@
 
 U7 (予測誤差統一設計 §2 U7 / 設計 doc §4「無意識コンテキスト」): belief top-K や
 L5 自己像・世界観といった「このキャラのモデル」を chunk 主観補完 LLM に渡すことで、
-``prediction_error`` / ``salience`` の判定が「誰にとっても同じ驚き」から
+``interpreted`` / ``prediction_error`` の判定が「誰にとっても同じ驚き」から
 「このキャラにとっての驚き」になる。
 
 ``unconscious_context_enabled`` コンストラクタ引数 (= UNCONSCIOUS_CONTEXT_ENABLED
 flag に対応) で
 
 - flag OFF: provider を注入していても一切呼ばれず、system prompt / user message は
-  導入前 (= salience_enabled のみのケース) と byte 同一
+  導入前と byte 同一
 - flag ON: provider が呼ばれ、返した非空テキストが「## いまの自分（信念と自己像）」
   section として user message に載り、system prompt に判定指示が追記される
 
@@ -87,19 +87,18 @@ class TestUnconsciousContextFlagOff:
         assert calls == []
 
     def test_system_prompt_user_message_before_byte_matches(self) -> None:
-        """salience_enabled のみのケースと完全一致すること (無意識コンテキスト
-        節が一切追加されない)。"""
+        """provider を渡しても flag OFF なら、渡さないときと system prompt・user message が完全一致する (無意識コンテキスト節が一切追加されない)。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         port_without = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
-        svc_without = EpisodicChunkSubjectiveFieldsService(port_without, salience_enabled=True)
+        svc_without = EpisodicChunkSubjectiveFieldsService(port_without)
         svc_without.merge_llm_subjective_fields(draft, persona_text='p', encoding_input=enc)
         port_with = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
-        svc_with = EpisodicChunkSubjectiveFieldsService(port_with, salience_enabled=True, unconscious_context_provider=lambda pid, cues: '無視されるはずのテキスト', unconscious_context_enabled=False)
+        svc_with = EpisodicChunkSubjectiveFieldsService(port_with, unconscious_context_provider=lambda pid, cues: '無視されるはずのテキスト', unconscious_context_enabled=False)
         svc_with.merge_llm_subjective_fields(draft, persona_text='p', encoding_input=enc)
         assert _system_content(port_with) == _system_content(port_without)
         assert _user_content(port_with) == _user_content(port_without)
-        assert _system_content(port_with) == _build_system_prompt(salience_enabled=True, unconscious_context_enabled=False)
+        assert _system_content(port_with) == _build_system_prompt(unconscious_context_enabled=False)
 
 class TestUnconsciousContextFlagOn:
     """unconscious_context_enabled=True のときの section 挿入・system prompt 追記。"""

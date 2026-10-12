@@ -24,6 +24,9 @@ from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import 
     build_hearsay_cue_signature,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.being.domain.memory_turn_clock import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PENDING_KIND_PLAN,
@@ -33,9 +36,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
-)
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-    MemoryTurnReader,
 )
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GOAL_STATUS_ABANDONED,

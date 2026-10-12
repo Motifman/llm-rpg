@@ -1,7 +1,7 @@
 """記憶のターン数の数え手が、証拠と信念を作る部品まで届くことを保証する (#1452)。
 
 配線はキーワード引数の受け渡しで繋がっているので、途中で別の数え手を渡すと、
-予期の清算 (#1440) がターン数を進めても証拠と信念のターン数が 0 のまま残る。
+1 手ごとにターン数を進めても証拠と信念のターン数が 0 のまま残る。
 LLM は呼ばない。
 """
 
@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import (
@@ -20,9 +21,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import HeardClaim
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
-)
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-    MemoryTurnReader,
 )
 from tests.runtime_config_helpers import belief_consolidation_config
 
@@ -39,7 +37,6 @@ def _runtime():
         _SCENARIO_PATH,
         config=belief_consolidation_config(
             memo_distill_enabled=True,
-            salience_structured_failure_enabled=True,
         ),
     )
 
@@ -51,12 +48,12 @@ class TestMemoryTurnReaderWiring:
         """固着パスを組んだ runtime は、記憶のターン数の数え手を 1 つ持つ。"""
         runtime = _runtime()
 
-        assert isinstance(runtime._expectation_store, MemoryTurnReader)
+        assert isinstance(runtime._memory_turn_clock, MemoryTurnClock)
 
     def test_all_evidence_and_belief_makers_read_the_runtime_counter(self) -> None:
-        """固める処理・クラスタ昇格・予測の外れ・memo・同じ失敗の繰り返しの転記が、どれも runtime の数え手を読む。"""
+        """固める処理・クラスタ昇格・伝聞・memo の転記が、どれも runtime の数え手を読む。"""
         runtime = _runtime()
-        counter = runtime._expectation_store
+        counter = runtime._memory_turn_clock
         stack = runtime._episodic_stack
 
         readers = {
@@ -64,7 +61,6 @@ class TestMemoryTurnReaderWiring:
             "promotion": stack.episodic_semantic_promotion.memory_turn_reader,
             "hearsay": stack.chunk_coordinator._belief_evidence_transcriber._memory_turn_reader,
             "memo_distill": runtime._memo_distill_transcriber._memory_turn_reader,
-            "structured_failure": runtime._structured_failure_transcriber._memory_turn_reader,
         }
 
         assert {name: reader is counter for name, reader in readers.items()} == {
@@ -76,7 +72,7 @@ class TestMemoryTurnReaderWiring:
         runtime = _runtime()
         being_id = BeingId("being_w1_p1")
         for _ in range(3):
-            runtime._expectation_store.advance_turn(being_id)
+            runtime._memory_turn_clock.advance_turn(being_id)
         transcriber = runtime._episodic_stack.chunk_coordinator._belief_evidence_transcriber
         episode = SubjectiveEpisode(
             episode_id="ep-1",

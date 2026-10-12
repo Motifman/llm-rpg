@@ -15,10 +15,10 @@ from ai_rpg_world.application.trace.recorder import ITraceRecorder
 from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.episode_recall import RecallResult, recall_episodes
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
+from ai_rpg_world.domain.common.exception import DomainException
 
 _logger = logging.getLogger(__name__)
 

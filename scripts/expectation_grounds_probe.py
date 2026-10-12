@@ -50,6 +50,9 @@ from ai_rpg_world.application.being.expectation.settlement import (  # noqa: E40
     ExpectationSettlementService,
 )
 from ai_rpg_world.application.trace import TraceEventKind  # noqa: E402
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (  # noqa: E402
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (  # noqa: E402
     Expectation,
@@ -153,9 +156,11 @@ def _judge_one(
 ) -> dict[str, Any]:
     being = BeingId(f"probe-{player_id}-{move.tick}")
     repository = InMemoryExpectationRepository()
+    clock = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     service = ExpectationSettlementService(
         repository,
+        turn_reader=clock,
         judgment_port=port,
         dispatcher=ExpectationEventDispatcher(
             repository, receivers=(), max_attempts=1, trace_recorder_provider=lambda: None
@@ -167,7 +172,7 @@ def _judge_one(
         grounds_min_probability=0.5,
         trace_recorder_provider=lambda: recorder,
     )
-    turn = repository.advance_turn(being)
+    turn = clock.advance_turn(being)
     repository.save(
         Expectation(
             expectation_id=ExpectationId(f"p{player_id}-tick{move.tick}"),

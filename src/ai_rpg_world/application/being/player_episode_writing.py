@@ -13,10 +13,10 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
 from ai_rpg_world.being.application.episode_writing import EpisodeWriter
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)

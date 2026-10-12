@@ -1,5 +1,4 @@
-"""SubjectiveEpisode の salience フィールドが U6 (STRUCTURED_FAILURE + salience)
-の一撃学習経路に使える形で安全に出し入れできることを保証する。
+"""SubjectiveEpisode の salience フィールドを、保存形式の後方互換のために安全に出し入れできることを保証する。
 
 heading (Optional, 既定 None) と違い、salience は「値が無い」状態を表現
 しない (常に "low" か "high" のどちらか) 必須フィールド。既定値 "low" で

@@ -35,10 +35,8 @@ from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from tests.application.being.expectation.support import (
-    RecordingTraceRecorder,
-    ScriptedJudgmentPort,
-)
+from tests.judgment_helpers import ScriptedJudgmentPort
+from tests.trace_helpers import RecordingTraceRecorder
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -158,7 +156,7 @@ class TestToolDefinitions:
         _move(wiring)
         _move(wiring)
 
-        assert runtime._expectation_store.current_turn(_being(runtime)) == 2
+        assert runtime._memory_turn_clock.current_turn(_being(runtime)) == 2
         after = json.dumps(
             [d.parameters for d in runtime.get_tool_definitions(player_id=_ME)],
             ensure_ascii=False,

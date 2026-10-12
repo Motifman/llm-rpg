@@ -43,8 +43,8 @@ from ai_rpg_world.domain.memory.expectation.value_object.shape_verdict import (
     ShapeVerdict,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.application.being.expectation.support import RecordingTraceRecorder
 from tests.runtime_config_helpers import episodic_config
+from tests.trace_helpers import RecordingTraceRecorder
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "forbidden_library_demo.json"

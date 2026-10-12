@@ -25,7 +25,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin impo
 from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
     Likelihood,
 )
-from tests.application.being.expectation.support import ScriptedJudgmentPort
 from tests.application.being.expectation.test_expectation_grounds_settlement import (
     BELIEFS,
     EPISODES,
@@ -33,6 +32,7 @@ from tests.application.being.expectation.test_expectation_grounds_settlement imp
     _Harness,
     _recall,
 )
+from tests.judgment_helpers import ScriptedJudgmentPort
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts/expectation_grounds_report.py"
 
@@ -116,7 +116,7 @@ def test_unavailable_turn_is_counted_apart_from_in_mind(report: ModuleType) -> N
 
 def _second_expectation(harness: _Harness) -> Expectation:
     """``harness.form`` と同じターンに、同じものを頭に載せた 2 件目の予期。"""
-    turn = harness.repository.current_turn(RIO)
+    turn = harness.clock.current_turn(RIO)
     return Expectation(
         expectation_id=ExpectationId("exp-2"),
         holder=RIO,

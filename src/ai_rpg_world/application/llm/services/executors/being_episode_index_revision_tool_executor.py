@@ -18,10 +18,10 @@ from ai_rpg_world.being.domain.episode import (
     EpisodeIndex,
     EpisodeRepository,
 )
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
+from ai_rpg_world.domain.common.exception import DomainException
 
 _logger = logging.getLogger(__name__)
 

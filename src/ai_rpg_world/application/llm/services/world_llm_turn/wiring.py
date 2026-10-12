@@ -498,6 +498,7 @@ class WorldLlmWiring:
             )
         return ExpectationSettlementService(
             self.runtime._expectation_store,
+            turn_reader=self.runtime._memory_turn_clock,
             judgment_port=self.typed_judgment_port,
             dispatcher=self.runtime._expectation_dispatcher,
             max_open=int(config.expectation_settlement_max_open),
@@ -528,6 +529,7 @@ class WorldLlmWiring:
             return None
         return ExpectationFormingService(
             self.runtime._expectation_store,
+            turn_reader=self.runtime._memory_turn_clock,
             undated_term_turns=int(config.expectation_undated_term_turns),
             dated_term_turns=int(config.expectation_dated_term_turns),
         )

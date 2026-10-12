@@ -252,7 +252,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'PROMPT_SECTION_ORDER': 'legacy', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'PREDICTION_CONTEXT_ID_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'SALIENCE_STRUCTURED_FAILURE_ENABLED': '1', 'MEMO_DISTILL_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'UNCONSCIOUS_CONTEXT_ENABLED': '1', 'ERROR_DRIVEN_REINTERPRETATION_ENABLED': '1', 'RECALL_HIT_BOOST_ENABLED': '1', 'ERROR_GATED_ENCODING_ENABLED': '1', 'PENDING_PREDICTION_ENABLED': '1', 'HEARSAY_ENABLED': '1', 'STATE_COLLAPSE_EVIDENCE_ENABLED': '1', 'GOAL_STORE_ENABLED': '1', 'GOAL_REVISION_ENABLED': '1', 'GOAL_REFLECT_ENABLED': '1', 'GOAL_STAGNATION_EVIDENCE_ENABLED': '1', 'STAGNATION_PRESSURE_ENABLED': '1', 'STAGNATION_REASONING_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'ESCAPE_LLM_SSOT': '1', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'PROMPT_SECTION_ORDER': 'legacy', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'PREDICTION_CONTEXT_ID_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_DISTILL_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'UNCONSCIOUS_CONTEXT_ENABLED': '1', 'ERROR_DRIVEN_REINTERPRETATION_ENABLED': '1', 'RECALL_HIT_BOOST_ENABLED': '1', 'ERROR_GATED_ENCODING_ENABLED': '1', 'PENDING_PREDICTION_ENABLED': '1', 'HEARSAY_ENABLED': '1', 'GOAL_STORE_ENABLED': '1', 'GOAL_REVISION_ENABLED': '1', 'GOAL_REFLECT_ENABLED': '1', 'GOAL_STAGNATION_EVIDENCE_ENABLED': '1', 'STAGNATION_PRESSURE_ENABLED': '1', 'STAGNATION_REASONING_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'ESCAPE_LLM_SSOT': '1', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
@@ -283,7 +283,6 @@ class TestFromEnvExplicit:
         assert cfg.belief_evidence_enabled is True
         assert cfg.belief_consolidation_enabled is True
         assert cfg.belief_attribution_enabled is True
-        assert cfg.salience_structured_failure_enabled is True
         assert cfg.memo_distill_enabled is True
         assert cfg.memo_tools_enabled is False
         assert cfg.unconscious_context_enabled is True
@@ -292,7 +291,6 @@ class TestFromEnvExplicit:
         assert cfg.error_gated_encoding_enabled is True
         assert cfg.pending_prediction_enabled is True
         assert cfg.hearsay_enabled is True
-        assert cfg.state_collapse_evidence_enabled is True
         assert cfg.goal_store_enabled is True
         assert cfg.goal_revision_enabled is True
         assert cfg.goal_reflect_enabled is True
@@ -383,6 +381,25 @@ class TestFromEnvFailFast:
         """熟考だけ ON で pressure / reflect が無い組み合わせは静かな失敗なので落とす。"""
         with pytest.raises(ValueError, match='STAGNATION_PRESSURE_ENABLED'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'GOAL_REFLECT_ENABLED': '1', 'STAGNATION_REASONING_ENABLED': '1'})
+
+class TestTheRemovedMemoryPartKeysAreRejected:
+    """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
+
+    黙って無視すると、部品を有効にしたつもりの run が部品なしで走る。
+    """
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "STATE_COLLAPSE_EVIDENCE_ENABLED",
+            "SALIENCE_STRUCTURED_FAILURE_ENABLED",
+        ],
+    )
+    def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
+        """消した部品のキーを true で書くと、unknown runtime_config key の ValueError になる。"""
+        with pytest.raises(ValueError, match=f"unknown runtime_config key.*{key}"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={key: "true"})
+
 
 class TestSubjectiveEpisodeDbPath:
     """SUBJECTIVE_EPISODE_DB_PATH を単一窓口 (config) に載せる (二重入口撤去)。

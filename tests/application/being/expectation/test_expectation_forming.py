@@ -9,6 +9,7 @@ from ai_rpg_world.application.being.expectation.forming import (
     ExpectationFormingService,
     WrittenExpectation,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin import (
     ExpectationOrigin,
@@ -25,17 +26,18 @@ _ME = BeingId("being-mori")
 
 def _service(
     repository: InMemoryExpectationRepository,
+    clock: InMemoryMemoryTurnClock,
 ) -> ExpectationFormingService:
     return ExpectationFormingService(
-        repository, undated_term_turns=5, dated_term_turns=30
+        repository, turn_reader=clock, undated_term_turns=5, dated_term_turns=30
     )
 
 
-def _at_turn(turn: int) -> InMemoryExpectationRepository:
-    repository = InMemoryExpectationRepository()
+def _at_turn(turn: int) -> tuple[InMemoryExpectationRepository, InMemoryMemoryTurnClock]:
+    clock = InMemoryMemoryTurnClock()
     for _ in range(turn):
-        repository.advance_turn(_ME)
-    return repository
+        clock.advance_turn(_ME)
+    return InMemoryExpectationRepository(), clock
 
 
 def _form(
@@ -57,8 +59,8 @@ class TestFormedExpectations:
         self,
     ) -> None:
         """Being のターン数が 3 のとき 2 件書くと、どちらもターン 3 に作られた清算待ちの予期として保存される。"""
-        repository = _at_turn(3)
-        service = _service(repository)
+        repository, clock = _at_turn(3)
+        service = _service(repository, clock)
 
         _form(
             service,
@@ -74,10 +76,10 @@ class TestFormedExpectations:
 
     def test_saved_expectation_carries_the_action_and_what_was_in_mind(self) -> None:
         """積んだ予期は、行動に添えた予期として、行動の文・期日・確からしさ・頭にあった信念と想起を持つ。"""
-        repository = _at_turn(1)
+        repository, clock = _at_turn(1)
 
         _form(
-            _service(repository),
+            _service(repository, clock),
             WrittenExpectation("夜に雨が降る", "今夜", Likelihood.MAYBE),
         )
 
@@ -91,10 +93,10 @@ class TestFormedExpectations:
 
     def test_undated_expectation_expires_after_the_undated_term(self) -> None:
         """期日の無い予期は、書いたターンから期日の無い予期の期限のターン数で期限を迎える。"""
-        repository = _at_turn(2)
+        repository, clock = _at_turn(2)
 
         _form(
-            _service(repository),
+            _service(repository, clock),
             WrittenExpectation("セナが返事をする", None, Likelihood.PROBABLY),
         )
 
@@ -103,10 +105,10 @@ class TestFormedExpectations:
 
     def test_dated_expectation_expires_after_the_dated_term(self) -> None:
         """期日のある予期は、期日のある予期の期限のターン数で期限を迎える。"""
-        repository = _at_turn(2)
+        repository, clock = _at_turn(2)
 
         _form(
-            _service(repository),
+            _service(repository, clock),
             WrittenExpectation("夜に雨が降る", "今夜", Likelihood.MAYBE),
         )
 
@@ -115,9 +117,9 @@ class TestFormedExpectations:
 
     def test_nothing_written_saves_nothing(self) -> None:
         """何も書かれていなければ何も保存せず、空を返す。"""
-        repository = _at_turn(1)
+        repository, clock = _at_turn(1)
 
-        formed = _form(_service(repository))
+        formed = _form(_service(repository, clock))
 
         assert formed == []
         assert repository.list_all_by_being(_ME) == []
@@ -128,10 +130,10 @@ class TestExpectationIds:
 
     def test_id_is_built_from_being_turn_and_order(self) -> None:
         """ターン 4 に 2 件書くと、ID は Being の ID・ターン・書いた順を並べた文字列になる。"""
-        repository = _at_turn(4)
+        repository, clock = _at_turn(4)
 
         formed = _form(
-            _service(repository),
+            _service(repository, clock),
             WrittenExpectation("a が起きる", None, Likelihood.EVEN),
             WrittenExpectation("b が起きる", None, Likelihood.EVEN),
         )
@@ -143,8 +145,8 @@ class TestExpectationIds:
 
     def test_forming_twice_in_one_turn_fails_without_overwriting(self) -> None:
         """同じターンに 2 回積もうとすると、前に積んだ予期を上書きせずに ValueError を投げる。"""
-        repository = _at_turn(1)
-        service = _service(repository)
+        repository, clock = _at_turn(1)
+        service = _service(repository, clock)
         _form(service, WrittenExpectation("a が起きる", None, Likelihood.EVEN))
 
         with pytest.raises(ValueError, match="already formed"):
@@ -171,11 +173,12 @@ class TestInterruptedSave:
     def test_failure_on_the_second_save_reports_the_first_as_saved(self) -> None:
         """2 件目の保存で失敗すると、1 件目だけを保存済みとして ExpectationFormingInterrupted で伝え、元の例外を原因に持つ。"""
         repository = _FailsOnSecondSave()
-        repository.advance_turn(_ME)
+        clock = InMemoryMemoryTurnClock()
+        clock.advance_turn(_ME)
 
         with pytest.raises(ExpectationFormingInterrupted) as raised:
             _form(
-                _service(repository),
+                _service(repository, clock),
                 WrittenExpectation("a が起きる", None, Likelihood.EVEN),
                 WrittenExpectation("b が起きる", None, Likelihood.EVEN),
             )
@@ -194,4 +197,8 @@ class TestConstruction:
         terms = {"undated_term_turns": 5, "dated_term_turns": 30, name: 0}
 
         with pytest.raises(ValueError, match=name):
-            ExpectationFormingService(InMemoryExpectationRepository(), **terms)
+            ExpectationFormingService(
+                InMemoryExpectationRepository(),
+                turn_reader=InMemoryMemoryTurnClock(),
+                **terms,
+            )

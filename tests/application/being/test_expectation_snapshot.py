@@ -16,6 +16,7 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemorySnapshotService,
     SnapshotCoverageError,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (
     Expectation,
@@ -67,23 +68,26 @@ def _expectation(expectation_id: str) -> Expectation:
     )
 
 
-def _service() -> tuple[BeingMemorySnapshotService, InMemoryExpectationRepository]:
+def _service() -> tuple[
+    BeingMemorySnapshotService, InMemoryExpectationRepository, InMemoryMemoryTurnClock
+]:
     store = InMemoryExpectationRepository()
-    return _make_service(expectation_store=store), store
+    clock = InMemoryMemoryTurnClock()
+    return _make_service(expectation_store=store, memory_turn_clock=clock), store, clock
 
 
 def _round_trip(
     source: BeingMemorySnapshotService,
-) -> tuple[InMemoryExpectationRepository, str]:
+) -> tuple[InMemoryExpectationRepository, InMemoryMemoryTurnClock, str]:
     payload = source.capture(RIO)
-    restored, store = _service()
+    restored, store, clock = _service()
     restored.restore(RIO, payload)
-    return store, payload
+    return store, clock, payload
 
 
-def _advance_to(store: InMemoryExpectationRepository, turn: int) -> None:
-    while store.current_turn(RIO) < turn:
-        store.advance_turn(RIO)
+def _advance_to(clock: InMemoryMemoryTurnClock, turn: int) -> None:
+    while clock.current_turn(RIO) < turn:
+        clock.advance_turn(RIO)
 
 
 def _snapshots(store: InMemoryExpectationRepository) -> list[Any]:
@@ -95,24 +99,24 @@ class TestRoundTrip:
 
     def test_open_expectation_checks_and_turn_come_back(self) -> None:
         """清算待ちの予期と照合の記録とターン数は、保存して復元すると元に戻る。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-open")
         expectation.record(Check(turn=11, verdict=CheckVerdict.HIT))
         expectation.record(Check(turn=12, verdict=CheckVerdict.UNDETERMINED))
         store.save(expectation, [])
-        _advance_to(store, 12)
+        _advance_to(clock, 12)
 
-        restored, _ = _round_trip(source)
+        restored, restored_clock, _ = _round_trip(source)
 
         assert _snapshots(restored) == [expectation.snapshot()]
         assert [e.expectation_id for e in restored.list_open_by_being(RIO)] == [
             ExpectationId("exp-open")
         ]
-        assert restored.current_turn(RIO) == 12
+        assert restored_clock.current_turn(RIO) == 12
 
     def test_closed_expectations_come_back_closed_at_same_turn(self) -> None:
         """期限切れと形の判定で外した予期は、終わった状態と終わったターンのまま戻り、清算待ちの一覧に出ない。"""
-        source, store = _service()
+        source, store, clock = _service()
         expired = _expectation("exp-expired")
         expired_event = expired.expire_if_overdue(now_turn=EXPIRES_AT + 2)
         dismissed = _expectation("exp-dismissed")
@@ -121,9 +125,9 @@ class TestRoundTrip:
         )
         store.save(expired, [expired_event])
         store.save(dismissed, [dismissed_event])
-        _advance_to(store, EXPIRES_AT + 2)
+        _advance_to(clock, EXPIRES_AT + 2)
 
-        restored, _ = _round_trip(source)
+        restored, _, _ = _round_trip(source)
 
         assert [
             (s.status, s.closed_at_turn) for s in _snapshots(restored)
@@ -135,17 +139,17 @@ class TestRoundTrip:
 
     def test_undelivered_events_come_back_undelivered(self) -> None:
         """未配信の出来事は、ID と中身を保ったまま未配信として戻り、配信済みの出来事は戻らない。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         missed = expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
         store.save(expectation, [missed])
         settled = expectation.record(Check(turn=12, verdict=CheckVerdict.MISS))
         store.save(expectation, [settled])
-        _advance_to(store, 12)
+        _advance_to(clock, 12)
         delivered, kept = store.list_undelivered_by_being(RIO)
         store.mark_delivered(RIO, delivered.event_id)
 
-        restored, _ = _round_trip(source)
+        restored, _, _ = _round_trip(source)
 
         assert restored.list_undelivered_by_being(RIO) == [kept]
 
@@ -167,13 +171,13 @@ class TestRoundTrip:
     )
     def test_every_event_kind_survives_payload(self, drive: Any) -> None:
         """どの種類の出来事も、payload を通って同じ値の未配信として戻る。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         events = [event for event in drive(expectation) if event is not None]
         store.save(expectation, events)
-        _advance_to(store, EXPIRES_AT + 1)
+        _advance_to(clock, EXPIRES_AT + 1)
 
-        restored, _ = _round_trip(source)
+        restored, _, _ = _round_trip(source)
 
         assert restored.list_undelivered_by_being(
             RIO
@@ -181,16 +185,16 @@ class TestRoundTrip:
 
     def test_grounds_and_settled_event_grounds_come_back(self) -> None:
         """形と一緒に受けた根拠は、予期と未配信の確定の出来事の両方で同じ値のまま戻る。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         grounds = ExpectationGrounds(beliefs=("belief-1",), episodes=("episode-3",))
         expectation.judge_shape(ShapeVerdict.SETTLEABLE, turn=FORMED_AT, grounds=grounds)
         expectation.record(Check(turn=11, verdict=CheckVerdict.HIT))
         settled = expectation.record(Check(turn=12, verdict=CheckVerdict.HIT))
         store.save(expectation, [settled])
-        _advance_to(store, 12)
+        _advance_to(clock, 12)
 
-        restored, _ = _round_trip(source)
+        restored, _, _ = _round_trip(source)
 
         assert _snapshots(restored)[0].grounds == grounds
         [entry] = restored.list_undelivered_by_being(RIO)
@@ -198,29 +202,29 @@ class TestRoundTrip:
 
     def test_settled_miss_comes_back_with_what_happened(self) -> None:
         """未配信の外れの確定の出来事は、運んでいた時系列ごと保存され、復元で同じ並びのまま戻る (#1509)。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
         settled = expectation.record(Check(turn=12, verdict=CheckVerdict.MISS))
         lines = ("ノアは井戸に来なかった", "カイ「ノアは浜にいる」")
         store.save(expectation, [replace(settled, what_happened=lines)])
-        _advance_to(store, 12)
+        _advance_to(clock, 12)
 
-        restored, _ = _round_trip(source)
+        restored, _, _ = _round_trip(source)
 
         [entry] = restored.list_undelivered_by_being(RIO)
         assert entry.event.what_happened == lines  # type: ignore[union-attr]
 
     def test_settled_event_without_what_happened_key_comes_back_empty(self) -> None:
         """時系列のキーが無い #1509 より前の未配信の確定の出来事は、拒まずに空の時系列として戻る。材料が理由を持たないだけで、状態は壊れない。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
         store.save(expectation, [expectation.record(Check(turn=12, verdict=CheckVerdict.MISS))])
-        _advance_to(store, 12)
+        _advance_to(clock, 12)
         payload = json.loads(source.capture(RIO))
         del payload["expectation_undelivered_events"][0]["what_happened"]
-        target, restored = _service()
+        target, restored, _ = _service()
 
         target.restore(RIO, json.dumps(payload))
 
@@ -229,15 +233,15 @@ class TestRoundTrip:
 
     def test_empty_store_round_trips_as_empty(self) -> None:
         """予期もターン数も無い Being は空の list で保存され、復元しても空のまま。"""
-        source, _ = _service()
+        source, _, _ = _service()
 
-        restored, payload = _round_trip(source)
+        _, restored_clock, payload = _round_trip(source)
 
         decoded = json.loads(payload)
         assert decoded["expectations"] == []
         assert decoded["expectation_undelivered_events"] == []
         assert decoded["memory_turn"] == []
-        assert restored.current_turn(RIO) == 0
+        assert restored_clock.current_turn(RIO) == 0
 
 
 class TestRejectBrokenPayload:
@@ -245,29 +249,29 @@ class TestRejectBrokenPayload:
 
     def test_status_contradicting_checks_is_format_error(self) -> None:
         """照合の記録と食い違う状態を持つ予期は、BeingMemoryPayloadFormatError で拒む。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         expectation.record(Check(turn=11, verdict=CheckVerdict.HIT))
         store.save(expectation, [])
-        _advance_to(store, 11)
+        _advance_to(clock, 11)
         payload = json.loads(source.capture(RIO))
         payload["expectations"][0]["status"] = ExpectationStatus.SETTLED.value
         payload["expectations"][0]["closed_at_turn"] = 11
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="expectations"):
             target.restore(RIO, json.dumps(payload))
 
     def test_unknown_event_kind_is_format_error(self) -> None:
         """知らない種類の出来事は、BeingMemoryPayloadFormatError で拒む。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         missed = expectation.record(Check(turn=11, verdict=CheckVerdict.MISS))
         store.save(expectation, [missed])
-        _advance_to(store, 11)
+        _advance_to(clock, 11)
         payload = json.loads(source.capture(RIO))
         payload["expectation_undelivered_events"][0]["kind"] = "surprised"
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(
             BeingMemoryPayloadFormatError, match="expectation_undelivered_events"
@@ -281,52 +285,52 @@ class TestRejectBrokenPayload:
     )
     def test_malformed_memory_turn_is_format_error(self, memory_turn: list[Any]) -> None:
         """ターン数が空でも正の int 1 つでもないと、BeingMemoryPayloadFormatError で拒む。0 は空の list で表すので [0] も拒む。"""
-        source, _ = _service()
+        source, _, _ = _service()
         payload = json.loads(source.capture(RIO))
         payload["memory_turn"] = memory_turn
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="memory_turn"):
             target.restore(RIO, json.dumps(payload))
 
     def test_beliefs_in_mind_as_str_is_format_error(self) -> None:
         """頭にあった信念が list でなく文字列だと、1 文字ずつの tuple に化けさせずに BeingMemoryPayloadFormatError で拒む。"""
-        source, store = _service()
+        source, store, clock = _service()
         store.save(_expectation("exp-1"), [])
-        _advance_to(store, FORMED_AT)
+        _advance_to(clock, FORMED_AT)
         payload = json.loads(source.capture(RIO))
         payload["expectations"][0]["beliefs_in_mind"] = "belief-1"
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="expectations"):
             target.restore(RIO, json.dumps(payload))
 
     def test_judged_shape_without_grounds_key_is_format_error(self) -> None:
         """形を判定した予期に根拠のキーが無い payload (#1484 より前の保存) は、根拠を空と捏造せずに BeingMemoryPayloadFormatError で拒む。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         expectation.judge_shape(
             ShapeVerdict.SETTLEABLE, turn=FORMED_AT, grounds=ExpectationGrounds()
         )
         store.save(expectation, [])
-        _advance_to(store, FORMED_AT)
+        _advance_to(clock, FORMED_AT)
         payload = json.loads(source.capture(RIO))
         del payload["expectations"][0]["grounds"]
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="grounds"):
             target.restore(RIO, json.dumps(payload))
 
     def test_settled_event_without_grounds_key_is_format_error(self) -> None:
         """未配信の確定の出来事に根拠のキーが無い payload は、BeingMemoryPayloadFormatError で拒む。"""
-        source, store = _service()
+        source, store, clock = _service()
         expectation = _expectation("exp-1")
         expectation.record(Check(turn=11, verdict=CheckVerdict.HIT))
         store.save(expectation, [expectation.record(Check(turn=12, verdict=CheckVerdict.HIT))])
-        _advance_to(store, 12)
+        _advance_to(clock, 12)
         payload = json.loads(source.capture(RIO))
         del payload["expectation_undelivered_events"][0]["grounds"]
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="grounds"):
             target.restore(RIO, json.dumps(payload))
@@ -335,9 +339,9 @@ class TestRejectBrokenPayload:
         self,
     ) -> None:
         """別の Being の予期が混じった payload は BeingMemoryPayloadFormatError で拒み、ほかの store も予期の store も書き換えない。"""
-        source, store = _service()
+        source, store, clock = _service()
         store.save(_expectation("exp-1"), [])
-        _advance_to(store, FORMED_AT)
+        _advance_to(clock, FORMED_AT)
         payload = json.loads(source.capture(RIO))
         payload["expectations"][0]["holder"] = "being-noa"
         payload["memo"] = [
@@ -351,7 +355,7 @@ class TestRejectBrokenPayload:
                 "fulfillment_context": None,
             }
         ]
-        target, _ = _service()
+        target, _, _ = _service()
         before = target.capture(RIO)
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="being-noa"):
@@ -361,12 +365,12 @@ class TestRejectBrokenPayload:
 
     def test_turn_before_expectation_is_format_error(self) -> None:
         """記憶のターン数が予期を持ったターンより前なら、BeingMemoryPayloadFormatError で拒む。"""
-        source, store = _service()
+        source, store, clock = _service()
         store.save(_expectation("exp-1"), [])
-        _advance_to(store, FORMED_AT)
+        _advance_to(clock, FORMED_AT)
         payload = json.loads(source.capture(RIO))
         payload["memory_turn"] = [FORMED_AT - 1]
-        target, _ = _service()
+        target, _, _ = _service()
 
         with pytest.raises(BeingMemoryPayloadFormatError, match="turn"):
             target.restore(RIO, json.dumps(payload))
@@ -390,7 +394,7 @@ class TestCoverage:
             original(emitted_keys=set(emitted_keys) - {key}, expected_keys=expected_keys)
 
         monkeypatch.setattr(module, "_validate_snapshot_payload_coverage", dropping)
-        source, _ = _service()
+        source, _, _ = _service()
 
         with pytest.raises(SnapshotCoverageError, match=key):
             source.capture(RIO)

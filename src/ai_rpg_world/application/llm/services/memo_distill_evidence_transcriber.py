@@ -11,8 +11,8 @@ U5 (予測誤差統一設計 §2 U5 / semantic_learning_consolidation_design.md
 
 ``BeliefEvidence.episode_ids`` は必須 (traceability) のため、その being の
 **直近の episode** に anchor する。episode が 1 件も無ければ証拠を作らず
-skip する (``StructuredFailureEvidenceTranscriber`` と同じ設計判断: 証拠を
-捏造してでも残すより、無ければ諦める。warning ログで可視化する)。
+skip する (証拠を捏造してでも残すより、無ければ諦める。warning ログで
+可視化する)。
 
 memo_done は one-shot (memo は完了と同時に消費され、二度と同じ memo が
 ``memo_done`` を通ることはない) なので、discard 済み memo の再判定防止用の
@@ -27,12 +27,12 @@ from collections.abc import Callable
 from uuid import uuid4
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.being.domain.memory_turn_clock import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-    MemoryTurnReader,
 )
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
@@ -53,7 +53,7 @@ _logger = logging.getLogger(__name__)
 # memo は tool/spot のような固定 cue を持たないため、cue_signature は決定論の
 # 固定キーにする。固着パスの LLM は text (memo 本文 + fulfillment_context) を
 # 読んで discard / create を判定するので、shortlist の cue 一致にはあまり
-# 依存しない (STRUCTURED_FAILURE の "tool:<tool_name>" とは事情が異なる)。
+# 依存しない。
 MEMO_DISTILL_CUE_SIGNATURE = "self:memo"
 
 # text が肥大化すると固着パスの prompt を圧迫するため上限で truncate する。
@@ -139,7 +139,6 @@ class MemoDistillEvidenceTranscriber:
             episode_ids=(anchor_episode.episode_id,),
             cue_signature=MEMO_DISTILL_CUE_SIGNATURE,
             text=text,
-            # 一撃学習経路 (salience=high) は chunk 主観補完 LLM 専用に残す。
             # memo_done は反復も驚きの大小も持たないルールベースの転記
             # なので常に low。
             salience=BELIEF_EVIDENCE_SALIENCE_LOW,

@@ -145,7 +145,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "PROMPT_SECTION_ORDER",
     "RECALL_HIT_BOOST_ENABLED",
     "REASON_FIRST_TWO_STEP_ENABLED",
-    "SALIENCE_STRUCTURED_FAILURE_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
     "SEMANTIC_PASSIVE_TOP_K",
@@ -158,7 +157,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SITUATION_BELIEF_RECALL_NARROWER",
     "STAGNATION_PRESSURE_ENABLED",
     "STAGNATION_REASONING_ENABLED",
-    "STATE_COLLAPSE_EVIDENCE_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
@@ -432,7 +430,6 @@ class ResolvedLlmRuntimeConfig:
     situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
-    salience_structured_failure_enabled: bool = False
     memo_distill_enabled: bool = False
     unconscious_context_enabled: bool = False
     error_driven_reinterpretation_enabled: bool = False
@@ -440,7 +437,6 @@ class ResolvedLlmRuntimeConfig:
     error_gated_encoding_enabled: bool = False
     pending_prediction_enabled: bool = False
     hearsay_enabled: bool = False
-    state_collapse_evidence_enabled: bool = False
 
     # Goal / stagnation 系。
     goal_store_enabled: bool = False
@@ -644,7 +640,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_pending_prediction_enabled,
             resolve_prediction_context_id_enabled,
             resolve_recall_hit_boost_enabled,
-            resolve_salience_structured_failure_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
             resolve_semantic_search_enabled,
@@ -653,7 +648,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_short_term_memory_turn_window,
             resolve_stagnation_pressure_enabled,
             resolve_stagnation_reasoning_enabled,
-            resolve_state_collapse_evidence_enabled,
             resolve_unconscious_context_enabled,
         )
 
@@ -967,9 +961,6 @@ class ResolvedLlmRuntimeConfig:
             "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
             default=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
         )
-        salience_structured_failure_enabled = (
-            resolve_salience_structured_failure_enabled(env=source)
-        )
         memo_distill_enabled = resolve_memo_distill_enabled(env=source)
         memo_tools_enabled = resolve_memo_tools_enabled(env=source)
         try:
@@ -986,9 +977,6 @@ class ResolvedLlmRuntimeConfig:
         error_gated_encoding_enabled = resolve_error_gated_encoding_enabled(env=source)
         pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
         hearsay_enabled = resolve_hearsay_enabled(env=source)
-        state_collapse_evidence_enabled = resolve_state_collapse_evidence_enabled(
-            env=source
-        )
         goal_store_enabled = resolve_goal_store_enabled(env=source)
         goal_revision_enabled = resolve_goal_revision_enabled(env=source)
         goal_reflect_enabled = resolve_goal_reflect_enabled(env=source)
@@ -1134,7 +1122,6 @@ class ResolvedLlmRuntimeConfig:
             situation_belief_recall_narrower=situation_belief_recall_narrower,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
-            salience_structured_failure_enabled=salience_structured_failure_enabled,
             memo_distill_enabled=memo_distill_enabled,
             unconscious_context_enabled=unconscious_context_enabled,
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
@@ -1142,7 +1129,6 @@ class ResolvedLlmRuntimeConfig:
             error_gated_encoding_enabled=error_gated_encoding_enabled,
             pending_prediction_enabled=pending_prediction_enabled,
             hearsay_enabled=hearsay_enabled,
-            state_collapse_evidence_enabled=state_collapse_evidence_enabled,
             goal_store_enabled=goal_store_enabled,
             goal_revision_enabled=goal_revision_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
@@ -1288,7 +1274,6 @@ class ResolvedLlmRuntimeConfig:
             situation_belief_recall_narrower=CHAR_BIGRAM_BM25,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
-            salience_structured_failure_enabled=False,
             memo_distill_enabled=True,
             unconscious_context_enabled=False,
             error_driven_reinterpretation_enabled=False,
@@ -1296,7 +1281,6 @@ class ResolvedLlmRuntimeConfig:
             error_gated_encoding_enabled=False,
             pending_prediction_enabled=False,
             hearsay_enabled=False,
-            state_collapse_evidence_enabled=False,
             goal_store_enabled=False,
             goal_revision_enabled=False,
             goal_reflect_enabled=False,
