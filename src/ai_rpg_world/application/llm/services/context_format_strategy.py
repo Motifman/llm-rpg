@@ -42,12 +42,11 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     2. **【自己像と世界観】** — long_summary_text (L5)
     3. **【最近の流れ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
-    5. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
-    6. **【関連する学び】** — learned_text (semantic top-K)
-    7. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
-    7b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
-    8. **【進行中のメモ】** — active_memos_text
-    9. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
+    5. **【関連する学び】** — learned_text (semantic top-K)
+    6. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
+    6b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
+    7. **【進行中のメモ】** — active_memos_text
+    8. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
     意図:
       - prefix cache は直近の出来事の安定した先頭まで残す。semantic top-K と
@@ -92,7 +91,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
-        prediction_feedback_text: str = "",
         pending_predictions_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
@@ -108,7 +106,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("learned_text", learned_text),
             ("mid_summary_text", mid_summary_text),
             ("long_summary_text", long_summary_text),
-            ("prediction_feedback_text", prediction_feedback_text),
             ("pending_predictions_text", pending_predictions_text),
             ("known_people_text", known_people_text),
             ("episode_index_text", episode_index_text),
@@ -128,7 +125,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 learned_text=learned_text,
                 mid_summary_text=mid_summary_text,
                 long_summary_text=long_summary_text,
-                prediction_feedback_text=prediction_feedback_text,
                 pending_predictions_text=pending_predictions_text,
                 known_people_text=known_people_text,
                 episode_index_text=episode_index_text,
@@ -144,7 +140,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
-            prediction_feedback_text=prediction_feedback_text,
             pending_predictions_text=pending_predictions_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
@@ -264,20 +259,10 @@ def _emit_recent_events(sections: list[str], recent_events_text: str) -> None:
     ])
 
 
-def _emit_prediction_feedback(sections: list[str], prediction_feedback_text: str) -> None:
-    if prediction_feedback_text.strip():
-        sections.extend([
-            "",
-            "【前回の予測と実際】",
-            prediction_feedback_text.strip(),
-        ])
-
-
 def _emit_pending_predictions(sections: list[str], pending_predictions_text: str) -> None:
     """U10a (予測誤差統一設計 部品6): 【保留中の予測】section を emit する。
 
-    【前回の予測と実際】の隣に置く (計画書の配置指定)。再浮上した pending が
-    無ければ ``pending_predictions_text`` は空文字 (= section ごと省略)。
+    再浮上した pending が無ければ ``pending_predictions_text`` は空文字 (= section ごと省略)。
     """
     if pending_predictions_text.strip():
         sections.extend([
@@ -343,7 +328,6 @@ def _format_stable_to_volatile(
     learned_text: str,
     mid_summary_text: str,
     long_summary_text: str,
-    prediction_feedback_text: str,
     pending_predictions_text: str = "",
     known_people_text: str = "",
     episode_index_text: str = "",
@@ -352,7 +336,7 @@ def _format_stable_to_volatile(
     """Phase 0 default: 更新頻度の低い section から並べる。
 
     順序: objective → self_image (L5) → mid_summary (L4) → recent_events →
-    prediction_feedback → pending_predictions → learned → memories → memos →
+    pending_predictions → learned → memories → memos →
     current_state。
 
     section 寿命 / 変動率の根拠 (Y_after_pr612 実測, tick 1-107):
@@ -363,7 +347,6 @@ def _format_stable_to_volatile(
     | L5 self_image        | ~45 tick に 1 回   | stable |
     | L4 mid_summary       | 15 tick に 1 世代  | stable |
     | recent_events (head) | ~0% (末尾 append) | **head 安定** |
-    | prediction_feedback  | 0% or 100%        | (シナリオ依存、未使用なら空) |
     | learned (semantic)   | 36-62%            | volatile (top-K 再計算) |
     | recall (記憶)         | 19-32%            | volatile (cue 再計算) |
     | memos                | 23-43%            | high-volatile (agent 操作依存) |
@@ -422,19 +405,8 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 5. 前回の予測と実際 (空なら省略)
-    # 毎ターン直前 action 依存で volatile (= 100% 変動)。シナリオが
-    # expected_result_policy=off なら常時空。
-    if prediction_feedback_text.strip():
-        sections.extend([
-            "【前回の予測と実際】",
-            prediction_feedback_text.strip(),
-            "",
-        ])
-
-    # 5b. 保留中の予測 (U10a / 部品6、空なら省略)
-    # 【前回の予測と実際】の隣に置く (計画書の配置指定)。再浮上しなければ
-    # flag ON でも常に空 (= section ごと省略)。
+    # 5. 保留中の予測 (U10a / 部品6、空なら省略)
+    # 再浮上しなければ flag ON でも常に空 (= section ごと省略)。
     if pending_predictions_text.strip():
         sections.extend([
             "【保留中の予測】",
@@ -501,7 +473,6 @@ def _format_legacy(
     learned_text: str,
     mid_summary_text: str,
     long_summary_text: str,
-    prediction_feedback_text: str,
     pending_predictions_text: str = "",
     known_people_text: str = "",
     episode_index_text: str = "",
@@ -523,7 +494,6 @@ def _format_legacy(
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
     _emit_being_memo(sections, being_memo_text)
-    _emit_prediction_feedback(sections, prediction_feedback_text)
     _emit_pending_predictions(sections, pending_predictions_text)
     _emit_recent_events(sections, recent_events_text)
     _emit_relevant_memories(sections, relevant_memories_text)

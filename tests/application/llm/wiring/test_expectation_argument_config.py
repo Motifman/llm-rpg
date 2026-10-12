@@ -12,7 +12,6 @@ _ON = {
     "TYPED_JUDGMENT_PROVIDER": "stub",
     "EXPECTATION_SETTLEMENT_ENABLED": "1",
     "PREDICTION_CONTEXT_ID_ENABLED": "1",
-    "LLM_EXPECTED_RESULT_POLICY": "off",
     "EXPECTATION_ARGUMENT_ENABLED": "1",
 }
 
@@ -61,14 +60,6 @@ class TestUnusableCombinationsFailBeforeTheRun:
         values = {**_ON, "PREDICTION_CONTEXT_ID_ENABLED": "0"}
 
         with pytest.raises(ValueError, match="PREDICTION_CONTEXT_ID_ENABLED"):
-            _config(**values)
-
-    @pytest.mark.parametrize("policy", ["optional", "required"])
-    def test_enabling_with_expected_result_fails(self, policy: str) -> None:
-        """expected_result を出す設定と同時に有効にすると、予測を書く欄が 2 つ並ぶので ValueError を投げる。"""
-        values = {**_ON, "LLM_EXPECTED_RESULT_POLICY": policy}
-
-        with pytest.raises(ValueError, match="LLM_EXPECTED_RESULT_POLICY"):
             _config(**values)
 
     @pytest.mark.parametrize(

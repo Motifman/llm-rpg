@@ -581,7 +581,7 @@ def _catalogued_tool_definitions() -> dict[str, ToolCategory]:
         for value in vars(module).values():
             if isinstance(value, ToolDefinitionDto):
                 found[value.name] = value.category
-    assess = assess_situation_definition(expected_result_policy="off")
+    assess = assess_situation_definition()
     found[assess.name] = assess.category
     recall = episode_recall_definition(max_handles=1)
     found[recall.name] = recall.category

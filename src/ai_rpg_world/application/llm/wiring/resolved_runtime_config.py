@@ -111,7 +111,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
     "LLM_EPISODIC_REINTERPRETATION_ENABLED",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-    "LLM_EXPECTED_RESULT_POLICY",
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
     "LLM_MAX_OUTPUT_TOKENS",
@@ -253,7 +252,7 @@ class ResolvedLlmRuntimeConfig:
             超えたものだけを根拠にする
         expectation_argument_enabled: 環境の tool に予期の引数 ``expectations`` を
             付け、書かれた予期を積む (#1441)。**既定は off**。清算と、プロンプトに
-            載った信念を記録する台帳が要り、``expected_result`` とは併用できない
+            載った信念を記録する台帳が要る
         expectation_undated_term_turns: 期日の無い予期を、書いてから何ターンで
             期限切れにするか
         expectation_dated_term_turns: 期日のある予期の期限。期日は環境の時間で
@@ -339,11 +338,6 @@ class ResolvedLlmRuntimeConfig:
     semantic_llm_gist_enabled: bool
     semantic_passive_top_k: int
     semantic_search_enabled: bool
-
-    # Prediction (#526): 行動前の予測 expected_result を core action tool の
-    # schema に露出するか。``"off"`` (露出せず挙動不変) | ``"optional"`` (schema
-    # に出すが required にしない) | ``"required"`` (毎ターン必須)。
-    expected_result_policy: str
 
     # Prediction (#526 / U3): 段1=LLM 駆動のエピソード再解釈 (credit assignment) を
     # 有効化するか。``LLM_EPISODIC_REINTERPRETATION_ENABLED=1`` で ON。default OFF で
@@ -469,11 +463,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 "short-term memory turn window requires "
                 "0 < compact_count < cap"
-            )
-        if self.expected_result_policy not in _VALID_EXPECTED_RESULT_POLICIES:
-            raise ValueError(
-                f"expected_result_policy={self.expected_result_policy!r} is not recognized. "
-                f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
             )
         if self.tool_mode not in _VALID_TOOL_MODES:
             raise ValueError(
@@ -812,9 +801,6 @@ class ResolvedLlmRuntimeConfig:
             source, "EPISODIC_PROMOTION_EXPANSION_HOPS", default=4
         )
 
-        # Prediction (#526): expected_result 露出 policy
-        expected_result_policy = _resolve_expected_result_policy(source)
-
         # Prediction (#526 / U3): エピソード再解釈 on/off
         episodic_reinterpretation_enabled = _parse_truthy(
             source.get("LLM_EPISODIC_REINTERPRETATION_ENABLED"), default=False
@@ -1014,7 +1000,6 @@ class ResolvedLlmRuntimeConfig:
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
             semantic_passive_top_k=semantic_passive_top_k,
             semantic_search_enabled=semantic_search_enabled,
-            expected_result_policy=expected_result_policy,
             episodic_reinterpretation_enabled=episodic_reinterpretation_enabled,
             recall_habituation_enabled=recall_habituation_enabled,
             recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
@@ -1155,7 +1140,6 @@ class ResolvedLlmRuntimeConfig:
             semantic_llm_gist_enabled=False,
             semantic_passive_top_k=0,
             semantic_search_enabled=False,
-            expected_result_policy="off",
             episodic_reinterpretation_enabled=False,
             recall_habituation_enabled=False,
             recall_habituation_decay_window_ticks=5,
@@ -1280,11 +1264,6 @@ class ResolvedLlmRuntimeConfig:
                 "EXPECTATION_ARGUMENT_ENABLED=1 requires "
                 "PREDICTION_CONTEXT_ID_ENABLED=1 (頭にあった信念と想起を、"
                 "そのターンのプロンプトから取る)"
-            )
-        if self.expected_result_policy != "off":
-            raise ValueError(
-                "EXPECTATION_ARGUMENT_ENABLED=1 requires "
-                "LLM_EXPECTED_RESULT_POLICY=off (予測を書く欄が 2 つ並ぶ)"
             )
 
     def to_trace_dict(self) -> dict[str, Any]:
@@ -1416,7 +1395,6 @@ def _parse_truthy(value: str | None, *, default: bool) -> bool:
     )
 
 
-_VALID_EXPECTED_RESULT_POLICIES = frozenset({"off", "optional", "required"})
 _VALID_TOOL_MODES = frozenset({"default", "pure_spot_graph"})
 _VALID_TOOL_CHOICES = frozenset({"required", "auto"})
 _VALID_REASONING_EFFORTS = frozenset({
@@ -1428,21 +1406,6 @@ _VALID_REASONING_EFFORTS = frozenset({
     "high",
     "xhigh",
 })
-
-
-def _resolve_expected_result_policy(source: Mapping[str, str]) -> str:
-    """``LLM_EXPECTED_RESULT_POLICY`` を解決 (#526 / PR #434 fail-fast 継承)。
-
-    未設定 / 空文字 → ``"off"`` (露出せず挙動不変)。off / optional / required の
-    いずれでもなければ ``ValueError``。
-    """
-    raw = (source.get("LLM_EXPECTED_RESULT_POLICY") or "off").strip().lower()
-    if raw not in _VALID_EXPECTED_RESULT_POLICIES:
-        raise ValueError(
-            f"LLM_EXPECTED_RESULT_POLICY={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_EXPECTED_RESULT_POLICIES)}"
-        )
-    return raw
 
 
 def _resolve_tool_mode(source: Mapping[str, str]) -> str:

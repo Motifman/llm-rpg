@@ -180,44 +180,6 @@ def _fallback_persona_block(display_name: str) -> str:
     ).build(persona)
 
 
-def _expected_result_rule_line(
-    expected_result_policy: str, *, tool_schema_mode: str = "legacy"
-) -> str:
-    """expected_result 露出 policy に応じた行動ルール行 (#526 v0)。
-
-    off では空文字 (= 行が増えず prompt 不変)。optional/required では、
-    expected_result が「願望・目的ではなく行動前の予測」であることと、後で予測と
-    実際のズレが振り返られることを伝える。
-    """
-    if tool_schema_mode == "reason_first":
-        if expected_result_policy == "required":
-            return (
-                "- 2段階ターンでは `assess_situation` で `expected_result` に、"
-                "次に選ぶ行動で『何が分かる・何が起きると思うか』の予測を必ず書く"
-                "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
-            )
-        if expected_result_policy == "optional":
-            return (
-                "- 2段階ターンでは、予測を持てるときは `assess_situation` の "
-                "`expected_result` に『何が起きると思うか』を書いてよい"
-                "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
-            )
-        return ""
-    if expected_result_policy == "required":
-        return (
-            "- 探索・移動・相互作用・待機の各ツールでは `expected_result` に、"
-            "その行動をした結果『何が分かる・何が起きると思うか』の予測を必ず書く"
-            "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
-        )
-    if expected_result_policy == "optional":
-        return (
-            "- 探索・移動・相互作用・待機の各ツールでは、予測を持てるときは "
-            "`expected_result` に『何が起きると思うか』を書いてよい"
-            "（願望や目的ではなく、行動前の予測。後でこの予測と実際の結果のズレを振り返る）。"
-        )
-    return ""
-
-
 def _expectations_rule_line(enabled: bool) -> str:
     """予期の引数を書かせる行動ルール行 (#1441)。無効なら空文字で、prompt は変わらない。
 
@@ -327,7 +289,6 @@ def build_world_system_prompt(
     relevant_memories_shown: bool,
     active_recall_offered: bool,
     enable_string_seed_of_thought: bool = False,
-    expected_result_policy: str = "off",
     tool_schema_mode: str = "legacy",
     has_goal: bool = True,
     expectation_argument_enabled: bool = False,
@@ -357,13 +318,9 @@ def build_world_system_prompt(
         True のとき、ツール選択に String Seed of Thought（ランダム文字列の操作結果を n で割った余りで
         辞書順ツール列のインデックスを決める）を追記する。n は当該リクエストで渡される全ツール数。
 
-    expected_result_policy:
-        ``"off"`` (既定) なら予測関連の行動ルールは増えず prompt 不変。``"optional"`` /
-        ``"required"`` のとき、expected_result を書く指示行を 行動ルール に追加する (#526 v0)。
-
     expectation_argument_enabled:
         ``True`` のとき、予期の引数 ``expectations`` を書く指示行を 行動ルール に
-        追加する (#1441)。``expected_result`` とは設定で併用させない。
+        追加する (#1441)。
 
     episode_index_shown / episode_recall_offered:
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
@@ -401,14 +358,10 @@ def build_world_system_prompt(
             "続く user 文面に【現在の目的】section があれば参照してよいが、"
             "無ければ自分の関心・状況・ペルソナに従って過ごす。"
         )
-    # #526 v0: policy != off のときだけ予測ルール行を足す。off では先頭に改行も
-    # 付けず、prompt を従来と完全一致させる (prefix cache 不変)。
-    expected_result_rule = _expected_result_rule_line(
-        expected_result_policy, tool_schema_mode=tool_schema_mode
-    ) or _expectations_rule_line(expectation_argument_enabled)
-    expected_result_rule_block = (
-        f"\n{expected_result_rule}" if expected_result_rule else ""
-    )
+    # 予期の引数を出すときだけ行を足す。出さないときは先頭に改行も付けず、
+    # prompt を変えない (prefix cache 不変)。
+    expectations_rule = _expectations_rule_line(expectation_argument_enabled)
+    expectations_rule_block = f"\n{expectations_rule}" if expectations_rule else ""
     subjective_rule = (
         "- 2段階ターンでは、まず `assess_situation` で `inner_thought` に、"
         "上記【ペルソナ】の口調に揃えた **あなた自身の頭の中の独白** を短い一文で必ず含める。"
@@ -447,7 +400,7 @@ def build_world_system_prompt(
 
 【行動ルール】
 - 世界と相互作用する唯一の手段は、tool call である。
-{subjective_rule}{expected_result_rule_block}
+{subjective_rule}{expectations_rule_block}
 - 1 回の応答で選べる tool は 1 つだけである。
 - ラベル（接続先・オブジェクト・相手プレイヤー等）は、続きの文面内の「現在地と周囲」等に表示されたものだけを使う。
 - 行動は条件を満たさないと拒否されることがある。各オブジェクトに表示された操作の中から選ぶこと。
