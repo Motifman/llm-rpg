@@ -2342,23 +2342,13 @@ class WorldRuntime:
             return []
         return self._short_term_memory.append_all(player_id, drained)
 
-    def _wire_auxiliary_tool_stack(self) -> None:
-        """TODO ツール実行器を遅延初期化する。
+    def _wire_being_stack(self) -> None:
+        """プレイヤーに結びつく Being の保存先・用意・解決を、まだ無ければ組む。
 
-        Phase 3 Step 3a-3: memo は being_id 経路必須なので、ここで
-        ``BeingRepository`` + ``BeingAttachmentResolver`` + provisioning を
-        構築する。executor 自体は Resolver を持たず、
-        ``run_llm_auxiliary_tool`` が ``ensure_attached`` のあと
-        ``resolve_being_id`` して ``ActingBeing`` を handler に渡す。
-
-        Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
-        の executor も組み立てる (idempotent)。
+        記憶の部品はどれも Being を単位に持つので、古いメモの実行器
+        (``_wire_auxiliary_tool_stack``) の有無に関わらず組む (#1631)。
         """
-        # 既に両方 wire 済ならスキップ。recall executor は episodic_stack の
-        # 注入タイミング次第で「todo は wire 済だが recall がまだ」になり得る
-        # ため、各々の None check で個別に判定する。
-        if self._todo_tool_executor is not None:
-            self._wire_memory_recall_executor_if_possible()
+        if hasattr(self, "_aux_being_repository"):
             return
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
@@ -2373,15 +2363,30 @@ class WorldRuntime:
             InMemoryBeingRepository,
         )
 
-        if not hasattr(self, "_aux_being_repository"):
-            self._aux_being_repository = InMemoryBeingRepository()
-            self._aux_being_provisioning = BeingProvisioningService(
-                self._aux_being_repository
-            )
-            self._aux_being_resolver = BeingAttachmentResolver(
-                self._aux_being_repository
-            )
-            self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
+        self._aux_being_repository = InMemoryBeingRepository()
+        self._aux_being_provisioning = BeingProvisioningService(
+            self._aux_being_repository
+        )
+        self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository)
+        self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
+
+    def _wire_auxiliary_tool_stack(self) -> None:
+        """TODO ツール実行器を遅延初期化する。
+
+        executor 自体は Resolver を持たず、``run_llm_auxiliary_tool`` が
+        ``ensure_attached`` のあと ``resolve_being_id`` して ``ActingBeing`` を
+        handler に渡す。
+
+        Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
+        の executor も組み立てる (idempotent)。
+        """
+        self._wire_being_stack()
+        # 既に両方 wire 済ならスキップ。recall executor は episodic_stack の
+        # 注入タイミング次第で「todo は wire 済だが recall がまだ」になり得る
+        # ため、各々の None check で個別に判定する。
+        if self._todo_tool_executor is not None:
+            self._wire_memory_recall_executor_if_possible()
+            return
 
         self._todo_tool_executor = TodoToolExecutor(
             self._todo_store,
@@ -2409,7 +2414,7 @@ class WorldRuntime:
         できないため、その場合は executor を作らない。LLM への露出可否は
         ``get_tool_definitions`` で runtime config と executor の AND として
         決める。``_aux_being_resolver`` / ``_aux_being_default_world_id`` は
-        ``_wire_auxiliary_tool_stack`` 内で先に初期化される前提。
+        ``_wire_being_stack`` で先に初期化される前提。
 
         PR-D fix: 旧実装は冒頭で ``_memory_recall_tool_executor`` の有無で
         早期 return していたが、それだと PR-D で追加した
@@ -2507,10 +2512,7 @@ class WorldRuntime:
 
     @property
     def aux_being_resolver(self) -> Any:
-        """Phase 3 Step 3a-3: auxiliary tool stack の ``_aux_being_resolver`` 公開。
-        ``_acting_being_for`` 等が ``_wire_auxiliary_tool_stack`` 経由で Being を
-        解決する。``_wire_auxiliary_tool_stack`` を呼んでいないと None。
-        """
+        """``_aux_being_resolver`` の公開。``_wire_being_stack`` を呼んでいないと None。"""
         return getattr(self, "_aux_being_resolver", None)
 
     @property
@@ -2580,7 +2582,7 @@ class WorldRuntime:
             )
 
     def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
-        self._wire_auxiliary_tool_stack()
+        self._wire_being_stack()
         self._aux_being_provisioning.ensure_attached(player_id)
         being_id = self._aux_being_resolver.resolve_being_id(
             self._aux_being_default_world_id, player_id
@@ -2610,8 +2612,11 @@ class WorldRuntime:
                 message="Being is not attached to this player.",
                 error_code="INVALID_STATE",
             )
-        assert self._todo_tool_executor is not None
-        handlers: dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
+        handlers: dict[str, Any] = (
+            dict(self._todo_tool_executor.get_handlers())
+            if self._todo_tool_executor is not None
+            else {}
+        )
 
         def _merge_handlers(next_handlers: dict[str, Any]) -> None:
             # サイレント上書き防止: 将来 executor が増えたとき同名 tool が
@@ -8276,7 +8281,7 @@ def create_world_runtime(
     # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
     # 補助 Being を起動時に構築し、全参加者を fail-fast で provision する。
     if config.prompt_dataset_capture_enabled:
-        runtime._wire_auxiliary_tool_stack()
+        runtime._wire_being_stack()
         for s in getattr(scenario, "player_spawns", ()):
             runtime._aux_being_provisioning.ensure_attached(
                 PlayerId(int(s.player_id))
@@ -8286,7 +8291,7 @@ def create_world_runtime(
         # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線
         # を早期に確立し、各 player_spawn 分の Being を provision しておく。
         if not config.prompt_dataset_capture_enabled:
-            runtime._wire_auxiliary_tool_stack()
+            runtime._wire_being_stack()
             for s in getattr(scenario, "player_spawns", ()):
                 try:
                     runtime._aux_being_provisioning.ensure_attached(
@@ -8990,10 +8995,9 @@ def create_world_runtime(
                 runtime._episodic_stack.semantic_memory_store,
             )
 
-        # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、既に
-        # 構築済の _todo_tool_executor (= _wire_auxiliary_tool_stack() が本
-        # ブロックより前で呼ばれるため belief_evidence_buffer_store 確定前に
-        # 作られている) へ post-hoc に差し込む。executor 自身が memo_done
+        # U5 (MEMO_DISTILL): flag ON のときだけ transcriber を作り、
+        # _todo_tool_executor が構築済なら post-hoc に差し込む。まだなら
+        # _wire_auxiliary_tool_stack が組むときに適用する。executor 自身が memo_done
         # 成功時に record_from_memo を呼ぶ。episode_store は
         # build_episodic_stack が確定させた共有 store。
         if _memo_distill_enabled and belief_evidence_buffer_store is not None:
@@ -9008,8 +9012,8 @@ def create_world_runtime(
                 current_tick_provider=runtime.current_tick,
                 memory_turn_reader=runtime._memory_turn_clock,
             )
-            # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
-            # 作り直しても (set_trace_recorder 等) 再適用されるようにする。
+            # runtime に保持し、_wire_auxiliary_tool_stack が executor を初めて組む
+            # ときも、作り直すとき (set_trace_recorder 等) も適用されるようにする。
             # これがないと build 後の set_trace_recorder で transcriber が
             # 静かに失われていた (memo_done 28 件に対し evidence 0 件)。
             runtime._memo_distill_transcriber = memo_distill_transcriber
@@ -9034,7 +9038,7 @@ def create_world_runtime(
     # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
     # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
     # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     for spawn in scenario.player_spawns:
         try:
             runtime._aux_being_provisioning.ensure_attached(
@@ -9045,6 +9049,7 @@ def create_world_runtime(
                 f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
                 "渡せない"
             ) from exc
+    runtime._wire_auxiliary_tool_stack()
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
     )
