@@ -27,7 +27,6 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
-from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
