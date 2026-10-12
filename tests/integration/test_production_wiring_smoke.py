@@ -104,13 +104,13 @@ class TestShortTermMemoryConfigVsRuntime:
     """
 
     def test_config_unspecified_default_short_term_memory(self) -> None:
-        """設定未指定 → default の DefaultSlidingWindowMemory が使われる。"""
-        from ai_rpg_world.application.llm.services.sliding_window_memory import (
-            DefaultSlidingWindowMemory,
+        """設定未指定 → default の SummarizingShortTermMemory が使われる (#1631)。"""
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
 
         runtime = _build_runtime()
-        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
+        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
     def test_sliding_window_default_short_term_memory(self) -> None:
         """sliding window 明示 でも DefaultSlidingWindowMemory。"""
@@ -341,8 +341,8 @@ class TestConfigInjection:
         runtime = create_world_runtime(_SCENARIO, config=cfg)
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
-    def test_cfg_empty_config_default(self) -> None:
-        """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
+    def test_cfg_empty_config_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """cfg 引数省略時は環境変数の SHORT_TERM_MEMORY_KIND=sliding_window を読まず、空設定の既定の rolling_summary になる。"""
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
         )
@@ -351,9 +351,10 @@ class TestConfigInjection:
         )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
+        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert not isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
-        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
+        assert not isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
+        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
 
 class TestRunStartTraceVsRuntime:

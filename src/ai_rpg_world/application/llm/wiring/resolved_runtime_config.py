@@ -1152,11 +1152,11 @@ class ResolvedLlmRuntimeConfig:
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary",
+                short_term_memory_kind="sliding_window",
             )
         """
         defaults: dict[str, Any] = dict(
-            short_term_memory_kind="sliding_window",
+            short_term_memory_kind="rolling_summary",
             short_term_memory_turn_cap=20,
             short_term_memory_turn_compact_count=10,
             # PR #467: K run #466 で thread_pool を本番 default に。テスト
