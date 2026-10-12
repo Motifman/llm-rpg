@@ -48,6 +48,7 @@ from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports impor
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )
+from ai_rpg_world.being.application.episode_writing import EpisodeWritingCompletion
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
 DEFAULT_LLM_MODEL = _DEFAULT_MODEL
@@ -310,6 +311,7 @@ class LiteLLMClient(
     IBeliefConsolidationCompletionPort,
     IShortTermMemorySummaryCompletionPort,
     IShortTermMemoryLongSummaryCompletionPort,
+    EpisodeWritingCompletion,
 ):
     """
     LiteLLM の completion API で messages + tools を送り、1 つの tool_call を返す実装。
@@ -1108,6 +1110,13 @@ class LiteLLMClient(
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
         prompt 構築や parse は ``ShortTermMemoryLongSummaryService`` 側の責務。
         """
+        return self.complete_episode_subjective_json(messages)
+
+    def complete_episode_writing_json(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """目次つきのエピソードの書き起こし (#1626)。要約と同じく熟考を止めて送る。"""
         return self.complete_episode_subjective_json(messages)
 
     def _parse_tool_call(
