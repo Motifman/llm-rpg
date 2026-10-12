@@ -20,7 +20,7 @@
 
 ## 1. 実測 — いま目的層は本命 run で死んでいる
 
-`belief_goal_full` 系 profile は `GOAL_STORE_ENABLED` と
+`belief_goal_full` 系 profile (Issue #1631 で退役) は `GOAL_STORE_ENABLED` と
 `GOAL_REVISION_ENABLED` を両方 true にしている。つまり目的の見直し (G2) は
 配線されている。それでも既存 run の trace は次のとおり。
 
