@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 class FixedMemoryTurnReader(MemoryTurnReader):

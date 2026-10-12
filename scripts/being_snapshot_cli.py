@@ -154,6 +154,9 @@ def _build_stack(
     from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
         InMemoryMemoBookRepository,
     )
+    from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+        InMemoryMemoryTurnClock,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
         InMemoryExpectationRepository,
     )
@@ -183,6 +186,7 @@ def _build_stack(
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
         expectation_store=InMemoryExpectationRepository(),
+        memory_turn_clock=InMemoryMemoryTurnClock(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
 

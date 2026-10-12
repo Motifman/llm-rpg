@@ -71,6 +71,9 @@ from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_stor
     InMemoryBeliefEvidenceBufferStore,
 )
 from ai_rpg_world.application.trace import TraceEventKind  # noqa: E402
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (  # noqa: E402
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
 from ai_rpg_world.domain.memory.expectation.aggregate.expectation import (  # noqa: E402
     Expectation,
@@ -204,10 +207,12 @@ def judge_window(
     in_mind = _in_mind_before_each_action(trace_path, player_id)
     being = BeingId(f"replay-{player_id}-{start}")
     repository = InMemoryExpectationRepository()
+    clock = InMemoryMemoryTurnClock()
     recorder = _Recorder()
     collecting = _Collecting()
     service = ExpectationSettlementService(
         repository,
+        turn_reader=clock,
         judgment_port=port,
         dispatcher=ExpectationEventDispatcher(
             repository, receivers=(collecting,), max_attempts=3,
@@ -223,7 +228,7 @@ def judge_window(
     formed: list[dict[str, Any]] = []
     window = list(enumerate(moves))[start : start + turns]
     for index, move in window:
-        turn = repository.advance_turn(being)
+        turn = clock.advance_turn(being)
         expected = (move.arguments.get("expected_result") or "").strip()
         if expected:
             mind = in_mind[index]

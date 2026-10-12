@@ -77,10 +77,10 @@ from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     TextCandidate,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
+from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
     StagnationPressureRepository,
 )

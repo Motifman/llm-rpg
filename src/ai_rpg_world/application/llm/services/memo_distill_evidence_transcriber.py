@@ -27,12 +27,12 @@ from collections.abc import Callable
 from uuid import uuid4
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.being.domain.memory_turn_clock import (
+    MemoryTurnReader,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-    MemoryTurnReader,
 )
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
