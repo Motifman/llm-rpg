@@ -55,19 +55,20 @@ class PlayerEpisodeWriting:
         *,
         trigger: str,
     ) -> None:
-        being_id = self._being_id_of(player_id)
         base: dict[str, Any] = {
             "trigger": trigger,
-            "being_id": being_id.value if being_id is not None else None,
+            "being_id": None,
             "event_count": len(entries),
         }
-        if being_id is None:
-            self._record(player_id, outcome="skipped", skip_reason="no_being", **base)
-            return
-        if not entries:
-            self._record(player_id, outcome="skipped", skip_reason="no_events", **base)
-            return
         try:
+            being_id = self._being_id_of(player_id)
+            if being_id is None:
+                self._record(player_id, outcome="skipped", skip_reason="no_being", **base)
+                return
+            base["being_id"] = being_id.value
+            if not entries:
+                self._record(player_id, outcome="skipped", skip_reason="no_events", **base)
+                return
             written_turn = self._turn_reader.current_turn(being_id)
             environment_name = self._environment_name_of(player_id)
             self_name, persona = self._persona_of(int(player_id.value))

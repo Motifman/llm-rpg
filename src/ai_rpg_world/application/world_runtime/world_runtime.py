@@ -716,6 +716,8 @@ class WorldRuntime:
     _being_episode_store: EpisodeRepository = field(
         default_factory=InMemoryEpisodeRepository, repr=False
     )
+    # #1626: profile で書き起こしを有効にしたときだけ create_world_runtime が組む。
+    _player_episode_writing: Any | None = field(default=None, repr=False)
     # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
     _expectation_dispatcher: Any | None = field(default=None, repr=False)
     # 案A (band-gated thinking): 停滞 reflect 注入 → 次行動での熟考を橋渡しする
@@ -2373,6 +2375,33 @@ class WorldRuntime:
         if acting is None:
             return None
         return self._expectation_store.advance_turn(acting.being_id)
+
+    def _write_compacted_episodes(
+        self, player_id: PlayerId, entries: Sequence[Any]
+    ) -> None:
+        from ai_rpg_world.application.being.player_episode_writing import (
+            TRIGGER_COMPACTION,
+        )
+
+        if self._player_episode_writing is None:
+            raise RuntimeError("episode writing is not wired; build the runtime with create_world_runtime")
+        self._player_episode_writing.write(player_id, entries, trigger=TRIGGER_COMPACTION)
+
+    def write_episodes_on_leaving(self) -> None:
+        """環境を離れるとき (run の終わり) に、まだ畳まれていない出来事からエピソードを書く (#1626)。
+
+        書き起こしを有効にしていなければ何もしない。
+        """
+        if self._player_episode_writing is None:
+            return
+        from ai_rpg_world.application.being.player_episode_writing import TRIGGER_LEAVING
+
+        for player_id in self.get_player_ids():
+            self._player_episode_writing.write(
+                player_id,
+                self._short_term_memory.uncompacted_entries(player_id),
+                trigger=TRIGGER_LEAVING,
+            )
 
     def redeliver_expectation_events(self, being_ids: Iterable[BeingId]) -> None:
         """再開した直後に、snapshot から戻った未配信の予期の出来事を配り直す (#1440)。"""
@@ -4875,6 +4904,7 @@ def _build_short_term_memory(
     world_character: CharacterPromptInput | None,
     persona_block: str,
     event_store: UnifiedRecentEventStore,
+    on_compacted: Callable[[PlayerId, Sequence[Any]], None] | None = None,
 ) -> IShortTermMemory:
     """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
 
@@ -4965,6 +4995,7 @@ def _build_short_term_memory(
         event_store=event_store,
         turn_cap=cfg.short_term_memory_turn_cap,
         compact_turn_count=cfg.short_term_memory_turn_compact_count,
+        on_compacted=on_compacted,
     )
 
 
@@ -5104,6 +5135,59 @@ def _record_meetings_at_spawn(
             for other in spawns:
                 if other is not spawn:
                     acquaintances.record_meeting(PlayerId(spawn.player_id), other.name)
+
+
+def _build_player_episode_writing(
+    cfg: ResolvedLlmRuntimeConfig,
+    *,
+    runtime: WorldRuntime,
+    turn_reader: InMemoryExpectationRepository,
+    persona_of: Callable[[int], tuple[str, str]],
+) -> Any:
+    """#1626: 書き起こしの部品を組む。LiteLLM が組めなければ起動を止める。"""
+    from ai_rpg_world.application.being.player_episode_writing import (
+        PlayerEpisodeWriting,
+    )
+    from ai_rpg_world.application.llm.services.stub_episode_writing_completion import (
+        StubEpisodeWritingCompletion,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_config,
+    )
+    from ai_rpg_world.application.observation.being_contract import (
+        environment_entry_for_player,
+    )
+    from ai_rpg_world.being.application.episode_writing import (
+        EpisodeWriter,
+        EpisodeWritingCompletion,
+    )
+
+    completion: EpisodeWritingCompletion
+    if cfg.llm_client_kind == "litellm":
+        client = create_llm_client_from_config(cfg)
+        if not isinstance(client, EpisodeWritingCompletion):
+            raise RuntimeError(
+                "BEING_EPISODE_WRITING_ENABLED needs an LLM client that can write episodes"
+            )
+        completion = client
+    else:
+        completion = StubEpisodeWritingCompletion()
+
+    def _being_id_of(player_id: PlayerId) -> BeingId | None:
+        acting = runtime._acting_being_for(player_id)
+        return acting.being_id if acting is not None else None
+
+    return PlayerEpisodeWriting(
+        writer=EpisodeWriter(completion, runtime._being_episode_store),
+        being_id_of=_being_id_of,
+        turn_reader=turn_reader,
+        environment_name_of=lambda pid: environment_entry_for_player(
+            runtime.scenario, pid
+        ).environment_name,
+        persona_of=persona_of,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
 
 
 def create_world_runtime(
@@ -6424,6 +6508,12 @@ def create_world_runtime(
         world_character=world_character,
         persona_block=persona_block,
         event_store=recent_event_store,
+        # runtime はこのあとで組むが、畳むのは tick が始まってからなので間に合う。
+        on_compacted=(
+            (lambda pid, entries: runtime._write_compacted_episodes(pid, entries))
+            if config.being_episode_writing_enabled
+            else None
+        ),
     )
     action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
@@ -8859,6 +8949,17 @@ def create_world_runtime(
             player_id, environment_entry_for_player(scenario, player_id)
         )
     _record_meetings_at_spawn(scenario, player_acquaintances)
+    if config.being_episode_writing_enabled:
+        runtime._player_episode_writing = _build_player_episode_writing(
+            config,
+            runtime=runtime,
+            turn_reader=expectation_store,
+            persona_of=_build_persona_resolver(
+                scenario=scenario,
+                world_character=world_character,
+                persona_block=persona_block,
+            ),
+        )
 
     # disabled_tools の名前が実在するかを、ここで確かめる。
     #

@@ -24,6 +24,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 MAX_EPISODES_PER_WRITING = 3
+EVENTS_HEADING = "【書き残す範囲の出来事 (古い → 新しい)】"
 
 _FIELD_LIMITS = (
     ("about", INDEX_TEXT_MAX_LENGTH),
@@ -165,7 +166,7 @@ def _messages(*, self_name: str, persona: str, events_text: str) -> list[dict[st
         lines.append(f"あなたの人物像 = {persona.strip()}")
     lines += [
         "",
-        "【書き残す範囲の出来事 (古い → 新しい)】",
+        EVENTS_HEADING,
         events_text,
         "",
         "上記から JSON 形式で記憶を書いてください。",
@@ -177,6 +178,7 @@ def _messages(*, self_name: str, persona: str, events_text: str) -> list[dict[st
 
 
 __all__ = [
+    "EVENTS_HEADING",
     "MAX_EPISODES_PER_WRITING",
     "SYSTEM_PROMPT",
     "EpisodeWriter",

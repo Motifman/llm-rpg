@@ -189,6 +189,23 @@ class TestPlayerEpisodeWritingTrace:
         assert payload["error_type"] == "EpisodeWritingResponseException"
         assert repository.list_by_being(ADA_BEING) == ()
 
+    def test_being_lookup_failure_is_traced_and_swallowed(self) -> None:
+        """Being を引く処理が例外を投げても、外へ出さず、LLM を呼ばず、失敗として残す。"""
+        completion = _Completion({"episodes": [_item()]})
+        writing, *_ , recorder = _make(completion)
+
+        def _broken(pid: PlayerId) -> BeingId | None:
+            raise RuntimeError("resolver down")
+
+        writing._being_id_of = _broken
+
+        writing.write(ADA, [_observation("金庫が開いた。", 1)], trigger=TRIGGER_COMPACTION)
+
+        (payload,) = recorder.of(TraceEventKind.EPISODE_WRITING)
+        assert payload["outcome"] == "failed"
+        assert payload["being_id"] is None
+        assert completion.messages == []
+
     def test_player_without_being_is_skipped_without_calling(self) -> None:
         """Being が引けないプレイヤーは、LLM を呼ばず、飛ばした理由を残す。"""
         completion = _Completion({"episodes": [_item()]})
