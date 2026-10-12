@@ -400,8 +400,8 @@ class TestSmokeBeliefEvidenceWiring:
     """
 
     def test_flag_off_belief_evidence_buffer_store_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """evidence 系 flag がすべて OFF なら belief evidence buffer store は None。"""
-        runtime = _build_runtime(enabled=True, memo_distill_enabled=False)
+        """エピソードだけを有効にし、evidence 系 flag を書かないと、belief evidence buffer store は None。"""
+        runtime = _build_runtime(enabled=True)
         assert runtime._episodic_stack.belief_evidence_buffer_store is None
 
     def test_flag_belief_evidence_buffer_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -411,28 +411,3 @@ class TestSmokeBeliefEvidenceWiring:
         )
         runtime = _build_runtime(enabled=True, belief_evidence_enabled=True)
         assert isinstance(runtime._episodic_stack.belief_evidence_buffer_store, InMemoryBeliefEvidenceBufferStore)
-
-class TestSmokeMemoDistillWiring:
-    """U5 (MEMO_DISTILL): ``MEMO_DISTILL_ENABLED`` の配線が
-    ``create_world_runtime`` 経路で生きていることの smoke。
-
-    ``_wire_auxiliary_tool_stack()`` が belief_evidence_buffer_store の
-    構築より前に ``_todo_tool_executor`` を作ってしまうため、post-hoc
-    setter (``set_memo_distill_transcriber``) 経由の差し込みが実際に効いて
-    いることを保証する。転記自体の単体挙動は
-    ``test_memo_distill_evidence_transcriber.py`` /
-    ``test_memo_executor_memo_distill.py`` で担保済み。
-    """
-
-    def test_flag_off_todo_tool_executor_transcriber_not_injected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """flag を明示 OFF にすると todo tool executor に transcriber が注入されない。"""
-        runtime = _build_runtime(enabled=True, memo_distill_enabled=False)
-        assert runtime._todo_tool_executor._memo_distill_transcriber is None
-
-    def test_flag_todo_tool_executor_transcriber_injected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """flag ON なら todo tool executor に transcriber が注入される。"""
-        from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
-            MemoDistillEvidenceTranscriber,
-        )
-        runtime = _build_runtime(enabled=True, belief_evidence_enabled=True, memo_distill_enabled=True)
-        assert isinstance(runtime._todo_tool_executor._memo_distill_transcriber, MemoDistillEvidenceTranscriber)

@@ -1068,6 +1068,8 @@ memo A/B の scenario は `survival_island_v4_coop.json` に固定する。v4 �
 
 **その後**: memo A/B の 2 profile と `belief_goal_v4` は、Issue #1631 で退役させた。memo A/B の結果は `var/runs/v4coop_memo_keep_004` と `v4coop_memo_hide_005` に残る。
 
+メモの蒸留 (`MEMO_DISTILL_ENABLED`) は、記憶の部品の撤去 (#1631) の #1654 で消した。
+
 ## 35. `is_outdoor` 未宣言の屋内扱いは validator で見える化する
 
 `SpotNode.is_outdoor` は既定 false のまま維持する。洞窟・廃屋・小屋など、空や

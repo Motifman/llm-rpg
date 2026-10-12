@@ -63,7 +63,6 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "LLM_EPISODIC_RECALL_HABITUATION_ENABLED": "true",
     "LLM_EPISODIC_RECALL_SLOT_ENABLED": "true",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED": "true",
-    "MEMO_DISTILL_ENABLED": "true",
     "MEMO_TOOLS_ENABLED": "true",
     "PENDING_PREDICTION_ENABLED": "true",
     "PREDICTION_CONTEXT_ID_ENABLED": "true",
@@ -148,7 +147,6 @@ _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
 #: 全部入りの今のメモを、メモ帳に置き換える差分。
 _MEMO_BOOK_INSTEAD = {
     "MEMO_TOOLS_ENABLED": "false",
-    "MEMO_DISTILL_ENABLED": "false",
     "BEING_MEMO_ENABLED": "true",
 }
 
@@ -191,7 +189,7 @@ _DISABLED_PARTS = [
         id="learned",
     ),
     pytest.param(
-        {"MEMO_TOOLS_ENABLED": "false", "MEMO_DISTILL_ENABLED": "false"},
+        {"MEMO_TOOLS_ENABLED": "false"},
         (_ACTIVE_MEMOS, *_MEMO_TOOLS, *_MEMO_BOOK_NAMES),
         id="memo",
     ),
