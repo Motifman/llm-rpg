@@ -6176,7 +6176,7 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 
 **関連**: #5 / #234 / P8。
 
-目的の達成 hint (`TYPED_JUDGMENT_GOAL_HINT_ENABLED` / `_MIN_PROBABILITY`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。
+目的の達成 hint (`TYPED_JUDGMENT_GOAL_HINT_ENABLED` / `_MIN_PROBABILITY`) は、記憶の部品の撤去 (#1631) の #1657 で消した。
 
 ## D1439. 予期の状態の変化と、その出来事を、同じ保存の単位で残す
 
