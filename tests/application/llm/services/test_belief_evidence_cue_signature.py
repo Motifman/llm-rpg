@@ -89,10 +89,6 @@ class TestSelfAxisSeparationInCueTokens:
         direct_cue = build_belief_evidence_cue_signature(_episode(who=('entity:actor:7',)))
         assert set(cue_tokens('self:entity:actor:7')) & set(cue_tokens(direct_cue)) == set()
 
-    def test_self_cues_of_same_person_share_token(self) -> None:
-        """同じ本人 (player 7) についての self: 軸の cue どうしは同じトークンを持つ。"""
-        assert set(cue_tokens('self:entity:actor:7')) & set(cue_tokens('self:entity:actor:7'))
-
 class TestGoalStagnationCueSignature:
     """P-U1: build_goal_stagnation_cue_signature が goal: 軸の cue_signature を
     決定論的に組み立てる挙動を保証する。"""

@@ -269,7 +269,7 @@ class InlineEpisodicSubjectiveScheduler:
             return
 
         # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
-        # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
+        # 以降の sidecar 処理 (想起系 / 約束の記録・清算) はそれぞれ
         # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
         # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
         # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
@@ -580,7 +580,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             return
 
         # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
-        # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
+        # 以降の sidecar 処理 (想起系 / 約束の記録・清算) はそれぞれ
         # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
         # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
         # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で

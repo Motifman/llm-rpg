@@ -271,7 +271,6 @@ class BeliefEvidenceTranscriber:
                 text_snippet=evidence.text[:120],
                 salience=evidence.salience,
                 in_context_belief_ids=list(evidence.in_context_belief_ids),
-                # P9 (伝聞): HEARSAY のとき誰から来た情報かを trace に残す。
                 source_speaker=evidence.source_speaker,
             )
         except Exception:
