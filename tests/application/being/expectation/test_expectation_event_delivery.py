@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from tests.application.being.expectation.support import RecordingTraceRecorder
+from tests.trace_helpers import RecordingTraceRecorder
 
 from ai_rpg_world.application.being.expectation.event_delivery import (
     ExpectationEventDispatcher,

@@ -104,7 +104,7 @@ class TestSituationRecallIsWiredOnlyWhenEnabled:
         self, enabled: bool, expected: str, absent: str
     ) -> None:
         """無効なら受動想起の trace だけが、有効なら状況の項目の trace だけが、プロンプト 1 回につき 1 件残る。"""
-        from tests.application.being.expectation.support import RecordingTraceRecorder
+        from tests.trace_helpers import RecordingTraceRecorder
 
         runtime = _build_runtime(
             semantic_passive_top_k=3, situation_belief_recall_enabled=enabled
@@ -161,7 +161,7 @@ class TestTheEmbeddingNarrowerInTheRun:
             EmbeddingUnavailableError,
         )
         from ai_rpg_world.infrastructure.llm.openrouter_embedder import OpenRouterEmbedder
-        from tests.application.being.expectation.support import RecordingTraceRecorder
+        from tests.trace_helpers import RecordingTraceRecorder
 
         def down(self, texts):  # type: ignore[no-untyped-def]
             raise EmbeddingUnavailableError("HTTP 503: overloaded")

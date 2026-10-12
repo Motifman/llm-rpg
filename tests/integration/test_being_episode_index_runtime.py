@@ -25,7 +25,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from tests.application.being.expectation.support import ScriptedJudgmentPort
+from tests.judgment_helpers import ScriptedJudgmentPort
 
 _ISLAND = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v4_coop.json"
 _HEADING = "【思い出せる出来事】"

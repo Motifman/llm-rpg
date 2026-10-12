@@ -1,4 +1,4 @@
-"""予期の清算と配信の試験で使う、trace を記録して読み返す口と、答えを台本で返す判断ポート。"""
+"""答えを台本で返す判断ポート。"""
 
 from __future__ import annotations
 
@@ -13,37 +13,6 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
 from ai_rpg_world.application.llm.services.typed_judgment_stub import (
     DeterministicTypedJudgmentPort,
 )
-from ai_rpg_world.application.trace import ITraceRecorder, TraceEvent
-
-
-class RecordingTraceRecorder(ITraceRecorder):
-    def __init__(self) -> None:
-        self.events: list[TraceEvent] = []
-
-    def record(
-        self,
-        kind: str,
-        *,
-        tick: int | None = None,
-        player_id: int | None = None,
-        **payload: Any,
-    ) -> TraceEvent:
-        event = TraceEvent(
-            seq=len(self.events) + 1,
-            timestamp="2026-10-03T00:00:00Z",
-            kind=kind,
-            tick=tick,
-            player_id=player_id,
-            payload=dict(payload),
-        )
-        self.events.append(event)
-        return event
-
-    def close(self) -> None:
-        return None
-
-    def payloads(self, kind: str) -> list[dict[str, Any]]:
-        return [event.payload for event in self.events if event.kind == kind]
 
 
 class ScriptedJudgmentPort(ITypedJudgmentPort):
@@ -66,3 +35,6 @@ class ScriptedJudgmentPort(ITypedJudgmentPort):
         if isinstance(script, Exception):
             raise script
         return DeterministicTypedJudgmentPort(script).judge(state, questions)
+
+
+__all__ = ["ScriptedJudgmentPort"]

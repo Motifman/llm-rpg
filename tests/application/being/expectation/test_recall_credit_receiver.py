@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from tests.application.being.expectation.support import RecordingTraceRecorder
+from tests.trace_helpers import RecordingTraceRecorder
 
 from ai_rpg_world.application.being.expectation.recall_credit import (
     ExpectationRecallCreditReceiver,
