@@ -65,9 +65,6 @@ from ai_rpg_world.application.world_graph.unreachable_attribute_notes import (
     unreachable_attribute_notes,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-)
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
@@ -346,11 +343,6 @@ VisibleMonsterObserver = Callable[[int, SpotGraphMonsterEntry], None]
 #: 同じ場所で倒れている / 死んでいる人を見た、という通知。
 #: 引数は (見た人の player_id, 倒れている人の entity_id, 表示名, 退場が確定したか)。
 FallenBodyObserver = Callable[[int, int, str, bool], None]
-# P-U3/P-U4 (停滞感の表出): player_id (int) → 停滞感バンド (``none`` /
-# ``light`` / ``strong``、P-U2 の resolve_stagnation_pressure_band と同型)。
-# 自己 (own_stagnation_band) と他者 (nearby_entities の stagnation_band) の
-# 両方がこの provider を共有する。未注入なら常に none 相当に縮退する。
-StagnationBandProvider = Callable[[int], str]
 #: 見る側が、対象を自分と同じ側だと既に知っているかを返す。
 #: 役割名そのものを prompt の状態組み立てへ持ち込まないため、真偽だけを渡す。
 KnownAllyChecker = Callable[[PlayerId, PlayerId], bool]
@@ -388,7 +380,6 @@ class SpotGraphCurrentStateBuilder:
         item_state_resolver: Callable[[int], dict[str, Any] | None] | None = None,
         current_tick_provider: Callable[[], int] | None = None,
         minutes_per_tick: int | None = None,
-        stagnation_band_provider: StagnationBandProvider | None = None,
         dead_player_checker: Callable[[PlayerId], bool] | None = None,
         areas: Sequence[Any] = (),
         distant_cues: Sequence[Any] = (),
@@ -450,9 +441,6 @@ class SpotGraphCurrentStateBuilder:
         # PR #2 状態異常 surface: 残り tick 表示用 (None なら effect 名のみ表示)
         self._current_tick_provider = current_tick_provider
         self._minutes_per_tick = minutes_per_tick
-        # P-U3/P-U4 (停滞感の表出): 未注入 (None) なら自己・他者とも常に
-        # STAGNATION_PRESSURE_BAND_NONE (= 何も描画しない、導入前と挙動一致)。
-        self._stagnation_band_provider = stagnation_band_provider
         # 同 spot の他 player が DEAD (終局・復活不可) かを返す checker。未注入なら
         # 常に False (= 死亡表示を出さない、導入前と挙動一致)。outcome は
         # PlayerStatusAggregate ではなく PlayerOutcomeRegistry 側にあるので、
@@ -714,26 +702,6 @@ class SpotGraphCurrentStateBuilder:
             display_text=tod.display_text,
             is_dark=tod.is_dark,
         )
-
-    def _resolve_stagnation_band(self, entity_id: int) -> str:
-        """entity_id の停滞感バンドを provider から引く。
-
-        provider 未注入 / 例外は常に ``STAGNATION_PRESSURE_BAND_NONE`` に
-        縮退させる (= flag OFF や配線漏れで表出が壊れて他の表示まで巻き込む
-        事故を防ぐ、既存の time_of_day_provider 等と同じ safer fallback)。
-        """
-        if self._stagnation_band_provider is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        try:
-            return self._stagnation_band_provider(entity_id)
-        except Exception:
-            logger.warning(
-                "stagnation_band_provider raised unexpectedly for entity_id=%s; "
-                "falling back to none",
-                entity_id,
-                exc_info=True,
-            )
-            return STAGNATION_PRESSURE_BAND_NONE
 
     def set_dead_player_checker(
         self, checker: Callable[[PlayerId], bool] | None
@@ -1490,9 +1458,6 @@ class SpotGraphCurrentStateBuilder:
                 except Exception:
                     other_is_down = body_is_here
                     other_fatigue_level = "ok"
-                # P-U4 (停滞感の表出・他者): fatigue_level と対称に、同 spot の
-                # 他 player の停滞感バンドも常時 state として lift する。
-                other_stagnation_band = self._resolve_stagnation_band(int(other_eid))
                 # 終局 DEAD かを checker で判定 (未注入なら False)。表示で
                 # 「(死亡している)」を「(倒れて動かない)」と区別するために使う。
                 other_is_dead = self._resolve_is_dead(int(other_eid))
@@ -1502,7 +1467,6 @@ class SpotGraphCurrentStateBuilder:
                     is_down=other_is_down,
                     is_dead=other_is_dead,
                     fatigue_level=other_fatigue_level,
-                    stagnation_band=other_stagnation_band,
                     carried_item_names=self._carried_item_names_of_fallen(
                         int(other_eid),
                         is_incapacitated=other_is_down or other_is_dead,
@@ -1616,9 +1580,6 @@ class SpotGraphCurrentStateBuilder:
         own_fatigue_level: str = (
             getattr(player, "fatigue_level", "ok") if player is not None else "ok"
         )
-        # P-U3 (停滞感の表出・自己): own_fatigue_level と対称に本人の停滞感
-        # バンドを lift する。
-        own_stagnation_band: str = self._resolve_stagnation_band(player_id)
 
         return SpotGraphPlayerSnapshotDto(
             current_spot_id=spot_id.value,
@@ -1656,7 +1617,6 @@ class SpotGraphCurrentStateBuilder:
             active_effect_lines=active_effect_lines,
             agent_status=agent_status,
             own_fatigue_level=own_fatigue_level,
-            own_stagnation_band=own_stagnation_band,
             economy_declared=bool(self._merchants),
             merchants_at_spot=self._merchant_entries_at(spot_id),
             own_gold=(

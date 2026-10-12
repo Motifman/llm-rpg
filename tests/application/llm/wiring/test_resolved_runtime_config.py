@@ -201,7 +201,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'PROMPT_SECTION_ORDER': 'legacy', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'PREDICTION_CONTEXT_ID_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'UNCONSCIOUS_CONTEXT_ENABLED': '1', 'ERROR_DRIVEN_REINTERPRETATION_ENABLED': '1', 'RECALL_HIT_BOOST_ENABLED': '1', 'PENDING_PREDICTION_ENABLED': '1', 'GOAL_STORE_ENABLED': '1', 'GOAL_REVISION_ENABLED': '1', 'GOAL_REFLECT_ENABLED': '1', 'GOAL_STAGNATION_EVIDENCE_ENABLED': '1', 'STAGNATION_PRESSURE_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'ESCAPE_LLM_SSOT': '1', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'PROMPT_SECTION_ORDER': 'legacy', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'PREDICTION_CONTEXT_ID_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'UNCONSCIOUS_CONTEXT_ENABLED': '1', 'ERROR_DRIVEN_REINTERPRETATION_ENABLED': '1', 'RECALL_HIT_BOOST_ENABLED': '1', 'PENDING_PREDICTION_ENABLED': '1', 'GOAL_STORE_ENABLED': '1', 'GOAL_REVISION_ENABLED': '1', 'GOAL_REFLECT_ENABLED': '1', 'GOAL_STAGNATION_EVIDENCE_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'ESCAPE_LLM_SSOT': '1', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
@@ -241,7 +241,6 @@ class TestFromEnvExplicit:
         assert cfg.goal_revision_enabled is True
         assert cfg.goal_reflect_enabled is True
         assert cfg.goal_stagnation_evidence_enabled is True
-        assert cfg.stagnation_pressure_enabled is True
         assert cfg.tool_mode == 'pure_spot_graph'
         assert cfg.escape_llm_ssot_enabled is True
         assert cfg.scenario_random_seed == 42
@@ -352,6 +351,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "TYPED_JUDGMENT_GOAL_HINT_ENABLED",
             "TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY",
             "STAGNATION_REASONING_ENABLED",
+            "STAGNATION_PRESSURE_ENABLED",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
@@ -466,7 +466,7 @@ class TestToTraceDict:
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
         assert 'belief_evidence_enabled' in d
-        assert 'stagnation_pressure_enabled' in d
+        assert 'goal_reflect_enabled' in d
         assert 'tool_mode' in d
 
     def test_api_key(self) -> None:

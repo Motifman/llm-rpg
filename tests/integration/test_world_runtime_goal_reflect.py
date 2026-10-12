@@ -92,50 +92,14 @@ class TestGoalStagnationEvidenceWiring:
         assert coord._goal_stagnation_evidence_enabled is False
 
 
-class TestStagnationPressureWiring:
-    """P-U2: STAGNATION_PRESSURE_ENABLED が world_runtime から coordinator まで
-    配線され、既定 OFF であることを固定する。"""
-
-    def test_stagnation_pressure_wired_when_enabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_consolidation_config(
-                goal_reflect_enabled=True,
-                stagnation_pressure_enabled=True,
-            ),
-        )
-        coord = _coordinator(runtime)
-        assert coord is not None
-        assert coord._stagnation_pressure_enabled is True
-        assert coord._stagnation_pressure_store is not None
-        # runtime 側にも store が保持され、snapshot stub から拾える (checklist #27)。
-        assert runtime._stagnation_pressure_store is not None
-        assert runtime._stagnation_pressure_store is coord._stagnation_pressure_store
-
-    def test_stagnation_pressure_off_by_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_consolidation_config(goal_reflect_enabled=True),
-        )
-        coord = _coordinator(runtime)
-        assert coord is not None
-        assert coord._stagnation_pressure_enabled is False
-        assert runtime._stagnation_pressure_store is None
-
-
 class TestFailFastRequiresBeliefConsolidation:
-    """敵対的レビュー HIGH-1: P-U1 / P-U2 は固着パス
+    """敵対的レビュー HIGH-1: P-U1 は固着パス
     (``BeliefConsolidationCoordinator``) 経由でしか動かないが、その coordinator
     自体は ``BELIEF_CONSOLIDATION_ENABLED`` が ON のときしか構築されない
     (episodic_stack.py の ``if belief_consolidation_enabled and
     belief_evidence_buffer_store is not None`` 分岐)。GOAL_STAGNATION_EVIDENCE_ENABLED
-    や STAGNATION_PRESSURE_ENABLED だけを ON にして BELIEF_CONSOLIDATION_ENABLED を
-    OFF のままにすると、coordinator が一度も構築されず、カウンタや evidence 化の
-    経路が丸ごと死んだまま起動時に何の警告もエラーも出ない「静かな失敗」になる。
+    だけを ON にして BELIEF_CONSOLIDATION_ENABLED を OFF のままにすると、
+    coordinator が一度も構築されず、evidence 化の経路が丸ごと死んだまま起動時に何の警告もエラーも出ない「静かな失敗」になる。
     本クラスは、この組み合わせを起動時 fail-fast (ValueError) で弾くことを保証する。"""
 
     def _semantic_without_belief_consolidation_config(self, **overrides):
@@ -153,18 +117,6 @@ class TestFailFastRequiresBeliefConsolidation:
                 ),
             )
 
-    def test_stagnation_pressure_without_belief_consolidation_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        with pytest.raises(ValueError, match="BELIEF_CONSOLIDATION_ENABLED"):
-            create_world_runtime(
-                _SCENARIO_PATH,
-                config=self._semantic_without_belief_consolidation_config(
-                    goal_reflect_enabled=True,
-                    stagnation_pressure_enabled=True,
-                ),
-            )
-
     def test_all_flags_enabled_together_does_not_raise(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -174,13 +126,11 @@ class TestFailFastRequiresBeliefConsolidation:
             config=_consolidation_config(
                 goal_reflect_enabled=True,
                 goal_stagnation_evidence_enabled=True,
-                stagnation_pressure_enabled=True,
             ),
         )
         coord = _coordinator(runtime)
         assert coord is not None
         assert coord._goal_stagnation_evidence_enabled is True
-        assert coord._stagnation_pressure_enabled is True
 
 
 class TestGoalReflectAuditTarget:
