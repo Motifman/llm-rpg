@@ -89,9 +89,11 @@ def resolve_target_item_name(
     if not exact and key in {_normalized(n) for n in world_item_names}:
         # 正式な名前が書かれたなら、その品を指している。「カンテラ」で
         # 「カンテラの油」を奪うと、本人の意図と違う物を動かす。
-        return TargetItemNameResolution(written, ItemNameOutcome.ABSENT, rescue_wired=wired)
+        return TargetItemNameResolution(
+            written, ItemNameOutcome.ABSENT, "official_name_of_other_item", rescue_wired=wired,
+        )
     partial = exact or _distinct(
-        [h for h in held if key and (key in _normalized(h.name) or _normalized(h.name) in key)]
+        [h for h in held if key and _normalized(h.name) and (key in _normalized(h.name) or _normalized(h.name) in key)]
     )
     method = "exact" if exact else "partial"
     if len(partial) == 1:
@@ -105,8 +107,10 @@ def resolve_target_item_name(
             matched_names=tuple(h.name for h in partial), rescue_wired=wired,
         )
     candidates = {h.name: h.description for h in _distinct(list(held))}
-    if rescue is None or not candidates:
-        return TargetItemNameResolution(written, ItemNameOutcome.ABSENT, rescue_wired=wired)
+    if not candidates:
+        return TargetItemNameResolution(written, ItemNameOutcome.ABSENT, "nothing_held", rescue_wired=wired)
+    if rescue is None:
+        return TargetItemNameResolution(written, ItemNameOutcome.ABSENT, "no_judge", rescue_wired=False)
     answer = rescue.rescue(written, candidates=candidates, action_name=action_name)
     chosen_items = _distinct([h for h in held if answer.accepted and h.name == answer.chosen])
     if len(chosen_items) > 1:

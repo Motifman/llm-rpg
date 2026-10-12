@@ -953,6 +953,18 @@ class PlayerInteractionApplicationService:
         )
         spot_presence_count = len(graph.presence_at(actor_spot).present_entity_ids)
 
+        # 再使用間隔。**前提条件より先に見る。**
+        #
+        # あとに置くと「暗くないので襲えない」が先に返り、待たされている
+        # ことが分からない。行為者自身の状態なので、伝えても何も漏れない。
+        remaining = self._remaining_cooldown_ticks(
+            actor_player_id, action_name, idef, current_tick
+        )
+        if remaining > 0:
+            raise InteractionNotAllowedException(
+                f"まだ間を置く必要がある。あと{self._span_text(remaining)}。"
+            )
+
         # LLM は「太い流木を奪う」のように**名前**で品目を指す (倒れた相手の
         # 持ち物は prompt に出ている: PR #824)。domain 側は spec id しか扱わ
         # ないので、名前 → spec id の解決はここで済ませて
@@ -968,18 +980,6 @@ class PlayerInteractionApplicationService:
         self._record_item_name_resolution(
             name_resolution, actor_player_id, target_player_id, action_name
         )
-
-        # 再使用間隔。**前提条件より先に見る。**
-        #
-        # あとに置くと「暗くないので襲えない」が先に返り、待たされている
-        # ことが分からない。行為者自身の状態なので、伝えても何も漏れない。
-        remaining = self._remaining_cooldown_ticks(
-            actor_player_id, action_name, idef, current_tick
-        )
-        if remaining > 0:
-            raise InteractionNotAllowedException(
-                f"まだ間を置く必要がある。あと{self._span_text(remaining)}。"
-            )
 
         ok, reason = self._interaction.can_interact(
             idef,

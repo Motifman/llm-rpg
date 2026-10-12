@@ -192,3 +192,18 @@ class TestNothingFits:
         done, message = _pickpocket(runtime, "鉄の鍵")
 
         assert (done, message) == (False, "籠の中の相手には手が届かない。")
+
+
+class TestWhileWaiting:
+    """再使用間隔の間に懐を探ったとき。"""
+
+    def test_the_judge_is_not_asked_while_the_actor_must_wait(self, runtime) -> None:
+        """奪った直後で間を置く必要があるときは、「まだ間を置く必要がある」と断り、品名の判断を問わない。"""
+        _give(runtime, _MIO, "fuel_can")
+        assert _pickpocket(runtime, "燃料の缶")[0]
+        rescue = _Rescue("昇降機の起動鍵", accepted=True)
+        runtime.set_target_item_name_rescue(rescue)
+
+        done, message = _pickpocket(runtime, "鉄の鍵")
+
+        assert (done, message.startswith("まだ間を置く必要がある"), rescue.calls) == (False, True, [])

@@ -61,7 +61,9 @@ class TraceEventKind:
     # 当てようとした 1 件。正式な名前で当たったときは出さない。
     # payload: action_name / target_player_id / written /
     #   outcome: "resolved" | "ambiguous" | "absent" | "unrecognized" /
-    #   method: "exact" | "partial" | "judgment" | None / resolved_name / matched_names /
+    #   method: "exact" | "partial" | "judgment" | "official_name_of_other_item" |
+    #   "nothing_held" | "no_judge" (後ろの 3 つは absent と言い切った理由) /
+    #   resolved_name / matched_names /
     #   rescue_wired (意味の判断が配線されていたか) /
     #   judgment: {chosen, probability, confidence, min_confidence, accepted, latency_ms,
     #   source, unavailable_reason} | None

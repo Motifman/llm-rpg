@@ -116,7 +116,7 @@ class TestOfficialNamesOfOtherItems:
 
         result = _resolve("カンテラ", (oil,))
 
-        assert (result.outcome, result.spec_id) == (ItemNameOutcome.ABSENT, None)
+        assert (result.outcome, result.spec_id, result.method) == (ItemNameOutcome.ABSENT, None, "official_name_of_other_item")
 
     def test_the_official_name_of_another_item_is_not_judged(self) -> None:
         """正式な名前が書かれたときは、その品を指していると読み、意味の判断を問わない。"""
@@ -134,7 +134,7 @@ class TestNoMatchingItem:
         """意味の判断が配線されていないとき、重なりの無い名前は今までどおり「持っていない」になる。"""
         result = _resolve("ランタン", (_LIFT_KEY, _FUEL_CAN))
 
-        assert (result.outcome, result.spec_id, result.rescue_wired) == (ItemNameOutcome.ABSENT, None, False)
+        assert (result.outcome, result.spec_id, result.method) == (ItemNameOutcome.ABSENT, None, "no_judge")
 
     def test_a_target_holding_nothing_is_absent_without_asking(self) -> None:
         """相手が何も持っていないときは、判断を問わずに「持っていない」になる。"""
@@ -142,7 +142,7 @@ class TestNoMatchingItem:
 
         result = _resolve("起動鍵", (), rescue)
 
-        assert (result.outcome, rescue.calls) == (ItemNameOutcome.ABSENT, [])
+        assert (result.outcome, result.method, rescue.calls) == (ItemNameOutcome.ABSENT, "nothing_held", [])
 
     def test_an_accepted_judgment_resolves_to_the_chosen_item(self) -> None:
         """重なりの無い「鉄の鍵」を、判断が確信をもって「昇降機の起動鍵」と選べば、その鍵に当たる。"""
@@ -166,7 +166,7 @@ class TestNoMatchingItem:
 
         result = _resolve("ランタン", (_LIFT_KEY, _FUEL_CAN), rescue)
 
-        assert result.outcome is ItemNameOutcome.ABSENT
+        assert (result.outcome, result.method) == (ItemNameOutcome.ABSENT, "judgment")
 
     def test_an_unconfident_judgment_is_unrecognized_not_absent(self) -> None:
         """判断が候補を選んだが確信が足りないときは、品を選ばず、持っていないとも言わない。"""
@@ -203,3 +203,15 @@ class TestNoMatchingItem:
         result = _resolve("鉄の鍵", (_LIFT_KEY, twin, _FUEL_CAN), rescue)
 
         assert (result.outcome, result.spec_id) == (ItemNameOutcome.AMBIGUOUS, None)
+
+
+class TestBlankNames:
+    """正式な名前が空白だけの品。"""
+
+    def test_a_blank_official_name_is_not_a_part_of_every_name(self) -> None:
+        """空白だけの名前の品は、どの書き方にも部分一致で当たらない。"""
+        blank = HeldItem(ItemSpecId(7), "　", "")
+
+        result = _resolve("起動鍵", (blank,))
+
+        assert (result.outcome, result.spec_id) == (ItemNameOutcome.ABSENT, None)
