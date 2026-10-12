@@ -115,7 +115,7 @@ class TestFormatActionSummaryForDisplay:
         )
 
     def test_hidden_fields_include_inner_thought_and_duplicate_content(self) -> None:
-        """JSON フォールバックから心の声・発話本文・メモ本文・予測・予期などの重複入力を落とす。"""
+        """JSON フォールバックから心の声・発話本文・メモ本文・予測・予期・メモ帳への書き込みなどの重複入力を落とす。"""
         assert ACTION_SUMMARY_HIDDEN_FIELDS == frozenset(
             {
                 "content",
@@ -124,6 +124,7 @@ class TestFormatActionSummaryForDisplay:
                 "intention",
                 "expected_result",
                 "expectations",
+                "memo",
                 "emotion_hint",
             }
         )

@@ -61,6 +61,11 @@ _RECALL_BY_HANDLE = "memory_recall_by_handle"
 _EXPLORE_RELATED = "memory_explore_related"
 _SEARCH_SEMANTIC = "memory_search_semantic"
 _MEMO_TOOLS = ("memo_add", "memo_list", "memo_done")
+#: メモ帳 (#1628) の欄、システムプロンプトの説明、環境の tool の引数。
+_MEMO_BOOK = "【メモ】"
+_MEMO_RULES = "【メモの書き方】"
+_MEMO_ARGUMENT = '"memo": {'
+_MEMO_BOOK_NAMES = (_MEMO_BOOK, _MEMO_RULES, _MEMO_ARGUMENT)
 
 _ALL_NAMES = (
     _RELEVANT_MEMORIES,
@@ -75,6 +80,7 @@ _ALL_NAMES = (
     _EXPLORE_RELATED,
     _SEARCH_SEMANTIC,
     *_MEMO_TOOLS,
+    *_MEMO_BOOK_NAMES,
 )
 
 #: 全部入りのとき、1 ターン目のプロンプトに出る名前。
@@ -83,7 +89,22 @@ _ALL_NAMES = (
 #: いなかった名前でも緑になる。【関連する学び】と【保留中の予測】は中身が
 #: できてから出る欄で、1 ターン目には出ない。この 2 つの総当たりは、本文が
 #: 将来それを指したときに落ちる見張りになる。
-_ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {_LEARNED, _PENDING_PREDICTIONS}
+#:
+#: メモ帳は今のメモの道具と並べられない (設定で止める) ので、全部入りには入らない。
+#: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
+#: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
+_ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
+    _LEARNED,
+    _PENDING_PREDICTIONS,
+    *_MEMO_BOOK_NAMES,
+}
+
+#: 全部入りの今のメモを、メモ帳に置き換える差分。
+_MEMO_BOOK_INSTEAD = {
+    "MEMO_TOOLS_ENABLED": "false",
+    "MEMO_DISTILL_ENABLED": "false",
+    "BEING_MEMO_ENABLED": "true",
+}
 
 #: (止める部品, 設定の差分, 消えるべき名前)。
 _DISABLED_PARTS = [
@@ -125,7 +146,7 @@ _DISABLED_PARTS = [
     ),
     pytest.param(
         {"MEMO_TOOLS_ENABLED": "false", "MEMO_DISTILL_ENABLED": "false"},
-        (_ACTIVE_MEMOS, *_MEMO_TOOLS),
+        (_ACTIVE_MEMOS, *_MEMO_TOOLS, *_MEMO_BOOK_NAMES),
         id="memo",
     ),
     pytest.param(
@@ -218,3 +239,17 @@ class TestNoDisabledMemoryPartIsNamedAnywhere:
 
         named = {name for name in _ALL_NAMES if name in prompt}
         assert named == {_ACTIVE_MEMOS, *_MEMO_TOOLS}
+
+
+class TestTheMemoBookReplacesTheOldMemo:
+    """全部入りの今のメモをメモ帳に置き換えると、メモ帳の名前だけが出て、今のメモの名前が消えることを保証する (#1628)。"""
+
+    def test_memo_book_names_appear_and_old_memo_names_vanish(self) -> None:
+        """メモ帳に置き換えると、【メモ】・【メモの書き方】・引数 memo が出て、【進行中のメモ】と memo_* のツールが消え、ほかの部品の名前は変わらない。"""
+        prompt = _full_prompt_with(_MEMO_BOOK_INSTEAD)
+
+        named = {name for name in _ALL_NAMES if name in prompt}
+
+        assert named == (
+            _ADVERTISED_WHEN_ALL_ENABLED - {_ACTIVE_MEMOS, *_MEMO_TOOLS}
+        ) | set(_MEMO_BOOK_NAMES)

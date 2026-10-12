@@ -62,6 +62,7 @@ from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
 )
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
+    "BEING_MEMO_ENABLED",
     "BELIEF_ATTRIBUTION_ENABLED",
     "BELIEF_CANDIDATE_NARROWER",
     "BELIEF_CANDIDATE_TOP_K",
@@ -437,6 +438,8 @@ class ResolvedLlmRuntimeConfig:
     # 文字列を変えるため同じく実験条件。
     tool_mode: str = "default"
     memo_tools_enabled: bool = True
+    # #1628: メモ帳と、環境の tool に付ける引数 memo。今のメモの道具とは並べない。
+    being_memo_enabled: bool = False
     escape_llm_ssot_enabled: bool = False
     scenario_random_seed: int | None = None
     prompt_dataset_capture_enabled: bool = False
@@ -512,6 +515,11 @@ class ResolvedLlmRuntimeConfig:
         self._validate_belief_create_gate()
         self._validate_situation_belief_recall()
         self._validate_expectation_settlement()
+        if self.being_memo_enabled and self.memo_tools_enabled:
+            raise ValueError(
+                "BEING_MEMO_ENABLED=1 requires MEMO_TOOLS_ENABLED=false "
+                "(メモを書く口と【進行中のメモ】【メモ】が 2 つずつ並ぶ)"
+            )
         if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
             raise ValueError(
                 "STAGNATION_REASONING_ENABLED=1 requires "
@@ -912,6 +920,12 @@ class ResolvedLlmRuntimeConfig:
         )
         memo_distill_enabled = resolve_memo_distill_enabled(env=source)
         memo_tools_enabled = resolve_memo_tools_enabled(env=source)
+        try:
+            being_memo_enabled = _parse_truthy(
+                source.get("BEING_MEMO_ENABLED"), default=False
+            )
+        except ValueError as exc:
+            raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
         unconscious_context_enabled = resolve_unconscious_context_enabled(env=source)
         error_driven_reinterpretation_enabled = (
             resolve_error_driven_reinterpretation_enabled(env=source)
@@ -1081,6 +1095,7 @@ class ResolvedLlmRuntimeConfig:
             stagnation_reasoning_enabled=stagnation_reasoning_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
+            being_memo_enabled=being_memo_enabled,
             escape_llm_ssot_enabled=escape_llm_ssot_enabled,
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
@@ -1230,6 +1245,7 @@ class ResolvedLlmRuntimeConfig:
             stagnation_reasoning_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,
+            being_memo_enabled=False,
             escape_llm_ssot_enabled=False,
             scenario_random_seed=None,
             prompt_dataset_capture_enabled=False,
