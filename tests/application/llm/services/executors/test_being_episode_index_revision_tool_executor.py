@@ -124,6 +124,7 @@ class TestRevisingTheIndex:
         "arguments",
         [
             pytest.param({"about": "金庫を開けた", "recall_when": "箱を見たとき"}, id="no_handle"),
+            pytest.param({"handle": "  ", "about": "金庫を開けた", "recall_when": "箱を見たとき"}, id="blank_handle"),
             pytest.param({"handle": "ep_000001", "recall_when": "箱を見たとき"}, id="no_about"),
             pytest.param({"handle": "ep_000001", "about": "金庫を開けた", "recall_when": "  "}, id="blank_recall_when"),
             pytest.param({"handle": "ep_000001", "about": 3, "recall_when": "箱を見たとき"}, id="not_a_string"),
