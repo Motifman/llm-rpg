@@ -220,8 +220,6 @@ class MemoBook:
                 f"{kind.value} memos are at the limit of {KIND_LIMITS[kind]}"
             )
         _require_known_episode(provenance, known_episode_handles)
-        if any(m.memo_id == memo_id for m in self.memos):
-            raise MemoValidationException(f"memo_id {memo_id!r} is already in the book")
         memo = Memo(
             memo_id=memo_id,
             handle=_handle_for(memo_id, {m.handle for m in self.memos}),
@@ -244,8 +242,6 @@ class MemoBook:
     ) -> MemoBook:
         """``provenance`` を渡さなければ、分かったことでも前の出どころのまま。"""
         memo = self._require(handle)
-        if provenance is not None and memo.kind is not MemoKind.FACT:
-            raise MemoValidationException(f"a {memo.kind.value} memo must not have provenance")
         _require_known_episode(provenance, known_episode_handles)
         _require_turn(turn, "turn")
         edited = replace(

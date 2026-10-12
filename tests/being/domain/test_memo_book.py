@@ -316,11 +316,20 @@ class TestMemoInvariants:
             self._memo(environment_name=" ")
 
     def test_duplicate_handles_in_a_book_are_rejected(self) -> None:
-        """同じ呼び名のメモが 2 件あるメモ帳は作れず、MemoValidationException を投げる。"""
+        """ID が違っても同じ呼び名のメモが 2 件あるメモ帳は作れず、MemoValidationException を投げる。"""
         memo = _add(MemoBook.empty()).memos[0]
+        same_handle = _add(MemoBook.empty(), memo_id=SAME_PREFIX_ID).memos[0]
 
         with pytest.raises(MemoValidationException):
-            MemoBook(memos=(memo, memo))
+            MemoBook(memos=(memo, same_handle))
+
+    def test_duplicate_ids_in_a_book_are_rejected(self) -> None:
+        """同じ ID のメモが 2 件あるメモ帳は作れず、MemoValidationException を投げる。"""
+        memo = _add(MemoBook.empty()).memos[0]
+        longer = dataclasses.replace(memo, handle="m_3f2a7b9")
+
+        with pytest.raises(MemoValidationException):
+            MemoBook(memos=(memo, longer))
 
     def test_find_returns_the_memo_or_none(self) -> None:
         """呼び名で引くと、あればそのメモを、無ければ None を返す。"""
