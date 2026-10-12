@@ -29,6 +29,7 @@ _TOOL_NAME_UNKNOWN = "none"
 # 「値ではなく軸そのもの」が区別情報なので、cue_tokens が例外的に軸名を残す。
 _SELF_CUE_AXIS = "self"
 
+
 def build_belief_evidence_cue_signature(episode: SubjectiveEpisode) -> str:
     """episode の構造化フィールドから決定論的な cue_signature を組む。
 

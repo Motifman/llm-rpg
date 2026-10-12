@@ -440,7 +440,7 @@ class BeliefConsolidationCoordinator:
         return text.strip()
 
     def _valid_reflect_verdict(self, raw: dict[str, Any]) -> str | None:
-        """reflect decision から、``_apply_reflect`` (観測注入/evidence 化) が使う
+        """reflect decision から、``_apply_reflect`` (観測注入) が使う
         正当な verdict を取り出す。goal_reflect が OFF / 観測 sink 未注入 / verdict が未知の
         いずれかなら None (= ``_apply_reflect`` は何もしない)。statement の有無や
         乱発防止 cap には依存しない (それらは呼び出し側が判定する)。"""
