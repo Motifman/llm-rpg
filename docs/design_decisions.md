@@ -6219,7 +6219,8 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 snapshot のキー `memory_turn` は変えていない。予期の保存先は、復元のときに一緒に戻すターン数を
 `require_restorable` で確かめるためだけに受け取り、持たない。
 
-予期のドメイン (`domain/memory/expectation`) と保存先も Issue #1631 で消した。snapshot から
+予期のドメイン (`domain/memory/expectation`) と保存先も Issue #1631 で消した。`require_restorable` も一緒に消えたので、
+snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。snapshot から
 `expectations` と `expectation_undelivered_events` のキーを外した。消す前に保存した snapshot は、
 復元が足りないキーだけを拒むので、そのまま読める (2 つのキーは読み飛ばす)。`memory_turn` は残した。
 `snapshot_save` / `snapshot_load` の trace の `expectation_counts` は、記憶のターン数だけを載せる

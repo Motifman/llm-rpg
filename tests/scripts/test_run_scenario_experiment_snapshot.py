@@ -415,8 +415,8 @@ class TestSnapshotArgs:
         assert save_dir.exists()
 
 
-class TestSnapshotTraceCarriesExpectationCounts:
-    """smoke_stub で保存と再開を通しで回し、SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に Being ごとの予期の件数が載ることを保証する。"""
+class TestSnapshotTraceCarriesMemoryTurns:
+    """smoke_stub で保存と再開を通しで回し、SNAPSHOT_SAVE / SNAPSHOT_LOAD の trace に Being ごとの記憶のターン数が載ることを保証する。"""
 
     @staticmethod
     def _events(trace_path: Path, kind: str) -> list[dict]:
