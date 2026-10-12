@@ -550,56 +550,6 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
         with pytest.raises(TypeError):
             ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(port), store, belief_evidence_transcriber='not_a_transcriber')
 
-_HEARD_CLAIMS_RETURN = {'interpreted': 'I', 'recall_text': 'R', 'heard_claims': [{'speaker': 'カイト', 'claim': '自分の発言'}, {'speaker': 'リオ', 'claim': '北の泉は安全だ'}]}
-
-class TestInlineSchedulerActorNamePropagation:
-
-    def test_actor_name_self_speaker_claim_rejected_2(self) -> None:
-        """actor name を渡すと本人speakerのclaimが弾かれる。"""
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        port = _StubPort(returns=_HEARD_CLAIMS_RETURN)
-        service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
-        scheduler = InlineEpisodicSubjectiveScheduler(service, store)
-        scheduler.submit(draft, persona_text='', encoding_input=enc, actor_name='カイト')
-        ep_after = store.get_by_being(being_id, draft.episode_id)
-        assert [c.speaker for c in ep_after.heard_claims] == ['リオ']
-
-    def test_actor_name_line(self) -> None:
-        """未指定 (デフォルト None) では従来通り全ての speaker を通す
-
-        (後方互換: actor_name を渡さない既存呼び出し元の挙動を変えない)。
-        """
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        port = _StubPort(returns=_HEARD_CLAIMS_RETURN)
-        service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
-        scheduler = InlineEpisodicSubjectiveScheduler(service, store)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        ep_after = store.get_by_being(being_id, draft.episode_id)
-        assert [c.speaker for c in ep_after.heard_claims] == ['カイト', 'リオ']
-
-class TestThreadPoolSchedulerActorNamePropagation:
-
-    def test_actor_name_self_speaker_claim_rejected(self) -> None:
-        """actor name を渡すと本人speakerのclaimが弾かれる。"""
-        (enc, draft, being_id, resolver, world_id) = _build_encoding_and_draft()
-        store = InMemorySubjectiveEpisodeStore()
-        store.put_by_being(being_id, draft)
-        port = _StubPort(returns=_HEARD_CLAIMS_RETURN)
-        service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(service, store, max_workers=1)
-        try:
-            scheduler.submit(draft, persona_text='', encoding_input=enc, actor_name='カイト')
-            scheduler.shutdown()
-        except Exception:
-            scheduler.shutdown(timeout=2.0)
-            raise
-        ep_after = store.get_by_being(being_id, draft.episode_id)
-        assert [c.speaker for c in ep_after.heard_claims] == ['リオ']
-
 class _RaisingOnAddPendingPredictionStore(InMemoryPendingPredictionStore):
     """記録 (add_by_being) だけを失敗させる fake store。
 

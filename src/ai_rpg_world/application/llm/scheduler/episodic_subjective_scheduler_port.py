@@ -48,10 +48,7 @@ class IEpisodicSubjectiveCompletionScheduler(Protocol):
         submit: 1 chunk 分の LLM 補完ジョブを投入する。drafted 段階の episode は
             既に ``episode_store`` に書かれている前提なので、Scheduler 側で改めて
             put する必要はない。Scheduler が完了時に LLM 結果で **同じ episode_id
-            の episode を上書き** する責任を持つ。``actor_name`` (H-2 / 自己言及
-            ループ) は聞き手本人の名前で、heard_claims の speaker がこれと一致
-            する claim を弾く材料として ``merge_llm_subjective_fields`` に渡す。
-            None (未配線) なら自己判定を行わない。
+            の episode を上書き** する責任を持つ。
         shutdown: 進行中ジョブをキャンセル or drain する。``timeout`` 秒待っても
             終わらないジョブは諦めて落ちる (= テンプレが残るだけで損失は限定的)。
     """
@@ -62,7 +59,6 @@ class IEpisodicSubjectiveCompletionScheduler(Protocol):
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: str | None = None,
     ) -> None:
         ...
 

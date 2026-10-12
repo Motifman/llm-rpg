@@ -2,7 +2,7 @@
 
 U2 (証拠台帳統一設計 §2 U2): 「証拠の入口はすべてルールベースの転記
 (新規 LLM 呼び出しなし)」に従う。本クラスは判定を作らず、既に下された判定
-(約束の清算、目的の達成・断念、伝聞の抽出) を ``BeliefEvidence`` に写すだけ。
+(約束の清算、目的の達成・断念) を ``BeliefEvidence`` に写すだけ。
 
 予測の当否は、chunk の ``prediction_error`` ではなく確定した予期から積む
 (#1443、``ExpectationBeliefMaterialReceiver``)。
@@ -21,7 +21,6 @@ from uuid import uuid4
 
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_belief_evidence_cue_signature,
-    build_hearsay_cue_signature,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.being.domain.memory_turn_clock import (
@@ -56,12 +55,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
 
 _logger = logging.getLogger(__name__)
 
-# P9 (伝聞): 主張の対象を特定できなかった HEARSAY evidence の cue。BeliefEvidence
-# は空 cue を許さないための sentinel であり、既存 belief とは噛み合わず固着パスの
-# discard に流れる (= 実質「対象不明の伝聞」)。
-_HEARSAY_UNATTRIBUTED_CUE = "hearsay:unattributed"
-
-
 def _pending_cue_signature(
     pending: PendingPrediction, episode: SubjectiveEpisode
 ) -> str:
@@ -92,7 +85,6 @@ class BeliefEvidenceTranscriber:
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         memory_turn_reader: MemoryTurnReader,
-        noun_matcher: object | None = None,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -112,15 +104,6 @@ class BeliefEvidenceTranscriber:
             raise TypeError("memory_turn_reader must be MemoryTurnReader")
         self._current_tick_provider = current_tick_provider
         self._memory_turn_reader = memory_turn_reader
-        # P9 (伝聞): heard_claim の対象を拾って cue にするための noun matcher。
-        # 未注入なら伝聞 cue は空文字 (対象不明) になる。noun_matcher は
-        # build_episodic_stack 内で scenario から構築されるため、transcriber の
-        # 構築が先行する配線では後から attach_noun_matcher で注入する。
-        self._noun_matcher = noun_matcher
-
-    def attach_noun_matcher(self, noun_matcher: object | None) -> None:
-        """伝聞 cue 生成用の noun matcher を後から注入する (P9 配線用)。"""
-        self._noun_matcher = noun_matcher
 
     def record_pending_resolution(
         self,
@@ -250,55 +233,6 @@ class BeliefEvidenceTranscriber:
         self._buffer_store.append_by_being(being_id, evidence)
         self._emit_trace(being_id, evidence)
         return evidence
-
-    def record_heard_claims(
-        self, being_id: BeingId, episode: SubjectiveEpisode
-    ) -> list[BeliefEvidence]:
-        """episode.heard_claims を HEARSAY evidence に転記する (P9)。
-
-        各 claim について:
-        - text = claim (主張の内容)
-        - source_kind = HEARSAY
-        - cue_signature = 主張の対象 (noun matcher で spot / player を拾う。
-          対象不明なら空文字 = 固着パスの discard に委ねる)
-        - source_speaker = 話者 (cue と分離。混ぜると話者についての belief に
-          化ける)
-        - salience = low (伝聞は反復してこそ意味がある。裏切り等の一撃ものと違う)
-
-        判定 (誰が何を言ったか) は既に chunk 主観補完 LLM が済ませており、本
-        メソッドは転記のみ (U2 以来の「証拠の入口は転記のみ」)。空タプルなら何も
-        しない。
-        """
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if not isinstance(episode, SubjectiveEpisode):
-            raise TypeError("episode must be SubjectiveEpisode")
-        recorded: list[BeliefEvidence] = []
-        for claim in episode.heard_claims:
-            cue = build_hearsay_cue_signature(
-                claim.claim,
-                self._noun_matcher,
-                self_player_id=episode.player_id,
-            )
-            # 対象を特定できない伝聞は sentinel cue に寄せる (BeliefEvidence は
-            # 空 cue を許さないため)。固着パスから見れば実質 cue なしで、既存
-            # belief と噛み合わず discard される = 「曖昧な対象は捨てる」の実現。
-            evidence = BeliefEvidence(
-                evidence_id=f"belief-evidence-{uuid4().hex}",
-                source_kind=BeliefEvidenceSourceKind.HEARSAY,
-                episode_ids=(episode.episode_id,),
-                cue_signature=cue or _HEARSAY_UNATTRIBUTED_CUE,
-                text=claim.claim,
-                salience=BELIEF_EVIDENCE_SALIENCE_LOW,
-                occurred_at=episode.occurred_at,
-                observed_turn=self._memory_turn_reader.current_turn(being_id),
-                tick=self._resolve_tick(),
-                source_speaker=claim.speaker,
-            )
-            self._buffer_store.append_by_being(being_id, evidence)
-            self._emit_trace(being_id, evidence)
-            recorded.append(evidence)
-        return recorded
 
     def _resolve_tick(self) -> int | None:
         if self._current_tick_provider is None:

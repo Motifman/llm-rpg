@@ -41,7 +41,6 @@ marker に分けてあります (`docs/llm_provider_selection.md` の「実呼�
 |---|---|---|---|
 | `yesterday_v1` | `tests/quality/test_yesterday_v1.py` | `yesterday_v1_baseline.md` | 「昨日何してた?」に答えられるか (= 自伝的時系列 / 能動想起) |
 | `prediction_v1` | `tests/quality/test_prediction_v1.py` | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
-| `sign_hearsay_v1` | `tests/quality/test_sign_hearsay_v1.py` | `sign_hearsay_v1_baseline.md` | 看板を読んだ観測が P9 伝聞抽出の入力に乗るか (#714 看板 primitive の follow-up) |
 
 ## 使い方
 

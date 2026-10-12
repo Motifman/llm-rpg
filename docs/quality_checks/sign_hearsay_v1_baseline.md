@@ -1,5 +1,7 @@
 # sign_hearsay_v1: 看板を読んだ観測は P9 伝聞抽出に乗るか
 
+> 伝聞の部品 (`HEARSAY_ENABLED`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。この検査の試験と prompt の dump も一緒に消した。
+
 ## 背景
 
 #714 で看板 (書き置き) primitive が入った。`examine` すると「『本文』 —

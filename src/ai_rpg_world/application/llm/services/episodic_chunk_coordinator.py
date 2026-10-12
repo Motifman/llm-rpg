@@ -106,11 +106,6 @@ class EpisodicChunkCoordinator:
         recent_actions_limit: int = 20,
         chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
         persona_block_provider: Callable[[PlayerId], str] | None = None,
-        # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者照合に使う
-        # 本人名 provider。persona_block_provider と同じ player_id 引きの形。
-        # 未指定なら自己言及チェックは縮退し従来通り通す (安全側に落とし過ぎて
-        # 伝聞が全滅しないようにする)。
-        player_name_provider: Callable[[PlayerId], str] | None = None,
         episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
         trace_recorder: ITraceRecorder | None = None,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
@@ -139,8 +134,6 @@ class EpisodicChunkCoordinator:
             )
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
-        if player_name_provider is not None and not callable(player_name_provider):
-            raise TypeError("player_name_provider must be callable or None")
         if episodic_memory_link_service is not None and not isinstance(
             episodic_memory_link_service, EpisodicMemoryLinkApplicationService
         ):
@@ -217,11 +210,6 @@ class EpisodicChunkCoordinator:
         self._chunk_subjective_fields_service = chunk_subjective_fields_service
         self._subjective_completion_scheduler = subjective_completion_scheduler
         self._persona_block_provider = persona_block_provider
-        # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者が本人自身か
-        # どうかを判定するための本人名 provider。未指定 (None) なら
-        # merge_llm_subjective_fields / scheduler.submit に actor_name=None を
-        # 渡し、自己判定を行わない (安全側に倒し過ぎて伝聞が全滅しないようにする)。
-        self._player_name_provider = player_name_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: dict[int, list[ActionResultEntry]] = {}
@@ -261,16 +249,6 @@ class EpisodicChunkCoordinator:
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode_store への put を episode.being_id 経路で発行する。"""
         self._episodic_episode_store.put_by_being(episode.being_id, episode)
-
-    def _record_heard_claims_if_applicable(self, episode: SubjectiveEpisode) -> None:
-        """P9 (伝聞): 同期 LLM 補完直後に heard_claims を HEARSAY evidence に転記する。
-
-        予測の当否は確定した予期から積む (#1443) ので、ここでは扱わない。
-        transcriber 未注入 (flag OFF) なら何もしない。
-        """
-        if self._belief_evidence_transcriber is None:
-            return
-        self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
 
     def _record_pending_prediction_if_applicable(
         self,
@@ -566,19 +544,10 @@ class EpisodicChunkCoordinator:
                 if self._persona_block_provider is not None
                 else ""
             )
-            # H-2: actor_name は persona_block_provider と同じ player_id 引きの
-            # provider から取る。未配線 (None) なら actor_name=None のまま
-            # merge に渡し、自己判定を行わない (persona_block と同じ規約)。
-            actor_name = (
-                self._player_name_provider(player_id)
-                if self._player_name_provider is not None
-                else None
-            )
             episode = self._chunk_subjective_fields_service.merge_llm_subjective_fields(
                 episode,
                 persona_text=persona_block,
                 encoding_input=encoding_input,
-                actor_name=actor_name,
             )
             # U1: prediction_error が同期経路で確定した瞬間に PREDICTION_OUTCOME
             # を emit する (非同期 scheduler 経路は完了時に別途 emit する)。
@@ -587,7 +556,6 @@ class EpisodicChunkCoordinator:
                 episode=episode,
                 chunk_actions=encoding_input.action_results,
             )
-            self._record_heard_claims_if_applicable(episode)
             # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
             # 抽出された約束・見込みを PendingPrediction 化して per-Being
             # store に積む。flag OFF / 抽出なし / store 未配線なら no-op
@@ -615,18 +583,11 @@ class EpisodicChunkCoordinator:
                 if self._persona_block_provider is not None
                 else ""
             )
-            # H-2: 非同期経路も同期経路と同じ actor_name 解決規約 (未配線なら None)。
-            actor_name = (
-                self._player_name_provider(player_id)
-                if self._player_name_provider is not None
-                else None
-            )
             try:
                 self._subjective_completion_scheduler.submit(
                     episode,
                     persona_text=persona_block,
                     encoding_input=encoding_input,
-                    actor_name=actor_name,
                 )
             except Exception:
                 # scheduler の submit は本来例外を投げないが、誤実装に備えて。
