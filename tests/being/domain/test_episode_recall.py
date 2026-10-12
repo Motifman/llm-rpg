@@ -98,9 +98,17 @@ class TestRecallEpisodes:
             recall_episodes(_repo(), ADA, [], turn=6)
 
     def test_turn_before_writing_rejects_the_whole_call(self) -> None:
-        """書いた時より前のターンで呼び出すと EpisodeValidationException を投げ、どのエピソードの回数も増えない。"""
+        """2 件目だけが書いた時より前のターンになる呼び出しは EpisodeValidationException を投げ、先に呼び出せた 1 件目の回数も増えない。"""
         repo = _repo()
+        late = Episode.write(
+            episode_id="cc33dd44-1d2e-4f00-8a00-000000000003",
+            environment_name="島",
+            written_turn=5,
+            index=EpisodeIndex(summary="浜で火をおこした", recall_when="寒いとき"),
+            body="流木を集めた。",
+        )
+        repo.add(ADA, late)
 
         with pytest.raises(EpisodeValidationException):
-            recall_episodes(repo, ADA, ["ep_aa11bb", "ep_3f2a7b"], turn=1)
-        assert [e.recall_count for e in repo.list_by_being(ADA)] == [0, 0]
+            recall_episodes(repo, ADA, ["ep_aa11bb", "ep_cc33dd"], turn=3)
+        assert [e.recall_count for e in repo.list_by_being(ADA)] == [0, 0, 0]
