@@ -51,7 +51,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -1495,9 +1494,10 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     assert "【現在選べる対象引数】" in action_user
     final_instruction = (
         "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-        "inner_thought / expected_result は再生成しない。"
+        "inner_thought は再生成しない。"
     )
     assert action_user.endswith(final_instruction)
+    assert "expected_result" not in action_user
     assert action_user.index("【行動前の状況評価】") < action_user.index(
         "【現在選べる対象引数】"
     )

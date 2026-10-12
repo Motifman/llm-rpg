@@ -42,11 +42,11 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     2. **【自己像と世界観】** — long_summary_text (L5)
     3. **【最近の流れ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
-    6. **【関連する学び】** — learned_text (semantic top-K)
-    7. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
-    7b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
-    8. **【進行中のメモ】** — active_memos_text
-    9. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
+    5. **【関連する学び】** — learned_text (semantic top-K)
+    6. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
+    6b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
+    7. **【進行中のメモ】** — active_memos_text
+    8. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
     意図:
       - prefix cache は直近の出来事の安定した先頭まで残す。semantic top-K と
@@ -405,9 +405,8 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 5b. 保留中の予測 (U10a / 部品6、空なら省略)
-    # 再浮上しなければ
-    # flag ON でも常に空 (= section ごと省略)。
+    # 5. 保留中の予測 (U10a / 部品6、空なら省略)
+    # 再浮上しなければ flag ON でも常に空 (= section ごと省略)。
     if pending_predictions_text.strip():
         sections.extend([
             "【保留中の予測】",

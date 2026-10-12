@@ -11,7 +11,6 @@ LLM エージェントが**実際に**受け取る観測テキスト・ツール
 from __future__ import annotations
 
 import logging
-import os
 import random
 import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -185,7 +184,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.observation.contracts.dtos import (

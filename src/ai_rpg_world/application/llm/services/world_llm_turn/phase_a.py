@@ -685,7 +685,7 @@ def append_reason_first_assessment(
 
 _REASON_FIRST_ACTION_INSTRUCTION = (
     "- 上の評価を踏まえ、実行する行動 tool を1つ選ぶ。"
-    "inner_thought / expected_result は再生成しない。"
+    "inner_thought は再生成しない。"
 )
 
 def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
