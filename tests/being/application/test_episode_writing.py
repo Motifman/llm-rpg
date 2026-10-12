@@ -7,8 +7,8 @@ import pytest
 
 from ai_rpg_world.being.application.episode_writing import (
     MAX_EPISODES_PER_WRITING,
-    EpisodeWritingCompletion,
     EpisodeWriter,
+    EpisodeWritingCompletion,
 )
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (

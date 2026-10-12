@@ -2395,11 +2395,17 @@ class WorldRuntime:
         if self._player_episode_writing is None:
             return
         from ai_rpg_world.application.being.player_episode_writing import TRIGGER_LEAVING
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
+        )
 
+        memory = self._short_term_memory
+        if not isinstance(memory, SummarizingShortTermMemory):
+            raise RuntimeError("episode writing needs SHORT_TERM_MEMORY_KIND=rolling_summary")
         for player_id in self.get_player_ids():
             self._player_episode_writing.write(
                 player_id,
-                self._short_term_memory.uncompacted_entries(player_id),
+                memory.uncompacted_entries(player_id),
                 trigger=TRIGGER_LEAVING,
             )
 
