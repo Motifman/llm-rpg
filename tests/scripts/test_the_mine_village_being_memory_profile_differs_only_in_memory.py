@@ -78,22 +78,18 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert being["SEMANTIC_PASSIVE_TOP_K"] == 0
 
     def test_new_memory_is_on_with_the_compared_settings(self) -> None:
-        """メモ帳とエピソードの書き起こしと目次 (呼び出された順、10 件、一度に 3 件) が入っている。"""
+        """メモ帳が入り、常に入る目次は比べた設定 (10 件、一度に 3 件) で出る。"""
         being = _load(_BEING_MEMORY)["runtime_config"]
 
         assert {
             key: being[key]
             for key in (
                 "BEING_MEMO_ENABLED",
-                "BEING_EPISODE_WRITING_ENABLED",
-                "BEING_EPISODE_INDEX_ORDER",
                 "BEING_EPISODE_INDEX_LIMIT",
                 "BEING_EPISODE_RECALL_MAX_HANDLES",
             )
         } == {
             "BEING_MEMO_ENABLED": True,
-            "BEING_EPISODE_WRITING_ENABLED": True,
-            "BEING_EPISODE_INDEX_ORDER": "recalled_rises_to_top",
             "BEING_EPISODE_INDEX_LIMIT": 10,
             "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
         }
@@ -114,8 +110,6 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
             values=_runtime_config_mapping_from_source(being)
         )
 
-        assert cfg.being_episode_writing_enabled is True
-        assert cfg.being_episode_index_order == "recalled_rises_to_top"
         assert cfg.being_episode_index_limit == 10
         assert cfg.being_episode_recall_max_handles == 3
         assert cfg.being_memo_enabled is True

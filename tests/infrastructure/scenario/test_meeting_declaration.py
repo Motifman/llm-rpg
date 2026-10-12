@@ -81,6 +81,8 @@ class TestScenariosWithoutTheDeclaration:
             "use_item", "drop_item", "pickup_item", "give_item",
             "attack", "listen", "wait", "tend_to_player", "speak",
             "memo_add", "memo_list", "memo_done",
+            # #1631: 目次つきのエピソードは設定で止められず、常に出る。
+            "episode_recall", "episode_revise_index",
         }
 
         assert _tool_names(_WITHOUT_MEETING) == expected

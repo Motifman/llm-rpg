@@ -22,10 +22,8 @@ def test_stub_run_writes_episodes_on_compaction_and_on_leaving_before_the_snapsh
     config["max_world_ticks"] = 12
     config["runtime_config"].update(
         {
-            "SHORT_TERM_MEMORY_KIND": "rolling_summary",
             "SHORT_TERM_MEMORY_TURN_CAP": 2,
             "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": 1,
-            "BEING_EPISODE_WRITING_ENABLED": True,
         }
     )
     config_path = tmp_path / "experiment.json"

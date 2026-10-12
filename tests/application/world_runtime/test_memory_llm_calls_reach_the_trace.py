@@ -42,8 +42,6 @@ def _runtime_with_recorder() -> tuple[Any, _Recorder]:
     config = runtime_config(
         llm_client_kind="litellm",
         llm_api_key="sk-test",
-        short_term_memory_kind="rolling_summary",
-        being_episode_writing_enabled=True,
     )
     runtime = create_world_runtime(_SCENARIO, config=config)
     recorder = _Recorder()
