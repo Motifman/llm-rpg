@@ -37,6 +37,7 @@ MAX_CONSECUTIVE_LLM_FAILURES = 3
 FOLLOW_UP_REASON_SUCCEEDED = "succeeded"
 FOLLOW_UP_REASON_REST_CHOSEN = "rest_chosen"
 FOLLOW_UP_REASON_TRAVELING = "traveling"
+FOLLOW_UP_REASON_CANNOT_ACT = "cannot_act"
 
 @dataclass
 class WorldLlmTurnTrigger(ILlmTurnTrigger):
@@ -135,6 +136,7 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                 if check_game_end().is_ended:
                     self.pending_player_ids.clear()
                     self._self_reschedule_streak.clear()
+                    self._own_action_follow_ups.clear()
                     return
             except Exception as exc:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
@@ -365,13 +367,18 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
 
         自分の行動の結果も本人への観測として扱う。回さないのは、wait で休むことを
         選んだときと、時間のかかる移動の途中だけ。移動は着いたときに起こされる。
+        行動の結果で倒れた・去った人は、回しても入口で落ちるので、回さない理由として残す。
         失敗は ``should_reschedule`` と ``_retry_after_llm_failure`` が受け持つ。
         """
         if not result.success or result.was_no_op:
             return
         if result.rests_until_woken:
             reason = FOLLOW_UP_REASON_REST_CHOSEN
-        elif self._is_traveling(player_id_value):
+        elif not self.wiring.runtime._player_life_query.can_take_turn(
+            PlayerId(player_id_value)
+        ):
+            reason = FOLLOW_UP_REASON_CANNOT_ACT
+        elif self._is_traveling(player_id_value, stage="llm_turn.own_action_follow_up"):
             reason = FOLLOW_UP_REASON_TRAVELING
         else:
             reason = FOLLOW_UP_REASON_SUCCEEDED
@@ -512,9 +519,9 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         # かつ heartbeat / observation で起こされても turn 実行を空回り
         # させない。到着時に SpotGraphTravelStageService.on_arrival
         # 経由で schedule_turn が打たれて再開する。
-        return not self._is_traveling(player_id_value)
+        return not self._is_traveling(player_id_value, stage="llm_turn.can_act")
 
-    def _is_traveling(self, player_id_value: int) -> bool:
+    def _is_traveling(self, player_id_value: int, *, stage: str) -> bool:
         status_repo = getattr(self.wiring.runtime, "_player_status_repo", None)
         if status_repo is None:
             return False
@@ -526,5 +533,5 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             return nav is not None and nav.is_traveling
         except Exception as exc:
             # 判定できないときはターンを回す側に倒す。
-            self._record_follow_up_failure(exc, "llm_turn.can_act", player_id_value)
+            self._record_follow_up_failure(exc, stage, player_id_value)
             return False

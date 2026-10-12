@@ -18,6 +18,7 @@ import pytest
 from tests.support.trace_recorders import CollectingTraceRecorder
 
 from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
+    FOLLOW_UP_REASON_CANNOT_ACT,
     FOLLOW_UP_REASON_REST_CHOSEN,
     FOLLOW_UP_REASON_SUCCEEDED,
     FOLLOW_UP_REASON_TRAVELING,
@@ -286,6 +287,36 @@ class TestTravelingDoesNotGetTurns:
 
             assert session.hal_follow_ups()[0]["rescheduled"] is False
             assert session.hal_follow_ups()[0]["reason"] == FOLLOW_UP_REASON_TRAVELING
+
+
+class TestPlayerWhoCannotActAfterwardsIsNotRescheduled:
+    """成功した行動の結果で倒れた・去った人は、次の tick に回さず、その理由を trace に残すことを保証する。"""
+
+    def test_player_who_cannot_take_a_turn_is_recorded_as_not_rescheduled(self) -> None:
+        """探索が成功した直後に手番を取れない状態になった人は、own_action_follow_up に rescheduled=False と、行動できない理由で残り、次の手番も来ない。"""
+        with TemporaryDirectory() as tmp:
+            session = _open_session(tmp)
+            session.script_hal([_EXPLORE])
+            life = session.runtime._player_life_query
+            original = life.can_take_turn
+            acted: list[int] = []
+            life.can_take_turn = lambda pid: not (int(pid.value) == int(_HAL) and acted) and original(pid)
+            session.recorder.record = _note_hal_action(session.recorder.record, acted)
+
+            session.advance(session.idle_timeout_ticks() + 3)
+
+            assert session.hal_follow_ups()[0]["rescheduled"] is False
+            assert session.hal_follow_ups()[0]["reason"] == FOLLOW_UP_REASON_CANNOT_ACT
+            assert [tool for _, tool in session.hal_turns()] == ["explore"]
+
+
+def _note_hal_action(record: Any, acted: list[int]) -> Any:
+    def wrapped(kind: str, **kwargs: Any) -> Any:
+        if kind == "action_result" and kwargs.get("player_id") == int(_HAL):
+            acted.append(1)
+        return record(kind, **kwargs)
+
+    return wrapped
 
 
 class TestRepeatingTheSameActionIsWarned:

@@ -128,7 +128,7 @@ class TraceEventKind:
     # payload: consecutive_failures / max_consecutive_failures / rescheduled / error_code
     LLM_FAILURE_RETRY = "llm_failure_retry"
     # #1597: 成功した自分の行動のあと、次の tick に手番を回したか。成功した手番ごとに 1 件。
-    # payload: rescheduled / reason (succeeded / rest_chosen / traveling)
+    # payload: rescheduled / reason (succeeded / rest_chosen / traveling / cannot_act)
     OWN_ACTION_FOLLOW_UP = "own_action_follow_up"
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
