@@ -253,7 +253,9 @@ def run_scene(scene: Scene, client: LiteLLMClient) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", default="belief_goal_full")
+    parser.add_argument(
+        "--profile", required=True, help="信念を固める処理を有効にした profile の名前"
+    )
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--max-calls", type=int, default=50)
     parser.add_argument("--out", type=Path)

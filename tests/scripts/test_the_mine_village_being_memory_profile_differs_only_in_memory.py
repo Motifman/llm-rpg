@@ -1,8 +1,8 @@
-"""廃坑の山村の新しい記憶の profile が、メモだけの profile とメモとエピソードの設定だけで違っている。
+"""廃坑の山村の新しい記憶の profile が、古い記憶の部品を止め、新しい記憶だけを入れている。
 
-新しい記憶 (#1621) を全部入りの run (mine_v1_006) と比べる。古い部品を止めた状態は
-メモだけの profile で検査済みなので、そこからの差を見張る。thinking や出力の上限が
-黙ってずれると、行動の違いを記憶のせいと読めなくなる。
+新しい記憶 (#1621) を全部入りの run (mine_v1_006) と比べる。比べた古い profile は
+#1631 で退役させたので、止めた部品と入れた部品をこの profile の上で直接見張る。
+古い部品が黙って入ると、行動の違いを新しい記憶のせいと読めなくなる。
 """
 
 from __future__ import annotations
@@ -25,8 +25,42 @@ from scripts.run_scenario_experiment import (  # noqa: E402
 
 _PROFILES = _ROOT / "data" / "experiment_profiles"
 
-_MEMO_ONLY = "memory_jev_mine_v1_v41_thinking_capped_memo_only"
 _BEING_MEMORY = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
+
+#: 全部入りの run (mine_v1_006) が入れていて、この profile が止める古い記憶の部品。
+_OLD_MEMORY_PARTS_TURNED_OFF = frozenset({
+    "BELIEF_ATTRIBUTION_ENABLED",
+    "BELIEF_CONSOLIDATION_ENABLED",
+    "BELIEF_CREATE_GATE_ENABLED",
+    "BELIEF_EVIDENCE_ENABLED",
+    "EPISODIC_RECALL_ENABLED",
+    "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
+    "ERROR_GATED_ENCODING_ENABLED",
+    "EXPECTATION_ARGUMENT_ENABLED",
+    "EXPECTATION_SETTLEMENT_ENABLED",
+    "GOAL_REFLECT_ENABLED",
+    "GOAL_REVISION_ENABLED",
+    "GOAL_STAGNATION_EVIDENCE_ENABLED",
+    "GOAL_STORE_ENABLED",
+    "HEARSAY_ENABLED",
+    "LLM_AFTERGLOW_ENABLED",
+    "LLM_EPISODIC_ENABLED",
+    "LLM_EPISODIC_RECALL_HABITUATION_ENABLED",
+    "LLM_EPISODIC_RECALL_SLOT_ENABLED",
+    "LLM_EPISODIC_SUBJECTIVE_ENABLED",
+    "MEMO_DISTILL_ENABLED",
+    "MEMO_TOOLS_ENABLED",
+    "PENDING_PREDICTION_ENABLED",
+    "PREDICTION_CONTEXT_ID_ENABLED",
+    "RECALL_HIT_BOOST_ENABLED",
+    "SALIENCE_STRUCTURED_FAILURE_ENABLED",
+    "SEMANTIC_LLM_GIST_ENABLED",
+    "SITUATION_BELIEF_RECALL_ENABLED",
+    "STAGNATION_PRESSURE_ENABLED",
+    "STAGNATION_REASONING_ENABLED",
+    "TYPED_JUDGMENT_GOAL_HINT_ENABLED",
+    "UNCONSCIOUS_CONTEXT_ENABLED",
+})
 
 
 def _load(name: str) -> dict:
@@ -34,38 +68,45 @@ def _load(name: str) -> dict:
 
 
 class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
-    """新しい記憶の profile とメモだけの profile の差は、古いメモを止めて新しい記憶を入れる設定だけ。"""
+    """新しい記憶の profile が、古い記憶の部品を止め、新しい記憶を入れることを保証する。"""
 
-    def test_runtime_config_differs_only_in_memo_and_episode_keys(self) -> None:
-        """runtime_config の差は、古いメモを止め、メモ帳とエピソードの書き起こしと目次 (呼び出された順、10 件、一度に 3 件) を入れる 6 キーだけ。"""
+    def test_old_memory_parts_are_off_and_learned_shows_nothing(self) -> None:
+        """古い記憶の部品はすべて false で書かれ、【関連する学び】は 0 件。"""
         being = _load(_BEING_MEMORY)["runtime_config"]
-        memo_only = _load(_MEMO_ONLY)["runtime_config"]
 
-        differing = {
-            key: (being.get(key), memo_only.get(key))
-            for key in set(being) | set(memo_only)
-            if being.get(key) != memo_only.get(key)
+        not_off = {key for key in _OLD_MEMORY_PARTS_TURNED_OFF if being.get(key) is not False}
+
+        assert not_off == set()
+        assert being["SEMANTIC_PASSIVE_TOP_K"] == 0
+
+    def test_new_memory_is_on_with_the_compared_settings(self) -> None:
+        """メモ帳とエピソードの書き起こしと目次 (呼び出された順、10 件、一度に 3 件) が入っている。"""
+        being = _load(_BEING_MEMORY)["runtime_config"]
+
+        assert {
+            key: being[key]
+            for key in (
+                "BEING_MEMO_ENABLED",
+                "BEING_EPISODE_WRITING_ENABLED",
+                "BEING_EPISODE_INDEX_ORDER",
+                "BEING_EPISODE_INDEX_LIMIT",
+                "BEING_EPISODE_RECALL_MAX_HANDLES",
+            )
+        } == {
+            "BEING_MEMO_ENABLED": True,
+            "BEING_EPISODE_WRITING_ENABLED": True,
+            "BEING_EPISODE_INDEX_ORDER": "recalled_rises_to_top",
+            "BEING_EPISODE_INDEX_LIMIT": 10,
+            "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
         }
 
-        assert differing == {
-            "MEMO_TOOLS_ENABLED": (False, True),
-            "BEING_MEMO_ENABLED": (True, None),
-            "BEING_EPISODE_WRITING_ENABLED": (True, None),
-            "BEING_EPISODE_INDEX_ORDER": ("recalled_rises_to_top", None),
-            "BEING_EPISODE_INDEX_LIMIT": (10, None),
-            "BEING_EPISODE_RECALL_MAX_HANDLES": (3, None),
-        }
+    def test_thinking_output_cap_and_short_term_summary_are_kept(self) -> None:
+        """thinking、出力の上限、短期記憶の要約は、比べた全部入りの run と同じ値のまま。"""
+        being = _load(_BEING_MEMORY)["runtime_config"]
 
-    def test_world_and_run_length_are_the_same(self) -> None:
-        """世界、run の長さ、snapshot の保存はメモだけの profile と同じ。"""
-        being = _load(_BEING_MEMORY)
-        memo_only = _load(_MEMO_ONLY)
-
-        differing = {
-            key for key in set(being) | set(memo_only) if being.get(key) != memo_only.get(key)
-        }
-
-        assert differing == {"profile", "description", "runtime_config"}
+        assert being["LLM_REASONING_EFFORT"] == "minimal"
+        assert being["LLM_MAX_OUTPUT_TOKENS"] == 4096
+        assert being["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
 
     def test_profile_resolves_with_new_memory_on_and_old_memory_off(self) -> None:
         """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードとメモ帳が入り、古いエピソードと古いメモは止まっている。"""
