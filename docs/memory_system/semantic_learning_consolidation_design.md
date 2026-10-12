@@ -99,7 +99,7 @@ BeliefEvidence:
 | MEMO_DISTILL | memo_done / memo 容量溢れ | memo 本文 + fulfillment_context を**無条件で候補化**。ノイズかどうかはここで判定しない (固着パスの LLM が判定する)。一度 discard された memo は記録して再判定しない |
 | FAMILIARITY | 既存クラスタ検出 (現 promotion の検出部) | 強リンククラスタが閾値到達したとき。**store への直接書き込みをやめ、evidence 化して同じ固着パスに流す** |
 
-> STRUCTURED_FAILURE は #1646、MEMO_DISTILL は #__PR__ で、書き起こしごと消した (#1631)。
+> STRUCTURED_FAILURE は #1646、MEMO_DISTILL は #1654 で、書き起こしごと消した (#1631)。
 
 ### salience (一撃学習の経路)
 

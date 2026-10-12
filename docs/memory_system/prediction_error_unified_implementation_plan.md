@@ -253,7 +253,7 @@
 
 ### U5 — MEMO_DISTILL
 
-> 書き起こしとキー `MEMO_DISTILL_ENABLED` は #__PR__ で消した (#1631)。
+> 書き起こしとキー `MEMO_DISTILL_ENABLED` は #1654 で消した (#1631)。
 
 - 触る場所: `memo_done` / memo 溢れの経路 (`TraceEventKind.MEMO_DONE` を
   出している箇所) から memo 本文を**無条件で** MEMO_DISTILL evidence に
