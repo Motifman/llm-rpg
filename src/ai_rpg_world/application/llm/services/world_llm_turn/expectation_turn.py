@@ -167,7 +167,6 @@ def _trace_skipped(
 
 
 __all__ = [
-    "form_expectations_from_call",
     "settle_expectations_after_turn",
     "turn_material",
     "without_tool_names",
