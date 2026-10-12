@@ -450,33 +450,3 @@ class TestSnapshotTraceCarriesExpectationCounts:
             turns.append({c["being_id"]: c["memory_turn"] for c in counts})
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())
-
-    def test_resumed_run_redelivers_restored_beings_before_first_turn(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """snapshot から再開した run は、復元した Being すべてについて、最初のターンより前に未配信の予期の出来事を配り直す。"""
-        from scripts.run_scenario_experiment import main
-
-        from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
-
-        common = ["--profile", "smoke_stub", "--max-world-ticks", "2", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
-        snapshots = tmp_path / "snapshots"
-        assert main([*common, "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]) == 0
-        calls: list[tuple[list[str], int]] = []
-        original = WorldRuntime.redeliver_expectation_events
-
-        def _record(self: WorldRuntime, being_ids: Any) -> None:
-            ids = [b.value for b in being_ids]
-            turns = [self._memory_turn_clock.current_turn(b) for b in being_ids]
-            calls.append((ids, sum(turns)))
-            original(self, being_ids)
-
-        monkeypatch.setattr(WorldRuntime, "redeliver_expectation_events", _record)
-
-        assert main([*common, "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]) == 0
-
-        (loaded,) = self._events(tmp_path / "second" / "trace.jsonl", "snapshot_load")
-        ((ids, turns_at_call),) = calls
-        assert ids == loaded["payload"]["restored_being_ids"]
-        restored_turns = sum(c["memory_turn"] for c in loaded["payload"]["expectation_counts"])
-        assert turns_at_call == restored_turns

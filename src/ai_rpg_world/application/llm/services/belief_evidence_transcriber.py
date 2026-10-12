@@ -4,8 +4,8 @@ U2 (証拠台帳統一設計 §2 U2): 「証拠の入口はすべてルールベ
 (新規 LLM 呼び出しなし)」に従う。本クラスは判定を作らず、既に下された判定
 (約束の清算、目的の達成・断念) を ``BeliefEvidence`` に写すだけ。
 
-予測の当否は、chunk の ``prediction_error`` ではなく確定した予期から積む
-(#1443、``ExpectationBeliefMaterialReceiver``)。
+予測の当否は chunk の ``prediction_error`` からは積まない。確定した予期から積んで
+いた受け取る側は #1631 で消した。
 
 feature flag (``BELIEF_EVIDENCE_ENABLED``, default OFF) は「配線 (wire) と
 有効化 (enable) の分離」の既存パターンに従い、wiring 層が本クラスを

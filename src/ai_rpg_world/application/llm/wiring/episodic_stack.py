@@ -429,8 +429,6 @@ def build_episodic_stack(
     # False だと reflect 自体が発火しないため、coordinator 側で組み合わせ
     # 不整合を起動時 fail-fast で弾く。
     goal_stagnation_evidence_enabled: bool = False,
-    # #1509: 外れた予期の材料が持つ時系列の読み方を固着 LLM に足す。
-    expectation_what_happened_enabled: bool = False,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
     # True のとき chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻み、reinterpretation_coordinator が誤差専用
@@ -578,7 +576,6 @@ def build_episodic_stack(
                 # P-U1: ON のときだけ stalled/misaligned の reflect verdict を
                 # goal: 軸の evidence に変換する (OFF = 導入前と挙動一致)。
                 goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
-                expectation_what_happened_enabled=expectation_what_happened_enabled,
                 create_gate=belief_create_gate,
             )
     elif episode_store is None:

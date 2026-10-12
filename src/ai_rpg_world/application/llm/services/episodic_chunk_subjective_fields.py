@@ -15,12 +15,6 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value
 
-from ai_rpg_world.application.being.expectation.belief_material import (
-    expectation_outcome_text,
-)
-from ai_rpg_world.application.being.expectation.likelihood_labels import (
-    LIKELIHOOD_LABELS,
-)
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
@@ -37,7 +31,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
     PendingResolutionVerdict,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.expectation.value_object.check_verdict import Outcome
 
 _SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を埋める助手です。
 入力はルールが組み立てたエピソード草案・人物像・ソース事実のみです。
@@ -521,14 +514,6 @@ class EpisodicChunkSubjectiveFieldsService:
                     f"- [{p.pending_id}] {p.text}" for p in active_pendings
                 ),
             ]
-        if encoding_input.settled_missed_expectations:
-            user_sections += [
-                "## 確定して外れた予期",
-                "\n".join(
-                    f"- {LIKELIHOOD_LABELS[m.likelihood]}と思っていた「{m.content}」"
-                    for m in encoding_input.settled_missed_expectations
-                ),
-            ]
         user_sections += [
             "## ルール草案（事実・索引はここに依存。改変禁止）",
             _format_draft_facts(draft),
@@ -549,7 +534,6 @@ class EpisodicChunkSubjectiveFieldsService:
         ]
         interp_llm: str | None = None
         recall_llm: str | None = None
-        pred_err_llm: str | None = None
         heading_llm: str | None = None
         pending_prediction_draft: PendingPredictionDraft | None = None
         pending_resolution_verdicts: tuple[PendingResolutionVerdict, ...] = ()
@@ -562,7 +546,6 @@ class EpisodicChunkSubjectiveFieldsService:
             else:
                 interp_llm = _normalize_llm_str(raw_obj.get("interpreted"))
                 recall_llm = _normalize_llm_str(raw_obj.get("recall_text"))
-                pred_err_llm = _normalize_llm_str(raw_obj.get("prediction_error"))
                 # heading は afterglow index 用の 1 行見出し (#526 段階 3 後続)。
                 # 失敗時 / 欠落時は None に倒し、SubjectiveEpisode に渡る前に
                 # 30 文字へ切り詰める (後続テストで保証)。
@@ -593,21 +576,13 @@ class EpisodicChunkSubjectiveFieldsService:
 
         interpreted = _merge_picks(llm_value=interp_llm, fallback=fallback_i)
         recall_text = _merge_picks(llm_value=recall_llm, fallback=fallback_r)
-        # 外れたかどうかは予期の清算だけが決める。外れた予期が無い chunk で
-        # LLM が書いた文は、chunk の中から判断し直した外れなので捨てる。
-        missed = encoding_input.settled_missed_expectations
-        prediction_error = pred_err_llm if missed else None
-        if missed and prediction_error is None:
-            # 外れは確定しているので、LLM が書けなかったときも外れたこと自体は残す。
-            prediction_error = " ".join(
-                expectation_outcome_text(m.content, m.likelihood, Outcome.MISS)
-                for m in missed
-            )
+        # 外れたかどうかを決めていた予期の清算は #1631 で消した。LLM が書いた文は、
+        # chunk の中から判断し直した外れなので捨てる。
         merged = replace(
             draft,
             interpreted=interpreted,
             recall_text=recall_text,
-            prediction_error=prediction_error,
+            prediction_error=None,
             heading=heading_llm,
             pending_prediction_draft=pending_prediction_draft,
             pending_resolution_verdicts=pending_resolution_verdicts,

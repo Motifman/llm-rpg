@@ -860,8 +860,6 @@ def _drive_scenario(
                         for b, r in restore_report.world_clock_restarts.items()
                     ],
                 )
-                # #1440: 前の run で配れなかった予期の出来事を、最初のターンより先に配り直す。
-                runtime.redeliver_expectation_events(restore_report.restored)
 
                 # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
                 # world.json が無ければ no-op = 後方互換)。world snapshot は

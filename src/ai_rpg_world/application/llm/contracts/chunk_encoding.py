@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Union
+from typing import Literal
 
 from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     format_action_call_for_history,
@@ -19,9 +19,6 @@ from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
-)
-from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
-    Likelihood,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -217,23 +214,6 @@ def format_unified_timeline_as_recent_events_bullets(
 
 
 @dataclass(frozen=True)
-class SettledMissedExpectation:
-    """chunk を閉じるまでに外れたで確定した予期 1 件。主観補完 LLM に何が違ったかを書かせる (#1443)。"""
-
-    event_id: str
-    content: str
-    likelihood: Likelihood
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.event_id, str) or not self.event_id.strip():
-            raise TypeError("event_id must be a non-empty str")
-        if not isinstance(self.content, str) or not self.content.strip():
-            raise TypeError("content must be a non-empty str")
-        if not isinstance(self.likelihood, Likelihood):
-            raise TypeError("likelihood must be Likelihood")
-
-
-@dataclass(frozen=True)
 class ChunkEncodingInput:
     """
     チャンク 1 回分のエンコード入力（不変）。
@@ -251,7 +231,6 @@ class ChunkEncodingInput:
     # させるためにプロンプトへ載せる。coordinator が close 判定時に注入する
     # (flag OFF / store 未配線なら常に空 = 導入前と byte 一致)。
     active_pending_predictions: tuple[PendingPrediction, ...] = ()
-    settled_missed_expectations: tuple[SettledMissedExpectation, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.player_id, PlayerId):
@@ -281,13 +260,6 @@ class ChunkEncodingInput:
         for idx, p in enumerate(self.active_pending_predictions):
             if not isinstance(p, PendingPrediction):
                 raise TypeError(f"active_pending_predictions[{idx}] must be PendingPrediction")
-        if not isinstance(self.settled_missed_expectations, tuple) or not all(
-            isinstance(m, SettledMissedExpectation)
-            for m in self.settled_missed_expectations
-        ):
-            raise TypeError(
-                "settled_missed_expectations must be tuple[SettledMissedExpectation, ...]"
-            )
         expected = merge_observations_and_action_results_to_unified_timeline(
             self.observations, self.action_results
         )
@@ -304,7 +276,6 @@ def build_chunk_encoding_input(
     *,
     observation_overflow_from_window: Sequence[ObservationEntry] = (),
     active_pending_predictions: Sequence[PendingPrediction] = (),
-    settled_missed_expectations: Sequence[SettledMissedExpectation] = (),
 ) -> ChunkEncodingInput:
     """観測スライス・行動結果スライスから ChunkEncodingInput を組み立てる。"""
     if not isinstance(player_id, PlayerId):
@@ -319,7 +290,6 @@ def build_chunk_encoding_input(
         unified_timeline=timeline,
         observation_overflow_from_window=tuple(observation_overflow_from_window),
         active_pending_predictions=tuple(active_pending_predictions),
-        settled_missed_expectations=tuple(settled_missed_expectations),
     )
 
 
