@@ -57,6 +57,17 @@ class TraceEventKind:
     # "acting_being_resolution_failed"。問うた行では None。失敗した行動など、
     # action の trace から分かる見送りは残さない。
     TYPED_JUDGMENT = "typed_judgment"
+    # #1641: 人を対象にした操作の引数 item を、正式な名前どおりでなく相手の所持品へ
+    # 当てようとした 1 件。正式な名前で当たったときは出さない。
+    # payload: action_name / target_player_id / written /
+    #   outcome: "resolved" | "ambiguous" | "absent" | "unrecognized" /
+    #   method: "exact" | "partial" | "judgment" | "official_name_of_other_item" |
+    #   "nothing_held" | "no_judge" (後ろの 3 つは absent と言い切った理由) /
+    #   resolved_name / matched_names /
+    #   rescue_wired (意味の判断が配線されていたか) /
+    #   judgment: {chosen, probability, confidence, min_confidence, accepted, latency_ms,
+    #   source, unavailable_reason} | None
+    ITEM_NAME_RESOLUTION = "item_name_resolution"
     # Issue #240 後続: 同一 (tool, fingerprint) の連打を loop guard が検知し
     # 警告観測を注入したタイミング。trace で wait spam の抑制動作を可視化する。
     # payload: tool_name / argument_fingerprint / consecutive_count

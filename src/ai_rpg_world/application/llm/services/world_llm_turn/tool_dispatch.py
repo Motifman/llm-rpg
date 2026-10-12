@@ -32,6 +32,9 @@ from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolv
     TARGET_LABEL_JUDGMENTS_KEY,
     SpotGraphArgumentResolver,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.target_item_name_rescue import (
+    TargetItemNameRescue,
+)
 from ai_rpg_world.application.llm.services._argument_resolvers.target_label_rescue import (
     QUESTION_NAME as TARGET_LABEL_RESCUE_QUESTION,
 )
@@ -397,6 +400,18 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
                     0.85,
                 )
             ),
+        )
+    # 人を対象にした操作の品名も同じ判断で選び直す (#1641)。候補は相手の所持品で
+    # resolver には見えないので、runtime の対人操作に渡す。
+    set_item_name_rescue = getattr(wiring.runtime, "set_target_item_name_rescue", None)
+    if callable(set_item_name_rescue):
+        set_item_name_rescue(
+            TargetItemNameRescue(
+                port=typed_judgment_port,
+                min_confidence=target_label_rescue.min_confidence,
+            )
+            if typed_judgment_port is not None and target_label_rescue is not None
+            else None
         )
     argument_resolver = SpotGraphArgumentResolver(
         action_name_rescue=action_name_rescue,

@@ -34,6 +34,7 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.declared_observation_message import (
     declared_observation_message_for_lighting,
 )
@@ -58,6 +59,13 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     plan_item_removals_from_inventory,
     remove_items_of_specs_from_inventory,
+)
+from ai_rpg_world.application.world_graph.target_item_name_resolution import (
+    HeldItem,
+    ItemNameOutcome,
+    ItemNameRescuer,
+    TargetItemNameResolution,
+    resolve_target_item_name,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
@@ -105,6 +113,10 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+from ai_rpg_world.domain.world_graph.value_object.unresolved_item_name import (
+    UNRESOLVED_ITEM_NAME_KEY,
+    UnresolvedItemNameReason,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext
@@ -279,6 +291,21 @@ class PlayerInteractionApplicationService:
             idef.action_name: idef for idef in player_interactions
         }
         self._overflow_sink = overflow_sink
+        self._item_name_rescue: ItemNameRescuer | None = None
+        self._trace_recorder: Any | None = None
+        self._trace_tick_provider: Any | None = None
+
+    def set_item_name_rescue(self, rescue: ItemNameRescuer | None) -> None:
+        """品名を意味で読み替える判断を後付けで注入する。未注入なら名前の重なりだけで当てる。"""
+        self._item_name_rescue = rescue
+
+    @property
+    def item_name_rescue(self) -> ItemNameRescuer | None:
+        return self._item_name_rescue
+
+    def set_trace_recorder(self, recorder: Any, current_tick_provider: Any) -> None:
+        self._trace_recorder = recorder
+        self._trace_tick_provider = current_tick_provider
 
     def set_effective_lighting_resolver(self, resolver: Any | None) -> None:
         """実効照明 resolver を後付けで注入する (二段構築用)。"""
@@ -926,19 +953,6 @@ class PlayerInteractionApplicationService:
         )
         spot_presence_count = len(graph.presence_at(actor_spot).present_entity_ids)
 
-        # LLM は「太い流木を奪う」のように**名前**で品目を指す (倒れた相手の
-        # 持ち物は prompt に出ている: PR #824)。domain 側は spec id しか扱わ
-        # ないので、名前 → spec id の解決はここで済ませて
-        # ``interaction_parameters`` に入れておく。見つからないときは入れない
-        # ままにして、``TARGET_HAS_ITEM`` に「相手はそれを持っていない」と
-        # 言わせる (ここで例外にすると LLM が学習できない失敗になる)。
-        resolved_parameters = self._with_resolved_item_spec_id(
-            interaction_parameters,
-            target_inv,
-            item_repository,
-            item_spec_repository,
-        )
-
         # 再使用間隔。**前提条件より先に見る。**
         #
         # あとに置くと「暗くないので襲えない」が先に返り、待たされている
@@ -950,6 +964,22 @@ class PlayerInteractionApplicationService:
             raise InteractionNotAllowedException(
                 f"まだ間を置く必要がある。あと{self._span_text(remaining)}。"
             )
+
+        # LLM は「太い流木を奪う」のように**名前**で品目を指す (倒れた相手の
+        # 持ち物は prompt に出ている: PR #824)。domain 側は spec id しか扱わ
+        # ないので、名前 → spec id の解決はここで済ませて
+        # ``interaction_parameters`` に入れておく。当てられないときは理由だけを
+        # 置き、``TARGET_HAS_ITEM`` に自分の番で断らせる (D1641)。
+        resolved_parameters, name_resolution = self._with_resolved_item_spec_id(
+            interaction_parameters,
+            target_inv,
+            item_repository,
+            item_spec_repository,
+            action_name=action_name,
+        )
+        self._record_item_name_resolution(
+            name_resolution, actor_player_id, target_player_id, action_name
+        )
 
         ok, reason = self._interaction.can_interact(
             idef,
@@ -1174,11 +1204,19 @@ class PlayerInteractionApplicationService:
         # 前提条件を確かめる行動そのものが罰になると、条件を試せなくなる。
         self._record_cooldown_start(actor_player_id, action_name, idef, current_tick)
 
+        messages = tuple(result.messages)
+        if name_resolution is not None and name_resolution.renamed:
+            # 黙って読み替えると、崩れた名前で通ると学んで書き続ける。奪えた
+            # 後なので、品の名前を伝えても相手の持ち物は漏れない。
+            messages = (
+                f"「{name_resolution.written}」は「{name_resolution.resolved_name}」と解釈した。",
+                *messages,
+            )
         return PlayerInteractionResultDto(
             action_name=action_name,
             actor_player_id=int(actor_player_id),
             target_player_id=int(target_player_id),
-            messages=tuple(result.messages),
+            messages=messages,
             action_display_label=idef.effective_display_label,
             actor_granted_spec_ids=tuple(
                 s.value for s in result.item_spec_ids_to_grant
@@ -1206,67 +1244,89 @@ class PlayerInteractionApplicationService:
         target_inventory: PlayerInventoryAggregate,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-    ) -> dict[str, Any] | None:
+        *,
+        action_name: str,
+    ) -> tuple[dict[str, Any] | None, TargetItemNameResolution | None]:
         """``parameters["item"]`` (品目名) を対象の所持から spec id へ解決する。
 
-        見つからなければ何も足さない。「相手はその名前のものを持っていない」
-        は普通に起きる状況なので、ここで例外にすると LLM が学習できない失敗に
-        なる。条件 (``TARGET_HAS_ITEM``) 側が不成立として言葉で返す。
+        当てられなければ spec id を足さず、理由 (曖昧 / 見分けられない) だけを
+        足す。持っていないと分かったときは何も足さない。ここで例外にすると、
+        前提条件より先に断りが出て、相手の持ち物の手がかりが漏れる。
 
         既に ``item_spec_id`` が入っている呼び出し (テストや将来の別経路) は
         そのまま尊重して上書きしない。
         """
         if not interaction_parameters:
-            return interaction_parameters
+            return interaction_parameters, None
         if self.ITEM_SPEC_ID_KEY in interaction_parameters:
-            return interaction_parameters
+            return interaction_parameters, None
         raw_name = interaction_parameters.get(self.ITEM_NAME_KEY)
         if not isinstance(raw_name, str) or not raw_name.strip():
-            return interaction_parameters
-        spec_id = self._find_spec_id_by_name(
-            target_inventory,
+            return interaction_parameters, None
+        resolution = resolve_target_item_name(
             raw_name.strip(),
-            item_repository,
-            item_spec_repository,
+            self._held_items(target_inventory, item_repository, item_spec_repository),
+            rescue=self._item_name_rescue,
+            action_name=action_name,
+            world_item_names=frozenset(
+                spec.name for spec in item_spec_repository.find_all()
+            ),
         )
-        if spec_id is None:
-            return interaction_parameters
-        return {**interaction_parameters, self.ITEM_SPEC_ID_KEY: spec_id.value}
+        if resolution.spec_id is not None:
+            return (
+                {**interaction_parameters, self.ITEM_SPEC_ID_KEY: resolution.spec_id.value},
+                resolution,
+            )
+        reason = {
+            ItemNameOutcome.AMBIGUOUS: UnresolvedItemNameReason.AMBIGUOUS,
+            ItemNameOutcome.UNRECOGNIZED: UnresolvedItemNameReason.UNRECOGNIZED,
+        }.get(resolution.outcome)
+        if reason is None:
+            return interaction_parameters, resolution
+        return (
+            {**interaction_parameters, UNRESOLVED_ITEM_NAME_KEY: reason.value},
+            resolution,
+        )
 
-    def _find_spec_id_by_name(
+    def _held_items(
         self,
         inventory: PlayerInventoryAggregate,
-        name: str,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-    ) -> ItemSpecId | None:
-        """対象の所持品から表示名が一致する item spec id を引く。
+    ) -> tuple[HeldItem, ...]:
+        held: list[HeldItem] = []
+        for spec_id in sorted(
+            collect_owned_item_spec_ids_from_inventory(inventory, item_repository),
+            key=lambda s: s.value,
+        ):
+            spec = item_spec_repository.find_by_id(spec_id)
+            name = getattr(spec, "name", None) if spec is not None else None
+            if name:
+                held.append(HeldItem(spec_id, name, getattr(spec, "description", "") or ""))
+        return tuple(held)
 
-        同名の別 spec が複数あるときは、どれか 1 つを選ばずに例外で止める。
-        ``collect_owned_item_spec_ids_from_inventory`` が返すのは frozenset で
-        反復順が保証されないため、素朴に最初の一致を返すと **実行ごとに違う
-        物を奪う**。対象名の解決 (``resolve_target``) で種別横断の同名衝突を
-        拒否したのと同じ理由で、ここでも黙って選ばない。
-        """
-        matches = [
-            spec_id
-            for spec_id in collect_owned_item_spec_ids_from_inventory(
-                inventory, item_repository
+    def _record_item_name_resolution(
+        self,
+        resolution: TargetItemNameResolution | None,
+        actor_player_id: PlayerId,
+        target_player_id: PlayerId,
+        action_name: str,
+    ) -> None:
+        payload = resolution.trace_payload() if resolution is not None else None
+        if payload is None or self._trace_recorder is None:
+            return
+        tick = self._trace_tick_provider() if self._trace_tick_provider else None
+        try:
+            self._trace_recorder.record(
+                TraceEventKind.ITEM_NAME_RESOLUTION,
+                tick=tick,
+                player_id=int(actor_player_id),
+                action_name=action_name,
+                target_player_id=int(target_player_id),
+                **payload,
             )
-            if self._spec_name(spec_id, item_spec_repository) == name
-        ]
-        if len(matches) > 1:
-            raise InteractionNotAllowedException(
-                f"「{name}」に当てはまるものが相手の持ち物に複数ある。"
-                "どれを指すのか決められないので、別の物を指定すること。"
-            )
-        return matches[0] if matches else None
-
-    def _spec_name(
-        self, spec_id: ItemSpecId, item_spec_repository: ItemSpecRepository
-    ) -> str | None:
-        spec = item_spec_repository.find_by_id(spec_id)
-        return getattr(spec, "name", None) if spec is not None else None
+        except Exception:  # pragma: no cover - 記録の失敗で行動を落とさない
+            _logger.warning("failed to record item name resolution trace", exc_info=True)
 
     def _require_free_slots(
         self,

@@ -1193,6 +1193,9 @@ class WorldRuntime:
         market_service = getattr(self, "_market_service", None)
         if market_service is not None:
             market_service.set_trace_recorder(recorder, self.current_tick)
+        player_interaction_service = getattr(self, "_player_interaction_service", None)
+        if player_interaction_service is not None:
+            player_interaction_service.set_trace_recorder(recorder, self.current_tick)
         # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
@@ -3961,6 +3964,14 @@ class WorldRuntime:
                 actor_player_id=actor_player_id,
             ),
         )
+
+    def set_target_item_name_rescue(self, rescue: Any | None) -> None:
+        """人を対象にした操作で、品名を相手の所持品から意味で読み替える判断を注入する (D1641)。"""
+        self._player_interaction_service.set_item_name_rescue(rescue)
+
+    @property
+    def target_item_name_rescue(self) -> Any | None:
+        return self._player_interaction_service.item_name_rescue
 
     def do_interact_with_player(
         self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
