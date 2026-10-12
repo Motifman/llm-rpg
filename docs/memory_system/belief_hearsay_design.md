@@ -1,6 +1,6 @@
 # 伝聞による学習 (HEARSAY) — 人の話と噂話から belief を作る
 
-> 伝聞の部品 (`HEARSAY_ENABLED`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。
+> 伝聞の部品 (`HEARSAY_ENABLED`) は、記憶の部品の撤去 (#1631) の #1649 で消した。
 
 > 2026-07-12。unified_full_001 の分析
 > ([unified_memory_full_run_analysis_2026-07-08.md](./unified_memory_full_run_analysis_2026-07-08.md) R7)
