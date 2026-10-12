@@ -26,6 +26,11 @@ from litellm import InternalServerError as LitellmInternalServerError
 from litellm import RateLimitError as LitellmRateLimitError
 from litellm import ServiceUnavailableError as LitellmServiceUnavailableError
 
+from ai_rpg_world.application.llm.contracts.aux_llm_call import (
+    AuxLlmCall,
+    AuxLlmCallSink,
+    AuxLlmComponent,
+)
 from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetrics,
     LlmCallMetricsSink,
@@ -333,6 +338,7 @@ class LiteLLMClient(
         wall_cap_seconds: float | None = None,
         rate_limit_retry_attempts: int = _DEFAULT_RATE_LIMIT_RETRY_ATTEMPTS,
         rate_limit_retry_base_sleep: float = _DEFAULT_RATE_LIMIT_RETRY_BASE_SLEEP,
+        aux_call_sink: AuxLlmCallSink | None = None,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise ValueError("model must be a non-empty string")
@@ -411,6 +417,7 @@ class LiteLLMClient(
         if self._wall_cap_seconds <= 0:
             raise ValueError("wall_cap_seconds must be greater than 0")
 
+        self._aux_call_sink = aux_call_sink
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _call_with_wall_cap(self, call_fn: Callable[[], _Result]) -> _Result:
@@ -1002,11 +1009,77 @@ class LiteLLMClient(
         """
         tools 無しで JSON object を強制する chat completion を行いパース済み dict を返す。
         失敗や不正 JSON ではここでは補完せず LlmApiCallException を送出し、呼び出し元が草案テンプレへフォールバックする。
-
-        注意 (PR #358): 本 API は episodic subjective rewrite 専用のため metrics は
-        収集しない。τ_sim 分析対象は Phase A の意思決定 LLM のみ。subjective 系の
-        metrics が必要になったら専用の sink 引数を足すこと (現状の実験 #356 では不要)。
         """
+        return self._complete_aux_json(messages, AuxLlmComponent.EPISODE_SUBJECTIVE)
+
+    def _complete_aux_json(
+        self,
+        messages: list[dict[str, Any]],
+        component: AuxLlmComponent,
+    ) -> dict[str, Any]:
+        start_monotonic = time.monotonic()
+        response: Any = None
+        try:
+            response = self._send_json_request(messages)
+            parsed = self._parse_json_object(response)
+        except LlmApiCallException as e:
+            self._record_aux_call(
+                component,
+                response=response,
+                start_monotonic=start_monotonic,
+                error_code=e.error_code,
+            )
+            raise
+        self._record_aux_call(
+            component,
+            response=response,
+            start_monotonic=start_monotonic,
+            error_code=None,
+        )
+        return parsed
+
+    def _record_aux_call(
+        self,
+        component: AuxLlmComponent,
+        *,
+        response: Any,
+        start_monotonic: float,
+        error_code: str | None,
+    ) -> None:
+        if self._aux_call_sink is None:
+            return
+        try:
+            prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
+            self._aux_call_sink.record(
+                AuxLlmCall(
+                    component=component,
+                    model=self._model,
+                    wall_latency_ms=int((time.monotonic() - start_monotonic) * 1000),
+                    success=error_code is None,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cached_tokens=cached_tokens,
+                    cost_usd=self._extract_reported_cost_usd(response),
+                    error_code=error_code,
+                )
+            )
+        except Exception:
+            self._logger.exception("aux_call_sink.record failed")
+
+    @staticmethod
+    def _extract_reported_cost_usd(response: Any) -> float | None:
+        usage = getattr(response, "usage", None)
+        cost = getattr(usage, "cost", None)
+        if cost is None and isinstance(usage, dict):
+            cost = usage.get("cost")
+        if cost is None:
+            return None
+        try:
+            return float(cost)
+        except (TypeError, ValueError):
+            return None
+
+    def _send_json_request(self, messages: list[dict[str, Any]]) -> Any:
         # JSON 抽出は行動選択ではない。agent turn の thinking 設定を継承すると
         # 費用だけでなく json_object との provider 互換性も悪化するため、
         # knob を増やさず全補助 JSON 呼び出しで明示的に止める。
@@ -1014,7 +1087,7 @@ class LiteLLMClient(
         try:
             # SDK 透過 retry は max_retries=0 で無効化済み。RateLimit / 一時 5xx の
             # みアプリ層で短い backoff retry する。
-            response = self._call_with_selective_retry(
+            return self._call_with_selective_retry(
                 lambda: litellm.completion(
                     messages=messages,
                     response_format={"type": "json_object"},
@@ -1033,6 +1106,9 @@ class LiteLLMClient(
                 error_code=error_code,
                 cause=e,
             ) from e
+
+    @staticmethod
+    def _parse_json_object(response: Any) -> dict[str, Any]:
         if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
             raise LlmApiCallException(
                 "Empty response from subjective completion",
@@ -1066,7 +1142,7 @@ class LiteLLMClient(
         messages: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """tools 無しで想起後再解釈 JSON object を返す。"""
-        return self.complete_episode_subjective_json(messages)
+        return self._complete_aux_json(messages, AuxLlmComponent.EPISODIC_REINTERPRETATION)
 
     def complete_semantic_gist_json(
         self,
@@ -1077,7 +1153,7 @@ class LiteLLMClient(
         ``complete_episode_subjective_json`` と同じ json_object 強制完了を
         使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
         """
-        return self.complete_episode_subjective_json(messages)
+        return self._complete_aux_json(messages, AuxLlmComponent.SEMANTIC_GIST)
 
     def complete_belief_consolidation_json(
         self,
@@ -1088,7 +1164,7 @@ class LiteLLMClient(
         ``complete_episode_subjective_json`` と同じ json_object 強制完了を
         使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
         """
-        return self.complete_episode_subjective_json(messages)
+        return self._complete_aux_json(messages, AuxLlmComponent.BELIEF_CONSOLIDATION)
 
     def complete_short_term_summary_json(
         self,
@@ -1099,7 +1175,7 @@ class LiteLLMClient(
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
         prompt 構築や parse は ``ShortTermMemorySummaryService`` 側の責務。
         """
-        return self.complete_episode_subjective_json(messages)
+        return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_SUMMARY)
 
     def complete_short_term_long_summary_json(
         self,
@@ -1110,14 +1186,14 @@ class LiteLLMClient(
         既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
         prompt 構築や parse は ``ShortTermMemoryLongSummaryService`` 側の責務。
         """
-        return self.complete_episode_subjective_json(messages)
+        return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_LONG_SUMMARY)
 
     def complete_episode_writing_json(
         self,
         messages: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """目次つきのエピソードの書き起こし (#1626)。要約と同じく熟考を止めて送る。"""
-        return self.complete_episode_subjective_json(messages)
+        return self._complete_aux_json(messages, AuxLlmComponent.EPISODE_WRITING)
 
     def _parse_tool_call(
         self,
