@@ -48,11 +48,20 @@ class TestPretendActionLines:
     """偽装の操作が、本物と同じ表示名で行動の行に書かれることを run で見張る。"""
 
     def test_pretend_action_line_does_not_show_the_pretend_name(self) -> None:
-        """偽装の操作 (``*_pretend``) を選ぶシードで回しても、行動の行の要約に操作名が出ない。"""
-        scenario = _SCENARIOS / "station_drill.json"
-        result = run_random_agents(scenario, seed=0, max_world_ticks=5)
+        """偽装の操作 (``*_pretend``) を選ぶシードで回しても、行動の行の要約に操作名が出ない。
 
-        pretend = [a for a in result.actions if str(a.arguments.get("action_name", "")).endswith("_pretend")]
-        assert pretend, "このシードでは偽装の操作を一度も選ばなかった。シードを変えないと何も確かめていない"
+        ツールが増減するとでたらめな選び方の分布がずれるので、シードを 1 つに決めず、
+        偽装の操作を選んだ最初のシードで確かめる。
+        """
+        scenario = _SCENARIOS / "station_drill.json"
+        for seed in range(20):
+            result = run_random_agents(scenario, seed=seed, max_world_ticks=5)
+            if any(
+                str(a.arguments.get("action_name", "")).endswith("_pretend")
+                for a in result.actions
+            ):
+                break
+        else:
+            pytest.fail("シード 0〜19 のどれも偽装の操作を選ばなかった。何も確かめていない")
         names = scenario_action_names(scenario)
         assert [f for f in result.findings if find_action_names_in_action_lines(f.detail, names)] == []

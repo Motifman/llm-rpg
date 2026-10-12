@@ -144,9 +144,6 @@ def _open_session(tmp: str, config: ResolvedLlmRuntimeConfig | None = None) -> _
 def _episode_config() -> ResolvedLlmRuntimeConfig:
     return ResolvedLlmRuntimeConfig.from_mapping(
         values={
-            "SHORT_TERM_MEMORY_KIND": "rolling_summary",
-            "BEING_EPISODE_WRITING_ENABLED": "1",
-            "BEING_EPISODE_INDEX_ORDER": "recalled_rises_to_top",
             "TYPED_JUDGMENT_PROVIDER": "stub",
         }
     )
