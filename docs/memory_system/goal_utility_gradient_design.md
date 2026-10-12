@@ -346,6 +346,8 @@ DeepSeek v4 flash、llm_call=436、outcome=TIMEOUT)。比較ベースライン�
 
 ## 12. 案A (band-gated thinking) — inner_thought 後付け問題への構造的対処 (2026-07-19)
 
+> 案A (`STAGNATION_REASONING_ENABLED`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。
+
 検証 run が示した核心「表出しても行動が変わらない」の構造的原因は、**inner_thought が
 tool_call 確定後に生成される後付け**だったこと (応答は tool_choice="required" の tool-calling で、
 関数名 → arguments → inner_thought の順に生成される。「ループを抜けねば」と書きつつ同じ行動で
