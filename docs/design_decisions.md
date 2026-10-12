@@ -8150,3 +8150,20 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 - 判断の配線を忘れると、profile が判断を求めても読み替えが効かない。`tests/presentation/spot_graph_game/test_typed_judgment_reaches_the_session.py` が見張る
 
 **関連**: Issue #1641 / #1321。
+
+---
+
+## D1631. 短期記憶の既定は rolling_summary にする
+
+**何を**: `SHORT_TERM_MEMORY_KIND` を書かない設定は `rolling_summary` になる (これまでは `sliding_window`)。stub の 3 profile (`smoke_stub`、`station_drill_stub`、`issue_1429_candidate_capture_smoke`) も `rolling_summary` にした。`sliding_window` は明示すれば選べる。
+
+**なぜ**: 新しい記憶のエピソードの書き起こし (design_decisions D1623、#1626) は、短期記憶が出来事を畳むときと環境を出るときに呼ばれる。`sliding_window` には畳む瞬間が無く、書き起こしを呼べる場所が無い。新しい記憶をスイッチの無い標準にする (Issue #1631) 前に、既定のまま書き起こしまで動く形にしておく。実 LLM を使う profile はすでにすべて `rolling_summary` なので、実験の挙動と費用は変わらない。stub の LLM では要約が LLM を呼ばずにテンプレートで畳まれるので、試験も実 API を呼ばない。
+
+**採らなかった案**:
+
+- 短期記憶の種類で新しい記憶の有無を分ける: 「書き起こしが入るか」が短期記憶の種類に隠れて決まり、`sliding_window` の run では目次が黙って空のまま走る
+- `sliding_window` をここで消す: Issue #1631 の段 13 (値を固定する設定) の仕事で、試験とコードの片付けが一度に広がる
+
+**どうしないと壊れるか**: 既定が `sliding_window` のまま新しい記憶を標準にすると、設定を書かない試験と stub の run が、起動時の検査で止まるか、書き起こしの無いまま走る。
+
+**関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。

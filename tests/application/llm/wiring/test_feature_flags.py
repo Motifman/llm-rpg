@@ -282,14 +282,14 @@ class TestResolveShortTermMemoryKind:
     """``SHORT_TERM_MEMORY_KIND`` env 解決 (Phase 2)。"""
 
     def test_default_short_term_memory(self) -> None:
-        """default は sliding window。"""
-        assert resolve_short_term_memory_kind(env={}) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+        """設定に書かなければ rolling_summary になる。新しい記憶の書き起こしは畳むときに呼ばれる (#1631)。"""
+        assert resolve_short_term_memory_kind(env={}) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
 
     def test_env_empty_string_default_2(self) -> None:
-        """env 空文字でも default。"""
+        """空文字を渡しても、書かなかったときと同じ rolling_summary になる。"""
         assert resolve_short_term_memory_kind(
             env={ENV_SHORT_TERM_MEMORY_KIND: ""}
-        ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+        ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
 
     def test_short_term_memory(self) -> None:
         """有効な sliding window。"""

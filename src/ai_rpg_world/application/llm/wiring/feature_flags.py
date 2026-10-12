@@ -272,7 +272,8 @@ def resolve_short_term_memory_kind(
 ) -> str:
     """``SHORT_TERM_MEMORY_KIND`` env を解決する。
 
-    - default は ``sliding_window`` (検証中の安定設定)
+    - default は ``rolling_summary``。新しい記憶の書き起こし (#1626) は畳む
+      ときに呼ばれ、``sliding_window`` には畳む瞬間が無い (#1631)
     - 未知文字列は ``ValueError`` (silent fallback 防止 / PR #433 経緯:
       短縮形 ``rolling`` を渡したのに silent fallback で sliding_window が
       使われ、実験 24h 分が無駄になりかけた)
@@ -289,7 +290,7 @@ def resolve_short_term_memory_kind(
     source = env
     raw = (source.get(ENV_SHORT_TERM_MEMORY_KIND) or "").strip().lower()
     if not raw:
-        return SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
+        return SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
     if raw not in _VALID_SHORT_TERM_MEMORY_KINDS:
         raise ValueError(
             f"{ENV_SHORT_TERM_MEMORY_KIND}={raw!r} is not recognized. "
