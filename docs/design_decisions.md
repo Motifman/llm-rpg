@@ -6668,7 +6668,7 @@ U9a / U9b) は外す (Issue #1443)。
 
 **関連**: design_decisions D1414 / D1463 / Issue #1414 / #1484。
 
-状況の項目から引く想起 (`SITUATION_BELIEF_RECALL_ENABLED` / `_NARROWER`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。【関連する学び】は受動想起 (`SEMANTIC_PASSIVE_TOP_K`) が出す。
+状況の項目から引く想起 (`SITUATION_BELIEF_RECALL_ENABLED` / `_NARROWER`) は、記憶の部品の撤去 (#1631) の #1656 で消した。【関連する学び】は受動想起 (`SEMANTIC_PASSIVE_TOP_K`) が出す。
 
 ## D1414-3. ~~次のターンの想起で残す欄は、ターンの終わりの清算の呼び出しで毎ターン問い、予期の判定とは分けて読む~~
 
@@ -6891,7 +6891,7 @@ D1440) と同じ扱い。
 
 **関連**: design_decisions D1414 / D1414-3 / D1414-4 / D1414-5 / D1414-6 / D1414-7 / Issue #1414。
 
-状況の項目から引く想起 (`SITUATION_BELIEF_RECALL_ENABLED` / `_NARROWER`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。【関連する学び】は受動想起 (`SEMANTIC_PASSIVE_TOP_K`) が出す。
+状況の項目から引く想起 (`SITUATION_BELIEF_RECALL_ENABLED` / `_NARROWER`) は、記憶の部品の撤去 (#1631) の #1656 で消した。【関連する学び】は受動想起 (`SEMANTIC_PASSIVE_TOP_K`) が出す。
 
 ## D1498. 信念の絞り込みは文字の 2 字組のままにし、形態素解析の手法は比べた記録だけ残して外す
 
