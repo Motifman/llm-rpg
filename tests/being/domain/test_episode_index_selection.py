@@ -6,6 +6,7 @@ from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.episode_index_selection import (
     EpisodeIndexSelection,
     NewestFirst,
+    RecalledRisesToTop,
 )
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
@@ -62,3 +63,53 @@ class TestNewestFirst:
         """N が 0 以上の整数でなければ EpisodeValidationException を投げる。"""
         with pytest.raises(EpisodeValidationException):
             NewestFirst().select([_episode(1, 2)], limit=limit)  # type: ignore[arg-type]
+
+
+class TestRecalledRisesToTop:
+    """RecalledRisesToTop が、書いた時と最後に呼び出した時のうち新しいほうで並べ、上から N 件を返すことを保証する。"""
+
+    def test_is_an_episode_index_selection(self) -> None:
+        """RecalledRisesToTop は、profile で NewestFirst と取り替えられるよう EpisodeIndexSelection として使える。"""
+        assert isinstance(RecalledRisesToTop(), EpisodeIndexSelection)
+
+    def test_recalled_old_episode_rises_above_newer_ones(self) -> None:
+        """ターン 1 に書いてターン 8 に呼び出したエピソードは、ターン 5 と 3 に書いた呼び出されていないエピソードより上に来る。"""
+        old = _episode(1, 1).recalled_at(turn=8)
+        episodes = [old, _episode(2, 3), _episode(3, 5)]
+
+        chosen = RecalledRisesToTop().select(episodes, limit=3)
+
+        assert chosen == (old, episodes[2], episodes[1])
+
+    def test_unrecalled_episodes_sink_out_of_the_n(self) -> None:
+        """呼び出されないまま、書いた時が呼び出しより古いエピソードは、N 件から外れる。"""
+        recalled = _episode(1, 1).recalled_at(turn=9)
+        newer = _episode(2, 6)
+        sunk = _episode(3, 4)
+
+        chosen = RecalledRisesToTop().select([recalled, newer, sunk], limit=2)
+
+        assert chosen == (recalled, newer)
+
+    def test_episode_recalled_long_ago_sinks_below_newer_writing(self) -> None:
+        """前に呼び出したエピソードも、その後に書いたエピソードより下になる。"""
+        recalled = _episode(1, 1).recalled_at(turn=3)
+        newer = _episode(2, 7)
+
+        chosen = RecalledRisesToTop().select([recalled, newer], limit=2)
+
+        assert chosen == (newer, recalled)
+
+    def test_later_added_comes_first_within_the_same_turn(self) -> None:
+        """書いた時か呼び出した時が同じターンなら、一覧で後ろにある (後から足した) ものが先に来る。"""
+        recalled = _episode(1, 1).recalled_at(turn=4)
+        written = _episode(2, 4)
+
+        chosen = RecalledRisesToTop().select([recalled, written], limit=2)
+
+        assert chosen == (written, recalled)
+
+    def test_limit_that_is_negative_is_rejected(self) -> None:
+        """N が負なら EpisodeValidationException を投げる。"""
+        with pytest.raises(EpisodeValidationException):
+            RecalledRisesToTop().select([_episode(1, 2)], limit=-1)

@@ -31,4 +31,20 @@ class NewestFirst(EpisodeIndexSelection):
         return tuple(sorted(reversed(episodes), key=lambda e: e.written_turn, reverse=True))
 
 
-__all__ = ["EpisodeIndexSelection", "NewestFirst"]
+class RecalledRisesToTop(EpisodeIndexSelection):
+    """書いた時と最後に呼び出した時のうち新しいほうの順。使わない記憶が自然に沈む。
+
+    同じターンなら後から足した方を先に出す。
+    """
+
+    def _ordered(self, episodes: Sequence[Episode]) -> tuple[Episode, ...]:
+        return tuple(sorted(reversed(episodes), key=_last_touched_turn, reverse=True))
+
+
+def _last_touched_turn(episode: Episode) -> int:
+    if episode.last_recalled_turn is None:
+        return episode.written_turn
+    return episode.last_recalled_turn
+
+
+__all__ = ["EpisodeIndexSelection", "NewestFirst", "RecalledRisesToTop"]
