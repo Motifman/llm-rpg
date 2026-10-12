@@ -188,7 +188,7 @@ TEMPORAL_GAP_TICKS_FOR_CLOSE      = 8     # 時間断絶 = 別 scene
 10. HOLD_ACCUMULATING (蓄積継続)
 ```
 
-失敗した action で閉じる条項 (`PREDICTION_ERROR_SALIENT`、`ERROR_GATED_ENCODING_ENABLED`) は、記憶の部品の撤去 (#1631) の #__PR__ で消した。
+失敗した action で閉じる条項 (`PREDICTION_ERROR_SALIENT`、`ERROR_GATED_ENCODING_ENABLED`) は、記憶の部品の撤去 (#1631) の #1651 で消した。
 
 ### 4.4 `scene_boundary` フラグ
 
