@@ -24,7 +24,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
-from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.llm.services.world_vocabulary import (
     lighting_display,
 )
@@ -35,6 +34,7 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.declared_observation_message import (
     declared_observation_message_for_lighting,
 )
