@@ -1,4 +1,4 @@
-"""needs decayの状態・event・evidenceが確定境界に追随することを保証する。"""
+"""needs decayの状態とeventが確定境界に追随することを保証する。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from ai_rpg_world.application.common.exceptions import CommandPostCommitExceptio
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
@@ -64,28 +63,10 @@ def _make_status(*, player_id: int, hunger: int, hp: int = 100) -> PlayerStatusA
     return status
 
 
-class _EvidenceSpy:
-    def __init__(self, repository: InMemoryPlayerStatusRepository) -> None:
-        self._repository = repository
-        self.recorded_hunger: list[int] = []
-        self.cleared: list[BeingId] = []
-
-    def record_hunger_max_evidence(self, _being_id: BeingId) -> None:
-        status = self._repository.find_by_id(PlayerId(1))
-        assert status is not None
-        hunger = status.needs.get(NeedType.HUNGER)
-        assert hunger is not None
-        self.recorded_hunger.append(hunger.value)
-
-    def clear_hunger_max_state(self, being_id: BeingId) -> None:
-        self.cleared.append(being_id)
-
-
 def _build_stage(
     store: InMemoryDataStore,
     *,
     observed_hp: list[int],
-    evidence: _EvidenceSpy,
 ) -> tuple[SpotGraphNeedsDecayStageService, InMemoryPlayerStatusRepository]:
     repository = InMemoryPlayerStatusRepository(store)
     dispatcher = CommandEventDispatcher()
@@ -113,8 +94,6 @@ def _build_stage(
     stage = SpotGraphNeedsDecayStageService(
         rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 1},
         starvation_damage_per_tick=1,
-        state_collapse_evidence_transcriber=evidence,
-        state_collapse_being_id_resolver=lambda _player_id: BeingId("being-1"),
         command_scope_factory=scope_factory,
     )
     return stage, repository
@@ -134,16 +113,10 @@ class TestNeedsDecayCommandScope:
             stage.run(WorldTick(1))
 
     def test_success_observers_read_committed_status(self) -> None:
-        """致死飢餓eventと空腹限界evidenceはstatus確定後にだけ届く。"""
+        """致死飢餓eventはstatus確定後にだけ届く。"""
         store = InMemoryDataStore()
-        repository = InMemoryPlayerStatusRepository(store)
-        evidence = _EvidenceSpy(repository)
         observed_hp: list[int] = []
-        stage, repository = _build_stage(
-            store,
-            observed_hp=observed_hp,
-            evidence=evidence,
-        )
+        stage, repository = _build_stage(store, observed_hp=observed_hp)
         repository.save(_make_status(player_id=1, hunger=99, hp=1))
 
         stage.run(WorldTick(1))
@@ -153,21 +126,14 @@ class TestNeedsDecayCommandScope:
         assert status.hp.value == 0
         assert status.needs.get(NeedType.HUNGER).value == 100  # type: ignore[union-attr]
         assert observed_hp == [0]
-        assert evidence.recorded_hunger == [100]
 
     def test_save_failure_rolls_back_all_players_and_suppresses_side_effects(
         self,
     ) -> None:
-        """一括保存失敗では全員のneeds・HPを戻しeventとevidenceを出さない。"""
+        """一括保存失敗では全員のneeds・HPを戻しeventを出さない。"""
         store = InMemoryDataStore()
-        repository = InMemoryPlayerStatusRepository(store)
-        evidence = _EvidenceSpy(repository)
         observed_hp: list[int] = []
-        stage, repository = _build_stage(
-            store,
-            observed_hp=observed_hp,
-            evidence=evidence,
-        )
+        stage, repository = _build_stage(store, observed_hp=observed_hp)
         repository.save(_make_status(player_id=1, hunger=99, hp=1))
         repository.save(_make_status(player_id=2, hunger=10, hp=100))
         original_save_all = InMemoryPlayerStatusRepository.save_all
@@ -190,19 +156,11 @@ class TestNeedsDecayCommandScope:
         assert first.needs.get(NeedType.HUNGER).value == 99  # type: ignore[union-attr]
         assert second.needs.get(NeedType.HUNGER).value == 10  # type: ignore[union-attr]
         assert observed_hp == []
-        assert evidence.recorded_hunger == []
-        assert evidence.cleared == []
 
-    def test_evidence_follows_a_commit_with_cleanup_failure(self) -> None:
-        """commit後の資源解放失敗でもstatusに追随してevidenceを記録する。"""
+    def test_cleanup_failure_after_commit_keeps_status_and_reaches_caller(self) -> None:
+        """commit後の資源解放が失敗しても進めたneedsは確定したまま残り、CommandPostCommitExceptionが呼出し側へ届く。"""
         store = InMemoryDataStore()
-        repository = InMemoryPlayerStatusRepository(store)
-        evidence = _EvidenceSpy(repository)
-        stage, repository = _build_stage(
-            store,
-            observed_hp=[],
-            evidence=evidence,
-        )
+        stage, repository = _build_stage(store, observed_hp=[])
         repository.save(_make_status(player_id=1, hunger=99))
         original_release = store.release_uow_transaction
 
@@ -218,4 +176,3 @@ class TestNeedsDecayCommandScope:
         status = repository.find_by_id(PlayerId(1))
         assert status is not None
         assert status.needs.get(NeedType.HUNGER).value == 100  # type: ignore[union-attr]
-        assert evidence.recorded_hunger == [100]
