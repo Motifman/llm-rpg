@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     )
 
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
+from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, IndexRevision
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
@@ -976,3 +977,55 @@ def dict_to_acquaintance(data: dict[str, Any]) -> Acquaintance:
         first_met_turn=data["first_met_turn"],
         last_met_turn=data["last_met_turn"],
     )
+
+
+def _episode_index_to_dict(index: EpisodeIndex) -> dict[str, Any]:
+    return {"summary": index.summary, "recall_when": index.recall_when}
+
+
+def _dict_to_episode_index(data: dict[str, Any]) -> EpisodeIndex:
+    return EpisodeIndex(summary=data["summary"], recall_when=data["recall_when"])
+
+
+def being_episode_to_dict(episode: Episode) -> dict[str, Any]:
+    return {
+        "episode_id": episode.episode_id,
+        "handle": episode.handle,
+        "environment_name": episode.environment_name,
+        "written_turn": episode.written_turn,
+        "index": _episode_index_to_dict(episode.index),
+        "body": episode.body,
+        "recall_count": episode.recall_count,
+        "last_recalled_turn": episode.last_recalled_turn,
+        "index_history": [
+            {
+                "previous": _episode_index_to_dict(revision.previous),
+                "revised_turn": revision.revised_turn,
+            }
+            for revision in episode.index_history
+        ],
+    }
+
+
+def dict_to_being_episode(data: dict[str, Any]) -> Episode:
+    """呼び名は ID から作り直さない。伸ばした呼び名が 6 文字に戻ると、前の呼び名が別の記録を指す。"""
+    try:
+        return Episode(
+            episode_id=data["episode_id"],
+            handle=data["handle"],
+            environment_name=data["environment_name"],
+            written_turn=data["written_turn"],
+            index=_dict_to_episode_index(data["index"]),
+            body=data["body"],
+            recall_count=data["recall_count"],
+            last_recalled_turn=data["last_recalled_turn"],
+            index_history=tuple(
+                IndexRevision(
+                    previous=_dict_to_episode_index(revision["previous"]),
+                    revised_turn=revision["revised_turn"],
+                )
+                for revision in data["index_history"]
+            ),
+        )
+    except DomainException as exc:
+        raise ValueError(f"invalid being episode payload: {exc}") from exc

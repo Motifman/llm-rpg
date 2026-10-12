@@ -12,6 +12,7 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
     _validate_snapshot_payload_coverage,
 )
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
+from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 
 
 class TestValidateSnapshotPayloadCoverage:
@@ -70,7 +71,7 @@ def _make_service(expectation_store=None):
     )
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
     from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import InMemoryExpectationRepository
-    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), expectation_store=expectation_store or InMemoryExpectationRepository())
+    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), goal_journal_store=InMemoryGoalJournalStore(), stagnation_pressure_store=InMemoryStagnationPressureStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), expectation_store=expectation_store or InMemoryExpectationRepository())
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -113,7 +114,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
         service = _make_service()
-        payload_without_new_key = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': []}
+        payload_without_new_key = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': []}
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId('being-test'), json.dumps(payload_without_new_key))
         assert 'fictional_new_store' in str(exc_info.value)
@@ -129,7 +130,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadFormatError
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         service = _make_service()
-        broken_payload = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'belief_evidence_buffer': [{'evidence_id': 'e1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '探索は空振りだった', 'salience': 'medium', 'occurred_at': '2026-07-05T09:00:00+00:00', 'tick': 7}]}
+        broken_payload = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'recall_buffer_pending': [], 'reinterpretation_journal': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'recall_buffer_received_event_ids': [], 'pending_predictions': [], 'goal_journal': [], 'stagnation_pressure_count': [], 'expectations': [], 'expectation_undelivered_events': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'belief_evidence_buffer': [{'evidence_id': 'e1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '探索は空振りだった', 'salience': 'medium', 'occurred_at': '2026-07-05T09:00:00+00:00', 'tick': 7}]}
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId('being-test'), json.dumps(broken_payload))
         assert 'belief_evidence_buffer' in str(exc_info.value)
@@ -166,7 +167,7 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
-        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository())
+        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository())
         provisioning.ensure_attached(PlayerId(1))
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         with pytest.raises(SnapshotCoverageError):

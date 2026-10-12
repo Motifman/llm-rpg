@@ -8,6 +8,7 @@ DDD の原則に従い、ドメイン固有の意味を持つカスタム例外�
 from __future__ import annotations
 
 from ai_rpg_world.domain.common.exception import (
+    BusinessRuleException,
     DomainException,
     NotFoundException,
     StateException,
@@ -96,6 +97,24 @@ class BeingSnapshotVersionException(BeingDomainException, ValidationException):
     error_code = "BEING.SNAPSHOT_VERSION"
 
 
+class EpisodeValidationException(BeingDomainException, ValidationException):
+    """エピソードや目次が決まり (空でない、長さの上限、呼び名、回数と時の並び) を満たさない。"""
+
+    error_code = "BEING.EPISODE_VALIDATION"
+
+
+class EpisodeConflictException(BeingDomainException, BusinessRuleException):
+    """同じ Being の中で、ID か呼び名が重なるエピソードを置こうとした。"""
+
+    error_code = "BEING.EPISODE_CONFLICT"
+
+
+class EpisodeNotFoundException(BeingDomainException, NotFoundException):
+    """書き戻そうとしたエピソードが、その Being の記録に無い。"""
+
+    error_code = "BEING.EPISODE_NOT_FOUND"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -106,4 +125,7 @@ __all__ = [
     "BeingNotFoundException",
     "BeingSnapshotIncompleteException",
     "BeingSnapshotVersionException",
+    "EpisodeConflictException",
+    "EpisodeNotFoundException",
+    "EpisodeValidationException",
 ]

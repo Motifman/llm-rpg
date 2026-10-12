@@ -70,9 +70,11 @@ from typing import Any
 from ai_rpg_world.application.being._memory_payload_codecs import (
     acquaintance_to_dict,
     afterglow_entry_to_dict,
+    being_episode_to_dict,
     belief_evidence_to_dict,
     dict_to_acquaintance,
     dict_to_afterglow_entry,
+    dict_to_being_episode,
     dict_to_belief_evidence,
     dict_to_episode_hit_count_pair,
     dict_to_episode_tick_pair,
@@ -112,6 +114,7 @@ from ai_rpg_world.application.llm.services.episodic_recall_success_store import 
     IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
+from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
@@ -285,6 +288,7 @@ class BeingMemorySnapshotService:
         "expectation_undelivered_events",
         "memory_turn",
         "acquaintances",
+        "being_episodes",
     })
 
     def __init__(
@@ -305,6 +309,7 @@ class BeingMemorySnapshotService:
         goal_journal_store: GoalJournalRepository,
         stagnation_pressure_store: StagnationPressureRepository,
         acquaintance_store: AcquaintanceRepository,
+        being_episode_store: EpisodeRepository,
         expectation_store: ExpectationRepository,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
@@ -364,6 +369,8 @@ class BeingMemorySnapshotService:
             )
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
+        if not isinstance(being_episode_store, EpisodeRepository):
+            raise TypeError("being_episode_store must be EpisodeRepository")
         if not isinstance(expectation_store, ExpectationRepository):
             raise TypeError("expectation_store must be ExpectationRepository")
         self._memo = memo_store
@@ -381,6 +388,7 @@ class BeingMemorySnapshotService:
         self._goal_journal = goal_journal_store
         self._stagnation_pressure = stagnation_pressure_store
         self._acquaintance = acquaintance_store
+        self._being_episode = being_episode_store
         self._expectation = expectation_store
 
     def capture(self, being_id: BeingId) -> str:
@@ -491,6 +499,9 @@ class BeingMemorySnapshotService:
         payload["memory_turn"] = [memory_turn] if memory_turn else []
         payload["acquaintances"] = [
             acquaintance_to_dict(a) for a in self._acquaintance.list_by_being(being_id)
+        ]
+        payload["being_episodes"] = [
+            being_episode_to_dict(e) for e in self._being_episode.list_by_being(being_id)
         ]
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
@@ -689,6 +700,15 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 "payload['acquaintances'] has the same person twice"
             )
+        being_episodes = _decode_list(
+            payload["being_episodes"], dict_to_being_episode, "being_episodes"
+        )
+        for field_name in ("episode_id", "handle"):
+            values = [getattr(e, field_name) for e in being_episodes]
+            if len(set(values)) != len(values):
+                raise BeingMemoryPayloadFormatError(
+                    f"payload['being_episodes'] has the same {field_name} twice"
+                )
         # 予期の組の整合は、どの store にも書く前に確かめる。ほかの store を
         # 書き換えたあとで予期だけ拒むと、半端な状態が残る。
         try:
@@ -762,6 +782,7 @@ class BeingMemorySnapshotService:
             turn=memory_turn,
         )
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
+        self._being_episode.replace_all_by_being(being_id, being_episodes)
 
 
 __all__ = [
