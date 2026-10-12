@@ -200,7 +200,7 @@ class TestTheIndexInThePrompt:
 
 
 class TestTheRecallTool:
-    """呼び出しのツールが目次を出す設定でだけ出て、runtime の手番の外の経路で本文を返すことを保証する。"""
+    """呼び出しのツールが目次を出す設定で上限 M 件とともに出て、手番を経由せず runtime から直接呼び出しても本文を返すことを保証する。"""
 
     def test_the_tool_is_offered_with_the_configured_limit(self) -> None:
         """目次を出す設定では呼び出しのツールが出て、呼び名の上限が M 件になる。"""

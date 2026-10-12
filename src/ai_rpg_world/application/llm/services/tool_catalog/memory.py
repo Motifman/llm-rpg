@@ -317,7 +317,7 @@ def episode_recall_definition(max_handles: int) -> ToolDefinitionDto:
             "目次の「思い出すとき」に今の場面が当てはまるとき、昔のことを人に話す前、"
             "似た場面で前にどうしたかを確かめたいときに使う。"
             f"1 回に {max_handles} 件まで、まとめて思い出せる。"
-            "目次に無い呼び名は思い出せない。思い出すだけで、世界の状態は変えない。"
+            "目次に無い呼び名は思い出せない。思い出すだけで、世界の出来事は起こさない。"
         ),
         parameters={
             "type": "object",
