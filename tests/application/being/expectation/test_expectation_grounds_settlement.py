@@ -7,10 +7,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
-from tests.application.being.expectation.support import (
-    RecordingTraceRecorder,
-    ScriptedJudgmentPort,
-)
+from tests.judgment_helpers import ScriptedJudgmentPort
+from tests.trace_helpers import RecordingTraceRecorder
 
 from ai_rpg_world.application.being.expectation.belief_material import (
     ExpectationBeliefMaterialReceiver,
