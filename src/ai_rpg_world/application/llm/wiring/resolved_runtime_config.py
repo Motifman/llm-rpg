@@ -90,7 +90,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "EPISODIC_RECALL_ENABLED",
     "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
-    "ERROR_GATED_ENCODING_ENABLED",
     "END_ON_ALL_DOWN",
     "ESCAPE_LLM_SSOT",
     "GOAL_REFLECT_ENABLED",
@@ -424,7 +423,6 @@ class ResolvedLlmRuntimeConfig:
     unconscious_context_enabled: bool = False
     error_driven_reinterpretation_enabled: bool = False
     recall_hit_boost_enabled: bool = False
-    error_gated_encoding_enabled: bool = False
     pending_prediction_enabled: bool = False
 
     # Goal / stagnation 系。
@@ -606,7 +604,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_episodic_explore_related_enabled,
             resolve_episodic_recall_enabled,
             resolve_error_driven_reinterpretation_enabled,
-            resolve_error_gated_encoding_enabled,
             resolve_goal_reflect_enabled,
             resolve_goal_revision_enabled,
             resolve_goal_stagnation_evidence_enabled,
@@ -941,7 +938,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_error_driven_reinterpretation_enabled(env=source)
         )
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
-        error_gated_encoding_enabled = resolve_error_gated_encoding_enabled(env=source)
         pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
         goal_store_enabled = resolve_goal_store_enabled(env=source)
         goal_revision_enabled = resolve_goal_revision_enabled(env=source)
@@ -1090,7 +1086,6 @@ class ResolvedLlmRuntimeConfig:
             unconscious_context_enabled=unconscious_context_enabled,
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
-            error_gated_encoding_enabled=error_gated_encoding_enabled,
             pending_prediction_enabled=pending_prediction_enabled,
             goal_store_enabled=goal_store_enabled,
             goal_revision_enabled=goal_revision_enabled,
@@ -1239,7 +1234,6 @@ class ResolvedLlmRuntimeConfig:
             unconscious_context_enabled=False,
             error_driven_reinterpretation_enabled=False,
             recall_hit_boost_enabled=False,
-            error_gated_encoding_enabled=False,
             pending_prediction_enabled=False,
             goal_store_enabled=False,
             goal_revision_enabled=False,

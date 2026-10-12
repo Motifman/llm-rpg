@@ -8325,7 +8325,6 @@ def create_world_runtime(
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
             log_error_driven_reinterpretation_enabled_state,
-            log_error_gated_encoding_enabled_state,
             log_memo_distill_enabled_state,
             log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
@@ -8429,11 +8428,6 @@ def create_world_runtime(
                 "ため reflect 注入 (= 熟考ラッチの武装トリガ) が起きず、熟考ゲートが"
                 "一生発火しない (静かな失敗)。GOAL_REFLECT_ENABLED=1 も設定してください。"
             )
-        # U8 (予測誤差統一設計 部品2・誤差ゲート付き符号化 / default OFF):
-        # 境界 (2a, chunk_coordinator へ伝播) をゲートする。evidence buffer とは
-        # 無関係な独立 flag なので buffer store 条件には加えない。
-        _error_gated_encoding_enabled = config.error_gated_encoding_enabled
-        log_error_gated_encoding_enabled_state(_error_gated_encoding_enabled)
         # U5: MEMO_DISTILL 転記 (default ON)。memo を手帳で終わらせず
         # semantic evidence へ蒸留するため、明示 OFF でだけ止める。
         # 他 3 flag 同様、同じ evidence
@@ -8908,9 +8902,6 @@ def create_world_runtime(
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled
             ),
-            # U8 (部品2a): chunk_coordinator (同期・非同期共通の境界判定) に
-            # decide_chunk_boundary への flag 伝播を頼む。
-            error_gated_boundary_enabled=_error_gated_encoding_enabled,
             # U9b (想起の信用割り当て・的中側): 的中側 sidecar を作り、
             # passive_recall の順位に使う。回数は確定した予期から足す (#1443)。
             recall_hit_boost_enabled=_recall_hit_boost_enabled,
