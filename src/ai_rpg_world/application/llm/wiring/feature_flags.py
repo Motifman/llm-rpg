@@ -504,52 +504,6 @@ def log_belief_consolidation_enabled_state(enabled: bool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Semantic memory: salience + STRUCTURED_FAILURE (U6)
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED = "SALIENCE_STRUCTURED_FAILURE_ENABLED"
-
-
-def resolve_salience_structured_failure_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """salience 判定 + STRUCTURED_FAILURE 転記 + high salience cap を動かすか。
-
-    ``SALIENCE_STRUCTURED_FAILURE_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    OFF (既定) のとき:
-    - chunk 主観補完 LLM の system prompt に salience 節は出ず、
-      ``episode.salience`` は常に ``"low"`` (= 導入前と byte 同一の prompt)
-    - loop_guard の cross_tick_failure 閾値到達は
-      ``BeliefEvidence(source_kind=STRUCTURED_FAILURE)`` に転記されない
-      (``record_and_check`` 自体は ``CrossTickFailureTrigger`` を返すが、
-      呼び出し側で transcriber が None のため no-op になる)
-
-    ON のとき、chunk 主観補完 LLM が salience を判定し、salience=high の
-    evidence が件数閾値なしで次回固着パスに載る (S2 一撃学習)。加えて
-    STRUCTURED_FAILURE evidence の転記も有効になる (S5 手続き学習)。
-
-    詳細は docs/memory_system/semantic_learning_consolidation_design.md
-    「salience (一撃学習の経路)」節、
-    docs/memory_system/prediction_error_unified_implementation_plan.md の
-    U6 節。
-    """
-    return _parse_bool_env(
-        ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED, env=env, default=False
-    )
-
-
-def log_salience_structured_failure_enabled_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
 # Semantic memory: MEMO_DISTILL 転記 (U5)
 # ──────────────────────────────────────────────────────────────────
 
@@ -686,7 +640,7 @@ def resolve_unconscious_context_enabled(
       構築されない (= 想起挙動・§learned section など既存の semantic 経路には
       一切影響しない)
 
-    ON にすると、``prediction_error`` / ``salience`` の判定材料として cue 一致の
+    ON にすると、``interpreted`` / ``prediction_error`` の判定材料として cue 一致の
     active belief top-5 (確信度付き) + (RollingSummary 使用時のみ) L5
     self_image / world_view が system prompt の指示と共に user message に載る。
     これにより「誰にとっても同じ驚き」の判定から「このキャラにとっての驚き」の
@@ -815,7 +769,7 @@ ENV_ERROR_GATED_ENCODING_ENABLED = "ERROR_GATED_ENCODING_ENABLED"
 def resolve_error_gated_encoding_enabled(
     env: Mapping[str, str] | None = None,
 ) -> bool:
-    """密度を時間やイベント数ではなく予測誤差で決める 2 つの局所変更を動かすか
+    """chunk の区切りを時間やイベント数ではなく予測誤差で決めるか
     (予測誤差統一設計 部品2、U8)。
 
     ``ERROR_GATED_ENCODING_ENABLED=1`` で ON、未設定 / その他は OFF。
@@ -824,19 +778,11 @@ def resolve_error_gated_encoding_enabled(
     - ``decide_chunk_boundary`` に U8 で足した条項 (成功を予測していたのに
       失敗 / error_code 付き失敗があれば境界候補にする) は一切評価されず、
       境界挙動は U8 導入前と完全一致する
-    - chunk 主観補完 LLM の system prompt の recall_text 長さ指示は U6 導入時
-      の一律指示 (250〜450 字) のまま byte 一致 (salience_enabled の値に
-      関わらず)
 
     ON にすると:
     - bucket 内に構造的な予測ミスがあれば (MIN_ACTIONS_FOR_CLOSE 到達後・
       scene 境界系の判定の後、観測件数閾値の前というルール順で) chunk 境界の
       候補になる (``ChunkBoundaryReason.PREDICTION_ERROR_SALIENT``)
-    - ``SALIENCE_STRUCTURED_FAILURE_ENABLED`` (U6) も同時に ON のとき、
-      recall_text の長さ指示が salience 連動になる (high: 250〜450字 /
-      low: 80〜150字)。U6 flag が OFF のままだと salience 自体が存在しない
-      ため、本 flag が ON でも長さ指示は変わらない (連動先が無いため安全に
-      縮退)
 
     詳細は docs/memory_system/prediction_error_unified_memory_design.md
     「部品 2: 誤差ゲート付き符号化」節、

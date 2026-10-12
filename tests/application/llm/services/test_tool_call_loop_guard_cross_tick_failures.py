@@ -36,7 +36,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
-    CrossTickFailureTrigger,
     ToolCallLoopGuardService,
 )
 from ai_rpg_world.application.llm.tool_constants import (
@@ -303,56 +302,6 @@ class TestCrossTickFailureDetection:
             "window 経過後の再発火が起きていない (_cross_tick_last_warn が"
             " pruning されていない疑い)"
         )
-
-    def test_returns_trigger_cross_tick_failure_trigger(self) -> None:
-        """U6 (STRUCTURED_FAILURE): 警告が実際に発火した回だけ
-        ``CrossTickFailureTrigger`` を返す。呼び出し側 (presentation 層) が
-        being を解決して BeliefEvidence へ転記するための最小情報。"""
-        buffer = _StubBuffer()
-        tick = _TickProvider(start=0)
-        svc = self._make(buffer, tick)
-        pid = PlayerId(3)
-        args = {"target_label": "東の茂み", "action_name": "harvest_berry"}
-
-        results = []
-        for t in [0, 5, 10]:
-            tick.tick = t
-            results.append(
-                svc.record_and_check(
-                    pid,
-                    TOOL_NAME_SPOT_GRAPH_INTERACT,
-                    args,
-                    success=False,
-                    error_code="INTERACTION_PRECONDITION_FAILED",
-                )
-            )
-
-        assert results[0] is None
-        assert results[1] is None
-        assert results[2] == CrossTickFailureTrigger(
-            tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            error_code="INTERACTION_PRECONDITION_FAILED",
-            count=3,
-            window=20,
-        )
-
-    def test_emits_warning_for_streak_none(self) -> None:
-        """cross_tick も streak も発火しなかった呼び出しは None を返す
-        (= 呼び出し側が誤って転記しないための契約)。"""
-        buffer = _StubBuffer()
-        tick = _TickProvider(start=0)
-        svc = self._make(buffer, tick)
-        pid = PlayerId(3)
-
-        result = svc.record_and_check(
-            pid,
-            TOOL_NAME_SPOT_GRAPH_INTERACT,
-            {"target_label": "東の茂み", "action_name": "harvest_berry"},
-            success=False,
-            error_code="INTERACTION_PRECONDITION_FAILED",
-        )
-
-        assert result is None
 
     def test_success_error_code_default_call_existing(self) -> None:
         """新パラメータ ``success`` / ``error_code`` を渡さない旧 API 呼び出しは、
