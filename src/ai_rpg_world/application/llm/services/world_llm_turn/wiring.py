@@ -29,9 +29,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
 )
-from ai_rpg_world.application.llm.services.goal_completion_hint_service import (
-    GoalCompletionHintService,
-)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.loop_diagnosis import LoopDiagnosis
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
@@ -257,9 +254,6 @@ class WorldLlmWiring:
                 judgment_port=self.typed_judgment_port,
                 min_probability=min_probability,
             )
-        self.goal_completion_hint_service = self._build_goal_completion_hint_service()
-        #: being ごとに、目的の達成を問わなかった理由のうち最後に trace に残したもの。問うたら消す (#1448)。
-        self.goal_hint_last_skipped_reason: dict[str, str] = {}
         self.expectation_settlement = self._build_expectation_settlement()
         if self.typed_judgment_port is not None:
             self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
@@ -440,40 +434,6 @@ class WorldLlmWiring:
             for m in book.memos
             if m.kind is MemoKind.TODO
         ]
-
-    def _build_goal_completion_hint_service(self) -> GoalCompletionHintService | None:
-        """profile が目的の hint を求めたときだけ組む (#1448)。
-
-        前提が欠けたまま有効にした profile は起動前に落とす。黙って無効にすると、
-        run 後に「hint が 0 件」が閾値のせいか配線のせいか見分けられない。
-        goal_outcome が tool に出ていない run で組むと、存在しない申告を勧める。
-        """
-        config = getattr(self.runtime, "_runtime_config", None)
-        if config is None or not config.typed_judgment_goal_hint_enabled:
-            return None
-        port = self.typed_judgment_port
-        goal_store = getattr(self.runtime, "_goal_journal_store", None)
-        goal_outcome_offered = bool(
-            getattr(self.runtime, "_goal_revision_enabled", False)
-        )
-        if port is None or goal_store is None or not goal_outcome_offered:
-            missing = [
-                requirement
-                for requirement, present in (
-                    ("TYPED_JUDGMENT_PROVIDER", port is not None),
-                    ("GOAL_STORE_ENABLED", goal_store is not None),
-                    ("GOAL_REVISION_ENABLED", goal_outcome_offered),
-                )
-                if not present
-            ]
-            raise ValueError(
-                "TYPED_JUDGMENT_GOAL_HINT_ENABLED requires " + ", ".join(missing)
-            )
-        return GoalCompletionHintService(
-            goal_store,
-            judgment_port=port,
-            min_probability=float(config.typed_judgment_goal_hint_min_probability),
-        )
 
     def _build_expectation_settlement(self) -> ExpectationSettlementService | None:
         """profile が予期の清算を求めたときだけ組む (#1440)。
