@@ -7963,7 +7963,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1623 / #1621 / #1626、design_decisions 1 / 10 / D1616 / D1623 / D1626 / D1628。
 
-**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。
+**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。 記憶のツールを隠す純スポットグラフ (`LLM_TOOL_MODE=pure_spot_graph`) では、呼び出せない目次を出さない。
 
 ---
 
@@ -8175,3 +8175,5 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 既定が `sliding_window` のまま新しい記憶を標準にすると、短期記憶の種類を書かない設定 (多くの試験) が、起動時の検査で止まるか、書き起こしの無いまま走る。
 
 **関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。
+
+**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。

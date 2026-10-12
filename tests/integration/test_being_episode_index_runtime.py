@@ -368,3 +368,37 @@ class TestMemoFromAnEpisode:
 
         [memo] = runtime._being_memo_store.get(_being_of(runtime, pid)).memos
         assert memo.provenance is not None and memo.provenance.source_from == sunk.handle
+
+
+class TestThePureSpotGraphMode:
+    """記憶のツールを隠す純スポットグラフでは、呼び出せない目次を出さないことを保証する (#1631)。"""
+
+    def test_neither_the_index_nor_its_tools_appear(self) -> None:
+        """LLM_TOOL_MODE=pure_spot_graph では、エピソードがあっても【思い出せる出来事】も 2 つのツールもプロンプト全文に出ない。"""
+        runtime, recorder = _runtime(LLM_TOOL_MODE="pure_spot_graph")
+        pid = runtime.get_player_ids()[0]
+        _write(runtime, pid, 1, summary="火を起こした")
+
+        system, user, tools = _first_turn(runtime, pid)
+
+        whole = system + user + json.dumps(tools, ensure_ascii=False)
+        assert [
+            name
+            for name in (_HEADING, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX)
+            if name in whole
+        ] == []
+        assert [k for k, _, _ in recorder.events if k == TraceEventKind.EPISODE_INDEX_SHOWN] == []
+
+    def test_the_default_mode_shows_both(self) -> None:
+        """既定のツールの出し方では、同じ準備で【思い出せる出来事】と 2 つのツールが出る。"""
+        runtime, _ = _runtime()
+        pid = runtime.get_player_ids()[0]
+        _write(runtime, pid, 1, summary="火を起こした")
+
+        system, user, tools = _first_turn(runtime, pid)
+
+        whole = system + user + json.dumps(tools, ensure_ascii=False)
+        assert all(
+            name in whole
+            for name in (_HEADING, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX)
+        )

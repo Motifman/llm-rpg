@@ -1926,21 +1926,20 @@ class WorldRuntime:
             tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
             flag_name="SEMANTIC_SEARCH_ENABLED",
         )
+        episode_index_revision_enabled = self._episode_index_enabled()
         episode_recall_max_handles = None
-        if self._resolve_requested_memory_tool_enabled(
-            requested=self._episode_index_enabled(),
-            executor=self._being_episode_recall_tool_executor,
-            tool_name=TOOL_NAME_EPISODE_RECALL,
-            flag_name="the episode index (always on, #1631)",
-        ):
+        if episode_index_revision_enabled:
+            if (
+                self._being_episode_recall_tool_executor is None
+                or self._being_episode_index_revision_tool_executor is None
+            ):
+                raise ToolExposureConfigurationError(
+                    f"{TOOL_NAME_EPISODE_RECALL} and {TOOL_NAME_EPISODE_REVISE_INDEX} are "
+                    "always offered (#1631), but their executors are not wired; build the "
+                    "runtime with create_world_runtime"
+                )
             assert cfg is not None
             episode_recall_max_handles = cfg.being_episode_recall_max_handles
-        episode_index_revision_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=self._episode_index_enabled(),
-            executor=self._being_episode_index_revision_tool_executor,
-            tool_name=TOOL_NAME_EPISODE_REVISE_INDEX,
-            flag_name="the episode index (always on, #1631)",
-        )
         return [
             defn
             for defn, _ in get_memory_specs(
@@ -2004,8 +2003,7 @@ class WorldRuntime:
     def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
         """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
 
-        ツールは #1616 と同じく、実際に出すツールの一覧から決める。純スポットグラフの
-        経路では、目次が出ていても記憶のツールは隠れる。
+        ツールは #1616 と同じく、実際に出すツールの一覧から決める。
         """
         offered = {
             definition.name
@@ -2015,7 +2013,8 @@ class WorldRuntime:
 
     def _episode_index_enabled(self) -> bool:
         # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
-        return self._runtime_config is not None
+        # 記憶のツールを隠す純スポットグラフでは、呼び出せない目次を出さない。
+        return self._runtime_config is not None and self._include_todo_tools
 
     def episode_index_text(self, player_id: PlayerId) -> str:
         """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
