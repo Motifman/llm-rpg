@@ -77,12 +77,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_EVIDENCE_ENABLED",
     "DISTANT_VIEW_TRACE_ENABLED",
     "EPISODIC_EXPLORE_RELATED_ENABLED",
-    "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
-    "EXPECTATION_GROUNDS_MAX_QUESTIONS",
-    "EXPECTATION_GROUNDS_MIN_PROBABILITY",
-    "EXPECTATION_SETTLEMENT_ENABLED",
-    "EXPECTATION_SETTLEMENT_MAX_OPEN",
-    "EXPECTATION_SETTLEMENT_TIMELINE_TURNS",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "EPISODIC_RECALL_ENABLED",
@@ -234,18 +228,6 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_semantic_repeat_min_probability: 繰り返しと見なす確率の閾値。
             警告が待機へ押すのを避けるため高めに置く
         typed_judgment_semantic_repeat_window: 判断に渡す直近の行動の件数
-        expectation_settlement_enabled: ターンの終わりに、予期の形と当否を Jev に
-            問うて清算する (#1440)。**既定は off**。判断の provider が要る
-        expectation_settlement_max_open: 清算の問いに載せる清算待ちの予期の上限。
-            超えたら期日の無い古い予期から期限を繰り上げて閉じる
-        expectation_settlement_timeline_turns: 清算の問いに見せる出来事の時系列の
-            ターン数
-        expectation_event_max_delivery_attempts: 予期の出来事を配り直す回数の上限。
-            清算の有効化によらず、予期の出来事を配るときに使う
-        expectation_grounds_max_questions: 予期を書いたターンの清算の呼び出しに
-            並べる、根拠の問い (頭にあった信念とエピソードごとの問い) の上限 (#1484)
-        expectation_grounds_min_probability: 根拠として採る確率の閾値。これを
-            超えたものだけを根拠にする
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -306,12 +288,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_semantic_repeat_enabled: bool
     typed_judgment_semantic_repeat_min_probability: float
     typed_judgment_semantic_repeat_window: int
-    expectation_settlement_enabled: bool
-    expectation_settlement_max_open: int
-    expectation_settlement_timeline_turns: int
-    expectation_event_max_delivery_attempts: int
-    expectation_grounds_max_questions: int
-    expectation_grounds_min_probability: float
 
     # Episodic memory
     episodic_enabled: bool
@@ -478,7 +454,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 "SHORT_TERM_MEMORY_KIND must be rolling_summary: episode writing is always on"
             )
-        self._validate_expectation_settlement()
         if self.being_memo_enabled and self.memo_tools_enabled:
             raise ValueError(
                 "BEING_MEMO_ENABLED=1 requires MEMO_TOOLS_ENABLED=false "
@@ -706,38 +681,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW must be 2 or greater"
             )
-        try:
-            expectation_settlement_enabled = _parse_truthy(
-                source.get("EXPECTATION_SETTLEMENT_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"EXPECTATION_SETTLEMENT_ENABLED: {exc}") from exc
-        expectation_settlement_max_open = _resolve_positive_int(
-            source,
-            "EXPECTATION_SETTLEMENT_MAX_OPEN",
-            default=_DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN,
-        )
-        expectation_settlement_timeline_turns = _resolve_positive_int(
-            source,
-            "EXPECTATION_SETTLEMENT_TIMELINE_TURNS",
-            default=_DEFAULT_EXPECTATION_SETTLEMENT_TIMELINE_TURNS,
-        )
-        expectation_event_max_delivery_attempts = _resolve_positive_int(
-            source,
-            "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
-            default=_DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS,
-        )
-        expectation_grounds_max_questions = _resolve_positive_int(
-            source,
-            "EXPECTATION_GROUNDS_MAX_QUESTIONS",
-            default=_DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS,
-        )
-        expectation_grounds_min_probability = _resolve_ratio_with_default(
-            source,
-            "EXPECTATION_GROUNDS_MIN_PROBABILITY",
-            default=_DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY,
-        )
-
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
         openrouter_quantization = _strip_or_none(source.get("OPENROUTER_QUANTIZATION"))
@@ -937,14 +880,6 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_semantic_repeat_min_probability
             ),
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
-            expectation_settlement_enabled=expectation_settlement_enabled,
-            expectation_settlement_max_open=expectation_settlement_max_open,
-            expectation_settlement_timeline_turns=expectation_settlement_timeline_turns,
-            expectation_event_max_delivery_attempts=(
-                expectation_event_max_delivery_attempts
-            ),
-            expectation_grounds_max_questions=expectation_grounds_max_questions,
-            expectation_grounds_min_probability=expectation_grounds_min_probability,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -1069,18 +1004,6 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_semantic_repeat_window=(
                 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
             ),
-            expectation_settlement_enabled=False,
-            expectation_settlement_max_open=_DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN,
-            expectation_settlement_timeline_turns=(
-                _DEFAULT_EXPECTATION_SETTLEMENT_TIMELINE_TURNS
-            ),
-            expectation_event_max_delivery_attempts=(
-                _DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS
-            ),
-            expectation_grounds_max_questions=_DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS,
-            expectation_grounds_min_probability=(
-                _DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY
-            ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
             episodic_explore_related_enabled=False,
@@ -1171,33 +1094,6 @@ class ResolvedLlmRuntimeConfig:
                 "other than off (問う先が無い)"
             )
 
-    def _validate_expectation_settlement(self) -> None:
-        for key, value in (
-            ("EXPECTATION_SETTLEMENT_MAX_OPEN", self.expectation_settlement_max_open),
-            (
-                "EXPECTATION_SETTLEMENT_TIMELINE_TURNS",
-                self.expectation_settlement_timeline_turns,
-            ),
-            (
-                "EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS",
-                self.expectation_event_max_delivery_attempts,
-            ),
-            (
-                "EXPECTATION_GROUNDS_MAX_QUESTIONS",
-                self.expectation_grounds_max_questions,
-            ),
-        ):
-            if value < 1:
-                raise ValueError(f"{key} must be 1 or greater")
-        # 閾値を超えたものだけを根拠にするので、1 ではどの確率も根拠にならない。
-        if not 0.0 < self.expectation_grounds_min_probability < 1.0:
-            raise ValueError("EXPECTATION_GROUNDS_MIN_PROBABILITY must be in (0, 1)")
-        if self.expectation_settlement_enabled and self.typed_judgment_provider == "off":
-            raise ValueError(
-                "EXPECTATION_SETTLEMENT_ENABLED=1 requires TYPED_JUDGMENT_PROVIDER "
-                "other than off (問う先が無い)"
-            )
-
     def to_trace_dict(self) -> dict[str, Any]:
         """run_start trace payload 用の dict 表現 (PR 3/6 で entrypoint が利用)。
 
@@ -1259,22 +1155,6 @@ _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY = 0.8
 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW = 4
 
-#: 清算待ちの上限の暫定値。#1436 の試しで DeepSeek は 1 ターンに平均 2.9 件の予期を
-#: 書き、形の判定で 15% ほどが外れた。数ターン分を抱えられる値に置き、予期を積む
-#: 入口 (#1441) で実際の件数を見て決め直す。
-_DEFAULT_EXPECTATION_SETTLEMENT_MAX_OPEN = 8
-#: 見せる時系列のターン数の暫定値。#1436 の試作で、結果が 1 ターン後に届く予期は
-#: 次のターンに当たったへ移った。数ターン遅れて届く結果まで拾える長さに置く。
-_DEFAULT_EXPECTATION_SETTLEMENT_TIMELINE_TURNS = 4
-_DEFAULT_EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS = 3
-#: 根拠の問いの上限。頭に載る信念は最大 3 件で、1 ターンに書く予期は平均 3 件ほど
-#: (#1436 の試し)。予期 1 件分の信念とエピソードは並べ切れ、1 ターンの問いが数十件に
-#: 膨らまない値に置く。過去 run の 64 手を組み直した試し (#1484) では最大 7 件だった。
-_DEFAULT_EXPECTATION_GROUNDS_MAX_QUESTIONS = 12
-#: 同じ試しの清算できる予期で、人の当否では 0.5 で選んだ 19 件のうち根拠でないものは 2 件、0.4 では 33 件中 11 件。
-#: 取りこぼしより、関係の無い信念に材料を積むほうが悪循環の入口になるので 0.5 に置く。
-#: エピソードは 120 字の抜粋で問うた結果なので暫定。全文で確かめ直す。
-_DEFAULT_EXPECTATION_GROUNDS_MIN_PROBABILITY = 0.5
 
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})

@@ -3,8 +3,8 @@
 同期経路 (``EpisodicChunkCoordinator``) と非同期経路の両方が
 ``PREDICTION_OUTCOME`` の trace に載せるため、ここに集約する。
 
-想起の信用割り当て (外れのずれの書き添えと、的中の回数) は、確定した予期から
-返す (#1443、``ExpectationRecallCreditReceiver``)。
+想起の信用割り当て (外れのずれの書き添えと、的中の回数) を確定した予期から返して
+いた受け取る側は #1631 で消した。
 """
 
 from __future__ import annotations

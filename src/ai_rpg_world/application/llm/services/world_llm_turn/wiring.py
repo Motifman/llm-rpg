@@ -14,12 +14,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai_rpg_world.application.being.expectation.grounds import (
-    MemoryStoreInMindTextReader,
-)
-from ai_rpg_world.application.being.expectation.settlement import (
-    ExpectationSettlementService,
-)
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
 )
@@ -156,10 +150,6 @@ class WorldLlmWiring:
     #: 存在しない tool 名から意図した tool を意味で選ぶ口 (#1413)。
     #: typed_judgment_port から __post_init__ で組む。None なら文字の類似度だけで提案する。
     tool_name_rescue: ToolNameRescue | None = field(default=None, init=False)
-    #: ターンの終わりに予期を清算する口 (#1440)。profile が求めなければ None。
-    expectation_settlement: ExpectationSettlementService | None = field(
-        default=None, init=False
-    )
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
@@ -254,7 +244,6 @@ class WorldLlmWiring:
                 judgment_port=self.typed_judgment_port,
                 min_probability=min_probability,
             )
-        self.expectation_settlement = self._build_expectation_settlement()
         if self.typed_judgment_port is not None:
             self.tool_name_rescue = ToolNameRescue(port=self.typed_judgment_port)
         # Issue #264 後続 B1: speech_say の audience resolver。
@@ -434,45 +423,6 @@ class WorldLlmWiring:
             for m in book.memos
             if m.kind is MemoKind.TODO
         ]
-
-    def _build_expectation_settlement(self) -> ExpectationSettlementService | None:
-        """profile が予期の清算を求めたときだけ組む (#1440)。
-
-        判断ポートが無いまま有効にした profile は起動前に落とす。黙って無効にすると、
-        清算の trace が 0 件の run を「予期が無かった」と読み違える。
-        """
-        config = getattr(self.runtime, "_runtime_config", None)
-        if config is None or not config.expectation_settlement_enabled:
-            return None
-        if self.typed_judgment_port is None:
-            raise ValueError(
-                "EXPECTATION_SETTLEMENT_ENABLED requires TYPED_JUDGMENT_PROVIDER"
-            )
-        return ExpectationSettlementService(
-            self.runtime._expectation_store,
-            turn_reader=self.runtime._memory_turn_clock,
-            judgment_port=self.typed_judgment_port,
-            dispatcher=self.runtime._expectation_dispatcher,
-            max_open=int(config.expectation_settlement_max_open),
-            timeline_turns=int(config.expectation_settlement_timeline_turns),
-            grounds_reader=self._in_mind_text_reader(),
-            max_grounds_questions=int(config.expectation_grounds_max_questions),
-            grounds_min_probability=float(config.expectation_grounds_min_probability),
-            trace_recorder_provider=lambda: getattr(self.runtime, "trace_recorder", None),
-        )
-
-    def _in_mind_text_reader(self) -> MemoryStoreInMindTextReader:
-        """プロンプトの想起と同じ store から、頭にあった信念とエピソードの本文を引く (#1484)。
-
-        episodic stack が無い run では本文を引けず、根拠の問いは出ない。外した
-        理由は清算の trace の ``grounds`` に残る。
-        """
-        stack = getattr(self.runtime, "_episodic_stack", None)
-        return MemoryStoreInMindTextReader(
-            semantic_store=getattr(stack, "semantic_memory_store", None),
-            episode_store=getattr(stack, "episode_store", None),
-            journal_store=getattr(stack, "reinterpretation_journal", None),
-        )
 
     def _time_label(self) -> str:
         runtime_label = getattr(self.runtime, "_time_label", None)

@@ -71,20 +71,6 @@ class ToolExposureConfigurationError(RuntimeError):
 
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
-from ai_rpg_world.application.being.expectation.belief_material import (
-    MAX_WHAT_HAPPENED_CHARS,
-    ExpectationBeliefMaterialReceiver,
-)
-from ai_rpg_world.application.being.expectation.chunk_note import (
-    ExpectationChunkNoteReceiver,
-)
-from ai_rpg_world.application.being.expectation.event_delivery import (
-    ExpectationEventDispatcher,
-    ExpectationEventReceiver,
-)
-from ai_rpg_world.application.being.expectation.recall_credit import (
-    ExpectationRecallCreditReceiver,
-)
 from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
@@ -723,8 +709,6 @@ class WorldRuntime:
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
     )
-    # #1440: 予期の出来事の配り手。create_world_runtime が config の上限で組む。
-    _expectation_dispatcher: Any | None = field(default=None, repr=False)
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
@@ -2470,18 +2454,6 @@ class WorldRuntime:
                 player_id,
                 memory.uncompacted_entries(player_id),
                 trigger=TRIGGER_LEAVING,
-            )
-
-    def redeliver_expectation_events(self, being_ids: Iterable[BeingId]) -> None:
-        """再開した直後に、snapshot から戻った未配信の予期の出来事を配り直す (#1440)。"""
-        if self._expectation_dispatcher is None:
-            raise RuntimeError(
-                "expectation dispatcher is not wired; build the runtime with "
-                "create_world_runtime"
-            )
-        for being_id in being_ids:
-            self._expectation_dispatcher.deliver_pending(
-                being_id, tick=self.current_tick()
             )
 
     def _acting_being_for(self, player_id: PlayerId) -> ActingBeing | None:
@@ -4875,62 +4847,6 @@ def _build_short_term_memory(
         compact_turn_count=cfg.short_term_memory_turn_compact_count,
         on_compacted=on_compacted,
     )
-
-
-def _expectation_event_receivers(
-    runtime: WorldRuntime, config: ResolvedLlmRuntimeConfig
-) -> tuple[ExpectationEventReceiver, ...]:
-    """確定した予期を記憶の材料にする受け取る側を、有効な記憶の機能の分だけ並べる (#1443)。
-
-    受け取る側が書く store は episodic stack のものを使う。snapshot が拾う store と
-    別のものに書くと、再開した run で材料と受け取り済みの記録が消える。
-    """
-    stack = runtime._episodic_stack
-    if stack is None:
-        if config.expectation_settlement_enabled:
-            logger.warning(
-                "expectation settlement is enabled but the episodic stack is not "
-                "built; settled expectations reach no memory"
-            )
-        return ()
-    trace_provider = lambda: runtime._trace_recorder  # noqa: E731
-    receivers: list[ExpectationEventReceiver] = []
-    if config.belief_evidence_enabled and stack.belief_evidence_buffer_store is None:
-        logger.warning(
-            "BELIEF_EVIDENCE_ENABLED but belief_evidence_buffer_store is missing; "
-            "settled expectations do not become belief evidence"
-        )
-    if config.error_driven_reinterpretation_enabled and stack.recall_buffer_store is None:
-        logger.warning(
-            "ERROR_DRIVEN_REINTERPRETATION_ENABLED but recall_buffer_store is missing "
-            "(no reinterpretation completion); settled misses are not stamped on recalls"
-        )
-    if config.belief_evidence_enabled and stack.belief_evidence_buffer_store is not None:
-        receivers.append(
-            ExpectationBeliefMaterialReceiver(
-                stack.belief_evidence_buffer_store,
-                now_provider=lambda: datetime.now(timezone.utc),
-                trace_recorder_provider=trace_provider,
-                max_what_happened_chars=MAX_WHAT_HAPPENED_CHARS,
-            )
-        )
-    recall_buffer = (
-        stack.recall_buffer_store if config.error_driven_reinterpretation_enabled else None
-    )
-    if stack.recall_success_store is not None or recall_buffer is not None:
-        receivers.append(
-            ExpectationRecallCreditReceiver(
-                success_store=stack.recall_success_store,
-                recall_buffer_store=recall_buffer,
-                trace_recorder_provider=trace_provider,
-            )
-        )
-    receivers.append(
-        ExpectationChunkNoteReceiver(
-            stack.chunk_coordinator, trace_recorder_provider=trace_provider
-        )
-    )
-    return tuple(receivers)
 
 
 def _build_belief_create_gate(
@@ -8540,12 +8456,6 @@ def create_world_runtime(
             # に畳み込む。store は上で構築済み (runtime._stagnation_pressure_store)。
             stagnation_pressure_enabled=_stagnation_pressure_enabled,
             stagnation_pressure_store=runtime._stagnation_pressure_store,
-            # #1509: 外れた予期の材料は清算が付ける時系列を持ち、証拠バッファの
-            # 受け取る側が材料に写す。どちらかが off の run では付かないので、固着の
-            # prompt に読み方の節も足さない。
-            expectation_what_happened_enabled=(
-                config.expectation_settlement_enabled and config.belief_evidence_enabled
-            ),
             # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled
@@ -8603,14 +8513,6 @@ def create_world_runtime(
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
-
-    # 受け取る側は記憶の store に書くので、episodic stack を組んだあとで配り手を作る。
-    runtime._expectation_dispatcher = ExpectationEventDispatcher(
-        runtime._expectation_store,
-        receivers=_expectation_event_receivers(runtime, config),
-        max_attempts=config.expectation_event_max_delivery_attempts,
-        trace_recorder_provider=lambda: runtime._trace_recorder,
-    )
 
     # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
     # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。

@@ -100,7 +100,6 @@ def _build_setup(
     completion: Any = _UNSET,
     belief_attribution_enabled: bool = False,
     goal_reflect_enabled: bool = False,
-    expectation_what_happened_enabled: bool = False,
     objective_text_provider: Any = None,
     reflect_observation_sink: Any = None,
     stall_min_interval_turns: int = 15,
@@ -134,7 +133,6 @@ def _build_setup(
         high_salience_batch_cap=high_salience_batch_cap,
         belief_attribution_enabled=belief_attribution_enabled,
         goal_reflect_enabled=goal_reflect_enabled,
-        expectation_what_happened_enabled=expectation_what_happened_enabled,
         objective_text_provider=objective_text_provider,
         reflect_observation_sink=reflect_observation_sink,
         stall_min_interval_turns=stall_min_interval_turns,
@@ -2231,7 +2229,7 @@ class TestHearsayLeftInTheBuffer:
 
 
 class TestMissWhatHappenedReachesConsolidation:
-    """外れの材料が持つ時系列が、信念をまとめる LLM の入力に載り、その読み方がシステムプロンプトで説明される挙動を保証する (#1509)。"""
+    """材料が持つ時系列が、信念をまとめる LLM の入力にそのまま載る挙動を保証する (#1509)。時系列の読み方の節は、外れた予期を材料にする清算と一緒に #1631 で消した。"""
 
     @staticmethod
     def _flush(**setup_kwargs: Any) -> tuple[str, dict[str, Any]]:
@@ -2252,33 +2250,25 @@ class TestMissWhatHappenedReachesConsolidation:
 
     def test_what_happened_is_in_evidence_payload(self) -> None:
         """時系列を持つ材料は、入力の evidence に what_happened として同じ並びで載る。"""
-        _, user = self._flush(expectation_what_happened_enabled=True)
+        _, user = self._flush()
 
         by_id = {e["evidence_id"]: e for e in user["evidence"]}
         assert by_id["e1"]["what_happened"] == ["浜に流木は無かった", "ノア「波が運んでくる」"]
 
     def test_evidence_without_what_happened_has_no_key(self) -> None:
         """時系列を持たない材料の入力には what_happened のキーを載せない。"""
-        _, user = self._flush(expectation_what_happened_enabled=True)
+        _, user = self._flush()
 
         by_id = {e["evidence_id"]: e for e in user["evidence"]}
         assert "what_happened" not in by_id["e2"]
 
-    def test_system_prompt_explains_what_happened_when_enabled(self) -> None:
-        """有効なときは、システムプロンプトの【入力の意味】に what_happened の説明があり、外れから学ぶときの指示が付く。"""
-        system, _ = self._flush(expectation_what_happened_enabled=True)
-
-        meaning = system.split("【入力の意味】", 1)[1].split("【あなたの仕事】", 1)[0]
-        assert "what_happened" in meaning
-        assert "【外れた予期から学ぶ】" in system
-
-    def test_system_prompt_is_unchanged_when_disabled(self) -> None:
-        """無効なときは、システムプロンプトが導入前の定数と byte 一致する。"""
+    def test_system_prompt_has_no_what_happened_section(self) -> None:
+        """システムプロンプトは、時系列の読み方の節を足さない導入前の定数と byte 一致する。"""
         from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
             _SYSTEM_BELIEF_CONSOLIDATION_JSON,
         )
 
-        system, _ = self._flush(expectation_what_happened_enabled=False)
+        system, _ = self._flush()
 
         assert system == _SYSTEM_BELIEF_CONSOLIDATION_JSON
 

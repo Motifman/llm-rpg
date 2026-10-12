@@ -10,9 +10,6 @@ from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
-from ai_rpg_world.application.llm.services.world_llm_turn.expectation_turn import (
-    settle_expectations_after_turn,
-)
 from ai_rpg_world.application.llm.services.world_llm_turn.types import (
     LLM_CALL_FAILED_ERROR_CODE,
     LlmPhaseAResult,
@@ -330,7 +327,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
         # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
         self._snapshot_needs_after_turn(player_id_value)
-        settle_expectations_after_turn(self.wiring, PlayerId(player_id_value))
         self.wiring.short_term_memory.complete_turn(PlayerId(player_id_value))
 
     def _retry_after_llm_failure(
