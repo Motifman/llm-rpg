@@ -11,6 +11,7 @@ from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_PREFIX_MEMO,
     TOOL_NAME_PREFIX_MEMORY,
 )
@@ -69,7 +70,9 @@ _BEING_INNER_RECORD_TYPES: Final = frozenset({"goal_reflect", "goal_revision"})
 # 結果の文 (「メモを追加しました（ID: …）」など) を自分の行動の結果として写すと、記憶の
 # 側が環境で起きたことと取り違える (#1414 の確かめ方で、いま起きたことに混ざっていた)。
 _AGENT_SIDE_TOOL_PREFIXES: Final = (TOOL_NAME_PREFIX_MEMO, TOOL_NAME_PREFIX_MEMORY)
-_AGENT_SIDE_TOOLS: Final = frozenset({TOOL_NAME_ASSESS_SITUATION, TOOL_NAME_EPISODE_RECALL})
+_AGENT_SIDE_TOOLS: Final = frozenset(
+    {TOOL_NAME_ASSESS_SITUATION, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX}
+)
 
 _ROUTE_BY_CATEGORY: Final[Mapping[ObservationCategory, Route]] = {
     "self_only": OwnBodyState(),
