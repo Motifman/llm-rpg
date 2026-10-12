@@ -18,6 +18,8 @@ def _build_prompt(
     enable_string_seed_of_thought: bool = False,
 ) -> str:
     return build_world_system_prompt(
+        relevant_memories_shown=True,
+        active_recall_offered=True,
         world_title="テスト世界",
         persona_block="【ペルソナ】名前: エイダ",
         safe_intro="周囲を観察しながら暮らす世界。",
@@ -70,6 +72,8 @@ def test_system_prompt_never_exposes_banned_engine_vocabulary(
 
 def _build_with_persona(persona_block: str) -> str:
     return build_world_system_prompt(
+        relevant_memories_shown=True,
+        active_recall_offered=True,
         world_title="テスト世界",
         persona_block=persona_block,
         safe_intro="周囲を観察しながら暮らす世界。",
