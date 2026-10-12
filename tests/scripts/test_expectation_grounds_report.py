@@ -116,7 +116,7 @@ def test_unavailable_turn_is_counted_apart_from_in_mind(report: ModuleType) -> N
 
 def _second_expectation(harness: _Harness) -> Expectation:
     """``harness.form`` と同じターンに、同じものを頭に載せた 2 件目の予期。"""
-    turn = harness.repository.current_turn(RIO)
+    turn = harness.clock.current_turn(RIO)
     return Expectation(
         expectation_id=ExpectationId("exp-2"),
         holder=RIO,

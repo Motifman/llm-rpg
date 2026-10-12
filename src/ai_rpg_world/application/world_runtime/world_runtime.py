@@ -345,6 +345,7 @@ from ai_rpg_world.application.world_runtime.pipeline_event_publisher import Pipe
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
+from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -353,6 +354,9 @@ from ai_rpg_world.being.infrastructure.in_memory_episode_repository import (
 )
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
     InMemoryMemoBookRepository,
+)
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
 )
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -706,13 +710,18 @@ class WorldRuntime:
     # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _stagnation_pressure_store: Any | None = field(default=None, repr=False)
-    # #1440 / #1452: 予期と、その出来事と、Being ごとの記憶のターン数。清算の
-    # 有効化によらず、作ったときに 1 つだけ持つ。証拠と信念は観測のターン数を
-    # ここから読み、1 手ごとにターン数を進め、実験 snapshot stub
-    # (_wiring_stub_from_world_runtime) もここから拾う。あとから代入し直すと、
-    # 先に組んだ配り手だけが古い store を指したまま分かれる。
+    # #1440 / #1452: 予期と、その出来事。清算の有効化によらず、作ったときに
+    # 1 つだけ持つ。実験 snapshot stub (_wiring_stub_from_world_runtime) も
+    # ここから拾う。あとから代入し直すと、先に組んだ配り手だけが古い store を
+    # 指したまま分かれる。
     _expectation_store: InMemoryExpectationRepository = field(
         default_factory=InMemoryExpectationRepository, repr=False
+    )
+    # #1631: Being ごとの記憶のターン数。1 手ごとに進め、記憶にターン数を付ける
+    # 部品はここから読む。あとから代入し直すと、先に組んだ部品だけが古い時計を
+    # 読み続ける。
+    _memory_turn_clock: MemoryTurnClock = field(
+        default_factory=InMemoryMemoryTurnClock, repr=False
     )
     # #1520: Being が会った相手の記録。Being の snapshot に入り、世界の
     # snapshot には入らない。
@@ -2518,7 +2527,7 @@ class WorldRuntime:
         acting = self._acting_being_for(player_id)
         if acting is None:
             return None
-        return self._expectation_store.advance_turn(acting.being_id)
+        return self._memory_turn_clock.advance_turn(acting.being_id)
 
     def _write_compacted_episodes(
         self, player_id: PlayerId, entries: Sequence[Any]
@@ -5312,7 +5321,7 @@ def _build_player_episode_writing(
     cfg: ResolvedLlmRuntimeConfig,
     *,
     runtime: WorldRuntime,
-    turn_reader: InMemoryExpectationRepository,
+    turn_reader: MemoryTurnReader,
     persona_of: Callable[[int], tuple[str, str]],
 ) -> Any:
     """#1626: 書き起こしの部品を組む。LiteLLM が組めなければ起動を止める。"""
@@ -7144,6 +7153,7 @@ def create_world_runtime(
     )
 
     expectation_store = InMemoryExpectationRepository()
+    memory_turn_clock = InMemoryMemoryTurnClock()
     acquaintance_store = InMemoryAcquaintanceRepository()
 
     def _being_id_of(player_id: PlayerId) -> BeingId | None:
@@ -7169,7 +7179,7 @@ def create_world_runtime(
     player_acquaintances = PlayerAcquaintances(
         store=acquaintance_store,
         being_id_of=_being_id_of,
-        turn_reader=expectation_store,
+        turn_reader=memory_turn_clock,
         environment_name=scenario.metadata.title,
         names_by_player_id={
             int(spawn.player_id): spawn.name for spawn in scenario.player_spawns
@@ -7237,6 +7247,7 @@ def create_world_runtime(
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,
         _expectation_store=expectation_store,
+        _memory_turn_clock=memory_turn_clock,
         _acquaintance_store=acquaintance_store,
         _player_acquaintances=player_acquaintances,
         # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
@@ -8571,7 +8582,7 @@ def create_world_runtime(
                     belief_evidence_buffer_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
-                    memory_turn_reader=runtime._expectation_store,
+                    memory_turn_reader=runtime._memory_turn_clock,
                 )
                 # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
                 # GoalRevisionApplier の遅延 holder をここで埋める。
@@ -8868,7 +8879,7 @@ def create_world_runtime(
             # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=runtime.current_tick,
-            memory_turn_reader=runtime._expectation_store,
+            memory_turn_reader=runtime._memory_turn_clock,
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
             # H-2 (自己言及ループ / 横断レビュー): chunk 主観補完が抽出した
@@ -9029,7 +9040,7 @@ def create_world_runtime(
                     runtime._episodic_stack.episode_store,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
-                    memory_turn_reader=runtime._expectation_store,
+                    memory_turn_reader=runtime._memory_turn_clock,
                 )
             )
 
@@ -9054,7 +9065,7 @@ def create_world_runtime(
                 runtime._episodic_stack.episode_store,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
-                memory_turn_reader=runtime._expectation_store,
+                memory_turn_reader=runtime._memory_turn_clock,
             )
 
             def _resolve_state_collapse_being_id(
@@ -9101,7 +9112,7 @@ def create_world_runtime(
                 runtime._episodic_stack.episode_store,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=runtime.current_tick,
-                memory_turn_reader=runtime._expectation_store,
+                memory_turn_reader=runtime._memory_turn_clock,
             )
             # runtime に保持し、以後 _wire_auxiliary_tool_stack が executor を
             # 作り直しても (set_trace_recorder 等) 再適用されるようにする。
@@ -9160,7 +9171,7 @@ def create_world_runtime(
 
         runtime._being_episode_recall_tool_executor = BeingEpisodeRecallToolExecutor(
             repository=runtime._being_episode_store,
-            turn_reader=expectation_store,
+            turn_reader=memory_turn_clock,
             max_handles=config.being_episode_recall_max_handles,
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=lambda: runtime.current_tick(),
@@ -9168,7 +9179,7 @@ def create_world_runtime(
         runtime._being_episode_index_revision_tool_executor = (
             BeingEpisodeIndexRevisionToolExecutor(
                 repository=runtime._being_episode_store,
-                turn_reader=expectation_store,
+                turn_reader=memory_turn_clock,
                 trace_recorder_provider=lambda: runtime._trace_recorder,
                 current_tick_provider=lambda: runtime.current_tick(),
             )
@@ -9177,7 +9188,7 @@ def create_world_runtime(
         runtime._player_episode_writing = _build_player_episode_writing(
             config,
             runtime=runtime,
-            turn_reader=expectation_store,
+            turn_reader=memory_turn_clock,
             persona_of=_build_persona_resolver(
                 scenario=scenario,
                 world_character=world_character,

@@ -40,6 +40,7 @@ from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_s
     InMemoryEpisodicRecallBufferStore,
 )
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
     EpisodicRecallObservation,
@@ -122,6 +123,7 @@ class _Harness:
         max_grounds_questions: int = 8,
     ) -> None:
         self.repository = InMemoryExpectationRepository()
+        self.clock = InMemoryMemoryTurnClock()
         self.recorder = RecordingTraceRecorder()
         self.port = port
         self.evidence = InMemoryBeliefEvidenceBufferStore()
@@ -130,6 +132,7 @@ class _Harness:
         trace = lambda: self.recorder  # noqa: E731
         self.service = ExpectationSettlementService(
             self.repository,
+            turn_reader=self.clock,
             judgment_port=port,
             dispatcher=ExpectationEventDispatcher(
                 self.repository,
@@ -159,8 +162,8 @@ class _Harness:
 
     def form(self, expectation_id: str = "exp-1", content: str = "トムが麦束を焼いてくれる") -> None:
         """次のターンに進め、頭に信念 2 件とエピソード 2 件を載せた予期を作る。"""
-        self.repository.advance_turn(RIO)
-        turn = self.repository.current_turn(RIO)
+        self.clock.advance_turn(RIO)
+        turn = self.clock.current_turn(RIO)
         self.repository.save(
             Expectation(
                 expectation_id=ExpectationId(expectation_id),
@@ -180,7 +183,7 @@ class _Harness:
         self.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
     def turn(self) -> None:
-        self.repository.advance_turn(RIO)
+        self.clock.advance_turn(RIO)
         self.service.settle_turn(RIO, self_name="リオ", material=QUIET)
 
     def grounds(self, expectation_id: str = "exp-1") -> ExpectationGrounds | None:
@@ -538,7 +541,7 @@ class TestDuplicatedInMind:
     def test_duplicated_ids_are_asked_once_and_settlement_continues(self) -> None:
         """同じ信念の ID が 2 回並んでいても問いは 1 件で、根拠に選ばれても清算は止まらない。"""
         harness = _Harness(ScriptedJudgmentPort({"ground_belief_0": 0.9}))
-        harness.repository.advance_turn(RIO)
+        harness.clock.advance_turn(RIO)
         harness.repository.save(
             Expectation(
                 expectation_id=ExpectationId("exp-1"),

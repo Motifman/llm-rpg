@@ -13,11 +13,11 @@ from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
+from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+    InMemoryMemoryTurnClock,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 
 ADA = PlayerId(1)
 NOA = PlayerId(2)
@@ -42,7 +42,7 @@ def _make(
     acquaintances = PlayerAcquaintances(
         store=InMemoryAcquaintanceRepository(),
         being_id_of=lambda pid: BeingId(f"being_p{pid.value}") if pid.value in NAMES else None,
-        turn_reader=InMemoryExpectationRepository(),
+        turn_reader=InMemoryMemoryTurnClock(),
         environment_name="山村",
         names_by_player_id=NAMES,
         appearances_by_player_id=LOOKS if appearances is None else appearances,
@@ -347,7 +347,7 @@ class TestFallingBackToAppearance:
         acquaintances = PlayerAcquaintances(
             store=InMemoryAcquaintanceRepository(),
             being_id_of=lambda pid: BeingId(f"being_p{pid.value}"),
-            turn_reader=InMemoryExpectationRepository(),
+            turn_reader=InMemoryMemoryTurnClock(),
             environment_name="山村",
             names_by_player_id=NAMES,
             appearances_by_player_id=LOOKS,

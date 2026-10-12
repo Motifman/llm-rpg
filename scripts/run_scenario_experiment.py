@@ -668,8 +668,8 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
-    # #1440 / #1452 (予期): runtime は清算の有効化や episodic によらず、予期と
-    # 記憶のターン数の数え手を 1 つ持つ。
+    # #1440 / #1452 (予期): runtime は清算の有効化や episodic によらず、予期の
+    # store を 1 つ持つ。
     expectation_store = getattr(runtime, "_expectation_store", None)
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
@@ -692,6 +692,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
+        memory_turn_clock=getattr(runtime, "_memory_turn_clock", None),
     )
 
 

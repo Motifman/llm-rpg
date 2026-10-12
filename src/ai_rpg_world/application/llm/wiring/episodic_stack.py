@@ -78,6 +78,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
         SemanticPassiveRecallService,
     )
+    from ai_rpg_world.being.domain.memory_turn_clock import (
+        MemoryTurnReader,
+    )
     from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
         EpisodicRecallBufferRepository,
     )
@@ -86,9 +89,6 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
         PendingPredictionRepository,
-    )
-    from ai_rpg_world.domain.memory.expectation.repository.memory_turn_reader import (
-        MemoryTurnReader,
     )
 
 from ai_rpg_world.application.llm.contracts.interfaces import (

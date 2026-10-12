@@ -141,7 +141,7 @@ def form_expectations_from_call(
             trace["skipped_reason"] = "no_acting_being"
             return
         trace["being_id"] = acting.being_id.value
-        trace["turn"] = runtime._expectation_store.current_turn(acting.being_id)
+        trace["turn"] = runtime._memory_turn_clock.current_turn(acting.being_id)
         ledger = runtime._get_prediction_context_ledger()
         context = None if ledger is None else ledger.peek(player_id)
         if context is None:

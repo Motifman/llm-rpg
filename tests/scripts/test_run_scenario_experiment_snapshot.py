@@ -221,6 +221,9 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
             InMemoryMemoBookRepository,
         )
+        from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
+            InMemoryMemoryTurnClock,
+        )
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
             InMemoryBeingRepository,
         )
@@ -254,6 +257,7 @@ class TestExpectedPayloadKeysCoverage:
             _goal_journal_store=InMemoryGoalJournalStore(),
             _stagnation_pressure_store=InMemoryStagnationPressureStore(),
             _expectation_store=InMemoryExpectationRepository(),
+            _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),
             _being_memo_store=InMemoryMemoBookRepository(),
@@ -467,7 +471,7 @@ class TestSnapshotTraceCarriesExpectationCounts:
 
         def _record(self: WorldRuntime, being_ids: Any) -> None:
             ids = [b.value for b in being_ids]
-            turns = [self._expectation_store.current_turn(b) for b in being_ids]
+            turns = [self._memory_turn_clock.current_turn(b) for b in being_ids]
             calls.append((ids, sum(turns)))
             original(self, being_ids)
 

@@ -141,8 +141,8 @@ class TestTheIndexInThePrompt:
         pid = runtime.get_player_ids()[0]
         old = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
         _write(runtime, pid, 2, summary="火を起こした", written_turn=1)
-        runtime._expectation_store.advance_turn(_being_of(runtime, pid))
-        runtime._expectation_store.advance_turn(_being_of(runtime, pid))
+        runtime._memory_turn_clock.advance_turn(_being_of(runtime, pid))
+        runtime._memory_turn_clock.advance_turn(_being_of(runtime, pid))
         runtime.run_llm_auxiliary_tool(pid, TOOL_NAME_EPISODE_RECALL, {"handles": [old.handle]})
 
         _, user, _ = _first_turn(runtime, pid)
@@ -156,8 +156,8 @@ class TestTheIndexInThePrompt:
         pid = runtime.get_player_ids()[0]
         old = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
         newer = _write(runtime, pid, 2, summary="火を起こした", written_turn=1)
-        runtime._expectation_store.advance_turn(_being_of(runtime, pid))
-        runtime._expectation_store.advance_turn(_being_of(runtime, pid))
+        runtime._memory_turn_clock.advance_turn(_being_of(runtime, pid))
+        runtime._memory_turn_clock.advance_turn(_being_of(runtime, pid))
         runtime.run_llm_auxiliary_tool(pid, TOOL_NAME_EPISODE_RECALL, {"handles": [old.handle]})
 
         _, user, _ = _first_turn(runtime, pid)

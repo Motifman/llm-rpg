@@ -91,7 +91,7 @@ def apply_memo_from_call(
             return MemoCallOutcome(feedback=feedback_text([(None, WRITING_FAILED_TEXT)]))
         being_id = acting.being_id
         trace["being_id"] = being_id.value
-        turn = runtime._expectation_store.current_turn(being_id)
+        turn = runtime._memory_turn_clock.current_turn(being_id)
         trace["turn"] = turn
         environment_name = runtime.environment_name_for(player_id)
         trace["environment_name"] = environment_name

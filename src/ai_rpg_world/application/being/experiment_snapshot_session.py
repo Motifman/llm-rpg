@@ -418,14 +418,16 @@ class ExperimentSnapshotSession:
     ) -> None:
         # **必須** store: 「これがなければ snapshot 自体が意味を持たない」もの。
         # being_repository / resolver はないと that's that.
-        # 知り合いの記録・目次つきのエピソード・メモ帳は runtime が常に持つ。空で代用すると、
-        # 再開した Being が会った相手や書いた記憶を忘れたまま、配線漏れと見分けられない。
+        # 知り合いの記録・目次つきのエピソード・メモ帳・記憶のターン数は runtime が常に持つ。
+        # 空で代用すると、再開した Being が会った相手や書いた記憶を忘れたまま、配線漏れと
+        # 見分けられない。
         required_fields = (
             "being_repository",
             "being_attachment_resolver",
             "acquaintance_store",
             "being_episode_store",
             "being_memo_store",
+            "memory_turn_clock",
         )
         missing_required = [
             name
@@ -572,8 +574,10 @@ class ExperimentSnapshotSession:
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,
             expectation_store=expectation_store,
+            memory_turn_clock=wiring_result.memory_turn_clock,
         )
         self._expectation_store = expectation_store
+        self._memory_turn_clock = wiring_result.memory_turn_clock
         self._gateway = BeingSnapshotFileGateway()
         self._capture_use_case = CaptureBeingSnapshotToFileUseCase(
             being_repository=wiring_result.being_repository,
@@ -622,7 +626,7 @@ class ExperimentSnapshotSession:
                     "undelivered_events": len(
                         self._expectation_store.list_undelivered_by_being(being_id)
                     ),
-                    "memory_turn": self._expectation_store.current_turn(being_id),
+                    "memory_turn": self._memory_turn_clock.current_turn(being_id),
                 }
             )
         return counts

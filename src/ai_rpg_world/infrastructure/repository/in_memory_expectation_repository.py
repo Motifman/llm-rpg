@@ -42,10 +42,9 @@ class _BeingState:
         default_factory=dict
     )
     undelivered: list[UndeliveredExpectationEvent] = field(default_factory=list)
-    turn: int = 0
 
     def is_empty(self) -> bool:
-        return not self.expectations and not self.undelivered and self.turn == 0
+        return not self.expectations and not self.undelivered
 
 
 def _require_being_id(being_id: object) -> BeingId:
@@ -138,15 +137,6 @@ class InMemoryExpectationRepository(ExpectationRepository):
         state.undelivered = remaining
         self._drop_if_empty(being_id)
 
-    def current_turn(self, being_id: BeingId) -> int:
-        state = self._states.get(_require_being_id(being_id))
-        return state.turn if state else 0
-
-    def advance_turn(self, being_id: BeingId) -> int:
-        state = self._states.setdefault(_require_being_id(being_id), _BeingState())
-        state.turn += 1
-        return state.turn
-
     def replace_all_by_being(
         self,
         being_id: BeingId,
@@ -168,7 +158,6 @@ class InMemoryExpectationRepository(ExpectationRepository):
                 for snapshot in (e.snapshot() for e in expectations)
             },
             undelivered=list(undelivered_events),
-            turn=turn,
         )
         self._states[being_id] = replaced
         self._drop_if_empty(being_id)
