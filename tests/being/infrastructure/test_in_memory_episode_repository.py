@@ -170,6 +170,37 @@ class TestInMemoryEpisodeRepository:
             repo.save(ADA, FIRST.recalled_at(turn=7))
         assert repo.list_by_being(ADA) == (recalled,)
 
+    def test_save_that_replaces_index_without_history_is_rejected(self) -> None:
+        """前の版を履歴に残さずに目次だけを替えた版を書き戻すと EpisodeConflictException を投げ、目次は変わらない。"""
+        repo = InMemoryEpisodeRepository()
+        repo.add(ADA, FIRST)
+
+        with pytest.raises(EpisodeConflictException):
+            repo.save(ADA, dataclasses.replace(FIRST, index=EpisodeIndex(summary="別の目次", recall_when="別の条件")))
+        assert repo.list_by_being(ADA) == (FIRST,)
+
+    def test_save_with_forged_previous_index_is_rejected(self) -> None:
+        """履歴に足した前の版が、記録の目次と違う版を書き戻すと EpisodeConflictException を投げ、記録は変わらない。"""
+        repo = InMemoryEpisodeRepository()
+        repo.add(ADA, FIRST)
+        forged = dataclasses.replace(FIRST, index=EpisodeIndex(summary="偽の前の版", recall_when="偽の条件")).with_revised_index(
+            EpisodeIndex(summary="新しい目次", recall_when="新しい条件"), turn=6
+        )
+
+        with pytest.raises(EpisodeConflictException):
+            repo.save(ADA, forged)
+        assert repo.list_by_being(ADA) == (FIRST,)
+
+    def test_save_that_moves_last_recall_back_is_rejected(self) -> None:
+        """回数は同じでも、最後に呼び出した時を前のターンに戻した版を書き戻すと EpisodeConflictException を投げる。"""
+        repo = InMemoryEpisodeRepository()
+        recalled = FIRST.recalled_at(turn=8)
+        repo.add(ADA, recalled)
+
+        with pytest.raises(EpisodeConflictException):
+            repo.save(ADA, FIRST.recalled_at(turn=5))
+        assert repo.list_by_being(ADA) == (recalled,)
+
     def test_replace_all_overwrites_the_being(self) -> None:
         """全部を書き戻すと、その Being の記録が渡した並びに置き換わり、前の記録は残らない。"""
         repo = InMemoryEpisodeRepository()

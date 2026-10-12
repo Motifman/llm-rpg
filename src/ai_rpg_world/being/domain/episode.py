@@ -181,16 +181,27 @@ class Episode:
 
     def follows(self, earlier: Episode) -> bool:
         """``earlier`` から呼び出しと目次の直しだけで行き着ける版か。"""
+        kept = len(earlier.index_history)
+        if self.index_history[:kept] != earlier.index_history:
+            return False
+        if len(self.index_history) == kept:
+            index_kept = self.index == earlier.index
+        else:
+            index_kept = self.index_history[kept].previous == earlier.index
+        recall_kept = earlier.last_recalled_turn is None or (
+            self.last_recalled_turn is not None
+            and self.last_recalled_turn >= earlier.last_recalled_turn
+        )
         return (
-            self.episode_id == earlier.episode_id
+            index_kept
+            and recall_kept
+            and self.episode_id == earlier.episode_id
             and self.handle == earlier.handle
             and self.environment_name == earlier.environment_name
             and self.written_turn == earlier.written_turn
             and self.body == earlier.body
             and self.recall_count >= earlier.recall_count
-            and self.index_history[: len(earlier.index_history)] == earlier.index_history
         )
-
 
 class EpisodeRepository(ABC):
     @abstractmethod
