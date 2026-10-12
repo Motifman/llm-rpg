@@ -153,7 +153,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     assess_situation_definition,
     strip_reason_first_action_subjective_schema,
     with_expectations_schema,
-    with_expected_result_schema,
     with_goal_outcome_schema,
     with_goal_update_schema,
 )
@@ -214,7 +213,6 @@ from ai_rpg_world.application.player.services.player_life_query import PlayerLif
 from ai_rpg_world.application.player.services.player_outcome_observation_formatter import (
     PlayerOutcomeObservationFormatter,
 )
-from ai_rpg_world.application.social.public_sns.prompt_projection import notification_receipts
 from ai_rpg_world.application.social.public_sns.retained_screen import PublicSnsScreenStore
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
@@ -797,11 +795,6 @@ class WorldRuntime:
     # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
     # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
     _include_todo_tools: bool = field(default=True, repr=False)
-    # Prediction (#526 v0): 行動前の予測 expected_result を core action tool の
-    # schema に露出する policy。``"off"`` (露出せず=既定/挙動不変) | ``"optional"``
-    # (schema に出すが必須にしない) | ``"required"`` (毎ターン必須)。factory が
-    # ResolvedLlmRuntimeConfig.expected_result_policy から設定する。
-    _expected_result_policy: str = field(default="off", repr=False)
     # 実験設定の解決済み DTO。遅延構築される component も env を読み直さず、
     # runtime 作成時と同じ設定を見るために保持する。
     _runtime_config: Any | None = field(default=None, repr=False)
@@ -1510,9 +1503,7 @@ class WorldRuntime:
             )
         )
         definitions.append(
-            assess_situation_definition(
-                expected_result_policy=self._expected_result_policy
-            )
+            assess_situation_definition()
         )
         missing = unclassified_action_argument_names(definitions)
         if missing:
@@ -1785,7 +1776,7 @@ class WorldRuntime:
 
         ``tool_schema_mode="legacy"`` は従来互換。``"reason_first"`` では
         ``assess_situation`` を加え、行動 tool から step1 所有の
-        ``inner_thought`` / ``expected_result`` だけを外す。
+        ``inner_thought`` だけを外す。
 
         reason_first では ``assess_situation`` を必ず末尾に置く。action_phase
         は末尾の評価 tool だけを落とすため、先頭の行動 tool 定義ブロックを
@@ -1819,9 +1810,7 @@ class WorldRuntime:
         phase_spot = [by_name[n] for n in phase_names]
         assessment = (
             [
-                assess_situation_definition(
-                    expected_result_policy=self._expected_result_policy
-                )
+                assess_situation_definition()
             ]
             if tool_schema_mode == "reason_first"
             else []
@@ -1871,9 +1860,7 @@ class WorldRuntime:
         spot = [
             self._with_goal_update_if_enabled(
                 self._with_being_memo_if_enabled(
-                    self._with_expectations_if_enabled(
-                        self._with_expected_result_if_enabled(defn)
-                    )
+                    self._with_expectations_if_enabled(defn)
                 )
             )
             for defn in [*(d for d, _ in get_spot_graph_specs()), *get_public_sns_definitions()]
@@ -2066,35 +2053,6 @@ class WorldRuntime:
         も同時に止める。存在しない memo_done への誘導を残さないため。
         """
         return bool(getattr(self._runtime_config, "memo_tools_enabled", True))
-
-    # Prediction (#526 v0): expected_result 露出の対象 tool。記録経路 (do_* →
-    # _record_action_result) に subjective を配線済みの core action だけに限定する
-    # (= 露出範囲と structured 保存範囲を一致させる)。listen / item 系 / attack
-    # 等は generic 記録経路が未配線なので露出しない。
-    _EXPECTED_RESULT_TARGET_TOOLS = frozenset(
-        {
-            TOOL_NAME_SPOT_GRAPH_EXPLORE,
-            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-            TOOL_NAME_SPOT_GRAPH_INTERACT,
-            TOOL_NAME_SPOT_GRAPH_WAIT,
-        }
-    )
-
-    def _with_expected_result_if_enabled(
-        self, definition: ToolDefinitionDto
-    ) -> ToolDefinitionDto:
-        """policy が off 以外かつ対象 tool なら expected_result を schema に足す。
-
-        off (既定) では definition をそのまま返す = 挙動不変。optional は properties
-        にのみ、required は required にも追加する。
-        """
-        if self._expected_result_policy == "off":
-            return definition
-        if definition.name not in self._EXPECTED_RESULT_TARGET_TOOLS:
-            return definition
-        return with_expected_result_schema(
-            definition, required=self._expected_result_policy == "required"
-        )
 
     def _with_expectations_if_enabled(
         self, definition: ToolDefinitionDto
@@ -3236,7 +3194,6 @@ class WorldRuntime:
             system_prompt_builder=WorldSystemPromptBuilder(self),
             available_tools_provider=WorldAvailableToolsProvider(),
             recent_events_projection=(self._public_sns_projection.project if self._public_sns_projection else None),
-            observation_repetition_projection=notification_receipts if self._public_sns_projection else None,
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
@@ -5504,7 +5461,6 @@ def create_world_runtime(
             relevant_memories_shown=relevant_memories_shown,
             active_recall_offered=active_recall_offered,
             enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
-            expected_result_policy=config.expected_result_policy,
             expectation_argument_enabled=config.expectation_argument_enabled,
             being_memo_enabled=config.being_memo_enabled,
             has_goal=_has_goal,
@@ -7276,8 +7232,6 @@ def create_world_runtime(
             if include_todo_tools is not None
             else config.tool_mode != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
         ),
-        # Prediction (#526 v0): expected_result 露出 policy を config から設定。
-        _expected_result_policy=config.expected_result_policy,
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )

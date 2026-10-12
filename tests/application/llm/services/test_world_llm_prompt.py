@@ -14,7 +14,6 @@ BANNED_ENGINE_VOCABULARY = ("LLM", "関数呼び出し", "サーバー", "全キ
 def _build_prompt(
     *,
     tool_schema_mode: str = "legacy",
-    expected_result_policy: str = "off",
     enable_string_seed_of_thought: bool = False,
 ) -> str:
     return build_world_system_prompt(
@@ -24,7 +23,6 @@ def _build_prompt(
         persona_block="【ペルソナ】名前: エイダ",
         safe_intro="周囲を観察しながら暮らす世界。",
         tool_schema_mode=tool_schema_mode,
-        expected_result_policy=expected_result_policy,
         enable_string_seed_of_thought=enable_string_seed_of_thought,
     )
 
@@ -52,17 +50,14 @@ def test_action_rules_drop_engine_vocabulary_without_adding_meaning() -> None:
 
 
 @pytest.mark.parametrize("tool_schema_mode", ("legacy", "reason_first"))
-@pytest.mark.parametrize("expected_result_policy", ("off", "optional", "required"))
 @pytest.mark.parametrize("enable_string_seed_of_thought", (False, True))
 def test_system_prompt_never_exposes_banned_engine_vocabulary(
     tool_schema_mode: str,
-    expected_result_policy: str,
     enable_string_seed_of_thought: bool,
 ) -> None:
     """どの生成分岐でもエンジンの実装事情を世界の住人に見せない。"""
     prompt = _build_prompt(
         tool_schema_mode=tool_schema_mode,
-        expected_result_policy=expected_result_policy,
         enable_string_seed_of_thought=enable_string_seed_of_thought,
     )
 

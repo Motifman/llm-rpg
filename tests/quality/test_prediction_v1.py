@@ -3,11 +3,9 @@
 Issue #526 で議論した「予測 / 期待値の不在」(構造的不在 #3) に対する PR0〜PR3
 (予測→学習ループ) の効果を、LLM を呼ばず prompt 構造で点検する baseline harness。
 
-ループの両端を 2 variant で見る:
+ループの閉じる側を 1 variant で見る (予測と実際を並べる ``immediate`` は、
+行動ごとの結果の予想 expected_result と【前回の予測と実際】を消したとき #1631 で外した):
 
-- ``immediate``: 予測 (expected_result) 付き行動の直後に、予測と食い違う観測が
-  来たターンの prompt。``【前回の予測と実際】`` section が予測と実際の gap を
-  並べ、エージェントが「驚く」材料が揃っているか (= PR1 の突き合わせ面) を見る。
 - ``learned``: 予測由来の学び (SemanticMemoryEntry) が既に semantic store にある
   状態で、次に同じ相手に会うターンの prompt。``【関連する学び】`` section にその
   学びが戻り、次の予測を変える材料になっているか (= PR3 のループ閉じ面) を見る。
@@ -107,46 +105,11 @@ def _user_content(prompt: dict) -> str:
 
 @pytest.mark.quality
 class TestPredictionV1Baseline:
-    """``prediction_v1`` シナリオの 2 variant を回し、prompt を dump する。
+    """``prediction_v1`` シナリオの learned variant を回し、prompt を dump する。
 
     LLM は呼ばない。assert は runtime regression 検知の sanity のみ。
     質感の判断は dump された ``.prompt.txt`` を人が読む。
     """
-
-    def _push_missed_prediction(self, runtime, rin_id: PlayerId) -> None:
-        """予測付き行動 → 予測と食い違う観測、を時系列に注入する。
-
-        - action_result_store: speech_say を「ノアが返事をする」予測付きで積む
-        - obs_buffer: その後「ノアは無視した」観測を流す (予測と食い違う)
-        """
-        now = datetime.now(timezone.utc)
-        action_at = now - timedelta(minutes=2)
-        runtime._action_result_store.append(
-            rin_id,
-            "speech_say(target=ノア) を実行しました。",
-            "発言しました。",
-            action_at,
-            success=True,
-            tool_name="speech_say",
-            expected_result="QUALITY_MARKER_PREDICTION: ノアに声をかければ、今の目的を聞ける",
-        )
-        runtime._obs_buffer.append(
-            rin_id,
-            ObservationEntry(
-                occurred_at=now - timedelta(minutes=1),
-                output=ObservationOutput(
-                    prose="QUALITY_MARKER_ACTUAL: ノアは答えず、視線を外して立ち去った。",
-                    structured={
-                        "type": "observation",
-                        "about": "ノア",
-                        "content": "ノアは答えず立ち去った",
-                    },
-                    observation_category="social",
-                    schedules_turn=True,
-                ),
-                game_time_label=None,
-            ),
-        )
 
     def _seed_prediction_learning(self, runtime, rin_id: PlayerId) -> SemanticPassiveRecallService:
         """予測由来の学びを semantic store にシードし、recall service を返す。"""
@@ -191,20 +154,6 @@ class TestPredictionV1Baseline:
                 game_time_label=None,
             ),
         )
-
-    def test_immediate_baseline(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """immediate variant: 予測が外れた直後の prompt に【前回の予測と実際】が
-        出て、予測と実際の gap が並ぶか。"""
-        runtime = _build_runtime()
-        rin_id = _resolve_player_id(runtime, "リン")
-        self._push_missed_prediction(runtime, rin_id)
-        prompt = runtime.build_full_prompt(rin_id)
-        dump_path = _dump_prompt("immediate", prompt)
-        assert dump_path.exists()
-        user = _user_content(prompt)
-        # 予測と実際が prompt に並んでいる (= 突き合わせの材料が揃う)
-        assert "【前回の予測と実際】" in user, "予測フィードバック section が出ていない"
-        assert "QUALITY_MARKER_PREDICTION" in user, "行動前の予測が prompt に出ていない"
 
     def test_learned_baseline(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """learned variant: 予測由来の学びが【関連する学び】に戻り、次の予測を

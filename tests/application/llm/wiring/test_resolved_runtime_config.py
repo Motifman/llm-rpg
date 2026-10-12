@@ -179,55 +179,6 @@ class TestRecallHabituationEnabled:
         assert d['recall_habituation_enabled'] is True
         assert d['recall_habituation_decay_window_ticks'] == 7
 
-class TestExpectedResultPolicy:
-    """予測 (expected_result) 露出 policy の解決 (off/optional/required)。"""
-
-    def test_unset_off(self) -> None:
-        """LLM_EXPECTED_RESULT_POLICY 未設定なら off (= schema に出さず挙動不変)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.expected_result_policy == 'off'
-
-    def test_optional_resolve(self) -> None:
-        """optional を解決する (大文字・空白も吸収)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EXPECTED_RESULT_POLICY': ' Optional '})
-        assert cfg.expected_result_policy == 'optional'
-
-    def test_required_resolve(self) -> None:
-        """required を解決する。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EXPECTED_RESULT_POLICY': 'required'})
-        assert cfg.expected_result_policy == 'required'
-
-    def test_invalid_raises_value_error(self) -> None:
-        """未知の policy は fail-fast で ValueError。"""
-        with pytest.raises(ValueError, match='LLM_EXPECTED_RESULT_POLICY'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EXPECTED_RESULT_POLICY': 'maybe'})
-
-    def test_for_tests_default_off(self) -> None:
-        """for_tests の default は off。"""
-        assert ResolvedLlmRuntimeConfig.for_tests().expected_result_policy == 'off'
-
-    def test_for_tests_override_2(self) -> None:
-        """for_tests で override できる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(expected_result_policy='required')
-        assert cfg.expected_result_policy == 'required'
-
-    def test_trace_dict_included(self) -> None:
-        """trace payload に policy が出る (run の設定を post-hoc で追える)。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(expected_result_policy='optional')
-        assert cfg.to_trace_dict()['expected_result_policy'] == 'optional'
-
-    def test_tests_invalid_value_fail_fast(self) -> None:
-        """for_tests 経由の typo も __post_init__ で ValueError (from_mapping 以外も fail-fast)。"""
-        with pytest.raises(ValueError, match='expected_result_policy'):
-            ResolvedLlmRuntimeConfig.for_tests(expected_result_policy='optionnal')
-
-    def test_invalid_value_fail_fast(self) -> None:
-        """cls(...) 直接構築の typo も __post_init__ で ValueError。"""
-        base = ResolvedLlmRuntimeConfig.for_tests()
-        from dataclasses import replace
-        with pytest.raises(ValueError, match='expected_result_policy'):
-            replace(base, expected_result_policy='maybe')
-
 class TestShortTermMemoryTurnWindow:
     """自分のターン単位の窓設定を、全構築経路で同じ不変条件に保つ。"""
 
@@ -393,6 +344,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "SALIENCE_STRUCTURED_FAILURE_ENABLED",
             "HEARSAY_ENABLED",
             "ERROR_GATED_ENCODING_ENABLED",
+            "LLM_EXPECTED_RESULT_POLICY",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:

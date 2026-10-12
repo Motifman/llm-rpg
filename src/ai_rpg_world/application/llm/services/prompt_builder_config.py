@@ -135,7 +135,6 @@ class PromptBuilderCoreServices:
     system_prompt_builder: ISystemPromptBuilder
     available_tools_provider: IAvailableToolsProvider
     recent_events_projection: Callable[[PlayerId, list[Any]], tuple[list[Any], tuple[str, ...]]] | None = None
-    observation_repetition_projection: Callable[[list[Any]], list[Any]] | None = None
 
 
 @dataclass(frozen=True)

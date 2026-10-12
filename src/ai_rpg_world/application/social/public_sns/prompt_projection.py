@@ -148,12 +148,3 @@ class PublicSnsPromptProjection:
             raise ValueError("未表示の通知に配信記録がありません")
         self._pending = pending
         self._received = decoded
-
-
-def notification_receipts(observations: list[ObservationEntry]) -> list[ObservationEntry]:
-    """同じ判断内の補助欄は通知事実だけにして本文を重複させない。"""
-    return [
-        replace(obs, output=replace(obs.output, prose='公開SNSの通知が届きました。'))
-        if obs.output.structured.get('type') == 'public_sns_notification' else obs
-        for obs in observations
-    ]

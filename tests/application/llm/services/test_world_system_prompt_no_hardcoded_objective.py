@@ -77,13 +77,12 @@ class TestSystemPromptNoHardcodedEscapeObjective:
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
-            expected_result_policy="required",
             tool_schema_mode="reason_first",
         )
 
         assert "まず `assess_situation` で `inner_thought`" in prompt
         assert "行動 tool では、`assess_situation` の評価に従って" in prompt
-        assert "`assess_situation` で `expected_result`" in prompt
+        assert "expected_result" not in prompt
         assert "各ツール呼び出しでは `inner_thought`" not in prompt
 
     def test_safe_world_intro_text_prefers_scenario_llm_public_intro(self) -> None:

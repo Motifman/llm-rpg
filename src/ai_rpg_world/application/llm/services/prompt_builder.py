@@ -77,11 +77,6 @@ from ai_rpg_world.application.llm.services.prompt_sections.prediction_context im
     begin_prediction_context,
     emit_prediction_context_discarded_note,
 )
-from ai_rpg_world.application.llm.services.prompt_sections.prediction_feedback import (
-    _PREDICTION_FEEDBACK_LEDGER_LIMIT,
-    _PREDICTION_FEEDBACK_TOTAL_CHAR_CAP,
-    build_prediction_feedback_text,
-)
 from ai_rpg_world.application.llm.services.prompt_sections.semantic_recall import (
     _gather_semantic_topic_words_for_recall,
     emit_semantic_passive_recall_trace,
@@ -382,7 +377,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
-        self._observation_repetition_projection = core.observation_repetition_projection
         self._recent_events_projection = core.recent_events_projection
         self._recent_events_formatter = recent_events_formatter
         self._context_format_strategy = context_format_strategy
@@ -519,7 +513,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         instruction: str,
         tools: list[dict[str, Any]],
         user_content: str,
-        prediction_feedback_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
     ) -> None:
@@ -558,7 +551,6 @@ class DefaultPromptBuilder(IPromptBuilder):
                 episode_index_chars=len(episode_index_text),
                 current_state_chars=len(current_state_text),
                 memos_chars=len(active_memos_text),
-                prediction_feedback_chars=len(prediction_feedback_text),
                 recent_events_chars=len(recent_events_text),
                 recall_chars=len(relevant_memories_text),
                 inventory_chars=len(inventory_text),
@@ -683,9 +675,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_events_text = self._recent_events_formatter.format_unified_entries(
             projected_entries
         )
-        prediction_feedback_text = build_prediction_feedback_text(
-            action_results, (self._observation_repetition_projection(observations) if self._observation_repetition_projection else observations)
-        )
         # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
         # 再浮上。store 未配線 (flag OFF) なら常に空文字 (= section 省略)。
         pending_predictions_text = self._build_pending_predictions_text(
@@ -798,7 +787,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
-            prediction_feedback_text=prediction_feedback_text,
             pending_predictions_text=pending_predictions_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
@@ -869,7 +857,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             episode_index_text=episode_index_text,
             current_state_text=current_state_text,
             active_memos_text=active_memos_text + being_memo_text,
-            prediction_feedback_text=prediction_feedback_text,
             recent_events_text=recent_events_text,
             relevant_memories_text=relevant_memories_text,
             inventory_text=inventory_text,
