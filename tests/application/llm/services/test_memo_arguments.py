@@ -140,6 +140,19 @@ class TestReadingMemoOperations:
         assert read.operations == ()
         assert [(r.reason, r.raw) for r in read.rejected] == [(reason, item)]
 
+    @pytest.mark.parametrize(
+        "provenance",
+        [{"source": ["self"], "certainty": "sure"}, {"source": "self", "certainty": {"v": "sure"}}],
+        ids=["source_list", "certainty_dict"],
+    )
+    def test_unhashable_provenance_is_rejected_without_raising(self, provenance: dict[str, Any]) -> None:
+        """source や certainty に配列や辞書が入っていても例外を投げず、出どころが崩れた操作として外す。"""
+        item = {"do": "add", "kind": "fact", "text": "鍵", **provenance}
+
+        read = _read(item)
+
+        assert [(r.reason, r.raw) for r in read.rejected] == [(REJECTED_MISSING_PROVENANCE, item)]
+
     def test_episode_source_is_read_when_offered(self) -> None:
         """出どころの選択肢にエピソードを出す設定では、エピソードの呼び名を出どころとして読む。"""
         read = _read(

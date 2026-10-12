@@ -123,7 +123,12 @@ def _read_provenance(
     offered = {MemoSource.SELF.value, MemoSource.HEARD.value}
     if episode_source_offered:
         offered.add(MemoSource.EPISODE.value)
-    if source_raw not in offered or certainty_raw not in {c.value for c in MemoCertainty}:
+    if (
+        not isinstance(source_raw, str)
+        or not isinstance(certainty_raw, str)
+        or source_raw not in offered
+        or certainty_raw not in {c.value for c in MemoCertainty}
+    ):
         return REJECTED_MISSING_PROVENANCE
     source = MemoSource(source_raw)
     if source is MemoSource.SELF:

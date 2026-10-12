@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.llm.services.memo_arguments import (
@@ -33,6 +34,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+#: 書き込みの途中で失敗したときに本人へ返す文。返さないと、書けたと思い込んだまま進む。
+WRITING_FAILED_TEXT = "メモ帳に書けませんでした。もう一度書いてください。"
+
+
+@dataclass(frozen=True)
+class MemoCallOutcome:
+    """``feedback`` は結果の文の末尾に足す文で、無ければ空文字。"""
+
+    feedback: str = ""
+    added_memo_ids: frozenset[str] = frozenset()
+
+
 def apply_memo_from_call(
     wiring: WorldLlmWiring,
     player_id: PlayerId,
@@ -40,42 +53,42 @@ def apply_memo_from_call(
     tool_name: str,
     arguments: Mapping[str, Any],
     tools_payload: Any,
-) -> str:
-    """当てられなかった操作を本人に返す文を返す。無ければ空文字。
+) -> MemoCallOutcome:
+    """引数 ``memo`` を付けて送った tool の呼び出しだけを読む。行動の成否は問わない。
 
-    引数 ``memo`` を付けて送った tool の呼び出しだけを読む。行動の成否は問わない。
     メモは本人が書いたものなので、行動が断られても書いた事実は残す。
-    メモ帳への書き込みの失敗で行動を止めない。理由を trace に残す。
+    読み取りや書き込みの失敗で行動を止めない。本人に返し、理由を trace に残す。
     """
     if not _offered_with_memo(tools_payload, tool_name):
-        return ""
+        return MemoCallOutcome()
     runtime = wiring.runtime
-    read = read_memo_operations(
-        arguments, episode_source_offered=runtime.memo_episode_source_offered()
-    )
-    if not read.present:
-        return ""
     trace: dict[str, Any] = {
         "being_id": None,
         "turn": None,
         "tool": tool_name,
         "environment_name": None,
         "applied": [],
-        "rejected": [
-            {"index": r.index, "reason": r.reason, "raw": r.raw, "detail": None}
-            for r in read.rejected
-        ],
+        "rejected": [],
         "skipped_reason": None,
         "error": None,
     }
-    feedback: list[tuple[int | None, str]] = [
-        (r.index, rejection_text(r.reason)) for r in read.rejected
-    ]
+    feedback: list[tuple[int | None, str]] = []
+    added: frozenset[str] = frozenset()
     try:
+        read = read_memo_operations(
+            arguments, episode_source_offered=runtime.memo_episode_source_offered()
+        )
+        if not read.present:
+            return MemoCallOutcome()
+        for rejected in read.rejected:
+            trace["rejected"].append(
+                {"index": rejected.index, "reason": rejected.reason, "raw": rejected.raw, "detail": None}
+            )
+            feedback.append((rejected.index, rejection_text(rejected.reason)))
         acting = runtime._acting_being_for(player_id)
         if acting is None:
             trace["skipped_reason"] = "no_acting_being"
-            return ""
+            return MemoCallOutcome(feedback=feedback_text([(None, WRITING_FAILED_TEXT)]))
         being_id = acting.being_id
         trace["being_id"] = being_id.value
         turn = runtime._expectation_store.current_turn(being_id)
@@ -95,6 +108,9 @@ def apply_memo_from_call(
         trace["applied"] = [
             _applied_payload(a.index, a.operation, a.memo) for a in outcome.applied
         ]
+        added = frozenset(
+            a.memo.memo_id for a in outcome.applied if isinstance(a.operation, AddMemo)
+        )
         for r in outcome.rejected:
             trace["rejected"].append(
                 {"index": r.index, "reason": r.reason, "raw": arguments[MEMO_FIELD_NAME][r.index], "detail": r.detail}
@@ -104,11 +120,11 @@ def apply_memo_from_call(
         logger.exception("memo writing failed for player=%s", player_id.value)
         trace["skipped_reason"] = "writing_failed"
         trace["error"] = f"{type(exc).__name__}: {exc}"
-        return ""
+        return MemoCallOutcome(feedback=feedback_text([(None, WRITING_FAILED_TEXT)]))
     finally:
         _record(runtime, player_id, trace)
     feedback.sort(key=lambda item: -1 if item[0] is None else item[0])
-    return feedback_text(feedback)
+    return MemoCallOutcome(feedback=feedback_text(feedback), added_memo_ids=added)
 
 
 def _episode_handles(runtime: Any, being_id: Any) -> frozenset[str]:
@@ -161,4 +177,4 @@ def _record(runtime: Any, player_id: PlayerId, payload: dict[str, Any]) -> None:
         logger.exception("trace_recorder.record(%s) failed", TraceEventKind.BEING_MEMO)
 
 
-__all__ = ["apply_memo_from_call"]
+__all__ = ["WRITING_FAILED_TEXT", "MemoCallOutcome", "apply_memo_from_call"]

@@ -35,7 +35,7 @@ Noul なら意味で判定できる (#1322)。判断を持たない run は従�
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
@@ -216,14 +216,23 @@ class MemoCompletionHintService:
         being_id: BeingId,
         action_summary: str,
         result_summary: str,
+        *,
+        excluded_ids: Collection[str] = (),
     ) -> MemoHintDetection:
-        """未完了 memo のうち、達成した可能性が最も高い 1 件の hint を返す。"""
+        """未完了 memo のうち、達成した可能性が最も高い 1 件の hint を返す。
+
+        ``excluded_ids`` の memo は問わない。
+        """
         pending: Sequence[MemoEntry | PendingTodo] = (
             self._memo_store.list_uncompleted_by_being(being_id)
             if self._memo_store is not None
             else self._pending_todos(being_id)  # type: ignore[misc]
         )
-        memos = [memo for memo in pending if (memo.content or "").strip()]
+        memos = [
+            memo
+            for memo in pending
+            if (memo.content or "").strip() and memo.id not in excluded_ids
+        ]
         haystack = f"{action_summary}\n{result_summary}".strip()
         if not memos or not haystack:
             # 判断の材料が無い。空の問い合わせに課金しない。

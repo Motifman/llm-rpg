@@ -206,3 +206,13 @@ class TestHintForMemoBookTodos:
         """今のメモの store とメモ帳のやることを両方渡すと TypeError を投げる。どちらを見るかが決まらないため。"""
         with pytest.raises(TypeError):
             MemoCompletionHintService(InMemoryMemoStore(), pending_todos=lambda being_id: [])
+
+    def test_excluded_todo_gets_no_hint(self) -> None:
+        """問わないと渡したやることは、行動と重なっても知らせない。"""
+        todo = PendingTodo(id="3f2a7b9c-1d2e-4f00-8a00-000000000001", content="事務所で鍵を取る", handle="m_3f2a7b")
+
+        detection = self._service([todo]).detect(
+            BeingId("ada"), "事務所で鍵を取る", "鍵を手に入れた", excluded_ids={todo.id}
+        )
+
+        assert detection.hint is None

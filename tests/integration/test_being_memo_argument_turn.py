@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    format_action_summary_for_display,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.world_llm_turn.memo_turn import (
+    WRITING_FAILED_TEXT,
+)
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_WAIT
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
@@ -170,3 +176,49 @@ class TestMemoArgumentInATurn:
         hint = service.detect(acting.being_id, "事務所で鍵を取る", "鍵を手に入れた").hint
 
         assert hint is not None and hint.memo.content == "事務所で鍵を取る"
+
+    def test_writing_failure_is_returned_and_traced_without_stopping_the_action(self) -> None:
+        """メモ帳へ書く途中で失敗しても行動は通り、書けなかったことを結果の文で返し、理由を trace に残す。"""
+        runtime, wiring, recorder = _game([{"do": "add", "kind": "todo", "text": "鍵"}])
+
+        def broken(player_id: PlayerId) -> str:
+            raise RuntimeError("environment is gone")
+
+        runtime.environment_name_for = broken
+
+        result = _turn(wiring)
+
+        assert result.success
+        assert WRITING_FAILED_TEXT in result.message
+        (event,) = recorder.payloads(TraceEventKind.BEING_MEMO)
+        assert (event["skipped_reason"], event["error"]) == ("writing_failed", "RuntimeError: environment is gone")
+
+    def _hinted(self, *, added_in_the_same_call: bool) -> str:
+        summary = format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_WAIT, {"inner_thought": "様子を見る"})
+        memo = [{"do": "add", "kind": "todo", "text": summary}] if added_in_the_same_call else None
+        runtime, wiring, _ = _game(memo)
+        if not added_in_the_same_call:
+            acting = runtime._acting_being_for(_ME)
+            runtime._being_memo_store.save(
+                acting.being_id,
+                MemoBook.empty().add(
+                    memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+                    kind=MemoKind.TODO,
+                    text=summary,
+                    provenance=None,
+                    turn=0,
+                    environment_name="駅",
+                ),
+            )
+        service = wiring.memo_completion_hint_service
+        assert service is not None
+        service.judgment_port = None
+        return _turn(wiring).message
+
+    def test_todo_written_before_gets_a_hint_when_the_action_matches(self) -> None:
+        """前の手で書いたやることと同じ行動をすると、済んだかもしれないと知らせる。"""
+        assert "は済んだかもしれません" in self._hinted(added_in_the_same_call=False)
+
+    def test_todo_added_in_the_same_call_gets_no_hint(self) -> None:
+        """同じ行動に添えて足したやることは、行動の文と重なっても、済んだのではと知らせない。"""
+        assert "は済んだかもしれません" not in self._hinted(added_in_the_same_call=True)
