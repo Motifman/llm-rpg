@@ -147,6 +147,20 @@ class TestTheIndexInThePrompt:
         assert _section(user)[0].startswith(f"[{old.handle}] 浜に流れ着いた")
         assert _section(user)[0].endswith("(呼び出し 1 回)")
 
+    def test_newest_first_does_not_lift_a_recalled_episode(self) -> None:
+        """新しい順を選ぶと、古いエピソードを呼び出しても先頭には来ず、書いた時の順のまま並ぶ。"""
+        runtime, _ = _runtime("newest_first")
+        pid = runtime.get_player_ids()[0]
+        old = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
+        newer = _write(runtime, pid, 2, summary="火を起こした", written_turn=1)
+        runtime._expectation_store.advance_turn(_being_of(runtime, pid))
+        runtime._expectation_store.advance_turn(_being_of(runtime, pid))
+        runtime.run_llm_auxiliary_tool(pid, TOOL_NAME_EPISODE_RECALL, {"handles": [old.handle]})
+
+        _, user, _ = _first_turn(runtime, pid)
+
+        assert [line.split("]")[0] for line in _section(user)] == [f"[{newer.handle}", f"[{old.handle}"]
+
     def test_the_index_comes_after_the_recent_events(self) -> None:
         """毎ターン伸びる【直近の出来事】より後ろに置き、その先頭のキャッシュを崩さない。"""
         runtime, _ = _runtime("recalled_rises_to_top")
@@ -211,6 +225,39 @@ class TestTheRecallTool:
         stored = runtime._being_episode_store.find_by_handle(_being_of(runtime, pid), episode.handle)
         assert stored is not None and stored.recall_count == 1
         assert [p["outcome"] for k, _, p in recorder.events if k == TraceEventKind.EPISODE_RECALL] == ["recalled"]
+
+
+class _RecallClient(_PromptCaptureClient):
+    def __init__(self, handles: list[str]) -> None:
+        super().__init__()
+        self.handles = handles
+
+    def invoke(self, messages, tools, tool_choice="required", **kwargs):
+        super().invoke(messages, tools, tool_choice, **kwargs)
+        return {"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": self.handles}}
+
+
+class TestRecallingInATurn:
+    """エージェントが手番で呼び出しのツールを選ぶと、1 手の経路を通って本文が返ることを保証する。"""
+
+    def test_a_turn_that_chooses_the_tool_recalls_the_episode(self) -> None:
+        """LLM が手番で呼び出しのツールを選ぶと、成功の結果に本文が載り、回数が増える。"""
+        runtime, _ = _runtime("recalled_rises_to_top")
+        pid = runtime.get_player_ids()[0]
+        episode = _write(runtime, pid, 1, summary="火を起こした")
+
+        result = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=_RecallClient([episode.handle]),
+            typed_judgment_port=ScriptedJudgmentPort(),
+        ).run_turn(pid)
+
+        assert result.success is True
+        assert "火を起こしたときの本文。" in result.message
+        stored = runtime._being_episode_store.find_by_handle(_being_of(runtime, pid), episode.handle)
+        assert stored is not None and stored.recall_count == 1
 
 
 class TestTheDisabledProfile:
