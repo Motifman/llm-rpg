@@ -2387,10 +2387,11 @@ class WorldRuntime:
             raise RuntimeError("episode writing is not wired; build the runtime with create_world_runtime")
         self._player_episode_writing.write(player_id, entries, trigger=TRIGGER_COMPACTION)
 
-    def write_episodes_on_leaving(self) -> None:
+    def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
         """環境を離れるとき (run の終わり) に、まだ畳まれていない出来事からエピソードを書く (#1626)。
 
-        書き起こしを有効にしていなければ何もしない。
+        書き起こしを有効にしていなければ何もしない。``skip_reason`` を渡すと書かずに、
+        プレイヤーごとにその理由を trace に残す。
         """
         if self._player_episode_writing is None:
             return
@@ -2403,6 +2404,11 @@ class WorldRuntime:
         if not isinstance(memory, SummarizingShortTermMemory):
             raise RuntimeError("episode writing needs SHORT_TERM_MEMORY_KIND=rolling_summary")
         for player_id in self.get_player_ids():
+            if skip_reason is not None:
+                self._player_episode_writing.skip(
+                    player_id, trigger=TRIGGER_LEAVING, reason=skip_reason
+                )
+                continue
             self._player_episode_writing.write(
                 player_id,
                 memory.uncompacted_entries(player_id),

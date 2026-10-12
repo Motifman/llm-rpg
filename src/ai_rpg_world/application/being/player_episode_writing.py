@@ -116,6 +116,9 @@ class PlayerEpisodeWriting:
             **base,
         )
 
+    def skip(self, player_id: PlayerId, *, trigger: str, reason: str) -> None:
+        self._record(player_id, trigger=trigger, outcome="skipped", skip_reason=reason)
+
     def _record(self, player_id: PlayerId, **payload: Any) -> None:
         try:
             self._trace_recorder_provider().record(

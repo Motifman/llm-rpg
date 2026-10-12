@@ -1299,6 +1299,28 @@ class TestRollingSummaryCompactionListener:
 
         assert len(mem._mid_generations(_PID.value)) == 1
 
+    def test_listener_still_receives_the_range_when_the_summary_submit_fails(self) -> None:
+        """要約の送信が例外を投げても、短期記憶から外れた範囲は聞き手に渡る。"""
+        received: list[object] = []
+
+        class _BrokenScheduler(InlineShortTermMemoryScheduler):
+            def submit(self, pid, task):  # type: ignore[override]
+                raise RuntimeError("scheduler down")
+
+        mem = SummarizingShortTermMemory(
+            turn_cap=2,
+            compact_turn_count=1,
+            scheduler=_BrokenScheduler(),
+            on_compacted=lambda pid, entries: received.append(entries),
+        )
+        mem.append(_PID, _obs("turn-0"))
+        mem.complete_turn(_PID)
+
+        with pytest.raises(RuntimeError):
+            mem.complete_turn(_PID)
+
+        assert len(received) == 1
+
     def test_uncompacted_entries_include_the_open_turn(self) -> None:
         """まだ畳んでいない分は、閉じたターンと、まだ閉じていないターンの出来事を古い順に含む。"""
         mem = SummarizingShortTermMemory(turn_cap=4, compact_turn_count=2)

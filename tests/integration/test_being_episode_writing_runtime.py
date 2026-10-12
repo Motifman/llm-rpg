@@ -95,6 +95,19 @@ class TestEpisodeWritingInTheRuntime:
         assert writes[int(first.value)]["outcome"] == "written"
         assert all(writes[int(o.value)]["skip_reason"] == "no_events" for o in others)
 
+    def test_leaving_with_a_skip_reason_records_it_without_writing(self) -> None:
+        """離れるときに飛ばす理由を渡すと、出来事が残っていても書かず、プレイヤーごとにその理由を残す。"""
+        runtime, recorder = _runtime(enabled=True)
+        first = runtime.get_player_ids()[0]
+
+        _observe(runtime, first, "火がついた。", 1)
+        runtime.write_episodes_on_leaving(skip_reason="llm_unusable")
+
+        assert runtime._being_episode_store.list_by_being(_being_of(runtime, first)) == ()
+        writes = [p for k, _, p in recorder.events if k == TraceEventKind.EPISODE_WRITING]
+        assert len(writes) == len(runtime.get_player_ids())
+        assert {(p["trigger"], p["outcome"], p["skip_reason"]) for p in writes} == {("leaving", "skipped", "llm_unusable")}
+
     def test_disabled_profile_writes_nothing(self) -> None:
         """有効にしていなければ、畳んでも離れても、エピソードも書き起こしの trace も出ない。"""
         runtime, recorder = _runtime(enabled=False)

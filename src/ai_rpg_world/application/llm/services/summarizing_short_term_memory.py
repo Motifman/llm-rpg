@@ -251,12 +251,15 @@ class SummarizingShortTermMemory(IShortTermMemory):
         )
         consumed = list(compaction.entries)
         if consumed:
-            self._submit_summary(
-                player_id.value,
-                consumed,
-                compacted_turn_count=compaction.turn_count,
-            )
-            self._notify_compacted(player_id, consumed)
+            # 畳んだ範囲はもう窓から消えているので、要約の送信が失敗しても聞き手へは渡す。
+            try:
+                self._submit_summary(
+                    player_id.value,
+                    consumed,
+                    compacted_turn_count=compaction.turn_count,
+                )
+            finally:
+                self._notify_compacted(player_id, consumed)
 
     def _notify_compacted(
         self, player_id: PlayerId, consumed: list[UnifiedRecentEventEntry]
