@@ -346,6 +346,8 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "MEMO_DISTILL_ENABLED",
             "SITUATION_BELIEF_RECALL_ENABLED",
             "SITUATION_BELIEF_RECALL_NARROWER",
+            "TYPED_JUDGMENT_GOAL_HINT_ENABLED",
+            "TYPED_JUDGMENT_GOAL_HINT_MIN_PROBABILITY",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
