@@ -97,6 +97,7 @@ def _ensure_trace_recorder_provider(
 
 # persona resolver は (player_id_int) -> (player_name, persona_block)
 PersonaResolverFn = Callable[[int], "tuple[str, str]"]
+CompactionListenerFn = Callable[[PlayerId, Sequence[UnifiedRecentEventEntry]], None]
 
 
 class SummarizingShortTermMemory(IShortTermMemory):
@@ -140,6 +141,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         event_store: UnifiedRecentEventStore | None = None,
         turn_cap: int = 20,
         compact_turn_count: int = 10,
+        on_compacted: CompactionListenerFn | None = None,
     ) -> None:
         if l4_keep_generations <= 0:
             raise ValueError("l4_keep_generations must be positive")
@@ -179,6 +181,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._event_store = event_store or UnifiedRecentEventStore()
         self._turn_cap = turn_cap
         self._compact_turn_count = compact_turn_count
+        self._on_compacted = on_compacted
         if turn_cap <= 0 or compact_turn_count <= 0 or compact_turn_count >= turn_cap:
             raise ValueError("turn window requires 0 < compact_turn_count < turn_cap")
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
@@ -248,11 +251,34 @@ class SummarizingShortTermMemory(IShortTermMemory):
         )
         consumed = list(compaction.entries)
         if consumed:
-            self._submit_summary(
-                player_id.value,
-                consumed,
-                compacted_turn_count=compaction.turn_count,
+            # 畳んだ範囲はもう窓から消えているので、要約の送信が失敗しても聞き手へは渡す。
+            try:
+                self._submit_summary(
+                    player_id.value,
+                    consumed,
+                    compacted_turn_count=compaction.turn_count,
+                )
+            finally:
+                self._notify_compacted(player_id, consumed)
+
+    def _notify_compacted(
+        self, player_id: PlayerId, consumed: list[UnifiedRecentEventEntry]
+    ) -> None:
+        """要約の scheduler とは別に、この場で同期して呼ぶ。"""
+        if self._on_compacted is None:
+            return
+        try:
+            self._on_compacted(player_id, tuple(consumed))
+        except Exception:
+            _logger.exception(
+                "compaction listener raised (player_id=%s); continuing", player_id.value
             )
+
+    def uncompacted_entries(
+        self, player_id: PlayerId
+    ) -> tuple[UnifiedRecentEventEntry, ...]:
+        """まだ畳んでいない出来事。閉じていないターンの分も含む。"""
+        return tuple(self._event_store.get_active_timeline(player_id))
 
     def _emit_compaction(
         self,

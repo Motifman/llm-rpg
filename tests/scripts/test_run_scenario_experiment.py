@@ -97,6 +97,9 @@ class TestOutcomeAndReason:
             def count_traveling_players(self) -> int:
                 return 0
 
+            def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
+                return None
+
             def shutdown(self, *, timeout: float) -> None:
                 assert timeout == 30.0
 
@@ -180,6 +183,9 @@ class TestOutcomeAndReason:
 
             def count_traveling_players(self) -> int:
                 return 0
+
+            def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
+                return None
 
             def shutdown(self, *, timeout: float) -> None:
                 pass

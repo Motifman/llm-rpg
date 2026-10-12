@@ -207,6 +207,13 @@ class TraceEventKind:
     # 名前を知らずに会った相手の名前を知った (#1581)。payload: learned_name /
     # appearance (それまでの呼び方) / how (「名乗り」か「呼びかけ」)。
     NAME_LEARNED = "name_learned"
+    # 目次つきのエピソードを書き起こした (#1626)。1 回の書き起こしごとに 1 件。
+    # payload: being_id / trigger (compaction か leaving) / event_count /
+    # outcome (written / failed / skipped) / episode_count / dropped_count /
+    # written_turn / environment_name / episodes: list[{handle, summary,
+    # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /
+    # 失敗なら error_type と error、飛ばしたなら skip_reason。
+    EPISODE_WRITING = "episode_writing"
     SNAPSHOT_SAVE = "snapshot_save"
     # シナリオの round_assignment で player に割り当てた枠 (#1514)。宣言の無い
     # シナリオでは出ない。payload: round / seed / assignments: list[{player_id,
