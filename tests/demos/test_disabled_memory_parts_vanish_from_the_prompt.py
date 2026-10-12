@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 import pytest
-from tests.application.being.expectation.support import ScriptedJudgmentPort
+from tests.judgment_helpers import ScriptedJudgmentPort
 
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,

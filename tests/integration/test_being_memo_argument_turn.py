@@ -21,10 +21,8 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.being.domain.memo_book import KIND_LIMITS, MemoBook, MemoKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from tests.application.being.expectation.support import (
-    RecordingTraceRecorder,
-    ScriptedJudgmentPort,
-)
+from tests.judgment_helpers import ScriptedJudgmentPort
+from tests.trace_helpers import RecordingTraceRecorder
 
 _DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 _ME = PlayerId(1)

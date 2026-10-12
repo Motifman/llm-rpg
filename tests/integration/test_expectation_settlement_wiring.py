@@ -54,11 +54,9 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
-from tests.application.being.expectation.support import (
-    RecordingTraceRecorder,
-    ScriptedJudgmentPort,
-)
+from tests.judgment_helpers import ScriptedJudgmentPort
 from tests.runtime_config_helpers import episodic_config
+from tests.trace_helpers import RecordingTraceRecorder
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"

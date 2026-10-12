@@ -25,7 +25,6 @@ from ai_rpg_world.domain.memory.expectation.value_object.expectation_origin impo
 from ai_rpg_world.domain.memory.expectation.value_object.likelihood import (
     Likelihood,
 )
-from tests.application.being.expectation.support import ScriptedJudgmentPort
 from tests.application.being.expectation.test_expectation_grounds_settlement import (
     BELIEFS,
     EPISODES,
@@ -33,6 +32,7 @@ from tests.application.being.expectation.test_expectation_grounds_settlement imp
     _Harness,
     _recall,
 )
+from tests.judgment_helpers import ScriptedJudgmentPort
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts/expectation_grounds_report.py"
 
