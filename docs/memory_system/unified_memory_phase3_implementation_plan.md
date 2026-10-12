@@ -93,6 +93,7 @@ R1 クリーン追試 n=2 ──成功率──> (低ければ PR-G 凍結解除
 - 内容: `is_down` への遷移と空腹 max 到達を、`structured_failure_evidence_transcriber` 経由の高 salience evidence として積む。フック位置は player status 変化の観測生成点 (実装時に `player_formatter` 周辺を確認して既存パターンに合わせる)
 - フラグ: 既定 OFF (`STATE_COLLAPSE_EVIDENCE_ENABLED` 仮)、R2 で ON — 第 2 期の慣例どおり
 - 試験: down 遷移 → evidence 1 件 (salience high) / 同一 tick 内の重複防止 / フラグ OFF で no-op
+- 撤去: 記憶の部品の撤去 (#1631) の #__PR__ で、書き起こしとフラグを消した
 
 **PR-E: #621 系 down/revive trace event の欠落調査 → 修正** — **完了 (#710 マージ済み)**
 
