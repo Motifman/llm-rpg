@@ -146,8 +146,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SHORT_TERM_MEMORY_SCHEDULER_MODE",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
-    "SITUATION_BELIEF_RECALL_ENABLED",
-    "SITUATION_BELIEF_RECALL_NARROWER",
     "STAGNATION_PRESSURE_ENABLED",
     "STAGNATION_REASONING_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
@@ -410,12 +408,9 @@ class ResolvedLlmRuntimeConfig:
     belief_attribution_enabled: bool = False
     belief_create_gate_enabled: bool = False
     belief_candidate_narrower: str = CHAR_BIGRAM_BM25
-    # #1414: 【関連する学び】を状況の項目から引く。件数は semantic_passive_top_k。
-    situation_belief_recall_enabled: bool = False
     # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
-    situation_belief_recall_narrower: str = CHAR_BIGRAM_BM25
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
     unconscious_context_enabled: bool = False
@@ -511,7 +506,6 @@ class ResolvedLlmRuntimeConfig:
                 "valid: ['fail', 'warn']"
             )
         self._validate_belief_create_gate()
-        self._validate_situation_belief_recall()
         if self.short_term_memory_kind != "rolling_summary":
             # エピソードの書き起こし (#1626) を呼ぶ口は畳んで要約する短期記憶にしか無い。
             # 書き起こしは常に入るので、ほかの種類では目次が黙って空のまま走る (D1631)。
@@ -897,12 +891,6 @@ class ResolvedLlmRuntimeConfig:
         belief_candidate_narrower = (
             _strip_or_none(source.get("BELIEF_CANDIDATE_NARROWER")) or CHAR_BIGRAM_BM25
         )
-        try:
-            situation_belief_recall_enabled = _parse_truthy(
-                source.get("SITUATION_BELIEF_RECALL_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"SITUATION_BELIEF_RECALL_ENABLED: {exc}") from exc
         being_episode_index_limit = _resolve_positive_int(
             source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
         )
@@ -910,9 +898,6 @@ class ResolvedLlmRuntimeConfig:
             source,
             "BEING_EPISODE_RECALL_MAX_HANDLES",
             default=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
-        )
-        situation_belief_recall_narrower = (
-            _strip_or_none(source.get("SITUATION_BELIEF_RECALL_NARROWER")) or CHAR_BIGRAM_BM25
         )
         belief_candidate_top_k = _resolve_positive_int(
             source, "BELIEF_CANDIDATE_TOP_K", default=_DEFAULT_BELIEF_CANDIDATE_TOP_K
@@ -1072,10 +1057,8 @@ class ResolvedLlmRuntimeConfig:
             belief_attribution_enabled=belief_attribution_enabled,
             belief_create_gate_enabled=belief_create_gate_enabled,
             belief_candidate_narrower=belief_candidate_narrower,
-            situation_belief_recall_enabled=situation_belief_recall_enabled,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
-            situation_belief_recall_narrower=situation_belief_recall_narrower,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
             unconscious_context_enabled=unconscious_context_enabled,
@@ -1219,10 +1202,8 @@ class ResolvedLlmRuntimeConfig:
             belief_attribution_enabled=False,
             belief_create_gate_enabled=False,
             belief_candidate_narrower=CHAR_BIGRAM_BM25,
-            situation_belief_recall_enabled=False,
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
-            situation_belief_recall_narrower=CHAR_BIGRAM_BM25,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
             unconscious_context_enabled=False,
@@ -1260,20 +1241,6 @@ class ResolvedLlmRuntimeConfig:
     # ──────────────────────────────────────────────────────────────
     # Observability
     # ──────────────────────────────────────────────────────────────
-
-    def _validate_situation_belief_recall(self) -> None:
-        if self.situation_belief_recall_narrower not in SUPPORTED_TEXT_CANDIDATE_NARROWERS:
-            raise ValueError(
-                "situation_belief_recall_narrower="
-                f"{self.situation_belief_recall_narrower!r} is not recognized. "
-                f"valid: {sorted(SUPPORTED_TEXT_CANDIDATE_NARROWERS)}"
-            )
-        if self.situation_belief_recall_enabled and self.semantic_passive_top_k < 1:
-            # 件数と【関連する学び】を出す条件を受動想起と共有する。0 のまま有効にすると、
-            # 何も引かずに有効になったように見える。
-            raise ValueError(
-                "SITUATION_BELIEF_RECALL_ENABLED requires SEMANTIC_PASSIVE_TOP_K >= 1"
-            )
 
     def _validate_belief_create_gate(self) -> None:
         if self.belief_candidate_narrower not in SUPPORTED_TEXT_CANDIDATE_NARROWERS:

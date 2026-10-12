@@ -74,9 +74,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         IEpisodicRecallSlotStore,
     )
-    from ai_rpg_world.application.llm.services.prompt_sections.situation_recall import (
-        SituationRecallSources,
-    )
     from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
         SemanticPassiveRecallService,
     )
@@ -183,8 +180,6 @@ class EpisodicRecallConfig:
     # 詳細は docs/memory_system/semantic_memory_activation_plan.md §4。
     semantic_passive_recall: SemanticPassiveRecallService | None = None
     semantic_passive_top_k: int = 0
-    # #1414: 渡すと【関連する学び】を状況の項目から引く。件数は semantic_passive_top_k。
-    situation_recall: SituationRecallSources | None = None
     # PR8 (R5): Encounter Memory を recall cue trigger として使う。注入時、
     # 直近 ``encounter_recent_window_ticks`` 以内に encounter した entity /
     # spot / event が ``ENCOUNTER`` source の cue として recall に乗る。

@@ -392,6 +392,8 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "HEARSAY_ENABLED",
             "ERROR_GATED_ENCODING_ENABLED",
             "MEMO_DISTILL_ENABLED",
+            "SITUATION_BELIEF_RECALL_ENABLED",
+            "SITUATION_BELIEF_RECALL_NARROWER",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
