@@ -72,123 +72,22 @@ class TestBuildBeliefEvidenceCueSignature:
     def test_rejects_non_episode_argument(self) -> None:
         with pytest.raises(TypeError):
             build_belief_evidence_cue_signature('not-an-episode')
-from dataclasses import dataclass
-
-from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import build_hearsay_cue_signature
-
-
-@dataclass
-class _FakeMatch:
-    axis: str
-    value: str
-    start: int
-
-class _FakeMatcher:
-    """find_in_text が固定の NounMatch もどきを返す fake。"""
-
-    def __init__(self, matches):
-        self._matches = matches
-
-    def find_in_text(self, text):
-        return tuple(self._matches)
-
-class TestBuildHearsayCueSignature:
-    """P9: 伝聞の主張から対象を拾って cue を決める (話者は混ぜない)。"""
-
-    def test_spot_target_gives_spot_axis(self) -> None:
-        """主張の対象が場所なら spot: 軸。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='place_spot', value='12', start=3)])
-        assert build_hearsay_cue_signature('岩礁海岸は危ない', matcher) == 'spot:12'
-
-    def test_person_target_gives_player_axis(self) -> None:
-        """主張の対象が他者なら player: 軸。値は直接体験と揃えた entity:actor:{id} 形式 (P10)。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_5', start=0)])
-        assert build_hearsay_cue_signature('エイダは頼りになる', matcher) == 'player:entity:actor:5'
-
-    def test_person_target_clusters_with_direct_experience_cue(self) -> None:
-        """P10: 同一人物の伝聞 cue と直接体験 cue が同じ cue トークンを生む。
-
-        直接体験側の cue は手書きせず、実際の ``build_belief_evidence_cue_signature``
-        に chunk episode 相当 (who = ``entity:actor:5`` = chunk の
-        ``_who_from_observations`` が観測 actor から生成する形式) を通して導出する。
-        こうすることで、揃え先が「実際に belief evidence になる直接体験 cue」で
-        あることを固定し、片方の生成規則が変わったらテストが割れるようにする
-        (揃っていないと同じ人物の伝聞と体験が別クラスタになり strengthen/contradict
-        できず重複 create を生む)。
-        """
-        from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import cue_tokens
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_5', start=0)])
-        hearsay_cue = build_hearsay_cue_signature('エイダは頼りになる', matcher)
-        direct_episode = _episode(who=('entity:actor:5',))
-        direct_cue = build_belief_evidence_cue_signature(direct_episode)
-        common = set(cue_tokens(hearsay_cue)) & set(cue_tokens(direct_cue))
-        assert 'entity:actor:5' in common
-
-    def test_self_reference_gives_self_axis(self) -> None:
-        """対象が聞き手本人なら self: 軸 (その人物についての belief と別枠)。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_7', start=0)])
-        cue = build_hearsay_cue_signature('カイは人の話を聞かない', matcher, self_player_id=7)
-        assert cue == 'self:entity:actor:7'
-
-    def test_other_person_not_confused_with_self(self) -> None:
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_5', start=0)])
-        cue = build_hearsay_cue_signature('リオは詳しい', matcher, self_player_id=7)
-        assert cue == 'player:entity:actor:5'
-
-    def test_earliest_match_wins(self) -> None:
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_5', start=10), _FakeMatch(axis='place_spot', value='3', start=2)])
-        assert build_hearsay_cue_signature('北の森でリオが', matcher) == 'spot:3'
-
-    def test_no_target_gives_empty_cue(self) -> None:
-        """対象を特定できない主張は cue なし (固着の discard に委ねる)。"""
-        assert build_hearsay_cue_signature('よく分からない話', _FakeMatcher([])) == ''
-
-    def test_no_matcher_gives_empty_cue(self) -> None:
-        assert build_hearsay_cue_signature('何か', None) == ''
-
 class TestSelfAxisSeparationInCueTokens:
-    """P9/P10: self: 軸の「自分についての噂」が、照合トークン層まで貫通して
-    「同一人物についての player 軸の噂・直接体験」と別クラスタに保たれる。
+    """self: 軸の cue が、照合トークン層で同一人物の player: 軸の cue と別クラスタに保たれることを保証する。
 
-    self: 軸は自然文の対象照合 (world_noun_matcher) で聞き手本人を指すマッチを
-    分離する意図だが、``cue_tokens`` が最初の ``:`` で軸接頭辞を剥がすと
-    ``self:entity:actor:5`` と ``player:entity:actor:5`` が同じトークンに潰れ、
-    分離が照合層で無効化されていた (このクラスがその回帰を防ぐ)。
+    ``cue_tokens`` が最初の ``:`` で軸接頭辞を剥がすと ``self:entity:actor:7`` と
+    ``player:entity:actor:7`` が同じトークンに潰れる。保存済みの belief に self: 軸の
+    cue が残っているので、伝聞の部品を消したあと (#1631) も分離を保つ。
     """
 
     def test_self_and_player_tokens_of_same_person_do_not_collide(self) -> None:
-        """同一人物 (player 7) について、self: 軸の噂 cue と player: 軸の噂 cue が
-        共通トークンを一切持たない (自分についての噂が他者知識クラスタに寄らない)。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_7', start=0)])
-        self_cue = build_hearsay_cue_signature('カイは人の話を聞かない', matcher, self_player_id=7)
-        player_cue = build_hearsay_cue_signature('カイは頼れる', matcher)
-        assert set(cue_tokens(self_cue)) & set(cue_tokens(player_cue)) == set()
+        """同一人物 (player 7) の self: 軸の cue と player: 軸の cue は共通トークンを持たない。"""
+        assert set(cue_tokens('self:entity:actor:7')) & set(cue_tokens('player:entity:actor:7')) == set()
 
     def test_self_token_does_not_collide_with_direct_experience_of_same_person(self) -> None:
-        """self: 軸の噂 cue が、同一人物 (player 7) の直接体験 cue とも共通トークンを
-        持たない。P10 の「同一人物の噂と体験を寄せる」一致は player: 軸限定で、
-        self: 軸はそこに巻き込まれない。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_7', start=0)])
-        self_cue = build_hearsay_cue_signature('カイは人の話を聞かない', matcher, self_player_id=7)
+        """self: 軸の cue は、同一人物 (player 7) の直接体験の cue とも共通トークンを持たない。"""
         direct_cue = build_belief_evidence_cue_signature(_episode(who=('entity:actor:7',)))
-        assert set(cue_tokens(self_cue)) & set(cue_tokens(direct_cue)) == set()
-
-    def test_player_hearsay_still_clusters_with_direct_experience(self) -> None:
-        """P10 の意図した一致は壊れない: self でない同一人物 (player 5) の噂 cue と
-        直接体験 cue は依然として共通トークン ``entity:actor:5`` を共有する。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_5', start=0)])
-        player_cue = build_hearsay_cue_signature('エイダは頼りになる', matcher)
-        direct_cue = build_belief_evidence_cue_signature(_episode(who=('entity:actor:5',)))
-        common = set(cue_tokens(player_cue)) & set(cue_tokens(direct_cue))
-        assert 'entity:actor:5' in common
-
-    def test_self_hearsay_of_same_person_shares_token(self) -> None:
-        """同じ聞き手本人 (player 7) についての self: 軸の噂どうしは同じトークンに
-        寄る (自己認識クラスタ内での strengthen が効く)。"""
-        matcher = _FakeMatcher([_FakeMatch(axis='entity', value='spot_graph_player_7', start=0)])
-        first = build_hearsay_cue_signature('カイは静かだ', matcher, self_player_id=7)
-        second = build_hearsay_cue_signature('カイはよく笑う', matcher, self_player_id=7)
-        assert set(cue_tokens(first)) & set(cue_tokens(second))
+        assert set(cue_tokens('self:entity:actor:7')) & set(cue_tokens(direct_cue)) == set()
 
 class TestGoalStagnationCueSignature:
     """P-U1: build_goal_stagnation_cue_signature が goal: 軸の cue_signature を

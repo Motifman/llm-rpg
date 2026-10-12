@@ -229,23 +229,12 @@ class InlineEpisodicSubjectiveScheduler:
         """episode.being_id 経路で put。"""
         self._store.put_by_being(episode.being_id, episode)
 
-    def _record_heard_claims_if_applicable(self, episode: SubjectiveEpisode) -> None:
-        """P9 (伝聞): 非同期経路 (Inline 実装) の完了点で heard_claims を HEARSAY evidence に転記する。
-
-        予測の当否は確定した予期から積む (#1443) ので、ここでは扱わない。
-        transcriber 未注入 (flag OFF) なら何もしない。
-        """
-        if self._belief_evidence_transcriber is None:
-            return
-        self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
-
     def submit(
         self,
         draft: SubjectiveEpisode,
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: str | None = None,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -253,15 +242,12 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("persona_text must be str")
         if not isinstance(encoding_input, ChunkEncodingInput):
             raise TypeError("encoding_input must be ChunkEncodingInput")
-        if actor_name is not None and not isinstance(actor_name, str):
-            raise TypeError("actor_name must be str or None")
         start = time.monotonic()
         try:
             merged = self._service.merge_llm_subjective_fields(
                 draft,
                 persona_text=persona_text,
                 encoding_input=encoding_input,
-                actor_name=actor_name,
             )
             self._put_episode(merged)
         except Exception as exc:
@@ -283,14 +269,9 @@ class InlineEpisodicSubjectiveScheduler:
             return
 
         # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
-        # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
+        # 以降の sidecar 処理 (想起系 / 約束の記録・清算) はそれぞれ
         # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
         # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
-        _run_sidecar_safely(
-            "belief_evidence",
-            merged.episode_id,
-            lambda: self._record_heard_claims_if_applicable(merged),
-        )
         # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
         # 抽出された約束・見込みを PendingPrediction 化して per-Being
         # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
@@ -464,7 +445,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: str | None = None,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -472,8 +452,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("persona_text must be str")
         if not isinstance(encoding_input, ChunkEncodingInput):
             raise TypeError("encoding_input must be ChunkEncodingInput")
-        if actor_name is not None and not isinstance(actor_name, str):
-            raise TypeError("actor_name must be str or None")
         eid = draft.episode_id
         # 重複 / overflow / shutdown チェックはロック内で原子的に。
         # ただし ``_executor.submit`` 自体はロック外で呼ぶ:
@@ -534,7 +512,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         # ── ロック外で executor.submit ──
         try:
             future = self._executor.submit(
-                self._worker, draft, persona_text, encoding_input, actor_name
+                self._worker, draft, persona_text, encoding_input
             )
         except RuntimeError:
             # Executor が shutdown 済み (競合) → 予約を取り消して drop
@@ -566,22 +544,11 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         """episode.being_id 経路で put。"""
         self._store.put_by_being(episode.being_id, episode)
 
-    def _record_heard_claims_if_applicable(self, episode: SubjectiveEpisode) -> None:
-        """P9 (伝聞): 非同期経路 (ThreadPool 実装) の完了点で heard_claims を HEARSAY evidence に転記する。
-
-        予測の当否は確定した予期から積む (#1443) ので、ここでは扱わない。
-        transcriber 未注入 (flag OFF) なら何もしない。
-        """
-        if self._belief_evidence_transcriber is None:
-            return
-        self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
-
     def _worker(
         self,
         draft: SubjectiveEpisode,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: str | None = None,
     ) -> None:
         """ワーカー thread の本体。例外は呼び出し元に propagate しないこと。"""
         start = time.monotonic()
@@ -590,7 +557,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 draft,
                 persona_text=persona_text,
                 encoding_input=encoding_input,
-                actor_name=actor_name,
             )
             self._put_episode(merged)
         except Exception as exc:
@@ -614,14 +580,9 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             return
 
         # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
-        # 以降の sidecar 処理 (証拠転記 / 想起系 / 約束の記録・清算) はそれぞれ
+        # 以降の sidecar 処理 (想起系 / 約束の記録・清算) はそれぞれ
         # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
         # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
-        _run_sidecar_safely(
-            "belief_evidence",
-            merged.episode_id,
-            lambda: self._record_heard_claims_if_applicable(merged),
-        )
         # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
         # 抽出された約束・見込みを PendingPrediction 化して per-Being
         # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。

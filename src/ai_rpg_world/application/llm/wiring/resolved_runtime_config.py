@@ -101,7 +101,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "GOAL_REVISION_ENABLED",
     "GOAL_STAGNATION_EVIDENCE_ENABLED",
     "GOAL_STORE_ENABLED",
-    "HEARSAY_ENABLED",
     "LLM_AFTERGLOW_CAPACITY",
     "LLM_AFTERGLOW_ENABLED",
     "LLM_AFTERGLOW_MAX_RESIDENCE",
@@ -436,7 +435,6 @@ class ResolvedLlmRuntimeConfig:
     recall_hit_boost_enabled: bool = False
     error_gated_encoding_enabled: bool = False
     pending_prediction_enabled: bool = False
-    hearsay_enabled: bool = False
 
     # Goal / stagnation 系。
     goal_store_enabled: bool = False
@@ -634,7 +632,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_goal_revision_enabled,
             resolve_goal_stagnation_evidence_enabled,
             resolve_goal_store_enabled,
-            resolve_hearsay_enabled,
             resolve_memo_distill_enabled,
             resolve_memo_tools_enabled,
             resolve_pending_prediction_enabled,
@@ -976,7 +973,6 @@ class ResolvedLlmRuntimeConfig:
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
         error_gated_encoding_enabled = resolve_error_gated_encoding_enabled(env=source)
         pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
-        hearsay_enabled = resolve_hearsay_enabled(env=source)
         goal_store_enabled = resolve_goal_store_enabled(env=source)
         goal_revision_enabled = resolve_goal_revision_enabled(env=source)
         goal_reflect_enabled = resolve_goal_reflect_enabled(env=source)
@@ -1128,7 +1124,6 @@ class ResolvedLlmRuntimeConfig:
             recall_hit_boost_enabled=recall_hit_boost_enabled,
             error_gated_encoding_enabled=error_gated_encoding_enabled,
             pending_prediction_enabled=pending_prediction_enabled,
-            hearsay_enabled=hearsay_enabled,
             goal_store_enabled=goal_store_enabled,
             goal_revision_enabled=goal_revision_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
@@ -1280,7 +1275,6 @@ class ResolvedLlmRuntimeConfig:
             recall_hit_boost_enabled=False,
             error_gated_encoding_enabled=False,
             pending_prediction_enabled=False,
-            hearsay_enabled=False,
             goal_store_enabled=False,
             goal_revision_enabled=False,
             goal_reflect_enabled=False,
