@@ -31,6 +31,9 @@ system prompt / toolset の参照を戻せば、確率的要素を除いて同�
   - reasoning 有効時は `append_force_tool_call_instruction(prompt["messages"])`
     で user message 末尾を変え、`tool_choice="auto"` にする。
   - 通常時は `prompt["messages"]` と `tool_choice="required"` を使う。
+  - 追記: #1053 で熟考の有無にかかわらず `prompt["messages"]` と
+    `tool_choice="required"` を使うようになり、`append_force_tool_call_instruction`
+    はどこからも呼ばれなくなった。使わなくなった部品の撤去 (#1631) の #__PR__ で部品ごと消した。
   - 参照: `src/ai_rpg_world/presentation/spot_graph_game/runtime_manager.py:1588`
     から `:1636`。
 - LLM 呼び出しメトリクスは `LlmCallMetricsSink` 経由で trace に流れている。
