@@ -286,7 +286,7 @@
 
 ### U7 — 無意識コンテキスト → chunk 補完 (最優先の適用先)
 
-> U7 (`UNCONSCIOUS_CONTEXT_ENABLED`、chunk 主観補完に信念の上位 5 件と自己像を渡す provider) は #PRNUM で消した (#1631)。
+> U7 (`UNCONSCIOUS_CONTEXT_ENABLED`、chunk 主観補完に信念の上位 5 件と自己像を渡す provider) は #1690 で消した (#1631)。
 
 **できるようになること**: `prediction_error` / `salience` の判定が
 「誰にとっても同じ驚き」から「このキャラにとっての驚き」になる。
