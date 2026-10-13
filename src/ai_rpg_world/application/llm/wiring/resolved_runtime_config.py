@@ -81,7 +81,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "EPISODIC_RECALL_ENABLED",
     "END_ON_ALL_DOWN",
-    "ESCAPE_LLM_SSOT",
     "LLM_AFTERGLOW_CAPACITY",
     "LLM_AFTERGLOW_ENABLED",
     "LLM_AFTERGLOW_MAX_RESIDENCE",
@@ -347,13 +346,11 @@ class ResolvedLlmRuntimeConfig:
     # Goal / stagnation 系。
 
     # Prompt / tool 表面。``tool_mode`` は TODO 系 tool の露出を切り替えるため、
-    # 実験条件として trace に残す。``escape_llm_ssot_enabled`` は system prompt
-    # 文字列を変えるため同じく実験条件。
+    # 実験条件として trace に残す。
     tool_mode: str = "default"
     memo_tools_enabled: bool = True
     # #1628: メモ帳と、環境の tool に付ける引数 memo。今のメモの道具とは並べない。
     being_memo_enabled: bool = False
-    escape_llm_ssot_enabled: bool = False
     scenario_random_seed: int | None = None
     prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
@@ -719,9 +716,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
-        escape_llm_ssot_enabled = _parse_truthy(
-            source.get("ESCAPE_LLM_SSOT"), default=False
-        )
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
         prompt_dataset_capture_enabled = _parse_truthy(
             source.get("PROMPT_DATASET_CAPTURE_ENABLED"), default=False
@@ -836,7 +830,6 @@ class ResolvedLlmRuntimeConfig:
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
-            escape_llm_ssot_enabled=escape_llm_ssot_enabled,
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
@@ -947,7 +940,6 @@ class ResolvedLlmRuntimeConfig:
             tool_mode="default",
             memo_tools_enabled=True,
             being_memo_enabled=False,
-            escape_llm_ssot_enabled=False,
             scenario_random_seed=None,
             prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
