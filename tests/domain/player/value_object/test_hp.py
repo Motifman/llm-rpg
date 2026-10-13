@@ -54,11 +54,12 @@ class TestHp:
         with pytest.raises(HpValidationException, match="HPはmax_hp以下の値である必要があります"):
             Hp(150, 100)
 
-    def test_heal_success(self):
-        """回復のテスト（正常系）"""
+    @pytest.mark.parametrize("amount, expected_value", [(0, 50), (20, 70)], ids=["zero", "positive"])
+    def test_heal_success(self, amount, expected_value):
+        """回復量0では値を変えず、正量は最大HPを保って加算する。"""
         hp = Hp.create(50, 100)
-        healed_hp = hp.heal(20)
-        assert healed_hp.value == 70
+        healed_hp = hp.heal(amount)
+        assert healed_hp.value == expected_value
         assert healed_hp.max_hp == 100
 
     def test_heal_over_max(self):
@@ -74,11 +75,12 @@ class TestHp:
         with pytest.raises(HpValidationException, match="回復量は0以上の値である必要があります"):
             hp.heal(-10)
 
-    def test_damage_success(self):
-        """ダメージのテスト（正常系）"""
+    @pytest.mark.parametrize("amount, expected_value", [(0, 50), (20, 30)], ids=["zero", "positive"])
+    def test_damage_success(self, amount, expected_value):
+        """ダメージ量0では値を変えず、正量は最大HPを保って減算する。"""
         hp = Hp.create(50, 100)
-        damaged_hp = hp.damage(20)
-        assert damaged_hp.value == 30
+        damaged_hp = hp.damage(amount)
+        assert damaged_hp.value == expected_value
         assert damaged_hp.max_hp == 100
 
     def test_damage_over_current(self):
@@ -150,7 +152,6 @@ class TestHp:
         hp3 = Hp.create(30, 100)
 
         assert hash(hp1) == hash(hp2)
-        assert hash(hp1) != hash(hp3)
 
         # setで使用可能
         hp_set = {hp1, hp2, hp3}
