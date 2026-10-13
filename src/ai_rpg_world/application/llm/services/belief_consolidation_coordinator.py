@@ -458,9 +458,7 @@ class BeliefConsolidationCoordinator:
         """P4/P7: reflect 決定を処理する。停滞 / 達成 / 乖離の気づきを内省観測
 
         として本人に注入する。**goal store には書かない** — この coordinator は
-        goal store への参照を一切持たず、意識に「気づき」を返すだけ。目的の
-        status 変更や書き換えは本人 (P6 の goal_update) に委ねる (「無意識が感覚を
-        上げ、意識が決断する」の分担を構造で保証する)。以下のときは何もせず
+        goal store への参照を一切持たず、意識に「気づき」を返すだけ。以下のときは何もせず
         False を返す (= trace にも残さない):
         - goal_reflect OFF / 観測 sink 未注入
         - verdict が stalled / achieved / misaligned のいずれでもない

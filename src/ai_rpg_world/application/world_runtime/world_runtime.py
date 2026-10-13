@@ -126,12 +126,8 @@ from ai_rpg_world.application.llm.services.tool_catalog.memory import (
 from ai_rpg_world.application.llm.services.tool_catalog.public_sns import get_public_sns_definitions
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    GOAL_OUTCOME_ABANDONED,
-    GOAL_OUTCOME_ACHIEVED,
     assess_situation_definition,
     strip_reason_first_action_subjective_schema,
-    with_goal_outcome_schema,
-    with_goal_update_schema,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -477,8 +473,7 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     prompt / goal seed の挙動は不変。
 
     個人結果規則を持つ島シナリオも含めるのが必須。win/lose 配列だけを見ると
-    「勝敗条件なしの open world」に誤判定され、目的が unlocked (=
-    goal_update で書き換え・清算できる) になってしまう。
+    「勝敗条件なしの open world」に誤判定され、目的が unlocked になってしまう。
 
     ``build_world_system_prompt`` の safe_intro 判定 (create_world_runtime) と
     goal 目的層の seed 判定 (WorldRuntime._resolve_objective_via_goal_store)
@@ -706,10 +701,6 @@ class WorldRuntime:
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
     reason_first_two_step_enabled: bool = field(default=False, repr=False)
-    # P6 (目的の見直し): GOAL_REVISION_ENABLED の解決結果と、goal_update を
-    # 反映する applier。flag OFF / goal store 無しなら applier は None。
-    _goal_revision_enabled: bool = field(default=False, repr=False)
-    _goal_revision_applier: Any | None = field(default=None, repr=False)
     # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
     # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
     # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
@@ -1813,7 +1804,7 @@ class WorldRuntime:
         だけを決める。
         """
         spot = [
-            self._with_goal_update_if_enabled(self._with_being_memo_if_enabled(defn))
+            self._with_being_memo_if_enabled(defn)
             for defn in [*(d for d, _ in get_spot_graph_specs()), *get_public_sns_definitions()]
         ]
         # 「この世界に存在するツールか」は ToolExposure が一括で答える。
@@ -2047,19 +2038,6 @@ class WorldRuntime:
         )
 
         return environment_entry_for_player(self.scenario, player_id).environment_name
-
-    def _with_goal_update_if_enabled(
-        self, definition: ToolDefinitionDto
-    ) -> ToolDefinitionDto:
-        """P6/P8: GOAL_REVISION_ENABLED ON なら world-action tool に optional な
-
-        ``goal_update`` (立て直し) と ``goal_outcome`` (清算) を足す。**run 全体で
-        常時**適用するので tick 間で schema は byte 不変 (設計判断 #1 遵守)。
-        OFF (既定) では definition をそのまま返す。
-        """
-        if not self._goal_revision_enabled:
-            return definition
-        return with_goal_outcome_schema(with_goal_update_schema(definition))
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -2682,12 +2660,7 @@ class WorldRuntime:
         (HIGH-3 回帰対応)。終了条件のあるシナリオ (win/lose/end や
         player_outcome_rules がある) は locked=True (従来どおり、シナリオの
         終了条件だけが目的の達成/失敗を決める)。勝敗条件を持たない open
-        world (persistent_world_demo 等) は locked=False とし、エージェント
-        自身が goal_update (言い直し) / goal_outcome (清算) で目的を
-        書き換えられるようにする。以前は locked=True を全シナリオに固定して
-        いたため、目的文なしの run が作れない (open world も含め全 run が
-        必ず何らかの目的文を持つ) ことも重なって、P6 (言い直し) / P8 (清算)
-        の実効経路がどのシナリオでも到達不能になっていた。
+        world (persistent_world_demo 等) は locked=False とする。
         """
         store = self._goal_journal_store
         if store is None:
@@ -2708,7 +2681,7 @@ class WorldRuntime:
             return render_current_goal(active)
         # 未 seed: シナリオ目的があれば locked で 1 度だけ積む (P5)。fallback_text は
         # シナリオ目的文なので、seed 後の描画は従来の静的文字列と同一 (挙動不変)。
-        # P6: seed する目的が無い (open world) 場合は未定表示になる。
+        # seed する目的が無い (open world) 場合は未定表示になる。
         from uuid import uuid4
 
         from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
@@ -2738,30 +2711,13 @@ class WorldRuntime:
         )
         return render_current_goal(store.get_active_by_being(being_id))
 
-    def _emit_goal_observation(self, player_id: PlayerId, message: str) -> None:
-        """P6: 目的まわりの観測 (locked 拒否など) を本人に 1 件届ける。
-
-        goal_update が locked で拒否されたことを silent にせず意識に返すための
-        経路 (§4 G2)。food/weather 観測と同じ ``_emit_observation_directly``。
-        """
-        output = ObservationOutput(
-            prose=message,
-            structured={"type": "goal_revision"},
-            observation_category="self_only",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        self._emit_observation_directly(player_id, output)
-
     def _emit_reflect_observation(
         self, player_id: PlayerId, message: str, verdict: str = "stalled"
     ) -> None:
         """P4/P7: 固着パスの reflect (停滞 / 達成 / 乖離の気づき) を「ふと振り返ると
 
-        …」の内省観測として本人に届ける。無意識が感覚を上げ、意識が (P6 の
-        goal_update で) 決断する分担。loop_guard 警告と同じ observation buffer
-        経路。verdict は種別として structured に載せる (達成の気づきを P6 の
-        見直しや P8 の清算が拾えるようにする)。ここでは goal store には触れない。
+        …」の内省観測として本人に届ける。loop_guard 警告と同じ observation buffer
+        経路。verdict は種別として structured に載せる。ここでは goal store には触れない。
         """
         output = ObservationOutput(
             prose=message,
@@ -2776,8 +2732,7 @@ class WorldRuntime:
         """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
 
         読み取りのみ)。監査対象は goal store の active 目的に一本化する: active が
-        あればその文 (シナリオ目的が locked で seed 済み、または P6 で本人が
-        立て直した自己目的)。まだ active が無い場合のみシナリオ目的文へ縮退する
+        あればその文 (シナリオ目的が locked で seed 済み)。まだ active が無い場合のみシナリオ目的文へ縮退する
         が、これは seed される内容と同一なので監査対象は変わらない。どちらも
         解決できなければ None (目的が無ければ reflect は判断しない)。この経路は
         副作用 (seed) を起こさない — seed は 【現在の目的】描画側が担う。
@@ -2800,47 +2755,6 @@ class WorldRuntime:
             )
         except Exception:
             return None
-
-    def apply_goal_update_if_present(
-        self, player_id: PlayerId, arguments: dict[str, Any]
-    ) -> None:
-        """P6/P8: world-action tool の引数の goal_update / goal_outcome を反映する。
-
-        orchestrator (runtime_manager の run_phase_b) が tool 実行後に呼ぶ。
-        GOAL_REVISION_ENABLED OFF / goal store 無し / どちらも空なら no-op
-        (= 導入前と挙動一致)。being 未解決も no-op。goal_update は立て直し、
-        goal_outcome (achieved / abandoned) は清算 (P8)。
-        """
-        applier = self._goal_revision_applier
-        if applier is None:
-            return
-        if not isinstance(arguments, dict):
-            return
-        goal_update = arguments.get("goal_update")
-        goal_outcome = arguments.get("goal_outcome")
-        has_update = isinstance(goal_update, str) and bool(goal_update.strip())
-        has_outcome = goal_outcome in (GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED)
-        if not has_update and not has_outcome:
-            return
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return
-        try:
-            applier.apply(
-                being_id,
-                player_id,
-                goal_update_text=goal_update if has_update else None,
-                goal_outcome=goal_outcome if has_outcome else None,
-            )
-        except Exception:
-            logger.exception(
-                "apply_goal_update_if_present failed for player_id=%s",
-                player_id.value,
-            )
 
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
@@ -7920,49 +7834,6 @@ def create_world_runtime(
             )
 
             runtime._goal_journal_store = InMemoryGoalJournalStore()
-        # P6 (目的の見直し / G2): GOAL_REVISION_ENABLED ON かつ goal store が
-        # あるとき、goal_update を反映する applier を構築する。goal store が
-        # 無ければ改訂しようがないので何もしない (revision は store が前提)。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_goal_revision_enabled_state,
-        )
-
-        _goal_revision_requested = config.goal_revision_enabled
-        # revision は goal store が前提。GOAL_REVISION_ENABLED だけ ON で
-        # GOAL_STORE_ENABLED が OFF だと、goal_update を schema に露出しつつ
-        # applier が無く「誘うのに黙って捨てる」= 静かな失敗 (本 PR が撤回した
-        # まさにその挙動を config ミスで再現) になる。両者を畳んで、store が
-        # 無ければ revision も実効 OFF にし、schema 露出も起きないようにする。
-        if _goal_revision_requested and runtime._goal_journal_store is None:
-            logger.warning(
-                "GOAL_REVISION_ENABLED=1 だが GOAL_STORE_ENABLED が OFF のため "
-                "目的の改訂は無効化される (goal store が前提)。GOAL_STORE_ENABLED=1 "
-                "も設定してください。"
-            )
-        runtime._goal_revision_enabled = (
-            _goal_revision_requested and runtime._goal_journal_store is not None
-        )
-        log_goal_revision_enabled_state(runtime._goal_revision_enabled)
-        # P8: 目的の清算 (goal_outcome) が起きたとき belief evidence へ転記する
-        # transcriber は、この下で BELIEF 系 flag 依存で後から構築される。U7 と
-        # 同じ遅延 holder で applier に渡し、transcriber 確定後に中身を埋める
-        # (belief 経路が OFF のときは None のまま = 転記なしで清算だけ行う)。
-        _goal_settlement_transcriber_holder: list[Any] = [None]
-        if runtime._goal_revision_enabled:
-            from ai_rpg_world.application.llm.services.goal_revision_applier import (
-                GoalRevisionApplier,
-            )
-
-            runtime._goal_revision_applier = GoalRevisionApplier(
-                cast(Any, runtime._goal_journal_store),
-                observation_sink=runtime._emit_goal_observation,
-                current_tick_provider=runtime.current_tick,
-                now_provider=lambda: datetime.now(timezone.utc),
-                settlement_transcriber_provider=(
-                    lambda: _goal_settlement_transcriber_holder[0]
-                ),
-                trace_recorder_provider=lambda: runtime._trace_recorder,
-            )
         # U7: subjective service の構築 (この少し下) は semantic スタック構築
         # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
         # belief 取得に使う SemanticPassiveRecallService をこの時点ではまだ
@@ -7993,9 +7864,6 @@ def create_world_runtime(
                     current_tick_provider=runtime.current_tick,
                     memory_turn_reader=runtime._memory_turn_clock,
                 )
-                # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
-                # GoalRevisionApplier の遅延 holder をここで埋める。
-                _goal_settlement_transcriber_holder[0] = belief_evidence_transcriber
         if config.episodic_subjective_enabled:
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,

@@ -78,7 +78,6 @@ class AgentMove:
     arguments: Mapping[str, JsonValue]
     expectation: str | None = None
     inner_thought: str | None = None
-    goal_update: str | None = None
 
     def __post_init__(self) -> None:
         require_text(self.call_id, "call_id")
@@ -86,4 +85,3 @@ class AgentMove:
         object.__setattr__(self, "arguments", FrozenJsonObject(self.arguments))
         require_optional_text(self.expectation, "expectation")
         require_optional_text(self.inner_thought, "inner_thought")
-        require_optional_text(self.goal_update, "goal_update")

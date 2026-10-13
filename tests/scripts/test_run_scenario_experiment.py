@@ -826,7 +826,6 @@ class TestExperimentProfileManifest:
                 "BELIEF_EVIDENCE_ENABLED",
                 "BELIEF_CONSOLIDATION_ENABLED",
                 "GOAL_STORE_ENABLED",
-                "GOAL_REVISION_ENABLED",
             )
         } == {
             "LLM_EPISODIC_ENABLED": False,
@@ -837,7 +836,6 @@ class TestExperimentProfileManifest:
             "BELIEF_EVIDENCE_ENABLED": False,
             "BELIEF_CONSOLIDATION_ENABLED": False,
             "GOAL_STORE_ENABLED": False,
-            "GOAL_REVISION_ENABLED": False,
         }
         assert {
             key: profile["runtime_config"][key]
