@@ -4,12 +4,13 @@ Phase 3 Step 3d-3 (Issue #470): legacy player_id 版を撤去し、being_id 版�
 残した。
 
 横断レビュー H-3/M2 で ``InMemoryEpisodicRecallBufferStore`` のみ thread-safe
-化: ThreadPool の chunk 補完ワーカー (``episodic_subjective_completion_schedulers.py``)
-が ``stamp_prediction_outcome_for_episodes_by_being`` (list → replace の
-read-modify-write) を叩く一方、メイン
-thread は ``prompt_builder`` / ``episodic_reinterpretation_coordinator`` から
-append / peek / mark_processed を行う。#309 と同じ ``threading.RLock``
-パターンで公開メソッド全体を保護する。
+化した。ThreadPool の chunk 補完ワーカーが外れを想起に刻む
+(``stamp_prediction_outcome_for_episodes_by_being``、list → replace の
+read-modify-write) 一方、メイン thread は ``prompt_builder`` /
+``episodic_reinterpretation_coordinator`` から append / peek / mark_processed を
+行うためで、#309 と同じ ``threading.RLock`` パターンで公開メソッド全体を保護する。
+刻む書き手は #1631 で消したので、いまはワーカーから呼ばれない。stamp と一緒に
+再解釈の段で消す。
 
 ``InMemoryEpisodicReinterpretationJournalStore`` はこのワーカー thread から
 呼ばれる経路が無い (呼び出し元は ``episodic_reinterpretation_coordinator`` /
@@ -55,9 +56,8 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
     def __init__(self) -> None:
         self._pending: dict[BeingId, list[EpisodicRecallObservation]] = defaultdict(list)
         self._received_event_ids: dict[BeingId, list[str]] = {}
-        # ワーカー thread (stamp_prediction_outcome_for_episodes_by_being) とメイン
-        # thread (append / peek / mark_processed) が同じ dict / list を触るため、
-        # 公開メソッド全体を 1 つの RLock で保護する (#309 と同じ粒度・同じ理由)。
+        # 公開メソッド全体を 1 つの RLock で保護する (#309 と同じ粒度、理由は
+        # module docstring)。
         self._lock = threading.RLock()
 
     def append_by_being(

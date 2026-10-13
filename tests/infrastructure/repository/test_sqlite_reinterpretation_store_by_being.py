@@ -26,6 +26,8 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
 from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (
     SqliteEpisodicReinterpretationStore,
     _entry_to_payload,
+    _payload_to_recall,
+    _recall_to_payload,
 )
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
@@ -96,6 +98,16 @@ def being() -> BeingId:
 
 class TestSqliteRecallBufferByBeing:
     """SQLite recall buffer の by_being API。"""
+
+    def test_old_payload_with_prediction_context_id_is_read(self) -> None:
+        """予測の文脈 ID を書いていたころ (#1631 より前) の payload_json も読め、書き戻すときは ID のキーを出さない。"""
+        payload = _recall_to_payload(_obs(recall_id="r-old", episode_id="e1"))
+        payload["prediction_context_id"] = "pc-1"
+
+        restored = _payload_to_recall(payload)
+
+        assert restored.recall_id == "r-old"
+        assert "prediction_context_id" not in _recall_to_payload(restored)
 
     def test_append_pending_count(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId

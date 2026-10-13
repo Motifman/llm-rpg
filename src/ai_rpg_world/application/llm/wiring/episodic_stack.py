@@ -421,18 +421,14 @@ def build_episodic_stack(
     objective_text_provider: Any | None = None,
     reflect_observation_sink: Any | None = None,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
-    # True のとき chunk_coordinator が完了点で recall_buffer に
-    # prediction_error を刻み、reinterpretation_coordinator が誤差専用
-    # framing で再解釈する。reinterpretation_enabled が False なら
-    # recall_buffer 自体が構築されないため、本 flag だけ True にしても
-    # 安全に縮退する (実害なし)。
+    # True のとき reinterpretation_coordinator が、外れの刻まれた想起を誤差専用
+    # framing で再解釈する。外れを刻む書き手は #1631 で消したので、刻まれた
+    # 想起は無く安全に縮退する。
     error_driven_reinterpretation_enabled: bool = False,
     # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default False =
-    # flag OFF): True のとき的中側 sidecar store を構築し、chunk_coordinator
-    # の完了点 (同期) が record_hit を書き込み、passive_recall の
-    # multi_cue_score に boost を加算する。reinterpretation_enabled が False
-    # なら recall_buffer 自体が構築されないため、本 flag だけ True にしても
-    # 安全に縮退する (record_hit 対象の recall observation が無い)。
+    # flag OFF): True のとき的中側 sidecar store を構築し、passive_recall の
+    # multi_cue_score に的中の回数ぶんの boost を加算する。的中を数える書き手
+    # (record_hit) は #1631 で消したので、boost は常に 0 で安全に縮退する。
     recall_hit_boost_enabled: bool = False,
     recall_hit_boost_strength: int = 0,
     recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
