@@ -190,10 +190,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
             InMemoryMemoryLinkStore,
         )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-            InMemoryEpisodicReinterpretationJournalStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
         )
@@ -221,15 +217,11 @@ class TestExpectedPayloadKeysCoverage:
 
         repo = InMemoryBeingRepository()
         # episodic_stack 側の attribute 名は EpisodicStack dataclass (実体) と
-        # 揃える。reinterpretation_journal だけ stub 内部で
-        # ``episodic_reinterpretation_journal_store`` にリネームされる
-        # (既存の semantic / memory_link / recall_buffer と同じ扱い)。
+        # 揃える。
         episodic_stack = SimpleNamespace(
             episode_store=InMemorySubjectiveEpisodeStore(),
             semantic_memory_store=InMemorySemanticMemoryStore(),
             memory_link_store=InMemoryMemoryLinkStore(),
-            recall_buffer_store=InMemoryEpisodicRecallBufferStore(),
-            reinterpretation_journal=InMemoryEpisodicReinterpretationJournalStore(),
             belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
             recall_success_store=InMemoryEpisodicRecallSuccessStore(),
             recall_slot_store=InMemoryEpisodicRecallSlotStore(),

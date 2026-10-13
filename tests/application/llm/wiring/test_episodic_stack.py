@@ -163,45 +163,6 @@ class TestBuildEpisodicStack:
         stack = build_episodic_stack(scenario=scenario, graph=graph, observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, episode_store=shared)
         assert stack.episode_store is shared
 
-class TestReinterpretationOptIn:
-    """U3: build_episodic_stack の reinterpretation (段1) opt-in 配線。"""
-
-    def _io(self):
-        return (DefaultObservationContextBuffer(), DefaultSlidingWindowMemory(), DefaultActionResultStore())
-
-    def test_default_off_reinterpretation_all_none(self) -> None:
-        """reinterpretation_enabled 未指定なら coordinator/journal/buffer 全て None (従来挙動)。"""
-        (obs_buf, sliding, action_store) = self._io()
-        stack = build_episodic_stack(scenario=_stub_scenario(players=[(1, 't')]), graph=_stub_graph(spots={1: 'x'}), observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store)
-        assert stack.reinterpretation_coordinator is None
-        assert stack.reinterpretation_journal is None
-        assert stack.recall_buffer_store is None
-
-    def test_creates_prompt_buffer_none_enabled_completion_none_coordinator(self) -> None:
-        """completion なし: coordinator/journal は組むが、prompt は recall buffer を覗かない。"""
-        (obs_buf, sliding, action_store) = self._io()
-        stack = build_episodic_stack(scenario=_stub_scenario(players=[(1, 't')]), graph=_stub_graph(spots={1: 'x'}), observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, reinterpretation_enabled=True, reinterpretation_completion=None)
-        assert stack.reinterpretation_coordinator is not None
-        assert stack.reinterpretation_journal is not None
-        assert stack.recall_buffer_store is None
-
-    def test_enabled_completion_prompt_buffer_non_none(self) -> None:
-        """completion あり: prompt 用 recall_buffer_store も非 None になる (想起を pending 化)。"""
-        from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
-            IEpisodicReinterpretationCompletionPort,
-        )
-
-        class _StubCompletion(IEpisodicReinterpretationCompletionPort):
-
-            def complete_episodic_reinterpretation_json(self, messages):
-                return '{}'
-        (obs_buf, sliding, action_store) = self._io()
-        stack = build_episodic_stack(scenario=_stub_scenario(players=[(1, 't')]), graph=_stub_graph(spots={1: 'x'}), observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, reinterpretation_enabled=True, reinterpretation_completion=_StubCompletion())
-        assert stack.reinterpretation_coordinator is not None
-        assert stack.recall_buffer_store is not None
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        assert stack.reinterpretation_coordinator.current_turn_index(PlayerId(1)) == 0
-
 class TestRecallHitBoostOptIn:
     """U9b (想起の信用割り当て・的中側): build_episodic_stack の opt-in 配線。"""
 

@@ -281,10 +281,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         # event 駆動で頻繁に動く player には heartbeat が出なくなり、
         # 完全 idle な player だけ idle_timeout 経過後に 1 回起こされる。
         self._note_activity_after_turn(player_id_value)
-        # #526 / U3: 段1 エピソード再解釈の trigger 後半。turn 完了を coordinator に
-        # 通知し、interval 到達時に pending recall batch を LLM 再解釈する。
-        # reinterpretation OFF (coordinator 未構築) では no-op。
-        self._note_turn_for_reinterpretation(player_id_value)
         # U3b: 固着パス。turn 完了を coordinator に通知し、発火条件
         # (interval 到達 / cue_signature 反復 / salience=high) を満たした
         # ときだけ evidence batch を belief journal に統合する。
@@ -392,34 +388,12 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
             # snapshot 精度低下は致命ではない (差分が 0 になるだけ)
             self._record_follow_up_failure(exc, "llm_turn.needs_snapshot", player_id_value)
 
-    def _note_turn_for_reinterpretation(self, player_id_value: int) -> None:
-        """reinterpretation coordinator に turn 完了を通知する fail-safe ヘルパ。
-
-        coordinator 未配線 (reinterpretation OFF) / 異常系では何もしない
-        (turn 実行自体は壊さない)。``_note_activity_after_turn`` と同じ方式。
-        """
-        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
-        coordinator = (
-            getattr(stack, "reinterpretation_coordinator", None) if stack else None
-        )
-        if coordinator is None:
-            return
-        player_id = PlayerId(player_id_value)
-        acting = self.wiring.runtime._acting_being_for(player_id)
-        if acting is None:
-            return
-        try:
-            coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception as exc:
-            # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
-            self._record_follow_up_failure(exc, "llm_turn.reinterpretation", player_id_value)
-
     def _note_turn_for_belief_consolidation(self, player_id_value: int) -> None:
         """固着パス coordinator に turn 完了を通知する fail-safe ヘルパ。
 
         coordinator 未配線 (BELIEF_CONSOLIDATION_ENABLED OFF) / 異常系では
         何もしない (turn 実行自体は壊さない)。
-        ``_note_turn_for_reinterpretation`` と同じ方式。
+        ``_note_activity_after_turn`` と同じ方式。
         """
         stack = getattr(self.wiring.runtime, "_episodic_stack", None)
         coordinator = (

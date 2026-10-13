@@ -1,9 +1,8 @@
 """固着パス — evidence buffer を belief journal に統合する協調サービス (U3b)。
 
 semantic_learning_consolidation_design.md「固着パス:
-BeliefConsolidationCoordinator」節の本体。``EpisodicReinterpretationCoordinator``
-(``episodic_reinterpretation_coordinator.py``) を型紙にした batch 型
-coordinator で、**semantic store (belief journal) への書き込みはここが
+BeliefConsolidationCoordinator」節の本体。エピソードの再解釈の coordinator
+(#1631 で消した) を型紙にした batch 型 coordinator で、**semantic store (belief journal) への書き込みはここが
 唯一の入口**になる。
 
 # 発火 (ルール)

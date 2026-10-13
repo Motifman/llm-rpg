@@ -594,21 +594,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
-    # #558 レビュー反映 (MEDIUM-2): reinterpretation (段1) ON のとき episodic_stack が
-    # in-memory の recall_buffer / journal を持つ。snapshot surface で None ハードコード
-    # だと、再解釈 journal と pending recall buffer が save/load で silent に失われ、
-    # 再開時の記憶連続性 (自己の継続性) が壊れる。semantic と同じく stack から拾う
-    # (OFF なら None = 従来どおり空 in-memory fallback)。
-    recall_buffer_store = (
-        getattr(episodic_stack, "recall_buffer_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    reinterpretation_journal_store = (
-        getattr(episodic_stack, "reinterpretation_journal", None)
-        if episodic_stack is not None
-        else None
-    )
     # U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき episodic_stack が
     # belief evidence buffer store を持つ。checklist #27 (memory_full_003 で
     # stub 追従漏れが実際に起きた教訓) に従い、ここで拾わないと flag ON でも
@@ -654,8 +639,9 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
         memory_link_store=memory_link_store,
-        episodic_recall_buffer_store=recall_buffer_store,
-        episodic_reinterpretation_journal_store=reinterpretation_journal_store,
+        # 再解釈 (#1631 で消した) の想起の記録と journal は、snapshot の空の代用品で運ぶ。
+        episodic_recall_buffer_store=None,
+        episodic_reinterpretation_journal_store=None,
         episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
@@ -1223,7 +1209,6 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 _AUX_COMPONENT_LABELS: dict[str, str] = {
     AuxLlmComponent.EPISODE_SUBJECTIVE.value: "主観の書き込み",
-    AuxLlmComponent.EPISODIC_REINTERPRETATION.value: "エピソードの再解釈",
     AuxLlmComponent.SEMANTIC_GIST.value: "意味記憶の要旨",
     AuxLlmComponent.BELIEF_CONSOLIDATION.value: "信念の統合",
     AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",

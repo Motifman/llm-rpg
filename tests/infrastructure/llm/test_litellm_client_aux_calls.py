@@ -68,7 +68,6 @@ def _client(sink: Any) -> LiteLLMClient:
 
 _METHOD_TO_COMPONENT = [
     ("complete_episode_subjective_json", AuxLlmComponent.EPISODE_SUBJECTIVE),
-    ("complete_episodic_reinterpretation_json", AuxLlmComponent.EPISODIC_REINTERPRETATION),
     ("complete_semantic_gist_json", AuxLlmComponent.SEMANTIC_GIST),
     ("complete_belief_consolidation_json", AuxLlmComponent.BELIEF_CONSOLIDATION),
     ("complete_short_term_summary_json", AuxLlmComponent.SHORT_TERM_SUMMARY),

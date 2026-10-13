@@ -2658,10 +2658,6 @@ class WorldRuntime:
         if self._episodic_stack is not None:
             # #526 後続: stack に semantic passive recall があれば
             # 【関連する学び】section を出すために渡す (default OFF では None/0)。
-            # U3: stack に reinterpretation (段1) があれば、想起時に journal を覗いて
-            # 再解釈後テキストで recall を上書きし、想起 episode を recall_buffer に
-            # 積む配線を有効化する (default OFF では全 None で従来挙動)。
-            _reinterp_coord = self._episodic_stack.reinterpretation_coordinator
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
@@ -2672,13 +2668,6 @@ class WorldRuntime:
                 memory_link_service=self._episodic_stack.link_service,
                 semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
                 semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
-                recall_buffer_store=self._episodic_stack.recall_buffer_store,
-                reinterpretation_journal_store=self._episodic_stack.reinterpretation_journal,
-                turn_index_provider=(
-                    _reinterp_coord.current_turn_index
-                    if _reinterp_coord is not None
-                    else None
-                ),
                 # #526 段階 2: 慣化 sidecar。stack で enable された時のみ非 None。
                 recall_habituation_store=self._episodic_stack.recall_habituation_store,
                 recall_habituation_decay_window_ticks=(
@@ -7706,38 +7695,6 @@ def create_world_runtime(
                     _semantic_gist_service = optional_semantic_gist_service(
                         _gist_client, True
                     )
-        # #526 / U3: 段1 (エピソード再解釈) の opt-in 配線。
-        # LLM_EPISODIC_REINTERPRETATION_ENABLED かつ LiteLLMClient が取れるときだけ
-        # completion port (= LLM) を渡す。flag ON でも client が stub なら completion
-        # は None になり、coordinator は構築されるが再解釈 LLM は走らない
-        # (prompt も recall_buffer を覗かない = graceful)。env 直読みせず config から取る。
-        _reinterpretation_enabled = config.episodic_reinterpretation_enabled
-        _reinterpretation_completion = None
-        if _reinterpretation_enabled and config.llm_client_kind == "litellm":
-            # R2c-1: 抽出済み optional_llm_services から取る (wiring/__init__ の
-            # private helper symbol 依存を廃止。import-time 依存は R2c-2 で解消)。
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                optional_episodic_reinterpretation_completion,
-            )
-
-            try:
-                _reinterp_client = create_llm_client_from_config(
-                    config, aux_call_sink=aux_llm_call_sink
-                )
-            except Exception:
-                logger.exception(
-                    "LLM client factory failed; episodic reinterpretation disabled"
-                )
-                _reinterp_client = None
-            if _reinterp_client is not None:
-                _reinterpretation_completion = (
-                    optional_episodic_reinterpretation_completion(
-                        _reinterp_client, None
-                    )
-                )
         # U3b: 固着パスの completion port。BELIEF_CONSOLIDATION_ENABLED かつ
         # litellm client が取れるときだけ実 LLM を配線する。client が stub
         # (llm_client_kind != "litellm") のときは coordinator 自体は構築される
@@ -7782,8 +7739,6 @@ def create_world_runtime(
             semantic_passive_top_k=_semantic_top_k,
             semantic_gist_service=_semantic_gist_service,
             semantic_persona_resolver=_semantic_persona_resolver,
-            reinterpretation_enabled=_reinterpretation_enabled,
-            reinterpretation_completion=_reinterpretation_completion,
             # #526 段階 2: 慣化ペナルティ (default off)
             recall_habituation_enabled=config.recall_habituation_enabled,
             recall_habituation_decay_window_ticks=(

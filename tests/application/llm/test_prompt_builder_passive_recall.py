@@ -25,10 +25,6 @@ from ai_rpg_world.application.llm.services.context_format_strategy import Sectio
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-    InMemoryEpisodicRecallBufferStore,
-    InMemoryEpisodicReinterpretationJournalStore,
-)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
 from ai_rpg_world.application.llm.services.prompt_builder_config import EpisodicRecallConfig, PromptBuilderCoreServices
@@ -41,9 +37,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_location import Ep
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
-    EpisodicReinterpretationEntry,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.enum.player_enum import ControlType
@@ -108,7 +101,6 @@ class TestPromptBuilderPassiveRecall:
         """
         from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
         from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-        from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         player_num = 3
         _being_repo = InMemoryBeingRepository()
@@ -148,56 +140,3 @@ class TestPromptBuilderPassiveRecall:
         expected_joined = '[Day 2 09:00] 最近の出来事\n古いが cue で拾える'
         assert expected_joined in user
         assert out['current_beliefs_snapshot'] == expected_joined
-
-    def test_active_reinterpretation_overrides_episode_recall_and_records_observation(self) -> None:
-        """
-        active な再解釈がある episode は current_recall_text を prompt に使い、
-        想起された episode と状況 snapshot は recall buffer に積まれる。
-
-        Phase 3 Step 3d-3: legacy 撤去後、journal / recall_buffer は being_id
-        経路必須。Resolver+WorldId を inject し、provision 済の Being で
-        active entry を書く形に揃える。
-        """
-        from tests.application.llm._reinterpretation_being_test_helpers import make_reinterpretation_being_setup
-        player_num = 4
-        place_c = EpisodicCue(axis='place_spot', value='77', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        base = datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc)
-        store = InMemorySubjectiveEpisodeStore()
-        reinterp_setup = make_reinterpretation_being_setup()
-        being_id_4 = reinterp_setup.provision(player_num)
-        store.put_by_being(being_id_4, _episode(episode_id='e_reinterpreted', player_id=player_num, occurred_at=base + timedelta(hours=1), recall_text='古い回想は使われない', cues=(place_c,)))
-        recall_svc = EpisodicPassiveRecallRetrievalService(store)
-        being_id = being_id_4
-        journal = reinterp_setup.journal
-        journal.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='j-active', player_id=player_num, being_id=being_id, episode_id='e_reinterpreted', created_at=base + timedelta(hours=2), turn_index=10, current_interpretation='今なら罠への警戒として意味づけられる。', current_recall_text='私はあの場で感じた違和感を、今もはっきり覚えている。', source_recall_ids=('r-old',)))
-        recall_buffer = reinterp_setup.recall_buffer
-        buffer = MagicMock(spec=IObservationContextBuffer)
-        buffer.drain = MagicMock(return_value=[])
-        sliding = MagicMock(spec=IShortTermMemory)
-        sliding.append_all = MagicMock(return_value=[])
-        sliding.get_recent = MagicMock(return_value=[])
-        actions = MagicMock(spec=IActionResultStore)
-        actions.get_recent = MagicMock(return_value=[])
-        world = _world_query_stub(state=None)
-        current_fmt = MagicMock(spec=ICurrentStateFormatter)
-        current_fmt.format = MagicMock(return_value='fmt')
-        recent_fmt = MagicMock(spec=IRecentEventsFormatter)
-        recent_fmt.format_unified_entries = MagicMock(return_value='recent-events')
-        sys_builder = MagicMock(spec=ISystemPromptBuilder)
-        sys_builder.build = MagicMock(return_value='sys')
-        tools_p = MagicMock(spec=IAvailableToolsProvider)
-        tools_p.get_available_tools = MagicMock(return_value=[])
-        rt = ToolRuntimeContextDto(targets={}, current_spot_id=77)
-        ui_builder = MagicMock(spec=ILlmUiContextBuilder)
-        ui_builder.build = MagicMock(return_value=LlmUiContextDto(current_state_text='ui-current', tool_runtime_context=rt))
-        builder = DefaultPromptBuilder(PromptBuilderCoreServices(observation_buffer=buffer, short_term_memory=sliding, action_result_store=actions, recent_event_store=UnifiedRecentEventStore(), world_query_service=world, player_profile_repository=_profile_repo(player_id=player_num), current_state_formatter=current_fmt, recent_events_formatter=recent_fmt, context_format_strategy=SectionBasedContextFormatStrategy(), system_prompt_builder=sys_builder, available_tools_provider=tools_p), ui_context_builder=ui_builder, episodic=EpisodicRecallConfig(passive_recall=recall_svc, passive_recall_limit_per_axis=_TEST_PASSIVE_RECALL_LIMIT_PER_AXIS, passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES, recall_buffer_store=recall_buffer, reinterpretation_journal_store=journal, turn_index_provider=lambda _pid: 12))
-        out = builder.build(ActingBeing(player_id=PlayerId(player_num), being_id=being_id_4))
-        user = out['messages'][1]['content']
-        assert '私はあの場で感じた違和感' in user
-        assert '古い回想は使われない' not in user
-        pending = recall_buffer.peek_batch_by_being(being_id, batch_size=8, max_contexts_per_episode=3)
-        assert len(pending) == 1
-        assert pending[0].episode_id == 'e_reinterpreted'
-        assert pending[0].current_state_snapshot == 'ui-current'
-        assert pending[0].recent_events_snapshot == 'recent-events'
-        assert pending[0].turn_index == 12

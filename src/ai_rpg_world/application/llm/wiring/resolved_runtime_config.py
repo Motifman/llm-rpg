@@ -95,7 +95,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK",
     "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
     "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
-    "LLM_EPISODIC_REINTERPRETATION_ENABLED",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
@@ -283,10 +282,6 @@ class ResolvedLlmRuntimeConfig:
     semantic_passive_top_k: int
     semantic_search_enabled: bool
 
-    # Prediction (#526 / U3): 段1=LLM 駆動のエピソード再解釈 (credit assignment) を
-    # 有効化するか。``LLM_EPISODIC_REINTERPRETATION_ENABLED=1`` で ON。default OFF で
-    # 従来の episodic-only 動作 (再解釈を組まない)。
-    episodic_reinterpretation_enabled: bool
 
     # #526 段階 2: 慣化ペナルティ (recall された episode のスコアを decay_window
     # tick の間だけ下げる)。``LLM_EPISODIC_RECALL_HABITUATION_ENABLED=1`` で ON。
@@ -639,9 +634,6 @@ class ResolvedLlmRuntimeConfig:
         )
 
         # Prediction (#526 / U3): エピソード再解釈 on/off
-        episodic_reinterpretation_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_REINTERPRETATION_ENABLED"), default=False
-        )
 
         # #526 段階 2: 慣化ペナルティ (default off / decay 5 tick)
         recall_habituation_enabled = _parse_truthy(
@@ -810,7 +802,6 @@ class ResolvedLlmRuntimeConfig:
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
             semantic_passive_top_k=semantic_passive_top_k,
             semantic_search_enabled=semantic_search_enabled,
-            episodic_reinterpretation_enabled=episodic_reinterpretation_enabled,
             recall_habituation_enabled=recall_habituation_enabled,
             recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
             recall_slot_enabled=recall_slot_enabled,
@@ -921,7 +912,6 @@ class ResolvedLlmRuntimeConfig:
             semantic_llm_gist_enabled=False,
             semantic_passive_top_k=0,
             semantic_search_enabled=False,
-            episodic_reinterpretation_enabled=False,
             recall_habituation_enabled=False,
             recall_habituation_decay_window_ticks=5,
             recall_slot_enabled=False,
