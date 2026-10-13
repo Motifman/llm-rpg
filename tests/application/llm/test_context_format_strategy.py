@@ -118,32 +118,6 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "【所持・判明した物証】" not in text
         assert idx["obj"] < idx["events"] < idx["mem"] < idx["memos"] < idx["current"]
 
-    def test_pending_predictions_follow_recent_events_rendered(self, strategy):
-        """U10a (予測誤差統一設計 部品6): 【保留中の予測】は【直近の出来事】の後、【関連する学び】と【関連する記憶】の前に置く。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-            relevant_memories_text="記憶",
-            pending_predictions_text="・夕方に木の下でカイトと会う",
-            learned_text="- 扉は重い",
-        )
-        assert "【保留中の予測】" in text
-        idx_events = text.index("【直近の出来事】")
-        idx_pending = text.index("【保留中の予測】")
-        idx_learned = text.index("【関連する学び】")
-        idx_mem = text.index("【関連する記憶】")
-        assert idx_events < idx_pending < idx_learned < idx_mem
-
-    def test_returns_empty_when_pending_predictions_section(self, strategy):
-        """再浮上する pending prediction が無ければ (空文字)、【保留中の予測】
-
-        section 自体が出ない (= 導入前と byte 一致)。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-        )
-        assert "【保留中の予測】" not in text
-
     def test_duplicate_inventory_section_is_omitted(self, strategy):
         """旧 inventory section は省略し、現在地と周囲にある所持品だけを残す。"""
         text = strategy.format(
@@ -302,7 +276,6 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
             learned_text="学び",
             mid_summary_text="最近の流れ",
             long_summary_text="自己像",
-            pending_predictions_text="保留中の予測",
         )
         idx = {
             "obj":      text.index("【現在の目的】"),
@@ -311,7 +284,6 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
             "l4":       text.index("【最近の流れ】"),
             "current":  text.index("【現在地と周囲】"),
             "memos":    text.index("【進行中のメモ】"),
-            "pending":  text.index("【保留中の予測】"),
             "events":   text.index("【直近の出来事】"),
             "mem":      text.index("【関連する記憶】"),
         }
@@ -319,7 +291,7 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         assert (
             idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
             < idx["current"] < idx["memos"]
-            < idx["pending"] < idx["events"] < idx["mem"]
+            < idx["events"] < idx["mem"]
         )
 
     def test_legacy_known_people_follow_objective(self, strategy):
@@ -354,28 +326,6 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         idx_learned = text.index("【関連する学び】")
         idx_current = text.index("【現在地と周囲】")
         assert idx_objective < idx_learned < idx_current
-
-    def test_legacy_pending_predictions_precede_recent_events(self, strategy):
-        """legacy 順序でも【保留中の予測】は【進行中のメモ】の後、【直近の出来事】の直前に置く。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-            active_memos_text="メモ",
-            pending_predictions_text="・夕方に木の下でカイトと会う",
-        )
-        idx_memos = text.index("【進行中のメモ】")
-        idx_pending = text.index("【保留中の予測】")
-        idx_events = text.index("【直近の出来事】")
-        assert idx_memos < idx_pending < idx_events
-
-    def test_returns_empty_when_legacy_pending_predictions(self, strategy):
-        """legacy でも pending predictions が空なら省略される。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-        )
-        assert "【保留中の予測】" not in text
-
 
 class TestSectionBasedContextFormatStrategyValidation:
     """constructor / format の入力検証。"""

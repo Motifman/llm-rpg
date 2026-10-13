@@ -1,4 +1,4 @@
-"""EpisodicChunkCoordinator が、確定して外れた予期を次に閉じる chunk の主観補完へ渡し、chunk の prediction_error を信念の材料にしない挙動を保証する (#1443)。
+"""EpisodicChunkCoordinator が、chunk の prediction_error を LLM が書いても残さない挙動を保証する (#1631)。
 
 同期経路 (``chunk_subjective_fields_service`` 注入時) で、``after_action_recorded``
 が chunk を close するまで実際に action / observation を流し込む。
@@ -8,21 +8,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from tests.memory_turn_helpers import ZERO_TURN
-
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
-from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-    InMemoryBeliefEvidenceBufferStore,
-)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
@@ -40,7 +34,7 @@ class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
     def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         return self._returns
 
-def _build_coord(*, returns: dict[str, Any], belief_evidence_transcriber=None):
+def _build_coord(*, returns: dict[str, Any]):
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory()
     action_store = DefaultActionResultStore()
@@ -50,7 +44,7 @@ def _build_coord(*, returns: dict[str, Any], belief_evidence_transcriber=None):
     being_id = BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))
     port = _StubPort(returns)
     subjective_service = EpisodicChunkSubjectiveFieldsService(port)
-    coord = EpisodicChunkCoordinator(observation_buffer=buffer, short_term_memory=sliding, action_result_store=action_store, episodic_episode_store=episode_store, chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(), chunk_subjective_fields_service=subjective_service, belief_evidence_transcriber=belief_evidence_transcriber)
+    coord = EpisodicChunkCoordinator(observation_buffer=buffer, short_term_memory=sliding, action_result_store=action_store, episodic_episode_store=episode_store, chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(), chunk_subjective_fields_service=subjective_service)
     return (coord, buffer, action_store, being_id)
 
 def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id, *, start_hour: int=12) -> None:
@@ -62,18 +56,6 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being
     coord.after_action_recorded(player_id, being_id)
     action_store.append(player_id, action_summary='move', result_summary='ok', occurred_at=datetime(2026, 5, 1, start_hour, 2, tzinfo=timezone.utc), scene_boundary=True)
     coord.after_action_recorded(player_id, being_id)
-
-class TestChunkPredictionErrorIsNotBeliefMaterial:
-    """chunk の prediction_error は、確定した予期と二重に数えないよう信念の材料にしない挙動を保証する。"""
-
-    def test_prediction_error_of_chunk_adds_no_evidence(self) -> None:
-        """LLM が prediction_error を書いても、chunk の完了点では証拠を積まない。"""
-        buffer_store = InMemoryBeliefEvidenceBufferStore()
-        transcriber = BeliefEvidenceTranscriber(buffer_store, memory_turn_reader=ZERO_TURN)
-        (coord, buffer, action_store, being_id) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'prediction_error': '潮が満ちていて下りられなかった'}, belief_evidence_transcriber=transcriber)
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-        assert buffer_store.list_all_by_being(being_id) == []
-
 
 class TestChunkPredictionErrorIsDropped:
     """chunk の prediction_error を、LLM が書いても残さない挙動を保証する。"""

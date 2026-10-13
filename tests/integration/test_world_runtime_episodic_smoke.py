@@ -394,9 +394,7 @@ class TestSmokeBeliefEvidenceWiring:
     実 LLM は使わない (LiteLLMClient が取れない = subjective scheduler 自体は
     構築されない環境でもテストが通る必要がある)。ここで保証したいのは
     「flag ON で evidence buffer store が EpisodicStack に公開され、
-    snapshot 経由で拾える状態になっていること」で、転記自体の単体挙動は
-    ``test_belief_evidence_transcriber.py`` /
-    ``test_episodic_subjective_completion_schedulers.py`` で担保済み。
+    snapshot 経由で拾える状態になっていること」。
     """
 
     def test_flag_off_belief_evidence_buffer_store_none(self, monkeypatch: pytest.MonkeyPatch) -> None:

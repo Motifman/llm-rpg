@@ -201,7 +201,6 @@ class IContextFormatStrategy(ABC):
         learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
-        pending_predictions_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
         being_memo_text: str = "",
@@ -216,10 +215,6 @@ class IContextFormatStrategy(ABC):
 
         ``episode_index_text`` はエピソードの目次【思い出せる出来事】の本体。空なら
         section を出さない (#1623)。目次を出す設定では、空の目次も「まだ無い」と渡る。
-
-        ``pending_predictions_text`` は U10a (予測誤差統一設計 部品6) で
-        再浮上した「保留中の予測 (約束)」を一覧化した「【保留中の予測】」
-        section の本体。空文字なら section ごと省略する。
 
         ``active_memos_text`` は LLM が ``memo_add`` で固定した「進行中のメモ」
         section に表示するテキスト (Issue #188 Phase 1a)。空文字なら section を

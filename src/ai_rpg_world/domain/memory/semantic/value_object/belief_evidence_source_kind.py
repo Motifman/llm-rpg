@@ -5,10 +5,13 @@ U2 (証拠台帳統一設計 §2 / semantic_learning_consolidation_design.md
 将来の後続 PR (U2〜U6) で配線される全種別を最初から enum に予約しておく。
 
 - ``PREDICTION_ERROR``: chunk 主観補完 LLM が ``prediction_error`` を
-  非 None で埋めたとき (本 PR U2 で転記を配線する唯一の source)
-- ``FAMILIARITY``: 既存クラスタ検出の転用 (U3 で配線予定)
-- ``CONFIRMATION``: 学びを信じて行動し当たった (U4 で配線予定)
-- ``PENDING_RESOLUTION``: 保留中の予測 (約束) の履行/破棄清算 (U10 で配線予定)
+  非 None で埋めたとき
+- ``FAMILIARITY``: 既存クラスタ検出の転用 (いまの書き手はクラスタ昇格だけ)
+- ``CONFIRMATION``: 学びを信じて行動し当たった
+- ``PENDING_RESOLUTION``: 保留中の予測 (約束) の履行/破棄清算
+
+``PREDICTION_ERROR`` / ``PENDING_RESOLUTION`` の書き手は #1631 で消した。
+値は、消す前に保存した snapshot の evidence を読むために残している。
 """
 
 from __future__ import annotations

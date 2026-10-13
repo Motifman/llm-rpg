@@ -37,9 +37,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         RecallSlotEntry,
     )
-    from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-        PendingPrediction,
-    )
     from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
         BeliefEvidence,
     )
@@ -661,56 +658,6 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> BeliefEvidence:
         )
     except BeliefEvidenceValidationException as exc:
         raise ValueError(f"invalid BeliefEvidence payload: {exc}") from exc
-
-
-# ── U10a: PendingPrediction (予測誤差統一設計 部品6) の codec ──
-
-
-def pending_prediction_to_dict(pending: PendingPrediction) -> dict[str, Any]:
-    return {
-        "pending_id": pending.pending_id,
-        "text": pending.text,
-        "resolution_cues": list(pending.resolution_cues),
-        "tick_from": pending.tick_from,
-        "tick_to": pending.tick_to,
-        "origin_episode_id": pending.origin_episode_id,
-        "created_tick": pending.created_tick,
-        # P11: 種別 (promise / plan)。清算文面と trace の区別に使うので resume 後も
-        # 保つ必要がある。旧 snapshot (このキー無し) は promise に倒す (VO 既定と一致)。
-        "kind": pending.kind,
-    }
-
-
-def dict_to_pending_prediction(data: dict[str, Any]) -> PendingPrediction:
-    """dict → PendingPrediction。
-
-    ``dict_to_belief_evidence`` と同じ理由で、VO の **ドメイン例外**
-    (``PendingPredictionValidationException``) を ``_decode_list`` の
-    ``except (KeyError, ValueError, TypeError)`` 契約に合わせて ``ValueError``
-    に翻訳する。
-    """
-    from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
-        PendingPredictionValidationException,
-    )
-    from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-        PENDING_KIND_PROMISE,
-        PendingPrediction,
-    )
-
-    try:
-        return PendingPrediction(
-            pending_id=str(data["pending_id"]),
-            text=str(data["text"]),
-            resolution_cues=tuple(str(x) for x in data.get("resolution_cues", ())),
-            tick_from=int(data["tick_from"]),
-            tick_to=int(data["tick_to"]),
-            origin_episode_id=str(data["origin_episode_id"]),
-            created_tick=int(data["created_tick"]),
-            # P11: 旧 snapshot (kind キー無し) は promise に倒す (VO 既定と一致)。
-            kind=str(data.get("kind", PENDING_KIND_PROMISE)),
-        )
-    except PendingPredictionValidationException as exc:
-        raise ValueError(f"invalid PendingPrediction payload: {exc}") from exc
 
 
 def _str_tuple(value: Any, *, name: str) -> tuple[str, ...]:

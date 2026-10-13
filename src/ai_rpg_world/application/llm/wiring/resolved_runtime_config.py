@@ -117,7 +117,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
     "OPENROUTER_REQUIRE_PARAMS",
-    "PENDING_PREDICTION_ENABLED",
     "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "PROMPT_SECTION_ORDER",
@@ -355,7 +354,6 @@ class ResolvedLlmRuntimeConfig:
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
     error_driven_reinterpretation_enabled: bool = False
     recall_hit_boost_enabled: bool = False
-    pending_prediction_enabled: bool = False
 
     # Goal / stagnation 系。
 
@@ -497,7 +495,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_episodic_recall_enabled,
             resolve_error_driven_reinterpretation_enabled,
             resolve_memo_tools_enabled,
-            resolve_pending_prediction_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
@@ -747,7 +744,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_error_driven_reinterpretation_enabled(env=source)
         )
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
-        pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
         escape_llm_ssot_enabled = _parse_truthy(
             source.get("ESCAPE_LLM_SSOT"), default=False
@@ -866,7 +862,6 @@ class ResolvedLlmRuntimeConfig:
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
-            pending_prediction_enabled=pending_prediction_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
@@ -983,7 +978,6 @@ class ResolvedLlmRuntimeConfig:
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
             error_driven_reinterpretation_enabled=False,
             recall_hit_boost_enabled=False,
-            pending_prediction_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,
             being_memo_enabled=False,

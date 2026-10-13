@@ -82,9 +82,6 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
     from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
-    from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-        PendingPredictionRepository,
-    )
     from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 
 
@@ -209,14 +206,6 @@ class EpisodicRecallConfig:
     # ので、prompt_builder は store.apply_decision (書込) と prompt 表示の
     # ために参照する。
     afterglow_store: IAfterglowStore | None = None
-    # U10a (予測誤差統一設計 部品6・pending prediction / default off): 抽出
-    # された約束・見込みの per-Being store。注入時のみ動く (= default off で
-    # 既存挙動と同一)。他の sidecar store (recall_habituation_store 等) と
-    # 同じく「store が None なら機構自体が無効」で判定し、別の enabled bool
-    # は持たない。
-    pending_prediction_store: PendingPredictionRepository | None = None
-    # 再浮上の cap (1 ターンに出す件数の上限)。乱発防止のための構造的な歯止め。
-    pending_prediction_resurface_cap: int = 2
 
 
 @dataclass(frozen=True)

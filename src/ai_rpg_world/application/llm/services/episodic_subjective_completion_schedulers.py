@@ -44,15 +44,6 @@ from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
-from ai_rpg_world.application.llm.services._pending_prediction_recording import (
-    record_pending_prediction_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
-    resolve_pending_predictions_if_applicable,
-)
-from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-    BeliefEvidenceTranscriber,
-)
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
@@ -60,60 +51,9 @@ from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 _logger = logging.getLogger(__name__)
-
-
-def _resolve_recorder_from_provider(
-    recorder_provider: Callable[[], ITraceRecorder | None] | None,
-) -> ITraceRecorder | None:
-    """U10a: trace_recorder_provider を安全に解決する小さな helper。
-
-    ``_emit_trace`` 内の同等ロジックと重複するが、``record_pending_prediction_if_applicable``
-    は provider ではなく解決済み recorder を受け取る契約 (同期経路
-    ``EpisodicChunkCoordinator._resolve_trace_recorder`` と揃える) なので、
-    scheduler 側で 1 度だけ解決してから渡す。
-    """
-    if recorder_provider is None:
-        return None
-    try:
-        return recorder_provider()
-    except Exception:
-        return None
-
-
-def _run_sidecar_safely(
-    name: str,
-    episode_id: str,
-    fn: Callable[[], None],
-) -> None:
-    """LOW-4: chunk 完了点の sidecar 処理 (証拠転記・想起系・約束の記録/清算) を
-
-    個別に catch する helper。
-
-    主観補完 (merge) と episode store への put が既に成功した後に呼ぶことが
-    前提。1 つの sidecar が失敗しても他の sidecar をブロックしない (以前は
-    merge → put → 約束の記録 → 清算までを 1 つの try に包んでいたため、
-    ``record_pending_prediction_if_applicable`` の例外 (呼出元へ伝播させる
-    設計) が「LLM 補完が失敗」と誤報告され、実際には既に store に書き込み
-    済みの merged episode がありながら、後続の清算 (resolve) まで巻き添えで
-    skip されていた)。
-    """
-    try:
-        fn()
-    except Exception:
-        _logger.warning(
-            "episodic subjective completion sidecar '%s' failed after merge "
-            "already succeeded (episode_id=%s); merged episode is already "
-            "stored, only this sidecar's effect is missing",
-            name,
-            episode_id,
-            exc_info=True,
-        )
 
 
 def _emit_trace(
@@ -175,9 +115,6 @@ class InlineEpisodicSubjectiveScheduler:
         *,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
-        belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        pending_prediction_store: PendingPredictionRepository | None = None,
-        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -187,31 +124,11 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
-        # U2 (証拠台帳統一設計): flag OFF (= None) なら従来通り何もしない。
-        if belief_evidence_transcriber is not None and not isinstance(
-            belief_evidence_transcriber, BeliefEvidenceTranscriber
-        ):
-            raise TypeError(
-                "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
-            )
-        # U10a (予測誤差統一設計 部品6・pending prediction): flag OFF (= None)
-        # なら従来通り何もしない。
-        if pending_prediction_store is not None and not isinstance(
-            pending_prediction_store, PendingPredictionRepository
-        ):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository or None"
-            )
-        if not isinstance(pending_prediction_enabled, bool):
-            raise TypeError("pending_prediction_enabled must be bool")
 
         self._service = service
         self._store = episode_store
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        self._belief_evidence_transcriber = belief_evidence_transcriber
-        self._pending_prediction_store = pending_prediction_store
-        self._pending_prediction_enabled = pending_prediction_enabled
 
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode.being_id 経路で put。"""
@@ -256,46 +173,6 @@ class InlineEpisodicSubjectiveScheduler:
             )
             return
 
-        # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
-        # 以降の sidecar 処理 (想起系 / 約束の記録・清算) はそれぞれ
-        # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
-        # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
-        # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
-        # 抽出された約束・見込みを PendingPrediction 化して per-Being
-        # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
-        _run_sidecar_safely(
-            "pending_prediction_record",
-            merged.episode_id,
-            lambda: record_pending_prediction_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=merged.being_id,
-                episode=merged,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            ),
-        )
-        # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
-        # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
-        # store から除く (flag OFF / store 未配線なら no-op)。記録 (直上) が
-        # 失敗しても、この清算は独立に実行される。
-        _run_sidecar_safely(
-            "pending_prediction_resolve",
-            merged.episode_id,
-            lambda: resolve_pending_predictions_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=merged.being_id,
-                episode=merged,
-                belief_evidence_transcriber=self._belief_evidence_transcriber,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            ),
-        )
         latency_ms = int((time.monotonic() - start) * 1000)
         recall_snippet = (merged.recall_text or "")[:120]
         _emit_trace(
@@ -309,21 +186,6 @@ class InlineEpisodicSubjectiveScheduler:
                 "recall_text_snippet": recall_snippet,
             },
         )
-
-    def set_pending_prediction_store(
-        self, pending_prediction_store: PendingPredictionRepository | None
-    ) -> None:
-        """U10a: pending prediction store を構築後に差し込むための setter。
-
-        scheduler は build_episodic_stack より先に組み立てるので、store は後から差し込む。
-        """
-        if pending_prediction_store is not None and not isinstance(
-            pending_prediction_store, PendingPredictionRepository
-        ):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository or None"
-            )
-        self._pending_prediction_store = pending_prediction_store
 
     def shutdown(self, timeout: float | None = None) -> None:
         # 同期実装はキュー無し。何もしない。
@@ -356,9 +218,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         max_queue_size: int = 100,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
-        belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        pending_prediction_store: PendingPredictionRepository | None = None,
-        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(service, EpisodicChunkSubjectiveFieldsService):
             raise TypeError("service must be EpisodicChunkSubjectiveFieldsService")
@@ -372,32 +231,12 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("trace_recorder_provider must be callable or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
-        # U2 (証拠台帳統一設計): flag OFF (= None) なら従来通り何もしない。
-        if belief_evidence_transcriber is not None and not isinstance(
-            belief_evidence_transcriber, BeliefEvidenceTranscriber
-        ):
-            raise TypeError(
-                "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
-            )
-        # U10a (予測誤差統一設計 部品6・pending prediction): flag OFF (= None)
-        # なら従来通り何もしない。
-        if pending_prediction_store is not None and not isinstance(
-            pending_prediction_store, PendingPredictionRepository
-        ):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository or None"
-            )
-        if not isinstance(pending_prediction_enabled, bool):
-            raise TypeError("pending_prediction_enabled must be bool")
 
         self._service = service
         self._store = episode_store
         self._max_queue_size = max_queue_size
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        self._belief_evidence_transcriber = belief_evidence_transcriber
-        self._pending_prediction_store = pending_prediction_store
-        self._pending_prediction_enabled = pending_prediction_enabled
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="episodic_subj",
@@ -548,46 +387,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             )
             return
 
-        # LOW-4: 主観補完 (merge) と episode store への put は既に成功している。
-        # 以降の sidecar 処理 (想起系 / 約束の記録・清算) はそれぞれ
-        # 独立に失敗を許容する (1 つの失敗が他をブロックしない。特に約束の
-        # 記録の失敗が同じ chunk の清算を巻き添えにしないことが重要)。
-        # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
-        # 抽出された約束・見込みを PendingPrediction 化して per-Being
-        # store に積む (flag OFF / store 未配線 / 抽出なしなら no-op)。
-        _run_sidecar_safely(
-            "pending_prediction_record",
-            merged.episode_id,
-            lambda: record_pending_prediction_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=merged.being_id,
-                episode=merged,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            ),
-        )
-        # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
-        # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
-        # store から除く (flag OFF / store 未配線なら no-op)。記録 (直上) が
-        # 失敗しても、この清算は独立に実行される。
-        _run_sidecar_safely(
-            "pending_prediction_resolve",
-            merged.episode_id,
-            lambda: resolve_pending_predictions_if_applicable(
-                pending_prediction_store=self._pending_prediction_store,
-                pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=merged.being_id,
-                episode=merged,
-                belief_evidence_transcriber=self._belief_evidence_transcriber,
-                current_tick_provider=self._current_tick_provider,
-                trace_recorder=_resolve_recorder_from_provider(
-                    self._trace_recorder_provider
-                ),
-            ),
-        )
         latency_ms = int((time.monotonic() - start) * 1000)
         recall_snippet = (merged.recall_text or "")[:120]
         _emit_trace(
@@ -601,21 +400,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 "recall_text_snippet": recall_snippet,
             },
         )
-
-    def set_pending_prediction_store(
-        self, pending_prediction_store: PendingPredictionRepository | None
-    ) -> None:
-        """U10a: pending prediction store を構築後に差し込むための setter。
-
-        scheduler は build_episodic_stack より先に組み立てるので、store は後から差し込む。
-        """
-        if pending_prediction_store is not None and not isinstance(
-            pending_prediction_store, PendingPredictionRepository
-        ):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository or None"
-            )
-        self._pending_prediction_store = pending_prediction_store
 
     def shutdown(self, timeout: float | None = None) -> None:
         """進行中ジョブを drain しつつ executor を閉じる。

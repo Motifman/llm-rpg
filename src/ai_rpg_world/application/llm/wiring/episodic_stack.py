@@ -87,9 +87,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
         EpisodicReinterpretationJournalRepository,
     )
-    from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-        PendingPredictionRepository,
-    )
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -255,9 +252,8 @@ class EpisodicStack:
     afterglow_capacity: int = 10
     afterglow_max_residence: int = 10
     # U2 (証拠台帳統一設計 / default OFF): belief evidence buffer は呼び出し側
-    # (world_runtime.py) が flag を見て構築し、transcriber として
-    # chunk_coordinator / 非同期 scheduler の両方に注入する。stack はここに
-    # store の参照だけ公開する (snapshot 用。実体は呼び出し側が保持)。
+    # (world_runtime.py) が flag を見て構築する。stack はここに store の参照
+    # だけ公開する (snapshot 用。実体は呼び出し側が保持)。
     belief_evidence_buffer_store: Any | None = None
     # U3b (固着パス / default None = flag OFF 相当): 注入時のみ turn 後
     # フックから ``after_turn_completed`` が呼ばれ、belief journal への
@@ -272,11 +268,6 @@ class EpisodicStack:
     recall_success_store: IEpisodicRecallSuccessStore | None = None
     recall_hit_boost_strength: int = 0
     recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP
-    # U10a (予測誤差統一設計 部品6・pending prediction / default off): 抽出
-    # された約束・見込みを保持する per-Being store。enable 時に in-memory
-    # store を構築し、chunk_coordinator (書込み) と prompt_builder (再浮上の
-    # 読み出し) の両方に同一インスタンスを渡す。snapshot 用にも公開する。
-    pending_prediction_store: PendingPredictionRepository | None = None
 
 
 def build_scenario_noun_matcher(
@@ -392,12 +383,8 @@ def build_episodic_stack(
     # provider。注入時のみ動く (= default None で挙動不変)。
     runtime_context_provider: Callable[..., Any] | None = None,
     # U2 (証拠台帳統一設計 / default None = flag OFF 相当): 呼び出し側が
-    # BELIEF_EVIDENCE_ENABLED を見て構築した transcriber / store を渡す。
-    # transcriber は同期経路 (chunk_subjective_fields_service) の
-    # chunk_coordinator に配線する。非同期経路 (scheduler) は呼び出し側が
-    # 自分で scheduler へ注入する (build_episodic_stack は scheduler を
-    # 構築しないため)。store は snapshot 用に stack へそのまま公開する。
-    belief_evidence_transcriber: Any | None = None,
+    # BELIEF_EVIDENCE_ENABLED を見て構築した store を渡す。snapshot 用に
+    # stack へそのまま公開する。
     belief_evidence_buffer_store: Any | None = None,
     # U3b (固着パス / default False = flag OFF): True のとき
     # ``episodic_semantic_promotion`` が FAMILIARITY 転用モードになり、
@@ -426,12 +413,6 @@ def build_episodic_stack(
     recall_hit_boost_enabled: bool = False,
     recall_hit_boost_strength: int = 0,
     recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
-    # U10a (予測誤差統一設計 部品6・pending prediction / default False =
-    # flag OFF): True のとき pending prediction store (in-memory) を構築し、
-    # chunk_coordinator (同期経路の書込み) に配線する。非同期 scheduler 経路
-    # への配線は build_episodic_stack がスケジューラを構築しないため呼び出し
-    # 側 (world_runtime.py) の責務 (belief_evidence_transcriber と同じ分担)。
-    pending_prediction_enabled: bool = False,
     # semantic promotion の走査幅。実験条件なので ResolvedLlmRuntimeConfig
     # から渡す。既定値はサービス側の従来値と同じ。
     episodic_promotion_force_full_scan: bool = False,
@@ -607,16 +588,6 @@ def build_episodic_stack(
 
         recall_success_store = InMemoryEpisodicRecallSuccessStore()
 
-    # U10a (pending prediction / default off): enable 時のみ store を構築する。
-    # U9b の的中側 sidecar と同じ「flag ON のときだけ実体を作る」パターン。
-    pending_prediction_store: Any | None = None
-    if pending_prediction_enabled:
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-            InMemoryPendingPredictionStore,
-        )
-
-        pending_prediction_store = InMemoryPendingPredictionStore()
-
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
     # 渡すことで write/read 経路の cue 生成を対称化する。
@@ -644,12 +615,6 @@ def build_episodic_stack(
         # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
-        belief_evidence_transcriber=belief_evidence_transcriber,
-        # U10a (pending prediction): 同期経路用。非同期経路 (scheduler) は
-        # pending_prediction_store 確定後に呼び出し側 (world_runtime.py) が
-        # set_pending_prediction_store で差し込む。
-        pending_prediction_store=pending_prediction_store,
-        pending_prediction_enabled=pending_prediction_enabled,
     )
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して
@@ -743,7 +708,6 @@ def build_episodic_stack(
         recall_success_store=recall_success_store,
         recall_hit_boost_strength=recall_hit_boost_strength,
         recall_hit_boost_cap=recall_hit_boost_cap,
-        pending_prediction_store=pending_prediction_store,
     )
 
 

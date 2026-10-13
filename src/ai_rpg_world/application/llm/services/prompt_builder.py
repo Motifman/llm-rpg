@@ -66,9 +66,6 @@ from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall impor
     emit_episodic_recall_trace,
     run_episodic_passive_recall,
 )
-from ai_rpg_world.application.llm.services.prompt_sections.pending_predictions import (
-    build_pending_predictions_text,
-)
 from ai_rpg_world.application.llm.services.prompt_sections.semantic_recall import (
     _gather_semantic_topic_words_for_recall,
     emit_semantic_passive_recall_trace,
@@ -206,10 +203,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         encounter_spot_id_resolver = episodic.encounter_spot_id_resolver
         acquaintances_for_recall = episodic.acquaintances
         acquaintance_recent_window_turns = episodic.acquaintance_recent_window_turns
-        # U10a (予測誤差統一設計 部品6・pending prediction): store が None なら
-        # 機構自体が無効 (= 他の sidecar store と同じ「store の有無で判定」規約)。
-        pending_prediction_store = episodic.pending_prediction_store
-        pending_prediction_resurface_cap = episodic.pending_prediction_resurface_cap
 
         recent_observations_limit = limits.recent_observations_limit
         recent_actions_limit = limits.recent_actions_limit
@@ -394,10 +387,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         # ``debug.afterglow_index`` に乗ってくるので、ここでは store.apply_decision
         # (書込) のためにだけ参照する。retrieve は read-only。
         self._afterglow_store = episodic.afterglow_store
-        # U10a (予測誤差統一設計 部品6・pending prediction): 再浮上用 sidecar
-        # (任意)。default off。store が None なら機構自体が無効。
-        self._pending_prediction_store = pending_prediction_store
-        self._pending_prediction_resurface_cap = pending_prediction_resurface_cap
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall
@@ -647,13 +636,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_events_text = self._recent_events_formatter.format_unified_entries(
             projected_entries
         )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # 再浮上。store 未配線 (flag OFF) なら常に空文字 (= section 省略)。
-        pending_predictions_text = self._build_pending_predictions_text(
-            player_id=player_id,
-            being_id=being_id,
-            current_state_dto=current_state_dto,
-        )
 
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
@@ -750,7 +732,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
-            pending_predictions_text=pending_predictions_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
             being_memo_text=being_memo_text,
@@ -875,20 +856,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             player_id=player_id,
             situation_cues=situation_cues,
             candidates=candidates,
-        )
-
-    def _build_pending_predictions_text(
-        self,
-        *,
-        player_id: PlayerId,
-        being_id: BeingId,
-        current_state_dto: Any | None,
-    ) -> str:
-        return build_pending_predictions_text(
-            self,
-            player_id=player_id,
-            being_id=being_id,
-            current_state_dto=current_state_dto,
         )
 
     def _append_recall_observation(

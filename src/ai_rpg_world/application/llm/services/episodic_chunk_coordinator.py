@@ -16,9 +16,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.scheduler import (
         IEpisodicSubjectiveCompletionScheduler,
     )
-    from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-        BeliefEvidenceTranscriber,
-    )
 
 _logger = logging.getLogger(__name__)
 
@@ -33,12 +30,6 @@ from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IShortTermMemory,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_recording import (
-    record_pending_prediction_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
-    resolve_pending_predictions_if_applicable,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
@@ -57,9 +48,6 @@ from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
@@ -110,9 +98,6 @@ class EpisodicChunkCoordinator:
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
-        belief_evidence_transcriber: BeliefEvidenceTranscriber | None = None,
-        pending_prediction_store: PendingPredictionRepository | None = None,
-        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -168,32 +153,6 @@ class EpisodicChunkCoordinator:
                 "を scheduler 引数に渡してください。"
             )
 
-        # U2 (証拠台帳統一設計): 転記は wiring 層が flag を見て注入するかどうか
-        # 決める (「配線」と「有効化」の分離)。None なら従来通り何もしない。
-        if belief_evidence_transcriber is not None:
-            from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-                BeliefEvidenceTranscriber as _BET,
-            )
-
-            if not isinstance(belief_evidence_transcriber, _BET):
-                raise TypeError(
-                    "belief_evidence_transcriber must be BeliefEvidenceTranscriber or None"
-                )
-        # U10a (予測誤差統一設計 部品6・pending prediction / default None =
-        # flag OFF 相当): flag OFF なら従来通り何もしない (「配線と有効化の
-        # 分離」)。
-        if pending_prediction_store is not None and not isinstance(
-            pending_prediction_store, PendingPredictionRepository
-        ):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository or None"
-            )
-        if not isinstance(pending_prediction_enabled, bool):
-            raise TypeError("pending_prediction_enabled must be bool")
-        self._pending_prediction_store = pending_prediction_store
-        self._pending_prediction_enabled = pending_prediction_enabled
-        self._belief_evidence_transcriber = belief_evidence_transcriber
-
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
@@ -219,72 +178,6 @@ class EpisodicChunkCoordinator:
     def _put_episode(self, episode: SubjectiveEpisode) -> None:
         """episode_store への put を episode.being_id 経路で発行する。"""
         self._episodic_episode_store.put_by_being(episode.being_id, episode)
-
-    def _record_pending_prediction_if_applicable(
-        self,
-        episode: SubjectiveEpisode,
-    ) -> None:
-        """U10a (予測誤差統一設計 部品6): 抽出された約束・見込みを
-
-        ``PendingPrediction`` 化して per-Being store に積む (共通ロジックは
-        ``_pending_prediction_recording.record_pending_prediction_if_applicable``
-        に集約。非同期 scheduler 経路の対応箇所も同じ関数を呼ぶ)。
-        """
-        record_pending_prediction_if_applicable(
-            pending_prediction_store=self._pending_prediction_store,
-            pending_prediction_enabled=self._pending_prediction_enabled,
-            being_id=episode.being_id,
-            episode=episode,
-            current_tick_provider=self._current_tick_provider,
-            trace_recorder=self._resolve_trace_recorder(),
-        )
-
-    def _resolve_pending_predictions_if_applicable(
-        self,
-        episode: SubjectiveEpisode,
-    ) -> None:
-        """U10b (予測誤差統一設計 部品6・清算): 再浮上していた約束の履行/破棄
-
-        判定を evidence に転記し、決着分と期限切れ分を store から除く (共通
-        ロジックは ``_pending_prediction_resolution`` に集約。非同期 scheduler
-        経路も同じ関数を呼ぶ)。
-        """
-        resolve_pending_predictions_if_applicable(
-            pending_prediction_store=self._pending_prediction_store,
-            pending_prediction_enabled=self._pending_prediction_enabled,
-            being_id=episode.being_id,
-            episode=episode,
-            belief_evidence_transcriber=self._belief_evidence_transcriber,
-            current_tick_provider=self._current_tick_provider,
-            trace_recorder=self._resolve_trace_recorder(),
-        )
-
-    def _active_pending_predictions_for(
-        self, being_id: BeingId
-    ) -> tuple[Any, ...]:
-        """U10b: この chunk の補完時点で「窓が開いた」約束 (tick_from に達した
-
-        もの) を返す。chunk 主観補完 LLM に「果たされたか」を判定させるため
-        ``ChunkEncodingInput.active_pending_predictions`` に載せる。
-
-        flag OFF / store 未配線 / being 未解決 / current_tick 不明のときは
-        空タプル (= プロンプトに【保留中の約束】節が出ず、導入前と一致)。
-        """
-        if not self._pending_prediction_enabled or self._pending_prediction_store is None:
-            return ()
-        if self._current_tick_provider is None:
-            return ()
-        try:
-            current_tick = self._current_tick_provider()
-        except Exception:
-            return ()
-        if not isinstance(current_tick, int) or isinstance(current_tick, bool):
-            return ()
-        try:
-            live = self._pending_prediction_store.list_all_by_being(being_id)
-        except Exception:
-            return ()
-        return tuple(p for p in live if p.tick_from <= current_tick)
 
     def _resolve_trace_recorder(self) -> ITraceRecorder | None:
         if self._trace_recorder_provider is not None:
@@ -418,9 +311,6 @@ class EpisodicChunkCoordinator:
             obs_slice_sorted,
             chunk_actions_sorted,
             observation_overflow_from_window=tuple(overflow),
-            # U10b: 窓が開いた約束を補完プロンプトに載せて「果たされたか」を
-            # 判定させる。flag OFF / 該当なしのときは空 (= 導入前と一致)。
-            active_pending_predictions=self._active_pending_predictions_for(being_id),
         )
         hints = summarize_observation_boundary_hints(encoding_input.observations)
         decision = decide_chunk_boundary(
@@ -460,18 +350,6 @@ class EpisodicChunkCoordinator:
                 persona_text=persona_block,
                 encoding_input=encoding_input,
             )
-            # U10a (予測誤差統一設計 部品6・pending prediction): 同じ完了点で
-            # 抽出された約束・見込みを PendingPrediction 化して per-Being
-            # store に積む。flag OFF / 抽出なし / store 未配線なら no-op
-            # (導入前と完全に一致)。
-            self._record_pending_prediction_if_applicable(episode)
-            # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
-            # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
-            # store から除く。flag OFF / store 未配線なら no-op。抽出 (U10a) の
-            # 後に呼ぶことで「今回の chunk で作られた約束」を同じ完了で
-            # 誤って清算しないよう順序を保つ (新規約束は tick_from が未来なので
-            # active に載らないが、順序も明示しておく)。
-            self._resolve_pending_predictions_if_applicable(episode)
         # draft (もしくは inline merge 済み) を必ず先に store に写す。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。

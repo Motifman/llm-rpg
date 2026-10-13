@@ -17,9 +17,6 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-    PendingPrediction,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 UnifiedRecentEventKind = Literal["observation", "action_result"]
@@ -219,12 +216,6 @@ class ChunkEncodingInput:
     action_results: tuple[ActionResultEntry, ...]
     unified_timeline: tuple[UnifiedRecentEventLine, ...]
     observation_overflow_from_window: tuple[ObservationEntry, ...] = ()
-    # U10b (予測誤差統一設計 部品6・pending prediction 清算): この chunk を
-    # 補完する時点で being が保持している「窓が開いた約束」(tick_from に達した
-    # pending) の一覧。chunk 主観補完 LLM に「これらは果たされたか」を判定
-    # させるためにプロンプトへ載せる。coordinator が close 判定時に注入する
-    # (flag OFF / store 未配線なら常に空 = 導入前と byte 一致)。
-    active_pending_predictions: tuple[PendingPrediction, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.player_id, PlayerId):
@@ -249,11 +240,6 @@ class ChunkEncodingInput:
         for idx, o in enumerate(self.observation_overflow_from_window):
             if not isinstance(o, ObservationEntry):
                 raise TypeError(f"observation_overflow_from_window[{idx}] must be ObservationEntry")
-        if not isinstance(self.active_pending_predictions, tuple):
-            raise TypeError("active_pending_predictions must be tuple[PendingPrediction, ...]")
-        for idx, p in enumerate(self.active_pending_predictions):
-            if not isinstance(p, PendingPrediction):
-                raise TypeError(f"active_pending_predictions[{idx}] must be PendingPrediction")
         expected = merge_observations_and_action_results_to_unified_timeline(
             self.observations, self.action_results
         )
@@ -269,7 +255,6 @@ def build_chunk_encoding_input(
     action_results: Sequence[ActionResultEntry],
     *,
     observation_overflow_from_window: Sequence[ObservationEntry] = (),
-    active_pending_predictions: Sequence[PendingPrediction] = (),
 ) -> ChunkEncodingInput:
     """観測スライス・行動結果スライスから ChunkEncodingInput を組み立てる。"""
     if not isinstance(player_id, PlayerId):
@@ -283,7 +268,6 @@ def build_chunk_encoding_input(
         action_results=act_t,
         unified_timeline=timeline,
         observation_overflow_from_window=tuple(observation_overflow_from_window),
-        active_pending_predictions=tuple(active_pending_predictions),
     )
 
 
