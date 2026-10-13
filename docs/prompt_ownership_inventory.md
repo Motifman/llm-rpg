@@ -36,7 +36,7 @@
    - 現在地と周囲: `WorldRuntimeQueryAdapter` → `_build_minimal_player_state_dto` → `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`) で現在地の塊を作り、`SpotGraphUiContextBuilder.build` (`llm/services/spot_graph_ui_context_builder.py:513`) が `prompt_section_layout.sections_for` の順に接続先・オブジェクト・その場の人などの節を足す
    - 直近の出来事: `UnifiedRecentEventStore.get_active_timeline` を `RecentEventsFormatter.format_unified_entries` (`llm/services/recent_events_formatter.py:47`) で行にする
    - 保留中の予測と、前回の予測と実際は #1631 で消した
-   - 関連する記憶と見出し (`prompt_sections/episodic_recall.py:316`)、関連する学び (`prompt_sections/semantic_recall.py:80`)
+   - 関連する記憶と見出し (`prompt_sections/episodic_recall.py:257`)、関連する学び (`prompt_sections/semantic_recall.py:80`)
    - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、最近の流れと自己像と世界観 (短期記憶の `get_mid_summary_text` / `get_long_summary_text`)
 3. `SectionBasedContextFormatStrategy.format` (`llm/services/context_format_strategy.py`) が見出しを付けて並べる (747 行)。run の設定は `stable_to_volatile` で、`_format_stable_to_volatile` (300 行) の順になる
 4. 繰り返しの警告 (`_build_loop_warning_prefix`、780 行) を指示の前に付け、本文の後ろに置く (783 行)
@@ -110,8 +110,8 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U8 【前回の予測と実際】 | (#1631 で消した) | - | - | - | - |
 | U9 【保留中の予測】 | (#1631 で消した) | - | - | - | - |
 | U10 【関連する学び】 | 「- 釣りには釣竿が必要だ」「- 狼煙には流木・枯れ葉・火打ち石が必要だ」 | `run_semantic_passive_recall` (`semantic_recall.py:80`) | semantic store。profile の `semantic_passive_top_k` | Being の持ち物 | semantic store |
-| U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:316`)、空の置き文は 576 行 | episodic store、recall slot (再解釈は #1631 で消した) | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
-| U12 さっき思い出した記憶の見出し | 「【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)」「気になる見出しがあれば memory_recall_by_handle にその handle を渡して…」「- [ep_02c662] 釣竿作りが流木不足で失敗した」 | `_format_afterglow_section` (`episodic_recall.py:79`)。U11 の本文の末尾につながり、【関連する記憶】の中に入る | afterglow。profile の `afterglow_enabled` | Being の持ち物 | afterglow |
+| U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:257`)、空の置き文は 463 行 | episodic store、recall slot (再解釈は #1631 で消した) | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
+| U12 さっき思い出した記憶の見出し | 「【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)」「気になる見出しがあれば memory_recall_by_handle にその handle を渡して…」「- [ep_02c662] 釣竿作りが流木不足で失敗した」 | `_format_afterglow_section` (`episodic_recall.py:72`)。U11 の本文の末尾につながり、【関連する記憶】の中に入る | afterglow。profile の `afterglow_enabled` | Being の持ち物 | afterglow |
 | U13 【進行中のメモ】 | 「- [memo_718918…] [tick=11, 経過 13 tick] 狼煙に必要な物: …」 | `_build_active_memos_text` (`prompt_builder.py:971`) → `format_active_memos` (`llm/services/active_memos_formatter.py:19`) | memo store と世界の tick。profile の `memo_tools_enabled` | Being の持ち物 | memo (表示の時計が世界の tick) |
 | U14 現在地の塊 | 「現在地: 高地の泉 (初めて訪れた)」「  山の中腹に湧く泉。…」「雰囲気: …」「天候: 弱い晴れ（屋外）」「現在時刻: Day 1 12:00」「時刻帯: 昼」 | `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`)、注記は `_annotate_current_spot_familiarity` (`llm/services/spot_graph_ui_context_builder.py:628`)。死亡後の【いまの存在状態】は同 529 行 | 世界の snapshot (spot の名前と説明、眺望、天候、時刻、会議の状況、点検の進み具合、残り行動量、自分の状態)。「(初めて訪れた)」は encounter | 混ざっている (環境の描写と、行った場所の記録) | 無 (encounter はシナリオの spot ID と `PlayerId` の鍵) |
 | U15 この場で働きかけられるもの | 「接続先:」「  - "山麓への道" → "山麓"（通行可）」「オブジェクト:」「  - "湧水の口" (今は汲めない・時間を置けば戻る) — …」「      いまできない: 湧水を汲む → "drink_water"（…）」「同じ場所に居るモンスター: (このスポットにモンスターはいない)」 | `SpotGraphUiContextBuilder` の `_build_connection_section` (720 行)、`_build_object_section` (801 行)、`_build_monster_section` (1078 行)、地面のアイテム・商人・市場・所持金・取引の節 | 世界の snapshot とシナリオの物と操作。商人などはシナリオで宣言したときだけ | 環境の材料 | 無 |

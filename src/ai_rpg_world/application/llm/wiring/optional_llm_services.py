@@ -1,14 +1,15 @@
-"""LLM クライアント有無で optional な LLM サービス/ポートを解決する共有ヘルパ (経路統一 R2c-1)。
+"""LLM クライアント有無で optional な LLM サービスを解決する共有ヘルパ (経路統一 R2c-1)。
 
 元は ``wiring/__init__.py`` (full wiring = create_llm_agent_wiring) 内の private 関数
-``_optional_semantic_gist_service`` だったが、escape runtime もこれらに依存しており、full wiring 本体 (create_llm_agent_wiring /
-LlmAgentOrchestrator) を退役 (R2c-2) する前に、**symbol 依存だけ**を独立モジュールへ切り出す。
+だったが、escape runtime もこれに依存しており、full wiring 本体
+(create_llm_agent_wiring / LlmAgentOrchestrator) を退役 (R2c-2) する前に、
+**symbol 依存だけ**を独立モジュールへ切り出す。
 (注: 本モジュールは ``wiring`` package 配下なので import すると ``wiring/__init__.py`` も
 ロードされる = import-time の full wiring 依存は残る。これは R2c-2 で __init__ から full
 wiring 本体を削除して軽量化することで解消する。)
 
 「LiteLLM クライアントのときだけ実 LLM サービスを返し、それ以外は None」という判定で、
-full wiring 固有のロジックには依存しない。再解釈の completion ポートは #1631 で消した。
+full wiring 固有のロジックには依存しない。
 """
 
 from __future__ import annotations
