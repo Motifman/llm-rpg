@@ -144,7 +144,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
-    "UNCONSCIOUS_CONTEXT_ENABLED",
     "WORLD_TICK_FAILURE_POLICY",
 })
 
@@ -352,7 +351,6 @@ class ResolvedLlmRuntimeConfig:
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
-    unconscious_context_enabled: bool = False
     recall_hit_boost_enabled: bool = False
 
     # Goal / stagnation 系。
@@ -501,7 +499,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_short_term_memory_kind,
             resolve_short_term_memory_scheduler_mode,
             resolve_short_term_memory_turn_window,
-            resolve_unconscious_context_enabled,
         )
 
         source: Mapping[str, str] = values if values is not None else {}
@@ -740,7 +737,6 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
-        unconscious_context_enabled = resolve_unconscious_context_enabled(env=source)
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
         escape_llm_ssot_enabled = _parse_truthy(
@@ -858,7 +854,6 @@ class ResolvedLlmRuntimeConfig:
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
-            unconscious_context_enabled=unconscious_context_enabled,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
@@ -974,7 +969,6 @@ class ResolvedLlmRuntimeConfig:
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
-            unconscious_context_enabled=False,
             recall_hit_boost_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,
