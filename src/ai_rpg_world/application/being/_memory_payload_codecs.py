@@ -84,7 +84,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
@@ -243,37 +242,6 @@ def dict_to_semantic_entry(
             if data.get("last_observed_turn") is not None
             else None
         ),
-    )
-
-
-# ---- goal (P5) ----------------------------------------------------------------
-
-def goal_entry_to_dict(entry: GoalEntry) -> dict[str, Any]:
-    return {
-        "goal_id": entry.goal_id,
-        "player_id": entry.player_id,
-        "text": entry.text,
-        "status": entry.status,
-        "locked": entry.locked,
-        "origin": entry.origin,
-        "created_tick": entry.created_tick,
-        "created_at": _dt_to_iso(entry.created_at),
-        "supersedes": entry.supersedes,
-    }
-
-
-def dict_to_goal_entry(data: dict[str, Any]) -> GoalEntry:
-    supersedes = data.get("supersedes")
-    return GoalEntry(
-        goal_id=str(data["goal_id"]),
-        player_id=int(data["player_id"]),
-        text=str(data["text"]),
-        status=str(data["status"]),
-        locked=bool(data["locked"]),
-        origin=str(data["origin"]),
-        created_tick=int(data["created_tick"]),
-        created_at=_iso_to_dt(str(data["created_at"])),
-        supersedes=str(supersedes) if supersedes else None,
     )
 
 

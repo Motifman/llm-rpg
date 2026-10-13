@@ -2,6 +2,8 @@
 
 > 前提: [goal_layer_design_active_inference.md](./goal_layer_design_active_inference.md)
 > の G1 (goal store) は実装済み。本 doc はその **入口** だけを扱う。
+>
+> G1 の goal store と `players[].goal_locked` は、記憶の部品の撤去 (#1631) の #PRNUM で消した。`players[].objective` は残り、そのプレイヤーの【現在の目的】にそのまま載る。`goal_locked` を書いたシナリオは、読み込みの時点で止まる。
 
 ## 0. 要約
 

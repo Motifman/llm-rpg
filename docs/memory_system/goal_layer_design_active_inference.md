@@ -126,7 +126,7 @@ unlocked で自己生成に任せる。1 つの機構で両方をカバーする
 
 ### 作業項目 (G 系)
 
-> G2 (`goal_update`) と G4 の清算 (`goal_outcome`、清算の信念の証拠、trace の `goal_resolution` / `goal_revision_rejected`) は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #1664 で消した。G3 の振り返り (`GOAL_REFLECT_ENABLED`) は #1679 で消した。G1 の goal store は続く PR で消す。
+> G2 (`goal_update`) と G4 の清算 (`goal_outcome`、清算の信念の証拠、trace の `goal_resolution` / `goal_revision_rejected`) は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #1664 で消した。G3 の振り返り (`GOAL_REFLECT_ENABLED`) は #1679 で消した。G1 の goal store (`GOAL_STORE_ENABLED`、snapshot の `goal_journal`) も #PRNUM で消した。【現在の目的】は、シナリオの目的の文をそのまま出す。
 
 - **G1 — goal store**: per-Being の journal 方式 (belief journal と同型:
   改訂は supersede、履歴は消えない)。【現在の目的】を store から描画。

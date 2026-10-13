@@ -100,7 +100,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 | 部分 | 中身 | 作る場所 | 材料の出どころ | 分類 | Being がいま持つか |
 |---|---|---|---|---|---|
-| U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` (`world_runtime/world_runtime.py:2907`) → `_resolve_objective_via_goal_store` (2499 行)、`_resolve_player_objective_text` (2400 行) | シナリオの `metadata.llm_objective_text` か `players[].objective`。goal journal に無ければ最初に入れ、以後は goal journal の active な目的を描く | 混ざっている (環境が課す目的と、Being が `goal_update` で立て直した目的。`goal_update` は #1631 で消した) | goal journal (`GoalEntry.player_id: int` と `created_tick` が残る) |
+| U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` → `_resolve_player_objective_text` (`world_runtime/world_runtime.py`) | シナリオの `players[].objective` か `metadata.llm_objective_text` を、そのまま描く | 環境の材料 (goal journal を #1631 で消すまでは混ざっていた) | 無 |
 | U2 【自己像と世界観】 | 「私について: 私は難破船から生き延びた探索者。…」「この世界について: …」 | `SummarizingShortTermMemory.get_long_summary_text` (`llm/services/summarizing_short_term_memory.py:318`) | 短期記憶の L5 要約。profile の `short_term_memory_kind=rolling_summary` のときだけ。run では 206 中 7 呼び出し | Being の持ち物 | 無 (整数の player 鍵) |
 | U3 【最近の流れ】 | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」「  未解決: …」 | `get_mid_summary_text` (同 330 行)、行の形は 742 行 | 短期記憶の L4 要約。U2 と同じ profile | Being の持ち物 | 無 (整数の player 鍵) |
 | U4 観測の行 | 「- [Day 1 深夜 5:30] カイが言った: 「…」」「- [Day 1 6:00] 朝になった。」「- [Day 1 6:00] 〈森の小道〉の向こうから、カイの遠くの声が聞こえる: 「…」」 | `format_observation_line_for_recent_events` (`llm/contracts/chunk_encoding.py:80`)。遠くの声の文は `player_formatter.py:474` (`observation/services/formatters/`) | 環境のイベントを観測パイプラインが本文にしたもの。`UnifiedRecentEventStore` に積まれる | 混ざっている (環境の観測と、遠くの声で話者の名前を出すかという誰を知っているかの判断) | 無 (`PlayerId` 鍵) |
@@ -151,6 +151,8 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 1 章を作り直して数え直した。部分の数と分類の件数は元のままで、Being の持ち物のうち `PlayerId` か整数の player を鍵にした store にある件数を 7 から 5 に直した。
 
+#1631 で消した部分 (U6、U8、T4、T5) と、goal journal を消して環境の材料になった U1 は、この集計に反映していない。
+
 ## 2. 環境が公開する情報の型の案
 
 ### 2-1. 既存の契約の型で足りるもの
@@ -183,7 +185,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 | 部分 | store | 注意 |
 |---|---|---|
-| 現在の目的 | goal journal | `GoalEntry.player_id: int` と `created_tick` が残る。環境を出るときに環境が課した目的を外す処理は #1465 の範囲 |
+| 現在の目的 | (goal journal は #1631 で消した) | いまはシナリオの目的の文をそのまま描く。Being が目的を持つ store は無い |
 | 保留中の予測 | pending_prediction | 再浮上の条件が `spot:<id>` / `player:<名前>` と tick。名前の文とターン数に替える (#1436) |
 | 関連する学び | semantic store | — |
 | 関連する記憶・見出し | episodic / afterglow / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
@@ -251,7 +253,7 @@ encounter はいま、環境の判定にも使われている (確認)。
 | encounter の鍵 | シナリオの spot 文字列 ID、`monster_{整数}`、`player_{整数}`、event_id |
 | 保留中の予測 | `spot:<id>`、tick |
 | 短期記憶の行動の行 | `error_code=INTERACTION_PRECONDITION_FAILED`、`tool=interact` |
-| 目的 | `GoalEntry.player_id: int`、`created_tick` |
+| 目的 | (goal journal と一緒に #1631 で消した) |
 | system prompt | 実装の語「SlidingWindow」 |
 | 人格 | ゲームの効果名「heal_hp 50」(シナリオの文。直すのはシナリオ側) |
 

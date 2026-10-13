@@ -45,7 +45,6 @@
     "ERROR_DRIVEN_REINTERPRETATION_ENABLED": true,
     "RECALL_HIT_BOOST_ENABLED": false,
     "PENDING_PREDICTION_ENABLED": false,
-    "GOAL_STORE_ENABLED": false,
     "REASON_FIRST_TWO_STEP_ENABLED": true,
     "PROMPT_SECTION_ORDER": "stable_to_volatile",
     "LLM_TOOL_MODE": "default",

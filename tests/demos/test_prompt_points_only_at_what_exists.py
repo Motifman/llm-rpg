@@ -142,7 +142,6 @@ def captured(request) -> dict[str, Any]:
     """1 ターン目に渡す文面とツールを取る。"""
     config = ResolvedLlmRuntimeConfig.for_tests(
         episodic_enabled=True,
-        goal_store_enabled=True,
     )
     runtime = create_world_runtime(_SCENARIOS / request.param, config=config)
     client = _PromptCaptureClient()

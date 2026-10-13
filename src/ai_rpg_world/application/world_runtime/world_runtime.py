@@ -462,19 +462,14 @@ def _required_task_count(scenario: Any) -> int | None:
 
 
 def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
-    """勝敗条件を宣言するシナリオか (= goal あり) を導出する (#526 U5, P5)。
+    """勝敗条件を宣言するシナリオか (= goal あり) を導出する (#526 U5)。
 
-    win/lose/end/player outcome 規則のいずれかがあれば goal 前提の文面・目的層
-    locked=True。
+    win/lose/end/player outcome 規則のいずれかがあれば goal 前提の文面にする。
     既存シナリオは全て game_end_conditions を持つので True になり、system
-    prompt / goal seed の挙動は不変。
+    prompt の挙動は不変。
 
     個人結果規則を持つ島シナリオも含めるのが必須。win/lose 配列だけを見ると
-    「勝敗条件なしの open world」に誤判定され、目的が unlocked になってしまう。
-
-    ``build_world_system_prompt`` の safe_intro 判定 (create_world_runtime) と
-    goal 目的層の seed 判定 (WorldRuntime._resolve_objective_via_goal_store)
-    の両方がこの 1 つの導出ロジックを共有する (判定基準の分岐を防ぐ)。
+    「勝敗条件なしの open world」に誤判定される。
     """
     return bool(
         scenario.win_conditions
@@ -656,10 +651,6 @@ class WorldRuntime:
     _prepare_action_command_scope_factory: Any | None = field(default=None, repr=False)
     _death_grace_timer: Any | None = field(default=None, repr=False)
     _downed_incident_log: Any | None = field(default=None, repr=False)
-    # P5 (目的層): GOAL_STORE_ENABLED ON のときだけ構築される goal journal store。
-    # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
-    # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
-    _goal_journal_store: Any | None = field(default=None, repr=False)
     # #1631: Being ごとの記憶のターン数。1 手ごとに進め、記憶にターン数を付ける
     # 部品はここから読む。あとから代入し直すと、先に組んだ部品だけが古い時計を
     # 読み続ける。
@@ -2615,90 +2606,6 @@ class WorldRuntime:
             field,
         )
 
-    def _resolve_player_goal_locked(self, player_id: PlayerId) -> bool:
-        """目的層 G6: そのプレイヤーの初期目的を locked にするかを解決する。
-
-        ``players[].goal_locked`` が明示されていればそれを優先し、未指定なら
-        従来どおり ``_scenario_has_goal(self.scenario)`` に従う (挙動不変)。
-
-        spawn が見つからない player_id で呼ばれた場合はシナリオ由来の値へ縮退
-        するが、``_resolve_player_objective_text`` と同じ理由で warning を残す。
-        """
-        for spawn in self.scenario.player_spawns:
-            if spawn.player_id != player_id.value:
-                continue
-            if spawn.goal_locked is not None:
-                return spawn.goal_locked
-            return _scenario_has_goal(self.scenario)
-        self._warn_unknown_player_spawn(player_id, "goal_locked")
-        return _scenario_has_goal(self.scenario)
-
-    def _resolve_objective_via_goal_store(
-        self, player_id: PlayerId, fallback_text: str
-    ) -> str:
-        """P5 (目的層 G1): goal store の active 目的を【現在の目的】に描画する。
-
-        遅延 seed: その being にまだ目的が無ければ、シナリオ目的文を
-        ``origin=scenario`` で 1 度だけ seed する。描画結果は常に
-        ``fallback_text`` と同一 (seed 直後の active はまだ改訂されていない
-        ので) = 既存シナリオの挙動不変。store 未構築・being 未解決なら安全に
-        fallback_text。
-
-        locked は ``_scenario_has_goal(self.scenario)`` に連動させる
-        (HIGH-3 回帰対応)。終了条件のあるシナリオ (win/lose/end や
-        player_outcome_rules がある) は locked=True (従来どおり、シナリオの
-        終了条件だけが目的の達成/失敗を決める)。勝敗条件を持たない open
-        world (persistent_world_demo 等) は locked=False とする。
-        """
-        store = self._goal_journal_store
-        if store is None:
-            return fallback_text
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return fallback_text
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return fallback_text
-        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-            render_current_goal,
-        )
-
-        active = store.get_active_by_being(being_id)
-        if active is not None:
-            return render_current_goal(active)
-        # 未 seed: シナリオ目的があれば locked で 1 度だけ積む (P5)。fallback_text は
-        # シナリオ目的文なので、seed 後の描画は従来の静的文字列と同一 (挙動不変)。
-        # seed する目的が無い (open world) 場合は未定表示になる。
-        from uuid import uuid4
-
-        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-            GOAL_ORIGIN_SCENARIO,
-            GOAL_STATUS_ACTIVE,
-            GoalEntry,
-        )
-
-        if not fallback_text.strip():
-            return render_current_goal(None)
-        try:
-            tick = self.current_tick()
-        except Exception:
-            tick = 0
-        store.add_by_being(
-            being_id,
-            GoalEntry(
-                goal_id=f"goal-{uuid4().hex}",
-                player_id=int(player_id.value),
-                text=fallback_text,
-                status=GOAL_STATUS_ACTIVE,
-                locked=self._resolve_player_goal_locked(player_id),
-                origin=GOAL_ORIGIN_SCENARIO,
-                created_tick=tick if isinstance(tick, int) else 0,
-                created_at=datetime.now(timezone.utc),
-            ),
-        )
-        return render_current_goal(store.get_active_by_being(being_id))
-
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
     # 同じインスタンスタイプを使うことを明示する。
@@ -2762,18 +2669,11 @@ class WorldRuntime:
         # lambda 内で resolve すると毎ターン呼ばれて重複ログ + 同一例外を投げる
         # ことになるため、ここで closure キャプチャする。
         resolved_objective_text = self._resolve_scenario_llm_objective_text()
-        # P5 (目的層 G1): 常に goal-aware provider を差し込む。goal store が未構築
-        # (GOAL_STORE_ENABLED OFF = self._goal_journal_store is None) のとき
-        # _resolve_objective_via_goal_store は静的シナリオ文字列をそのまま返す
-        # (= 挙動不変)。store 構築 (flag 解決) は create_world_runtime のメモリ
-        # 配線側で行い、ここでは provider 設置だけ (prompt builder 構築が LLM
-        # 有効時にしか走らないため、store 構築をここに置くと flag が効かない)。
         sections = PromptSectionProviders(
-            # 目的層 G6: fallback は player ごとに解決する。players[].objective が
-            # あればその人だけ別の目的文で seed され、無ければ従来どおり
-            # シナリオ共通文になる。
-            objective_text_provider=lambda pid: self._resolve_objective_via_goal_store(
-                pid, self._resolve_player_objective_text(pid, resolved_objective_text)
+            # 目的層 G6: players[].objective があればその人だけ別の目的文に
+            # なり、無ければシナリオ共通文になる。
+            objective_text_provider=lambda pid: self._resolve_player_objective_text(
+                pid, resolved_objective_text
             ),
             memo_store=self._todo_store if self._memo_tools_enabled() else None,
             being_memo_text_provider=(
@@ -4905,7 +4805,6 @@ def create_world_runtime(
     # win/lose/outcome のいずれかがあれば goal 前提の文面、無ければ永続世界として
     # escape/goal 前提 (脱出できない / 勝利条件・最終目的) を中立化する。既存シナリオは
     # 全て game_end_conditions を持つので has_goal=True となり prompt は不変。
-    # 目的層の goal seed (locked 判定) とロジックを共有する (_scenario_has_goal)。
     _has_goal = _scenario_has_goal(scenario)
     safe_intro = safe_world_intro_text(scenario.metadata, has_goal=_has_goal)
     # 見取り図・陣営の内訳・点検の割り当ては **シナリオのデータから組み立てる**。
@@ -7742,21 +7641,6 @@ def create_world_runtime(
         # 加えない。
         _pending_prediction_enabled = config.pending_prediction_enabled
         log_pending_prediction_enabled_state(_pending_prediction_enabled)
-        # P5 (目的層 G1): GOAL_STORE_ENABLED ON のとき goal store を構築し
-        # runtime に保持する。【現在の目的】provider (prompt builder 側) と実験
-        # snapshot stub がここから拾う。OFF なら None のまま (静的シナリオ文字列)。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_goal_store_enabled_state,
-        )
-
-        _goal_store_enabled = config.goal_store_enabled
-        log_goal_store_enabled_state(_goal_store_enabled)
-        if _goal_store_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-                InMemoryGoalJournalStore,
-            )
-
-            runtime._goal_journal_store = InMemoryGoalJournalStore()
         # U7: subjective service の構築 (この少し下) は semantic スタック構築
         # (build_episodic_stack 呼び出し、この関数のずっと下) より先に走るため、
         # belief 取得に使う SemanticPassiveRecallService をこの時点ではまだ
