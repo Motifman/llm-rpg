@@ -6258,6 +6258,8 @@ snapshot のキー `memory_turn` は変えていない。予期の保存先は�
 ない。目撃文との重複を避けて本文を空にした `player_downed` と、時刻ラベルの無い観測も拒む。
 どれも `ObservationNotRepresentable` の理由で区別する。
 
+目的の改訂 (`goal_revision`) は #1664 で、目的の振り返り (`goal_reflect`、`GOAL_REFLECT_ENABLED`) は #PRNUM で、記憶の部品の撤去 (#1631) として消した。拒む記録はループ警告だけになった。
+
 **trace での数え方**: アダプタはまだ run の中で動いていない。trace の `observation` に変換の
 入力がそのまま残るので、`scripts/being_contract_unknown_report.py` が run を回さずに欄ごとの
 「不明」を数える。

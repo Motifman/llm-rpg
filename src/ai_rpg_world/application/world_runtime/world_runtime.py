@@ -2711,51 +2711,6 @@ class WorldRuntime:
         )
         return render_current_goal(store.get_active_by_being(being_id))
 
-    def _emit_reflect_observation(
-        self, player_id: PlayerId, message: str, verdict: str = "stalled"
-    ) -> None:
-        """P4/P7: 固着パスの reflect (停滞 / 達成 / 乖離の気づき) を「ふと振り返ると
-
-        …」の内省観測として本人に届ける。loop_guard 警告と同じ observation buffer
-        経路。verdict は種別として structured に載せる。ここでは goal store には触れない。
-        """
-        output = ObservationOutput(
-            prose=message,
-            structured={"type": "goal_reflect", "verdict": verdict},
-            observation_category="self_only",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        self._emit_observation_directly(player_id, output)
-
-    def _reflect_objective_provider(self, player_id: PlayerId) -> str | None:
-        """P4/P7: reflect の監査対象となる現在の目的文を返す (best-effort、
-
-        読み取りのみ)。監査対象は goal store の active 目的に一本化する: active が
-        あればその文 (シナリオ目的が locked で seed 済み)。まだ active が無い場合のみシナリオ目的文へ縮退する
-        が、これは seed される内容と同一なので監査対象は変わらない。どちらも
-        解決できなければ None (目的が無ければ reflect は判断しない)。この経路は
-        副作用 (seed) を起こさない — seed は 【現在の目的】描画側が担う。
-        """
-        store = self._goal_journal_store
-        if store is not None:
-            resolver = getattr(self, "_aux_being_resolver", None)
-            world_id = getattr(self, "_aux_being_default_world_id", None)
-            if resolver is not None and world_id is not None:
-                being_id = resolver.resolve_being_id(world_id, player_id)
-                if being_id is not None:
-                    active = store.get_active_by_being(being_id)
-                    if active is not None:
-                        return str(active.text)
-        try:
-            # 目的層 G6: 縮退先も player ごとに解決する。ここが共通文のままだと、
-            # 個別目的を持つプレイヤーが seed 前に「他人の目的」で監査される。
-            return self._resolve_player_objective_text(
-                player_id, self._resolve_scenario_llm_objective_text()
-            )
-        except Exception:
-            return None
-
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
     # 同じインスタンスタイプを使うことを明示する。
@@ -7795,13 +7750,6 @@ def create_world_runtime(
         # 空になり安全に縮退する)。
         _belief_attribution_enabled = config.belief_attribution_enabled
         log_belief_attribution_enabled_state(_belief_attribution_enabled)
-        # P4 (reflect): 固着パスに目的への前進評価を足すか。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_goal_reflect_enabled_state,
-        )
-
-        _goal_reflect_enabled = config.goal_reflect_enabled
-        log_goal_reflect_enabled_state(_goal_reflect_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
@@ -8184,11 +8132,6 @@ def create_world_runtime(
             ),
             # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
             belief_attribution_enabled=_belief_attribution_enabled,
-            # P4 (reflect): 固着 LLM に目的への前進評価を足す。監査対象の目的文と
-            # 内省観測 sink を provider で渡す (goal store 差し替えは P7)。
-            goal_reflect_enabled=_goal_reflect_enabled,
-            objective_text_provider=runtime._reflect_objective_provider,
-            reflect_observation_sink=runtime._emit_reflect_observation,
             # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled

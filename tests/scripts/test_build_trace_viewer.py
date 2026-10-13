@@ -758,7 +758,7 @@ class TestFormatEventBody:
             TraceEvent(
                 seq=3,
                 timestamp="t",
-                kind="goal_reflect",
+                kind="custom_summary_event",
                 tick=1,
                 player_id=1,
                 payload={"goal_id": "g1", "summary": "水を探す"},
