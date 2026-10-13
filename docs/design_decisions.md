@@ -6222,6 +6222,13 @@ hint が勧めていた `goal_outcome` も、目的の見直し (`GOAL_REVISION_
 snapshot のキー `memory_turn` は変えていない。予期の保存先は、復元のときに一緒に戻すターン数を
 `require_restorable` で確かめるためだけに受け取り、持たない。
 
+予期のドメイン (`domain/memory/expectation`) と保存先も Issue #1631 で消した。`require_restorable` も一緒に消えたので、
+snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。snapshot から
+`expectations` と `expectation_undelivered_events` のキーを外した。消す前に保存した snapshot は、
+復元が足りないキーだけを拒むので、そのまま読める (2 つのキーは読み飛ばす)。`memory_turn` は残した。
+`snapshot_save` / `snapshot_load` の trace の `expectation_counts` は、記憶のターン数だけを載せる
+`memory_turns` (`[{being_id, memory_turn}]`) に変えた。
+
 ## D1463. 環境とエージェントの契約は、欄の段と経路ごとの必須欄を型で表し、本文に無い名前を写さない
 
 **何を**: `ai_rpg_world.being.contract` に観測 (`Observation`)・エージェントの 1 手
@@ -6327,7 +6334,7 @@ snapshot のキー `memory_turn` は変えていない。予期の保存先は�
 
 **関連**: design_decisions D1439 / design_decisions 5 / Issue #1436 / #1441 / #1442 / #1443 / #1464 / #1479。
 
-**その後**: 予期の清算 (`ExpectationSettlementService`、`EXPECTATION_SETTLEMENT_*`)、配り手 (`ExpectationEventDispatcher`、`EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS`)、再開時の配り直しは Issue #1631 で消した。予期の保存先と snapshot のキーは続く PR で消す。
+**その後**: 予期の清算 (`ExpectationSettlementService`、`EXPECTATION_SETTLEMENT_*`)、配り手 (`ExpectationEventDispatcher`、`EXPECTATION_EVENT_MAX_DELIVERY_ATTEMPTS`)、再開時の配り直しは Issue #1631 で消した。予期の保存先と snapshot のキーも、続く PR で消した (D1439 の「その後」)。
 
 ## D1452. 信念と証拠は観測のターン数だけを持ち、状態の変わり方は観測の食い違いから学ぶ
 
@@ -6433,7 +6440,7 @@ Being のターン数を作ったターンとして清算待ちの予期を積�
 
 **その後**: 行動ごとの結果の予想 (`LLM_EXPECTED_RESULT_POLICY`、tool の `expected_result` 引数、行動ルールの予測の行、【前回の予測と実際】) は Issue #1631 で消した。予期の引数と同時に有効にさせない検査も一緒に消えた。行動の記録に残る `expected_result` の欄と、古い区切り・主観補完の読み手は、続く PR で消す。
 
-予期の引数そのもの (`EXPECTATION_ARGUMENT_ENABLED`、期限のターン数 `EXPECTATION_UNDATED_TERM_TURNS` / `EXPECTATION_DATED_TERM_TURNS`、tool の `expectations` 引数、行動ルールの予期の行、書かれた予期を積む `ExpectationFormingService`) も Issue #1631 で消した。予期の清算・配り手・保存先は続く PR で消す。
+予期の引数そのもの (`EXPECTATION_ARGUMENT_ENABLED`、期限のターン数 `EXPECTATION_UNDATED_TERM_TURNS` / `EXPECTATION_DATED_TERM_TURNS`、tool の `expectations` 引数、行動ルールの予期の行、書かれた予期を積む `ExpectationFormingService`) も Issue #1631 で消した。予期の清算・配り手・保存先も、続く PR で消した (D1439 / D1440 の「その後」)。
 
 ## D1443. 予測の当否の材料は確定した予期だけから積み、受け取る側は受け取り済みの ID を材料と同じ store に持つ
 

@@ -369,9 +369,6 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_team import (
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-    InMemoryExpectationRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
@@ -663,13 +660,6 @@ class WorldRuntime:
     # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _goal_journal_store: Any | None = field(default=None, repr=False)
-    # #1440 / #1452: 予期と、その出来事。清算の有効化によらず、作ったときに
-    # 1 つだけ持つ。実験 snapshot stub (_wiring_stub_from_world_runtime) も
-    # ここから拾う。あとから代入し直すと、先に組んだ配り手だけが古い store を
-    # 指したまま分かれる。
-    _expectation_store: InMemoryExpectationRepository = field(
-        default_factory=InMemoryExpectationRepository, repr=False
-    )
     # #1631: Being ごとの記憶のターン数。1 手ごとに進め、記憶にターン数を付ける
     # 部品はここから読む。あとから代入し直すと、先に組んだ部品だけが古い時計を
     # 読み続ける。
@@ -6621,7 +6611,6 @@ def create_world_runtime(
         failure_isolator=world_tick_failure_isolator,
     )
 
-    expectation_store = InMemoryExpectationRepository()
     memory_turn_clock = InMemoryMemoryTurnClock()
     acquaintance_store = InMemoryAcquaintanceRepository()
 
@@ -6715,7 +6704,6 @@ def create_world_runtime(
         _short_term_memory=short_term_memory,
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,
-        _expectation_store=expectation_store,
         _memory_turn_clock=memory_turn_clock,
         _acquaintance_store=acquaintance_store,
         _player_acquaintances=player_acquaintances,

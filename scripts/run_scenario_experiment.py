@@ -664,9 +664,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
-    # #1440 / #1452 (予期): runtime は清算の有効化や episodic によらず、予期の
-    # store を 1 つ持つ。
-    expectation_store = getattr(runtime, "_expectation_store", None)
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
@@ -683,7 +680,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         recall_slot_store=recall_slot_store,
         afterglow_store=afterglow_store,
         recall_habituation_store=recall_habituation_store,
-        expectation_store=expectation_store,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
@@ -840,9 +836,7 @@ def _drive_scenario(
                     directory=str(snapshot_load_dir),
                     restored_count=len(restore_report.restored),
                     restored_being_ids=[b.value for b in restore_report.restored],
-                    expectation_counts=snapshot_session.expectation_counts(
-                        restore_report.restored
-                    ),
+                    memory_turns=snapshot_session.memory_turns(restore_report.restored),
                     cross_scenario_transfers=[
                         {
                             "being_id": b.value,
@@ -1109,9 +1103,7 @@ def _drive_scenario(
                     succeeded_count=len(report.succeeded),
                     failed_count=len(report.failed),
                     succeeded_being_ids=[b.value for b in report.succeeded],
-                    expectation_counts=snapshot_session.expectation_counts(
-                        report.succeeded
-                    ),
+                    memory_turns=snapshot_session.memory_turns(report.succeeded),
                     failures=[
                         {"being_id": b.value, "error": err}
                         for (b, err) in report.failed

@@ -154,9 +154,6 @@ def _build_stack(
     from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
         InMemoryMemoryTurnClock,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-        InMemoryExpectationRepository,
-    )
 
     memory_snapshot = BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
@@ -180,7 +177,6 @@ def _build_stack(
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
-        expectation_store=InMemoryExpectationRepository(),
         memory_turn_clock=InMemoryMemoryTurnClock(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
@@ -235,8 +231,7 @@ def cmd_save(args: argparse.Namespace) -> int:
     # に到達できないので、これらは常に空のまま保存される。実験 run 中の想起
     # 状態を取りこぼしていることがユーザに伝わるよう、明示的に warning を残す。
     logger.warning(
-        "recall_slot / afterglow / habituation / expectations (with their "
-        "undelivered events and memory turn) / acquaintances / being "
+        "recall_slot / afterglow / habituation / memory turn / acquaintances / being "
         "episodes / being memo book are in-memory sidecars and "
         "are NOT captured via this CLI. The resulting snapshot will have "
         "those layers empty."
