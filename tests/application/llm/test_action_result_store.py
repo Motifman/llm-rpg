@@ -51,17 +51,6 @@ class TestDefaultActionResultStore:
         assert got[0].argument_fingerprint == "{}"
         assert got[0].should_reschedule is True
 
-    def test_append_with_expected_result(self, store):
-        """行動前予測を append し get_recent で取り出せる。"""
-        store.append(
-            PlayerId(1),
-            "調べる",
-            "扉は固く閉まっていた",
-            expected_result="扉の仕掛けが分かる",
-        )
-        got = store.get_recent(PlayerId(1), 1)
-        assert got[0].expected_result == "扉の仕掛けが分かる"
-
     def test_append_with_intention_and_emotion_hint(self, store):
         """目的 (intention) と感情 (emotion_hint) を append し取り出せる。"""
         store.append(
@@ -142,16 +131,6 @@ class TestDefaultActionResultStore:
                 "a",
                 "b",
                 occurred_at="2025-01-01",  # type: ignore[arg-type]
-            )
-
-    def test_append_expected_result_not_str_raises_type_error(self, store):
-        """expected_result が str / None 以外なら TypeError。"""
-        with pytest.raises(TypeError, match="expected_result must be str or None"):
-            store.append(
-                PlayerId(1),
-                "a",
-                "b",
-                expected_result=123,  # type: ignore[arg-type]
             )
 
     def test_append_with_in_context_belief_ids(self, store):

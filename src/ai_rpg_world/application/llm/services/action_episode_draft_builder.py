@@ -213,21 +213,6 @@ def _outcome_label(command_result: LlmCommandResultDto, result_summary: str) -> 
     return f"失敗{ec_part}: {suffix}" if suffix else f"失敗{ec_part}"
 
 
-def _prediction_error_template(
-    expected: str | None, command_result: LlmCommandResultDto, result_summary: str
-) -> str | None:
-    if expected is None:
-        return None
-    summary = result_summary.strip() or command_result.message.strip()
-    if summary == expected:
-        return None
-    return (
-        "事前予想と結果要約が一致しない。"
-        f" 予想: {expected}"
-        f" / 結果: {summary}"
-    )
-
-
 def _recall_text(tool_name: str, command_result: LlmCommandResultDto, action_summary: str, result_summary: str) -> str:
     outcome_word = "成功" if command_result.success else "失敗"
     act = action_summary.strip()
@@ -328,9 +313,7 @@ class ActionEpisodeDraftBuilder:
 
         args = canonical_arguments or {}
         intention_raw = args.get("intention")
-        expected_raw = args.get("expected_result")
         why = _optional_strip("why", intention_raw if isinstance(intention_raw, str) else None)
-        expected = _optional_strip("expected", expected_raw if isinstance(expected_raw, str) else None)
 
         felt_raw = args.get("emotion_hint")
         felt: str | None = None
@@ -342,7 +325,6 @@ class ActionEpisodeDraftBuilder:
         observed = _compose_observed(command_result, result_summary, recent_observation)
         rs_for_deriv = result_summary if res_sum_raw else command_result.message
         outcome = _outcome_label(command_result, rs_for_deriv)
-        prediction_error = _prediction_error_template(expected, command_result, result_summary)
 
         if episodic_cues is not None:
             cues_resolved = episodic_cues
@@ -386,9 +368,9 @@ class ActionEpisodeDraftBuilder:
             what=what,
             why=why,
             observed=observed,
-            expected=expected,
+            expected=None,
             outcome=outcome,
-            prediction_error=prediction_error,
+            prediction_error=None,
             felt=felt,
             interpreted=None,
             cues=cues_resolved,

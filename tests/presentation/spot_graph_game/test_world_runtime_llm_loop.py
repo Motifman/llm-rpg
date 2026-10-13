@@ -84,7 +84,6 @@ class _FakeRuntime:
         self,
         player_id: PlayerId,
         *,
-        expected_result=None,
         intention=None,
         emotion_hint=None,
     ) -> _ExploreResult:
@@ -109,10 +108,9 @@ class _FakeRuntime:
         tool_name: str = "",
         success: bool = True,
         error_code: str | None = None,
-        # PR-θ2 (経路統合): runtime_manager が subjective (expected_result /
+        # PR-θ2 (経路統合): runtime_manager が subjective (inner_thought /
         # intention / emotion_hint) を kwarg で渡すようになったので fake 側も
         # 受け付ける。値は使わない (この fake は action_summary のみ検証)。
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
         identifier_arguments=None,

@@ -34,7 +34,6 @@ def test_projection_keeps_copyable_values_and_only_free_text_names() -> None:
             "stealth": False,
             "memo_ids": ["memo-a", "memo-b"],
             "inner_thought": "すぐ下の専用行に出る",
-            "expected_result": "予測行に出る",
         }
     )
 
