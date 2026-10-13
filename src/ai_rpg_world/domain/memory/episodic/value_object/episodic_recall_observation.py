@@ -11,7 +11,6 @@ from datetime import datetime
 
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
     normalize_optional_text,
-    optional_non_blank,
     reject_blank,
     validate_str_tuple,
 )
@@ -31,13 +30,6 @@ class EpisodicRecallObservation:
     persona_snapshot: str
     situation_cues: tuple[str, ...]
     turn_index: int
-    # U9a (予測誤差統一設計 部品5・誤差駆動再解釈): この recall observation を
-    # in-context にして立てた予測が外れたときの誤差文。
-    # 「思い出したのに外れた」を再解釈 coordinator が誤差専用 framing で扱う
-    # ための入力になる (的中側の ranking boost は U9b で別途扱う、本 VO
-    # フィールドはその対象外)。ERROR_DRIVEN_REINTERPRETATION_ENABLED が
-    # OFF (既定) のときは常に None (後方互換・旧 snapshot 由来も None)。
-    prediction_outcome_error: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "recall_id", reject_blank("recall_id", self.recall_id))
@@ -73,13 +65,6 @@ class EpisodicRecallObservation:
             raise TypeError("turn_index must be int")
         if self.turn_index < 0:
             raise ValueError("turn_index must be 0 or greater")
-        object.__setattr__(
-            self,
-            "prediction_outcome_error",
-            optional_non_blank(
-                "prediction_outcome_error", self.prediction_outcome_error
-            ),
-        )
 
 
 __all__ = ["EpisodicRecallObservation"]

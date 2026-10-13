@@ -6503,7 +6503,7 @@ U9a / U9b) は外す (Issue #1443)。
 - **当たりの回数は、想起の記録が残っていなくても足す**: 役に立った回数はエピソードごとの
   数で、想起の記録を経由しない。旧経路は想起の記録に残ったエピソードにだけ足していた。
   外れのずれは想起の記録にしか書けないので、想起が再解釈で処理済みなら書き添えは 0 件になる。
-  その件数は trace の `stamped_recalls` に残す
+  その件数は trace の `stamped_recalls` に残す (ずれの書き添えは Issue #1631 で消した)
 - **SQLite の store は 1 本の接続を 1 つのスレッドから使う前提**: 受け取り済みの ID と材料を
   複数文で書くので、別スレッドが同じ接続で commit すると途中の状態が確定しうる。実験の run は
   メモリ上の store を使う。DB に移すとき (#1479) に接続とトランザクションの扱いを決める
@@ -6511,7 +6511,8 @@ U9a / U9b) は外す (Issue #1443)。
   `BELIEF_EVIDENCE_ENABLED`、ずれの書き添えは `ERROR_DRIVEN_REINTERPRETATION_ENABLED` と想起の
   記録 (再解釈の LLM があるとき)、役に立った回数は `RECALL_HIT_BOOST_ENABLED`。配り手は
   episodic stack を組んだあとで作る。機能が有効なのに store が無くて登録できないときは起動時に
-  warning を出し、配信の trace には登録された受け取る側の名前を残す
+  warning を出し、配信の trace には登録された受け取る側の名前を残す (配り手と受け取る側、
+  `ERROR_DRIVEN_REINTERPRETATION_ENABLED` は Issue #1631 で消した)
 
 **比べた結果**: `docs/experiments/issue_1443_expectation_material/` に、過去 run の同じ 64 手で
 材料の件数を前後で並べた。反証は 16 → 16 件で数は同じだが、予期どおりの失敗や「分からない」
@@ -6524,6 +6525,8 @@ U9a / U9b) は外す (Issue #1443)。
 **関連**: design_decisions D1439 / D1440 / D1441 / D1452 / Issue #1414 / #1436 / #1442 / #1479。
 
 **その後**: 確定した予期を信念の材料・想起の手柄・区切りのメモに返す受け取る側は Issue #1631 で消した。古いエピソードの区切りの `prediction_error` は、外れを決める清算が無くなったので、いつも空になる。
+
+誤差駆動の再解釈 (`ERROR_DRIVEN_REINTERPRETATION_ENABLED`)、ずれを想起の記録に書き添える `stamp_prediction_outcome_for_episodes_by_being`、想起の記録の `prediction_outcome_error` と受け取り済みの出来事の ID も Issue #1631 で消した。Being の snapshot は `recall_buffer_received_event_ids` を書かなくなった。消す前の snapshot も読める。
 
 ## D1484. 予期の根拠は形と同じ呼び出しで 1 件ずつ問い、確定した当否は根拠にだけ返す
 

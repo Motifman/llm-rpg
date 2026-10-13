@@ -67,7 +67,6 @@ def _recall_to_payload(row: EpisodicRecallObservation) -> dict[str, Any]:
         "persona_snapshot": row.persona_snapshot,
         "situation_cues": list(row.situation_cues),
         "turn_index": row.turn_index,
-        "prediction_outcome_error": row.prediction_outcome_error,
     }
 
 
@@ -83,8 +82,6 @@ def _payload_to_recall(data: dict[str, Any]) -> EpisodicRecallObservation:
         persona_snapshot=str(data.get("persona_snapshot", "")),
         situation_cues=tuple(str(x) for x in data.get("situation_cues", ())),
         turn_index=int(data.get("turn_index", 0)),
-        # U9a: 旧 payload にはキー自体が無いので None に倒す (後方互換)。
-        prediction_outcome_error=data.get("prediction_outcome_error"),
     )
 
 
@@ -236,6 +233,8 @@ def _init_schema_v3_drop_legacy(connection: sqlite3.Connection) -> None:
     )
 
 
+# 受け取り済みの出来事の ID の表。読み書きは #1631 で消したが、既存の DB の版の並びを
+# 保つため migration は残す。
 def _init_schema_v4_received_events(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
@@ -535,110 +534,6 @@ class SqliteEpisodicReinterpretationStore(
             _payload_to_entry(json.loads(str(r[0])), fallback_being_id=being_id)
             for r in cur.fetchall()
         ]
-
-    def stamp_prediction_outcome_for_episodes_by_being(
-        self,
-        being_id: BeingId,
-        episode_ids: tuple[str, ...],
-        prediction_error: str,
-        *,
-        event_id: str,
-    ) -> int | None:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if not isinstance(prediction_error, str) or not prediction_error.strip():
-            raise ValueError("prediction_error must be a non-empty str")
-        if not isinstance(event_id, str) or not event_id.strip():
-            raise ValueError("event_id must be a non-empty str")
-        targets = set(episode_ids)
-        try:
-            inserted = self._conn.execute(
-                """
-                INSERT OR IGNORE INTO episodic_recall_received_event_by_being
-                    (being_id_value, event_id, received_order)
-                VALUES (?, ?, (
-                    SELECT COALESCE(MAX(received_order), 0) + 1
-                    FROM episodic_recall_received_event_by_being
-                    WHERE being_id_value = ?
-                ))
-                """,
-                (being_id.value, event_id, being_id.value),
-            ).rowcount
-            if inserted == 0:
-                self._conn.rollback()
-                return None
-            rows = self._conn.execute(
-                """
-                SELECT recall_id, payload_json
-                FROM episodic_recall_observations_by_being
-                WHERE being_id_value = ?
-                """,
-                (being_id.value,),
-            ).fetchall()
-            stamped = 0
-            for recall_id, payload_raw in rows:
-                data = json.loads(str(payload_raw))
-                if (
-                    data.get("episode_id") not in targets
-                    or data.get("prediction_outcome_error") is not None
-                ):
-                    continue
-                data["prediction_outcome_error"] = prediction_error
-                stamped += 1
-                self._conn.execute(
-                    """
-                    UPDATE episodic_recall_observations_by_being
-                    SET payload_json = ?
-                    WHERE being_id_value = ? AND recall_id = ?
-                    """,
-                    (json.dumps(data, ensure_ascii=False), being_id.value, recall_id),
-                )
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
-        return stamped
-
-    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        cur = self._conn.execute(
-            """
-            SELECT event_id FROM episodic_recall_received_event_by_being
-            WHERE being_id_value = ?
-            ORDER BY received_order ASC
-            """,
-            (being_id.value,),
-        )
-        return [str(r[0]) for r in cur.fetchall()]
-
-    def replace_received_event_ids_by_being(
-        self, being_id: BeingId, event_ids: list[str]
-    ) -> None:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if not isinstance(event_ids, list) or not all(
-            isinstance(e, str) and e.strip() for e in event_ids
-        ):
-            raise TypeError("event_ids must be list of non-empty str")
-        try:
-            self._conn.execute(
-                "DELETE FROM episodic_recall_received_event_by_being WHERE being_id_value = ?",
-                (being_id.value,),
-            )
-            for order, event_id in enumerate(dict.fromkeys(event_ids), start=1):
-                self._conn.execute(
-                    """
-                    INSERT INTO episodic_recall_received_event_by_being
-                        (being_id_value, event_id, received_order)
-                    VALUES (?, ?, ?)
-                    """,
-                    (being_id.value, event_id, order),
-                )
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
 
     def replace_all_by_being(
         self,

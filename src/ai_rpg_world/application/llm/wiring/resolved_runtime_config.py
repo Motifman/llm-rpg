@@ -80,7 +80,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "EPISODIC_RECALL_ENABLED",
-    "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
     "END_ON_ALL_DOWN",
     "ESCAPE_LLM_SSOT",
     "LLM_AFTERGLOW_CAPACITY",
@@ -343,7 +342,6 @@ class ResolvedLlmRuntimeConfig:
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
-    error_driven_reinterpretation_enabled: bool = False
     recall_hit_boost_enabled: bool = False
 
     # Goal / stagnation 系。
@@ -484,7 +482,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_belief_evidence_enabled,
             resolve_episodic_explore_related_enabled,
             resolve_episodic_recall_enabled,
-            resolve_error_driven_reinterpretation_enabled,
             resolve_memo_tools_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_semantic_llm_gist_enabled,
@@ -720,9 +717,6 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
-        error_driven_reinterpretation_enabled = (
-            resolve_error_driven_reinterpretation_enabled(env=source)
-        )
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
         escape_llm_ssot_enabled = _parse_truthy(
@@ -838,7 +832,6 @@ class ResolvedLlmRuntimeConfig:
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
-            error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
@@ -950,7 +943,6 @@ class ResolvedLlmRuntimeConfig:
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
-            error_driven_reinterpretation_enabled=False,
             recall_hit_boost_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,

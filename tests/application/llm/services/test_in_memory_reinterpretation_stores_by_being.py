@@ -37,7 +37,6 @@ def _obs(
     episode_id: str,
     player_id: int = 1,
     recalled_at: datetime = _NOW,
-    prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
         recall_id=recall_id,
@@ -50,7 +49,6 @@ def _obs(
         persona_snapshot="persona",
         situation_cues=("cue",),
         turn_index=1,
-        prediction_outcome_error=prediction_outcome_error,
     )
 
 
@@ -282,7 +280,9 @@ class TestRecallBufferReplaceAll:
 
 
 class TestRecallBufferThreadSafety:
-    """横断レビュー H-3/M2: ThreadPool ワーカーとメイン thread の同時アクセス。
+    """横断レビュー H-3/M2 で入れた lock が、外側で保持したまま公開メソッドを呼んでも詰まらない (再入できる) ことを保証する。
+
+    lock を要したワーカーからの書き込み (stamp) は #1631 で消した。
 
     ``InMemoryEpisodicRecallBufferStore`` のみが対象 (``InMemoryEpisodicReinterpretationJournalStore``
     はワーカー thread から呼ばれる経路が無いため対象外)。
@@ -299,53 +299,8 @@ class TestRecallBufferThreadSafety:
             store.pending_count_by_being(being)
             store.list_pending_by_being(being)
             store.peek_batch_by_being(being, batch_size=1, max_contexts_per_episode=1)
-            store.stamp_prediction_outcome_for_episodes_by_being(
-                being, ("e1",), "誤差", event_id="ev-1"
-            )
             store.mark_processed_by_being(being, ("r1",))
             store.replace_all_pending_by_being(being, [])
-
-    def test_concurrent_append_and_stamp_prediction_outcome_never_loses_observations(
-        self, being: BeingId
-    ) -> None:
-        """ワーカー thread の ``append_by_being`` と、
-        ``stamp_prediction_outcome_for_episodes_by_being`` (list 読み取り →
-        更新版差し替えの read-modify-write) を並走させても、append した
-        recall observation が無音で消えない。
-
-        stamp 側はマッチしない episode_id を渡し、実質 no-op のまま
-        read-modify-write の競合窓だけを突く。
-        """
-        total = 300
-        store = InMemoryEpisodicRecallBufferStore()
-        being_id = being
-
-        def appender() -> None:
-            for i in range(total):
-                store.append_by_being(
-                    being_id,
-                    _obs(recall_id=f"r{i}", episode_id=f"e{i}"),
-                )
-
-        def stamper() -> None:
-            for i in range(total):
-                store.stamp_prediction_outcome_for_episodes_by_being(
-                    being_id, ("no-such-episode",), "誤差", event_id=f"ev-{i}"
-                )
-
-        t_append = threading.Thread(target=appender)
-        t_stamp = threading.Thread(target=stamper)
-        t_append.start()
-        t_stamp.start()
-        t_append.join(timeout=10)
-        t_stamp.join(timeout=10)
-        assert not t_append.is_alive()
-        assert not t_stamp.is_alive()
-
-        rows = store.list_pending_by_being(being_id)
-        assert len(rows) == total
-        assert {o.recall_id for o in rows} == {f"r{i}" for i in range(total)}
-
 
 class TestJournalReplaceAll:
     """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""

@@ -39,7 +39,6 @@ def _obs(
     episode_id: str,
     player_id: int = 1,
     recalled_at: datetime = _NOW,
-    prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
         recall_id=recall_id,
@@ -52,7 +51,6 @@ def _obs(
         persona_snapshot="persona",
         situation_cues=("cue",),
         turn_index=1,
-        prediction_outcome_error=prediction_outcome_error,
     )
 
 
