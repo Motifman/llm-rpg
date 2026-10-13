@@ -20,7 +20,6 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED,
     ENV_MEMO_TOOLS_ENABLED,
-    ENV_PREDICTION_CONTEXT_ID_ENABLED,
     ENV_RECALL_HIT_BOOST_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SEMANTIC_SEARCH_ENABLED,
@@ -36,7 +35,6 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_episodic_explore_related_state,
     log_error_driven_reinterpretation_enabled_state,
     log_memo_tools_enabled_state,
-    log_prediction_context_id_state,
     log_recall_hit_boost_enabled_state,
     log_semantic_passive_top_k_state,
     log_semantic_search_state,
@@ -48,7 +46,6 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     resolve_episodic_explore_related_enabled,
     resolve_error_driven_reinterpretation_enabled,
     resolve_memo_tools_enabled,
-    resolve_prediction_context_id_enabled,
     resolve_recall_hit_boost_enabled,
     resolve_semantic_passive_top_k,
     resolve_semantic_search_enabled,
@@ -222,54 +219,6 @@ class TestLogSemanticSearchState:
         ):
             log_semantic_search_state(True)
             log_semantic_search_state(False)
-        messages = [rec.message for rec in caplog.records]
-        assert any("ENABLED" in m for m in messages)
-        assert any("DISABLED" in m for m in messages)
-
-
-class TestResolvePredictionContextIdEnabled:
-    """``PREDICTION_CONTEXT_ID_ENABLED`` env パース (予測誤差統一設計 U1)。"""
-
-    def test_default_off(self) -> None:
-        """default は OFF。"""
-        assert resolve_prediction_context_id_enabled(env={}) is False
-
-    @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "ON", "True"])
-    def test_truthy(self, raw: str) -> None:
-        """truthy は ON。"""
-        assert resolve_prediction_context_id_enabled(
-            env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
-        ) is True
-
-    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", ""])
-    def test_falsy_empty_string_off(self, raw: str) -> None:
-        """falsy リテラルまたは空文字は OFF。"""
-        assert resolve_prediction_context_id_enabled(
-            env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
-        ) is False
-
-    @pytest.mark.parametrize("raw", ["random", "yeah", "tru", "2"])
-    def test_unknown_raises_value_error_11(self, raw: str) -> None:
-        """未知の値は ValueError。"""
-        with pytest.raises(ValueError):
-            resolve_prediction_context_id_enabled(
-                env={ENV_PREDICTION_CONTEXT_ID_ENABLED: raw}
-            )
-
-
-class TestLogPredictionContextIdState:
-    """解決結果を INFO ログ 1 件で残す (予測誤差統一設計 U1)。"""
-
-    def test_enabled_disabled_log_rendered(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """ENABLED でも DISABLED でも log に出る。"""
-        with caplog.at_level(
-            logging.INFO,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            log_prediction_context_id_state(True)
-            log_prediction_context_id_state(False)
         messages = [rec.message for rec in caplog.records]
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)

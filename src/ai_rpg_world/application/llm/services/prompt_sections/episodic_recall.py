@@ -325,14 +325,8 @@ def run_episodic_passive_recall(
     recent_events_text: str,
     player_info: SystemPromptPlayerInfoDto,
     current_state_dto: Any | None = None,
-    prediction_context_id: str | None = None,
-) -> tuple[str, int | None, tuple[str, ...]]:
-    """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数, episode_id 群) を返す。
-
-    ``prediction_context_id`` が渡されたとき、生成する各
-    ``EpisodicRecallObservation`` にその id を stamp する (U1 部品5: この
-    episode を想起した prompt build で立てた予測をあとで辿るため)。None なら
-    stamp しない (= id 機構 OFF)。
+) -> tuple[str, int | None]:
+    """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数) を返す。
 
     Issue #227 後続レビュー (Prompt MEDIUM-5) で build() 本体から抽出。
     responsibilities:
@@ -347,7 +341,7 @@ def run_episodic_passive_recall(
     を表す。 sentinel int を避けて Optional で区別する。
     """
     if builder._episodic_passive_recall is None:
-        return "", None, ()
+        return "", None
 
     observation_structured = None
     observation_prose: str | None = None
@@ -559,7 +553,6 @@ def run_episodic_passive_recall(
                     persona_snapshot=player_info.persona_block,
                     situation_cues=situation_cue_keys,
                     turn_index=turn_index,
-                    prediction_context_id=prediction_context_id,
                 )
                 append_recall_observation(builder, being_id, observation)
             except Exception as e:
@@ -575,8 +568,4 @@ def run_episodic_passive_recall(
     candidate_count = len(recall_result.candidates)
     if not relevant_memories_text.strip():
         relevant_memories_text = "(受動想起では何も浮かばなかった)"
-
-    # U1 (部品5 想起の信用割り当ての土台): この build で in-context だった
-    # episode_id 群を prediction_context_id に紐づけるため呼び出し元へ返す。
-    episode_ids = tuple(c.episode.episode_id for c in recall_result.candidates)
-    return relevant_memories_text, candidate_count, episode_ids
+    return relevant_memories_text, candidate_count

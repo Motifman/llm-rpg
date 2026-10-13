@@ -6448,6 +6448,8 @@ Being のターン数を作ったターンとして清算待ちの予期を積�
 
 予期の引数そのもの (`EXPECTATION_ARGUMENT_ENABLED`、期限のターン数 `EXPECTATION_UNDATED_TERM_TURNS` / `EXPECTATION_DATED_TERM_TURNS`、tool の `expectations` 引数、行動ルールの予期の行、書かれた予期を積む `ExpectationFormingService`) も Issue #1631 で消した。予期の清算・配り手・保存先も、続く PR で消した (D1439 / D1440 の「その後」)。
 
+信念と想起の台帳 (`PredictionContextLedger`、`PREDICTION_CONTEXT_ID_ENABLED`) も Issue #1631 で消した。台帳を読む予期が無くなり、プロンプトにも出ない ID を行動の記録と想起に書くだけになっていた。行動の記録の `prediction_context_id` / `in_context_belief_ids`、想起の記録の `prediction_context_id`、trace の `prediction_outcome` も一緒に消えた。world snapshot と Being の snapshot はこれらのキーを書かなくなった。版は据え置きで、キーのある古い snapshot も読める。
+
 ## D1443. 予測の当否の材料は確定した予期だけから積み、受け取る側は受け取り済みの ID を材料と同じ store に持つ
 
 **何を**: 予期の配り手 (D1440) に 3 つの受け取る側を登録する。確定した予期の当否を、頭に
@@ -6590,7 +6592,7 @@ U9a / U9b) は外す (Issue #1443)。
 **関連**: design_decisions D1439 / D1440 / D1443 / Issue #1436 / #1414 / #1454 / #1467
 (つながりの強化も根拠にだけ返す決まりを渡す)。
 
-**その後**: 根拠の選択 (`grounds.py`、`EXPECTATION_GROUNDS_*`) は、予期の清算と一緒に Issue #1631 で消した。
+**その後**: 根拠の選択 (`grounds.py`、`EXPECTATION_GROUNDS_*`) は、予期の清算と一緒に Issue #1631 で消した。台帳 (`PredictionContextLedger`) も、続く PR で消した (D1441 の「その後」)。
 
 ## D1414. ~~想起は状況の 6 つの欄から、残す欄を選んだマスクごとに引き、結果を混ぜずに持つ~~
 

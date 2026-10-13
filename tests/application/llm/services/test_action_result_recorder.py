@@ -9,9 +9,6 @@ import pytest
 from ai_rpg_world.application.llm.services.action_result_recorder import (
     ActionResultRecorder,
 )
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -158,87 +155,3 @@ class TestActionResultRecorder:
         with pytest.raises(TypeError, match="action_result_store must not be None"):
             ActionResultRecorder(None)  # type: ignore[arg-type]
 
-
-class TestPredictionContextIdConsumption:
-    """U1: prediction_context_ledger からの consume → store.append への焼き込み。"""
-
-    def test_ledger_uninjected_prediction_context_id_none(self) -> None:
-        """ledger 未注入なら prediction context id は常に None。"""
-        store = _StoreSpy([])
-        ActionResultRecorder(store).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["prediction_context_id"] is None
-
-    def test_pending_id_consume_store(self) -> None:
-        """pending id が consume されて store に渡る。"""
-        ledger = PredictionContextLedger()
-        issued = ledger.issue(PlayerId(1))
-        store = _StoreSpy([])
-        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["prediction_context_id"] == issued.prediction_context_id
-        # consume 済みなので ledger 側からは消えている
-        assert ledger.peek(PlayerId(1)) is None
-
-    def test_pending_id_none(self) -> None:
-        """no-tool ターンの反対 (record だけ呼ばれて build を経ていない) でも壊れない。"""
-        ledger = PredictionContextLedger()
-        store = _StoreSpy([])
-        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["prediction_context_id"] is None
-
-    def test_other_player_pending_id_not_consumed(self) -> None:
-        """player をまたいだ混線防止。"""
-        ledger = PredictionContextLedger()
-        issued_p2 = ledger.issue(PlayerId(2))
-        store = _StoreSpy([])
-        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["prediction_context_id"] is None
-        assert ledger.peek(PlayerId(2)).prediction_context_id == (
-            issued_p2.prediction_context_id
-        )
-
-    def test_invalid_ledger_raises_type_error(self) -> None:
-        """不正な ledger 型は TypeError。"""
-        with pytest.raises(TypeError, match="prediction_context_ledger"):
-            ActionResultRecorder(
-                _StoreSpy([]), prediction_context_ledger=object()  # type: ignore[arg-type]
-            )
-
-
-class TestInContextBeliefIdsConsumption:
-    """U4 (予測誤差統一設計 部品3): consume した PredictionContext.belief_ids が
-    そのまま store.append の in_context_belief_ids に焼き込まれること。"""
-
-    def test_ledger_uninjected_context_belief_ids_empty_tuple(self) -> None:
-        """ledger 未注入なら in context belief ids は常に空タプル。"""
-        store = _StoreSpy([])
-        ActionResultRecorder(store).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["in_context_belief_ids"] == ()
-
-    def test_consume_belief_ids_store(self) -> None:
-        """consume した belief ids が store に渡る。"""
-        ledger = PredictionContextLedger()
-        ledger.issue(PlayerId(1), belief_ids=("sem-1", "sem-2"))
-        store = _StoreSpy([])
-        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["in_context_belief_ids"] == ("sem-1", "sem-2")
-
-    def test_pending_context_belief_ids_empty_tuple(self) -> None:
-        """no-tool ターンの反対 (record だけ呼ばれて build を経ていない) でも壊れない。"""
-        ledger = PredictionContextLedger()
-        store = _StoreSpy([])
-        ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
-        )
-        assert store.last_kwargs["in_context_belief_ids"] == ()

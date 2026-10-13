@@ -131,8 +131,6 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
         "execution_provenance": entry.execution_provenance.to_dict() if entry.execution_provenance else None,
-        "prediction_context_id": entry.prediction_context_id,
-        "in_context_belief_ids": list(entry.in_context_belief_ids),
     }
 
 
@@ -158,16 +156,7 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         emotion_hint=data.get("emotion_hint"),
         scene_boundary=bool(data.get("scene_boundary", False)),
         occurred_tick=data.get("occurred_tick"),
-        # U1: 旧スキーマ (v3 以前) には無いキーなので .get で None に倒す
-        # (= 「この行動はどの prompt build に紐づくか不明」として扱う。
-        # 後方互換は data.get レベルで担保しつつ、schema_version 自体は
-        # 意味変更を明示するため bump する)。
         execution_provenance=(ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None),
-        prediction_context_id=data.get("prediction_context_id"),
-        # U4: 旧スキーマ (v4 以前) には無いキーなので .get で空タプルに倒す
-        # (= 「in-context belief は無い」として扱う。attribution 機構 OFF や
-        # 旧 snapshot との後方互換)。
-        in_context_belief_ids=tuple(data.get("in_context_belief_ids", [])),
     )
 
 
@@ -795,9 +784,9 @@ _AR_SUBSYSTEM_KEY = "action_result_store"
 # v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
 # v2〜v5 は、欠けたキーを data.get で None/() に倒せるので実害は無かったが、
 # 意味の変更を示すため版を上げた。
-# expected_result は #1631 で書くのをやめたが、版は 5 のまま据え置いた。版は完全一致で
-# 照合するので、上げるといまある snapshot が読めなくなる。キーのある古い snapshot は
-# restore が読み飛ばす。
+# expected_result / prediction_context_id / in_context_belief_ids は #1631 で書くのを
+# やめたが、版は 5 のまま据え置いた。版は完全一致で照合するので、上げるといまある
+# snapshot が読めなくなる。キーのある古い snapshot は restore が読み飛ばす。
 _AR_SCHEMA_VERSION = 5
 
 

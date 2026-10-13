@@ -58,8 +58,6 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         intention=f"{action} で先へ進む",
         emotion_hint="determination",
         occurred_tick=42,
-        prediction_context_id="predctx-abc123",
-        in_context_belief_ids=("sem-belief-1", "sem-belief-2"),
     )
 
 
@@ -126,11 +124,8 @@ class TestActionResultStoreCodec:
         assert "expected_result" not in first_captured
         assert first_captured["intention"] == "walk で先へ進む"
         assert first_captured["emotion_hint"] == "determination"
-        assert first_captured["prediction_context_id"] == "predctx-abc123"
-        assert first_captured["in_context_belief_ids"] == [
-            "sem-belief-1",
-            "sem-belief-2",
-        ]
+        assert "prediction_context_id" not in first_captured
+        assert "in_context_belief_ids" not in first_captured
 
         dst = DefaultActionResultStore()
         dst_runtime = SimpleNamespace(_action_result_store=dst)
@@ -144,21 +139,24 @@ class TestActionResultStoreCodec:
         assert results[0].intention == "walk で先へ進む"
         assert results[0].emotion_hint == "determination"
         assert results[0].occurred_tick == 42
-        assert results[0].prediction_context_id == "predctx-abc123"
-        assert results[0].in_context_belief_ids == ("sem-belief-1", "sem-belief-2")
 
-    def test_restore_ignores_expected_result_of_snapshots_saved_before_removal(self) -> None:
-        """expected_result を書いていたころの v5 の snapshot も読め、ほかの欄はそのまま戻る (#1631)。"""
+    def test_restore_ignores_keys_of_snapshots_saved_before_removal(self) -> None:
+        """expected_result / prediction_context_id / in_context_belief_ids を書いていたころの v5 の snapshot も読め、ほかの欄はそのまま戻る (#1631)。"""
         src = DefaultActionResultStore()
         src._event_store.replace_action_results(PlayerId(1), [_action_entry("walk")])
         captured = ActionResultStoreSubsystemCodec().capture(SimpleNamespace(_action_result_store=src))
-        captured["entries"][0]["entries"][0]["expected_result"] = "walk で道が開ける"
+        old_entry = captured["entries"][0]["entries"][0]
+        old_entry["expected_result"] = "walk で道が開ける"
+        old_entry["prediction_context_id"] = "predctx-abc123"
+        old_entry["in_context_belief_ids"] = ["sem-belief-1"]
         dst = DefaultActionResultStore()
 
         ActionResultStoreSubsystemCodec().restore(SimpleNamespace(_action_result_store=dst), captured)
 
         (restored,) = dst.get_recent(PlayerId(1), limit=10)
         assert not hasattr(restored, "expected_result")
+        assert not hasattr(restored, "prediction_context_id")
+        assert not hasattr(restored, "in_context_belief_ids")
         assert restored.inner_thought == "walk の前に状況を整理する"
         assert restored.intention == "walk で先へ進む"
 
@@ -167,64 +165,6 @@ class TestActionResultStoreCodec:
         runtime = SimpleNamespace(_action_result_store=None)
         captured = ActionResultStoreSubsystemCodec().capture(runtime)
         assert captured["entries"] == []
-
-    def test_prediction_context_id_legacy_schema_data_none(self) -> None:
-        """v4 導入前 (= キー自体が無い) payload を decode しても例外にならず None になる。
-
-        schema_version チェック自体は旧 snapshot を弾く仕様 (バージョン不一致で
-        ValueError) だが、dict 単体の decode 経路 (_dict_to_action_result_entry)
-        は data.get ベースなので、欠損キーに対する robustness を独立に確認する。
-        """
-        dst = DefaultActionResultStore()
-        dst_runtime = SimpleNamespace(_action_result_store=dst)
-        payload = {
-            "schema_version": 5,
-            "entries": [
-                {
-                    "player_id": 1,
-                    "entries": [
-                        {
-                            "occurred_at": "2026-06-14T12:00:00+00:00",
-                            "action_summary": "walk_summary",
-                            "result_summary": "ok",
-                            # prediction_context_id キー自体を欠落させる
-                        }
-                    ],
-                }
-            ],
-        }
-        ActionResultStoreSubsystemCodec().restore(dst_runtime, payload)
-        results = dst.get_recent(PlayerId(1), limit=10)
-        assert results[0].prediction_context_id is None
-
-    def test_context_belief_ids_legacy_schema_data_empty_tuple(self) -> None:
-        """v5 導入前 (= キー自体が無い) payload を decode しても例外にならず空タプルになる。
-
-        U4 で追加した ``in_context_belief_ids`` の後方互換を、
-        prediction_context_id と同じ形で独立に確認する。
-        """
-        dst = DefaultActionResultStore()
-        dst_runtime = SimpleNamespace(_action_result_store=dst)
-        payload = {
-            "schema_version": 5,
-            "entries": [
-                {
-                    "player_id": 1,
-                    "entries": [
-                        {
-                            "occurred_at": "2026-06-14T12:00:00+00:00",
-                            "action_summary": "walk_summary",
-                            "result_summary": "ok",
-                            # in_context_belief_ids キー自体を欠落させる
-                        }
-                    ],
-                }
-            ],
-        }
-        ActionResultStoreSubsystemCodec().restore(dst_runtime, payload)
-        results = dst.get_recent(PlayerId(1), limit=10)
-        assert results[0].in_context_belief_ids == ()
-
 
 class TestSlidingWindowCodecRollingSummaryBackend:
     """``MEMORY_KIND=rolling_summary`` (= K run の最適構成) backend での

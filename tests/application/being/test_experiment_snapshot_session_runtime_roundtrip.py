@@ -174,8 +174,6 @@ def _populate_runtime_state(runtime: Any) -> None:
         intention="鍵を探す",
         emotion_hint="焦り",
         occurred_tick=37,
-        prediction_context_id="predctx-runtime-roundtrip",
-        in_context_belief_ids=("sem-runtime-1",),
     )
     runtime._encounter_memory.observe(
         player_id,
@@ -329,7 +327,7 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
         for entry in recent_player["entries"]
         if entry["kind"] == "action_result"
     )
-    assert action_payload["prediction_context_id"] == "predctx-runtime-roundtrip"
+    assert "prediction_context_id" not in action_payload
     assert (
         player_world["encounter_memory"]["entries"][0]["records"][0]["key"]
         == "spot:ancient_archive"

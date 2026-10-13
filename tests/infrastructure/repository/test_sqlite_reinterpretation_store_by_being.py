@@ -26,6 +26,8 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
 from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (
     SqliteEpisodicReinterpretationStore,
     _entry_to_payload,
+    _payload_to_recall,
+    _recall_to_payload,
 )
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
@@ -37,7 +39,6 @@ def _obs(
     episode_id: str,
     player_id: int = 1,
     recalled_at: datetime = _NOW,
-    prediction_context_id: str | None = None,
     prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
@@ -51,7 +52,6 @@ def _obs(
         persona_snapshot="persona",
         situation_cues=("cue",),
         turn_index=1,
-        prediction_context_id=prediction_context_id,
         prediction_outcome_error=prediction_outcome_error,
     )
 
@@ -98,6 +98,16 @@ def being() -> BeingId:
 
 class TestSqliteRecallBufferByBeing:
     """SQLite recall buffer の by_being API。"""
+
+    def test_old_payload_with_prediction_context_id_is_read(self) -> None:
+        """予測の文脈 ID を書いていたころ (#1631 より前) の payload_json も読め、書き戻すときは ID のキーを出さない。"""
+        payload = _recall_to_payload(_obs(recall_id="r-old", episode_id="e1"))
+        payload["prediction_context_id"] = "pc-1"
+
+        restored = _payload_to_recall(payload)
+
+        assert restored.recall_id == "r-old"
+        assert "prediction_context_id" not in _recall_to_payload(restored)
 
     def test_append_pending_count(
         self, store: SqliteEpisodicReinterpretationStore, being: BeingId
@@ -155,114 +165,6 @@ class TestSqliteRecallBufferByBeing:
             )
             == ()
         )
-
-
-class TestSqliteRecallBufferStampPredictionOutcome:
-    """U9a: SQLite 版 ``stamp_prediction_outcome_by_being``。"""
-
-    def test_matches_prediction_context_id_obs_included(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """一致する prediction context id の未処理 obs に誤差が載る。"""
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた")
-        got = store.list_pending_by_being(being)[0]
-        assert got.prediction_outcome_error == "外れた"
-
-    def test_different_prediction_context_id_obs_not_included(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """別の prediction context id の obs には載らない。"""
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-2"),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた")
-        rows = {o.recall_id: o for o in store.list_pending_by_being(being)}
-        assert rows["r1"].prediction_outcome_error == "外れた"
-        assert rows["r2"].prediction_outcome_error is None
-
-    def test_obs(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """既に誤差が刻まれた obs は上書きしない。"""
-        store.append_by_being(
-            being,
-            _obs(
-                recall_id="r1",
-                episode_id="e1",
-                prediction_context_id="pc-1",
-                prediction_outcome_error="最初の誤差",
-            ),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-1", "二度目の誤差")
-        got = store.list_pending_by_being(being)[0]
-        assert got.prediction_outcome_error == "最初の誤差"
-
-
-class TestSqliteListEpisodeIdsByPredictionContext:
-    """U9b: SQLite 版 ``list_episode_ids_by_prediction_context_by_being``。"""
-
-    def test_returns_matches_prediction_context_id_episode_id(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """一致する prediction context id の episode id を返す。"""
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert got == ("e1",)
-
-    def test_returns_all_multiple_episode_same_prediction_context_id(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """複数 episode が同じ predictioncontextid に紐づく場合は全件返す。"""
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert set(got) == {"e1", "e2"}
-
-    def test_same_episode_multiple_recall_deduplicates(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """同じ episode を複数 recall しても重複排除される。"""
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert got == ("e1",)
-
-    def test_matches_empty_tuple(
-        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
-    ) -> None:
-        """一致するものが無ければ空tuple。"""
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(
-            being, "pc-nonexistent"
-        )
-        assert got == ()
 
 
 class TestSqliteJournalByBeing:
