@@ -7255,7 +7255,7 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 **関連**: design_decisions 15〜18 (snapshot) / Issue #1508 / #1464 / #1520。
 
-世界の tick を 0 に置き換える欄のうち、目的 (goal journal の `created_tick`) は、目的の保存先と一緒に記憶の部品の撤去 (#1631) の #PRNUM で消した。
+世界の tick を 0 に置き換える欄のうち、目的 (goal journal の `created_tick`) は、目的の保存先と一緒に記憶の部品の撤去 (#1631) の #1686 で消した。
 
 ---
 
