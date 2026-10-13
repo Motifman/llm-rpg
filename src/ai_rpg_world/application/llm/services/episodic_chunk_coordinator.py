@@ -153,7 +153,6 @@ class EpisodicChunkCoordinator:
                 "を scheduler 引数に渡してください。"
             )
 
-
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
