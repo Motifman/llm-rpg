@@ -242,9 +242,9 @@ def _compose_outcome(action_results: tuple[ActionResultEntry, ...]) -> str:
     return f"{n_fail}件失敗を含む / {n_ok}成功（末尾要約: {rs}）"
 
 
-# chunk が複数 action を含むとき、expected / why は全 action 分を箇条書きで残す
-# (最新だけだと前半 action の予測が消える)。トークン肥大を避けるため上限を設け、
-# 超過分は「ほか N 件」に畳む。SubjectiveEpisode.expected / why は str なので
+# chunk が複数 action を含むとき、why は全 action 分を箇条書きで残す
+# (最新だけだと前半 action の目的が消える)。トークン肥大を避けるため上限を設け、
+# 超過分は「ほか N 件」に畳む。SubjectiveEpisode.why は str なので
 # 構造化リストにはせず、LLM 露出・再解釈に向く自然文 (箇条書き) として持つ。
 _MAX_SUBJECTIVE_BULLETS = 3
 
@@ -253,7 +253,7 @@ def _compose_subjective_bullets(
     action_results: tuple[ActionResultEntry, ...],
     field_name: str,
 ) -> str | None:
-    """各 action の主観テキスト (expected_result / intention) を時系列順に
+    """各 action の主観テキスト (intention) を時系列順に
     ``- {tool}: {text}`` で箇条書き化する。最大 _MAX_SUBJECTIVE_BULLETS 件、
     超過分は ``- ほか N 件`` に畳む。1 件も無ければ None (= フィールド未充填)。
     """
@@ -270,11 +270,6 @@ def _compose_subjective_bullets(
     if remainder > 0:
         lines.append(f"- ほか {remainder} 件")
     return "\n".join(lines)
-
-
-def _compose_expected(action_results: tuple[ActionResultEntry, ...]) -> str | None:
-    """各 action の行動前予測 (expected_result) を箇条書きにする。"""
-    return _compose_subjective_bullets(action_results, "expected_result")
 
 
 def _compose_why(action_results: tuple[ActionResultEntry, ...]) -> str | None:
@@ -500,7 +495,7 @@ class ChunkEpisodeDraftBuilder:
             what=what,
             why=_compose_why(acts),
             observed=observed,
-            expected=_compose_expected(acts),
+            expected=None,
             outcome=_compose_outcome(acts),
             # prediction_error は質的乖離判定なので LLM 補完に委ねる (PR2b)。
             # ここでは決定論的に埋められないため None のまま。

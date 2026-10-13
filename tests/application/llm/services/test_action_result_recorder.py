@@ -116,7 +116,7 @@ class TestActionResultRecorder:
         assert events == ["append", "chunk"]
 
     def test_subjective_fields_passed_through_store(self) -> None:
-        """expected_result/intention/emotion_hint を store.append に通す口がある (U2 配線用)。"""
+        """intention/emotion_hint を store.append に通す口がある (U2 配線用)。"""
         store = _StoreSpy([])
         ActionResultRecorder(store).record(
             PlayerId(1),
@@ -124,12 +124,10 @@ class TestActionResultRecorder:
             result_summary="r", game_time_label=None,
             occurred_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
             tool_name="t",
-            expected_result="予測X",
             intention="目的Y",
             emotion_hint="curiosity",
             episodic_stack=None,
         )
-        assert store.last_kwargs["expected_result"] == "予測X"
         assert store.last_kwargs["intention"] == "目的Y"
         assert store.last_kwargs["emotion_hint"] == "curiosity"
 

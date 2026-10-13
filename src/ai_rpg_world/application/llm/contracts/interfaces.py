@@ -122,7 +122,6 @@ class IActionResultStore(ABC):
         game_time_label: str | None = None,
         omit_result_in_prompt: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
         scene_boundary: bool = False,

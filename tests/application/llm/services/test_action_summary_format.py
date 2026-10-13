@@ -30,7 +30,6 @@ _FULL_ARGS = {
     "action_name": "inspect",
     "inner_thought": "何か手がかりがあるはずだ",
     "intention": "祭壇の封印の手がかりを探す",
-    "expected_result": "祭壇から封印の手がかりが得られる",
     "emotion_hint": "curiosity",
 }
 
@@ -117,14 +116,13 @@ class TestFormatActionSummaryForDisplay:
         )
 
     def test_hidden_fields_include_inner_thought_and_duplicate_content(self) -> None:
-        """JSON フォールバックから心の声・発話本文・メモ本文・予測・メモ帳への書き込みなどの重複入力を落とす。"""
+        """JSON フォールバックから心の声・発話本文・メモ本文・メモ帳への書き込みなどの重複入力を落とす。"""
         assert ACTION_SUMMARY_HIDDEN_FIELDS == frozenset(
             {
                 "content",
                 "reason",
                 "inner_thought",
                 "intention",
-                "expected_result",
                 "memo",
                 "emotion_hint",
             }
@@ -137,14 +135,12 @@ class TestFormatActionSummaryForDisplay:
             {
                 "content": "本文",
                 "inner_thought": "考え",
-                "expected_result": "予測",
                 "target_label": "周囲",
             },
         )
         assert out == 'look_around({"target_label": "周囲"}) を実行しました。'
         assert "content" not in out
         assert "inner_thought" not in out
-        assert "expected_result" not in out
 
     def test_no_args_returns_bare_summary(self) -> None:
         """args が空なら自然文 formatter は空入力向けの短文を返す。"""

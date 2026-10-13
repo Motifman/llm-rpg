@@ -108,12 +108,6 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
     time_prefix = f"[{entry.game_time_label}] " if entry.game_time_label else ""
-    # #552 PR-A: 行動前の予測 (expected_result) を [予測: ...] として行内に別表記する。
-    # action_summary の JSON からは sanitizer で落としてあるので二重表示にならない。
-    # 構造化フィールドから読むので、予測が無ければ何も足さない。「行動 → 予測 → 結果」
-    # の順で並べ、失敗 / omit_result 行にも付ける (予測と実際のズレを読み取れるように)。
-    prediction = (entry.expected_result or "").strip()
-    prediction_label = f" [予測: {prediction}]" if prediction else ""
     inner_thought = (entry.inner_thought or "").strip()
     inner_thought_line = f"\n  心の声: {inner_thought}" if inner_thought else ""
     if entry.success:
@@ -132,17 +126,17 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
         )
         continuation_lines = call_line + inner_thought_line
         if entry.omit_result_in_prompt:
-            return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}{continuation_lines}"
+            return f"{time_prefix}[行動] {entry.action_summary}{continuation_lines}"
         if entry.tool_name == TOOL_NAME_SPEECH and entry.result_summary:
             return (
-                f"{time_prefix}[行動] {entry.action_summary}{prediction_label}"
+                f"{time_prefix}[行動] {entry.action_summary}"
                 f"{entry.result_summary}{continuation_lines}"
             )
         return (
-            f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [結果] {entry.result_summary}"
+            f"{time_prefix}[行動] {entry.action_summary} → [結果] {entry.result_summary}"
             f"{continuation_lines}"
         )
-    parts = [f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [失敗]"]
+    parts = [f"{time_prefix}[行動] {entry.action_summary} → [失敗]"]
     if entry.error_code is not None:
         parts.append(f"error_code={entry.error_code}")
         if entry.tool_name:

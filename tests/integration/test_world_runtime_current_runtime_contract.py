@@ -331,7 +331,6 @@ class _ContractRuntime:
         error_code: str | None = None,
         scene_boundary: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
         argument_fingerprint: str | None = None,
@@ -349,7 +348,6 @@ class _ContractRuntime:
             tool_name=tool_name,
             argument_fingerprint=argument_fingerprint,
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
             identifier_arguments=identifier_arguments,
@@ -365,7 +363,6 @@ class _ContractRuntime:
                 "error_code": error_code,
                 "scene_boundary": scene_boundary,
                 "inner_thought": inner_thought,
-                "expected_result": expected_result,
                 "intention": intention,
                 "emotion_hint": emotion_hint,
                 "identifier_arguments": dict(identifier_arguments or {}),
@@ -414,9 +411,8 @@ class _ReasonFirstRuntime(_ContractRuntime):
                         "type": "object",
                         "properties": {
                             "inner_thought": {"type": "string"},
-                            "expected_result": {"type": "string"},
                         },
-                        "required": ["inner_thought", "expected_result"],
+                        "required": ["inner_thought"],
                     },
                 )
             )
@@ -829,7 +825,6 @@ def _reason_first_success_client() -> _SequencedLlmClient:
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "反復失敗を避けて別手を選ぶ。",
-                    "expected_result": "新しい展開になる。",
                 },
             },
             {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
@@ -1095,7 +1090,6 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "水源は一度失敗したので周囲を見直す。",
-                    "expected_result": "新しい発見があるはずだ。",
                 },
             },
             {
@@ -1138,7 +1132,6 @@ def test_reason_first_two_step_injects_assessment_before_action_execution(
     assert "水源は一度失敗したので周囲を見直す。" in client.calls[1]["messages"][-1]["content"]
     assert "実行する行動 tool を1つ選ぶ" in client.calls[1]["messages"][-1]["content"]
     assert captured_arguments["inner_thought"] == "水源は一度失敗したので周囲を見直す。"
-    assert captured_arguments["expected_result"] == "新しい発見があるはずだ。"
     kinds = [kind for kind, _ in runtime.trace_recorder.records]
     assert TraceEventKind.REASON_FIRST_STARTED in kinds
     assert TraceEventKind.REASON_FIRST_ASSESSED in kinds
@@ -1212,7 +1205,6 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "一度失敗したので状況を見直す。",
-                    "expected_result": "次は探索できる。",
                 },
             },
             {
@@ -1249,7 +1241,6 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
     assert executed == [
         {
             "inner_thought": "一度失敗したので状況を見直す。",
-            "expected_result": "次は探索できる。",
         }
     ]
     failed = [
@@ -1300,14 +1291,12 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "まず評価する。",
-                    "expected_result": "探索する。",
                 },
             },
             {
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "まだ評価する。",
-                    "expected_result": "何もしない。",
                 },
             },
         ]
@@ -1339,10 +1328,10 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     assert failed[-1]["reason_first_turn_id"]
 
 
-def test_reason_first_prediction_uses_shared_action_recording_path(
+def test_reason_first_action_prompt_places_assessment_before_target_arguments(
     clean_runtime_env: None,
 ) -> None:
-    """reason_first の予測は内部注入後、legacy と同じ action 記録経路で保存される。"""
+    """reason_first の行動段階の user 文面は、評価・選べる対象引数・最後の指示の順に並び、行動は共有の記録経路で保存される。"""
     runtime = _create_runtime()
     runtime.reason_first_two_step_enabled = lambda player_id: True
     player_id = runtime.get_player_ids()[0]
@@ -1352,7 +1341,6 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
                 "name": TOOL_NAME_ASSESS_SITUATION,
                 "arguments": {
                     "inner_thought": "周囲を見れば出口の手がかりが増える。",
-                    "expected_result": "出口の手がかりが見つかる。",
                 },
             },
             {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
@@ -1370,7 +1358,6 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     assert result.success is True
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
-    assert entry.expected_result == "出口の手がかりが見つかる。"
     assert [call["call_phase"] for call in client.calls] == [
         "assess_phase",
         "action_phase",
@@ -1384,44 +1371,12 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
         "inner_thought は再生成しない。"
     )
     assert action_user.endswith(final_instruction)
-    assert "expected_result" not in action_user
     assert action_user.index("【行動前の状況評価】") < action_user.index(
         "【現在選べる対象引数】"
     )
     assert action_user.index("【現在選べる対象引数】") < action_user.index(
         final_instruction
     )
-
-
-def test_reason_first_without_assessment_prediction_records_none_through_shared_path(
-    clean_runtime_env: None,
-) -> None:
-    """reason_first でも予測が無い評価なら、共有 action 記録経路の expected_result は None のまま。"""
-    runtime = _create_runtime()
-    runtime.reason_first_two_step_enabled = lambda player_id: True
-    player_id = runtime.get_player_ids()[0]
-    client = _SequencedLlmClient(
-        [
-            {
-                "name": TOOL_NAME_ASSESS_SITUATION,
-                "arguments": {"inner_thought": "まず周囲を確認する。"},
-            },
-            {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}},
-        ]
-    )
-    wiring = _WorldLlmWiring(
-        runtime=runtime,
-        observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
-        llm_client=client,
-    )
-
-    result = wiring.run_turn(player_id)
-
-    assert result.success is True
-    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
-    assert entry.expected_result is None
 
 
 def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
@@ -1876,7 +1831,6 @@ def test_record_action_result_preserves_escape_hook_order(
     assert store.kwargs["tool_name"] == "contract_probe"
     assert store.kwargs["game_time_label"] == runtime._time_label()
     # escape は当面 subjective fields を渡さない (#553 baseline / U2 で配線)
-    assert store.kwargs["expected_result"] is None
     assert store.kwargs["intention"] is None
     assert store.kwargs["emotion_hint"] is None
     being = runtime.aux_being_resolver.resolve_being_id(
@@ -2423,11 +2377,11 @@ def test_phase_b_records_unsupported_tool_failure_with_raw_tool_summary(
     assert entry["error_code"] == "UNSUPPORTED_TOOL"
 
 
-def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
+def test_phase_b_generic_failure_passes_subjective_fields_to_the_record(
     clean_runtime_env: None,
 ) -> None:
-    """#552 PR-A: sanitizer が JSON から予測を落とすので、失敗 (unsupported) 経路でも
-    構造化 expected_result を _record_action_result に渡し、失敗行の [予測:] を守る。"""
+    """sanitizer が JSON から主観入力を落とすので、失敗 (unsupported) 経路でも
+    intention / emotion_hint を構造化フィールドとして _record_action_result に渡す。"""
     player_id = PlayerId(1)
     runtime = _ContractRuntime()
     wiring = _wiring_for_contract_runtime(runtime)
@@ -2439,7 +2393,6 @@ def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
                 "name": "contract_unknown_tool",
                 "arguments": {
                     "probe": "x",
-                    "expected_result": "未知ツールでも何か起きる",
                     "intention": "試しに呼ぶ",
                     "emotion_hint": "curiosity",
                 },
@@ -2449,27 +2402,9 @@ def test_phase_b_generic_failure_preserves_expected_result_for_prediction_line(
 
     entry = runtime.action_results[0]
     # JSON からは落ちるが構造化フィールドには残る
-    assert "expected_result" not in entry["action_summary"]
-    assert entry["expected_result"] == "未知ツールでも何か起きる"
+    assert "intention" not in entry["action_summary"]
     assert entry["intention"] == "試しに呼ぶ"
-    # その entry を recent-events 行にすると失敗行に [予測:] が出る
-    from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-        format_action_result_line_for_recent_events,
-    )
-    from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-
-    line = format_action_result_line_for_recent_events(
-        ActionResultEntry(
-            occurred_at=datetime.now(timezone.utc),
-            action_summary=entry["action_summary"],
-            result_summary=entry["result_summary"],
-            success=False,
-            error_code=entry["error_code"],
-            expected_result=entry["expected_result"],
-        )
-    )
-    assert "[予測: 未知ツールでも何か起きる]" in line
-    assert "[失敗]" in line
+    assert entry["emotion_hint"] == "curiosity"
 
 
 def test_direct_explore_records_natural_language_action_summary(
@@ -2485,7 +2420,6 @@ def test_direct_explore_records_natural_language_action_summary(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
     assert entry.success is True
-    assert entry.expected_result is None
     assert entry.intention is None
     assert entry.emotion_hint is None
     assert entry.argument_fingerprint is None
@@ -2535,13 +2469,11 @@ def test_direct_explore_carries_subjective_fields_when_passed(
 
     runtime.do_explore(
         player_id,
-        expected_result="周囲に出口の手がかりがある",
         intention="出口を探す",
         emotion_hint="curiosity",
     )
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.expected_result == "周囲に出口の手がかりがある"
     assert entry.intention == "出口を探す"
     assert entry.emotion_hint == "curiosity"
 
@@ -2562,14 +2494,12 @@ def test_direct_travel_carries_subjective_fields_when_passed(
     runtime.do_move(
         player_id,
         destination_key,
-        expected_result="廊下に出られる",
         intention="次の部屋へ進む",
         emotion_hint="determination",
     )
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
-    assert entry.expected_result == "廊下に出られる"
     assert entry.intention == "次の部屋へ進む"
     assert entry.emotion_hint == "determination"
 
@@ -2605,7 +2535,6 @@ def test_explore_handler_threads_subjective_args_into_record(
         player_id,
         {
             "inner_thought": "周囲を見る",
-            "expected_result": "出口の手がかりが見つかる",
             "intention": "出口を探す",
             "emotion_hint": "curiosity",
             "say_inline": "何かないか見てみよう",
@@ -2615,7 +2544,6 @@ def test_explore_handler_threads_subjective_args_into_record(
 
     assert result.success is True
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.expected_result == "出口の手がかりが見つかる"
     assert entry.intention == "出口を探す"
     assert entry.emotion_hint == "curiosity"
     assert entry.free_text_argument_names == ("say_inline",)
@@ -2648,7 +2576,6 @@ def test_explore_handler_records_none_subjective_when_args_absent(
     )
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.expected_result is None
     assert entry.intention is None
     assert entry.emotion_hint is None
 

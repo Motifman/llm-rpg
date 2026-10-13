@@ -2135,7 +2135,6 @@ class WorldRuntime:
         error_code: str | None = None,
         scene_boundary: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> None:
@@ -2151,14 +2150,14 @@ class WorldRuntime:
         意味するかどうか。cognitive science の "doorway effect" を反映して、
         spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
 
-        ``inner_thought`` / ``expected_result`` / ``intention`` / ``emotion_hint``: LLM が行動前に
-        宣言した主観入力 (予測 / 目的 / 感情)。予測誤差駆動の学習ループ
+        ``inner_thought`` / ``intention`` / ``emotion_hint``: LLM が行動前に
+        宣言した主観入力 (心の声 / 目的 / 感情)。予測誤差駆動の学習ループ
         (#526) の入力。do_* 経由で raw args 由来の値が渡る (U2)。露出スキーマが
         OFF の間は全 None なので記録挙動は不変。
         """
         # U1 (#526 後続): append → chunk write → semantic promotion (escape baseline
         # の順序・error isolation) を共有 ActionResultRecorder に委譲する。挙動は
-        # #553 で contract 化済みで不変。subjective fields (expected_result 等) は
+        # #553 で contract 化済みで不変。subjective fields (intention 等) は
         # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
         # 予測誤差統一設計 U1: prompt_builder.build() が発行した
@@ -2182,7 +2181,6 @@ class WorldRuntime:
             error_code=error_code,
             scene_boundary=scene_boundary,
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
             # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
@@ -3033,7 +3031,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
@@ -3102,7 +3099,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
         )
@@ -3118,7 +3114,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
@@ -3164,7 +3159,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
         )
@@ -3496,7 +3490,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> Any:
@@ -3553,7 +3546,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
         )
@@ -3640,7 +3632,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> SpotExplorationResultDto:
@@ -3658,7 +3649,6 @@ class WorldRuntime:
             identifier_arguments=identifier_arguments,
             free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
         )
@@ -3672,7 +3662,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> None:
@@ -3740,7 +3729,6 @@ class WorldRuntime:
                 ),
                 free_text_argument_names=free_text_argument_names,
                 inner_thought=inner_thought,
-                expected_result=expected_result,
                 intention=intention,
                 emotion_hint=emotion_hint,
             )
@@ -3767,7 +3755,6 @@ class WorldRuntime:
             free_text_argument_names=free_text_argument_names,
             scene_boundary=True,
             inner_thought=inner_thought,
-            expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
         )

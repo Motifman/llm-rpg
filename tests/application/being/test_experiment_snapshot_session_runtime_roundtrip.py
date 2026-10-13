@@ -171,7 +171,6 @@ def _populate_runtime_state(runtime: Any) -> None:
         success=False,
         error_code="INVALID_TARGET_LABEL",
         tool_name="spot_graph_interact",
-        expected_result="棚を調べれば鍵が見つかるはず",
         intention="鍵を探す",
         emotion_hint="焦り",
         occurred_tick=37,

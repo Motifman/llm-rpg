@@ -412,7 +412,7 @@ def build_episodic_stack(
     # 固着パスを組むときは必須。
     memory_turn_reader: MemoryTurnReader | None = None,
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
-    # chunk_coordinator が in_context_belief_ids / had_expected_result を計算して
+    # chunk_coordinator が in_context_belief_ids を計算して
     # belief_evidence_transcriber に渡す。非同期 scheduler 経路への配線は
     # build_episodic_stack がスケジューラを構築しないため呼び出し側 (world_runtime.py)
     # の責務 (belief_evidence_transcriber と同じ分担)。
