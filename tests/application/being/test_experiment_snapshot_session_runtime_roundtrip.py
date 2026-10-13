@@ -62,7 +62,6 @@ def _snapshot_runtime_config() -> Any:
         goal_store_enabled=True,
         belief_consolidation_enabled=True,
         belief_evidence_enabled=True,
-        goal_reflect_enabled=True,
     )
 
 

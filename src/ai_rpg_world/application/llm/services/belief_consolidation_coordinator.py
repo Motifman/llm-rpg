@@ -45,7 +45,6 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
@@ -110,8 +109,6 @@ DEFAULT_CONTRADICT_INACTIVE_THRESHOLD = 0.2
 # されるため (S2 一撃学習)、乱発すると prompt が high だらけになる懸念が
 # design 段階から指摘されていた (「不確実性 (中)」節)。まず 3 件から始める。
 DEFAULT_HIGH_SALIENCE_BATCH_CAP = 3
-# P4: 同一目的への停滞内省観測を出す最小 turn 間隔 (乱発防止 cap)。
-DEFAULT_STALL_MIN_INTERVAL_TURNS = 15
 MAX_BELIEF_TEXT_CHARS = 50
 MAX_TAG_CHARS = 30
 MAX_TAGS = 8
@@ -122,16 +119,6 @@ _ACTION_REVISE = "revise"
 _ACTION_CONTRADICT = "contradict"
 _ACTION_DISCARD = "discard"
 _ACTION_EXPLAIN_CHANGE = "explain_change"
-_ACTION_REFLECT = "reflect"  # P4: 目的への前進評価 (belief journal には書かない)
-# P7: reflect が返す判定の種類。停滞 / 達成 / 乖離 (目的と行動の乖離)。いずれも
-# 内省観測として本人に返すだけで、goal store の status 変更はしない (不変条件)。
-_REFLECT_VERDICT_STALLED = "stalled"
-_REFLECT_VERDICT_ACHIEVED = "achieved"
-_REFLECT_VERDICT_MISALIGNED = "misaligned"
-_REFLECT_VERDICTS = frozenset(
-    {_REFLECT_VERDICT_STALLED, _REFLECT_VERDICT_ACHIEVED, _REFLECT_VERDICT_MISALIGNED}
-)
-
 # H3 (固着 LLM 出力の検証と可視化): 適用できなかった decision に付ける skip 理由。
 # _apply_* が None を返せば適用成功、これらの文字列を返せば「この理由で適用せず
 # journal に触れなかった」を意味する。trace payload と warning に載せて、学びの
@@ -152,7 +139,6 @@ _SKIP_EXPLAIN_CHANGE_BELIEF_NOT_FOUND = "explain_change_belief_not_found"
 _SKIP_EXPLAIN_CHANGE_EMPTY_TEXT = "explain_change_empty_text"
 _SKIP_EXPLAIN_CHANGE_NO_EVIDENCE = "explain_change_no_evidence"
 _SKIP_EXPLAIN_CHANGE_CURRENT_SITUATION = "explain_change_current_situation"
-_SKIP_REFLECT_SUPPRESSED = "reflect_suppressed"
 _SKIP_UNKNOWN_ACTION = "unknown_action"
 _SKIP_NOT_A_DICT = "not_a_dict"
 _SKIP_APPLY_ERROR = "apply_error"
@@ -235,46 +221,14 @@ _CONFIRMATION_INSTRUCTION = (
 )
 
 
-# P4 (reflect / 目的への前進評価): GOAL_REFLECT_ENABLED が ON のときだけ足す節。
-# belief journal には書かず、目的に前進があったかを判断させる。停滞と判断した
-# ときだけ reflect を宣言させる (前進していれば書かない = 乱発防止の第一段)。
-# ユーザメッセージに【現在の目的】が渡っているときだけ意味を持つ。
-_REFLECT_INSTRUCTION = """
-
-【目的への前進評価 (reflect)】
-ユーザメッセージに「現在の目的」が渡っている場合、evidence 群を通常どおり
-create / strengthen 等で処理した**うえで、それとは別に**、この期間の行動を
-その目的と照らして評価すること。次の 3 つのいずれかが明らかなときだけ、他の
-決定に**加えて** reflect を 1 つ足す (create の代わりではなく、追加で書く):
-
-(1) 停滞 (stalled): 目的に向けた試み (移動・探索など) が続けて 2 回以上ねらいを
-    外し、かつこの期間の evidence に目的へ近づけたものが 1 件も無い。
-    → {"action":"reflect","verdict":"stalled","statement":"<同じ場所を空回りしている、という気づきを一人称で 1 文>"}
-(2) 達成 (achieved): 目的がすでに果たされたことを示す evidence がある
-    (探していたものを見つけた・行きたかった場所に着いた等)。
-    → {"action":"reflect","verdict":"achieved","statement":"<目指していたことはもう果たした、という気づきを一人称で 1 文>"}
-(3) 乖離 (misaligned): 目的と結びつく行動がなく、目的とは無関係なことばかりに
-    没頭していて、目的から明らかにそれている。
-    → {"action":"reflect","verdict":"misaligned","statement":"<目的から逸れている、という気づきを一人称で 1 文>"}
-
-reflect は belief を作らない (意識に「気づき」を返すだけ)。目的の status を
-変えたり目的文を書き換えたりはしない — 気づきを本人に返すだけで、どうするかの
-判断は本人 (次の手) に委ねる。
-次のときは reflect を書かない:
-- 目的に向けて着実に前進している (近づいた evidence があり、逸れてもいない)
-- 待ち合わせ・看病のように、動いていないことに正当な理由がある
-- どの判断も確信が持てない"""
-
-
 # #1509: 外れた予期の材料に付く時系列の読み方。予期の清算が無効な run では時系列が
 # 付かないので、ON のときだけ足す。関係の無い出来事を除く判断は規則にせず、ここで
 # LLM に任せる。言い切りの抑えは既存の確信度の指示 (支持の数) だけでは効かなかった。
 def _build_belief_consolidation_system_prompt(
     *,
     attribution_enabled: bool,
-    goal_reflect_enabled: bool = False,
 ) -> str:
-    """CONFIRMATION 節 / reflect 節を条件付きで足した system prompt を組む。
+    """CONFIRMATION 節を条件付きで足した system prompt を組む。
 
     全 flag OFF のときは ``_SYSTEM_BELIEF_CONSOLIDATION_JSON`` をそのまま返す
     (= 既定 prompt が byte 不変であることをここで保証する)。
@@ -283,8 +237,6 @@ def _build_belief_consolidation_system_prompt(
     if attribution_enabled:
         assert _CONFIRMATION_ANCHOR in prompt
         prompt = prompt.replace(_CONFIRMATION_ANCHOR, _CONFIRMATION_INSTRUCTION)
-    if goal_reflect_enabled:
-        prompt = prompt + _REFLECT_INSTRUCTION
     return prompt
 
 
@@ -331,10 +283,6 @@ class BeliefConsolidationCoordinator:
         trace_recorder_provider: Any | None = None,
         current_tick_provider: Any | None = None,
         belief_attribution_enabled: bool = False,
-        goal_reflect_enabled: bool = False,
-        objective_text_provider: Callable[[PlayerId], str | None] | None = None,
-        reflect_observation_sink: Callable[[PlayerId, str, str], None] | None = None,
-        stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
         create_gate: BeliefCreateGate | None = None,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
@@ -365,29 +313,6 @@ class BeliefConsolidationCoordinator:
             raise ValueError("high_salience_batch_cap must be positive")
         if not isinstance(belief_attribution_enabled, bool):
             raise TypeError("belief_attribution_enabled must be bool")
-        if not isinstance(goal_reflect_enabled, bool):
-            raise TypeError("goal_reflect_enabled must be bool")
-        if objective_text_provider is not None and not callable(objective_text_provider):
-            raise TypeError("objective_text_provider must be callable or None")
-        if reflect_observation_sink is not None and not callable(reflect_observation_sink):
-            raise TypeError("reflect_observation_sink must be callable or None")
-        # P4 fail-fast: goal_reflect を ON にするなら「監査対象の目的 provider」と
-        # 「内省観測 sink」の両方が要る。片方でも欠けると reflect 節を prompt に
-        # 出しておきながら発火した reflect を黙って捨てる / 目的が渡らず節が死んで
-        # token だけ食う、という静かな失敗になる。起動時に構造で弾く (CLAUDE.md
-        # 「起動時 fail-fast が最後の砦」)。
-        if goal_reflect_enabled and objective_text_provider is None:
-            raise ValueError(
-                "goal_reflect_enabled requires objective_text_provider "
-                "(reflect の監査対象となる目的が渡らないと節が死ぬ)"
-            )
-        if goal_reflect_enabled and reflect_observation_sink is None:
-            raise ValueError(
-                "goal_reflect_enabled requires reflect_observation_sink "
-                "(発火した reflect を注入できず黙って捨てることになる)"
-            )
-        if stall_min_interval_turns < 1:
-            raise ValueError("stall_min_interval_turns must be positive")
         if create_gate is not None and not isinstance(create_gate, BeliefCreateGate):
             raise TypeError("create_gate must be BeliefCreateGate or None")
         self._evidence_buffer_store = evidence_buffer_store
@@ -402,100 +327,14 @@ class BeliefConsolidationCoordinator:
         self._high_salience_batch_cap = high_salience_batch_cap
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        # U4: ON のときだけ CONFIRMATION 節を system prompt に足す
-        # (OFF = pre-U4 と byte 一致)。P4: goal_reflect も同様に flag ON で reflect
-        # 節を足す (OFF なら reflect の指示は一切出ない)。
-        self._goal_reflect_enabled = goal_reflect_enabled
-        self._objective_text_provider = objective_text_provider
-        self._reflect_observation_sink = reflect_observation_sink
-        self._stall_min_interval_turns = stall_min_interval_turns
         self._create_gate = create_gate
+        # U4: ON のときだけ CONFIRMATION 節を system prompt に足す
+        # (OFF = pre-U4 と byte 一致)。
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
-            goal_reflect_enabled=goal_reflect_enabled,
         )
         self._turn_counts: dict[int, int] = defaultdict(int)
-        # P4/P7: 同一 being への内省観測の乱発防止 cap。最後に観測を出した turn
-        # index を (player, verdict 種別) ごとに覚え、min_interval 未満なら再注入
-        # しない。種別ごとに分けるのは、直近の停滞観測が達成の気づきを巻き込んで
-        # 抑制してしまわないため (別種の気づきは独立に返せる)。
-        self._last_reflect_turn: dict[tuple[int, str], int] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
-
-    def _resolve_objective_text(self, player_id: PlayerId) -> str | None:
-        """P4: reflect の監査対象となる現在の目的文を解決する。
-
-        goal_reflect が OFF / provider 未注入 / 例外 / 空文字なら None
-        (= reflect 節が意味を持たず、prompt にも目的が載らない)。
-        """
-        if not self._goal_reflect_enabled or self._objective_text_provider is None:
-            return None
-        try:
-            text = self._objective_text_provider(player_id)
-        except Exception:
-            self._logger.debug("objective_text_provider raised", exc_info=True)
-            return None
-        if not isinstance(text, str) or not text.strip():
-            return None
-        return text.strip()
-
-    def _valid_reflect_verdict(self, raw: dict[str, Any]) -> str | None:
-        """reflect decision から、``_apply_reflect`` (観測注入) が使う
-        正当な verdict を取り出す。goal_reflect が OFF / 観測 sink 未注入 / verdict が未知の
-        いずれかなら None (= ``_apply_reflect`` は何もしない)。statement の有無や
-        乱発防止 cap には依存しない (それらは呼び出し側が判定する)。"""
-        if not self._goal_reflect_enabled or self._reflect_observation_sink is None:
-            return None
-        verdict = raw.get("verdict")
-        return verdict if verdict in _REFLECT_VERDICTS else None
-
-    def _apply_reflect(
-        self,
-        being_id: BeingId,
-        player_id: int,
-        raw: dict[str, Any],
-    ) -> bool:
-        """P4/P7: reflect 決定を処理する。停滞 / 達成 / 乖離の気づきを内省観測
-
-        として本人に注入する。**goal store には書かない** — この coordinator は
-        goal store への参照を一切持たず、意識に「気づき」を返すだけ。以下のときは何もせず
-        False を返す (= trace にも残さない):
-        - goal_reflect OFF / 観測 sink 未注入
-        - verdict が stalled / achieved / misaligned のいずれでもない
-        - statement が空
-        - 同一 player の同じ種別の観測が直近 ``stall_min_interval_turns`` 以内
-          (種別ごとの乱発防止 cap)
-        観測を注入したら True。
-        """
-        verdict = self._valid_reflect_verdict(raw)
-        if verdict is None:
-            return False
-        statement = raw.get("statement")
-        if not isinstance(statement, str) or not statement.strip():
-            return False
-        turn = self._turn_counts.get(player_id, 0)
-        cap_key = (player_id, verdict)
-        last = self._last_reflect_turn.get(cap_key)
-        if last is not None and (turn - last) < self._stall_min_interval_turns:
-            return False
-        # _resolve_reflect_verdict が sink 未注入なら None を返し、verdict が
-        # ここまで来ている時点で sink は在る
-        assert self._reflect_observation_sink is not None
-        try:
-            self._reflect_observation_sink(
-                PlayerId(player_id), statement.strip(), verdict
-            )
-        except Exception:
-            # cap は注入に成功したときだけ消費する。sink が一時的に失敗した局面で
-            # cap を進めてしまうと、注入していないのに次の同種の気づきが
-            # stall_min_interval_turns ぶん抑制され、取りこぼしが長引く。
-            self._logger.warning(
-                "reflect_observation_sink raised for player_id=%s", player_id,
-                exc_info=True,
-            )
-            return False
-        self._last_reflect_turn[cap_key] = turn
-        return True
 
     def current_turn_index(self, player_id: PlayerId) -> int:
         if not isinstance(player_id, PlayerId):
@@ -576,11 +415,8 @@ class BeliefConsolidationCoordinator:
             return 0
         batch = self._select_batch(all_evidence)
         shortlist = self._build_shortlist(being_id, batch)
-        objective_text = self._resolve_objective_text(player_id)
         current_turn = self._memory_turn_reader.current_turn(being_id)
-        messages = self._build_messages(
-            batch, shortlist, objective_text, current_turn=current_turn
-        )
+        messages = self._build_messages(batch, shortlist, current_turn=current_turn)
         try:
             raw_obj = self._completion.complete_belief_consolidation_json(messages)
         except LlmApiCallException as e:
@@ -747,7 +583,6 @@ class BeliefConsolidationCoordinator:
         self,
         batch: tuple[BeliefEvidence, ...],
         shortlist: tuple[SemanticMemoryEntry, ...],
-        objective_text: str | None = None,
         *,
         current_turn: int,
     ) -> list[dict[str, Any]]:
@@ -771,10 +606,6 @@ class BeliefConsolidationCoordinator:
             "evidence": evidence_payload,
             "shortlist": shortlist_payload,
         }
-        # P4: reflect の監査対象。現在の目的が解決できたときだけ載せる
-        # (reflect 節は「現在の目的が渡っているとき」を条件に判断するため)。
-        if objective_text:
-            user_content["現在の目的"] = objective_text
         return [
             {"role": "system", "content": self._system_prompt},
             {
@@ -836,14 +667,6 @@ class BeliefConsolidationCoordinator:
                     )
                 elif action == _ACTION_DISCARD:
                     skip_reason = None  # evidence は batch drain で消える (正当な適用)
-                elif action == _ACTION_REFLECT:
-                    # 停滞でない / cap / flag OFF なら注入しない = 適用ではないが
-                    # 「幻覚 belief_id」等の失敗とは質が違うので skip 理由で残す。
-                    skip_reason = (
-                        None
-                        if self._apply_reflect(being_id, player_id, raw)
-                        else _SKIP_REFLECT_SUPPRESSED
-                    )
                 else:
                     skip_reason = _SKIP_UNKNOWN_ACTION
             except Exception as e:  # pragma: no cover - 想定外の1件で全体を壊さない
