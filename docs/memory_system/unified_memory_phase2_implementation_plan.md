@@ -129,6 +129,8 @@
 
 ### P4 — reflect (前進評価) + 内省観測 【本計画のレーン A 本体】
 
+> P4 は、目的の振り返り (`GOAL_REFLECT_ENABLED`) として、記憶の部品の撤去 (#1631) の #1679 で消した。
+
 - `belief_consolidation_coordinator.py` に decision 種別 `reflect` を追加:
   「この期間の evidence 群と現在の目的を読み、目的への前進があったか
   判断せよ。停滞と判断したら 1 文で宣言せよ」。監査対象はこの時点では
@@ -227,6 +229,8 @@
   time-to-first-goal を M6 指標にして検証する
 
 ### P7 — 監査を goal store に接続 (P4 + P5 の合流)
+
+> P7 の監査の接続も、P4 と一緒に #1679 で消した。
 
 - P4 の reflect の監査対象を `objective_text` から goal store の
   active 目的に差し替え。停滞・矛盾 (目的と行動の乖離)・達成の 3 種を
