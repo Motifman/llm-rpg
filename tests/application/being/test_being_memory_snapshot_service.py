@@ -583,6 +583,20 @@ class TestRestoreRoundTrip:
         evidence = dict_to_belief_evidence(data)
         assert evidence.source_speaker is None
 
+    def test_recall_observation_ignores_prediction_context_id_of_old_snapshots(self) -> None:
+        """予測の文脈 ID を書いていたころ (#1631 より前) の想起の記録も読め、ID のキーは読み飛ばし、書き戻すときも出さない。"""
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_recall_observation,
+            recall_observation_to_dict,
+        )
+        data = {'recall_id': 'r-old-1', 'player_id': 1, 'episode_id': 'ep-1', 'recalled_at': _NOW.isoformat(), 'source_axes': ['temporal'], 'current_state_snapshot': 'state', 'recent_events_snapshot': 'events', 'persona_snapshot': 'persona', 'situation_cues': ['cue-a'], 'turn_index': 3, 'prediction_context_id': 'pc-1'}
+
+        obs = dict_to_recall_observation(data)
+
+        assert obs.recall_id == 'r-old-1'
+        assert obs.turn_index == 3
+        assert 'prediction_context_id' not in recall_observation_to_dict(obs)
+
     def test_recall_observation_prediction_outcome_error_legacy_data_none(self) -> None:
         """U9a 導入前 (キー自体が無い) payload を decode しても例外にならず
         None になる (旧データとの後方互換)。"""
