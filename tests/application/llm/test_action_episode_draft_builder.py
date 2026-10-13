@@ -40,25 +40,18 @@ class TestActionEpisodeDraftBuilderHappyPath:
         assert 'TRAP_TRIGGERED' in ep.outcome
         assert ep.felt is None
 
-    def test_expected_result_optional_episode_ok(self) -> None:
-        """expected_result が無いとき prediction_error は None のままでも成立する。"""
+    def test_expected_and_prediction_error_are_none_without_expected_result(self) -> None:
+        """引数に予想が無いとき、expected と prediction_error は None のまま episode が成立する。"""
         builder = ActionEpisodeDraftBuilder()
         ep = builder.build(player_id=3, being_id=BeingId('being-test'), occurred_at=_utc(2026, 5, 3, 16, 0), tool_name='wait_turn', canonical_arguments={'emotion_hint': 'neutral'}, runtime_context=ToolRuntimeContextDto.empty(), command_result=LlmCommandResultDto(success=True, message='待機した'), action_summary='待機', result_summary='待機した', episodic_cues=())
         assert ep.expected is None
         assert ep.prediction_error is None
 
-    def test_prediction_error_when_expected_differs_from_summary(self) -> None:
-        """expected と結果要約が食い違うと単純な予測誤差文が載る。"""
+    def test_expected_result_argument_is_not_read(self) -> None:
+        """#1631 で消した expected_result を LLM が渡し、結果要約と食い違っても、expected と prediction_error は None のまま。"""
         builder = ActionEpisodeDraftBuilder()
         ep = builder.build(player_id=4, being_id=BeingId('being-test'), occurred_at=_utc(2026, 5, 3, 17, 0), tool_name='open', canonical_arguments={'expected_result': '中身が見える'}, runtime_context=ToolRuntimeContextDto.empty(), command_result=LlmCommandResultDto(success=False, message='鍵がかかっている'), action_summary='開ける', result_summary='鍵がかかっている', episodic_cues=())
-        assert ep.expected == '中身が見える'
-        assert ep.prediction_error is not None
-        assert '予想:' in ep.prediction_error
-
-    def test_prediction_error_none_when_expected_matches_summary(self) -> None:
-        """予想文字列が結果要約と同一なら予測誤差フィールドは空にする。"""
-        builder = ActionEpisodeDraftBuilder()
-        ep = builder.build(player_id=412, being_id=BeingId('being-test'), occurred_at=_utc(2026, 5, 3, 17, 30), tool_name='probe', canonical_arguments={'expected_result': '完全一致ライン'}, runtime_context=ToolRuntimeContextDto.empty(), command_result=LlmCommandResultDto(success=True, message='完全一致ライン'), action_summary='-', result_summary='完全一致ライン', episodic_cues=())
+        assert ep.expected is None
         assert ep.prediction_error is None
 
 class TestObservedSanityAndGameTime:
@@ -116,7 +109,7 @@ class TestFiveWOneHFieldProvenance:
         out = ObservationOutput(prose='', structured=structured)
         obs = ObservationEntry(occurred_at=_utc(2026, 5, 3, 21, 0), output=out)
         rt = ToolRuntimeContextDto(targets={'enemy': ToolRuntimeTargetDto(label='e', kind='Monster', display_name='M', player_id=100)}, current_spot_id=12, current_sub_location_id=3, current_area_ids=(9, 10), current_x=1, current_y=2, current_z=0)
-        canon = {'intention': '倒す', 'expected_result': 'ダメージを与える', 'emotion_hint': 'determination'}
+        canon = {'intention': '倒す', 'emotion_hint': 'determination'}
         ep = ActionEpisodeDraftBuilder().build(player_id=8, being_id=BeingId('being-test'), occurred_at=_utc(2026, 5, 3, 21, 5), tool_name='attack_target', canonical_arguments=canon, runtime_context=rt, command_result=LlmCommandResultDto(success=True, message='命中'), action_summary='攻撃した', result_summary='命中', recent_observation=obs, episodic_cues=())
         assert ep.who == ('entity:monster:100', 'entity:actor:502')
         assert ep.location.spot_id == 12

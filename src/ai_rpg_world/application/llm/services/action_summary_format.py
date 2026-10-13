@@ -68,7 +68,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 
 # action_summary の JSON fallback から落とす主観入力・冗長入力フィールド。
-# - expected_result: chunk_encoding が [予測: ...] で別表記するので二重表示回避
 # - inner_thought: ActionResultEntry.inner_thought から「心の声: ...」として出す
 # - content: speak / memo_add では自然文または別 section に出るため JSON から落とす
 # - reason / intention / emotion_hint: recent-events の生 JSON には不要
@@ -79,7 +78,6 @@ ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
         "reason",
         "inner_thought",
         "intention",
-        "expected_result",
         "memo",
         "emotion_hint",
     }

@@ -159,14 +159,14 @@ class TestComputeTemplateHelpers:
 class TestPredictionErrorCompletion:
     """外れを決めていた予期の清算を #1631 で消したので、prediction_error は LLM が書いても既定の文でも埋めず None のままにする挙動を保証する。"""
 
-    def _encoding_with_expected(self, *, success: bool=True) -> Any:
+    def _encoding_with_action(self, *, success: bool=True) -> Any:
         t = datetime(2026, 5, 4, 4, 0, tzinfo=timezone.utc)
-        act = ActionResultEntry(occurred_at=t, action_summary='ノアに声をかけた', result_summary='ok' if success else '無視された', tool_name='speech_say', success=success, expected_result='ノアが返事をする')
-        return build_chunk_encoding_input(PlayerId(7), (), (act,), )
+        act = ActionResultEntry(occurred_at=t, action_summary='ノアに声をかけた', result_summary='ok' if success else '無視された', tool_name='speech_say', success=success)
+        return build_chunk_encoding_input(PlayerId(7), (), (act,))
 
     def test_llm_text_is_dropped(self) -> None:
         """LLM が prediction_error を書いても None にする。chunk の中から判断し直した外れは使わない。"""
-        enc = self._encoding_with_expected()
+        enc = self._encoding_with_action()
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'prediction_error': '話せると思ったが黙って立ち去られた。'}))
         merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
@@ -174,7 +174,7 @@ class TestPredictionErrorCompletion:
 
     def test_failed_action_keeps_prediction_error_none(self) -> None:
         """失敗した行動があっても、prediction_error は既定の文で埋めず None のまま。"""
-        enc = self._encoding_with_expected(success=False)
+        enc = self._encoding_with_action(success=False)
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'prediction_error': ''}))
 
@@ -184,7 +184,7 @@ class TestPredictionErrorCompletion:
 
     def test_llm_failure_leaves_prediction_error_none(self) -> None:
         """LLM が失敗し、失敗した行動があっても、prediction_error は None にする。"""
-        enc = self._encoding_with_expected(success=False)
+        enc = self._encoding_with_action(success=False)
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         svc = EpisodicChunkSubjectiveFieldsService(_StubSubjectivePort(LlmApiCallException('down', error_code='LLM_API_CALL_FAILED')))
 
@@ -194,7 +194,7 @@ class TestPredictionErrorCompletion:
 
     def test_no_settled_miss_section(self) -> None:
         """確定して外れた予期の節は出さない。"""
-        enc = self._encoding_with_expected()
+        enc = self._encoding_with_action()
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'prediction_error': ''})
         EpisodicChunkSubjectiveFieldsService(port).merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
@@ -202,16 +202,13 @@ class TestPredictionErrorCompletion:
         user_content = next((m['content'] for m in port.last_messages if m.get('role') == 'user'), '')
         assert '確定して外れた予期' not in user_content
 
-    def test_prompt_includes_prediction_error_instruction_and_expected(self) -> None:
-        """system prompt に prediction_error 指示、user に expected が渡る。"""
-        enc = self._encoding_with_expected()
+    def test_prompt_includes_prediction_error_instruction(self) -> None:
+        """system prompt に prediction_error の指示が残る。出力の形と一緒に、古いエピソードを消す段で消す。"""
+        enc = self._encoding_with_action()
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'prediction_error': ''})
         svc = EpisodicChunkSubjectiveFieldsService(port)
         svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert port.last_messages is not None
         sys_content = next((m['content'] for m in port.last_messages if m.get('role') == 'system'), '')
-        user_content = next((m['content'] for m in port.last_messages if m.get('role') == 'user'), '')
         assert 'prediction_error' in sys_content
-        assert 'expected' in user_content
-        assert 'ノアが返事をする' in user_content

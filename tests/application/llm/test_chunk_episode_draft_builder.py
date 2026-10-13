@@ -127,14 +127,14 @@ class TestChunkEpisodeDraftBuilder:
         assert ep.action is not None
         assert ep.action.tool_name == 'alpha,beta'
 
-    def test_expected_why_felt_composed_from_action_subjective_fields(self) -> None:
-        """expected/why/felt が action results の主観入力から決定論的に埋まる (PR2a)。"""
+    def test_why_felt_composed_from_action_subjective_fields(self) -> None:
+        """why/felt が action results の主観入力から決定論的に埋まり、expected は None のまま (予想の入力は #1631 で消した)。"""
         t0 = datetime(2026, 5, 4, 16, 0, 0, tzinfo=timezone.utc)
-        a1 = ActionResultEntry(occurred_at=t0, action_summary='ノアに挨拶', result_summary='ok', tool_name='speech_say', expected_result='ノアが返事をする', intention='ノアの様子を確かめる', emotion_hint='curiosity')
-        a2 = ActionResultEntry(occurred_at=t0 + timedelta(minutes=1), action_summary='灯台へ移動', result_summary='ok', tool_name='travel', expected_result='灯台に着く', intention='灯台で手がかりを探す', emotion_hint='determination')
+        a1 = ActionResultEntry(occurred_at=t0, action_summary='ノアに挨拶', result_summary='ok', tool_name='speech_say', intention='ノアの様子を確かめる', emotion_hint='curiosity')
+        a2 = ActionResultEntry(occurred_at=t0 + timedelta(minutes=1), action_summary='灯台へ移動', result_summary='ok', tool_name='travel', intention='灯台で手がかりを探す', emotion_hint='determination')
         inp = build_chunk_encoding_input(PlayerId(1), (), (a1, a2))
         ep = ChunkEpisodeDraftBuilder().build(inp, being_id=BeingId('being-test'))
-        assert ep.expected == '- speech_say: ノアが返事をする\n- travel: 灯台に着く'
+        assert ep.expected is None
         assert ep.why == '- speech_say: ノアの様子を確かめる\n- travel: 灯台で手がかりを探す'
         assert ep.felt == 'curiosity、determination'
         assert ep.prediction_error is None
@@ -148,15 +148,15 @@ class TestChunkEpisodeDraftBuilder:
         assert ep.why is None
         assert ep.felt is None
 
-    def test_expected_compresses_beyond_three_actions(self) -> None:
-        """expected は最大3件 + 「ほか N 件」に畳む (トークン肥大防止)。"""
+    def test_why_compresses_beyond_three_actions(self) -> None:
+        """why は最大3件 + 「ほか N 件」に畳む (トークン肥大防止)。"""
         t0 = datetime(2026, 5, 4, 18, 0, 0, tzinfo=timezone.utc)
-        acts = tuple(ActionResultEntry(occurred_at=t0 + timedelta(minutes=i), action_summary=f'a{i}', result_summary='ok', tool_name=f'tool{i}', expected_result=f'予測{i}') for i in range(5))
+        acts = tuple(ActionResultEntry(occurred_at=t0 + timedelta(minutes=i), action_summary=f'a{i}', result_summary='ok', tool_name=f'tool{i}', intention=f'目的{i}') for i in range(5))
         inp = build_chunk_encoding_input(PlayerId(1), (), acts)
         ep = ChunkEpisodeDraftBuilder().build(inp, being_id=BeingId('being-test'))
-        assert ep.expected is not None
-        assert 'ほか 2 件' in ep.expected
-        assert len(ep.expected.splitlines()) == 4
+        assert ep.why is not None
+        assert 'ほか 2 件' in ep.why
+        assert len(ep.why.splitlines()) == 4
 
     def test_felt_dedups_repeated_emotion(self) -> None:
         """同じ emotion_hint が続いても felt では 1 回だけ。"""

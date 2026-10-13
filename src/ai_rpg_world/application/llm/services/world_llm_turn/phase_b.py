@@ -361,9 +361,9 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
     if not skip_duplicate_action_log:
         # #552 PR-A: raw args の json.dumps をやめ、主観ノイズを落とした
         # sanitized summary を記録する (失敗 / wait / listen 等の経路)。
-        # sanitizer が JSON から expected_result を落とすので、構造化フィールドに
-        # 予測を残さないと失敗行の [予測:] が消える。subjective を明示的に渡す
-        # (成功 core action は do_* 経路で配線済 = U2、ここは generic 経路の補完)。
+        # sanitizer が JSON から主観入力を落とすので、構造化フィールドに残すよう
+        # subjective を明示的に渡す (成功 core action は do_* 経路で配線済 = U2、
+        # ここは generic 経路の補完)。
         # dispatch が resolver の正規値を反映済みの射影を置いていればそれを
         # 使う (置いていない = resolver を通らない tool なら raw から作る)。
         identifier_arguments, free_text_argument_names = (

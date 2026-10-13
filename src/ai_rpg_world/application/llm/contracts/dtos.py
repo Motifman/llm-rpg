@@ -155,11 +155,8 @@ class ActionResultEntry:
     # 自由文の値は履歴を肥大化させず、呼び出し形を示すため名前だけを残す。
     identifier_arguments: Mapping[str, str] = field(default_factory=dict)
     free_text_argument_names: tuple[str, ...] = ()
-    # 予測→学習ループの主観入力。次ターン feedback (PR1) では expected_result のみ
-    # 使うが、episodic 永続化 (PR2) で intention→episode.why / expected_result→
-    # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
-    # 後方互換 (= world-action 以外の tool / 旧 snapshot)。
-    expected_result: str | None = None
+    # 主観入力。episodic 永続化で intention→episode.why / emotion_hint→episode.felt
+    # に配線する。どれも既定 None で後方互換 (= world-action 以外の tool / 旧 snapshot)。
     inner_thought: str | None = None
     intention: str | None = None
     emotion_hint: str | None = None
@@ -231,8 +228,6 @@ class ActionResultEntry:
             raise TypeError("game_time_label must be str or None")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
-        if self.expected_result is not None and not isinstance(self.expected_result, str):
-            raise TypeError("expected_result must be str or None")
         if self.inner_thought is not None and not isinstance(self.inner_thought, str):
             raise TypeError("inner_thought must be str or None")
         if self.intention is not None and not isinstance(self.intention, str):

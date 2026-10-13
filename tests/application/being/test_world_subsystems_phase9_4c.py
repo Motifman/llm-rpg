@@ -55,7 +55,6 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         tool_name=action,
         game_time_label="Day 1",
         inner_thought=f"{action} の前に状況を整理する",
-        expected_result=f"{action} で道が開ける",
         intention=f"{action} で先へ進む",
         emotion_hint="determination",
         occurred_tick=42,
@@ -124,7 +123,7 @@ class TestActionResultStoreCodec:
         assert len(captured["entries"][0]["entries"]) == 2
         first_captured = captured["entries"][0]["entries"][0]
         assert first_captured["inner_thought"] == "walk の前に状況を整理する"
-        assert first_captured["expected_result"] == "walk で道が開ける"
+        assert "expected_result" not in first_captured
         assert first_captured["intention"] == "walk で先へ進む"
         assert first_captured["emotion_hint"] == "determination"
         assert first_captured["prediction_context_id"] == "predctx-abc123"
@@ -142,12 +141,26 @@ class TestActionResultStoreCodec:
             "attack_summary",
         ]
         assert results[0].inner_thought == "walk の前に状況を整理する"
-        assert results[0].expected_result == "walk で道が開ける"
         assert results[0].intention == "walk で先へ進む"
         assert results[0].emotion_hint == "determination"
         assert results[0].occurred_tick == 42
         assert results[0].prediction_context_id == "predctx-abc123"
         assert results[0].in_context_belief_ids == ("sem-belief-1", "sem-belief-2")
+
+    def test_restore_ignores_expected_result_of_snapshots_saved_before_removal(self) -> None:
+        """expected_result を書いていたころの v5 の snapshot も読め、ほかの欄はそのまま戻る (#1631)。"""
+        src = DefaultActionResultStore()
+        src._event_store.replace_action_results(PlayerId(1), [_action_entry("walk")])
+        captured = ActionResultStoreSubsystemCodec().capture(SimpleNamespace(_action_result_store=src))
+        captured["entries"][0]["entries"][0]["expected_result"] = "walk で道が開ける"
+        dst = DefaultActionResultStore()
+
+        ActionResultStoreSubsystemCodec().restore(SimpleNamespace(_action_result_store=dst), captured)
+
+        (restored,) = dst.get_recent(PlayerId(1), limit=10)
+        assert not hasattr(restored, "expected_result")
+        assert restored.inner_thought == "walk の前に状況を整理する"
+        assert restored.intention == "walk で先へ進む"
 
     def test_action_result_store_none_op(self) -> None:
         """action result store が None でも no op。"""

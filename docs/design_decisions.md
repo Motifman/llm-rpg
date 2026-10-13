@@ -1597,6 +1597,8 @@ generic な失敗経路の両方が同じ射影関数を通り、snapshot は構
 には存在しないため空へ倒し、復元できない引数を捏造しない。この段階では記録だけを変え、
 プロンプトへの表示は別 PR で扱う。
 
+**その後**: 行動ごとの結果の予想 `expected_result` は Issue #1631 で消した。分類の表からも外したので、`inner_thought` だけが専用行に出るため省略される。
+
 ## 57. 行動履歴は意味の表示と再利用できる呼び出しを併記する
 
 行動の自然文は物語として読み返せる表示名を優先する。一方、表示名は tool の正規引数とは
@@ -1621,6 +1623,8 @@ tool の静的な説明や失敗後の復帰文に、シナリオに存在する
 `action_name` の具体例は書かない。run 018 では静的に例示した名前をモデルが写し、
 実際には宣言されていない操作を繰り返した。使える名前の真実の出所は毎回の
 「現在の状況」の対象行だけとし、静的文面はそこの引用値をそのまま写す規則だけを伝える。
+
+**その後**: `expected_result` の専用行 (`[予測: …]`) は Issue #1631 で消した。専用行を使うのは `inner_thought` だけになった。
 
 ## 58. 個別 outcome を world snapshot の独立 subsystem として保存する
 
@@ -6438,7 +6442,7 @@ Being のターン数を作ったターンとして清算待ちの予期を積�
 
 **関連**: design_decisions 1 / D1439 / D1440 / Issue #1436 / #1442 / #1443 / #1479。
 
-**その後**: 行動ごとの結果の予想 (`LLM_EXPECTED_RESULT_POLICY`、tool の `expected_result` 引数、行動ルールの予測の行、【前回の予測と実際】) は Issue #1631 で消した。予期の引数と同時に有効にさせない検査も一緒に消えた。行動の記録に残る `expected_result` の欄と、古い区切り・主観補完の読み手は、続く PR で消す。
+**その後**: 行動ごとの結果の予想 (`LLM_EXPECTED_RESULT_POLICY`、tool の `expected_result` 引数、行動ルールの予測の行、【前回の予測と実際】) は Issue #1631 で消した。予期の引数と同時に有効にさせない検査も一緒に消えた。行動の記録に残る `expected_result` の欄と、古いエピソードの下書きが予想を読む処理も、続く PR で消した。主観補完の LLM に `prediction_error` を書かせる指示は、古いエピソードを消す段で消す。world snapshot の `action_result_store` は `expected_result` を書かなくなった。版は 5 のままで、キーのある古い snapshot も読める。
 
 予期の引数そのもの (`EXPECTATION_ARGUMENT_ENABLED`、期限のターン数 `EXPECTATION_UNDATED_TERM_TURNS` / `EXPECTATION_DATED_TERM_TURNS`、tool の `expectations` 引数、行動ルールの予期の行、書かれた予期を積む `ExpectationFormingService`) も Issue #1631 で消した。予期の清算・配り手・保存先も、続く PR で消した (D1439 / D1440 の「その後」)。
 

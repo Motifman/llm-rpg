@@ -61,7 +61,6 @@ class TestPromptCaptureWithoutEpisodicMemory:
                 "name": "wait",
                 "arguments": {
                     "inner_thought": "まず周囲の動きを見る。",
-                    "expected_result": "少し待って状況が変わる。",
                 },
             }
         )

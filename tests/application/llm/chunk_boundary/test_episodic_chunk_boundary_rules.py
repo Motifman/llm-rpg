@@ -64,7 +64,6 @@ def _action(
     scene_boundary: bool = False,
     occurred_tick: int | None = None,
     success: bool = True,
-    expected_result: str | None = None,
     error_code: str | None = None,
 ) -> ActionResultEntry:
     ts = at or datetime(2026, 5, 4, 12, 1, 0, tzinfo=timezone.utc)
@@ -75,7 +74,6 @@ def _action(
         scene_boundary=scene_boundary,
         occurred_tick=occurred_tick,
         success=success,
-        expected_result=expected_result,
         error_code=error_code,
     )
 
@@ -358,13 +356,13 @@ class TestDecideChunkBoundary:
 
 
 class TestAFailedActionDoesNotCloseTheChunk:
-    """bucket 内の失敗した行動は、予測の外れや error_code があっても、それだけでは chunk を閉じないことを保証する。
+    """bucket 内の失敗した行動は、error_code の有無によらず、それだけでは chunk を閉じないことを保証する。
 
     失敗で区切る条項 (誤差ゲート付き符号化) は #1631 で消した。
     """
 
     def _bucket_with_failure(
-        self, *, expected_result: str | None, error_code: str | None
+        self, *, error_code: str | None
     ) -> list[ActionResultEntry]:
         return [
             _action(occurred_tick=0),
@@ -372,15 +370,14 @@ class TestAFailedActionDoesNotCloseTheChunk:
             _action(
                 occurred_tick=2,
                 success=False,
-                expected_result=expected_result,
                 error_code=error_code,
             ),
         ]
 
-    def test_failure_after_expecting_success_holds(self):
-        """成功を予測 (expected_result が空でない) していたのに失敗した行動があっても、HOLD_ACCUMULATING のまま閉じない。"""
+    def test_failure_without_error_code_holds(self):
+        """error_code の無い失敗をした行動があっても、HOLD_ACCUMULATING のまま閉じない。"""
         inp = build_chunk_encoding_input(
-            PlayerId(1), [], self._bucket_with_failure(expected_result="開くはずだった", error_code=None)
+            PlayerId(1), [], self._bucket_with_failure(error_code=None)
         )
 
         d = decide_chunk_boundary(inp)
@@ -391,7 +388,7 @@ class TestAFailedActionDoesNotCloseTheChunk:
     def test_failure_with_error_code_holds(self):
         """error_code 付きで失敗した行動があっても、HOLD_ACCUMULATING のまま閉じない。"""
         inp = build_chunk_encoding_input(
-            PlayerId(1), [], self._bucket_with_failure(expected_result=None, error_code="INVALID_TARGET")
+            PlayerId(1), [], self._bucket_with_failure(error_code="INVALID_TARGET")
         )
 
         d = decide_chunk_boundary(inp)

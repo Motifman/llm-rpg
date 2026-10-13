@@ -126,7 +126,6 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "game_time_label": entry.game_time_label,
         "omit_result_in_prompt": bool(entry.omit_result_in_prompt),
         "inner_thought": entry.inner_thought,
-        "expected_result": entry.expected_result,
         "intention": entry.intention,
         "emotion_hint": entry.emotion_hint,
         "scene_boundary": bool(entry.scene_boundary),
@@ -155,7 +154,6 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         game_time_label=data.get("game_time_label"),
         omit_result_in_prompt=bool(data.get("omit_result_in_prompt", False)),
         inner_thought=data.get("inner_thought"),
-        expected_result=data.get("expected_result"),
         intention=data.get("intention"),
         emotion_hint=data.get("emotion_hint"),
         scene_boundary=bool(data.get("scene_boundary", False)),
@@ -795,6 +793,8 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
 _AR_SUBSYSTEM_KEY = "action_result_store"
 # v2: expected_result 追加 (PR1)。v3: intention / emotion_hint 追加 (PR2a)。
 # v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
+# expected_result は #1631 で書くのをやめた。版は 5 のまま: restore は data.get で
+# 読むので、キーのある古い snapshot も、キーの無い新しい snapshot も同じ版で読める。
 # 旧 snapshot 互換は不要 (ユーザー判断)。restore は data.get で欠損を None/() に倒す
 # ため実害は出ないが、schema の意味変更を明示するため version を上げる。
 _AR_SCHEMA_VERSION = 5
