@@ -255,18 +255,6 @@ def _empty_recall_success_store() -> Any:
     return InMemoryEpisodicRecallSuccessStore()
 
 
-def _empty_pending_prediction_store() -> Any:
-    """U10a (予測誤差統一設計 部品6・pending prediction): snapshot 配線時に
-
-    pending prediction store が未配線 (= flag OFF) なら空 in-memory store で
-    代用する (checklist #27)。"""
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-        InMemoryPendingPredictionStore,
-    )
-
-    return InMemoryPendingPredictionStore()
-
-
 def _empty_goal_journal_store() -> Any:
     """P5 (目的層): snapshot 配線時に goal store が未配線 (= flag OFF) なら
 
@@ -473,13 +461,6 @@ class ExperimentSnapshotSession:
             getattr(wiring_result, "recall_success_store", None)
             or _empty_recall_success_store()
         )
-        # U10a (予測誤差統一設計 部品6・pending prediction): pending prediction
-        # store も未配線なら空 in-memory store にフォールバックする
-        # (checklist #27)。
-        pending_prediction_store = (
-            getattr(wiring_result, "pending_prediction_store", None)
-            or _empty_pending_prediction_store()
-        )
         # P5 (目的層): goal store も未配線なら空 in-memory store にフォール
         # バックする (checklist #27)。
         goal_journal_store = (
@@ -507,8 +488,6 @@ class ExperimentSnapshotSession:
                 "belief_evidence_buffer_store",
                 # U9b: 的中側 sidecar も同じ監視対象に入れる。
                 "recall_success_store",
-                # U10a: pending prediction store も同じ監視対象に入れる。
-                "pending_prediction_store",
                 # P5: goal store も同じ監視対象に入れる。
                 "goal_journal_store",
             )
@@ -533,7 +512,6 @@ class ExperimentSnapshotSession:
             recall_habituation_store=recall_habituation_store,
             belief_evidence_buffer_store=belief_evidence_buffer_store,
             recall_success_store=recall_success_store,
-            pending_prediction_store=pending_prediction_store,
             goal_journal_store=goal_journal_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,

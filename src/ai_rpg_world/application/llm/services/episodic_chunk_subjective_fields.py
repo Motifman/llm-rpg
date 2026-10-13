@@ -20,16 +20,7 @@ from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
-from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
-    PendingPredictionValidationException,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-    PENDING_KIND_PLAN,
-    PENDING_KIND_PROMISE,
-    PendingPredictionDraft,
-    PendingResolutionVerdict,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 _SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を埋める助手です。
@@ -88,59 +79,16 @@ _UNCONSCIOUS_CONTEXT_INSTRUCTION = """
 ならない。当該節が無い場合はこの指示を無視してよい。"""
 
 
-# U10a (予測誤差統一設計 部品6・pending prediction): 追加フィールド。
-_PENDING_KEY_LIST_BASE_NEW = (
-    "キーは次の 6 つ: interpreted, recall_text, prediction_error, heading, "
-    "pending_prediction, pending_resolutions。"
-)
-_PENDING_PREDICTION_INSTRUCTION = """
-
-pending_prediction は、この chunk に将来の特定の時・場所・相手についての
-約束や見込みが含まれるときだけ書くオブジェクト。**相手か場所か時刻の
-いずれかが特定できないものは書かない**（乱発防止）。何も無ければ null にする。
-オブジェクトのキーは次の 5 つ:
-- kind: 次のどちらか。
-  - "promise": 相手との約束（例:「夕方に木の下でカイトと交換する」）
-  - "plan": 自分の方針への見込み。「この進め方を続ければ N tick 以内に X が
-    得られるはず」という、期限つきの方針レベルの見通し
-    （例:「浜を探索し続ければ山頂への道の手がかりが見つかるはず」）。
-    **次の 1 手の結果予測（すぐ結果が出るもの）は plan にしない**。数 tick
-    単位の方針の見通しだけを plan にする（乱発防止）
-- text: 約束・見込みの内容を表す日本語 1 文
-- resolution_cues: 解決条件を表す文字列の配列（1 件以上）。各要素は
-  "spot:<場所のspot_id>" または "player:<相手の名前>" のいずれかの形式
-  （例: ["spot:12", "player:カイト"]）。入力の location.spot_id や who に
-  実在するものだけを使い、新たに創作しない
-- tick_offset_from / tick_offset_to: 解決が見込まれるまでの、今からの
-  tick 数（0 以上の整数、tick_offset_to は tick_offset_from 以上）。
-  正確な数値が分からない場合はおおよその見積もりでよいが、時刻の見当が
-  全くつかない場合は pending_prediction 全体を null にする
-
-pending_resolutions は、ユーザメッセージに【保留中の約束】節がある場合に、
-その約束のうちこの chunk で決着がついたものだけを記す配列（無ければ空配列
-[]）。当該節が無い場合はこの指示を無視して [] にする。各要素は次の 2 キーの
-オブジェクト:
-- pending_id: 【保留中の約束】節に添えられた id をそのまま写す
-- verdict: "fulfilled"（果たされた）または "broken"（破られた）のいずれか。
-  **どちらとも判断がつかない約束は配列に含めない**（曖昧なら黙って保留の
-  ままにする）"""
-
-
 def _build_system_prompt(
     *,
     unconscious_context_enabled: bool = False,
-    pending_prediction_enabled: bool = False,
 ) -> str:
-    """無意識コンテキスト節 / pending prediction 節を条件付きで足した
-    system prompt を組み立てる。
+    """無意識コンテキスト節を条件付きで足した system prompt を組み立てる。
 
-    全 flag が OFF のときは ``_SYSTEM_EPISODE_SUBJECTIVE_JSON`` をそのまま返す
+    flag が OFF のときは ``_SYSTEM_EPISODE_SUBJECTIVE_JSON`` をそのまま返す
     (= 既定 prompt が byte 不変であることをここで保証する)。
     """
     base = _SYSTEM_EPISODE_SUBJECTIVE_JSON
-    if pending_prediction_enabled:
-        assert _BASE_KEY_LIST in base
-        base = base.replace(_BASE_KEY_LIST, _PENDING_KEY_LIST_BASE_NEW) + _PENDING_PREDICTION_INSTRUCTION
     if unconscious_context_enabled:
         return base + _UNCONSCIOUS_CONTEXT_INSTRUCTION
     return base
@@ -293,117 +241,6 @@ def _merge_picks(
 # を招く。そこで抽出時に窓の起点・終点を近い将来の上限へクランプし、
 # 最小幅を確保して両極を防ぐ。上限値は 140 tick 級の run で「果たされな
 # かった約束が run 内に失効する」ことを担保する経験則で、M-run で調整可。
-_PENDING_TICK_OFFSET_MAX = 30
-_PENDING_TICK_WINDOW_MIN = 3
-
-
-def _clamp_pending_tick_offsets(tick_offset_from: int, tick_offset_to: int) -> tuple[int, int]:
-    """tick offset を妥当範囲へクランプする。
-
-    - 上限 ``_PENDING_TICK_OFFSET_MAX`` を超える値は上限に丸める
-    - クランプ後に窓が ``_PENDING_TICK_WINDOW_MIN`` 未満なら終点を広げる
-
-    クランプは「有効な (from<=to かつ from>=0 の) 範囲を狭める / 最小幅を
-    確保する」だけに留める。反転 (from>to) や負値はここで補正せず、そのまま
-    後段の VO バリデーションに委ねて従来どおり None に落とす (壊れた出力を
-    黙って「もっともらしい約束」に化けさせない)。
-    """
-    from_c = min(tick_offset_from, _PENDING_TICK_OFFSET_MAX)
-    to_c = min(tick_offset_to, _PENDING_TICK_OFFSET_MAX)
-    if from_c <= to_c and to_c - from_c < _PENDING_TICK_WINDOW_MIN:
-        to_c = from_c + _PENDING_TICK_WINDOW_MIN
-    return from_c, to_c
-
-
-def _normalize_pending_prediction(raw: Any) -> PendingPredictionDraft | None:
-    """LLM 出力の ``pending_prediction`` object を ``PendingPredictionDraft`` に
-
-    正規化する。null / 非 object / 必須キー欠落 / 型不正 / VO のバリデーション
-    違反 (resolution_cues の形式不正・tick 範囲逆転など) は全て None に倒す
-    (= 「約束なし」と同じ扱い。乱発防止の指示を無視した壊れた出力を安全側で
-    捨てる)。tick offset は ``_clamp_pending_tick_offsets`` で妥当範囲へ
-    クランプしてから VO に渡す (LLM が tick 尺度を誤って巨大値を返す問題への
-    防御。詳細は同関数の docstring)。
-    """
-    if not isinstance(raw, dict):
-        return None
-    text = raw.get("text")
-    if not isinstance(text, str) or not text.strip():
-        return None
-    raw_cues = raw.get("resolution_cues")
-    if not isinstance(raw_cues, (list, tuple)):
-        return None
-    cues: list[str] = []
-    for c in raw_cues:
-        if not isinstance(c, str) or not c.strip():
-            return None
-        cues.append(c.strip())
-    tick_offset_from = raw.get("tick_offset_from")
-    tick_offset_to = raw.get("tick_offset_to")
-    if isinstance(tick_offset_from, bool) or isinstance(tick_offset_to, bool):
-        return None
-    if not isinstance(tick_offset_from, int) or not isinstance(tick_offset_to, int):
-        return None
-    tick_offset_from, tick_offset_to = _clamp_pending_tick_offsets(
-        tick_offset_from, tick_offset_to
-    )
-    # P11: kind は "plan" と明示されたときだけ plan、それ以外 (欠落・"promise"・
-    # 未知の値) は promise に倒す。壊れた kind 値のために予測全体を捨てず、
-    # 既定の promise 扱いで拾う (種別の取りこぼしはあっても予測は残す)。
-    kind = (
-        PENDING_KIND_PLAN
-        if raw.get("kind") == PENDING_KIND_PLAN
-        else PENDING_KIND_PROMISE
-    )
-    try:
-        return PendingPredictionDraft(
-            text=text,
-            resolution_cues=tuple(cues),
-            tick_offset_from=tick_offset_from,
-            tick_offset_to=tick_offset_to,
-            kind=kind,
-        )
-    except PendingPredictionValidationException:
-        return None
-
-
-def _normalize_pending_resolutions(
-    raw: Any, valid_pending_ids: frozenset[str]
-) -> tuple[PendingResolutionVerdict, ...]:
-    """LLM 出力の ``pending_resolutions`` 配列を ``PendingResolutionVerdict`` の
-
-    tuple に正規化する。
-
-    安全側の縮退 (壊れた要素は黙って捨てる):
-    - null / 非配列 → 空タプル
-    - 要素が非 object / pending_id 欠落・非 str / verdict が
-      "fulfilled"/"broken" 以外 → その要素を捨てる
-    - ``valid_pending_ids`` (= この chunk で prompt に載せた約束の id 群) に
-      含まれない pending_id → 捨てる (存在しない約束を LLM が創作しても
-      清算しない)
-    - 同一 pending_id の重複 → 最初の判定を採用
-    """
-    if not isinstance(raw, (list, tuple)):
-        return ()
-    verdicts: list[PendingResolutionVerdict] = []
-    seen: set[str] = set()
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        pid = item.get("pending_id")
-        verdict = item.get("verdict")
-        if not isinstance(pid, str) or not pid.strip():
-            continue
-        pid = pid.strip()
-        if pid not in valid_pending_ids or pid in seen:
-            continue
-        try:
-            v = PendingResolutionVerdict(pending_id=pid, verdict=str(verdict))
-        except PendingPredictionValidationException:
-            continue
-        seen.add(pid)
-        verdicts.append(v)
-    return tuple(verdicts)
 
 
 class EpisodicChunkSubjectiveFieldsService:
@@ -422,7 +259,6 @@ class EpisodicChunkSubjectiveFieldsService:
         *,
         unconscious_context_provider: Callable[[int, Sequence[EpisodicCue]], str] | None = None,
         unconscious_context_enabled: bool = False,
-        pending_prediction_enabled: bool = False,
     ) -> None:
         if not isinstance(completion, IEpisodicChunkSubjectiveCompletionPort):
             raise TypeError("completion must implement IEpisodicChunkSubjectiveCompletionPort")
@@ -432,8 +268,6 @@ class EpisodicChunkSubjectiveFieldsService:
             raise TypeError("unconscious_context_provider must be callable or None")
         if not isinstance(unconscious_context_enabled, bool):
             raise TypeError("unconscious_context_enabled must be bool")
-        if not isinstance(pending_prediction_enabled, bool):
-            raise TypeError("pending_prediction_enabled must be bool")
         self._completion = completion
         # U7 (予測誤差統一設計 / 無意識コンテキスト): 「配線 (wire) と有効化
         # (enable) の分離」規約に従い、provider は常に受け取れるが
@@ -441,11 +275,6 @@ class EpisodicChunkSubjectiveFieldsService:
         # (= 未注入時と完全に同一の挙動)。
         self._unconscious_context_provider = unconscious_context_provider
         self._unconscious_context_enabled = unconscious_context_enabled
-        # U10a (予測誤差統一設計 部品6・pending prediction / default False =
-        # flag OFF): True のときだけ pending_prediction キーを system prompt に
-        # 足し、応答を PendingPredictionDraft として episode に載せる。False
-        # (既定) では pending_prediction_draft は常に None (= 導入前と byte 一致)。
-        self._pending_prediction_enabled = pending_prediction_enabled
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def merge_llm_subjective_fields(
@@ -471,18 +300,9 @@ class EpisodicChunkSubjectiveFieldsService:
 
         fallback_i = _template_interpreted(draft)
         fallback_r = _template_recall(draft)
-        _pending_sample = (
-            ', "pending_prediction": {"text": "...", "resolution_cues": '
-            '["spot:...", "player:..."], "tick_offset_from": 0, '
-            '"tick_offset_to": 0}, "pending_resolutions": '
-            '[{"pending_id": "...", "verdict": "fulfilled"}]'
-            if self._pending_prediction_enabled
-            else ""
-        )
-        _extra_sample = _pending_sample
         response_format = (
             '{"interpreted": "...", "recall_text": "...", "prediction_error": "...", '
-            f'"heading": "..."{_extra_sample}}}'
+            '"heading": "..."}'
         )
         unconscious_context_text = self._resolve_unconscious_context_text(draft)
         user_sections = [
@@ -498,22 +318,6 @@ class EpisodicChunkSubjectiveFieldsService:
                 "## いまの自分（信念と自己像）",
                 unconscious_context_text,
             ]
-        # U10b (予測誤差統一設計 部品6・pending prediction 清算): flag ON かつ
-        # この chunk 時点で窓が開いた約束が渡っているときだけ【保留中の約束】節を
-        # 足す。flag OFF / 約束なしのときは user_sections が U10a 時点と一致する。
-        active_pendings = (
-            encoding_input.active_pending_predictions
-            if self._pending_prediction_enabled
-            else ()
-        )
-        valid_pending_ids = frozenset(p.pending_id for p in active_pendings)
-        if active_pendings:
-            user_sections += [
-                "## 保留中の約束（この chunk で決着したものだけ pending_resolutions に記す）",
-                "\n".join(
-                    f"- [{p.pending_id}] {p.text}" for p in active_pendings
-                ),
-            ]
         user_sections += [
             "## ルール草案（事実・索引はここに依存。改変禁止）",
             _format_draft_facts(draft),
@@ -527,7 +331,6 @@ class EpisodicChunkSubjectiveFieldsService:
                 "role": "system",
                 "content": _build_system_prompt(
                     unconscious_context_enabled=self._unconscious_context_enabled,
-                    pending_prediction_enabled=self._pending_prediction_enabled,
                 ),
             },
             {"role": "user", "content": "\n\n".join(user_sections)},
@@ -535,8 +338,6 @@ class EpisodicChunkSubjectiveFieldsService:
         interp_llm: str | None = None
         recall_llm: str | None = None
         heading_llm: str | None = None
-        pending_prediction_draft: PendingPredictionDraft | None = None
-        pending_resolution_verdicts: tuple[PendingResolutionVerdict, ...] = ()
         try:
             raw_obj = self._completion.complete_episode_subjective_json(messages)
             if not isinstance(raw_obj, dict):
@@ -550,20 +351,6 @@ class EpisodicChunkSubjectiveFieldsService:
                 # 失敗時 / 欠落時は None に倒し、SubjectiveEpisode に渡る前に
                 # 30 文字へ切り詰める (後続テストで保証)。
                 heading_llm = _normalize_heading(raw_obj.get("heading"))
-                # U10a: flag OFF のときは LLM が誤って pending_prediction を
-                # 返しても無視し、episode.pending_prediction_draft は常に
-                # None のまま (= 導入前と同一挙動を保証する)。
-                if self._pending_prediction_enabled:
-                    pending_prediction_draft = _normalize_pending_prediction(
-                        raw_obj.get("pending_prediction")
-                    )
-                    # U10b: 再浮上中の約束の清算判定。prompt に載せた約束の
-                    # id (valid_pending_ids) に絞って正規化する。約束が 1 件も
-                    # 渡っていない chunk では valid_pending_ids が空なので、
-                    # LLM が何を返しても空タプルに畳まれる。
-                    pending_resolution_verdicts = _normalize_pending_resolutions(
-                        raw_obj.get("pending_resolutions"), valid_pending_ids
-                    )
         except LlmApiCallException as e:
             self._logger.warning(
                 "Episode subjective LLM failed (%s); using template fallback",
@@ -584,8 +371,6 @@ class EpisodicChunkSubjectiveFieldsService:
             recall_text=recall_text,
             prediction_error=None,
             heading=heading_llm,
-            pending_prediction_draft=pending_prediction_draft,
-            pending_resolution_verdicts=pending_resolution_verdicts,
         )
         self._assert_rule_fields_unchanged(draft, merged)
         return merged

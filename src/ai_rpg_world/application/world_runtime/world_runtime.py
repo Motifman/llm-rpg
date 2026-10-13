@@ -2793,10 +2793,6 @@ class WorldRuntime:
                 # #526 段階 3 PR-C: afterglow store。stack で enable された
                 # 時のみ非 None。retrieve 側にも同一 store が注入されている。
                 afterglow_store=self._episodic_stack.afterglow_store,
-                # U10a (予測誤差統一設計 部品6・pending prediction): stack で
-                # enable された時のみ非 None。書込みは chunk_coordinator /
-                # scheduler 側 (build_episodic_stack / 上の wiring 参照)。
-                pending_prediction_store=self._episodic_stack.pending_prediction_store,
                 encounter_memory=self._encounter_memory,
                 encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
                     "spot", spot_str_id
@@ -7632,15 +7628,12 @@ def create_world_runtime(
         persona_provider: Callable[[PlayerId], str] | None = None
         shared_episode_store = None  # scheduler が wire されたときだけ事前生成
         # U2 (証拠台帳統一設計 / default OFF): BELIEF_EVIDENCE_ENABLED のときだけ
-        # evidence buffer + transcriber を構築する。「配線 (wire) と有効化
-        # (enable) の分離」規約に従い、OFF なら None のまま扱う (= 転記コード
-        # パス自体は通るが不活性)。
+        # evidence buffer を構築する。OFF なら None のまま扱う。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_belief_attribution_enabled_state,
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
             log_error_driven_reinterpretation_enabled_state,
-            log_pending_prediction_enabled_state,
             log_recall_hit_boost_enabled_state,
             log_unconscious_context_enabled_state,
         )
@@ -7680,12 +7673,6 @@ def create_world_runtime(
         # 加えない)。
         _unconscious_context_enabled = config.unconscious_context_enabled
         log_unconscious_context_enabled_state(_unconscious_context_enabled)
-        # U10a (予測誤差統一設計 部品6・pending prediction / default OFF):
-        # 抽出・保持・再浮上を一括ゲートする。evidence buffer とは無関係な
-        # 独立 flag (別の per-Being store を使う) なので buffer store 条件には
-        # 加えない。
-        _pending_prediction_enabled = config.pending_prediction_enabled
-        log_pending_prediction_enabled_state(_pending_prediction_enabled)
         # P5 (目的層 G1): GOAL_STORE_ENABLED ON のとき goal store を構築し
         # runtime に保持する。【現在の目的】provider (prompt builder 側) と実験
         # snapshot stub がここから拾う。OFF なら None のまま (静的シナリオ文字列)。
@@ -7710,7 +7697,6 @@ def create_world_runtime(
         # semantic recall service を確定させる」ブロックを参照)。
         _unconscious_context_semantic_recall_holder: list[Any] = [None]
         belief_evidence_buffer_store = None
-        belief_evidence_transcriber = None
         if (
             _belief_evidence_enabled
             or _belief_consolidation_enabled
@@ -7720,17 +7706,6 @@ def create_world_runtime(
             )
 
             belief_evidence_buffer_store = InMemoryBeliefEvidenceBufferStore()
-            if _belief_evidence_enabled:
-                from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-                    BeliefEvidenceTranscriber,
-                )
-
-                belief_evidence_transcriber = BeliefEvidenceTranscriber(
-                    belief_evidence_buffer_store,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                    memory_turn_reader=runtime._memory_turn_clock,
-                )
         if config.episodic_subjective_enabled:
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
@@ -7809,7 +7784,6 @@ def create_world_runtime(
                     _client,
                     unconscious_context_provider=_unconscious_context_provider,
                     unconscious_context_enabled=_unconscious_context_enabled,
-                    pending_prediction_enabled=_pending_prediction_enabled,
                 )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
@@ -7823,14 +7797,6 @@ def create_world_runtime(
                     max_queue_size=100,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
-                    # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
-                    # None のまま (= 従来動作と完全互換)。
-                    belief_evidence_transcriber=belief_evidence_transcriber,
-                    # U10a: default False。pending_prediction_store 自体は
-                    # build_episodic_stack がこの後で構築するため、この時点
-                    # では未確定 (= None のまま)。build_episodic_stack 完了後に
-                    # set_pending_prediction_store で差し込む。
-                    pending_prediction_enabled=_pending_prediction_enabled,
                 )
                 # 各 player の persona_block を player_id 引きで返す provider。
                 # world_character (= 操作対象) は rich persona、その他は spawn 名
@@ -8035,11 +8001,7 @@ def create_world_runtime(
             runtime_context_provider=lambda pid: runtime.build_llm_context(
                 pid
             ).tool_runtime_context,
-            # U2 (証拠台帳統一設計): 同期経路用に transcriber を渡す (実際に
-            # 発火するのは chunk_subjective_fields_service 注入時のみ。本
-            # runtime の既定経路は非同期 scheduler なので通常は素通り)。store
-            # 自体は snapshot 用に stack へ公開する。
-            belief_evidence_transcriber=belief_evidence_transcriber,
+            # U2 (証拠台帳統一設計): store を snapshot 用に stack へ公開する。
             belief_evidence_buffer_store=belief_evidence_buffer_store,
             # U3b (固着パス): default OFF。ON のときのみクラスタ昇格が
             # FAMILIARITY 転用モードになり、BeliefConsolidationCoordinator が
@@ -8056,13 +8018,9 @@ def create_world_runtime(
                 _error_driven_reinterpretation_enabled
             ),
             # U9b (想起の信用割り当て・的中側): 的中側 sidecar を作り、
-            # passive_recall の順位に使う。回数は確定した予期から足す (#1443)。
+            # passive_recall の順位に使う。回数を足す書き手は #1631 で消した。
             recall_hit_boost_enabled=_recall_hit_boost_enabled,
             recall_hit_boost_strength=_recall_hit_boost_strength,
-            # U10a (pending prediction): 同期経路 (chunk_coordinator) と
-            # store 自体の構築を build_episodic_stack に任せる。非同期経路
-            # (scheduler) は下で set_pending_prediction_store により差し込む。
-            pending_prediction_enabled=_pending_prediction_enabled,
             episodic_promotion_force_full_scan=(
                 config.episodic_promotion_force_full_scan
             ),
@@ -8075,14 +8033,6 @@ def create_world_runtime(
             # fail-fast 済みなので、ここに来る db_path は非 subjective 経路のみ。
             subjective_episode_db_path=config.subjective_episode_db_path,
         )
-
-        # U10a: subjective_scheduler は build_episodic_stack より先に構築されて
-        # いるため (Pattern A の episode_store 共有と同じ理由)、
-        # pending_prediction_store が確定するこの時点で差し込む。
-        if subjective_scheduler is not None:
-            subjective_scheduler.set_pending_prediction_store(
-                runtime._episodic_stack.pending_prediction_store
-            )
 
         # U7: 無意識コンテキスト用 semantic recall service を確定させる。
         # build_episodic_stack が semantic_enabled=True のときに初めて

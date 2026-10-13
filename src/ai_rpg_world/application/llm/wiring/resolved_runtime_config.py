@@ -118,7 +118,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
     "OPENROUTER_REQUIRE_PARAMS",
-    "PENDING_PREDICTION_ENABLED",
     "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "PROMPT_SECTION_ORDER",
@@ -358,7 +357,6 @@ class ResolvedLlmRuntimeConfig:
     unconscious_context_enabled: bool = False
     error_driven_reinterpretation_enabled: bool = False
     recall_hit_boost_enabled: bool = False
-    pending_prediction_enabled: bool = False
 
     # Goal / stagnation 系。
     goal_store_enabled: bool = False
@@ -502,7 +500,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_error_driven_reinterpretation_enabled,
             resolve_goal_store_enabled,
             resolve_memo_tools_enabled,
-            resolve_pending_prediction_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
@@ -754,7 +751,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_error_driven_reinterpretation_enabled(env=source)
         )
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
-        pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
         goal_store_enabled = resolve_goal_store_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
         escape_llm_ssot_enabled = _parse_truthy(
@@ -875,7 +871,6 @@ class ResolvedLlmRuntimeConfig:
             unconscious_context_enabled=unconscious_context_enabled,
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
-            pending_prediction_enabled=pending_prediction_enabled,
             goal_store_enabled=goal_store_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
@@ -994,7 +989,6 @@ class ResolvedLlmRuntimeConfig:
             unconscious_context_enabled=False,
             error_driven_reinterpretation_enabled=False,
             recall_hit_boost_enabled=False,
-            pending_prediction_enabled=False,
             goal_store_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,

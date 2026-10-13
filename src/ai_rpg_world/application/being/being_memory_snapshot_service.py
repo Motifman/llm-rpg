@@ -83,7 +83,6 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_goal_entry,
     dict_to_memo_entry,
     dict_to_memory_link,
-    dict_to_pending_prediction,
     dict_to_recall_observation,
     dict_to_recall_slot_entry,
     dict_to_reinterpretation_entry,
@@ -94,7 +93,6 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     goal_entry_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
-    pending_prediction_to_dict,
     recall_observation_to_dict,
     recall_slot_entry_to_dict,
     reinterpretation_entry_to_dict,
@@ -128,9 +126,6 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_jo
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
 )
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
@@ -263,9 +258,6 @@ class BeingMemorySnapshotService:
         "belief_evidence_received_event_ids",
         "recall_success_received_event_ids",
         "recall_buffer_received_event_ids",
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測
-        # (約束) の per-Being state。
-        "pending_predictions",
         # P5 (目的層): 目的 journal の per-Being state (belief journal と同型)。
         "goal_journal",
         "memory_turn",
@@ -288,7 +280,6 @@ class BeingMemorySnapshotService:
         recall_habituation_store: IEpisodicRecallHabituationStore,
         belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
         recall_success_store: IEpisodicRecallSuccessStore,
-        pending_prediction_store: PendingPredictionRepository,
         goal_journal_store: GoalJournalRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
@@ -340,10 +331,6 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "recall_success_store must implement IEpisodicRecallSuccessStore"
             )
-        if not isinstance(pending_prediction_store, PendingPredictionRepository):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository"
-            )
         if not isinstance(goal_journal_store, GoalJournalRepository):
             raise TypeError("goal_journal_store must be GoalJournalRepository")
         if not isinstance(acquaintance_store, AcquaintanceRepository):
@@ -365,7 +352,6 @@ class BeingMemorySnapshotService:
         self._recall_habituation = recall_habituation_store
         self._belief_evidence_buffer = belief_evidence_buffer_store
         self._recall_success = recall_success_store
-        self._pending_prediction = pending_prediction_store
         self._goal_journal = goal_journal_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
@@ -448,12 +434,6 @@ class BeingMemorySnapshotService:
             "recall_buffer_received_event_ids": (
                 self._recall_buffer.list_received_event_ids_by_being(being_id)
             ),
-            # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の
-            # 予測 (約束) の per-Being state。
-            "pending_predictions": [
-                pending_prediction_to_dict(p)
-                for p in self._pending_prediction.list_all_by_being(being_id)
-            ],
             # P5 (目的層): 目的 journal の per-Being state。
             "goal_journal": [
                 goal_entry_to_dict(e)
@@ -612,13 +592,6 @@ class BeingMemorySnapshotService:
             payload["recall_buffer_received_event_ids"],
             "recall_buffer_received_event_ids",
         )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # デコード。
-        pending_predictions = _decode_list(
-            payload["pending_predictions"],
-            dict_to_pending_prediction,
-            "pending_predictions",
-        )
         # P5 (目的層): 目的 journal のデコード。
         goal_entries = _decode_list(
             payload["goal_journal"],
@@ -701,11 +674,6 @@ class BeingMemorySnapshotService:
         )
         self._recall_buffer.replace_received_event_ids_by_being(
             being_id, recall_buffer_received
-        )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # bulk overwrite。
-        self._pending_prediction.replace_all_by_being(
-            being_id, pending_predictions
         )
         # P5 (目的層): 目的 journal の bulk overwrite。
         self._goal_journal.replace_all_by_being(being_id, goal_entries)

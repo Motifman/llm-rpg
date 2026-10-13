@@ -58,7 +58,6 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "LLM_EPISODIC_RECALL_SLOT_ENABLED": "true",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED": "true",
     "MEMO_TOOLS_ENABLED": "true",
-    "PENDING_PREDICTION_ENABLED": "true",
     "RECALL_HIT_BOOST_ENABLED": "true",
     "SEMANTIC_LLM_GIST_ENABLED": "true",
     "UNCONSCIOUS_CONTEXT_ENABLED": "true",
@@ -120,16 +119,16 @@ _ALL_NAMES = (
 #: 全部入りのとき、1 ターン目のプロンプトに出る名前。
 #:
 #: **これが正の対照。** 止めたときに「消えること」だけを見ると、もともと出て
-#: いなかった名前でも緑になる。【関連する学び】と【保留中の予測】は中身が
-#: できてから出る欄で、1 ターン目には出ない。この 2 つの総当たりは、本文が
-#: 将来それを指したときに落ちる見張りになる。
+#: いなかった名前でも緑になる。【関連する学び】は中身ができてから出る欄で、
+#: 1 ターン目には出ない。この総当たりは、本文が将来それを指したときに落ちる
+#: 見張りになる。
 #:
 #: メモ帳は今のメモの道具と並べられない (設定で止める) ので、全部入りには入らない。
 #: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
 #: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
 #:
-#: 予期の引数 ``expectations`` は #1631 で消したので、全部入りでも出ない。名前の表に
-#: 残し、どの組み合わせでもプロンプトに戻ってこないことを見張る。
+#: 予期の引数 ``expectations`` と【保留中の予測】は #1631 で消したので、全部入りでも
+#: 出ない。名前の表に残し、どの組み合わせでもプロンプトに戻ってこないことを見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _LEARNED,
     _PENDING_PREDICTIONS,
@@ -186,11 +185,6 @@ _DISABLED_PARTS = [
         {"MEMO_TOOLS_ENABLED": "false"},
         (_ACTIVE_MEMOS, *_MEMO_TOOLS, *_MEMO_BOOK_NAMES),
         id="memo",
-    ),
-    pytest.param(
-        {"PENDING_PREDICTION_ENABLED": "false"},
-        (_PENDING_PREDICTIONS,),
-        id="pending_predictions",
     ),
 ]
 

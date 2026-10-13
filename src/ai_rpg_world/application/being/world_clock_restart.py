@@ -22,7 +22,6 @@ WORLD_TICK_FIELDS_BY_CODEC: dict[str, frozenset[str]] = {
     "afterglow_entry_to_dict": frozenset({"entered_tick"}),
     "episode_tick_pair_to_dict": frozenset({"tick"}),
     "belief_evidence_to_dict": frozenset({"tick"}),
-    "pending_prediction_to_dict": frozenset({"tick_from", "tick_to", "created_tick"}),
 }
 
 _RESET_TO_ROUND_START: dict[str, tuple[tuple[str, ...], ...]] = {
@@ -35,7 +34,8 @@ _RESET_TO_ROUND_START: dict[str, tuple[tuple[str, ...], ...]] = {
     "recall_habituation_last_recalled": (("tick",),),
 }
 
-# 窓が前の回の世界の時計を指していて、初期状態に戻った世界では判定できない。
+# 約束 (pending prediction) は #1631 で消した。古い snapshot に残る約束は、窓が
+# 前の回の世界の時計を指していて tick の欄を持つので、読まずに捨てる。
 _DROPPED_AT_ROUND_START = "pending_predictions"
 
 

@@ -7257,6 +7257,8 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 **関連**: design_decisions 15〜18 (snapshot) / Issue #1508 / #1464 / #1520。
 
+**その後**: 保留中の予測 (約束、`PENDING_PREDICTION_ENABLED`) は Issue #1631 で消した。Being の snapshot も `pending_predictions` を書かなくなった。消す前に保存した snapshot に残る約束は前の回の tick を持つので、replay では読み込む前に捨てる処理を残した。捨てた件数はいまも `world_clock_restarts` に残る。
+
 ---
 
 ## D1514-2. 回ごとの役と初期配置は、シナリオの `round_assignment` に枠として書き、シードと回の番号で並べ替える

@@ -91,7 +91,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
-        pending_predictions_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
         being_memo_text: str = "",
@@ -106,7 +105,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("learned_text", learned_text),
             ("mid_summary_text", mid_summary_text),
             ("long_summary_text", long_summary_text),
-            ("pending_predictions_text", pending_predictions_text),
             ("known_people_text", known_people_text),
             ("episode_index_text", episode_index_text),
             ("being_memo_text", being_memo_text),
@@ -125,7 +123,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
                 learned_text=learned_text,
                 mid_summary_text=mid_summary_text,
                 long_summary_text=long_summary_text,
-                pending_predictions_text=pending_predictions_text,
                 known_people_text=known_people_text,
                 episode_index_text=episode_index_text,
                 being_memo_text=being_memo_text,
@@ -140,7 +137,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
-            pending_predictions_text=pending_predictions_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
             being_memo_text=being_memo_text,
@@ -259,19 +255,6 @@ def _emit_recent_events(sections: list[str], recent_events_text: str) -> None:
     ])
 
 
-def _emit_pending_predictions(sections: list[str], pending_predictions_text: str) -> None:
-    """U10a (予測誤差統一設計 部品6): 【保留中の予測】section を emit する。
-
-    再浮上した pending が無ければ ``pending_predictions_text`` は空文字 (= section ごと省略)。
-    """
-    if pending_predictions_text.strip():
-        sections.extend([
-            "",
-            "【保留中の予測】",
-            pending_predictions_text.strip(),
-        ])
-
-
 def _emit_relevant_memories(sections: list[str], relevant_memories_text: str) -> None:
     """【関連する記憶】 section を emit する。
 
@@ -328,7 +311,6 @@ def _format_stable_to_volatile(
     learned_text: str,
     mid_summary_text: str,
     long_summary_text: str,
-    pending_predictions_text: str = "",
     known_people_text: str = "",
     episode_index_text: str = "",
     being_memo_text: str = "",
@@ -336,7 +318,7 @@ def _format_stable_to_volatile(
     """Phase 0 default: 更新頻度の低い section から並べる。
 
     順序: objective → self_image (L5) → mid_summary (L4) → recent_events →
-    pending_predictions → learned → memories → memos →
+    learned → memories → memos →
     current_state。
 
     section 寿命 / 変動率の根拠 (Y_after_pr612 実測, tick 1-107):
@@ -405,15 +387,6 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 5. 保留中の予測 (U10a / 部品6、空なら省略)
-    # 再浮上しなければ flag ON でも常に空 (= section ごと省略)。
-    if pending_predictions_text.strip():
-        sections.extend([
-            "【保留中の予測】",
-            pending_predictions_text.strip(),
-            "",
-        ])
-
     # 6. 関連する学び (semantic top-K、空なら省略)
     # score で top-K を選ぶが、表示順は entry_id で安定化されている。
     if learned_text.strip():
@@ -473,7 +446,6 @@ def _format_legacy(
     learned_text: str,
     mid_summary_text: str,
     long_summary_text: str,
-    pending_predictions_text: str = "",
     known_people_text: str = "",
     episode_index_text: str = "",
     being_memo_text: str = "",
@@ -494,7 +466,6 @@ def _format_legacy(
     _emit_current_state(sections, current_state_text)
     _emit_active_memos(sections, active_memos_text)
     _emit_being_memo(sections, being_memo_text)
-    _emit_pending_predictions(sections, pending_predictions_text)
     _emit_recent_events(sections, recent_events_text)
     _emit_relevant_memories(sections, relevant_memories_text)
     _emit_episode_index(sections, episode_index_text)

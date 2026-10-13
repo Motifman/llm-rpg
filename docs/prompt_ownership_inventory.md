@@ -35,7 +35,7 @@
    - 観測バッファから取り出して短期記憶に積む (613 行)
    - 現在地と周囲: `WorldRuntimeQueryAdapter` → `_build_minimal_player_state_dto` → `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`) で現在地の塊を作り、`SpotGraphUiContextBuilder.build` (`llm/services/spot_graph_ui_context_builder.py:513`) が `prompt_section_layout.sections_for` の順に接続先・オブジェクト・その場の人などの節を足す
    - 直近の出来事: `UnifiedRecentEventStore.get_active_timeline` を `RecentEventsFormatter.format_unified_entries` (`llm/services/recent_events_formatter.py:47`) で行にする
-   - 保留中の予測 (`prompt_sections/pending_predictions.py`)。前回の予測と実際は #1631 で消した
+   - 保留中の予測と、前回の予測と実際は #1631 で消した
    - 関連する記憶と見出し (`prompt_sections/episodic_recall.py:316`)、関連する学び (`prompt_sections/semantic_recall.py:80`)
    - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、最近の流れと自己像と世界観 (短期記憶の `get_mid_summary_text` / `get_long_summary_text`)
 3. `SectionBasedContextFormatStrategy.format` (`llm/services/context_format_strategy.py`) が見出しを付けて並べる (747 行)。run の設定は `stable_to_volatile` で、`_format_stable_to_volatile` (300 行) の順になる
@@ -63,7 +63,7 @@ system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前
         → S7【同じ局面にいる者】 → S8【渡される文面の内訳】 → S9【行動ルール】 → S10【独白と一言の書き方】
         → S11【文脈と履歴の限界】 → S12 SSoT
 user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
-        → U9【保留中の予測】 → U10【関連する学び】 → U11【関連する記憶】 → U12 見出し
+        → U10【関連する学び】 → U11【関連する記憶】 → U12 見出し
         → U13【進行中のメモ】 → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
         → 繰り返しの警告 (U7) → U21 指示の前の知らせ → U22 行動指示
 tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, memo_add, memo_list, memo_done,
@@ -108,7 +108,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U6 内省の観測行 | (#1631 で消した) | - | - | - | - |
 | U7 繰り返しの警告 | 指示の前の「⚠ 直前のあなたは `wait` を同じ引数で 2 ターン連続実行しました。…」(run では 1 呼び出し)。直近の出来事に入る「⚠ … を 3 回続けて同じ引数で実行している。…」(run には出ていない) | `_build_loop_warning_prefix` (`llm/services/prompt_builder.py:559`)、直近の出来事の行は `llm/services/loop_guard_warning.py` | `ToolCallLoopGuardService` の連続記録 | Being の持ち物 | 無 (整数の player 鍵) |
 | U8 【前回の予測と実際】 | (#1631 で消した) | - | - | - | - |
-| U9 【保留中の予測】 | (この run では無し) | `build_pending_predictions_text` (`prompt_sections/pending_predictions.py:13`) | pending_prediction。再浮上の条件が `spot:<id>` / `player:<名前>` と tick。profile の `pending_prediction_enabled` | Being の持ち物 | pending_prediction |
+| U9 【保留中の予測】 | (#1631 で消した) | - | - | - | - |
 | U10 【関連する学び】 | 「- 釣りには釣竿が必要だ」「- 狼煙には流木・枯れ葉・火打ち石が必要だ」 | `run_semantic_passive_recall` (`semantic_recall.py:80`) | semantic store。profile の `semantic_passive_top_k` | Being の持ち物 | semantic store |
 | U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:316`)、空の置き文は 576 行 | episodic store、recall slot、再解釈 | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
 | U12 さっき思い出した記憶の見出し | 「【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)」「気になる見出しがあれば memory_recall_by_handle にその handle を渡して…」「- [ep_02c662] 釣竿作りが流木不足で失敗した」 | `_format_afterglow_section` (`episodic_recall.py:79`)。U11 の本文の末尾につながり、【関連する記憶】の中に入る | afterglow。profile の `afterglow_enabled` | Being の持ち物 | afterglow |
@@ -184,7 +184,6 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 部分 | store | 注意 |
 |---|---|---|
 | 現在の目的 | goal journal | `GoalEntry.player_id: int` と `created_tick` が残る。環境を出るときに環境が課した目的を外す処理は #1465 の範囲 |
-| 保留中の予測 | pending_prediction | 再浮上の条件が `spot:<id>` / `player:<名前>` と tick。名前の文とターン数に替える (#1436) |
 | 関連する学び | semantic store | — |
 | 関連する記憶・見出し | episodic / afterglow / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
 | 進行中のメモ | memo | 表示の `tick=…, 経過 … tick` を Being のターン数に替える |
@@ -249,7 +248,6 @@ encounter はいま、環境の判定にも使われている (確認)。
 |---|---|
 | メモ | `tick=11, 経過 1 tick` |
 | encounter の鍵 | シナリオの spot 文字列 ID、`monster_{整数}`、`player_{整数}`、event_id |
-| 保留中の予測 | `spot:<id>`、tick |
 | 短期記憶の行動の行 | `error_code=INTERACTION_PRECONDITION_FAILED`、`tool=interact` |
 | 目的 | `GoalEntry.player_id: int`、`created_tick` |
 | system prompt | 実装の語「SlidingWindow」 |

@@ -200,9 +200,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
         )
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-            InMemoryPendingPredictionStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
             InMemorySemanticMemoryStore,
         )
@@ -238,7 +235,6 @@ class TestExpectedPayloadKeysCoverage:
             reinterpretation_journal=InMemoryEpisodicReinterpretationJournalStore(),
             belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
             recall_success_store=InMemoryEpisodicRecallSuccessStore(),
-            pending_prediction_store=InMemoryPendingPredictionStore(),
             recall_slot_store=InMemoryEpisodicRecallSlotStore(),
             afterglow_store=InMemoryAfterglowStore(),
             recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
