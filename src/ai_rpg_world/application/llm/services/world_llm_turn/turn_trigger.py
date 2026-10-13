@@ -106,7 +106,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
     _self_reschedule_streak: dict[int, int] = field(default_factory=dict)
     max_consecutive_llm_failures: int = MAX_CONSECUTIVE_LLM_FAILURES
     _llm_failure_streak: dict[int, int] = field(default_factory=dict)
-    _own_action_follow_ups: set[int] = field(default_factory=set)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         """外部要因 (他者観測 / arrival / idle timer 等) による起床。
@@ -133,51 +132,19 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
                 if check_game_end().is_ended:
                     self.pending_player_ids.clear()
                     self._self_reschedule_streak.clear()
-                    self._own_action_follow_ups.clear()
                     return
             except Exception as exc:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
                 self._record_follow_up_failure(exc, "llm_turn.check_game_end", None)
 
-        scheduled = list(self.pending_player_ids)
+        to_run = list(self.pending_player_ids)
         self.pending_player_ids.clear()
-        # 起動判定は未読の観測で動く必要があるかを問う。自分の行動の結果は材料に
-        # 入らないので、自分の行動のあとに回した人は判定にかけない (D1597)。
-        follow_ups = {v for v in scheduled if v in self._own_action_follow_ups}
-        self._own_action_follow_ups.clear()
-        to_run = list(scheduled)
-        # tick 単位の起動判定: 候補を「未読の観測がある人」全員に広げ、一人ひとりに
-        # ついて未読をまとめて「いま動く必要があるか」を問い、本当に不要と判定
-        # できた人だけ回さない。観測は buffer に残る。前の tick に寝た人は、新しい
-        # 観測が届かなくても溜まった未読で判断し直される。
-        turn_gate = getattr(self.wiring, "turn_gate", None)
-        if turn_gate is not None:
-            to_run = [v for v in to_run if v in follow_ups] + [
-                pid.value
-                for pid in turn_gate.candidates(
-                    [PlayerId(v) for v in to_run if v not in follow_ups]
-                )
-                if pid.value not in follow_ups
-            ]
         # #363 Fix 1b: 行動不可 (is_down / outcome 確定) のプレイヤーを除外。
         # 死亡したプレイヤーが speech 観測などで起こされるケースがあるため、
         # to_run の filter は確実に必要。
         to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
-        if turn_gate is not None:
-            judged = [PlayerId(v) for v in to_run if v not in follow_ups]
-            woken = (
-                turn_gate.decide_wave(
-                    judged,
-                    scheduled=[PlayerId(v) for v in scheduled if v not in follow_ups],
-                )
-                if judged
-                else []
-            )
-            to_run = [v for v in to_run if v in follow_ups] + [pid.value for pid in woken]
-            if not to_run:
-                return
 
         cfg = getattr(runtime, "_runtime_config", None)
         workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)
@@ -381,7 +348,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         rescheduled = reason == FOLLOW_UP_REASON_SUCCEEDED
         if rescheduled:
             self.pending_player_ids.add(player_id_value)
-            self._own_action_follow_ups.add(player_id_value)
         self._record_trace(
             TraceEventKind.OWN_ACTION_FOLLOW_UP,
             player_id_value,

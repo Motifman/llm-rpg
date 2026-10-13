@@ -1,6 +1,6 @@
 {
   "profile": "station_drill_jev",
-  "description": "行動名・対象名の選び直しを Jev の型付き判断で行う観察用。station_drill_thinking との差は OPENROUTER_PROVIDER (GMICloud。Cloudflare の 1/4 の単価で tool_choice=required を満たし、Baidu の共有プール枯渇が無い) と TYPED_JUDGMENT_PROVIDER=jev の 2 つだけ。発言による起動判定 (TYPED_JUDGMENT_TURN_GATE_ENABLED) は入れない。",
+  "description": "行動名・対象名の選び直しを Jev の型付き判断で行う観察用。station_drill_thinking との差は OPENROUTER_PROVIDER (GMICloud。Cloudflare の 1/4 の単価で tool_choice=required を満たし、Baidu の共有プール枯渇が無い) と TYPED_JUDGMENT_PROVIDER=jev の 2 つだけ。",
   "scenario": "data/scenarios/station_drill.json",
   "max_world_ticks": 50,
   "snapshot_save": false,
