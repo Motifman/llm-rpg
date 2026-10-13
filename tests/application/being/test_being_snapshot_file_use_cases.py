@@ -49,14 +49,13 @@ def _make_environment():
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
-    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
     recall = InMemoryEpisodicRecallBufferStore()
     journal = InMemoryEpisodicReinterpretationJournalStore()
     episode = InMemorySubjectiveEpisodeStore()
-    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), goal_journal_store=InMemoryGoalJournalStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, recall_buffer_store=recall, reinterpretation_journal_store=journal, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
     restore = RestoreBeingSnapshotFromFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)

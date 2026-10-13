@@ -60,7 +60,7 @@
 | 10 | 話す手段 | **できる** | `speak` の `whisper` (同じ場所の 1 人)、`say` (隣接まで)、`shout` (2 つ先まで)、`say_inline`、SNS、市場の掲示板、場所の掲示 | `tool_catalog/spot_graph.py:213-253` | 届く範囲は engine 固定 (通路の `sound_permeability` だけ書ける)。**チームだけの連絡手段が無い** |
 | 11 | 取引・譲渡・約束 | **部分的** | `give_item`、条件つきの交換 `player_trade` (`offer_expires_in_ticks`)、商人、市場 | `L/parse_world.py:333-369` | **約束 (後払いなど) を記録し、守ったか判定する仕組みは無い** |
 | 12 | 複数人でしかできない行動 | **できる** | `synchronized_action_groups[]`、人数の前提条件 `PLAYERS_AT_SPOT` | `L/parse_sync_groups.py`。使用例: station_drill `restore_frozen_fuel` | 完了時の効果に行為者が居ない。協力した本人たちに品物を渡せない (推測: 全員に配られる) |
-| 13 | 本人だけの情報・目的 | **できる** | `players[]` の `persona_prompt`、`objective`、`goal_locked`、`initial_items`、`initial_state`、`knows_at_start` (入るときに紹介する相手。書かなければ全員)。`role_personas`。属性の `visibility` は `public` / `secret` | `L/parse_actors.py:78-111, 383-536` | 公開範囲は 2 択で、**チーム内だけに公開する属性**は書けない |
+| 13 | 本人だけの情報・目的 | **できる** | `players[]` の `persona_prompt`、`objective`、`initial_items`、`initial_state`、`knows_at_start` (入るときに紹介する相手。書かなければ全員)。`role_personas`。属性の `visibility` は `public` / `secret` | `L/parse_actors.py:78-111, 383-536` | 公開範囲は 2 択で、**チーム内だけに公開する属性**は書けない |
 
 ## C. チームと敵対
 

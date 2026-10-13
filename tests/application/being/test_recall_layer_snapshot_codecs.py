@@ -135,7 +135,6 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
             InMemoryEpisodicRecallBufferStore,
             InMemoryEpisodicReinterpretationJournalStore,
         )
-        from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
         from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
         from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
@@ -144,7 +143,7 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         slot = InMemoryEpisodicRecallSlotStore()
         afterglow = InMemoryAfterglowStore()
         habituation = InMemoryEpisodicRecallHabituationStore()
-        service = BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), goal_journal_store=InMemoryGoalJournalStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        service = BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         return (service, slot, afterglow, habituation)
 
     def test_capture_emits_new_payload_keys(self):
@@ -207,14 +206,3 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         assert slot.get_slot(BeingId('being-restored')) == ()
         assert afterglow.get_index(BeingId('being-restored')) == ()
 
-class TestGoalEntryCodec:
-    """P5: GoalEntry の snapshot codec round-trip。"""
-
-    def test_round_trip_preserves_goal_fields(self):
-        from datetime import datetime, timezone
-
-        from ai_rpg_world.application.being._memory_payload_codecs import dict_to_goal_entry, goal_entry_to_dict
-        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
-        original = GoalEntry(goal_id='goal-1', player_id=1, text='山頂で狼煙を上げて救助される', status='superseded', locked=True, origin='scenario', created_tick=12, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc), supersedes='goal-0')
-        restored = dict_to_goal_entry(goal_entry_to_dict(original))
-        assert restored == original

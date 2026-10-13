@@ -194,9 +194,6 @@ class TestExpectedPayloadKeysCoverage:
             InMemoryEpisodicRecallBufferStore,
             InMemoryEpisodicReinterpretationJournalStore,
         )
-        from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-            InMemoryGoalJournalStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
         )
@@ -244,7 +241,6 @@ class TestExpectedPayloadKeysCoverage:
             _aux_being_repository=repo,
             aux_being_resolver=BeingAttachmentResolver(repo),
             _episodic_stack=episodic_stack,
-            _goal_journal_store=InMemoryGoalJournalStore(),
             _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),

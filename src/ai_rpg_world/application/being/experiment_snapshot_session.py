@@ -255,19 +255,6 @@ def _empty_recall_success_store() -> Any:
     return InMemoryEpisodicRecallSuccessStore()
 
 
-def _empty_goal_journal_store() -> Any:
-    """P5 (目的層): snapshot 配線時に goal store が未配線 (= flag OFF) なら
-
-    空 in-memory store で代用する (checklist #27)。"""
-    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-        InMemoryGoalJournalStore,
-    )
-
-    return InMemoryGoalJournalStore()
-
-
-
-
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -461,12 +448,6 @@ class ExperimentSnapshotSession:
             getattr(wiring_result, "recall_success_store", None)
             or _empty_recall_success_store()
         )
-        # P5 (目的層): goal store も未配線なら空 in-memory store にフォール
-        # バックする (checklist #27)。
-        goal_journal_store = (
-            getattr(wiring_result, "goal_journal_store", None)
-            or _empty_goal_journal_store()
-        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
         # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
@@ -488,8 +469,6 @@ class ExperimentSnapshotSession:
                 "belief_evidence_buffer_store",
                 # U9b: 的中側 sidecar も同じ監視対象に入れる。
                 "recall_success_store",
-                # P5: goal store も同じ監視対象に入れる。
-                "goal_journal_store",
             )
             if getattr(wiring_result, name, None) is None
         ]
@@ -512,7 +491,6 @@ class ExperimentSnapshotSession:
             recall_habituation_store=recall_habituation_store,
             belief_evidence_buffer_store=belief_evidence_buffer_store,
             recall_success_store=recall_success_store,
-            goal_journal_store=goal_journal_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,
