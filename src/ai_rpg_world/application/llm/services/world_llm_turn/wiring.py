@@ -144,9 +144,6 @@ class WorldLlmWiring:
     #: で、trace で区別できなければ OFF の run と全件 fallback の run が同じに
     #: 見える。
     typed_judgment_port: ITypedJudgmentPort | None = None
-    #: tick の終わりに「いま動く必要があるか」を問う起動判定。profile が求めなければ None。
-    #: runtime_manager が typed_judgment_port から組んで差し込む。
-    turn_gate: Any | None = None
     #: 存在しない tool 名から意図した tool を意味で選ぶ口 (#1413)。
     #: typed_judgment_port から __post_init__ で組む。None なら文字の類似度だけで提案する。
     tool_name_rescue: ToolNameRescue | None = field(default=None, init=False)

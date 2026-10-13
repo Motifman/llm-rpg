@@ -5639,6 +5639,8 @@ trace の `turn_needed` に `scheduled` (pending に居たか) を足す。
 
 **関連**: #217 / #219 / #220 / #221。
 
+起動判定 (`TurnGate`、`TYPED_JUDGMENT_TURN_GATE_ENABLED` / `_SKIP_BELOW`) は、どの profile も入れていなかったので、記憶ではない設定の片付け (#1631) の #PRNUM で消した。219〜222 は判断の記録として残す。
+
 ## 223. 行動名の意味による救済を semantic-resolver へ委譲する
 
 **何を**: `ActionNameRescue` から `SemanticResolver.resolve` を呼び、対象ごとの
@@ -8118,6 +8120,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 - 移動中に手番を回さない守りは、手番の入口 (`_can_player_act`) と、この判断の `traveling` の 2 か所にある。入口だけでも行動は止まるので、`traveling` を外したときに落ちるのは trace の試験だけになる
 
 **関連**: Issue #1597 / #1595 / #1508、design_decisions 7 / 222 / D1595、agent_design_principles 2。
+
+自分の行動のあとに回した人を起動判定にかけない扱いは、起動判定と一緒に #PRNUM で消した (#1631)。手番を次の tick に回す決まりはそのまま残る。
 
 ---
 

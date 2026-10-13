@@ -141,8 +141,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_SEMANTIC_REPEAT_ENABLED",
     "TYPED_JUDGMENT_SEMANTIC_REPEAT_MIN_PROBABILITY",
     "TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW",
-    "TYPED_JUDGMENT_TURN_GATE_ENABLED",
-    "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "WORLD_TICK_FAILURE_POLICY",
@@ -207,11 +205,6 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_target_label_min_confidence: 対象の名前を置き換える閾値。
             行動名より高い (既定 0.85)
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
-        typed_judgment_turn_gate_enabled: tick の終わりに pending の全員へ「いま
-            動く必要があるか」を問う起動判定を挟む。**既定は off**。provider を jev に
-            しても起動判定は入らない (#222)。観察するときだけ明示的に true にする
-        typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
-            回さない。取りこぼしを避けるため小さく置く
         typed_judgment_loop_diagnosis_enabled: ループ警告の発火時に、繰り返しの
             理由を問うて文面を選ぶ (#1411)。**既定は off**。provider が off なら
             有効にしても入らない
@@ -274,8 +267,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_action_name_min_confidence: float
     typed_judgment_target_label_min_confidence: float
     typed_judgment_memo_min_probability: float
-    typed_judgment_turn_gate_enabled: bool
-    typed_judgment_turn_gate_skip_below: float
     typed_judgment_loop_diagnosis_enabled: bool
     typed_judgment_semantic_repeat_enabled: bool
     typed_judgment_semantic_repeat_min_probability: float
@@ -605,17 +596,6 @@ class ResolvedLlmRuntimeConfig:
             default=_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY,
         )
         try:
-            typed_judgment_turn_gate_enabled = _parse_truthy(
-                source.get("TYPED_JUDGMENT_TURN_GATE_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"TYPED_JUDGMENT_TURN_GATE_ENABLED: {exc}") from exc
-        typed_judgment_turn_gate_skip_below = _resolve_ratio_with_default(
-            source,
-            "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
-            default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW,
-        )
-        try:
             typed_judgment_loop_diagnosis_enabled = _parse_truthy(
                 source.get("TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED"), default=False
             )
@@ -822,8 +802,6 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_target_label_min_confidence
             ),
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
-            typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
-            typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
             typed_judgment_loop_diagnosis_enabled=typed_judgment_loop_diagnosis_enabled,
             typed_judgment_semantic_repeat_enabled=typed_judgment_semantic_repeat_enabled,
             typed_judgment_semantic_repeat_min_probability=(
@@ -933,10 +911,6 @@ class ResolvedLlmRuntimeConfig:
             ),
             typed_judgment_memo_min_probability=(
                 _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
-            ),
-            typed_judgment_turn_gate_enabled=False,
-            typed_judgment_turn_gate_skip_below=(
-                _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
             ),
             typed_judgment_loop_diagnosis_enabled=False,
             typed_judgment_semantic_repeat_enabled=False,
@@ -1078,10 +1052,6 @@ _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 #: 対象の名前を置き換える閾値。過去 run で正しく置き換えた 5 件の最小は確率 0.93 /
 #: 確信 0.89、誤った寄せは 0.8 台だった (scripts/jev_target_label_rescue_demo.py)。
 _DEFAULT_TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE = 0.85
-
-#: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の起動判定 (#217) で
-#: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
-_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 
 #: 過去 run の窓 20 件で測った (scripts/jev_semantic_repeat_demo.py)。繰り返しで
 #: ない窓の最大は 0.51 で、完全一致で拾えなかった繰り返し 10 件のうち 6 件が
