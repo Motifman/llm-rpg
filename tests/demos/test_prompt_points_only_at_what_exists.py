@@ -55,8 +55,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    GOAL_OUTCOME_FIELD_NAME,
-    GOAL_UPDATE_FIELD_NAME,
     SUBJECTIVE_ACTION_FIELD_PROPERTIES,
     assess_situation_definition,
 )
@@ -133,7 +131,6 @@ def _property_names(schema: Any) -> set[str]:
 def _argument_names_the_code_knows() -> set[str]:
     """どこかのツールが受け取りうる引数の名前。いま渡しているかは問わない。"""
     names = set(SUBJECTIVE_ACTION_FIELD_PROPERTIES)
-    names |= {GOAL_UPDATE_FIELD_NAME, GOAL_OUTCOME_FIELD_NAME}
     names |= _property_names(assess_situation_definition().parameters)
     for definition, _ in get_spot_graph_specs():
         names |= _property_names(definition.parameters)
@@ -142,11 +139,10 @@ def _argument_names_the_code_knows() -> set[str]:
 
 @pytest.fixture(scope="module", params=_SCENARIO_FILES)
 def captured(request) -> dict[str, Any]:
-    """実 run と同じく目的の改訂を有効にして、1 ターン目に渡す文面とツールを取る。"""
+    """1 ターン目に渡す文面とツールを取る。"""
     config = ResolvedLlmRuntimeConfig.for_tests(
         episodic_enabled=True,
         goal_store_enabled=True,
-        goal_revision_enabled=True,
     )
     runtime = create_world_runtime(_SCENARIOS / request.param, config=config)
     client = _PromptCaptureClient()
@@ -185,12 +181,6 @@ def _remediation_texts() -> list[str]:
 class TestPromptPointsOnlyAtWhatExists:
     """実際に組み立てたプロンプトが、実在しない見出し・名前・引数を指さない。"""
 
-    def test_the_tools_offer_goal_update_as_in_the_saved_run(self, captured) -> None:
-        """正の対照: 誤りが見つかった run と同じく goal_update を渡している。渡していないと引数名の確認が空振りする。"""
-        offered = _property_names([tool["function"]["parameters"] for tool in captured["tools"]])
-
-        assert GOAL_UPDATE_FIELD_NAME in offered
-
     def test_every_section_written_in_brackets_is_a_real_heading(self, captured) -> None:
         """system prompt とツールの説明が【】で指す節は、system prompt か続く文面に、その見出しで始まる行として在る。"""
         headings = _headings(captured)
@@ -223,12 +213,15 @@ class TestPromptPointsOnlyAtWhatExists:
         known = _argument_names_the_code_knows()
         referring_texts = [captured["system"], *captured["descriptions"]]
 
-        not_offered = {
+        mentioned = {
             word
             for text in referring_texts
             for word in _IDENTIFIER.findall(text)
-            if word in known and word not in offered
+            if word in known
         }
+        not_offered = mentioned - offered
+
+        assert mentioned, "引数名の参照を 1 つも拾えていない。検査が空振りしている"
 
         assert not_offered == set(), f"渡していない引数: {sorted(not_offered)}"
 

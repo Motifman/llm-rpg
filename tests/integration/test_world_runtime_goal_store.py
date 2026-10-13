@@ -134,27 +134,18 @@ class TestWorldRuntimeGoalStoreLongScenarioText:
 
 
 class TestWorldRuntimeGoalLockedByHasGoal:
-    """HIGH-3 回帰: seed の locked は _scenario_has_goal (勝敗条件の有無) に連動する。
-
-    以前は全シナリオで locked=True を固定していた。目的文なしの run は作れない
-    ため、どんな run でも goal_update / goal_outcome が 100% 拒否され、P6
-    (言い直し) / P8 (清算) の実効経路が存在しなかった。
-    """
+    """HIGH-3 回帰: seed の locked は _scenario_has_goal (勝敗条件の有無) に連動する。"""
 
     def test_player_outcome_rule_scenario_still_seeds_locked_true(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """survival_island_v2 は win/lose 配列が空で個人結果規則が
         勝敗を決める (罠: win/lose だけを見ると誤って unlocked と判定される)。
-        player_outcome_rules の有無を含めて判定することで、locked=True
-        (従来どおり goal_update / goal_outcome を拒否) を維持する。
+        player_outcome_rules の有無を含めて判定することで、locked=True を維持する。
         """
         runtime = create_world_runtime(
             _SURVIVAL_V2_PATH,
-            config=episodic_config(
-                goal_store_enabled=True,
-                goal_revision_enabled=True,
-            ),
+            config=episodic_config(goal_store_enabled=True),
         )
         # v2 は win/lose 配列が空 (個人結果規則駆動) であることの前提確認。
         assert runtime.scenario.win_conditions == ()
@@ -172,26 +163,13 @@ class TestWorldRuntimeGoalLockedByHasGoal:
         assert seeded is not None
         assert seeded.locked is True
 
-        # 従来どおり goal_update は拒否され、目的は書き換わらない。
-        runtime.apply_goal_update_if_present(
-            player_id, {"goal_update": "宝探しに切り替える"}
-        )
-        active = runtime._goal_journal_store.get_active_by_being(being_id)
-        assert active.goal_id == seeded.goal_id
-
-    def test_open_world_scenario_seeds_locked_false_and_allows_revision(
+    def test_open_world_scenario_seeds_locked_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """persistent_world_demo (勝敗条件なし) は locked=False で seed され、
-        goal_update (言い直し / P6) と goal_outcome のみでの清算 (無目的に戻り
-        「(まだ定まっていない)」描画 / P8) の両方が初めて実効的に通る。
-        """
+        """persistent_world_demo (勝敗条件なし) は locked=False で seed される。"""
         runtime = create_world_runtime(
             _PERSISTENT_WORLD_PATH,
-            config=episodic_config(
-                goal_store_enabled=True,
-                goal_revision_enabled=True,
-            ),
+            config=episodic_config(goal_store_enabled=True),
         )
         assert runtime.scenario.win_conditions == ()
         assert runtime.scenario.lose_conditions == ()
@@ -208,17 +186,3 @@ class TestWorldRuntimeGoalLockedByHasGoal:
         seeded = runtime._goal_journal_store.get_active_by_being(being_id)
         assert seeded is not None
         assert seeded.locked is False
-
-        # P6: goal_update で言い直せる (以前は locked=True で必ず拒否されていた)。
-        runtime.apply_goal_update_if_present(
-            player_id, {"goal_update": "灯台を修理する"}
-        )
-        active = runtime._goal_journal_store.get_active_by_being(being_id)
-        assert active.text == "灯台を修理する"
-        assert active.supersedes == seeded.goal_id
-
-        # P8: goal_outcome のみで無目的に戻り、未定表示になる。
-        runtime.apply_goal_update_if_present(player_id, {"goal_outcome": "achieved"})
-        assert runtime._goal_journal_store.get_active_by_being(being_id) is None
-        rendered = runtime._resolve_objective_via_goal_store(player_id, "")
-        assert "まだ定まっていない" in rendered

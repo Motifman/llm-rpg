@@ -13,7 +13,11 @@ from pathlib import Path
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from tests.runtime_config_helpers import belief_consolidation_config
 
 _SCENARIO_PATH = (
@@ -58,28 +62,45 @@ class TestMemoryTurnReaderWiring:
         }
 
     def test_evidence_takes_turn_advanced_on_the_runtime_counter(self) -> None:
-        """runtime の数え手でターン数を 3 進めると、そのあと転記した目的の達成の証拠は observed_turn=3 を持つ。"""
+        """runtime の数え手でターン数を 3 進めると、そのあと転記した約束の清算の証拠は observed_turn=3 を持つ。"""
         runtime = _runtime()
         being_id = BeingId("being_w1_p1")
         for _ in range(3):
             runtime._memory_turn_clock.advance_turn(being_id)
         transcriber = runtime._episodic_stack.chunk_coordinator._belief_evidence_transcriber
-        goal = GoalEntry(
-            goal_id="goal-1",
+        episode = SubjectiveEpisode(
+            episode_id="ep-1",
+            being_id=being_id,
             player_id=1,
-            text="山頂で狼煙を上げる",
-            status="active",
-            locked=False,
-            origin="scenario",
-            created_tick=0,
-            created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            game_time_label=None,
+            source=EpisodeSource(event_ids=("evt-1",)),
+            location=EpisodeLocation(spot_id=3),
+            action=EpisodeAction(tool_name="explore"),
+            who=(),
+            what="w",
+            why=None,
+            observed="o",
+            expected=None,
+            outcome="ok",
+            prediction_error=None,
+            felt=None,
+            interpreted=None,
+            cues=(),
+        )
+        pending = PendingPrediction(
+            pending_id="pending-1",
+            text="夕方に木の下でカイトと会う",
+            resolution_cues=("spot:3",),
+            tick_from=10,
+            tick_to=20,
+            origin_episode_id="ep-origin",
+            created_tick=10,
+            kind="promise",
         )
 
-        evidence = transcriber.record_goal_resolution(
-            being_id,
-            goal,
-            outcome="achieved",
-            occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        evidence = transcriber.record_pending_resolution(
+            being_id, episode, pending, verdict="broken"
         )
 
         assert evidence is not None

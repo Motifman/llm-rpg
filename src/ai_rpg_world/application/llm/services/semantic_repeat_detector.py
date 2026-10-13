@@ -45,10 +45,6 @@ from ai_rpg_world.application.llm.services.loop_guard_detectors import (
     RecordedAction,
     SemanticRepeat,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    GOAL_OUTCOME_FIELD_NAME,
-    GOAL_UPDATE_FIELD_NAME,
-)
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -56,9 +52,6 @@ logger = logging.getLogger(__name__)
 
 QUESTION_NAME = "semantic_repeat"
 
-# 目的の同乗フィールドは fingerprint に残るので、要約の表に無い tool では JSON の
-# まま state に出てしまう。
-_GOAL_FIELDS = frozenset({GOAL_UPDATE_FIELD_NAME, GOAL_OUTCOME_FIELD_NAME})
 _RESULT_MAX_CHARS = 200
 
 
@@ -83,7 +76,6 @@ def _summarize(action: RecordedAction) -> str:
         arguments = {}
     if not isinstance(arguments, dict):
         arguments = {}
-    arguments = {k: v for k, v in arguments.items() if k not in _GOAL_FIELDS}
     return format_action_summary_for_display(action.tool_name, arguments)
 
 

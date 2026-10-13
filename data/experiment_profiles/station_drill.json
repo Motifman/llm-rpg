@@ -45,7 +45,6 @@
     "RECALL_HIT_BOOST_ENABLED": true,
     "PENDING_PREDICTION_ENABLED": true,
     "GOAL_STORE_ENABLED": true,
-    "GOAL_REVISION_ENABLED": true,
     "GOAL_REFLECT_ENABLED": true,
     "REASON_FIRST_TWO_STEP_ENABLED": true,
     "PROMPT_SECTION_ORDER": "stable_to_volatile",

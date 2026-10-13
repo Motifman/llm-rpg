@@ -16,17 +16,16 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestAgentMoveFromToolCall:
-    """ツール呼び出しの引数から、予期・内心・目的の更新を 1 手の欄へ取り出す規則を保証する。"""
+    """ツール呼び出しの引数から、予期・内心を 1 手の欄へ取り出す規則を保証する。"""
 
     def test_subjective_arguments_move_to_their_own_fields(self) -> None:
-        """expected_result・inner_thought・goal_update は 1 手の欄へ移り、引数からは消える。"""
+        """expected_result・inner_thought は 1 手の欄へ移り、引数からは消える。"""
         move = agent_move_from_tool_call(
             "travel_to",
             {
                 "destination_label": "通信室",
                 "expected_result": "通信室に着く",
                 "inner_thought": "急ごう",
-                "goal_update": "計器を直す",
             },
             call_id="call-1",
         )
@@ -36,17 +35,16 @@ class TestAgentMoveFromToolCall:
         assert dict(move.arguments) == {"destination_label": "通信室"}
         assert move.expectation == "通信室に着く"
         assert move.inner_thought == "急ごう"
-        assert move.goal_update == "計器を直す"
 
     @pytest.mark.parametrize("blank", [None, "", "   "])
     def test_blank_subjective_argument_becomes_absent(self, blank: Any) -> None:
         """主観の引数が null や空文字なら、1 手の欄は None になる。"""
         move = agent_move_from_tool_call(
-            "wait", {"expected_result": blank, "goal_update": blank}, call_id="call-1"
+            "wait", {"expected_result": blank, "inner_thought": blank}, call_id="call-1"
         )
 
         assert move.expectation is None
-        assert move.goal_update is None
+        assert move.inner_thought is None
         assert dict(move.arguments) == {}
 
     def test_non_text_subjective_argument_is_rejected(self) -> None:
