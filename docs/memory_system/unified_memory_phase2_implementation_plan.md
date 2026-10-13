@@ -154,6 +154,8 @@
 
 ### P5 — goal store + provider 差し替え (挙動不変 PR)
 
+> P5 は、目的の保存先 (`GOAL_STORE_ENABLED`) として、記憶の部品の撤去 (#1631) の #1686 で消した。
+
 - 新規 `domain/memory/goal/`: `GoalEntry` VO
   { `goal_id` / `text` / `status` (active | achieved | abandoned |
   superseded) / `locked: bool` / `origin` (scenario | self) /

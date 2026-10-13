@@ -83,7 +83,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
     "END_ON_ALL_DOWN",
     "ESCAPE_LLM_SSOT",
-    "GOAL_STORE_ENABLED",
     "LLM_AFTERGLOW_CAPACITY",
     "LLM_AFTERGLOW_ENABLED",
     "LLM_AFTERGLOW_MAX_RESIDENCE",
@@ -361,7 +360,6 @@ class ResolvedLlmRuntimeConfig:
     pending_prediction_enabled: bool = False
 
     # Goal / stagnation 系。
-    goal_store_enabled: bool = False
 
     # Prompt / tool 表面。``tool_mode`` は TODO 系 tool の露出を切り替えるため、
     # 実験条件として trace に残す。``escape_llm_ssot_enabled`` は system prompt
@@ -500,7 +498,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_episodic_explore_related_enabled,
             resolve_episodic_recall_enabled,
             resolve_error_driven_reinterpretation_enabled,
-            resolve_goal_store_enabled,
             resolve_memo_tools_enabled,
             resolve_pending_prediction_enabled,
             resolve_recall_hit_boost_enabled,
@@ -755,7 +752,6 @@ class ResolvedLlmRuntimeConfig:
         )
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
         pending_prediction_enabled = resolve_pending_prediction_enabled(env=source)
-        goal_store_enabled = resolve_goal_store_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
         escape_llm_ssot_enabled = _parse_truthy(
             source.get("ESCAPE_LLM_SSOT"), default=False
@@ -876,7 +872,6 @@ class ResolvedLlmRuntimeConfig:
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
             pending_prediction_enabled=pending_prediction_enabled,
-            goal_store_enabled=goal_store_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
@@ -995,7 +990,6 @@ class ResolvedLlmRuntimeConfig:
             error_driven_reinterpretation_enabled=False,
             recall_hit_boost_enabled=False,
             pending_prediction_enabled=False,
-            goal_store_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,
             being_memo_enabled=False,

@@ -19,7 +19,6 @@ def _payload(**overrides: object) -> str:
     base: dict[str, object] = {
         "schema_version": 1,
         "memo": [],
-        "goal_journal": [],
         "belief_evidence_buffer": [],
         "recall_slot_entries": [],
         "recall_slot_cooldown": [],
@@ -81,17 +80,15 @@ class TestRestartWorldClockInPayload:
         assert out["recall_habituation_last_recalled"][0]["tick"] == 0
         assert report.reset_tick_fields == 4
 
-    def test_goal_and_belief_evidence_ticks_become_round_start(self) -> None:
-        """目的の作成 tick と信念の材料の tick は 0 になり、観測ターンは残る。"""
+    def test_belief_evidence_ticks_become_round_start(self) -> None:
+        """信念の材料の tick は 0 になり、観測ターンは残る。"""
         payload = _payload(
-            goal_journal=[{"goal_id": "g1", "created_tick": 40}],
             belief_evidence_buffer=[{"evidence_id": "b1", "tick": 70, "observed_turn": 12}],
         )
 
         out_json, _ = restart_world_clock_in_payload(payload)
 
         out = json.loads(out_json)
-        assert out["goal_journal"][0]["created_tick"] == 0
         assert out["belief_evidence_buffer"][0]["tick"] == 0
         assert out["belief_evidence_buffer"][0]["observed_turn"] == 12
 
@@ -173,16 +170,11 @@ class TestRestartedPayloadRestoresIntoStores:
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import RecallSlotEntry
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
-        from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 
         now = datetime(2026, 10, 10, tzinfo=timezone.utc)
         being = BeingId("ada")
         src = _make_service()
         src._memo.add_by_being(being, "井戸は北", current_tick=90)
-        src._goal_journal.add_by_being(
-            being,
-            GoalEntry(goal_id="g1", player_id=1, text="脱出する", status="active", locked=False, origin="self", created_tick=40, created_at=now),
-        )
         src._recall_slot.replace_all_by_being(being, [RecallSlotEntry(episode_id="e1", entered_tick=80)], {"e2": 120})
         src._afterglow.replace_all_by_being(
             being, [AfterglowEntry(episode_id="e3", heading="h", entered_tick=85, source=list(AfterglowSource)[0])]
@@ -200,12 +192,11 @@ class TestRestartedPayloadRestoresIntoStores:
         dst.restore(being, restarted)
 
         assert [m.added_at_tick for m in dst._memo.list_all_by_being(being)] == [0]
-        assert [g.created_tick for g in dst._goal_journal.list_all_by_being(being)] == [0]
         assert [e.entered_tick for e in dst._recall_slot.get_slot(being)] == [0]
         assert dst._recall_slot.get_cooldown_until(being) == {"e2": 0}
         assert [e.entered_tick for e in dst._afterglow.get_index(being)] == [0]
         assert dst._recall_habituation.list_all_by_being(being) == {"e4": 0}
         assert dst._pending_prediction.list_all_by_being(being) == []
         assert dst._acquaintance.list_by_being(being) == src._acquaintance.list_by_being(being)
-        assert report.reset_tick_fields == 6
+        assert report.reset_tick_fields == 5
         assert report.dropped_pending_predictions == 1

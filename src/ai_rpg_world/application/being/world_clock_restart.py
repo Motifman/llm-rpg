@@ -3,7 +3,7 @@
 新しい回の世界の tick は 0 から始まる。snapshot に世界の tick の絶対値が
 残ったまま書き戻すと、前の回の tick 90 の記録が新しい回の tick 5 より新しく
 見え、想起の枠や余韻が tick 90 を過ぎるまで居座る。負の値にずらす案は、
-``GoalEntry`` と ``PendingPrediction`` が負の tick を拒むので採らない。
+``PendingPrediction`` が負の tick を拒むので採らない。
 #1464 で記憶が世界の tick を持たなくなれば、このモジュールは要らなくなる。
 """
 
@@ -17,7 +17,6 @@ from typing import Any
 WORLD_TICK_FIELDS_BY_CODEC: dict[str, frozenset[str]] = {
     "memo_entry_to_dict": frozenset({"added_at_tick"}),
     "_fulfillment_to_dict": frozenset({"completed_at_tick"}),
-    "goal_entry_to_dict": frozenset({"created_tick"}),
     "recall_slot_entry_to_dict": frozenset({"entered_tick"}),
     "afterglow_entry_to_dict": frozenset({"entered_tick"}),
     "episode_tick_pair_to_dict": frozenset({"tick"}),
@@ -27,7 +26,6 @@ WORLD_TICK_FIELDS_BY_CODEC: dict[str, frozenset[str]] = {
 
 _RESET_TO_ROUND_START: dict[str, tuple[tuple[str, ...], ...]] = {
     "memo": (("added_at_tick",), ("fulfillment_context", "completed_at_tick")),
-    "goal_journal": (("created_tick",),),
     "belief_evidence_buffer": (("tick",),),
     "recall_slot_entries": (("entered_tick",),),
     "recall_slot_cooldown": (("tick",),),

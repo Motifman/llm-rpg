@@ -136,9 +136,6 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
-    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-        InMemoryGoalJournalStore,
-    )
     from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
         InMemoryPendingPredictionStore,
     )
@@ -172,8 +169,6 @@ def _build_stack(
         # U10a: CLI 経由の単発 dump では pending prediction も in-memory で
         # 足りる (的中側 sidecar と同じ扱い)。
         pending_prediction_store=InMemoryPendingPredictionStore(),
-        # P5: CLI 経由の単発 dump では goal store も in-memory で足りる。
-        goal_journal_store=InMemoryGoalJournalStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),

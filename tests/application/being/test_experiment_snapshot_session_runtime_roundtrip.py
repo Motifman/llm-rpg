@@ -35,7 +35,6 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
 )
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
@@ -59,7 +58,6 @@ def _snapshot_runtime_config() -> Any:
         episodic_enabled=True,
         semantic_passive_top_k=3,
         pending_prediction_enabled=True,
-        goal_store_enabled=True,
         belief_consolidation_enabled=True,
         belief_evidence_enabled=True,
     )
@@ -217,19 +215,6 @@ def _populate_runtime_state(runtime: Any) -> None:
             kind="plan",
         ),
     )
-    runtime._goal_journal_store.add_by_being(
-        being_id,
-        GoalEntry(
-            goal_id="goal-runtime-1",
-            player_id=player_id.value,
-            text="図書館から脱出する手がかりを見つける",
-            status="active",
-            locked=False,
-            origin="self",
-            created_tick=37,
-            created_at=_NOW,
-        ),
-    )
 
 
 def _world_snapshot_payload(runtime: Any, session: ExperimentSnapshotSession) -> dict[str, Any]:
@@ -337,5 +322,4 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
     assert being_payload["memo"][0]["content"] == "再開後も忘れてはいけない作業"
     assert being_payload["semantic_entries"][0]["entry_id"] == "sem-runtime-1"
     assert being_payload["pending_predictions"][0]["kind"] == "plan"
-    assert being_payload["goal_journal"][0]["goal_id"] == "goal-runtime-1"
     assert [a["name"] for a in being_payload["acquaintances"]] == ["リン"]
