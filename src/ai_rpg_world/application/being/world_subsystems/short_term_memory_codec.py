@@ -793,10 +793,11 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
 _AR_SUBSYSTEM_KEY = "action_result_store"
 # v2: expected_result 追加 (PR1)。v3: intention / emotion_hint 追加 (PR2a)。
 # v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
-# expected_result は #1631 で書くのをやめた。版は 5 のまま: restore は data.get で
-# 読むので、キーのある古い snapshot も、キーの無い新しい snapshot も同じ版で読める。
-# 旧 snapshot 互換は不要 (ユーザー判断)。restore は data.get で欠損を None/() に倒す
-# ため実害は出ないが、schema の意味変更を明示するため version を上げる。
+# v2〜v5 は、欠けたキーを data.get で None/() に倒せるので実害は無かったが、
+# 意味の変更を示すため版を上げた。
+# expected_result は #1631 で書くのをやめたが、版は 5 のまま据え置いた。版は完全一致で
+# 照合するので、上げるといまある snapshot が読めなくなる。キーのある古い snapshot は
+# restore が読み飛ばす。
 _AR_SCHEMA_VERSION = 5
 
 
