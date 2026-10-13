@@ -6523,6 +6523,8 @@ U9a / U9b) は外す (Issue #1443)。
 
 **その後**: 確定した予期を信念の材料・想起の手柄・区切りのメモに返す受け取る側は Issue #1631 で消した。古いエピソードの区切りの `prediction_error` は、外れを決める清算が無くなったので、いつも空になる。
 
+誤差駆動の再解釈 (`ERROR_DRIVEN_REINTERPRETATION_ENABLED`)、ずれを想起の記録に書き添える `stamp_prediction_outcome_for_episodes_by_being`、想起の記録の `prediction_outcome_error` と受け取り済みの出来事の ID も Issue #1631 で消した。Being の snapshot は `recall_buffer_received_event_ids` を書かなくなった。消す前の snapshot も読める。
+
 ## D1484. 予期の根拠は形と同じ呼び出しで 1 件ずつ問い、確定した当否は根拠にだけ返す
 
 **何を**: 予期を書いたターンの清算の呼び出し (design_decisions D1440) に、頭にあった信念と

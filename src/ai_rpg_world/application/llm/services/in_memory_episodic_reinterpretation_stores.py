@@ -4,18 +4,11 @@ Phase 3 Step 3d-3 (Issue #470): legacy player_id 版を撤去し、being_id 版�
 残した。
 
 横断レビュー H-3/M2 で ``InMemoryEpisodicRecallBufferStore`` のみ thread-safe
-化した。ThreadPool の chunk 補完ワーカーが外れを想起に刻む
-(``stamp_prediction_outcome_for_episodes_by_being``、list → replace の
-read-modify-write) 一方、メイン thread は ``prompt_builder`` /
-``episodic_reinterpretation_coordinator`` から append / peek / mark_processed を
-行うためで、#309 と同じ ``threading.RLock`` パターンで公開メソッド全体を保護する。
-刻む書き手は #1631 で消したので、いまはワーカーから呼ばれない。stamp と一緒に
-再解釈の段で消す。
-
-``InMemoryEpisodicReinterpretationJournalStore`` はこのワーカー thread から
-呼ばれる経路が無い (呼び出し元は ``episodic_reinterpretation_coordinator`` /
-``belief_consolidation_coordinator`` 経由でメイン thread のみ) ため、今回は
-lock 化の対象外とする。
+化した (#309 と同じ ``threading.RLock`` パターンで公開メソッド全体を保護する)。
+lock を要した ThreadPool のワーカーからの書き込み (外れを想起に刻む stamp) は
+#1631 で消したので、いまの呼び出し元は ``prompt_builder`` /
+``episodic_reinterpretation_coordinator`` のメイン thread だけになった。store
+ごと再解釈の段で消す。
 """
 
 from __future__ import annotations
@@ -55,7 +48,6 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
 
     def __init__(self) -> None:
         self._pending: dict[BeingId, list[EpisodicRecallObservation]] = defaultdict(list)
-        self._received_event_ids: dict[BeingId, list[str]] = {}
         # 公開メソッド全体を 1 つの RLock で保護する (#309 と同じ粒度、理由は
         # module docstring)。
         self._lock = threading.RLock()
@@ -134,57 +126,6 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
                 )
         with self._lock:
             self._pending[being_id] = list(observations)
-
-    def stamp_prediction_outcome_for_episodes_by_being(
-        self,
-        being_id: BeingId,
-        episode_ids: tuple[str, ...],
-        prediction_error: str,
-        *,
-        event_id: str,
-    ) -> int | None:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if not isinstance(prediction_error, str) or not prediction_error.strip():
-            raise ValueError("prediction_error must be a non-empty str")
-        if not isinstance(event_id, str) or not event_id.strip():
-            raise ValueError("event_id must be a non-empty str")
-        targets = set(episode_ids)
-        with self._lock:
-            received = self._received_event_ids.setdefault(being_id, [])
-            if event_id in received:
-                return None
-            stamped = 0
-            updated: list[EpisodicRecallObservation] = []
-            for row in self._pending.get(being_id, []):
-                if row.episode_id in targets and row.prediction_outcome_error is None:
-                    row = replace(row, prediction_outcome_error=prediction_error)
-                    stamped += 1
-                updated.append(row)
-            self._pending[being_id] = updated
-            received.append(event_id)
-            return stamped
-
-    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        with self._lock:
-            return list(self._received_event_ids.get(being_id, ()))
-
-    def replace_received_event_ids_by_being(
-        self, being_id: BeingId, event_ids: list[str]
-    ) -> None:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if not isinstance(event_ids, list) or not all(
-            isinstance(e, str) and e.strip() for e in event_ids
-        ):
-            raise TypeError("event_ids must be list of non-empty str")
-        with self._lock:
-            if event_ids:
-                self._received_event_ids[being_id] = list(dict.fromkeys(event_ids))
-            else:
-                self._received_event_ids.pop(being_id, None)
 
 class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJournalRepository):
     """Being ごとに再解釈履歴と active pointer を保持する。"""

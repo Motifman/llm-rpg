@@ -252,7 +252,6 @@ class BeingMemorySnapshotService:
         # 戻さないと再開した run で配り直された出来事を積み直す。
         "belief_evidence_received_event_ids",
         "recall_success_received_event_ids",
-        "recall_buffer_received_event_ids",
         "memory_turn",
         "acquaintances",
         "being_episodes",
@@ -420,9 +419,6 @@ class BeingMemorySnapshotService:
             "recall_success_received_event_ids": (
                 self._recall_success.list_received_event_ids_by_being(being_id)
             ),
-            "recall_buffer_received_event_ids": (
-                self._recall_buffer.list_received_event_ids_by_being(being_id)
-            ),
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
@@ -572,10 +568,6 @@ class BeingMemorySnapshotService:
             payload["recall_success_received_event_ids"],
             "recall_success_received_event_ids",
         )
-        recall_buffer_received = _decode_received_event_ids(
-            payload["recall_buffer_received_event_ids"],
-            "recall_buffer_received_event_ids",
-        )
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
             isinstance(v, int) and not isinstance(v, bool) and v > 0
@@ -649,9 +641,6 @@ class BeingMemorySnapshotService:
         )
         self._recall_success.replace_received_event_ids_by_being(
             being_id, recall_success_received
-        )
-        self._recall_buffer.replace_received_event_ids_by_being(
-            being_id, recall_buffer_received
         )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)

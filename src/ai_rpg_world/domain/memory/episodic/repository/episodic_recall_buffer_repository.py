@@ -83,32 +83,4 @@ class EpisodicRecallBufferRepository(ABC):
         呼び出しは想定しない。
         """
 
-    @abstractmethod
-    def stamp_prediction_outcome_for_episodes_by_being(
-        self,
-        being_id: BeingId,
-        episode_ids: tuple[str, ...],
-        prediction_error: str,
-        *,
-        event_id: str,
-    ) -> int | None:
-        """確定して外れた予期のずれを、それを持ったときに思い出していた episode
-
-        の pending observation 群に刻み、その出来事の ID を受け取り済みにする (#1443)。
-
-        2 つは同じ保存の単位で書く (#1479)。刻んだ observation の件数を返す。
-        想起が再解釈で処理済みなら 0 件になりうる。受け取り済みの ID なら何も
-        刻まずに None を返す。既に刻まれた observation は上書きしない。
-        """
-
-    @abstractmethod
-    def list_received_event_ids_by_being(self, being_id: BeingId) -> list[str]:
-        """受け取り済みの出来事の ID を受け取った順に返す。snapshot の capture 用。"""
-
-    @abstractmethod
-    def replace_received_event_ids_by_being(
-        self, being_id: BeingId, event_ids: list[str]
-    ) -> None:
-        """受け取り済みの出来事の ID を置き換える。snapshot の restore 用。"""
-
 __all__ = ["EpisodicRecallBufferRepository"]

@@ -7532,24 +7532,13 @@ def create_world_runtime(
             log_belief_attribution_enabled_state,
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
-            log_error_driven_reinterpretation_enabled_state,
             log_recall_hit_boost_enabled_state,
             log_unconscious_context_enabled_state,
         )
 
         _belief_evidence_enabled = config.belief_evidence_enabled
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default OFF): 外れを想起に
-        # 刻む書き手は #1631 で消したので、stamp 対象の recall observation は無く
-        # 安全に縮退する。
-        _error_driven_reinterpretation_enabled = (
-            config.error_driven_reinterpretation_enabled
-        )
-        log_error_driven_reinterpretation_enabled_state(
-            _error_driven_reinterpretation_enabled
-        )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): U9a と
-        # 対称に、的中側 (思い出したから当たった) を recall ranking boost に
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): 的中側 (思い出したから当たった) を recall ranking boost に
         # 還流する。的中を数える書き手は #1631 で消したので、record_hit は
         # 行われず安全に縮退する。
         # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
@@ -7897,10 +7886,6 @@ def create_world_runtime(
             ),
             # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
             belief_attribution_enabled=_belief_attribution_enabled,
-            # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
-            error_driven_reinterpretation_enabled=(
-                _error_driven_reinterpretation_enabled
-            ),
             # U9b (想起の信用割り当て・的中側): 的中側 sidecar を作り、
             # passive_recall の順位に使う。回数を足す書き手は #1631 で消した。
             recall_hit_boost_enabled=_recall_hit_boost_enabled,

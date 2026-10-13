@@ -401,11 +401,6 @@ def build_episodic_stack(
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のとき固着の
     # prompt に CONFIRMATION 節を足す (BeliefConsolidationCoordinator に渡す)。
     belief_attribution_enabled: bool = False,
-    # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
-    # True のとき reinterpretation_coordinator が、外れの刻まれた想起を誤差専用
-    # framing で再解釈する。外れを刻む書き手は #1631 で消したので、刻まれた
-    # 想起は無く安全に縮退する。
-    error_driven_reinterpretation_enabled: bool = False,
     # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default False =
     # flag OFF): True のとき的中側 sidecar store を構築し、passive_recall の
     # multi_cue_score に的中の回数ぶんの boost を加算する。的中を数える書き手
@@ -540,9 +535,6 @@ def build_episodic_stack(
     # coordinator を直接構築する。escape は chunk_coordinator を既に上で持つので、
     # chunk_coordinator も束ねる汎用 stack builder は使わず、再解釈に必要な 3 点だけを
     # 組む (semantic とは独立 = mem_bundle 不要)。
-    # U9a (誤差駆動再解釈): chunk_coordinator が完了点で recall_buffer に
-    # prediction_error を刻めるよう、chunk_coordinator 構築より先にここで
-    # recall_buffer を確定させる (旧配置は chunk_coordinator の後だった)。
     reinterpretation_coordinator: Any | None = None
     reinterpretation_journal: Any | None = None
     prompt_recall_buffer: Any | None = None
@@ -565,9 +557,6 @@ def build_episodic_stack(
             recall_buffer_store=recall_buffer,
             journal_store=reinterpretation_journal,
             completion=reinterpretation_completion,
-            # U9a: flag OFF (既定) なら system prompt / payload は導入前と
-            # byte 一致 (coordinator 側で保証)。
-            error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
         )
         # prompt が recall buffer を覗くのは completion が有効なときだけ。completion が
         # None だと再解釈 LLM が走らず buffer が pending を溜め続けるだけなので、
