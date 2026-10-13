@@ -339,10 +339,6 @@ from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-    resolve_stagnation_pressure_band,
-)
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, SpeechChannel
@@ -669,9 +665,6 @@ class WorldRuntime:
     # OFF なら None (【現在の目的】は従来の静的シナリオ文字列で描画)。
     # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
     _goal_journal_store: Any | None = field(default=None, repr=False)
-    # P-U2 (停滞感 store): reflect verdict の畳み込み先カウンタ store。
-    # 実験 snapshot stub (_wiring_stub_from_world_runtime) がここから拾う。
-    _stagnation_pressure_store: Any | None = field(default=None, repr=False)
     # #1631: Being ごとの記憶のターン数。1 手ごとに進め、記憶にターン数を付ける
     # 部品はここから読む。あとから代入し直すと、先に組んだ部品だけが古い時計を
     # 読み続ける。
@@ -5767,54 +5760,6 @@ def create_world_runtime(
     def _resolve_entity_name(entity_id: int) -> str:
         return player_name_map.get(entity_id, f"プレイヤー({entity_id})")
 
-    # P-U3/P-U4 (停滞感の表出): 自己・他者の両方が共有する 1 本の provider。
-    # ``runtime`` / ``runtime._stagnation_pressure_store`` は本関数の後段で
-    # 構築される (state_builder は runtime インスタンス生成より前に組み立てる
-    # 既存の配線順)。closure は呼び出し時に free variable ``runtime`` を
-    # enclosing scope から遅延解決するので、実際に snapshot が build される
-    # 時点 (= create_world_runtime 完了後のリクエスト処理中) には
-    # ``runtime._aux_being_resolver`` / ``runtime._stagnation_pressure_store``
-    # は解決済みになっている。
-    #
-    # STAGNATION_PRESSURE_ENABLED が OFF のときは
-    # ``runtime._stagnation_pressure_store`` が None のままなので、この
-    # provider は常に none を返す (= 導入前とプロンプト完全一致)。
-    # episodic pipeline 自体が OFF (LLM_EPISODIC_ENABLED=0) で
-    # ``_aux_being_resolver`` が未構築の経路も同様に none へ縮退する。
-    #
-    # 呼び出し対象は自分自身 (P-U3) だけでなく builder の nearby ループが
-    # 引く他 player (P-U4) も含むため、関数名は「自己」に限定しない
-    # (旧名 ``_resolve_own_stagnation_band`` は誤解を招くため改名した)。
-    #
-    # store は組めているのに being が未解決 (= resolve_being_id が None) の
-    # ケースは、player が being に未 attach 等で正当に起こりうる一方、配線
-    # 漏れでも同じ none 縮退になり見分けが付かない。ログが無いと「停滞感が
-    # 永久に出ない」を「前進中で count==0」と区別できず、この機能が守りたい
-    # 「静かな失敗を弾く」という方針に反するので、player_id ごとに 1 回だけ
-    # 診断用の warning を残す (毎 tick 溢れさせないためのスロットル)。
-    # store 自体が None (= 機能無効) のときは何も出さない。
-    _stagnation_being_unresolved_warned: set[int] = set()
-
-    def _resolve_stagnation_band_for_player(player_id: int) -> str:
-        resolver = getattr(runtime, "_aux_being_resolver", None)
-        world_id = getattr(runtime, "_aux_being_default_world_id", None)
-        store = getattr(runtime, "_stagnation_pressure_store", None)
-        if resolver is None or world_id is None or store is None:
-            return STAGNATION_PRESSURE_BAND_NONE
-        being_id = resolver.resolve_being_id(world_id, PlayerId(player_id))
-        if being_id is None:
-            if player_id not in _stagnation_being_unresolved_warned:
-                _stagnation_being_unresolved_warned.add(player_id)
-                logger.warning(
-                    "stagnation_band_provider: player_id=%s に attach 済みの "
-                    "being が見つからず band は none に縮退する "
-                    "(この player については以後再警告しない)",
-                    player_id,
-                )
-            return STAGNATION_PRESSURE_BAND_NONE
-        count = store.get_by_being(being_id)
-        return resolve_stagnation_pressure_band(count)
-
     def _resolve_item_state(item_instance_id_value: int) -> dict[str, Any] | None:
         """Phase D-3a: instance_id から state dict を引く軽量 resolver。
 
@@ -6161,7 +6106,6 @@ def create_world_runtime(
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
         minutes_per_tick=_minutes_per_tick(scenario),
-        stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
         distant_cues=scenario.distant_cues,
         # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
@@ -7842,32 +7786,6 @@ def create_world_runtime(
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
     )
-    # 敵対的レビュー HIGH 1: 「episodic を前提にする機能群」の fail-fast を親 gate の
-    # 外に出す。P-U1 (GOAL_STAGNATION_EVIDENCE) / P-U2 (STAGNATION_PRESSURE) は
-    # いずれも episodic pipeline (固着パス / 停滞感 store) の内側でしか配線されない。従来これらの相互ガードは
-    # `if config.episodic_enabled:` の内側にあったため、LLM_EPISODIC_ENABLED を
-    # 立て忘れたまま各 flag を ON にすると、ブロックごと skip されて fail-fast すら
-    # 走らず「flag は立てたのに機能が一生動かず警告も出ない」静かな失敗になっていた
-    # (本 PR 群が売りにする「起動時 fail-fast」に正面から反する)。episodic 前提の
-    # flag が 1 つでも ON なら、親 gate に入る前にここで LLM_EPISODIC_ENABLED を要求
-    # して落とす。
-    if not config.episodic_enabled:
-        _episodic_dependent_flags = {
-            "GOAL_STAGNATION_EVIDENCE_ENABLED": (
-                config.goal_stagnation_evidence_enabled
-            ),
-            "STAGNATION_PRESSURE_ENABLED": config.stagnation_pressure_enabled,
-        }
-        _on_but_orphaned = [
-            name for name, enabled in _episodic_dependent_flags.items() if enabled
-        ]
-        if _on_but_orphaned:
-            raise ValueError(
-                f"{', '.join(_on_but_orphaned)}=1 だが LLM_EPISODIC_ENABLED が OFF の"
-                "ため episodic pipeline (固着パス / 停滞感 store / 熟考ラッチ) が丸ごと"
-                "構築されず、これらの機能が一生動かない (静かな失敗)。"
-                "LLM_EPISODIC_ENABLED=1 も設定してください。"
-            )
     # prompt dataset は記憶機能ではないが、各行へ安定した being_id を保存する。
     # episodic の親 gate に入れると lean profile では最初の LLM 呼び出しまで
     # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
@@ -7954,50 +7872,15 @@ def create_world_runtime(
         # P4 (reflect): 固着パスに目的への前進評価を足すか。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             log_goal_reflect_enabled_state,
-            log_goal_stagnation_evidence_enabled_state,
-            log_stagnation_pressure_enabled_state,
         )
 
         _goal_reflect_enabled = config.goal_reflect_enabled
         log_goal_reflect_enabled_state(_goal_reflect_enabled)
-        # P-U1 (目的停滞の evidence 化): reflect の stalled/misaligned verdict を
-        # goal: 軸の evidence に変換するか。
-        _goal_stagnation_evidence_enabled = config.goal_stagnation_evidence_enabled
-        log_goal_stagnation_evidence_enabled_state(_goal_stagnation_evidence_enabled)
-        # P-U2 (停滞感 store): reflect verdict を停滞感カウンタに畳み込むか。
-        _stagnation_pressure_enabled = config.stagnation_pressure_enabled
-        log_stagnation_pressure_enabled_state(_stagnation_pressure_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
         # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
         # どちらか一方でも ON なら buffer store 自体は作る。
         _belief_consolidation_enabled = config.belief_consolidation_enabled
         log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
-        # 敵対的レビュー HIGH-1 fail-fast: P-U1 (goal_stagnation_evidence) /
-        # P-U2 (stagnation_pressure) はどちらも BeliefConsolidationCoordinator
-        # (固着パス) 経由でしか動かないが、その coordinator 自体は
-        # belief_consolidation_enabled が ON のときしか構築されない
-        # (episodic_stack.py の `if belief_consolidation_enabled and
-        # belief_evidence_buffer_store is not None` 分岐)。coordinator
-        # コンストラクタ内の fail-fast (goal_reflect_enabled 必須等) は
-        # coordinator が実際に構築されたときにしか働かないため、それより前の
-        # ここで相互ガードしないと「flag を ON にしたのに coordinator が
-        # 一度も作られず、カウンタも evidence 化も一生 0 のまま、警告すら出ない」
-        # 静かな失敗になる (本 PR 群が売りにする「起動時 fail-fast で弾く」に
-        # 正面から反する)。
-        if _goal_stagnation_evidence_enabled and not _belief_consolidation_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED "
-                "が OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
-                "reflect の stalled/misaligned verdict を evidence 化する経路が丸ごと"
-                "動かない (静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
-            )
-        if _stagnation_pressure_enabled and not _belief_consolidation_enabled:
-            raise ValueError(
-                "STAGNATION_PRESSURE_ENABLED=1 だが BELIEF_CONSOLIDATION_ENABLED が "
-                "OFF のため固着パス (BeliefConsolidationCoordinator) が構築されず、"
-                "reflect verdict を停滞感カウンタに畳み込む経路が丸ごと動かない "
-                "(静かな失敗)。BELIEF_CONSOLIDATION_ENABLED=1 も設定してください。"
-            )
         # U7 (予測誤差統一設計 / 無意識コンテキスト / default OFF): belief top-K +
         # L5 を chunk 主観補完 LLM に渡すか。他 flag と独立 (evidence buffer は
         # 使わない = 読み取り専用の追加コンテキストなので buffer store 条件には
@@ -8101,17 +7984,6 @@ def create_world_runtime(
                 # P8: goal 清算の転記も同じ transcriber が担う。上で先に構築した
                 # GoalRevisionApplier の遅延 holder をここで埋める。
                 _goal_settlement_transcriber_holder[0] = belief_evidence_transcriber
-        # P-U2 (停滞感 store): ON のときだけ in-memory store を構築し、
-        # BeliefConsolidationCoordinator に注入する。runtime に保持するのは
-        # snapshot stub (_wiring_stub_from_world_runtime) から拾えるように
-        # するため (checklist #27。goal_journal_store と同じ扱い)。
-        runtime._stagnation_pressure_store = None
-        if _stagnation_pressure_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
-                InMemoryStagnationPressureStore,
-            )
-
-            runtime._stagnation_pressure_store = InMemoryStagnationPressureStore()
         if config.episodic_subjective_enabled:
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
@@ -8437,13 +8309,6 @@ def create_world_runtime(
             goal_reflect_enabled=_goal_reflect_enabled,
             objective_text_provider=runtime._reflect_objective_provider,
             reflect_observation_sink=runtime._emit_reflect_observation,
-            # P-U1 (目的停滞の evidence 化): ON のときだけ stalled/misaligned の
-            # reflect verdict を goal: 軸の高 salience evidence に変換する。
-            goal_stagnation_evidence_enabled=_goal_stagnation_evidence_enabled,
-            # P-U2 (停滞感 store): ON のときだけ reflect verdict を停滞感カウンタ
-            # に畳み込む。store は上で構築済み (runtime._stagnation_pressure_store)。
-            stagnation_pressure_enabled=_stagnation_pressure_enabled,
-            stagnation_pressure_store=runtime._stagnation_pressure_store,
             # U9a (誤差駆動再解釈): 再解釈 coordinator に誤差専用の framing を使わせる。
             error_driven_reinterpretation_enabled=(
                 _error_driven_reinterpretation_enabled

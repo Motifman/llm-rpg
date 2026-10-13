@@ -74,6 +74,8 @@ reflect は設計上わざと弱い。プロンプト指示 (`belief_consolidati
 
 ## 3. 案1 (中核・合意済み) — 目的に自動の鼓動誤差を与える
 
+> 案1 (`GOAL_STAGNATION_EVIDENCE_ENABLED`。停滞の振り返りを `goal:` 軸の信念の証拠にする部品) は、記憶の部品の撤去 (#1631) の #1663 で消した。
+
 現状の G4 は自己申告清算 (`goal_outcome`) だが、
 [goal_layer_design_active_inference.md](./goal_layer_design_active_inference.md) §2/§4.4 の
 原案は「**目的を選好的 pending prediction として保持し、期限で自動清算**」だった。これを起動する。
@@ -96,6 +98,8 @@ reflect は設計上わざと弱い。プロンプト指示 (`belief_consolidati
 自発依存) に頼らないので、快適なループでも確実に鳴る。
 
 ## 4. 案2 (併走・レビュー中) — 蓄積する停滞感
+
+> 案2 の停滞感 (`STAGNATION_PRESSURE_ENABLED`。数え方、snapshot、本人と他者への表示) は、記憶の部品の撤去 (#1631) の #1661 で消した。
 
 案1 は無意識・客観・遅い経路 (belief を直す)。それだけでは、行動ターンの LLM が
 **その瞬間に**ギャップを感じる仕組みがない。案2 は意識・主観・速い経路を足す。

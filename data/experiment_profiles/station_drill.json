@@ -47,8 +47,6 @@
     "GOAL_STORE_ENABLED": true,
     "GOAL_REVISION_ENABLED": true,
     "GOAL_REFLECT_ENABLED": true,
-    "GOAL_STAGNATION_EVIDENCE_ENABLED": true,
-    "STAGNATION_PRESSURE_ENABLED": true,
     "REASON_FIRST_TWO_STEP_ENABLED": true,
     "PROMPT_SECTION_ORDER": "stable_to_volatile",
     "LLM_TOOL_MODE": "default",

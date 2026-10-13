@@ -85,7 +85,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "ESCAPE_LLM_SSOT",
     "GOAL_REFLECT_ENABLED",
     "GOAL_REVISION_ENABLED",
-    "GOAL_STAGNATION_EVIDENCE_ENABLED",
     "GOAL_STORE_ENABLED",
     "LLM_AFTERGLOW_CAPACITY",
     "LLM_AFTERGLOW_ENABLED",
@@ -136,7 +135,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SHORT_TERM_MEMORY_SCHEDULER_MODE",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
-    "STAGNATION_PRESSURE_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
@@ -370,8 +368,6 @@ class ResolvedLlmRuntimeConfig:
     goal_store_enabled: bool = False
     goal_revision_enabled: bool = False
     goal_reflect_enabled: bool = False
-    goal_stagnation_evidence_enabled: bool = False
-    stagnation_pressure_enabled: bool = False
 
     # Prompt / tool 表面。``tool_mode`` は TODO 系 tool の露出を切り替えるため、
     # 実験条件として trace に残す。``escape_llm_ssot_enabled`` は system prompt
@@ -459,22 +455,6 @@ class ResolvedLlmRuntimeConfig:
                 "BEING_MEMO_ENABLED=1 requires MEMO_TOOLS_ENABLED=false "
                 "(メモを書く口と【進行中のメモ】【メモ】が 2 つずつ並ぶ)"
             )
-        if (
-            self.goal_stagnation_evidence_enabled or self.stagnation_pressure_enabled
-        ) and not self.belief_consolidation_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 / "
-                "STAGNATION_PRESSURE_ENABLED=1 require "
-                "BELIEF_CONSOLIDATION_ENABLED=1"
-            )
-        if (
-            self.goal_stagnation_evidence_enabled
-            or self.stagnation_pressure_enabled
-        ) and not self.episodic_enabled:
-            raise ValueError(
-                "GOAL_STAGNATION_EVIDENCE_ENABLED=1 / "
-                "STAGNATION_PRESSURE_ENABLED=1 require LLM_EPISODIC_ENABLED=1"
-            )
         # SUBJECTIVE_EPISODE_DB_PATH は episode store が組まれる経路でしか意味を
         # 持たない。episodic OFF では store 自体を作らず、subjective 経路は
         # (scheduler と共有する都合で) 常に in-memory を使うため、どちらの場合も
@@ -528,7 +508,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_error_driven_reinterpretation_enabled,
             resolve_goal_reflect_enabled,
             resolve_goal_revision_enabled,
-            resolve_goal_stagnation_evidence_enabled,
             resolve_goal_store_enabled,
             resolve_memo_tools_enabled,
             resolve_pending_prediction_enabled,
@@ -540,7 +519,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_short_term_memory_kind,
             resolve_short_term_memory_scheduler_mode,
             resolve_short_term_memory_turn_window,
-            resolve_stagnation_pressure_enabled,
             resolve_unconscious_context_enabled,
         )
 
@@ -790,10 +768,6 @@ class ResolvedLlmRuntimeConfig:
         goal_store_enabled = resolve_goal_store_enabled(env=source)
         goal_revision_enabled = resolve_goal_revision_enabled(env=source)
         goal_reflect_enabled = resolve_goal_reflect_enabled(env=source)
-        goal_stagnation_evidence_enabled = resolve_goal_stagnation_evidence_enabled(
-            env=source
-        )
-        stagnation_pressure_enabled = resolve_stagnation_pressure_enabled(env=source)
         tool_mode = _resolve_tool_mode(source)
         escape_llm_ssot_enabled = _parse_truthy(
             source.get("ESCAPE_LLM_SSOT"), default=False
@@ -918,8 +892,6 @@ class ResolvedLlmRuntimeConfig:
             goal_store_enabled=goal_store_enabled,
             goal_revision_enabled=goal_revision_enabled,
             goal_reflect_enabled=goal_reflect_enabled,
-            goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
-            stagnation_pressure_enabled=stagnation_pressure_enabled,
             tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
@@ -1042,8 +1014,6 @@ class ResolvedLlmRuntimeConfig:
             goal_store_enabled=False,
             goal_revision_enabled=False,
             goal_reflect_enabled=False,
-            goal_stagnation_evidence_enabled=False,
-            stagnation_pressure_enabled=False,
             tool_mode="default",
             memo_tools_enabled=True,
             being_memo_enabled=False,

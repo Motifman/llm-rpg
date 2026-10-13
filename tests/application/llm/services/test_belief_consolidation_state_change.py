@@ -555,35 +555,3 @@ class TestConsolidationTraceShowsTurnsAndActions:
         assert decision["action"] == "explain_change"
         assert decision["belief_id"] == "sem-depleted"
         assert decision["change_belief_id"] == change.belief_id
-
-
-class TestGoalStagnationEvidenceObservedTurn:
-    """固める処理が自分で積む目的の停滞の証拠にも、記憶のターン数が残ることを保証する。"""
-
-    def test_goal_stagnation_evidence_carries_current_memory_turn(self) -> None:
-        """記憶のターン数が 25 のときに停滞を証拠にすると、その証拠の observed_turn は 25 になる。"""
-        evidence_buffer = InMemoryBeliefEvidenceBufferStore()
-        coordinator = BeliefConsolidationCoordinator(
-            evidence_buffer_store=evidence_buffer,
-            semantic_store=InMemorySemanticMemoryStore(),
-            completion=_FakePort(
-                {
-                    "decisions": [
-                        {"action": "discard", "evidence_ids": ["e1"], "reason": "x"},
-                        {"action": "reflect", "verdict": "stalled", "statement": "空回りしている"},
-                    ]
-                }
-            ),
-            memory_turn_reader=FixedMemoryTurnReader(25),
-            goal_reflect_enabled=True,
-            objective_text_provider=lambda _pid: "山頂の狼煙台に火を灯す",
-            reflect_observation_sink=lambda *_a: None,
-            goal_stagnation_evidence_enabled=True,
-        )
-        evidence_buffer.append_by_being(_BEING, _evidence("e1", observed_turn=3))
-
-        coordinator.flush_player(_PLAYER, _BEING)
-
-        [goal_evidence] = evidence_buffer.list_all_by_being(_BEING)
-        assert goal_evidence.cue_signature.startswith("goal:")
-        assert goal_evidence.observed_turn == 25

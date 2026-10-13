@@ -264,11 +264,6 @@ class EpisodicStack:
     # 唯一の書き込み経路として動く。未注入時は evidence buffer に証拠だけが
     # 溜まり続ける (= U2 までの挙動)。
     belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
-    # P-U2 (停滞感 store / default None = flag OFF 相当): reflect verdict の
-    # 畳み込み先カウンタ store。belief_evidence_buffer_store と同様、実体は
-    # 呼び出し側 (world_runtime.py) が構築して注入し、ここには snapshot 用に
-    # 参照だけ公開する。
-    stagnation_pressure_store: Any | None = None
     # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default off): 的中側
     # sidecar (default None = flag OFF 相当)。enable 時に in-memory store を
     # 構築し、chunk_coordinator / passive_recall / prompt_builder (書込みは
@@ -428,18 +423,6 @@ def build_episodic_stack(
     goal_reflect_enabled: bool = False,
     objective_text_provider: Any | None = None,
     reflect_observation_sink: Any | None = None,
-    # P-U1 (目的停滞の evidence 化 / default False = flag OFF): True のとき
-    # reflect の stalled/misaligned verdict を goal: 軸の高 salience
-    # PREDICTION_ERROR evidence として buffer に積む。goal_reflect_enabled が
-    # False だと reflect 自体が発火しないため、coordinator 側で組み合わせ
-    # 不整合を起動時 fail-fast で弾く。
-    goal_stagnation_evidence_enabled: bool = False,
-    # P-U2 (停滞感 store / default False = flag OFF): True のとき reflect
-    # verdict を停滞感カウンタに畳み込む。store は呼び出し側 (world_runtime)
-    # が構築して渡す。goal_reflect_enabled が False だと reflect 自体が
-    # 発火しないため、coordinator 側で組み合わせ不整合を起動時 fail-fast で弾く。
-    stagnation_pressure_enabled: bool = False,
-    stagnation_pressure_store: Any | None = None,
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default False = flag OFF):
     # True のとき chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻み、reinterpretation_coordinator が誤差専用
@@ -584,13 +567,6 @@ def build_episodic_stack(
                 goal_reflect_enabled=goal_reflect_enabled,
                 objective_text_provider=objective_text_provider,
                 reflect_observation_sink=reflect_observation_sink,
-                # P-U1: ON のときだけ stalled/misaligned の reflect verdict を
-                # goal: 軸の evidence に変換する (OFF = 導入前と挙動一致)。
-                goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
-                # P-U2: ON のときだけ reflect verdict を停滞感カウンタに畳み込む
-                # (OFF = 導入前と挙動一致)。
-                stagnation_pressure_enabled=stagnation_pressure_enabled,
-                stagnation_pressure_store=stagnation_pressure_store,
                 create_gate=belief_create_gate,
             )
     elif episode_store is None:
@@ -781,7 +757,6 @@ def build_episodic_stack(
         afterglow_max_residence=afterglow_max_residence,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         belief_consolidation_coordinator=belief_consolidation_coordinator,
-        stagnation_pressure_store=stagnation_pressure_store,
         recall_success_store=recall_success_store,
         recall_hit_boost_strength=recall_hit_boost_strength,
         recall_hit_boost_cap=recall_hit_boost_cap,

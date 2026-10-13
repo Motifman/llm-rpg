@@ -35,9 +35,6 @@ from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_stor
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
-from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
-    InMemoryStagnationPressureStore,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
     BELIEF_EVIDENCE_SALIENCE_HIGH,
@@ -85,7 +82,6 @@ class _Setup:
     port: _FakeBeliefConsolidationPort
     being_id: BeingId
     player_id: PlayerId
-    stagnation_pressure_store: InMemoryStagnationPressureStore
 
 
 def _build_setup(
@@ -104,9 +100,6 @@ def _build_setup(
     reflect_observation_sink: Any = None,
     stall_min_interval_turns: int = 15,
     trace_recorder_provider: Any = None,
-    goal_stagnation_evidence_enabled: bool = False,
-    stagnation_pressure_enabled: bool = False,
-    stagnation_pressure_store: Any = _UNSET,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
     provisioning = BeingProvisioningService(repo)
@@ -115,11 +108,6 @@ def _build_setup(
 
     evidence_buffer = InMemoryBeliefEvidenceBufferStore()
     semantic_store = InMemorySemanticMemoryStore()
-    resolved_stagnation_store = (
-        InMemoryStagnationPressureStore()
-        if stagnation_pressure_store is _UNSET
-        else stagnation_pressure_store
-    )
     port = _FakeBeliefConsolidationPort(outcome)
     coordinator = BeliefConsolidationCoordinator(
         evidence_buffer_store=evidence_buffer,
@@ -137,9 +125,6 @@ def _build_setup(
         reflect_observation_sink=reflect_observation_sink,
         stall_min_interval_turns=stall_min_interval_turns,
         trace_recorder_provider=trace_recorder_provider,
-        goal_stagnation_evidence_enabled=goal_stagnation_evidence_enabled,
-        stagnation_pressure_enabled=stagnation_pressure_enabled,
-        stagnation_pressure_store=resolved_stagnation_store,
         memory_turn_reader=ZERO_TURN,
     )
     return _Setup(
@@ -149,7 +134,6 @@ def _build_setup(
         port=port,
         being_id=being_id,
         player_id=player_id,
-        stagnation_pressure_store=resolved_stagnation_store,
     )
 
 
@@ -1534,507 +1518,51 @@ class TestGoalReflect:
         assert offending == []
 
 
-class TestGoalStagnationEvidence:
-    """P-U1: reflect の stalled/misaligned verdict を goal: 軸の高 salience
-    PREDICTION_ERROR evidence として buffer に積む挙動と、その不変条件
-    (停滞 ≠ 即改訂 / goal store を触らない) を保証する。"""
+class TestReflectStaysAnObservation:
+    """目的の振り返りの判定は本人への観測になるだけで、信念の証拠にも belief journal にも書かないことを保証する。
 
-    def _goal_axis_evidence(self, setup) -> list[BeliefEvidence]:
-        return [
+    停滞を信念の証拠にする部品 (GOAL_STAGNATION_EVIDENCE_ENABLED) は #1631 で消した。
+    """
+
+    def test_stalled_verdict_injects_an_observation_and_pushes_no_goal_evidence(self) -> None:
+        """stalled の振り返りは観測を 1 件注入し、goal: 軸の証拠は積まない。"""
+        obs: list = []
+        setup = _build_setup(
+            outcome={"decisions": [
+                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
+            ]},
+            goal_reflect_enabled=True,
+            objective_text_provider=lambda pid: "山頂へ行く",
+            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
+        )
+        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
+
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
+
+        assert len(obs) == 1
+        assert [
             e
             for e in setup.evidence_buffer.list_all_by_being(setup.being_id)
             if e.cue_signature.startswith("goal:")
-        ]
+        ] == []
 
-    def test_stalled_verdict_pushes_one_high_salience_goal_evidence(self) -> None:
-        """stalled → goal: 軸・高 salience・PREDICTION_ERROR の evidence が 1 件積まれる。"""
-        obs: list = []
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled",
-                 "statement": "同じ場所を空回りしている気がする"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        # 観測は従来どおり注入される (P4/P7 の挙動を壊さない)。
-        assert len(obs) == 1
-        goal_evidences = self._goal_axis_evidence(setup)
-        assert len(goal_evidences) == 1
-        pushed = goal_evidences[0]
-        assert pushed.cue_signature == "goal:山頂へ行く"
-        assert pushed.salience == BELIEF_EVIDENCE_SALIENCE_HIGH
-        assert pushed.source_kind == BeliefEvidenceSourceKind.PREDICTION_ERROR
-
-    def test_stalled_verdict_emits_belief_evidence_trace(self) -> None:
-        """P-U1 の goal 停滞 evidence は buffer に積むだけでなく、通常の evidence と
-        同形の BELIEF_EVIDENCE trace event を 1 件出す。
-
-        D1 修正の核心: 案1 の evidence は ``append_by_being`` を直呼びしており、
-        buffer には積まれるが trace には一切現れなかった。そのため「停滞を belief に
-        固着させる」案1 の腕が実際に発火したか / belief を作ったかを run データから
-        検証できない静かな失敗になっていた。ここでは stalled のとき goal: 軸 evidence
-        が trace event として観測可能になることを保証する。
-        """
-        recorder = _CapturingRecorder()
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled",
-                 "statement": "同じ場所を空回りしている気がする"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-            trace_recorder_provider=lambda: recorder,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        from ai_rpg_world.application.trace import TraceEventKind
-
-        goal_events = [
-            e
-            for e in recorder.events
-            if e.kind == TraceEventKind.BELIEF_EVIDENCE
-            and (e.payload.get("cue_signature") or "").startswith("goal:")
-        ]
-        assert len(goal_events) == 1
-        payload = goal_events[0].payload
-        assert payload["cue_signature"] == "goal:山頂へ行く"
-        assert payload["salience"] == BELIEF_EVIDENCE_SALIENCE_HIGH
-        assert (
-            payload["source_kind"]
-            == BeliefEvidenceSourceKind.PREDICTION_ERROR.value
-        )
-        # buffer に積んだ evidence と同一 id が trace されている (別物を捏造しない)。
-        pushed = self._goal_axis_evidence(setup)[0]
-        assert payload["evidence_id"] == pushed.evidence_id
-
-    def test_flag_off_emits_belief_evidence_trace(self) -> None:
-        """GOAL_STAGNATION_EVIDENCE_ENABLED が OFF なら goal: 軸の BELIEF_EVIDENCE
-        trace event も一切出ない (= 導入前と完全一致・byte 不変の不変条件)。"""
-        recorder = _CapturingRecorder()
+    def test_reflect_does_not_write_belief_journal_or_hold_goal_store(self) -> None:
+        """振り返りは belief journal (semantic_store) に書かず、coordinator は目的の保存先への参照を持たない。"""
         setup = _build_setup(
             outcome={"decisions": [
                 {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
             ]},
             goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=False,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-            trace_recorder_provider=lambda: recorder,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        from ai_rpg_world.application.trace import TraceEventKind
-
-        goal_events = [
-            e
-            for e in recorder.events
-            if e.kind == TraceEventKind.BELIEF_EVIDENCE
-            and (e.payload.get("cue_signature") or "").startswith("goal:")
-        ]
-        assert goal_events == []
-
-    def test_achieved_verdict_pushes_evidence(self) -> None:
-        """achieved (前進) は誤差ではないので evidence を積まない。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
             objective_text_provider=lambda pid: "山頂へ行く",
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
-        assert self._goal_axis_evidence(setup) == []
-
-    def test_misaligned_verdict_pushes_one_goal_evidence(self) -> None:
-        """misaligned (目的と行動の乖離) も stalled と同じく evidence を 1 件積む。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "misaligned",
-                 "statement": "釣りに夢中で山頂のことを忘れていた"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        goal_evidences = self._goal_axis_evidence(setup)
-        assert len(goal_evidences) == 1
-
-    def test_flag_off_pushes_evidence_even_when_stalled(self) -> None:
-        """GOAL_STAGNATION_EVIDENCE_ENABLED が OFF (既定) なら、stalled でも
-        evidence を積まない = 導入前と完全に一致する。"""
-        obs: list = []
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=False,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        # 観測注入は変わらず発生するが、evidence は 1 件も積まれない。
-        assert len(obs) == 1
-        assert self._goal_axis_evidence(setup) == []
-
-    def test_suppressed_by_cap_pushes_evidence(self) -> None:
-        """観測注入自体が stall_min_interval_turns の cap で抑制された回は、
-        evidence も積まない (「reflect が実際に発火したときだけ」乱発防止を
-        観測と evidence で共有する)。
-
-        2 回目の flush では 1 回目に積んだ goal: evidence が batch に含まれ
-        (0 applied でも batch は 1 単位で drain される既存仕様のため) 一緒に
-        drain されてしまい、buffer の最終件数だけでは「2 回目に新規で積んだか」
-        を判定できない。そのため ``append_by_being`` 呼び出し自体をスパイして
-        goal: 軸 evidence の**追加回数**を直接数える。
-        """
-        obs: list = []
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
-            stall_min_interval_turns=15,
-        )
-        appended_goal_cues: list[str] = []
-        original_append = setup.evidence_buffer.append_by_being
-
-        def _spy_append(being_id, evidence) -> None:
-            if evidence.cue_signature.startswith("goal:"):
-                appended_goal_cues.append(evidence.cue_signature)
-            original_append(being_id, evidence)
-
-        setup.evidence_buffer.append_by_being = _spy_append
-
-        # 1 回目: 注入 + evidence 1 件が積まれる。
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert len(appended_goal_cues) == 1
-
-        # 2 回目: turn を進めずに即 flush → cap で観測が抑制され、evidence も
-        # 追加で積まれない (呼び出し回数が増えない)。
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        assert len(obs) == 1
-        assert len(appended_goal_cues) == 1
-
-    def test_reflect_does_write_belief_journal_directly(self) -> None:
-        """不変条件: evidence 化を導入しても、reflect 自体は belief journal
-        (semantic_store) に直接書き込まない。積むのは evidence buffer だけで、
-        journal への反映は次周期以降の固着 LLM の判断を経由する。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert setup.semantic_store.list_for_being(setup.being_id) == []
-        # goal store / journal への参照を持たないという既存不変条件も併せて確認する。
-        attrs = vars(setup.coordinator)
         offending = [
-            name for name in attrs
-            if any(k in name.lower() for k in ("journal", "goal_store", "goal_repo"))
-        ]
-        assert offending == []
-
-    def test_goal_stagnation_evidence_requires_goal_reflect_enabled(self) -> None:
-        """fail-fast: goal_stagnation_evidence だけ ON にして goal_reflect が
-        OFF だと構築時に落ちる (reflect が発火せず evidence 化の対象が永遠に
-        生まれない「flag を立てたのに何も起きない」静かな失敗を防ぐ)。"""
-        with pytest.raises(ValueError, match="goal_reflect_enabled"):
-            _build_setup(
-                outcome={"decisions": []},
-                goal_reflect_enabled=False,
-                goal_stagnation_evidence_enabled=True,
-            )
-
-    def test_pushed_evidence_consolidates_into_goal_belief(self) -> None:
-        """統合: 積んだ goal: evidence が次周期の固着 LLM 判断で belief 化される
-        (「この方針は目的に前進しない」型の goal: belief 形成を狙う経路の確認)。
-        """
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            goal_stagnation_evidence_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        # 1 周期目: reflect が発火し goal: evidence が 1 件積まれる (journal は空)。
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert self._goal_axis_evidence(setup) != []
-        assert setup.semantic_store.list_for_being(setup.being_id) == []
-
-        # 2 周期目: 固着 LLM が積まれた goal: evidence を create に変換する
-        # (evidence_ids 未指定 = batch 全体を根拠とみなす仕様を利用)。
-        setup.port.outcome = {
-            "decisions": [
-                {
-                    "action": "create",
-                    "text": "山頂へ行くのは前進しない",
-                    "importance": 7,
-                    "tags": ["goal"],
-                }
-            ]
-        }
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        active = [
-            e
-            for e in setup.semantic_store.list_for_being(setup.being_id)
-            if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
-        ]
-        assert len(active) == 1
-        assert active[0].text == "山頂へ行くのは前進しない"
-
-
-class TestStagnationPressure:
-    """P-U2: reflect verdict を「停滞感」カウンタに畳み込む挙動を保証する。
-
-    P-U1 (goal: evidence 化) とは独立した経路であり、cap (乱発防止) と
-    無関係にカウンタが動く点が evidence 化との核心的な違い。"""
-
-    def test_stalled_verdict_increments_counter(self) -> None:
-        """stalled → カウンタが 0 から 1 になる。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "空回りしている"}
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
-
-    def test_misaligned_verdict_increments_counter(self) -> None:
-        """misaligned も stalled と同じくカウンタを +1 する。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "misaligned", "statement": "逸れている"}
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
-
-    def test_achieved_verdict_resets_counter(self) -> None:
-        """achieved (前進) は、それまで積み上がったカウンタを 0 に戻す。"""
-        store = InMemoryStagnationPressureStore()
-        being_id_holder: list = []
-
-        # 1 周期目: stalled でカウンタを 2 まで積む。
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "空回りしている"}
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-            stagnation_pressure_store=store,
-            turn_interval=10_000,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        for _ in range(20):
-            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert store.get_by_being(setup.being_id) == 2
-
-        # 2 周期目: achieved でリセットされる。
-        setup.port.outcome = {
-            "decisions": [
-                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"}
-            ]
-        }
-        for _ in range(20):
-            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e3"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert store.get_by_being(setup.being_id) == 0
-
-    def test_verdict_leaves_counter_unchanged(self) -> None:
-        """reflect action が無い (verdict も無い) 回はカウンタを据え置く。"""
-        setup = _build_setup(
-            outcome={"decisions": []},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
-
-    def test_counter_still_increments_when_observation_suppressed_by_cap(self) -> None:
-        """cap (stall_min_interval_turns) で観測注入自体が抑制された回でも、
-        verdict が stalled ならカウンタは増える。
-
-        cap は「同じ気づきを本人に何度も見せない」ための表示側の間引きであって
-        「まだ停滞しているか」の判定ではない、という P-U2 の核心的な設計判断を
-        直接保証するテスト。"""
-        obs: list = []
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
-            stall_min_interval_turns=15,
-        )
-        # 1 回目: 観測が注入され、カウンタも 1 になる。
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert len(obs) == 1
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
-
-        # 2 回目: turn を進めずに即 flush → 観測は cap で抑制されるが、
-        # verdict は stalled のままなのでカウンタは 2 になる。
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert len(obs) == 1
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 2
-
-    def test_flag_off_leaves_counter_untouched_even_when_stalled(self) -> None:
-        """STAGNATION_PRESSURE_ENABLED が OFF (既定) なら、stalled でもカウンタは
-        動かない (= 導入前と完全に一致する)。"""
-        store = InMemoryStagnationPressureStore()
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=False,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-            stagnation_pressure_store=store,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert store.get_by_being(setup.being_id) == 0
-
-    def test_stagnation_pressure_requires_goal_reflect_enabled(self) -> None:
-        """fail-fast: stagnation_pressure だけ ON にして goal_reflect が OFF だと
-        構築時に落ちる (reflect が発火せずカウンタを動かす verdict が永遠に
-        生まれない「flag を立てたのに何も起きない」静かな失敗を防ぐ)。"""
-        with pytest.raises(ValueError, match="goal_reflect_enabled"):
-            _build_setup(
-                outcome={"decisions": []},
-                goal_reflect_enabled=False,
-                stagnation_pressure_enabled=True,
-            )
-
-    def test_stagnation_pressure_requires_store(self) -> None:
-        """fail-fast: stagnation_pressure_enabled だけ ON にして store を渡さない
-        (None) と構築時に落ちる。"""
-        with pytest.raises(ValueError, match="stagnation_pressure_store"):
-            _build_setup(
-                outcome={"decisions": []},
-                goal_reflect_enabled=True,
-                objective_text_provider=lambda pid: "山頂へ行く",
-                reflect_observation_sink=lambda pid, msg, verdict: None,
-                stagnation_pressure_enabled=True,
-                stagnation_pressure_store=None,
-            )
-
-    def test_multiple_stalled_reflects_in_one_flush_increment_counter_once(self) -> None:
-        """敵対的レビュー HIGH-2: 1 flush に reflect (stalled/misaligned) が複数
-        入っても、カウンタは 1 flush につき最大 +1 に畳み込まれる (件数分
-        (+3 等) 加算されない)。1 batch に evidence が複数あれば LLM が複数の
-        reflect decision を返し得るため、この畳み込みが無いと 1 flush で
-        いきなり strong band まで飛ぶ致命的な過剰反応になる。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "空回りA"},
-                {"action": "reflect", "verdict": "stalled", "statement": "空回りB"},
-                {"action": "reflect", "verdict": "misaligned", "statement": "逸れているC"},
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
-
-    def test_achieved_and_stalled_in_same_flush_resets_counter(self) -> None:
-        """敵対的レビュー HIGH-2: 同一 flush に achieved と stalled/misaligned が
-        混在するときは achieved を優先し、リセットする (+1 にはしない)。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "空回りA"},
-                {"action": "reflect", "verdict": "achieved", "statement": "もう果たした"},
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
-
-    def test_stagnation_pressure_does_write_belief_journal_or_goal_store(self) -> None:
-        """不変条件: 停滞感カウンタの畳み込みは belief journal にも goal store にも
-        書き込まない。積むのは stagnation_pressure_store のカウンタのみ。"""
-        setup = _build_setup(
-            outcome={"decisions": [
-                {"action": "reflect", "verdict": "stalled", "statement": "停滞している"}
-            ]},
-            goal_reflect_enabled=True,
-            stagnation_pressure_enabled=True,
-            objective_text_provider=lambda pid: "山頂へ行く",
-            reflect_observation_sink=lambda pid, msg, verdict: None,
-        )
-        setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-        assert setup.semantic_store.list_for_being(setup.being_id) == []
-        attrs = vars(setup.coordinator)
-        offending = [
-            name for name in attrs
+            name for name in vars(setup.coordinator)
             if any(k in name.lower() for k in ("journal", "goal_store", "goal_repo"))
         ]
         assert offending == []

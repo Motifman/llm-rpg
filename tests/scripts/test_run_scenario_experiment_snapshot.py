@@ -206,9 +206,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
             InMemorySemanticMemoryStore,
         )
-        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
-            InMemoryStagnationPressureStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
         )
@@ -252,7 +249,6 @@ class TestExpectedPayloadKeysCoverage:
             aux_being_resolver=BeingAttachmentResolver(repo),
             _episodic_stack=episodic_stack,
             _goal_journal_store=InMemoryGoalJournalStore(),
-            _stagnation_pressure_store=InMemoryStagnationPressureStore(),
             _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),

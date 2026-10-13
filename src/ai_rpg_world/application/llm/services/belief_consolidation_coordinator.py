@@ -65,9 +65,6 @@ from ai_rpg_world.application.llm.services.belief_create_gate import (
     BeliefCreateReview,
 )
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
-    build_goal_stagnation_cue_signature as _build_goal_stagnation_cue_signature,
-)
-from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     cue_tokens as _shared_cue_tokens,
 )
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
@@ -78,9 +75,6 @@ from ai_rpg_world.being.domain.memory_turn_clock import (
     MemoryTurnReader,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
-    StagnationPressureRepository,
-)
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
@@ -341,9 +335,6 @@ class BeliefConsolidationCoordinator:
         objective_text_provider: Callable[[PlayerId], str | None] | None = None,
         reflect_observation_sink: Callable[[PlayerId, str, str], None] | None = None,
         stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
-        goal_stagnation_evidence_enabled: bool = False,
-        stagnation_pressure_store: StagnationPressureRepository | None = None,
-        stagnation_pressure_enabled: bool = False,
         create_gate: BeliefCreateGate | None = None,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
@@ -376,8 +367,6 @@ class BeliefConsolidationCoordinator:
             raise TypeError("belief_attribution_enabled must be bool")
         if not isinstance(goal_reflect_enabled, bool):
             raise TypeError("goal_reflect_enabled must be bool")
-        if not isinstance(goal_stagnation_evidence_enabled, bool):
-            raise TypeError("goal_stagnation_evidence_enabled must be bool")
         if objective_text_provider is not None and not callable(objective_text_provider):
             raise TypeError("objective_text_provider must be callable or None")
         if reflect_observation_sink is not None and not callable(reflect_observation_sink):
@@ -399,38 +388,8 @@ class BeliefConsolidationCoordinator:
             )
         if stall_min_interval_turns < 1:
             raise ValueError("stall_min_interval_turns must be positive")
-        # P-U1 fail-fast: goal_stagnation_evidence は reflect の verdict を
-        # evidence に変換するだけの機能で、reflect 自体が発火しなければ
-        # 永遠に何も積まない。ON にしたのに goal_reflect_enabled が OFF だと
-        # 「flag を立てたのに何も起きない」静かな失敗になるため起動時に弾く。
-        if goal_stagnation_evidence_enabled and not goal_reflect_enabled:
-            raise ValueError(
-                "goal_stagnation_evidence_enabled requires goal_reflect_enabled "
-                "(reflect が発火しないと evidence 化の対象が生まれない)"
-            )
-        if stagnation_pressure_store is not None and not isinstance(
-            stagnation_pressure_store, StagnationPressureRepository
-        ):
-            raise TypeError(
-                "stagnation_pressure_store must be StagnationPressureRepository or None"
-            )
-        if not isinstance(stagnation_pressure_enabled, bool):
-            raise TypeError("stagnation_pressure_enabled must be bool")
         if create_gate is not None and not isinstance(create_gate, BeliefCreateGate):
             raise TypeError("create_gate must be BeliefCreateGate or None")
-        # P-U2 (停滞感 store): stagnation_pressure も goal_stagnation_evidence と
-        # 同じ理由で reflect 発火に依存する。goal_reflect が OFF だと verdict 自体が
-        # 生まれず「flag を立てたのに何も起きない」静かな失敗になるため弾く。
-        if stagnation_pressure_enabled and not goal_reflect_enabled:
-            raise ValueError(
-                "stagnation_pressure_enabled requires goal_reflect_enabled "
-                "(reflect が発火しないとカウンタを動かす verdict が生まれない)"
-            )
-        if stagnation_pressure_enabled and stagnation_pressure_store is None:
-            raise ValueError(
-                "stagnation_pressure_enabled requires stagnation_pressure_store "
-                "(カウンタを書き込む先が無いと ON にする意味が無い)"
-            )
         self._evidence_buffer_store = evidence_buffer_store
         self._semantic_store = semantic_store
         self._completion = completion
@@ -450,15 +409,6 @@ class BeliefConsolidationCoordinator:
         self._objective_text_provider = objective_text_provider
         self._reflect_observation_sink = reflect_observation_sink
         self._stall_min_interval_turns = stall_min_interval_turns
-        # P-U1 (目的停滞の evidence 化): ON のときだけ stalled/misaligned の
-        # reflect verdict を goal: 軸の高 salience PREDICTION_ERROR evidence
-        # として buffer に積む。OFF (既定) では evidence を一切積まず、
-        # 導入前 (内省観測の注入のみ) と挙動一致する。
-        self._goal_stagnation_evidence_enabled = goal_stagnation_evidence_enabled
-        # P-U2 (停滞感 store): ON のときだけ reflect verdict を停滞感カウンタに
-        # 畳み込む。OFF (既定) では store に一切触れず、導入前と挙動一致する。
-        self._stagnation_pressure_store = stagnation_pressure_store
-        self._stagnation_pressure_enabled = stagnation_pressure_enabled
         self._create_gate = create_gate
         self._system_prompt = _build_belief_consolidation_system_prompt(
             attribution_enabled=belief_attribution_enabled,
@@ -490,12 +440,10 @@ class BeliefConsolidationCoordinator:
         return text.strip()
 
     def _valid_reflect_verdict(self, raw: dict[str, Any]) -> str | None:
-        """reflect decision から、カウンタ集約 (``_apply_flush_stagnation_pressure``)
-        と ``_apply_reflect`` (観測注入/evidence 化) が共通で使う正当な verdict を
-        取り出す。goal_reflect が OFF / 観測 sink 未注入 / verdict が未知の
-        いずれかなら None (= どちらの経路にも寄与しない)。statement の有無や
-        乱発防止 cap には依存しない (それらは呼び出し側がそれぞれの目的で
-        別途判定する)。"""
+        """reflect decision から、``_apply_reflect`` (観測注入) が使う
+        正当な verdict を取り出す。goal_reflect が OFF / 観測 sink 未注入 / verdict が未知の
+        いずれかなら None (= ``_apply_reflect`` は何もしない)。statement の有無や
+        乱発防止 cap には依存しない (それらは呼び出し側が判定する)。"""
         if not self._goal_reflect_enabled or self._reflect_observation_sink is None:
             return None
         verdict = raw.get("verdict")
@@ -506,8 +454,6 @@ class BeliefConsolidationCoordinator:
         being_id: BeingId,
         player_id: int,
         raw: dict[str, Any],
-        batch: tuple[BeliefEvidence, ...],
-        objective_text: str | None,
     ) -> bool:
         """P4/P7: reflect 決定を処理する。停滞 / 達成 / 乖離の気づきを内省観測
 
@@ -522,24 +468,10 @@ class BeliefConsolidationCoordinator:
         - 同一 player の同じ種別の観測が直近 ``stall_min_interval_turns`` 以内
           (種別ごとの乱発防止 cap)
         観測を注入したら True。
-
-        P-U1 (目的停滞の evidence 化): 観測の注入に**成功した**とき (= cap を
-        実際に消費したとき) に限り、``goal_stagnation_evidence_enabled`` が ON
-        かつ verdict が stalled/misaligned であれば、``goal:`` 軸の高 salience
-        PREDICTION_ERROR evidence を 1 件 buffer に積む (``_emit_goal_stagnation_evidence``)。
-        cap で観測注入自体が抑制された回は evidence も積まない — 乱発防止の
-        鼓動を観測と evidence で共有するため (「reflect が実際に発火したとき
-        だけ」)。**goal store への書き込みや目的 status の変更はしない**
-        (この不変条件は evidence 化を導入しても変わらない。generate するのは
-        あくまで記述的な belief evidence であり、目的の改訂ではない)。
         """
         verdict = self._valid_reflect_verdict(raw)
         if verdict is None:
             return False
-        # 敵対的レビュー HIGH-2: 停滞感カウンタの更新は 1 decision ごとではなく
-        # 1 flush につき 1 回だけ集約して行う (``_apply_decisions`` が
-        # ``_apply_flush_stagnation_pressure`` で束ねる)。ここでは観測注入 /
-        # evidence 化だけを扱う。
         statement = raw.get("statement")
         if not isinstance(statement, str) or not statement.strip():
             return False
@@ -565,140 +497,7 @@ class BeliefConsolidationCoordinator:
             )
             return False
         self._last_reflect_turn[cap_key] = turn
-        if self._goal_stagnation_evidence_enabled and verdict in (
-            _REFLECT_VERDICT_STALLED,
-            _REFLECT_VERDICT_MISALIGNED,
-        ):
-            self._emit_goal_stagnation_evidence(
-                being_id, verdict, objective_text, batch
-            )
         return True
-
-    def _apply_flush_stagnation_pressure(
-        self, being_id: BeingId, flush_verdicts: list[str]
-    ) -> None:
-        """P-U2: 1 flush 内の reflect verdict 群を集約し、停滞感カウンタを
-        **1 flush につき最大 ±1** に畳み込む (敵対的レビュー HIGH-2 修正)。
-
-        修正前は reflect decision ごとに (= 1 flush に reflect が複数入ると
-        件数分) カウンタを更新していたため、1 batch に evidence が複数あって
-        LLM が reflect×3 のような decisions を返すと、観測注入・evidence 化は
-        cap で 1 件に抑えられるのにカウンタだけ +3 され、一発で strong band
-        まで飛ぶ過剰反応になっていた。ここでは 1 flush の verdict 群をまとめて
-        一度だけ判定する:
-
-        - achieved が 1 つでもあれば 0 にリセット (最優先。前進の兆候が 1 つでも
-          あれば据え置きにしない)
-        - achieved が無く stalled/misaligned が 1 つでもあれば +1
-        - どちらも無ければ据え置き
-
-        cap (観測注入の乱発防止) とは独立 — 観測注入が cap で抑制されても、
-        その flush に stalled/misaligned の verdict があれば +1 する既存の
-        設計意図は変えない (``flush_verdicts`` は cap を経由せず収集される)。
-        ``stagnation_pressure_enabled`` が OFF、または store が未注入、または
-        この flush に有効な verdict が 1 件も無ければ no-op。belief journal
-        にも goal store にも触れない (P-U1 と同じ「停滞 ≠ 即改訂」の不変条件)。
-        """
-        if (
-            not self._stagnation_pressure_enabled
-            or self._stagnation_pressure_store is None
-        ):
-            return
-        if not flush_verdicts:
-            return
-        if _REFLECT_VERDICT_ACHIEVED in flush_verdicts:
-            self._stagnation_pressure_store.reset_by_being(being_id)
-        elif any(
-            v in (_REFLECT_VERDICT_STALLED, _REFLECT_VERDICT_MISALIGNED)
-            for v in flush_verdicts
-        ):
-            self._stagnation_pressure_store.increment_by_being(being_id)
-
-    def _emit_goal_stagnation_evidence(
-        self,
-        being_id: BeingId,
-        verdict: str,
-        objective_text: str | None,
-        batch: tuple[BeliefEvidence, ...],
-    ) -> None:
-        """P-U1: 停滞/乖離の reflect verdict を誤差として固着パスに流す。
-
-        枯れ葉を無限に採り続ける等の「成功し続ける有害ループ」は、予測誤差
-        エンジンから見ると誤差ゼロ・信念確証で押し返す信号がない (効用勾配の
-        不在)。目的への停滞・乖離を ``goal:`` 軸の高 salience
-        PREDICTION_ERROR evidence に変換して固着パスに流し、``goal:`` belief
-        「この方針は目的に前進しない」の形成を狙う
-        (goal_utility_gradient_design.md P-U1)。ここは evidence buffer への
-        追記のみで、goal store への参照は持たない (目的そのものの改訂はしない)。
-
-        objective_text が空 (= reflect 節の前提が崩れている異常系) のときは
-        cue_signature を捏造せず evidence を積まない。episode_ids は今回の
-        flush 対象 batch (この reflect 判定が読んだ evidence 群) の
-        episode_ids を束ねて trace 可能性を保つ。
-        """
-        if not objective_text:
-            return
-        episode_ids = tuple(sorted({eid for e in batch for eid in e.episode_ids}))
-        if not episode_ids:
-            return
-        text = (
-            f"「{objective_text}」に前進していない"
-            if verdict == _REFLECT_VERDICT_STALLED
-            else f"「{objective_text}」から行動がそれている"
-        )
-        evidence = BeliefEvidence(
-            evidence_id=f"belief-evidence-{uuid4().hex}",
-            source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR,
-            episode_ids=episode_ids,
-            cue_signature=_build_goal_stagnation_cue_signature(objective_text),
-            text=text,
-            salience=BELIEF_EVIDENCE_SALIENCE_HIGH,
-            occurred_at=datetime.now(timezone.utc),
-            observed_turn=self._memory_turn_reader.current_turn(being_id),
-            tick=self._resolve_tick(),
-        )
-        self._evidence_buffer_store.append_by_being(being_id, evidence)
-        self._emit_belief_evidence_trace(being_id, evidence)
-
-    def _emit_belief_evidence_trace(
-        self, being_id: BeingId, evidence: BeliefEvidence
-    ) -> None:
-        """P-U1 の goal 停滞 evidence を ``BELIEF_EVIDENCE`` trace event として残す
-        (D1 修正)。
-
-        案1 の evidence は ``append_by_being`` を直呼びしており、他経路
-        (memo distill / episodic chunk 等) が transcriber 経由で必ず出す
-        ``BELIEF_EVIDENCE`` trace を出していなかった。そのため run データ上
-        ``cue_signature="goal:..."`` の evidence が 1 件も見えず、「停滞を belief に
-        固着させる」案1 の腕が発火したか・belief を作ったかを検証できない静かな
-        失敗になっていた。ここで他経路と同一 payload 形の trace を 1 件出し、
-        案1 を観測可能にする (buffer への追記が本筋で、trace は観測用の副作用な
-        ので recorder 不在・record 例外では黙って諦める = turn を壊さない)。
-        """
-        recorder = self._resolve_recorder()
-        if recorder is None:
-            return
-        try:
-            recorder.record(
-                TraceEventKind.BELIEF_EVIDENCE,
-                tick=evidence.tick,
-                being_id=being_id.value,
-                evidence_id=evidence.evidence_id,
-                source_kind=evidence.source_kind.value,
-                episode_ids=list(evidence.episode_ids),
-                cue_signature=evidence.cue_signature,
-                text_snippet=evidence.text[:120],
-                salience=evidence.salience,
-            )
-        except Exception:
-            # 敵対的レビュー LOW: これは案1 の効果測定用 trace なので、記録失敗を
-            # debug で握ると穴が見えにくい。turn/buffer 追記は壊さないが warning で
-            # 気づけるようにする。
-            _logger.warning(
-                "trace recorder.record raised for BELIEF_EVIDENCE "
-                "(goal stagnation); skipping",
-                exc_info=True,
-            )
 
     def current_turn_index(self, player_id: PlayerId) -> int:
         if not isinstance(player_id, PlayerId):
@@ -816,7 +615,6 @@ class BeliefConsolidationCoordinator:
             player_id.value,
             batch,
             raw_obj,
-            objective_text,
         )
         batch_ids = tuple(e.evidence_id for e in batch)
         # LLM 呼び出しは成功したが適用された decisions が 0 件だったのに batch を
@@ -996,7 +794,6 @@ class BeliefConsolidationCoordinator:
         player_id: int,
         batch: tuple[BeliefEvidence, ...],
         raw_obj: dict[str, Any],
-        objective_text: str | None = None,
     ) -> _DecisionApplicationResult:
         """decisions を belief journal に適用し、applied / skipped に分類して返す。
 
@@ -1015,10 +812,6 @@ class BeliefConsolidationCoordinator:
         now = datetime.now(timezone.utc)
         applied: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
-        # 敵対的レビュー HIGH-2: 1 flush 内の reflect verdict を集めておき、
-        # ループを抜けたあとに ``_apply_flush_stagnation_pressure`` で一度だけ
-        # カウンタを更新する (decision ごとの多重加算を防ぐ)。
-        flush_reflect_verdicts: list[str] = []
         for raw in raw_decisions:
             if not isinstance(raw, dict):
                 skipped.append({"reason": _SKIP_NOT_A_DICT, "decision": raw})
@@ -1046,18 +839,11 @@ class BeliefConsolidationCoordinator:
                 elif action == _ACTION_DISCARD:
                     skip_reason = None  # evidence は batch drain で消える (正当な適用)
                 elif action == _ACTION_REFLECT:
-                    # カウンタ集約用に verdict を収集する (statement 空 / cap
-                    # 抑制とは無関係。_valid_reflect_verdict と同じ判定基準)。
-                    verdict_for_pressure = self._valid_reflect_verdict(raw)
-                    if verdict_for_pressure is not None:
-                        flush_reflect_verdicts.append(verdict_for_pressure)
                     # 停滞でない / cap / flag OFF なら注入しない = 適用ではないが
                     # 「幻覚 belief_id」等の失敗とは質が違うので skip 理由で残す。
                     skip_reason = (
                         None
-                        if self._apply_reflect(
-                            being_id, player_id, raw, batch, objective_text
-                        )
+                        if self._apply_reflect(being_id, player_id, raw)
                         else _SKIP_REFLECT_SUPPRESSED
                     )
                 else:
@@ -1077,7 +863,6 @@ class BeliefConsolidationCoordinator:
                 applied.append(raw)
             else:
                 skipped.append({"reason": skip_reason, "decision": raw})
-        self._apply_flush_stagnation_pressure(being_id, flush_reflect_verdicts)
         return _DecisionApplicationResult(applied, skipped)
 
     @staticmethod

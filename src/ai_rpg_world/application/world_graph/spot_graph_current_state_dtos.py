@@ -6,10 +6,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-)
-
 # --- 構造化エントリ（UiContextBuilder がラベル付与に使用） ---
 
 @dataclass(frozen=True)
@@ -223,12 +219,6 @@ class SpotGraphNearbyEntityEntry:
     # 仲間の状態を「常時見えている」モデル: Observation ではなく state として
     # 毎 tick 反映する (#421/#425 のラベル → 名前+状態 設計に対称的)。
     fatigue_level: str = "ok"
-    # P-U4 (停滞感の表出・他者): 同 spot の他 player の停滞感バンド。
-    # ``none`` / ``light`` / ``strong`` の3段階 (P-U2 の
-    # ``resolve_stagnation_pressure_band`` の戻り値と同型)。ゲージ値そのものは
-    # 見せず、バンドだけを渡す設計 (docs/memory_system 系の停滞感 UX 判断)。
-    # fatigue_level と対称に「常時見えている」state として扱う。
-    stagnation_band: str = STAGNATION_PRESSURE_BAND_NONE
     # 行動不能 (is_down / is_dead) の相手が持っているものの表示名。
     #
     # 実 run のボトルネックが背景にある。山頂で仲間が倒れ、その荷物 (狼煙に要る
@@ -355,11 +345,7 @@ class SpotGraphPlayerSnapshotDto:
     参照する。仲間用の ``SpotGraphNearbyEntityDto.fatigue_level`` の自分版。
     旧構造では ``player_state`` dict に ``fatigue_level`` を入れる構造だったが、
     実際には ``dict(player.state)`` (= 自由 state) しか乗らず、hint が常に空に
-    なる silent failure があった。専用 field として明示する。
-
-    ``own_stagnation_band`` は P-U3 (停滞感の表出・自己) 用。行動者本人の
-    停滞感バンド (``none`` / ``light`` / ``strong``)。fatigue と同じく
-    ui_context_builder の「身体の状態」section で hint に変換される。"""
+    なる silent failure があった。専用 field として明示する。"""
 
     current_spot_id: int
     current_spot_name: str
@@ -463,13 +449,6 @@ class SpotGraphPlayerSnapshotDto:
     # のような操作可能性 hint を出すために参照する。
     # default `ok` は player aggregate が無い経路 (= テスト等) の fallback。
     own_fatigue_level: str = "ok"
-
-    # P-U3 (停滞感の表出・自己): 行動者本人の停滞感バンド。``none`` / ``light``
-    # / ``strong`` の3段階。ui_context_builder が「身体の状態」section に
-    # 「何かが前に進んでいない気がする」等の hint を出すために参照する。
-    # default ``none`` は provider 未配線 / flag OFF の経路の fallback
-    # (= 導入前と同じく何も描画しない)。
-    own_stagnation_band: str = STAGNATION_PRESSURE_BAND_NONE
 
     # Phase 4-E: 行動者本人の自由 state (HIDDEN を含む全項目)。
     # 自分自身の内面なので毒・呪い・隠しフラグも本人プロンプトには載せる。
