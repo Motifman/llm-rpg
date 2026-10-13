@@ -127,8 +127,6 @@ class IActionResultStore(ABC):
         scene_boundary: bool = False,
         occurred_tick: int | None = None,
         execution_provenance: ExecutionProvenance | None = None,
-        prediction_context_id: str | None = None,
-        in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
         """行動結果を 1 件追加する。"""
         pass

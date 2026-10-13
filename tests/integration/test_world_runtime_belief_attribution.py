@@ -29,7 +29,6 @@ _SCENARIO_PATH = (
 def _common_memory_config(**overrides):
     """attribution が実際に流れるための前提設定一式を作る。"""
     return belief_consolidation_config(
-        prediction_context_id_enabled=True,
         **overrides,
     )
 

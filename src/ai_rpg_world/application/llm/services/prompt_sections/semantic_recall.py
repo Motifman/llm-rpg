@@ -86,19 +86,15 @@ def run_semantic_passive_recall(
     action_results: list[Any],
     ui_context: Any,
     current_state_dto: Any | None = None,
-) -> tuple[str, tuple[str, ...]]:
+) -> str:
     """Phase 1c: semantic memory の状況連想 top-K を §「【関連する学び】」用に整形する。
 
     service 未注入 または top_k=0 なら空文字 (= section ごと省略)。
     situation_cues は episodic 受動想起と同じ build_situation_episodic_cues
     を使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
-
-    戻り値は (整形テキスト, belief entry_id 群)。後者は U1 の
-    prediction_context_id に「その build で in-context だった belief」
-    として紐づけるため。
     """
     if builder._semantic_passive_recall is None or builder._semantic_passive_top_k <= 0:
-        return "", ()
+        return ""
 
     observation_structured = None
     observation_prose: str | None = None
@@ -151,8 +147,7 @@ def run_semantic_passive_recall(
         candidates=candidates,
     )
 
-    belief_ids = tuple(c.entry.entry_id for c in candidates)
-    return format_semantic_recall_section(candidates), belief_ids
+    return format_semantic_recall_section(candidates)
 
 
 def emit_semantic_passive_recall_trace(

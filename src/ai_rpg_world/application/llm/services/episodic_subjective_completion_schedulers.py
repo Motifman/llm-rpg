@@ -50,9 +50,6 @@ from ai_rpg_world.application.llm.services._pending_prediction_recording import 
 from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
     resolve_pending_predictions_if_applicable,
 )
-from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
-    prediction_context_ids_from_actions,
-)
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
 )
@@ -87,15 +84,6 @@ def _resolve_recorder_from_provider(
         return recorder_provider()
     except Exception:
         return None
-
-
-def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) -> list[str]:
-    """U1: chunk を構成する action 群から prediction_context_id を重複排除して集める。
-
-    紐付けの土台のみ (どの belief/episode が in-context だったかの意味づけは
-    U4 の attribution ledger に委ねる)。
-    """
-    return prediction_context_ids_from_actions(encoding_input.action_results)
 
 
 def _run_sidecar_safely(
@@ -321,25 +309,6 @@ class InlineEpisodicSubjectiveScheduler:
                 "recall_text_snippet": recall_snippet,
             },
         )
-        # U1: 非同期経路でも prediction_error 確定の瞬間に PREDICTION_OUTCOME
-        # を emit する (同期経路は EpisodicChunkCoordinator 側で emit 済み)。
-        # id 機構が OFF (= 発行された id が 1 つも無い) のときは emit しない。
-        # PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない
-        # ので、default run の trace は U1 導入前と完全に一致する
-        # (共通規約 §0 / §4「flag を戻せば挙動が導入前と一致する」規律)。
-        prediction_context_ids = _prediction_context_ids_from_encoding(encoding_input)
-        if prediction_context_ids:
-            _emit_trace(
-                self._trace_recorder_provider,
-                self._current_tick_provider,
-                kind=TraceEventKind.PREDICTION_OUTCOME,
-                player_id=int(merged.player_id),
-                payload={
-                    "episode_id": merged.episode_id,
-                    "prediction_error": merged.prediction_error,
-                    "prediction_context_ids": prediction_context_ids,
-                },
-            )
 
     def set_pending_prediction_store(
         self, pending_prediction_store: PendingPredictionRepository | None
@@ -632,25 +601,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 "recall_text_snippet": recall_snippet,
             },
         )
-        # U1: 非同期経路でも prediction_error 確定の瞬間に PREDICTION_OUTCOME
-        # を emit する (同期経路は EpisodicChunkCoordinator 側で emit 済み)。
-        # id 機構が OFF (= 発行された id が 1 つも無い) のときは emit しない。
-        # PREDICTION_CONTEXT_ID_ENABLED=OFF (default) では action に id が付かない
-        # ので、default run の trace は U1 導入前と完全に一致する
-        # (共通規約 §0 / §4「flag を戻せば挙動が導入前と一致する」規律)。
-        prediction_context_ids = _prediction_context_ids_from_encoding(encoding_input)
-        if prediction_context_ids:
-            _emit_trace(
-                self._trace_recorder_provider,
-                self._current_tick_provider,
-                kind=TraceEventKind.PREDICTION_OUTCOME,
-                player_id=int(merged.player_id),
-                payload={
-                    "episode_id": merged.episode_id,
-                    "prediction_error": merged.prediction_error,
-                    "prediction_context_ids": prediction_context_ids,
-                },
-            )
 
     def set_pending_prediction_store(
         self, pending_prediction_store: PendingPredictionRepository | None

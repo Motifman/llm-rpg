@@ -100,9 +100,6 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
 )
 from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
 from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
@@ -2078,41 +2075,6 @@ class WorldRuntime:
         if scheduler is not None:
             scheduler.maybe_schedule(player_id, output)
 
-    def _get_prediction_context_ledger(self) -> PredictionContextLedger | None:
-        """予測誤差統一設計 U1 の ``PredictionContextLedger`` を lazy 構築・共有する。
-
-        ``DefaultPromptBuilder`` (発行元) と ``ActionResultRecorder``
-        (消費元) が同じ instance を参照する必要があるため、
-        ``_cached_default_prompt_builder`` と同じ lazy キャッシュパターンで
-        world_runtime が唯一の owner になる。
-
-        ``ResolvedLlmRuntimeConfig.prediction_context_id_enabled`` で default OFF
-        (共通規約 §0: 新機構は明示的に有効化しない限り動かさない)。OFF の間は
-        None を返し、builder / recorder 側は ledger 未注入と同じ経路
-        (= prediction_context_id は常に None) を通る。
-        """
-        sentinel_computed = getattr(
-            self, "_prediction_context_ledger_computed", False
-        )
-        if sentinel_computed:
-            return getattr(self, "_prediction_context_ledger_instance", None)
-
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_prediction_context_id_state,
-        )
-
-        cfg = getattr(self, "_runtime_config", None)
-        enabled = (
-            bool(cfg.prediction_context_id_enabled)
-            if cfg is not None
-            else False
-        )
-        log_prediction_context_id_state(enabled)
-        ledger = PredictionContextLedger() if enabled else None
-        self._prediction_context_ledger_instance = ledger
-        self._prediction_context_ledger_computed = True
-        return ledger
-
     def _record_action_result(
         self,
         player_id: PlayerId,
@@ -2151,13 +2113,9 @@ class WorldRuntime:
         # #553 で contract 化済みで不変。subjective fields (intention 等) は
         # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
-        # 予測誤差統一設計 U1: prompt_builder.build() が発行した
-        # prediction_context_id をこの record() が consume できるよう、
-        # builder と同じ ledger instance を共有する。
         recorder = ActionResultRecorder(
             self._action_result_store,
             logger=logger,
-            prediction_context_ledger=self._get_prediction_context_ledger(),
         )
         acting = self._acting_being_for(player_id)
         recorder.record(
@@ -2761,10 +2719,6 @@ class WorldRuntime:
             tool_call_loop_guard=getattr(
                 self, "_injected_tool_call_loop_guard", None
             ),
-            # 予測誤差統一設計 U1: _record_action_result の ActionResultRecorder
-            # と同じ ledger instance を共有し、この builder が発行した
-            # prediction_context_id を consume できるようにする。
-            prediction_context_ledger=self._get_prediction_context_ledger(),
         )
         self._cached_default_prompt_builder = builder
         return builder
@@ -2839,11 +2793,6 @@ class WorldRuntime:
             ],
             "tool_runtime_context": ctx.tool_runtime_context,
             "action_instruction": result["action_instruction"],
-            # U1: このターンに発行された prediction_context_id をそのまま
-            # 露出する (実際の consume は _record_action_result → ledger 経由
-            # で player_id をキーに行われるため、呼び出し側がこの値を渡す
-            # 必要は無いが、後続 PR のデバッグ・trace 突き合わせ用に残す)。
-            "prediction_context_id": result.get("prediction_context_id"),
             "sns_shown_notification_ids": result.get("sns_shown_notification_ids", ()),
             "sns_screen_generation": getattr(self._public_sns_screens.get(int(player_id)), "generation", None),
         }
@@ -7597,9 +7546,9 @@ def create_world_runtime(
 
         _belief_evidence_enabled = config.belief_evidence_enabled
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default OFF): 実効的には
-        # reinterpretation_enabled (段1) と PREDICTION_CONTEXT_ID_ENABLED (U1) の
-        # 両方が ON でないと stamp 対象の recall observation が無く安全に縮退する。
+        # U9a (予測誤差統一設計 部品5・誤差駆動再解釈 / default OFF): 外れを想起に
+        # 刻む書き手は #1631 で消したので、stamp 対象の recall observation は無く
+        # 安全に縮退する。
         _error_driven_reinterpretation_enabled = (
             config.error_driven_reinterpretation_enabled
         )
@@ -7608,9 +7557,8 @@ def create_world_runtime(
         )
         # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): U9a と
         # 対称に、的中側 (思い出したから当たった) を recall ranking boost に
-        # 還流する。実効的には reinterpretation_enabled (段1) と
-        # PREDICTION_CONTEXT_ID_ENABLED (U1) の両方が ON でないと record_hit
-        # 対象の recall observation が無く安全に縮退する。
+        # 還流する。的中を数える書き手は #1631 で消したので、record_hit は
+        # 行われず安全に縮退する。
         # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
         # 始める前提の定数 (habituation_strength と同じく env 非公開。
         # 「当たる記憶」の固定化を防ぐための上限)。
@@ -7618,10 +7566,6 @@ def create_world_runtime(
         log_recall_hit_boost_enabled_state(_recall_hit_boost_enabled)
         _recall_hit_boost_strength = 1
         # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
-        # 実効的には U1 (PREDICTION_CONTEXT_ID_ENABLED) が ON でないと belief_ids
-        # が流れてこないが、ここでは独立に flag を解決するだけに留める
-        # (U1 flag OFF のまま本 flag だけ ON でも in_context_belief_ids は常に
-        # 空になり安全に縮退する)。
         _belief_attribution_enabled = config.belief_attribution_enabled
         log_belief_attribution_enabled_state(_belief_attribution_enabled)
         # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは

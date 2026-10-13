@@ -400,40 +400,6 @@ def log_short_term_memory_scheduler_mode_state(mode: str) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────
-# 予測誤差統一設計 U1: prediction_context_id / PredictionOutcome
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_PREDICTION_CONTEXT_ID_ENABLED = "PREDICTION_CONTEXT_ID_ENABLED"
-
-
-def resolve_prediction_context_id_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``PredictionContextLedger`` (id の発行・消費) を動かすか。
-
-    ``PREDICTION_CONTEXT_ID_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    id 自体は prompt 本文にも LLM 応答にも一切現れない (trace / snapshot
-    のみに残るメタデータ) ため挙動への影響はほぼ無いが、新機構は default OFF
-    で入れる本計画の共通規約 (docs/memory_system/
-    prediction_error_unified_implementation_plan.md §0) に従う。OFF のときは
-    ``DefaultPromptBuilder`` / ``ActionResultRecorder`` に ledger が渡らず、
-    ``prediction_context_id`` は常に None (= 導入前と同じ挙動)。
-    """
-    return _parse_bool_env(ENV_PREDICTION_CONTEXT_ID_ENABLED, env=env, default=False)
-
-
-def log_prediction_context_id_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_PREDICTION_CONTEXT_ID_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
 # Semantic memory: belief evidence buffer 転記 (U2, 証拠台帳統一設計)
 # ──────────────────────────────────────────────────────────────────
 
@@ -552,18 +518,14 @@ def resolve_belief_attribution_enabled(
     ``BELIEF_ATTRIBUTION_ENABLED=1`` で ON、未設定 / その他は OFF。
 
     OFF (既定) のとき:
-    - ``ActionResultEntry.in_context_belief_ids`` は常に空 (= chunk_coordinator /
-      scheduler が計算自体を行わない)
     - PREDICTION_ERROR evidence に in-context belief が添付されない
     - CONFIRMATION evidence が生成されない
     - 固着パスの shortlist に in-context belief を強制搭載する経路が働かない
       (``BeliefEvidence.in_context_belief_ids`` が常に空のため)
 
-    ON にするには prompt build 時に belief_id が in-context として記録されて
-    いる必要がある (= 実質的に ``PREDICTION_CONTEXT_ID_ENABLED`` (U1) が ON で
-    ないと belief_ids が流れてこない)。U1 flag が OFF のまま本 flag だけ ON に
-    しても、``PredictionContextLedger`` 自体が配線されず
-    ``in_context_belief_ids`` は常に空になるため安全に縮退する (= 実害なし)。
+    prompt build 時に in-context だった belief_id を行動に記録する仕組み
+    (``PREDICTION_CONTEXT_ID_ENABLED``) は #1631 で消したので、ON にしても
+    ``BeliefEvidence.in_context_belief_ids`` は常に空のまま縮退する。
 
     詳細は docs/memory_system/semantic_learning_consolidation_design.md
     「信用割り当て: attribution ledger」節、
@@ -651,11 +613,8 @@ def resolve_error_driven_reinterpretation_enabled(
     - ``EpisodicReinterpretationCoordinator`` の system prompt / recall_context
       payload は導入前と byte 一致 (誤差駆動節が一切出ない)
 
-    ON にするには実質的に ``PREDICTION_CONTEXT_ID_ENABLED`` (U1) と
-    episodic reinterpretation (段1) の両方が ON である必要がある。どちらか
-    が欠けていても本 flag だけ ON にして構わない: prediction_context_id が
-    action に乗らない/recall buffer 自体が組まれないため、stamp 対象の
-    recall observation が存在せず安全に縮退する (実害なし)。
+    外れを想起に刻んでいた書き手は #1631 で消したので、ON にしても stamp 対象の
+    recall observation は無く、安全に縮退する。
 
     詳細は docs/memory_system/prediction_error_unified_memory_design.md
     「部品 5: 想起の信用割り当て」節、
@@ -699,12 +658,8 @@ def resolve_recall_hit_boost_enabled(
     - ``EpisodicPassiveRecallRetrievalService`` の ranking (``multi_cue_score``)
       への boost 加算は常に 0 (= 導入前と byte 一致)
 
-    ON にするには実質的に ``PREDICTION_CONTEXT_ID_ENABLED`` (U1) と
-    episodic reinterpretation (段1、recall_buffer 構築のため) の両方が ON
-    である必要がある。どちらかが欠けていても本 flag だけ ON にして構わない:
-    prediction_context_id が action に乗らない / recall buffer 自体が組まれ
-    ないため、record_hit 対象の recall observation が存在せず安全に縮退する
-    (実害なし)。
+    的中を数えていた書き手は #1631 で消したので、ON にしても record_hit は
+    行われず、安全に縮退する。
 
     詳細は docs/memory_system/prediction_error_unified_memory_design.md
     「部品 5: 想起の信用割り当て」節、
