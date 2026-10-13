@@ -49,11 +49,9 @@ class BeliefEvidence:
     observed_turn: int
     tick: int | None = None
     # U4 (予測誤差統一設計 部品3): この evidence が発生したターンで【関連する
-    # 学び】として in-context だった belief_id 群。attribution ledger を
-    # per-Being store 化する代わりに、``ActionResultEntry.in_context_belief_ids``
-    # から chunk 転記点 (``BeliefEvidenceTranscriber``) まで運ばれてきた値を
-    # そのまま添付する (新規 store は作らない設計判断)。既定は空タプル
-    # (= attribution 機構 OFF、または in-context belief が無かったとき)。
+    # 学び】として in-context だった belief_id 群。値を運んでいた行動の記録の欄と
+    # 転記の書き手は #1631 で消したので、いまは古い snapshot から戻る値だけが
+    # 入る。既定は空タプル。
     in_context_belief_ids: tuple[str, ...] = ()
     # P9 (伝聞): HEARSAY evidence の話者 (誰から来た情報か)。cue_signature (何に
     # ついての知識か) とは**分離して**保持する — 混ぜると「話者についての

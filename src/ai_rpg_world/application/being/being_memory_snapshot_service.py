@@ -82,7 +82,6 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
-    dict_to_pending_prediction,
     dict_to_recall_observation,
     dict_to_recall_slot_entry,
     dict_to_reinterpretation_entry,
@@ -92,7 +91,6 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
-    pending_prediction_to_dict,
     recall_observation_to_dict,
     recall_slot_entry_to_dict,
     reinterpretation_entry_to_dict,
@@ -126,9 +124,6 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_jo
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
@@ -258,9 +253,6 @@ class BeingMemorySnapshotService:
         "belief_evidence_received_event_ids",
         "recall_success_received_event_ids",
         "recall_buffer_received_event_ids",
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測
-        # (約束) の per-Being state。
-        "pending_predictions",
         "memory_turn",
         "acquaintances",
         "being_episodes",
@@ -281,7 +273,6 @@ class BeingMemorySnapshotService:
         recall_habituation_store: IEpisodicRecallHabituationStore,
         belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
         recall_success_store: IEpisodicRecallSuccessStore,
-        pending_prediction_store: PendingPredictionRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
@@ -332,10 +323,6 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "recall_success_store must implement IEpisodicRecallSuccessStore"
             )
-        if not isinstance(pending_prediction_store, PendingPredictionRepository):
-            raise TypeError(
-                "pending_prediction_store must be PendingPredictionRepository"
-            )
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
         if not isinstance(being_episode_store, EpisodeRepository):
@@ -355,7 +342,6 @@ class BeingMemorySnapshotService:
         self._recall_habituation = recall_habituation_store
         self._belief_evidence_buffer = belief_evidence_buffer_store
         self._recall_success = recall_success_store
-        self._pending_prediction = pending_prediction_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
@@ -437,12 +423,6 @@ class BeingMemorySnapshotService:
             "recall_buffer_received_event_ids": (
                 self._recall_buffer.list_received_event_ids_by_being(being_id)
             ),
-            # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の
-            # 予測 (約束) の per-Being state。
-            "pending_predictions": [
-                pending_prediction_to_dict(p)
-                for p in self._pending_prediction.list_all_by_being(being_id)
-            ],
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
@@ -596,13 +576,6 @@ class BeingMemorySnapshotService:
             payload["recall_buffer_received_event_ids"],
             "recall_buffer_received_event_ids",
         )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # デコード。
-        pending_predictions = _decode_list(
-            payload["pending_predictions"],
-            dict_to_pending_prediction,
-            "pending_predictions",
-        )
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
             isinstance(v, int) and not isinstance(v, bool) and v > 0
@@ -679,11 +652,6 @@ class BeingMemorySnapshotService:
         )
         self._recall_buffer.replace_received_event_ids_by_being(
             being_id, recall_buffer_received
-        )
-        # U10a (予測誤差統一設計 部品6・pending prediction): 保留中の予測の
-        # bulk overwrite。
-        self._pending_prediction.replace_all_by_being(
-            being_id, pending_predictions
         )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)

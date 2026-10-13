@@ -45,7 +45,6 @@
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
     "OPENROUTER_PROVIDER": "DeepInfra",
     "OPENROUTER_REQUIRE_PARAMS": false,
-    "PENDING_PREDICTION_ENABLED": false,
     "PROMPT_DATASET_CAPTURE_ENABLED": true,
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn",
     "PROMPT_SECTION_ORDER": "stable_to_volatile",

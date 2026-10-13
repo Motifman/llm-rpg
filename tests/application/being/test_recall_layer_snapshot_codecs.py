@@ -136,9 +136,6 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
             InMemoryEpisodicReinterpretationJournalStore,
         )
         from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-            InMemoryPendingPredictionStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
@@ -146,7 +143,7 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         slot = InMemoryEpisodicRecallSlotStore()
         afterglow = InMemoryAfterglowStore()
         habituation = InMemoryEpisodicRecallHabituationStore()
-        service = BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), pending_prediction_store=InMemoryPendingPredictionStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        service = BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), recall_buffer_store=InMemoryEpisodicRecallBufferStore(), reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         return (service, slot, afterglow, habituation)
 
     def test_capture_emits_new_payload_keys(self):
@@ -209,29 +206,3 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         assert slot.get_slot(BeingId('being-restored')) == ()
         assert afterglow.get_index(BeingId('being-restored')) == ()
 
-class TestPendingPredictionKindCodec:
-    """P11: PendingPrediction の kind (promise / plan) の codec round-trip。"""
-
-    def test_plan_kind_round_trips(self) -> None:
-        from datetime import datetime, timezone
-
-        from ai_rpg_world.application.being._memory_payload_codecs import (
-            dict_to_pending_prediction,
-            pending_prediction_to_dict,
-        )
-        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-            PENDING_KIND_PLAN,
-            PendingPrediction,
-        )
-        original = PendingPrediction(pending_id='pending-1', text='浜を探索し続ければ山頂への道が分かるはず', resolution_cues=('spot:12',), tick_from=20, tick_to=25, origin_episode_id='ep-1', created_tick=15, kind=PENDING_KIND_PLAN)
-        restored = dict_to_pending_prediction(pending_prediction_to_dict(original))
-        assert restored == original
-        assert restored.kind == PENDING_KIND_PLAN
-
-    def test_legacy_dict_without_kind_falls_back_promise(self) -> None:
-        """kind キーの無い旧 snapshot は promise に倒れる (後方互換)。"""
-        from ai_rpg_world.application.being._memory_payload_codecs import dict_to_pending_prediction
-        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PENDING_KIND_PROMISE
-        legacy = {'pending_id': 'pending-1', 'text': '夕方に木の下でカイトと会う', 'resolution_cues': ['spot:12', 'player:カイト'], 'tick_from': 10, 'tick_to': 15, 'origin_episode_id': 'ep-1', 'created_tick': 10}
-        restored = dict_to_pending_prediction(legacy)
-        assert restored.kind == PENDING_KIND_PROMISE

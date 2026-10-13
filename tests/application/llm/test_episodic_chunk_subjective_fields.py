@@ -117,6 +117,26 @@ class TestSystemPromptPastTense:
         act = ActionResultEntry(occurred_at=t, action_summary='待機した', result_summary='ok', tool_name='wait')
         return build_chunk_encoding_input(PlayerId(1), (), (act,))
 
+class TestPromptHasNoPendingPrediction:
+    """約束 (#1631 で消した) を抜き出させる指示と欄が、主観補完の prompt に出ないことを保証する。"""
+
+    def test_system_and_user_prompts_ask_only_the_four_keys(self) -> None:
+        """system prompt は 4 つのキーだけを求め、system にも user (応答形式) にも pending_prediction / pending_resolutions / 【保留中の約束】が出ない。"""
+        t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
+        act = ActionResultEntry(occurred_at=t, action_summary='待機した', result_summary='ok', tool_name='wait')
+        enc = build_chunk_encoding_input(PlayerId(1), (), (act,))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'x', 'recall_text': 'y'})
+
+        EpisodicChunkSubjectiveFieldsService(port).merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+
+        assert port.last_messages is not None
+        whole = '\n'.join(m['content'] for m in port.last_messages)
+        assert 'キーは次の 4 つ: interpreted, recall_text, prediction_error, heading。' in whole
+        for name in ('pending_prediction', 'pending_resolutions', '保留中の約束'):
+            assert name not in whole
+
+
 class TestComputeTemplateHelpers:
     """``compute_template_interpreted`` / ``compute_template_recall`` の純関数挙動。
 

@@ -136,9 +136,6 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-        InMemoryPendingPredictionStore,
-    )
     from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
         InMemoryAcquaintanceRepository,
     )
@@ -168,7 +165,6 @@ def _build_stack(
         recall_success_store=InMemoryEpisodicRecallSuccessStore(),
         # U10a: CLI 経由の単発 dump では pending prediction も in-memory で
         # 足りる (的中側 sidecar と同じ扱い)。
-        pending_prediction_store=InMemoryPendingPredictionStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
