@@ -7538,7 +7538,8 @@ def create_world_runtime(
 
         _belief_evidence_enabled = config.belief_evidence_enabled
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): 的中側 (思い出したから当たった) を recall ranking boost に
+        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): 的中側
+        # (思い出したから当たった) を recall ranking boost に
         # 還流する。的中を数える書き手は #1631 で消したので、record_hit は
         # 行われず安全に縮退する。
         # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく

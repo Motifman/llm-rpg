@@ -233,6 +233,8 @@ def _init_schema_v3_drop_legacy(connection: sqlite3.Connection) -> None:
     )
 
 
+# 受け取り済みの出来事の ID の表。読み書きは #1631 で消したが、既存の DB の版の並びを
+# 保つため migration は残す。
 def _init_schema_v4_received_events(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """

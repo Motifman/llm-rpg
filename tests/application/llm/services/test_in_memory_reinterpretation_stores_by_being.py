@@ -280,7 +280,9 @@ class TestRecallBufferReplaceAll:
 
 
 class TestRecallBufferThreadSafety:
-    """横断レビュー H-3/M2: ThreadPool ワーカーとメイン thread の同時アクセス。
+    """横断レビュー H-3/M2 で入れた lock が、外側で保持したまま公開メソッドを呼んでも詰まらない (再入できる) ことを保証する。
+
+    lock を要したワーカーからの書き込み (stamp) は #1631 で消した。
 
     ``InMemoryEpisodicRecallBufferStore`` のみが対象 (``InMemoryEpisodicReinterpretationJournalStore``
     はワーカー thread から呼ばれる経路が無いため対象外)。
