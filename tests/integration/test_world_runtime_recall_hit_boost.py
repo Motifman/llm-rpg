@@ -31,7 +31,6 @@ _SCENARIO_PATH = (
 def _common_memory_config(**overrides):
     """想起の信用割り当てが実際に流れるための前提設定一式を作る。"""
     return episodic_config(
-        prediction_context_id_enabled=True,
         episodic_reinterpretation_enabled=True,
         **overrides,
     )
@@ -79,7 +78,6 @@ class TestWorldRuntimeRecallHitBoostWiring:
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=episodic_config(
-                prediction_context_id_enabled=True,
                 recall_hit_boost_enabled=True,
             ),
         )

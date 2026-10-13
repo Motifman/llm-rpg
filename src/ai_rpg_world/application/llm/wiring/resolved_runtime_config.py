@@ -120,7 +120,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_QUANTIZATION",
     "OPENROUTER_REQUIRE_PARAMS",
     "PENDING_PREDICTION_ENABLED",
-    "PREDICTION_CONTEXT_ID_ENABLED",
     "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "PROMPT_SECTION_ORDER",
@@ -347,7 +346,6 @@ class ResolvedLlmRuntimeConfig:
 
     # Prediction / belief / semantic journal 系。いずれも実験条件を変える
     # flag なので、run_start / manifest に残すため本 DTO に集約する。
-    prediction_context_id_enabled: bool = False
     belief_evidence_enabled: bool = False
     belief_consolidation_enabled: bool = False
     belief_attribution_enabled: bool = False
@@ -508,7 +506,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_goal_store_enabled,
             resolve_memo_tools_enabled,
             resolve_pending_prediction_enabled,
-            resolve_prediction_context_id_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
@@ -720,7 +717,6 @@ class ResolvedLlmRuntimeConfig:
             source, "LLM_AFTERGLOW_MAX_RESIDENCE", default=10
         )
 
-        prediction_context_id_enabled = resolve_prediction_context_id_enabled(env=source)
         belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
         belief_consolidation_enabled = resolve_belief_consolidation_enabled(env=source)
         belief_attribution_enabled = resolve_belief_attribution_enabled(env=source)
@@ -871,7 +867,6 @@ class ResolvedLlmRuntimeConfig:
             afterglow_capacity=afterglow_capacity,
             afterglow_max_residence=afterglow_max_residence,
             episodic_recall_enabled=episodic_recall_enabled,
-            prediction_context_id_enabled=prediction_context_id_enabled,
             belief_evidence_enabled=belief_evidence_enabled,
             belief_consolidation_enabled=belief_consolidation_enabled,
             belief_attribution_enabled=belief_attribution_enabled,
@@ -992,7 +987,6 @@ class ResolvedLlmRuntimeConfig:
             afterglow_capacity=10,
             afterglow_max_residence=10,
             episodic_recall_enabled=False,
-            prediction_context_id_enabled=False,
             belief_evidence_enabled=False,
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,

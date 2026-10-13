@@ -37,7 +37,6 @@ def _obs(
     episode_id: str,
     player_id: int = 1,
     recalled_at: datetime = _NOW,
-    prediction_context_id: str | None = None,
     prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
     return EpisodicRecallObservation(
@@ -51,7 +50,6 @@ def _obs(
         persona_snapshot="persona",
         situation_cues=("cue",),
         turn_index=1,
-        prediction_context_id=prediction_context_id,
         prediction_outcome_error=prediction_outcome_error,
     )
 
@@ -175,171 +173,6 @@ class TestRecallBufferByBeing:
 # Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API が撤去されたため、
 # 旧/新 API の独立性を検証していたテストクラス ``TestRecallBufferIsolation``
 # は削除された。新 API のみが残り、being_id を一次キーとして扱う設計に統一。
-
-
-class TestRecallBufferStampPredictionOutcome:
-    """U9a: ``stamp_prediction_outcome_by_being`` の挙動。"""
-
-    def test_matches_prediction_context_id_obs_included(
-        self, being: BeingId
-    ) -> None:
-        """一致する prediction context id の未処理 obs に誤差が載る。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた: 実際は雨だった")
-        got = store.list_pending_by_being(being)[0]
-        assert got.prediction_outcome_error == "外れた: 実際は雨だった"
-
-    def test_different_prediction_context_id_obs_not_included(
-        self, being: BeingId
-    ) -> None:
-        """別の prediction context id の obs には載らない。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-2"),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-1", "外れた")
-        rows = {o.recall_id: o for o in store.list_pending_by_being(being)}
-        assert rows["r1"].prediction_outcome_error == "外れた"
-        assert rows["r2"].prediction_outcome_error is None
-
-    def test_obs(self, being: BeingId) -> None:
-        """既に誤差が刻まれた obs は上書きしない。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(
-                recall_id="r1",
-                episode_id="e1",
-                prediction_context_id="pc-1",
-                prediction_outcome_error="最初の誤差",
-            ),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-1", "二度目の誤差")
-        got = store.list_pending_by_being(being)[0]
-        assert got.prediction_outcome_error == "最初の誤差"
-
-    def test_matches(self, being: BeingId) -> None:
-        """一致するものが無ければ何もしない。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.stamp_prediction_outcome_by_being(being, "pc-nonexistent", "誤差")
-        got = store.list_pending_by_being(being)[0]
-        assert got.prediction_outcome_error is None
-
-    def test_value_raises_type_error_3(self, being: BeingId) -> None:
-        """型違反は TypeError。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        with pytest.raises(TypeError, match="being_id"):
-            store.stamp_prediction_outcome_by_being("not-being", "pc-1", "誤差")  # type: ignore[arg-type]
-
-
-class TestRecallBufferListEpisodeIdsByPredictionContext:
-    """U9b: ``list_episode_ids_by_prediction_context_by_being`` の挙動。
-
-    外れ側 (``stamp_prediction_outcome_by_being``) の読み出し版で、的中側
-    (recall success store への record_hit) がどの episode を想起して立てた
-    予測だったかを特定するために使う。
-    """
-
-    def test_returns_matches_prediction_context_id_episode_id(
-        self, being: BeingId
-    ) -> None:
-        """一致する prediction context id の episode id を返す。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert got == ("e1",)
-
-    def test_returns_all_multiple_episode_same_prediction_context_id(
-        self, being: BeingId
-    ) -> None:
-        """複数 episode が同じ predictioncontextid に紐づく場合は全件返す。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert set(got) == {"e1", "e2"}
-
-    def test_same_episode_multiple_recall_deduplicates(
-        self, being: BeingId
-    ) -> None:
-        """同じ episode を複数 recall しても重複排除される。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert got == ("e1",)
-
-    def test_different_prediction_context_id_episode_not_included(
-        self, being: BeingId
-    ) -> None:
-        """別の prediction context id の episode は含まれない。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        store.append_by_being(
-            being,
-            _obs(recall_id="r2", episode_id="e2", prediction_context_id="pc-2"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(being, "pc-1")
-        assert got == ("e1",)
-
-    def test_matches_empty_tuple(self, being: BeingId) -> None:
-        """一致するものが無ければ空tuple。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        store.append_by_being(
-            being,
-            _obs(recall_id="r1", episode_id="e1", prediction_context_id="pc-1"),
-        )
-        got = store.list_episode_ids_by_prediction_context_by_being(
-            being, "pc-nonexistent"
-        )
-        assert got == ()
-
-    def test_value_raises_type_error_2(self, being: BeingId) -> None:
-        """型違反は TypeError。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        with pytest.raises(TypeError, match="being_id"):
-            store.list_episode_ids_by_prediction_context_by_being(
-                "not-being", "pc-1"  # type: ignore[arg-type]
-            )
-
-    def test_prediction_context_id_empty_string_raises_value_error(
-        self, being: BeingId
-    ) -> None:
-        """prediction context id が空文字なら ValueError。"""
-        store = InMemoryEpisodicRecallBufferStore()
-        with pytest.raises(ValueError):
-            store.list_episode_ids_by_prediction_context_by_being(being, "")
 
 
 class TestJournalByBeing:
@@ -466,21 +299,22 @@ class TestRecallBufferThreadSafety:
             store.pending_count_by_being(being)
             store.list_pending_by_being(being)
             store.peek_batch_by_being(being, batch_size=1, max_contexts_per_episode=1)
-            store.stamp_prediction_outcome_by_being(being, "ctx-1", "誤差")
-            store.list_episode_ids_by_prediction_context_by_being(being, "ctx-1")
+            store.stamp_prediction_outcome_for_episodes_by_being(
+                being, ("e1",), "誤差", event_id="ev-1"
+            )
             store.mark_processed_by_being(being, ("r1",))
             store.replace_all_pending_by_being(being, [])
 
     def test_concurrent_append_and_stamp_prediction_outcome_never_loses_observations(
         self, being: BeingId
     ) -> None:
-        """ワーカー thread の ``append_by_being`` と、誤差駆動再解釈の完了点で
-        呼ばれる ``stamp_prediction_outcome_by_being`` (list 読み取り →
+        """ワーカー thread の ``append_by_being`` と、
+        ``stamp_prediction_outcome_for_episodes_by_being`` (list 読み取り →
         更新版差し替えの read-modify-write) を並走させても、append した
         recall observation が無音で消えない。
 
-        stamp 側はマッチしない ``prediction_context_id`` を渡し、実質
-        no-op のまま read-modify-write の競合窓だけを突く。
+        stamp 側はマッチしない episode_id を渡し、実質 no-op のまま
+        read-modify-write の競合窓だけを突く。
         """
         total = 300
         store = InMemoryEpisodicRecallBufferStore()
@@ -494,9 +328,9 @@ class TestRecallBufferThreadSafety:
                 )
 
         def stamper() -> None:
-            for _ in range(total):
-                store.stamp_prediction_outcome_by_being(
-                    being_id, "no-such-context", "誤差"
+            for i in range(total):
+                store.stamp_prediction_outcome_for_episodes_by_being(
+                    being_id, ("no-such-episode",), "誤差", event_id=f"ev-{i}"
                 )
 
         t_append = threading.Thread(target=appender)

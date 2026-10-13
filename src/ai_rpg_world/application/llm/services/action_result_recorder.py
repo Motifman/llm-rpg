@@ -21,13 +21,6 @@ semantic_promotion.on_after_tool_turn」を共有コアに抽出する。escape 
   を skip (= episodic OFF)。
 - subjective fields (inner_thought / intention / emotion_hint) や fingerprint 等は
   optional 引数として通す口を用意する。escape は当面 subset しか渡さない (U2 で配線)。
-- **prediction_context_id の consume (U1)**: ``prediction_context_ledger`` が
-  注入されていれば、record() の中で ``ledger.consume(player_id)`` した id を
-  ActionResultEntry に焼き込む。ledger 未注入 (None) なら常に None (= 既存挙動、
-  id 機構 OFF のランタイムとの後方互換)。consume は append の**前**に行う
-  (append 自体は必ず起きる操作なので、consume に失敗しても append 自体は
-  止めない、という優先順位にする必要はここでは生じない: consume は例外を
-  投げない単純な dict 操作のため)。
 """
 
 from __future__ import annotations
@@ -39,9 +32,6 @@ from typing import Any
 
 from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -54,19 +44,11 @@ class ActionResultRecorder:
         action_result_store: IActionResultStore,
         *,
         logger: logging.Logger | None = None,
-        prediction_context_ledger: PredictionContextLedger | None = None,
     ) -> None:
         if action_result_store is None:
             raise TypeError("action_result_store must not be None")
-        if prediction_context_ledger is not None and not isinstance(
-            prediction_context_ledger, PredictionContextLedger
-        ):
-            raise TypeError(
-                "prediction_context_ledger must be PredictionContextLedger or None"
-            )
         self._store = action_result_store
         self._logger = logger or logging.getLogger(self.__class__.__name__)
-        self._prediction_context_ledger = prediction_context_ledger
 
     def record(
         self,
@@ -93,18 +75,6 @@ class ActionResultRecorder:
         being_id: BeingId | None = None,
     ) -> None:
         """action を store に積み、episodic_stack があれば chunk → promotion を回す。"""
-        prediction_context_id: str | None = None
-        in_context_belief_ids: tuple[str, ...] = ()
-        if self._prediction_context_ledger is not None:
-            consumed = self._prediction_context_ledger.consume(player_id)
-            if consumed is not None:
-                prediction_context_id = consumed.prediction_context_id
-                # U4 (予測誤差統一設計 部品3): consume した PredictionContext が
-                # 持つ belief_ids (= このターンの prompt build 時に【関連する
-                # 学び】として in-context だった belief 群) も一緒に entry へ
-                # 焼き込む。新規 per-Being store は作らず、entry に載せたまま
-                # chunk 転記点まで運ぶ (U1 の prediction_context_id と同じ経路)。
-                in_context_belief_ids = consumed.belief_ids
         self._store.append(
             player_id,
             action_summary=action_summary,
@@ -120,8 +90,6 @@ class ActionResultRecorder:
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
             execution_provenance=current_execution_provenance(),
-            prediction_context_id=prediction_context_id,
-            in_context_belief_ids=in_context_belief_ids,
             inner_thought=inner_thought,
             intention=intention,
             emotion_hint=emotion_hint,

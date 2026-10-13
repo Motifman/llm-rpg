@@ -31,7 +31,6 @@ _SCENARIO_PATH = (
 def _common_memory_config(**overrides):
     """誤差駆動再解釈が実際に流れるための前提設定一式を作る。"""
     return episodic_config(
-        prediction_context_id_enabled=True,
         episodic_reinterpretation_enabled=True,
         **overrides,
     )
@@ -78,7 +77,6 @@ class TestWorldRuntimeErrorDrivenReinterpretationWiring:
         runtime = create_world_runtime(
             _SCENARIO_PATH,
             config=episodic_config(
-                prediction_context_id_enabled=True,
                 error_driven_reinterpretation_enabled=True,
             ),
         )

@@ -84,26 +84,6 @@ class EpisodicRecallBufferRepository(ABC):
         """
 
     @abstractmethod
-    def stamp_prediction_outcome_by_being(
-        self,
-        being_id: BeingId,
-        prediction_context_id: str,
-        prediction_error: str,
-    ) -> None:
-        """U9a (予測誤差統一設計 部品5・誤差駆動再解釈): ``prediction_context_id``
-
-        (= この記憶を思い出して立てた予測を特定する id) を持つ pending
-        observation 群に ``prediction_error`` を刻む。
-
-        pending 集合 (= まだ再解釈で処理されていない観測) だけが対象。
-        既に ``prediction_outcome_error`` が刻まれている observation は
-        上書きしない (1 つの recall observation は 1 つの予測文脈にしか
-        紐付かない前提だが、誤って複数回呼ばれても最初の刻みを保つ)。
-        一致する observation が無ければ何もしない (呼び出し側は
-        prediction_context_id が実在するか事前に検証しない)。
-        """
-
-    @abstractmethod
     def stamp_prediction_outcome_for_episodes_by_being(
         self,
         being_id: BeingId,
@@ -130,24 +110,5 @@ class EpisodicRecallBufferRepository(ABC):
         self, being_id: BeingId, event_ids: list[str]
     ) -> None:
         """受け取り済みの出来事の ID を置き換える。snapshot の restore 用。"""
-
-    @abstractmethod
-    def list_episode_ids_by_prediction_context_by_being(
-        self,
-        being_id: BeingId,
-        prediction_context_id: str,
-    ) -> tuple[str, ...]:
-        """U9b (予測誤差統一設計 部品5・想起の信用割り当て): ``prediction_context_id``
-
-        (= この記憶を思い出して立てた予測を特定する id) を持つ pending
-        observation 群の ``episode_id`` を重複排除して返す。
-
-        「思い出したから当たった」を的中側 (recall success store) に
-        書き込む際、どの episode を想起して立てた予測だったかを特定する
-        読み出し専用クエリ。``stamp_prediction_outcome_by_being`` (外れ側)
-        と対称の読み出し版で、pending 集合 (= まだ再解釈で処理されていない
-        観測) だけが対象。一致する observation が無ければ空 tuple を返す。
-        """
-
 
 __all__ = ["EpisodicRecallBufferRepository"]

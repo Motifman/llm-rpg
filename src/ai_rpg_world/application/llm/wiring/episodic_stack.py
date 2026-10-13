@@ -411,11 +411,8 @@ def build_episodic_stack(
     # #1452: 固着パスが作る証拠と信念に付ける記憶のターン数の読み口。
     # 固着パスを組むときは必須。
     memory_turn_reader: MemoryTurnReader | None = None,
-    # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
-    # chunk_coordinator が in_context_belief_ids を計算して
-    # belief_evidence_transcriber に渡す。非同期 scheduler 経路への配線は
-    # build_episodic_stack がスケジューラを構築しないため呼び出し側 (world_runtime.py)
-    # の責務 (belief_evidence_transcriber と同じ分担)。
+    # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のとき固着の
+    # prompt に CONFIRMATION 節を足す (BeliefConsolidationCoordinator に渡す)。
     belief_attribution_enabled: bool = False,
     # P4 (reflect / 目的への前進評価 / default False = flag OFF): True のとき
     # 固着 LLM に reflect 節を出し、停滞宣言を内省観測として本人に注入する。

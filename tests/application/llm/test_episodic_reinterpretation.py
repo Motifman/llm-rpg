@@ -76,10 +76,6 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         """常に RuntimeError。"""
         raise RuntimeError('broken')
 
-    def stamp_prediction_outcome_by_being(self, being_id: BeingId, prediction_context_id: str, prediction_error: str) -> None:
-        """常に RuntimeError。"""
-        raise RuntimeError('broken')
-
     def stamp_prediction_outcome_for_episodes_by_being(self, being_id: BeingId, episode_ids: tuple[str, ...], prediction_error: str, *, event_id: str) -> int | None:
         """常に RuntimeError。"""
         raise RuntimeError('broken')
@@ -92,16 +88,12 @@ class _BrokenRecallBufferStore(EpisodicRecallBufferRepository):
         """常に RuntimeError。"""
         raise RuntimeError('broken')
 
-    def list_episode_ids_by_prediction_context_by_being(self, being_id: BeingId, prediction_context_id: str) -> tuple[str, ...]:
-        """常に RuntimeError。"""
-        raise RuntimeError('broken')
-
 def _episode(*, episode_id: str, player_id: int=7, being_id: BeingId | None=None, recall_text: str='初期の一人称回想。') -> SubjectiveEpisode:
     bid = being_id if being_id is not None else BeingId(f'being_w1_p{player_id}')
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=bid, occurred_at=datetime(2026, 5, 4, 1, 0, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-a',)), location=EpisodeLocation(spot_id=10), action=EpisodeAction(tool_name='world_no_op'), who=('player:self',), what='古い扉を調べた', why=None, observed='古い扉は固く閉ざされていた。', expected=None, outcome='未解決', prediction_error=None, felt='caution', interpreted='閉ざされた場所だと思った。', cues=(EpisodicCue(axis='place_spot', value='10', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text=recall_text)
 
-def _recall(*, recall_id: str, episode_id: str, at: datetime, turn_index: int, player_id: int=7, prediction_context_id: str | None=None, prediction_outcome_error: str | None=None) -> EpisodicRecallObservation:
-    return EpisodicRecallObservation(recall_id=recall_id, player_id=player_id, episode_id=episode_id, recalled_at=at, source_axes=('temporal',), current_state_snapshot='現在地: 古い廊下', recent_events_snapshot='扉の前で立ち止まった。', persona_snapshot='一人称: 私', situation_cues=('place_spot:10',), turn_index=turn_index, prediction_context_id=prediction_context_id, prediction_outcome_error=prediction_outcome_error)
+def _recall(*, recall_id: str, episode_id: str, at: datetime, turn_index: int, player_id: int=7, prediction_outcome_error: str | None=None) -> EpisodicRecallObservation:
+    return EpisodicRecallObservation(recall_id=recall_id, player_id=player_id, episode_id=episode_id, recalled_at=at, source_axes=('temporal',), current_state_snapshot='現在地: 古い廊下', recent_events_snapshot='扉の前で立ち止まった。', persona_snapshot='一人称: 私', situation_cues=('place_spot:10',), turn_index=turn_index, prediction_outcome_error=prediction_outcome_error)
 _BEING_7 = BeingId('being_w1_p7')
 
 class TestInMemoryEpisodicRecallBufferStore:
@@ -243,7 +235,7 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
         """flag ON で誤差付き recall は prediction outcome error を含む。"""
         (episodes, setup, being_id) = self._stores()
         buffer = setup.recall_buffer
-        buffer.append_by_being(being_id, _recall(recall_id='r1', episode_id='ep-a', at=datetime(2026, 5, 4, tzinfo=timezone.utc), turn_index=0, prediction_context_id='pc-1', prediction_outcome_error='実際には扉は開いていた'))
+        buffer.append_by_being(being_id, _recall(recall_id='r1', episode_id='ep-a', at=datetime(2026, 5, 4, tzinfo=timezone.utc), turn_index=0, prediction_outcome_error='実際には扉は開いていた'))
         port = _FakeReinterpretationPort({'episode_updates': []})
         coord = EpisodicReinterpretationCoordinator(episode_store=episodes, recall_buffer_store=buffer, journal_store=setup.journal, completion=port, turn_interval=1, error_driven_reinterpretation_enabled=True)
         coord.flush_player(PlayerId(7), being_id)
@@ -270,7 +262,7 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
         """flag OFF (既定) は U9a 導入前と完全に一致する。"""
         (episodes_off, setup_off, being_id_off) = self._stores()
         buffer_off = setup_off.recall_buffer
-        buffer_off.append_by_being(being_id_off, _recall(recall_id='r1', episode_id='ep-a', at=datetime(2026, 5, 4, tzinfo=timezone.utc), turn_index=0, prediction_context_id='pc-1', prediction_outcome_error='実際には扉は開いていた'))
+        buffer_off.append_by_being(being_id_off, _recall(recall_id='r1', episode_id='ep-a', at=datetime(2026, 5, 4, tzinfo=timezone.utc), turn_index=0, prediction_outcome_error='実際には扉は開いていた'))
         port_off = _FakeReinterpretationPort({'episode_updates': []})
         coord_off = EpisodicReinterpretationCoordinator(episode_store=episodes_off, recall_buffer_store=buffer_off, journal_store=setup_off.journal, completion=port_off, turn_interval=1, error_driven_reinterpretation_enabled=False)
         coord_off.flush_player(PlayerId(7), being_id_off)
