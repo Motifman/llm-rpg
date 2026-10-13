@@ -133,8 +133,8 @@ class TestReplayStartsTheWorldOver:
         assert loaded["payload"]["world_snapshot_ignored"] is True
         assert [r["being_id"] for r in loaded["payload"]["world_clock_restarts"]] == loaded["payload"]["restored_being_ids"]
         (saved,) = _events(tmp_path / "r1", "snapshot_save")
-        saved_turns = {c["being_id"]: c["memory_turn"] for c in saved["payload"]["expectation_counts"]}
-        loaded_turns = {c["being_id"]: c["memory_turn"] for c in loaded["payload"]["expectation_counts"]}
+        saved_turns = {c["being_id"]: c["memory_turn"] for c in saved["payload"]["memory_turns"]}
+        loaded_turns = {c["being_id"]: c["memory_turn"] for c in loaded["payload"]["memory_turns"]}
         assert loaded_turns == saved_turns
         assert any(turn > 0 for turn in loaded_turns.values())
         first_tick = _events(tmp_path / "r2", "tick_start")[0]["tick"]

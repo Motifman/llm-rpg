@@ -80,7 +80,6 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_belief_evidence,
     dict_to_episode_hit_count_pair,
     dict_to_episode_tick_pair,
-    dict_to_expectation,
     dict_to_goal_entry,
     dict_to_memo_entry,
     dict_to_memory_link,
@@ -90,10 +89,8 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
-    dict_to_undelivered_expectation_event,
     episode_hit_count_pair_to_dict,
     episode_tick_pair_to_dict,
-    expectation_to_dict,
     goal_entry_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
@@ -103,7 +100,6 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     reinterpretation_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
-    undelivered_expectation_event_to_dict,
 )
 from ai_rpg_world.application.llm.services.afterglow_store import IAfterglowStore
 from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
@@ -135,15 +131,6 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
 )
 from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
     PendingPredictionRepository,
-)
-from ai_rpg_world.domain.memory.expectation.exception.expectation_exception import (
-    ExpectationValidationException,
-)
-from ai_rpg_world.domain.memory.expectation.repository.expectation_repository import (
-    ExpectationRepository,
-)
-from ai_rpg_world.domain.memory.expectation.service.require_restorable import (
-    require_restorable,
 )
 from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
@@ -281,10 +268,6 @@ class BeingMemorySnapshotService:
         "pending_predictions",
         # P5 (目的層): 目的 journal の per-Being state (belief journal と同型)。
         "goal_journal",
-        # #1439: 予期は状態をそのまま保存して戻す。未配信の出来事と記憶の
-        # ターン数も同じ store が持つので、3 key を同じ単位で書き戻す。
-        "expectations",
-        "expectation_undelivered_events",
         "memory_turn",
         "acquaintances",
         "being_episodes",
@@ -310,7 +293,6 @@ class BeingMemorySnapshotService:
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
-        expectation_store: ExpectationRepository,
         memory_turn_clock: MemoryTurnClock,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
@@ -370,8 +352,6 @@ class BeingMemorySnapshotService:
             raise TypeError("being_episode_store must be EpisodeRepository")
         if not isinstance(being_memo_store, MemoBookRepository):
             raise TypeError("being_memo_store must be MemoBookRepository")
-        if not isinstance(expectation_store, ExpectationRepository):
-            raise TypeError("expectation_store must be ExpectationRepository")
         if not isinstance(memory_turn_clock, MemoryTurnClock):
             raise TypeError("memory_turn_clock must be MemoryTurnClock")
         self._memo = memo_store
@@ -390,7 +370,6 @@ class BeingMemorySnapshotService:
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
-        self._expectation = expectation_store
         self._memory_turn_clock = memory_turn_clock
 
     def capture(self, being_id: BeingId) -> str:
@@ -481,14 +460,6 @@ class BeingMemorySnapshotService:
                 for e in self._goal_journal.list_all_by_being(being_id)
             ],
         }
-        payload["expectations"] = [
-            expectation_to_dict(e)
-            for e in self._expectation.list_all_by_being(being_id)
-        ]
-        payload["expectation_undelivered_events"] = [
-            undelivered_expectation_event_to_dict(u)
-            for u in self._expectation.list_undelivered_by_being(being_id)
-        ]
         memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
         payload["acquaintances"] = [
@@ -654,14 +625,6 @@ class BeingMemorySnapshotService:
             dict_to_goal_entry,
             "goal_journal",
         )
-        expectations = _decode_list(
-            payload["expectations"], dict_to_expectation, "expectations"
-        )
-        undelivered_expectation_events = _decode_list(
-            payload["expectation_undelivered_events"],
-            dict_to_undelivered_expectation_event,
-            "expectation_undelivered_events",
-        )
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
             isinstance(v, int) and not isinstance(v, bool) and v > 0
@@ -698,20 +661,6 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
             ) from exc
-        # 予期の組の整合は、どの store にも書く前に確かめる。ほかの store を
-        # 書き換えたあとで予期だけ拒むと、半端な状態が残る。
-        try:
-            require_restorable(
-                being_id,
-                expectations=expectations,
-                undelivered_events=undelivered_expectation_events,
-                turn=memory_turn,
-            )
-        except ExpectationValidationException as exc:
-            raise BeingMemoryPayloadFormatError(
-                f"payload['expectations'] does not fit {being_id}: {exc}"
-            ) from exc
-
         # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
         # memory_link / reinterpretation_journal / recall_buffer は episode に
         # 参照するが、本 service は参照整合性まで保証しない (= 各 store 独立)。
@@ -760,12 +709,6 @@ class BeingMemorySnapshotService:
         )
         # P5 (目的層): 目的 journal の bulk overwrite。
         self._goal_journal.replace_all_by_being(being_id, goal_entries)
-        self._expectation.replace_all_by_being(
-            being_id,
-            expectations=expectations,
-            undelivered_events=undelivered_expectation_events,
-            turn=memory_turn,
-        )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
