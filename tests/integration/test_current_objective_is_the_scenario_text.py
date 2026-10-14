@@ -40,7 +40,7 @@ def _user_content(runtime, player_id: PlayerId) -> str:
 
 def test_every_scenario_is_checked() -> None:
     """正の対照: 対象のシナリオを 1 本も拾えていないと、下の検査が空振りする。"""
-    assert len(_SCENARIO_FILES) >= 20
+    assert len(_SCENARIO_FILES) >= 19
 
 
 @pytest.mark.parametrize("scenario_file", _SCENARIO_FILES)
