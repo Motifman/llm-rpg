@@ -169,7 +169,6 @@ experiment-with-snapshot:
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
 		MEMORY_KIND=$(MEMORY_KIND) \
-		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
@@ -194,7 +193,6 @@ experiment-resume:
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
 		MEMORY_KIND=$(MEMORY_KIND) \
-		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
@@ -208,7 +206,6 @@ experiment-publish:
 		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
 		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) \
 		MEMORY_KIND=$(MEMORY_KIND) \
-		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=1
@@ -225,7 +222,7 @@ experiment-publish:
 # 上書き可能な変数 (省略時の survival 既定値):
 #   MAX_WORLD_TICKS=140  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-#   MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
+#   MEMORY_KIND / PROVIDER /
 #   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
 SURVIVAL_MAX_WORLD_TICKS ?= 140
 SURVIVAL_WORKERS ?= 4
@@ -239,7 +236,6 @@ experiment-survival:
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
 		MEMORY_KIND=$(MEMORY_KIND) \
-		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
@@ -260,7 +256,7 @@ experiment-survival:
 # 上書き可能な変数 (省略時の coop 既定値):
 #   MAX_WORLD_TICKS=240 (= stranded_at_tick)  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-#   MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
+#   MEMORY_KIND / PROVIDER /
 #   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
 COOP_MAX_WORLD_TICKS ?= 240
 COOP_WORKERS ?= 4
@@ -274,7 +270,6 @@ experiment-survival-coop:
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
 		MEMORY_KIND=$(MEMORY_KIND) \
-		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
@@ -287,7 +282,7 @@ experiment-survival-coop:
 #   make experiment-recall-probe OUT=var/runs/recall_probe_001
 #   make experiment-recall-probe DRY_RUN=1 OUT=/tmp/dryrun   # LLM 呼ばずに構造確認
 #
-# 既定: K run 設定 (rolling_summary / thread_pool) +
+# 既定: K run 設定 (rolling_summary) +
 #       DeepInfra fp4 / deepseek-v4-flash。OPENAI_API_KEY が要る。
 #
 # 引数:
