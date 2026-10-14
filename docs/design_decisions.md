@@ -816,7 +816,7 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 
 **その後**: 見出しの欄 (afterglow) の store と、役に立った回数の store (`recall_success`) は、Issue #1631 の段 9 で snapshot のキー (`afterglow_entries` / `recall_success_hit_count` / `recall_success_received_event_ids`) ごと消した。手順の 1〜4 を逆にたどって外した。restore は足りないキーだけを拒むので、消す前の snapshot も読める。replay で世界の時計を巻き戻すときは、古い snapshot に残る `afterglow_entries` を読まずに捨てる (`world_clock_restart.py`)。
 
-残る想起の枠と慣れの store も、Issue #1631 の段 9 の後半で snapshot のキー (`recall_slot_entries` / `recall_slot_cooldown` / `recall_habituation_last_recalled`) ごと消した。この項が生まれた PR-G の 3 store は、すべて無くなった。replay では、この 3 キーも読まずに捨てる。
+残る想起の枠と慣れの store も、Issue #1631 の #1777 で snapshot のキー (`recall_slot_entries` / `recall_slot_cooldown` / `recall_habituation_last_recalled`) ごと消した。この項が生まれた PR-G の 3 store は、すべて無くなった。replay では、この 3 キーも読まずに捨てる。
 
 ## 28. 実験に意味を持つ設定は profile/config だけから入れる
 
