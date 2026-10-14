@@ -28,6 +28,7 @@ class TestEffectiveLighting:
         """薄暗い部屋は光源有無にかかわらずDIM"""
         svc = SpotPerceptionService()
         assert svc.compute_effective_lighting(_atmosphere(LightingEnum.DIM), False) == LightingEnum.DIM
+        assert svc.compute_effective_lighting(_atmosphere(LightingEnum.DIM), True) == LightingEnum.DIM
 
     def test_dark_without_light_stays_dark(self) -> None:
         """暗闇で光源なしはDARKのまま"""
