@@ -39,7 +39,6 @@
     "BELIEF_ATTRIBUTION_ENABLED": true,
     "RECALL_HIT_BOOST_ENABLED": true,
     "REASON_FIRST_TWO_STEP_ENABLED": true,
-    "LLM_TOOL_MODE": "default",
     "SCENARIO_RANDOM_SEED": 42
   }
 }

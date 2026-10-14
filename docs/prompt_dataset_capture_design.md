@@ -597,8 +597,8 @@ system prompt は hash で重複排除する。将来、他キャラクターの
 }
 ```
 
-tool 定義も system prompt と同じく hash で重複排除する。`LLM_TOOL_MODE` や
-機能フラグで tool list が変わる場合も、別 toolset 行として保存される。
+tool 定義も system prompt と同じく hash で重複排除する。機能フラグで tool list が
+変わる場合も、別 toolset 行として保存される。
 
 ### `run.json`
 

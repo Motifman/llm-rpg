@@ -35,11 +35,6 @@ Phase「自走 tick + heartbeat + intent キュー + ActionFailed 観測」が�
    echo "LLM_CLIENT=litellm" >> .env
    echo "SPOT_GRAPH_TICK_INTERVAL_SEC=2.0" >> .env  # 余裕を持って 2 秒/tick
    echo "SPOT_GRAPH_TICK_LOOP_ENABLED=true" >> .env
-
-   # (任意) ツール mode。Issue #155 (TODO 設計再評価) の比較実験用。
-   # 既定 (未設定 / "default"): TODO 系ツールを含む従来構成
-   # "pure_spot_graph": TODO 系を除外、spot_graph_* + speech のみで実行
-   # echo "LLM_TOOL_MODE=pure_spot_graph" >> .env
    ```
 
 3. キャラクター・シナリオの確認:

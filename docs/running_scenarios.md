@@ -159,9 +159,8 @@ make experiment-relay
 
 | ターゲット | 内容 |
 |------------|------|
-| `make experiment-relay` | R1_default + R2_pure（relay_puzzle_demo、既定 max_ticks=30） |
-| `make experiment-relay-r1` | R1 のみ |
-| `make experiment-relay-r2` | R2 のみ |
+| `make experiment-relay` | R1_default（relay_puzzle_demo、既定 max_ticks=30） |
+| `make experiment-relay-r1` | R1 のみ (`experiment-relay` と同じ) |
 | `make experiment-relay-cloud` | OpenAI クラウド（`OPENAI_API_BASE` を空に上書き） |
 
 上書き例:
@@ -173,15 +172,16 @@ make experiment-relay ISSUE154_MAX_TICKS=30 \
 
 ---
 
-## 試行定義（R1 / R2 / R3）
+## 試行定義（R1 / R3）
 
-| キー | シナリオ | `LLM_TOOL_MODE` | 用途 |
-|------|----------|-----------------|------|
-| `R1_default` | `relay_puzzle_demo` | （未設定 = TODO ツール含む） | 協調 + TODO あり |
-| `R2_pure` | `relay_puzzle_demo` | `pure_spot_graph` | spot_graph + speech のみ |
-| `R3_contention` | `single_relic_contention_demo` | （未設定） | 争奪デモ（relay 以外） |
+| キー | シナリオ | 用途 |
+|------|----------|------|
+| `R1_default` | `relay_puzzle_demo` | 協調 + TODO あり |
+| `R3_contention` | `single_relic_contention_demo` | 争奪デモ（relay 以外） |
 
-フィルタ: `ISSUE154_RUNS=R1_default,R2_pure`（カンマ区切り）。
+フィルタ: `ISSUE154_RUNS=R1_default,R3_contention`（カンマ区切り）。
+
+TODO 系を外して比べる `R2_pure` (`LLM_TOOL_MODE=pure_spot_graph`) は、#1631 の #1762 で消した。
 
 ---
 
@@ -209,7 +209,7 @@ make experiment-relay ISSUE154_MAX_TICKS=30 \
 
 ```bash
 OPENAI_API_BASE= LLM_MODEL=openai/gpt-5-mini ISSUE154_MAX_TICKS=30 \
-  ISSUE154_RUNS=R1_default,R2_pure \
+  ISSUE154_RUNS=R1_default \
   python scripts/run_relay_puzzle_experiment.py -o var/gpt5mini_report.md
 ```
 
@@ -220,11 +220,11 @@ OPENAI_API_BASE= LLM_MODEL=openai/gpt-5-mini ISSUE154_MAX_TICKS=30 \
 ```bash
 source venv/bin/activate
 
-# relay_puzzle R1+R2（vLLM）
+# relay_puzzle R1（vLLM）
 LLM_MODEL=openai/gpt-5-mini \
 OPENAI_API_KEY= \
 ISSUE154_MAX_TICKS=30 \
-ISSUE154_RUNS=R1_default,R2_pure \
+ISSUE154_RUNS=R1_default \
 python scripts/run_relay_puzzle_experiment.py \
   -o var/my_report.md 2>&1 | tee var/my_run.log
 ```
