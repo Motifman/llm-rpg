@@ -167,3 +167,18 @@ class TestPostContent:
         assert post_content.content == content
         assert post_content.visibility == PostVisibility.PUBLIC
         assert post_content.hashtags == ("default",)
+
+    def test_aggregate_origin_length_rejections(self):
+        """集約の旧試験にあった日本語281文字は、集約へ渡る前に専用例外で拒否する。"""
+        with pytest.raises(ContentLengthValidationException):
+            PostContent("あ" * 281)
+
+    @pytest.mark.parametrize(
+        ("body", "hashtags"),
+        [("content", ["#tag"] * 11), ("content", tuple(["#tag"] * 11)), ("テスト", tuple(f"tag{i}" for i in range(11)))],
+        ids=["duplicate-list11", "duplicate-tuple11", "unprefixed-tuple11"],
+    )
+    def test_aggregate_origin_hashtag_rejections(self, body, hashtags):
+        """集約の旧試験にあったlist/tupleの重複タグと接頭辞なし11タグを、専用例外で拒否する。"""
+        with pytest.raises(HashtagCountValidationException):
+            PostContent(body, hashtags)
