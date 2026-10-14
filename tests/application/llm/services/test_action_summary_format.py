@@ -40,10 +40,6 @@ def _all_declared_tool_names() -> set[str]:
         definition.name
         for definition, _ in get_memory_specs(
             memo_enabled=True,
-            episodic_recall_enabled=True,
-            recall_by_handle_enabled=True,
-            episodic_explore_related_enabled=True,
-            semantic_search_enabled=True,
             episode_recall_max_handles=3,
             episode_index_revision_enabled=True,
         )

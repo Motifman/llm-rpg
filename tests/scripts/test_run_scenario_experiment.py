@@ -820,18 +820,14 @@ class TestExperimentProfileManifest:
             for key in (
                 "LLM_EPISODIC_ENABLED",
                 "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-                "EPISODIC_RECALL_ENABLED",
                 "SEMANTIC_LLM_GIST_ENABLED",
-                "SEMANTIC_SEARCH_ENABLED",
                 "BELIEF_EVIDENCE_ENABLED",
                 "BELIEF_CONSOLIDATION_ENABLED",
             )
         } == {
             "LLM_EPISODIC_ENABLED": False,
             "LLM_EPISODIC_SUBJECTIVE_ENABLED": False,
-            "EPISODIC_RECALL_ENABLED": False,
             "SEMANTIC_LLM_GIST_ENABLED": False,
-            "SEMANTIC_SEARCH_ENABLED": False,
             "BELIEF_EVIDENCE_ENABLED": False,
             "BELIEF_CONSOLIDATION_ENABLED": False,
         }
@@ -930,14 +926,6 @@ class TestExperimentProfileManifest:
                 "openrouter/deepseek/deepseek-v4-flash"
             ), profile_name
             assert runtime_config["OPENROUTER_PROVIDER"] == "DeepSeek", profile_name
-
-    def test_smoke_stub_does_not_set_active_search_tool_flags(self) -> None:
-        """smoke_stub は能動検索 2 tool を明示せず、既定 false のままにする。"""
-        profile = self._load_profile("smoke_stub")
-        runtime_config = profile["runtime_config"]
-
-        assert "SEMANTIC_SEARCH_ENABLED" not in runtime_config
-        assert "EPISODIC_EXPLORE_RELATED_ENABLED" not in runtime_config
 
     def test_uses_manifest_run_start_resolved_config_remains_profile(
         self,

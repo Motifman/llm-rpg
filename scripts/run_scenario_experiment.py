@@ -1811,11 +1811,6 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     print(
-        f"[run] episodic_explore_related={'on' if cfg.episodic_explore_related_enabled else 'off'} "
-        "(runtime_config.EPISODIC_EXPLORE_RELATED_ENABLED)",
-        flush=True,
-    )
-    print(
         f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
         "(runtime_config.SEMANTIC_LLM_GIST_ENABLED)",
         flush=True,
@@ -1823,11 +1818,6 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[run] semantic_passive_top_k={cfg.semantic_passive_top_k} "
         "(runtime_config.SEMANTIC_PASSIVE_TOP_K)",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_search={'on' if cfg.semantic_search_enabled else 'off'} "
-        "(runtime_config.SEMANTIC_SEARCH_ENABLED)",
         flush=True,
     )
     print(

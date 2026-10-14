@@ -77,14 +77,12 @@ def _format_afterglow_section(
     None / 空のときは空文字を返し、上位は section ごと省略する。各エントリは
     ``[handle] heading`` 形式の 1 行で並べ、LLM から「ぼんやり覚えてる
     記憶」として visible にする。handle は make_afterglow_handle で生成され、
-    同じ episode は常に同じ handle になる (= 後続 PR の能動想起ツールで
-    安定して引ける)。
+    同じ episode は常に同じ handle になる。
     """
     if not afterglow_index:
         return ""
     lines = [
         "【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)",
-        "気になる見出しがあれば memory_recall_by_handle にその handle を渡して本文を引き戻せる。",
     ]
     for entry in afterglow_index:
         handle = make_afterglow_handle(entry.episode_id)

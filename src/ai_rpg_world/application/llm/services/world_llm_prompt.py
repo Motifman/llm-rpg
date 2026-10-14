@@ -168,27 +168,13 @@ def _fallback_persona_block(display_name: str) -> str:
     ).build(persona)
 
 
-def _past_events_rule(
-    *, relevant_memories_shown: bool, active_recall_offered: bool
-) -> str:
-    """過去の出来事を何から語ってよいかの文。出ていない欄とツールを指さない (#1616)。"""
-    if relevant_memories_shown and active_recall_offered:
-        return (
-            "具体的な過去の出来事 (どこで何をした等) は【関連する記憶】または能動想起で"
-            "取り出した内容だけが「確かな記憶」である。【関連する記憶】が空のときは、"
-            "ペルソナから想像で補わず、能動想起の手段を試すか、「思い出せない」と素直に伝える。"
-        )
+def _past_events_rule(*, relevant_memories_shown: bool) -> str:
+    """過去の出来事を何から語ってよいかの文。出ていない欄を指さない (#1616)。"""
     if relevant_memories_shown:
         return (
             "具体的な過去の出来事 (どこで何をした等) は【関連する記憶】に出た内容だけが"
             "「確かな記憶」である。【関連する記憶】が空のときは、"
             "ペルソナから想像で補わず、「思い出せない」と素直に伝える。"
-        )
-    if active_recall_offered:
-        return (
-            "具体的な過去の出来事 (どこで何をした等) は能動想起で取り出した内容だけが"
-            "「確かな記憶」である。取り出せていないときは、"
-            "ペルソナから想像で補わず、能動想起の手段を試すか、「思い出せない」と素直に伝える。"
         )
     return (
         "具体的な過去の出来事 (どこで何をした等) は、続く user 文面に載っている内容だけが"
@@ -197,21 +183,14 @@ def _past_events_rule(
     )
 
 
-def _history_limit_rule(
-    *, relevant_memories_shown: bool, active_recall_offered: bool
-) -> str:
-    """直近の文面に載らない過去の扱い。出ていない欄とツールを指さない (#1616)。"""
-    relevant = (
+def _history_limit_rule(*, relevant_memories_shown: bool) -> str:
+    """直近の文面に載らない過去の扱い。出ていない欄を指さない (#1616)。"""
+    return (
         "【関連する記憶】も同様で、自動的に思い出せた分のみが載る "
         "(= 空でも「過去そのものが無い」とは限らない)。"
         if relevant_memories_shown
         else ""
     )
-    if not active_recall_offered:
-        return relevant
-    if relevant_memories_shown:
-        return relevant + "空のときに過去を語る必要があれば、能動想起の手段で取り出してから語ること。"
-    return "過去を語る必要があれば、能動想起の手段で取り出してから語ること。"
 
 
 def _episode_index_rule(*, shown: bool, recall_offered: bool) -> str:
@@ -259,7 +238,6 @@ def build_world_system_prompt(
     persona_block: str,
     safe_intro: str,
     relevant_memories_shown: bool,
-    active_recall_offered: bool,
     tool_schema_mode: str = "legacy",
     has_goal: bool = True,
     limits_actions: bool = True,
@@ -279,10 +257,10 @@ def build_world_system_prompt(
         勝利条件・最終目的) を中立化する (層2)。既存シナリオは全て has_goal=True なので
         prompt は不変。
 
-    relevant_memories_shown / active_recall_offered:
-        user 文面に【関連する記憶】の欄を出す設定か、能動想起のツールを出しているか。
-        記憶の指示は、出ているものだけを指す (#1616)。既定値を置かないのは、渡し忘れが
-        「両方ある」文へ黙って戻り、無い欄とツールをまた探させるため。
+    relevant_memories_shown:
+        user 文面に【関連する記憶】の欄を出す設定か。記憶の指示は、出ている欄だけを
+        指す (#1616)。既定値を置かないのは、渡し忘れが「欄がある」文へ黙って戻り、
+        無い欄をまた探させるため。
 
     episode_index_shown / episode_recall_offered:
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
@@ -336,12 +314,10 @@ def build_world_system_prompt(
     )
     persona_section = _persona_section(persona_block)
     past_events_rule = _past_events_rule(
-        relevant_memories_shown=relevant_memories_shown,
-        active_recall_offered=active_recall_offered,
+        relevant_memories_shown=relevant_memories_shown
     )
     history_limit_rule = _history_limit_rule(
-        relevant_memories_shown=relevant_memories_shown,
-        active_recall_offered=active_recall_offered,
+        relevant_memories_shown=relevant_memories_shown
     )
     body = f"""あなたは次のペルソナとして行動するキャラクターである。
 

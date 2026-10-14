@@ -6,7 +6,6 @@ memory 機能が **1 つのシナリオの中で一貫して動く** ことを�
 検証範囲:
 - Phase 0: prompt section の順序 (stable_to_volatile)
 - Phase 1c: §「【関連する学び】」 (semantic passive top-K)
-- Phase 1d: ``memory_search_semantic`` tool が tools 配列に出る
 - Phase 2: §「【最近の流れ】」 (L4 mid summary) が本人ターン上限で生成
 - Phase 2.1: scheduler 経由で L4 生成 (Inline で同期実行)
 - Phase 3: §「【自己像と世界観】」 (L5 long summary) が 4 世代目 L4 evict で

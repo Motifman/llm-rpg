@@ -35,7 +35,7 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "target_id": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     "cursor": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     "limit": ActionArgumentDisplayKind.IDENTIFIER_JSON,
-    # memory_recall_episodes.about: 検索した話題そのものは自由記述。
+    # episode_revise_index.about: どんな記憶かを書き直す自由記述。
     "about": ActionArgumentDisplayKind.FREE_TEXT,
     # interact.action_name: 表示された操作名と完全一致が必要。
     "action_name": ActionArgumentDisplayKind.IDENTIFIER_STRING,
@@ -55,7 +55,7 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "recall_when": ActionArgumentDisplayKind.FREE_TEXT,
     # episode_recall.handles: 【思い出せる出来事】の呼び名の配列を JSON のまま渡す。
     "handles": ActionArgumentDisplayKind.IDENTIFIER_JSON,
-    # memory_* handle: 想起結果が発行した handle と完全一致が必要。
+    # episode_revise_index.handle: 【思い出せる出来事】の呼び名と完全一致が必要。
     "handle": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # inner_thought: 直後の「心の声:」行に同じ値を表示済み。
     "inner_thought": ActionArgumentDisplayKind.OMIT,
@@ -80,8 +80,6 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "memo_ids": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # interact.parameters: interaction ごとに形が変わる自由入力本文。
     "parameters": ActionArgumentDisplayKind.FREE_TEXT,
-    # memory_search_semantic.query: 意味記憶を探す自由記述。
-    "query": ActionArgumentDisplayKind.FREE_TEXT,
     # wait.reason: 待つ理由を自由に書く入力。
     "reason": ActionArgumentDisplayKind.FREE_TEXT,
     # world action の say_inline: 行動と同時に話す自由記述。
@@ -94,17 +92,12 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "target_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # target_player_label: 現在状態に出た人物名と完全一致が必要。
     "target_player_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
-    # memory_recall_episodes.time_range: today / yesterday 等の列挙値と完全一致が必要。
-    "time_range": ActionArgumentDisplayKind.IDENTIFIER_STRING,
-    # memory search top_k: schema の整数値を JSON number のまま渡す。
-    "top_k": ActionArgumentDisplayKind.IDENTIFIER_JSON,
 }
 
 _FREE_TEXT_ARGUMENT_PLACEHOLDERS: Mapping[str, str] = {
     "about": "話題",
     "content": "本文",
     "parameters": "本文",
-    "query": "検索語",
     "reason": "理由",
     "say_inline": "発言",
 }

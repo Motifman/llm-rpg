@@ -1,11 +1,4 @@
-"""``wiring/feature_flags.py`` の env-driven knob 解決テスト。
-
-Phase 1a 配線: ``EPISODIC_EXPLORE_RELATED_ENABLED`` を env-driven にした。
-default OFF とすることで、エピソード記憶 (生成 / passive recall) の検証中に
-能動探索 tool を expose せず、検証変数の交絡を避ける。
-
-詳細: ``docs/memory_system/semantic_memory_activation_plan.md`` §9。
-"""
+"""``wiring/feature_flags.py`` の env-driven knob 解決テスト。"""
 
 from __future__ import annotations
 
@@ -17,89 +10,25 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     DEFAULT_SEMANTIC_PASSIVE_TOP_K,
     ENV_BELIEF_ATTRIBUTION_ENABLED,
     ENV_BELIEF_EVIDENCE_ENABLED,
-    ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
     ENV_MEMO_TOOLS_ENABLED,
     ENV_RECALL_HIT_BOOST_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
-    ENV_SEMANTIC_SEARCH_ENABLED,
     ENV_SHORT_TERM_MEMORY_KIND,
     SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
     SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
     log_belief_attribution_enabled_state,
     log_belief_evidence_enabled_state,
-    log_episodic_explore_related_state,
     log_memo_tools_enabled_state,
     log_recall_hit_boost_enabled_state,
     log_semantic_passive_top_k_state,
-    log_semantic_search_state,
     log_short_term_memory_kind_state,
     resolve_belief_attribution_enabled,
     resolve_belief_evidence_enabled,
-    resolve_episodic_explore_related_enabled,
     resolve_memo_tools_enabled,
     resolve_recall_hit_boost_enabled,
     resolve_semantic_passive_top_k,
-    resolve_semantic_search_enabled,
     resolve_short_term_memory_kind,
 )
-
-
-class TestResolveEpisodicExploreRelatedEnabled:
-    """``EPISODIC_EXPLORE_RELATED_ENABLED`` の env パース。"""
-
-    def test_env_unset_default_off_9(self) -> None:
-        """env 未設定なら OFF (検証中の default 不活性方針)。"""
-        assert resolve_episodic_explore_related_enabled(env={}) is False
-
-    def test_env_empty_string_default_off_2(self) -> None:
-        """空文字は未設定扱い → default OFF。"""
-        assert resolve_episodic_explore_related_enabled(
-            env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: ""}
-        ) is False
-
-    @pytest.mark.parametrize("raw", ["1", "true", "True", "TRUE", "yes", "YES", "on", "On"])
-    def test_truthy_value_9(self, raw: str) -> None:
-        """truthy リテラル ("1", "true", "yes", "on") は case-insensitive で ON。"""
-        assert resolve_episodic_explore_related_enabled(
-            env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
-        ) is True
-
-    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", "FALSE", "Off"])
-    def test_falsy_off(self, raw: str) -> None:
-        """明示的に falsy ("0" / "false" / "no" / "off") を渡したら OFF。"""
-        assert resolve_episodic_explore_related_enabled(
-            env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
-        ) is False
-
-    @pytest.mark.parametrize("raw", ["random", "2", "yeah", "tru", "enable"])
-    def test_unknown_raises_value_error_13(self, raw: str) -> None:
-        """truthy / falsy のどちらでもない値で silent fallback せず fail-fast (PR #434)。"""
-        with pytest.raises(ValueError) as exc_info:
-            resolve_episodic_explore_related_enabled(
-                env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: raw}
-            )
-        msg = str(exc_info.value)
-        assert ENV_EPISODIC_EXPLORE_RELATED_ENABLED in msg
-        assert raw in msg
-
-    def test_around_blank_strip(self) -> None:
-        """env var の値に空白混入があっても解釈できる。"""
-        assert resolve_episodic_explore_related_enabled(
-            env={ENV_EPISODIC_EXPLORE_RELATED_ENABLED: "  1  "}
-        ) is True
-
-
-class TestLogEpisodicExploreRelatedState:
-    """解決状態を INFO ログ 1 件で残す (run 再現性確保用)。"""
-
-    def test_off_one_rendered(self, caplog: pytest.LogCaptureFixture) -> None:
-        """ENABLED / DISABLED の 2 ケースで INFO log が出る。"""
-        with caplog.at_level(logging.INFO, logger="ai_rpg_world.application.llm.wiring.feature_flags"):
-            log_episodic_explore_related_state(True)
-            log_episodic_explore_related_state(False)
-        messages = [rec.message for rec in caplog.records]
-        assert any("ENABLED" in m for m in messages)
-        assert any("DISABLED" in m for m in messages)
 
 
 class TestResolveSemanticPassiveTopK:
@@ -163,54 +92,6 @@ class TestLogSemanticPassiveTopKState:
             log_semantic_passive_top_k_state(0)
         assert any("3" in rec.message for rec in caplog.records)
         assert any("0" in rec.message for rec in caplog.records)
-
-
-class TestResolveSemanticSearchEnabled:
-    """``SEMANTIC_SEARCH_ENABLED`` env パース (Phase 1d)。"""
-
-    def test_default_off_2(self) -> None:
-        """default は OFF。"""
-        assert resolve_semantic_search_enabled(env={}) is False
-
-    @pytest.mark.parametrize("raw", ["1", "true", "yes", "on", "ON", "True"])
-    def test_truthy_2(self, raw: str) -> None:
-        """truthy は ON。"""
-        assert resolve_semantic_search_enabled(
-            env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
-        ) is True
-
-    @pytest.mark.parametrize("raw", ["0", "false", "no", "off", ""])
-    def test_falsy_empty_string_off_2(self, raw: str) -> None:
-        """明示的 falsy / 空文字は OFF。空文字は「未設定」扱いで default を返す。"""
-        assert resolve_semantic_search_enabled(
-            env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
-        ) is False
-
-    @pytest.mark.parametrize("raw", ["random", "yeah", "tru", "2"])
-    def test_unknown_raises_value_error_12(self, raw: str) -> None:
-        """typo / 未知の値で silent fallback せず fail-fast (PR #434)。"""
-        with pytest.raises(ValueError):
-            resolve_semantic_search_enabled(
-                env={ENV_SEMANTIC_SEARCH_ENABLED: raw}
-            )
-
-
-class TestLogSemanticSearchState:
-    """解決結果を INFO ログ 1 件で残す (Phase 1d)。"""
-
-    def test_enabled_disabled_log_rendered_2(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """ENABLED でも DISABLED でも log に出る。"""
-        with caplog.at_level(
-            logging.INFO,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            log_semantic_search_state(True)
-            log_semantic_search_state(False)
-        messages = [rec.message for rec in caplog.records]
-        assert any("ENABLED" in m for m in messages)
-        assert any("DISABLED" in m for m in messages)
 
 
 class TestResolveShortTermMemoryKind:

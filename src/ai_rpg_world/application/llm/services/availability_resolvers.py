@@ -48,58 +48,6 @@ class NoOpAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
-class MemoryExploreRelatedAvailabilityResolver(IAvailabilityResolver):
-    """エピソード間リンク探索。利用可否は実行時に空結果となり得るが、LLM からは常に呼び出し可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
-class MemorySearchSemanticAvailabilityResolver(IAvailabilityResolver):
-    """semantic memory の能動検索 (Phase 1d)。
-
-    実行時には結果が空になり得るが、LLM からは常時呼び出し可能 (= 「思い出そう
-    としたが何も無かった」を学習させる)。
-    """
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
-class MemoryRecallEpisodesAvailabilityResolver(IAvailabilityResolver):
-    """episodic memory の能動 recall (Issue #526 不在 2)。
-
-    LLM からは常時呼び出し可能。実行時に 0 件なら「思い出そうとしたが何も
-    浮かばなかった」を message として返す (= 失敗の質感を学習させる)。
-    """
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
-class MemoryRecallByHandleAvailabilityResolver(IAvailabilityResolver):
-    """afterglow index の handle から本文を引き戻す能動想起 (#526 PR-D)。
-
-    afterglow が空でも tool 自体は呼び出し可能 (= LLM が誤って空の状態で
-    呼んだら「該当する見出しがありません」と返す)。state に依存せず常時 True。
-    """
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        return True
-
-
 class EpisodeRecallAvailabilityResolver(IAvailabilityResolver):
     """目次つきのエピソードの呼び出しと目次の直し (#1623)。目次が空でも呼べて、記憶が無いと返る。"""
 

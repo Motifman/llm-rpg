@@ -13,9 +13,6 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
     EpisodicPromotionFrontier,
 )
-from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
-    EpisodicMemoryExploreToolExecutor,
-)
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
 )
@@ -48,14 +45,6 @@ class EpisodicMemoryLinkBundle:
     link_service: EpisodicMemoryLinkApplicationService
     passive_recall: EpisodicPassiveRecallRetrievalService
 
-    def memory_explore_executor(self) -> EpisodicMemoryExploreToolExecutor:
-        return EpisodicMemoryExploreToolExecutor(
-            episode_store=self.episode_store,
-            link_store=self.link_store,
-            link_service=self.link_service,
-        )
-
-
 def default_link_and_semantic_stores_for_episode_store(
     episode_store: EpisodicEpisodeRepository,
 ) -> tuple[MemoryLinkRepository, SemanticMemoryRepository]:
@@ -85,9 +74,7 @@ def build_episodic_memory_link_bundle(
     link_store: MemoryLinkRepository | None = None,
     promotion_frontier: EpisodicPromotionFrontier | None = None,
 ) -> EpisodicMemoryLinkBundle:
-    """link_service / passive_recall を組み立てる。memory_explore_executor は
-    入口で決めた ``ActingBeing`` を受け取るため Resolver を持たない。
-    """
+    """link_service / passive_recall を組み立てる。"""
     ls = link_store if link_store is not None else InMemoryMemoryLinkStore()
     link_service = EpisodicMemoryLinkApplicationService(
         episode_store,

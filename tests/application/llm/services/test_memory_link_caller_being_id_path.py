@@ -10,34 +10,19 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
 
 being_id = _MIG_BeingId('being_w1_p1')
-import json
 from datetime import datetime, timezone
 
 import pytest
 from tests.application.llm._memory_link_being_test_helpers import make_memory_link_being_setup
 
-from ai_rpg_world.application.llm.services.afterglow_store import (
-    AfterglowEntry,
-    AfterglowSource,
-    InMemoryAfterglowStore,
-    make_afterglow_handle,
-)
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-    InMemoryEpisodicRecallSlotStore,
-    RecallSlotEntry,
-)
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import neighbor_priming_scores
-from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
-    EpisodicMemoryExploreToolExecutor,
-)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_EXPLORE_RELATED
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -90,85 +75,6 @@ class TestEpisodicMemoryLinkApplicationServiceCallerBeingId:
         svc.on_episode_committed(newest, now=_NOW)
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
         assert len(setup.link_store.list_all_links_for_being(other_being_id)) == 0
-
-class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
-    """``EpisodicMemoryExploreToolExecutor`` が ``ActingBeing`` 経路で link を引く。"""
-
-    def test_afterglow_and_slot_missing_invalid_state(self) -> None:
-        """afterglow_store も slot_store も無いと handle 解決不能で INVALID_STATE。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_memory_link_being_setup()
-        setup.provision(1)
-        acting = setup.acting_for(1)
-        episodes.put_by_being(acting.being_id, _ep(episode_id='seed'))
-        svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
-        executor = EpisodicMemoryExploreToolExecutor(episode_store=episodes, link_store=setup.link_store, link_service=svc)
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](acting, {'handle': make_afterglow_handle('seed'), 'top_k': 5})
-        assert result.success is False
-        assert result.error_code == 'INVALID_STATE'
-
-    def test_being_id_via_link_explore(self) -> None:
-        """prompt に出る handle で、同じ episode を起点に関連記憶を辿れる。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        afterglow_store = InMemoryAfterglowStore()
-        slot_store = InMemoryEpisodicRecallSlotStore()
-        setup = make_memory_link_being_setup()
-        being_id = setup.provision(1)
-        acting = setup.acting_for(1)
-        episodes.put_by_being(being_id, _ep(episode_id='seed'))
-        episodes.put_by_being(being_id, _ep(episode_id='other'))
-        afterglow_store.apply_decision(being_id, (AfterglowEntry(episode_id='seed', heading='種になった記憶', entered_tick=1, source=AfterglowSource.WEAK_RECALL),))
-        setup.link_store.upsert_link_by_being(being_id, _link(a='seed', b='other', strength=0.9))
-        svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
-        executor = EpisodicMemoryExploreToolExecutor(episode_store=episodes, link_store=setup.link_store, link_service=svc, afterglow_store=afterglow_store, slot_store=slot_store)
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](acting, {'handle': make_afterglow_handle('seed'), 'top_k': 5})
-        assert result.success is True
-        payload = json.loads(result.message)
-        ids = [r['episode_id'] for r in payload['related_episodes']]
-        assert 'other' in ids
-
-    def test_handle_consumed_by_recall_by_handle_can_still_explore_from_slot(self) -> None:
-        """本文を読んで afterglow から消えた handle でも、recall slot 経由で関連記憶を辿れる。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        afterglow_store = InMemoryAfterglowStore()
-        slot_store = InMemoryEpisodicRecallSlotStore()
-        setup = make_memory_link_being_setup()
-        being_id = setup.provision(1)
-        acting = setup.acting_for(1)
-        episodes.put_by_being(being_id, _ep(episode_id='seed'))
-        episodes.put_by_being(being_id, _ep(episode_id='other'))
-        afterglow_store.apply_decision(being_id, (AfterglowEntry(episode_id='seed', heading='種になった記憶', entered_tick=1, source=AfterglowSource.WEAK_RECALL),))
-        afterglow_store.remove(being_id, 'seed')
-        slot_store.force_insert(being_id, RecallSlotEntry(episode_id='seed', entered_tick=2), capacity=4)
-        setup.link_store.upsert_link_by_being(being_id, _link(a='seed', b='other', strength=0.9))
-        svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
-        executor = EpisodicMemoryExploreToolExecutor(episode_store=episodes, link_store=setup.link_store, link_service=svc, afterglow_store=afterglow_store, slot_store=slot_store)
-        result = executor.get_handlers()[TOOL_NAME_MEMORY_EXPLORE_RELATED](acting, {'handle': make_afterglow_handle('seed'), 'top_k': 5})
-        assert result.success is True
-        payload = json.loads(result.message)
-        ids = [r['episode_id'] for r in payload['related_episodes']]
-        assert 'other' in ids
-
-    def test_unknown_handle_returns_available_handles(self) -> None:
-        """存在しない handle は SYSTEM_ERROR ではなく、有効な handle 一覧付きで失敗する。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        afterglow_store = InMemoryAfterglowStore()
-        slot_store = InMemoryEpisodicRecallSlotStore()
-        setup = make_memory_link_being_setup()
-        being_id = setup.provision(1)
-        acting = setup.acting_for(1)
-        afterglow_store.apply_decision(being_id, (AfterglowEntry(episode_id='seed', heading='種になった記憶', entered_tick=1, source=AfterglowSource.WEAK_RECALL),))
-        svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
-        executor = EpisodicMemoryExploreToolExecutor(episode_store=episodes, link_store=setup.link_store, link_service=svc, afterglow_store=afterglow_store, slot_store=slot_store)
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](acting, {'handle': 'ep_missing', 'top_k': 5})
-        assert result.success is False
-        assert result.error_code == 'INVALID_ARGUMENT'
-        assert '有効な handle' in result.message
-        assert make_afterglow_handle('seed') in result.message
-        assert 'SYSTEM_ERROR' not in (result.error_code or '')
 
 class TestEpisodicPassiveRecallRetrievalServiceDualPath:
     """``EpisodicPassiveRecallRetrievalService`` の spreading activation が

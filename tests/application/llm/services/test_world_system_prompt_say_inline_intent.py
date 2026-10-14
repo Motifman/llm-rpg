@@ -21,7 +21,6 @@ def test_say_inline_guidance_asks_for_intent_not_result(tool_schema_mode: str) -
     「見つけました」と添えて相手に届いた先取りを防ぐため (#1612)。"""
     prompt = build_world_system_prompt(
         relevant_memories_shown=True,
-        active_recall_offered=True,
         world_title="廃坑の山村",
         persona_block="名前: サヨ",
         safe_intro="掘り場にいる。",

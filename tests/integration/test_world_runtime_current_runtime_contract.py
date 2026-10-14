@@ -8,7 +8,6 @@ today's behavior before further runtime convergence work.
 from __future__ import annotations
 
 import copy
-import dataclasses
 import json
 import re
 from collections.abc import Mapping
@@ -43,9 +42,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -90,7 +86,6 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LLM_EPISODIC_SUBJECTIVE_ENABLED",
         "SEMANTIC_PASSIVE_TOP_K",
         "SEMANTIC_LLM_GIST_ENABLED",
-        "SEMANTIC_SEARCH_ENABLED",
         "SHORT_TERM_MEMORY_KIND",
         "MEMO_TOOLS_ENABLED",
     ):
@@ -633,7 +628,6 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
     assert "visible_tile_map" not in user
     assert "current_terrain_type" not in user
     assert "travel_to" in tool_names
-    assert "memory_recall_episodes" not in tool_names
     assert runtime._episodic_stack is None
 
 
@@ -1380,7 +1374,7 @@ def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """episodic stack だけでは能動記憶ツールを露出せず、露出フラグを実験条件にする。"""
+    """episodic stack だけを立てると意味記憶の部品は組まれず、行動の道具は出る。"""
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
 
@@ -1396,160 +1390,7 @@ def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     assert stack.memory_link_store is None
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
-    assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
-    assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-
-
-@pytest.mark.parametrize(
-    ("flag_name", "tool_name"),
-    [
-        ("episodic_recall_enabled", TOOL_NAME_MEMORY_RECALL_EPISODES),
-        ("episodic_explore_related_enabled", TOOL_NAME_MEMORY_EXPLORE_RELATED),
-        ("semantic_search_enabled", TOOL_NAME_MEMORY_SEARCH_SEMANTIC),
-    ],
-)
-def test_memory_tool_exposure_flags_hide_tools_when_false(
-    clean_runtime_env: None,
-    flag_name: str,
-    tool_name: str,
-) -> None:
-    """各能動記憶ツールは対応する露出フラグが false のとき LLM に出ない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            **{flag_name: False},
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert tool_name not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-@pytest.mark.parametrize(
-    ("flag_name", "tool_name"),
-    [
-        ("episodic_recall_enabled", TOOL_NAME_MEMORY_RECALL_EPISODES),
-        ("episodic_explore_related_enabled", TOOL_NAME_MEMORY_EXPLORE_RELATED),
-        ("semantic_search_enabled", TOOL_NAME_MEMORY_SEARCH_SEMANTIC),
-    ],
-)
-def test_memory_tool_exposure_flags_show_tools_when_executor_is_wired(
-    clean_runtime_env: None,
-    flag_name: str,
-    tool_name: str,
-) -> None:
-    """露出フラグ true かつ必要な記憶スタックがあるときだけ能動記憶ツールを LLM に出す。"""
-    extra_config: dict[str, object] = {}
-    if flag_name == "episodic_explore_related_enabled":
-        # memory_explore_related は prompt に出る afterglow handle を入口にする。
-        # そのため executor 構築には link store だけでなく afterglow store も必要。
-        extra_config = {
-            "recall_slot_enabled": True,
-            "afterglow_enabled": True,
-        }
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            **{flag_name: True},
-            **extra_config,
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert tool_name in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-@pytest.mark.parametrize(
-    ("flag_name", "tool_name", "env_name"),
-    [
-        (
-            "episodic_recall_enabled",
-            TOOL_NAME_MEMORY_RECALL_EPISODES,
-            "EPISODIC_RECALL_ENABLED",
-        ),
-        (
-            "episodic_explore_related_enabled",
-            TOOL_NAME_MEMORY_EXPLORE_RELATED,
-            "EPISODIC_EXPLORE_RELATED_ENABLED",
-        ),
-        (
-            "semantic_search_enabled",
-            TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-            "SEMANTIC_SEARCH_ENABLED",
-        ),
-    ],
-)
-def test_memory_tool_flag_true_without_memory_stack_fails_fast(
-    clean_runtime_env: None,
-    flag_name: str,
-    tool_name: str,
-    env_name: str,
-) -> None:
-    """露出フラグ true なのに前提 executor が無い構成は、黙って無効化せず create_world_runtime の時点で落とす。"""
-    config = ResolvedLlmRuntimeConfig.for_tests(
-        episodic_enabled=False,
-        **{flag_name: True},
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        _create_runtime(config)
-
-    message = str(exc_info.value)
-    assert env_name in message
-    assert tool_name in message
-
-
-def test_memory_explore_related_flag_true_without_afterglow_fails_fast(
-    clean_runtime_env: None,
-) -> None:
-    """memory_explore_related は prompt の handle を解決するため、afterglow 無しで有効にすると create_world_runtime の時点で落ちる。"""
-    config = ResolvedLlmRuntimeConfig.for_tests(
-        episodic_enabled=True,
-        episodic_explore_related_enabled=True,
-        recall_slot_enabled=True,
-        afterglow_enabled=False,
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        _create_runtime(config)
-
-    message = str(exc_info.value)
-    assert "EPISODIC_EXPLORE_RELATED_ENABLED" in message
-    assert TOOL_NAME_MEMORY_EXPLORE_RELATED in message
-
-
-def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
-    clean_runtime_env: None,
-) -> None:
-    """露出設定の不整合は runtime_manager の整合性検証でも警告に丸めず起動を止める。
-
-    不整合な設定では create_world_runtime が先に落ちる (#1616) ので、整った runtime を
-    作ってから設定だけを差し替え、runtime_manager の検証まで届かせる。
-    """
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=False))
-    runtime._runtime_config = dataclasses.replace(
-        runtime._runtime_config, semantic_search_enabled=True
-    )
-
-    with pytest.raises(RuntimeError) as exc_info:
-        _WorldLlmWiring(
-            runtime=runtime,
-            observation_buffer=runtime._obs_buffer,
-            short_term_memory=runtime._short_term_memory,
-            llm_client=StubLlmClient(None),
-        )
-
-    message = str(exc_info.value)
-    assert "SEMANTIC_SEARCH_ENABLED" in message
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in message
 
 
 def test_memo_tools_default_visible_in_get_tool_definitions(
@@ -1571,7 +1412,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
-            episodic_recall_enabled=True,
             semantic_passive_top_k=3,
             memo_tools_enabled=False,
         )
@@ -1582,7 +1422,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     assert TOOL_NAME_MEMO_ADD not in tool_names
     assert TOOL_NAME_MEMO_LIST not in tool_names
     assert TOOL_NAME_MEMO_DONE not in tool_names
-    assert TOOL_NAME_MEMORY_RECALL_EPISODES in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
     assert runtime._episodic_stack is not None
     assert runtime._episodic_stack.passive_recall is not None
@@ -1634,46 +1473,6 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
     )
 
     assert wiring.memo_completion_hint_service is None
-
-
-def test_runtime_without_todo_tools_hides_memory_tools_before_individual_flags(
-    clean_runtime_env: None,
-) -> None:
-    """include_todo_tools=False で組んだ runtime では、個別フラグより粗い補助ツール遮断を優先する。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=False,
-            semantic_search_enabled=True,
-        ),
-        include_todo_tools=False,
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
-    assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
-    assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
-    clean_runtime_env: None,
-) -> None:
-    """シナリオ由来のツール除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_search_enabled=True,
-        ),
-        scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json",
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
 
 
 def test_semantic_config_wires_world_runtime_stack_and_prompt_learning(

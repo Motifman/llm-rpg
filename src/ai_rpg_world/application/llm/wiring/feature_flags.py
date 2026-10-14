@@ -69,38 +69,6 @@ def _parse_bool_env(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Episodic memory active retrieval
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_EPISODIC_EXPLORE_RELATED_ENABLED = "EPISODIC_EXPLORE_RELATED_ENABLED"
-
-
-def resolve_episodic_explore_related_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``memory_explore_related`` tool を LLM に expose するか。
-
-    `EPISODIC_EXPLORE_RELATED_ENABLED=1` で ON、未設定 / その他は OFF。
-
-    実装 ([`episodic_memory_explore_tool_executor`](../services/executors/episodic_memory_explore_tool_executor.py))
-    は既にある。LLM がリンクを能動的に辿るための tool だが、現在は episodic
-    chunk 生成 / passive recall の検証中なので default OFF。検証フェーズで
-    明示的に env で ON にして動作確認する。
-    """
-    return _parse_bool_env(ENV_EPISODIC_EXPLORE_RELATED_ENABLED, env=env, default=False)
-
-
-def log_episodic_explore_related_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。run の再現性確保用。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_EPISODIC_EXPLORE_RELATED_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
 # Semantic memory: LLM gist generation
 # ──────────────────────────────────────────────────────────────────
 
@@ -186,68 +154,6 @@ def log_semantic_passive_top_k_state(top_k: int) -> None:
         "%s resolved to %d (0 = §learned section disabled)",
         ENV_SEMANTIC_PASSIVE_TOP_K,
         top_k,
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
-# Semantic memory: active search tool (Phase 1d)
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_SEMANTIC_SEARCH_ENABLED = "SEMANTIC_SEARCH_ENABLED"
-
-
-def resolve_semantic_search_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``memory_search_semantic`` tool を LLM に expose するか。
-
-    `SEMANTIC_SEARCH_ENABLED=1` で ON、未設定 / その他は OFF。
-
-    実装 (``SemanticMemorySearchToolExecutor``) は常に動くが、tool 自体を
-    LLM に見せるかは env で制御する。検証フェーズで明示的に有効化する。
-
-    詳細は docs/memory_system/semantic_memory_activation_plan.md §5.2, §9。
-    """
-    return _parse_bool_env(ENV_SEMANTIC_SEARCH_ENABLED, env=env, default=False)
-
-
-def log_semantic_search_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_SEMANTIC_SEARCH_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
-# Episodic memory: active recall tool (Issue #526 後続)
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_EPISODIC_RECALL_ENABLED = "EPISODIC_RECALL_ENABLED"
-
-
-def resolve_episodic_recall_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``memory_recall_episodes`` tool を LLM に expose するか。
-
-    ``EPISODIC_RECALL_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    Issue #526 の不在 2 (agent-driven 想起) に対する v0 実装。検証
-    フェーズで明示的に有効化する。
-    """
-    return _parse_bool_env(ENV_EPISODIC_RECALL_ENABLED, env=env, default=False)
-
-
-def log_episodic_recall_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_EPISODIC_RECALL_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
     )
 
 

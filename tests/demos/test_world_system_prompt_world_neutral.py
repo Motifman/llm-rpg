@@ -16,7 +16,6 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
 def _build(*, has_goal: bool) -> str:
     return build_world_system_prompt(
         relevant_memories_shown=True,
-        active_recall_offered=True,
         world_title="テスト世界",
         persona_block="【ペルソナ】テスト",
         safe_intro="導入文",
@@ -65,7 +64,6 @@ class TestBuildWorldSystemPromptGoalFraming:
         """has_goal 未指定なら True 扱い (既存呼び出し・テストの prompt 不変)。"""
         assert _build(has_goal=True) == build_world_system_prompt(
             relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="【ペルソナ】テスト",
             safe_intro="導入文",
@@ -79,7 +77,6 @@ class TestActionLimitLineFollowsTheScenario:
         """limits_actions=False のとき、「行動の制限」の行と「総量には限り」の文が system prompt に出ない。締め切りの無い世界で、無い制限を信じさせないため。"""
         prompt = build_world_system_prompt(
             relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="【ペルソナ】テスト",
             safe_intro="導入文",
@@ -94,7 +91,6 @@ class TestActionLimitLineFollowsTheScenario:
         """limits_actions を渡さないときは、True を渡したときと 1 文字も違わない。既存シナリオのプレフィックスキャッシュを変えないため。"""
         assert _build(has_goal=True) == build_world_system_prompt(
             relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="【ペルソナ】テスト",
             safe_intro="導入文",

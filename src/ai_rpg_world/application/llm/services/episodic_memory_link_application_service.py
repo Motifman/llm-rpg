@@ -146,7 +146,7 @@ class EpisodicMemoryLinkApplicationService:
         *,
         now: datetime | None = None,
     ) -> None:
-        """memory_explore_related 等で辿った隣接エピソード間を強化する。"""
+        """辿った隣接エピソード間を強化する。"""
         now = now or datetime.now(timezone.utc)
         for lt in (MemoryLinkType.CO_RECALL, MemoryLinkType.TEMPORAL):
             self._hebbian_strengthen_pair(
