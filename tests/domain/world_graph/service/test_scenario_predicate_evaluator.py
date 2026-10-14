@@ -196,12 +196,12 @@ class TestScenarioPredicateEvaluatorLocation:
         assert wrong.missing_context == frozenset({"entity_locations"})
 
     def test_context_copies_and_validates_entity_locations(self) -> None:
-        """配置mappingを防御コピーし、不正なID型や値型を拒否する。"""
+        """配置mappingの元の対応を防御コピーし、整数キーを拒否する。"""
         source = {EntityId.create(1): SpotId.create(1)}
         context = EntityPlacementPredicateContext(source)
         source[EntityId.create(2)] = SpotId.create(2)
 
-        assert len(context.entity_locations or {}) == 1
+        assert context.entity_locations == {EntityId.create(1): SpotId.create(1)}
         with pytest.raises(PredicateContextValidationException):
             EntityPlacementPredicateContext({1: SpotId.create(1)})  # type: ignore[dict-item]
 
@@ -346,10 +346,13 @@ class TestScenarioPredicateEvaluatorStateValues:
             ),
             context,
         ).is_satisfied
-        result = evaluator.evaluate(
-            StateValuesMatchPredicate({"phase": "closed"}), context,
-        )
-        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        for required in (
+            {"phase": "closed"},
+            {"phase": "closed", "nested": {"items": [1, 2]}},
+            {"phase": "open", "nested": {"items": [1, 3]}},
+        ):
+            result = evaluator.evaluate(StateValuesMatchPredicate(required), context)
+            assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
 
     def test_missing_key_matches_expected_none_like_legacy_dict_get(self) -> None:
         """要求値Noneは現在キーの欠落とも一致する既存のdict.get比較を維持する。"""
@@ -391,6 +394,8 @@ class TestScenarioPredicateEvaluatorStateValues:
         required["nested"]["items"].append(2)
         actual["nested"]["items"].append(3)
 
+        assert predicate.required_values == {"nested": {"items": [1]}}
+        assert context.state_values == {"nested": {"items": [1]}}
         assert ScenarioPredicateEvaluator().evaluate(predicate, context).is_satisfied
 
     def test_rejects_non_mapping_and_non_string_keys(self) -> None:
