@@ -67,26 +67,34 @@ class TestItemAggregate:
         """破損耐久度を作成"""
         return Durability(current=0, max_value=100)
 
-    def test_create_basic_item_aggregate(self, sample_item_spec_no_durability):
-        """基本的なアイテム集約作成のテスト"""
-        item_id = ItemInstanceId(1)
+    @pytest.mark.parametrize(
+        ("item_id_value", "quantity"),
+        [
+            pytest.param(1, 5, id="original-id1-quantity5"),
+            pytest.param(25, 1, id="transferred-nondurable-id25"),
+        ],
+    )
+    def test_create_basic_item_aggregate(self, sample_item_spec_no_durability, item_id_value, quantity):
+        """耐久なしの集約は指定IDと数量を保持し、破損も生成イベントもない。"""
+        item_id = ItemInstanceId(item_id_value)
 
         aggregate = ItemAggregate.create(
             item_instance_id=item_id,
             item_spec=sample_item_spec_no_durability,
-            quantity=5
+            quantity=quantity
         )
 
         assert aggregate.item_instance_id == item_id
         assert aggregate.item_spec == sample_item_spec_no_durability
-        assert aggregate.quantity == 5
+        assert aggregate.quantity == quantity
         assert aggregate.durability is None
         assert not aggregate.is_broken
         assert len(aggregate.get_events()) == 0  # イベントなし
 
-    def test_create_item_with_durability(self, sample_item_spec_with_durability, sample_durability_full):
-        """耐久度付きアイテム集約作成のテスト"""
-        item_id = ItemInstanceId(2)
+    @pytest.mark.parametrize("item_id_value", [2, 24, 26], ids=["original-id2", "properties-id24", "nonbroken-id26"])
+    def test_create_item_with_durability(self, sample_item_spec_with_durability, sample_durability_full, item_id_value):
+        """最大耐久の集約は指定ID・仕様・数量・耐久度を保持し、破損していない。"""
+        item_id = ItemInstanceId(item_id_value)
 
         aggregate = ItemAggregate.create(
             item_instance_id=item_id,
@@ -115,9 +123,10 @@ class TestItemAggregate:
         assert aggregate.durability == sample_durability_partial
         assert not aggregate.is_broken
 
-    def test_create_item_with_broken_durability(self, sample_item_spec_with_durability, sample_durability_broken):
-        """破損耐久度付きアイテム集約作成のテスト"""
-        item_id = ItemInstanceId(4)
+    @pytest.mark.parametrize("item_id_value", [4, 27], ids=["original-id4", "broken-id27"])
+    def test_create_item_with_broken_durability(self, sample_item_spec_with_durability, sample_durability_broken, item_id_value):
+        """耐久0の集約を作ると耐久値を保持し、破損していると判定する。"""
+        item_id = ItemInstanceId(item_id_value)
 
         aggregate = ItemAggregate.create(
             item_instance_id=item_id,
@@ -182,6 +191,7 @@ class TestItemAggregate:
 
         # 耐久度なしアイテムの場合はdurabilityはNone
         assert aggregate.durability is None
+        assert aggregate.quantity == 3
 
     def test_create_by_crafting_with_durability_max(self, sample_item_spec_with_durability):
         """耐久度最大値を持つアイテムの合成作成テスト"""
@@ -262,7 +272,7 @@ class TestItemAggregate:
         assert event.remaining_durability.current < sample_durability_partial.current  # 耐久度減少
 
     def test_use_item_breaks_on_use(self, sample_item_spec_with_durability):
-        """使用時にアイテムが破損するテスト"""
+        """破損する使用は使用・破損の順に通知し、破損後の再使用は通知を増やさない。"""
         item_id = ItemInstanceId(10)
         # 現在の耐久度が1のアイテム
         durability_one = Durability(current=1, max_value=100)
@@ -294,6 +304,12 @@ class TestItemAggregate:
 
         # 破損状態になっていることを確認
         assert aggregate.is_broken
+
+        aggregate.use()
+
+        assert aggregate.quantity == 1
+        assert aggregate.durability == Durability(current=0, max_value=100)
+        assert aggregate.get_events() == events
 
     def test_add_quantity(self, sample_item_spec_no_durability):
         """数量追加のテスト"""
@@ -377,7 +393,7 @@ class TestItemAggregate:
         assert len(aggregate.get_events()) == 0
 
     def test_repair_durability_over_max_clamps_to_max(self, sample_item_spec_with_durability):
-        """最大値を超える修復は最大値にクランプされるテスト"""
+        """修理は上限100へ制限し、上限到達後の再修理では通知を増やさない。"""
         durability_low = Durability(current=95, max_value=100)
         aggregate = ItemAggregate.create(
             item_instance_id=ItemInstanceId(22),
@@ -390,9 +406,18 @@ class TestItemAggregate:
         aggregate.repair_durability(10)
 
         assert aggregate.durability.current == 100
+        events = aggregate.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], ItemRepairedEvent)
+        assert events[0].new_durability == Durability(current=100, max_value=100)
+
+        aggregate.repair_durability(10)
+
+        assert aggregate.durability.current == 100
+        assert aggregate.get_events() == events
 
     def test_quantity_operations_with_invalid_values(self, sample_item_spec_no_durability):
-        """無効な数量操作のテスト"""
+        """不正な加算・減算・設定は各例外で拒否し、現在数量5を変えない。"""
         aggregate = ItemAggregate.create(
             item_instance_id=ItemInstanceId(23),
             item_spec=sample_item_spec_no_durability,
@@ -402,62 +427,17 @@ class TestItemAggregate:
         # 負の数量追加
         with pytest.raises(QuantityValidationException):
             aggregate.add_quantity(-1)
+        assert aggregate.quantity == 5
 
         # 現在の数量を超える減算
         with pytest.raises(InsufficientQuantityException):
             aggregate.remove_quantity(10)
+        assert aggregate.quantity == 5
 
         # 負の数量設定
         with pytest.raises(QuantityValidationException):
             aggregate.set_quantity(-1)
-
-    def test_properties_access(self, sample_item_spec_with_durability, sample_durability_full):
-        """プロパティアクセスのテスト"""
-        item_id = ItemInstanceId(24)
-        aggregate = ItemAggregate.create(
-            item_instance_id=item_id,
-            item_spec=sample_item_spec_with_durability,
-            durability=sample_durability_full,
-            quantity=1  # 耐久度付きアイテムはquantity=1でなければならない
-        )
-
-        assert aggregate.item_instance_id == item_id
-        assert aggregate.item_spec == sample_item_spec_with_durability
-        assert aggregate.durability == sample_durability_full
-        assert aggregate.quantity == 1
-        assert not aggregate.is_broken
-
-    def test_is_broken_with_none_durability(self, sample_item_spec_no_durability):
-        """耐久度なしアイテムは破損しないテスト"""
-        aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(25),
-            item_spec=sample_item_spec_no_durability,
-            quantity=1
-        )
-
-        assert not aggregate.is_broken
-
-    def test_is_broken_with_full_durability(self, sample_item_spec_with_durability, sample_durability_full):
-        """満タン耐久度は破損していないテスト"""
-        aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(26),
-            item_spec=sample_item_spec_with_durability,
-            durability=sample_durability_full,
-            quantity=1
-        )
-
-        assert not aggregate.is_broken
-
-    def test_is_broken_with_zero_durability(self, sample_item_spec_with_durability, sample_durability_broken):
-        """ゼロ耐久度は破損しているテスト"""
-        aggregate = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(27),
-            item_spec=sample_item_spec_with_durability,
-            durability=sample_durability_broken,
-            quantity=1
-        )
-
-        assert aggregate.is_broken
+        assert aggregate.quantity == 5
 
     def test_events_persist_after_getting(self, sample_item_spec_no_durability):
         """イベント取得後もイベントが保持されるテスト"""
@@ -477,7 +457,7 @@ class TestItemAggregate:
         assert len(aggregate.get_events()) == 1
 
     def test_multiple_uses_accumulate_events(self, sample_item_spec_no_durability):
-        """複数回の使用でイベントが蓄積されるテスト（数量2で2回使用）"""
+        """数量2を使うたび残数1・0を順に通知し、数量0の再使用は通知を増やさない。"""
         aggregate = ItemAggregate.create(
             item_instance_id=ItemInstanceId(29),
             item_spec=sample_item_spec_no_durability,
@@ -492,6 +472,13 @@ class TestItemAggregate:
         events = aggregate.get_events()
         assert len(events) == 2
         assert all(isinstance(event, ItemUsedEvent) for event in events)
+        assert [event.remaining_quantity for event in events] == [1, 0]
+        assert aggregate.quantity == 0
+
+        aggregate.use()
+
+        assert aggregate.quantity == 0
+        assert aggregate.get_events() == events
 
     def test_get_item_info_no_durability(self, sample_item_spec_no_durability):
         """耐久度なしアイテムの情報を取得できる"""
