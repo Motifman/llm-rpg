@@ -3,7 +3,7 @@
 
 並走追加された 4 ``*_by_being`` メソッドが legacy player_id 版と互いに
 見えないことと、各メソッドの基本挙動を確認する。memo / semantic /
-memory_link / recall_buffer と同じパターン。
+memory_link と同じパターン。
 """
 from __future__ import annotations
 

@@ -558,9 +558,9 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
             ) from exc
-        # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
-        # memory_link は episode を
-        # 参照するが、本 service は参照整合性まで保証しない (= 各 store 独立)。
+        # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない。
+        # memory_link は episode を参照するが、本 service は参照整合性まで
+        # 保証しない (= 各 store 独立)。
         self._memo.replace_all_by_being(being_id, memo_entries)
         self._semantic.replace_all_by_being(
             being_id, semantic_entries, cluster_signatures

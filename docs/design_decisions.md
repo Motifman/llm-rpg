@@ -604,7 +604,7 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 - 将来 memo SQLite を入れるときは ``--memo-db`` 引数を追加する
 
 
-**その後**: 再解釈の保存先を消したので、CLI の `--reinterpretation-db` を Issue #1631 で外した。いまは 3 つの SQLite DB と in-memory memo で動く。
+**その後**: 再解釈の保存先を消したので、CLI の `--reinterpretation-db` を Issue #1631 で外した。見出しと本文の「4 SQLite DB」は消す前の構成で、いまは 3 つの SQLite DB と in-memory memo で動く。
 
 ---
 
