@@ -21,7 +21,6 @@ TOOL_NAME_PREFIX_TRADE = "trade_"
 TOOL_NAME_PREFIX_SNS = "sns_"
 TOOL_NAME_PREFIX_TODO = "todo_"
 TOOL_NAME_PREFIX_MEMO = "memo_"
-TOOL_NAME_PREFIX_MEMORY = "memory_"
 # PR-CC (Y_after_pr639_640 後続): spot_graph_ prefix を廃止し、bare 名で
 # 露出する。理由:
 # - LLM は spot_graph mode / tile_map mode 排他なので、mode ごとに露出する
@@ -156,21 +155,7 @@ TOOL_NAME_MEMO_DONE = TOOL_NAME_PREFIX_MEMO + "done"
 TOOL_NAME_TODO_ADD = TOOL_NAME_MEMO_ADD
 TOOL_NAME_TODO_LIST = TOOL_NAME_MEMO_LIST
 TOOL_NAME_TODO_COMPLETE = TOOL_NAME_MEMO_DONE
-TOOL_NAME_MEMORY_EXPLORE_RELATED = TOOL_NAME_PREFIX_MEMORY + "explore_related"
-TOOL_NAME_MEMORY_SEARCH_SEMANTIC = TOOL_NAME_PREFIX_MEMORY + "search_semantic"
-# Issue #526 後続: episodic memory の能動 recall ツール (= 「思い出そう」と
-# 意志して過去 episode を取り戻す経路)。passive recall は prompt 構築で
-# 自動で走るが、この tool は LLM が ``about`` + ``time_range`` を渡して
-# 能動的に過去を呼び戻す。
-TOOL_NAME_MEMORY_RECALL_EPISODES = TOOL_NAME_PREFIX_MEMORY + "recall_episodes"
-# Issue #526 後続 PR-D: afterglow index (= ぼんやり覚えてる見出し) から、
-# 「これ詳しく思い出したい」と handle を指定して本文を引き戻す経路。
-# memory_recall_episodes が自由文検索なのに対し、これは prompt 上の handle
-# (``ep_<6 文字>``) を直接指定して 1 件取り出す。slot に再注入されるため
-# 「もう一度鮮明に浮かんだ」状態を構造で実現する。
-TOOL_NAME_MEMORY_RECALL_BY_HANDLE = TOOL_NAME_PREFIX_MEMORY + "recall_by_handle"
-# #1623: 【思い出せる出来事】の目次から、呼び名で本文を呼び出す。古いエピソード
-# (memory_recall_by_handle) とは別の記録 (being/domain/episode.py) を引く。
+# #1623: 【思い出せる出来事】の目次から、呼び名で本文を呼び出す。
 TOOL_NAME_EPISODE_RECALL = "episode_recall"
 # #1623: 呼び出した本文と目次が合わなかったときに、本人が目次を直す。
 TOOL_NAME_EPISODE_REVISE_INDEX = "episode_revise_index"

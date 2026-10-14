@@ -44,7 +44,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
         """生成された system prompt の【行動ルール】段に「最優先の目的は『脱出』」が無い。"""
         prompt = build_world_system_prompt(
             relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
@@ -61,7 +60,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
         """
         prompt = build_world_system_prompt(
             relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
@@ -73,7 +71,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
         """reason_first では主観入力を書く先を行動 tool ではなく assess_situation と説明する。"""
         prompt = build_world_system_prompt(
             relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,

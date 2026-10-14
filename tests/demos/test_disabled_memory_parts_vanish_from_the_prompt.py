@@ -49,7 +49,6 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "BELIEF_CONSOLIDATION_ENABLED": "true",
     "BELIEF_CREATE_GATE_ENABLED": "true",
     "BELIEF_EVIDENCE_ENABLED": "true",
-    "EPISODIC_RECALL_ENABLED": "true",
     "LLM_AFTERGLOW_ENABLED": "true",
     "LLM_EPISODIC_ENABLED": "true",
     "LLM_EPISODIC_RECALL_HABITUATION_ENABLED": "true",
@@ -61,11 +60,9 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "BEING_MEMO_ENABLED": "false",
 }
 
-#: 全部入りの run も止めていた能動想起と【関連する学び】も有効にして、全部入りにする。
+#: 全部入りの run も止めていた【関連する学び】も有効にして、全部入りにする。
 #: 目次つきのエピソードは設定で止められず、常に入る (#1631)。
 _ALL_MEMORY_PARTS = {
-    "SEMANTIC_SEARCH_ENABLED": "true",
-    "EPISODIC_EXPLORE_RELATED_ENABLED": "true",
     "SEMANTIC_PASSIVE_TOP_K": "3",
 }
 
@@ -124,12 +121,19 @@ _ALL_NAMES = (
 #: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
 #: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
 #:
-#: 予期の引数 ``expectations`` と【保留中の予測】は #1631 で消したので、全部入りでも
-#: 出ない。名前の表に残し、どの組み合わせでもプロンプトに戻ってこないことを見張る。
+#: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具は #1631 で消したので、
+#: 全部入りでも出ない。見出しの欄は能動想起の道具の説明だけが名指ししていた。名前の表に残し、どの組み合わせでもプロンプトに戻ってこないことを
+#: 見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _LEARNED,
     _PENDING_PREDICTIONS,
     _EXPECTATIONS,
+    _ACTIVE_RECALL,
+    _RECALL_EPISODES,
+    _RECALL_BY_HANDLE,
+    _EXPLORE_RELATED,
+    _SEARCH_SEMANTIC,
+    _AFTERGLOW,
     *_MEMO_BOOK_NAMES,
     _MEMO_EPISODE_SOURCE,
 }
@@ -142,37 +146,6 @@ _MEMO_BOOK_INSTEAD = {
 
 #: (止める部品, 設定の差分, 消えるべき名前)。
 _DISABLED_PARTS = [
-    pytest.param(
-        {"EPISODIC_RECALL_ENABLED": "false"},
-        (_RECALL_EPISODES,),
-        id="memory_recall_episodes",
-    ),
-    pytest.param(
-        {"SEMANTIC_SEARCH_ENABLED": "false"},
-        (_SEARCH_SEMANTIC,),
-        id="memory_search_semantic",
-    ),
-    pytest.param(
-        {"EPISODIC_EXPLORE_RELATED_ENABLED": "false"},
-        (_EXPLORE_RELATED,),
-        id="memory_explore_related",
-    ),
-    pytest.param(
-        # 見出しが無ければ、見出しから引く 2 つのツールも組まれない。
-        {"LLM_AFTERGLOW_ENABLED": "false", "EPISODIC_EXPLORE_RELATED_ENABLED": "false"},
-        (_AFTERGLOW, _RECALL_BY_HANDLE, _EXPLORE_RELATED),
-        id="afterglow",
-    ),
-    pytest.param(
-        {
-            "EPISODIC_RECALL_ENABLED": "false",
-            "SEMANTIC_SEARCH_ENABLED": "false",
-            "EPISODIC_EXPLORE_RELATED_ENABLED": "false",
-            "LLM_AFTERGLOW_ENABLED": "false",
-        },
-        (_ACTIVE_RECALL, _RECALL_EPISODES, _RECALL_BY_HANDLE, _EXPLORE_RELATED, _SEARCH_SEMANTIC),
-        id="every_active_recall_tool",
-    ),
     pytest.param(
         {"SEMANTIC_PASSIVE_TOP_K": "0"},
         (_LEARNED,),

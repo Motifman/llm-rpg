@@ -90,19 +90,3 @@ def test_full_wiring_is_retired() -> None:
     ):
         assert not (_SRC / rel).exists(), rel
 
-
-def test_memory_recall_episodes_is_world_runtime_specific() -> None:
-    """Active episode recall is wired in world_runtime and WorldLlmWiring."""
-    world_runtime = _read(
-        _SRC / "ai_rpg_world/application/world_runtime/world_runtime.py"
-    )
-    world_llm_wiring = _read(
-        _SRC
-        / "ai_rpg_world/application/llm/services/world_llm_turn/wiring.py"
-    )
-
-    assert "memory_recall_episodes" in world_runtime
-    assert "TOOL_NAME_MEMORY_RECALL_EPISODES" in world_llm_wiring, (
-        "WorldLlmWiring が TOOL_NAME_MEMORY_RECALL_EPISODES を dispatch していない。"
-        "episode recall の tool handler 配線が抜けた可能性。"
-    )

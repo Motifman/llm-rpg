@@ -216,13 +216,10 @@ class EpisodicStack:
     # で運用を調整する。
     recall_slot_store: IEpisodicRecallSlotStore | None = None
     recall_slot_cooldown_ticks: int = 5
-    # PR-D: recall_by_handle ツールが force_insert に渡す capacity を、
-    # stack が確定した時点で露出しておく (= world_runtime 側で再計算しない)。
     recall_slot_capacity: int = 4
     # #526 段階 3 PR-C: afterglow index sidecar (= ぼんやり覚えてる 1 行見出し)。
     # default off。slot 退去や score 閾値で slot 入りできなかった弱い hit を
-    # heading 付きで保持し、prompt の見出し section と能動想起ツール (別 PR)
-    # に使う。
+    # heading 付きで保持し、prompt の見出し section に使う。
     afterglow_store: IAfterglowStore | None = None
     afterglow_capacity: int = 10
     afterglow_max_residence: int = 10

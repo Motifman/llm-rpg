@@ -34,10 +34,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
@@ -436,15 +432,11 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_WAIT: _format_wait,
 }
 
-# 能動想起系は結果文が本体で、行動名と引数を短く自然文化しても情報量が増えない。
+# エピソードの道具は結果文が本体で、行動名と引数を短く自然文化しても情報量が増えない。
 # JSON fallback を意図的に使うツールとして明示分類し、追加時の判断漏れをテストで
 # 捕まえる。
 INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
     {
-        TOOL_NAME_MEMORY_EXPLORE_RELATED,
-        TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-        TOOL_NAME_MEMORY_RECALL_EPISODES,
-        TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
         TOOL_NAME_EPISODE_RECALL,
         TOOL_NAME_EPISODE_REVISE_INDEX,
     }

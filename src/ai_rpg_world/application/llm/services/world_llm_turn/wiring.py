@@ -76,10 +76,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseA
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPEECH,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
@@ -285,29 +281,6 @@ class WorldLlmWiring:
             TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
             TOOL_NAME_TODO_COMPLETE: self._make_auxiliary_tool_handler(
                 TOOL_NAME_TODO_COMPLETE
-            ),
-            # Issue #526 後続: memory_recall_episodes も aux 経路で dispatch する。
-            # ``runtime.run_llm_auxiliary_tool`` が ``_memory_recall_tool_executor``
-            # を併用するよう PR #535 で配線済み。tool 定義は episodic_stack ON
-            # のときだけ ``get_tool_definitions`` で expose される。
-            TOOL_NAME_MEMORY_RECALL_EPISODES: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_RECALL_EPISODES
-            ),
-            TOOL_NAME_MEMORY_EXPLORE_RELATED: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_EXPLORE_RELATED
-            ),
-            TOOL_NAME_MEMORY_SEARCH_SEMANTIC: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_SEARCH_SEMANTIC
-            ),
-            # PR-D (#588) 後続 fix: memory_recall_by_handle も同じ aux 経路に
-            # 載せる。SSOT である本テーブルにエントリが無いと
-            # ``execute_tool`` の dispatcher が UNSUPPORTED_TOOL を返す silent
-            # failure になる (= Run D で 30 tick 中 2 回呼ばれたが両方失敗した
-            # 直接原因)。tool 定義は afterglow_store + slot_store が揃った
-            # ときだけ ``get_tool_definitions`` で expose されるので、ここに
-            # 居ても afterglow off の run では一切呼ばれない (= 安全)。
-            TOOL_NAME_MEMORY_RECALL_BY_HANDLE: self._make_auxiliary_tool_handler(
-                TOOL_NAME_MEMORY_RECALL_BY_HANDLE
             ),
             # #1623: 定義は目次を出す設定でだけ get_tool_definitions が出す。
             TOOL_NAME_EPISODE_RECALL: self._make_auxiliary_tool_handler(

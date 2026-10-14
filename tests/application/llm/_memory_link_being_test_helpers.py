@@ -1,8 +1,8 @@
 """memory_link caller テスト用の Being provisioning ヘルパー (Phase 3 Step 3c-2)。
 
 Step 3c-2 で memory_link caller (`EpisodicMemoryLinkApplicationService` /
-`EpisodicSemanticClusterPromotionService` / `EpisodicPassiveRecallRetrievalService`
-/ `EpisodicMemoryExploreToolExecutor`) が dual-path 化したため、テストで
+`EpisodicSemanticClusterPromotionService` / `EpisodicPassiveRecallRetrievalService`)
+が dual-path 化したため、テストで
 Resolver を注入したときに同じ Being で link 書き込みを行うヘルパーを
 共通化する。memo / semantic と同じパターン。
 """

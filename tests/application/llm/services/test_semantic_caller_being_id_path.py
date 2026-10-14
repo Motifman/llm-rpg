@@ -7,12 +7,10 @@ Step 3b-2 で導入した dual-path のうち legacy fallback を 3b-3 で撤去
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
 import pytest
 
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
@@ -22,17 +20,11 @@ from ai_rpg_world.application.being.being_provisioning_service import (
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
 )
-from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
-    SemanticMemorySearchToolExecutor,
-)
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
     SemanticPassiveRecallService,
-)
-from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
@@ -150,40 +142,6 @@ class TestSemanticPassiveRecallServiceNewPath:
             top_k=5,
         )
         assert result == []
-
-
-class TestSemanticMemorySearchToolExecutorNewPath:
-    """SemanticMemorySearchToolExecutor: ActingBeing 経路の検索。"""
-
-    def test_search_being_id_store_entry(
-        self,
-        store: InMemorySemanticMemoryStore,
-        provisioning: BeingProvisioningService,
-    ) -> None:
-        """being store に登録した entry が memory_search_semantic で見つかる。"""
-        being_id = provisioning.ensure_attached(PlayerId(2))
-        store.add_by_being(
-            being_id, _make_entry(text="りんご園で 3 個入手", tags=("apple",))
-        )
-
-        executor = SemanticMemorySearchToolExecutor(semantic_store=store)
-        handlers = executor.get_handlers()
-        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
-        result = handlers[TOOL_NAME_MEMORY_SEARCH_SEMANTIC](
-            acting, {"query": "りんご", "top_k": 5}
-        )
-        assert result.success is True
-        payload = json.loads(result.message)
-        assert len(payload["matched_entries"]) == 1
-        assert "りんご" in payload["matched_entries"][0]["summary"]
-
-    def test_semantic_executor_has_no_being_attachment_resolver(
-        self,
-        store: InMemorySemanticMemoryStore,
-    ) -> None:
-        """SemanticMemorySearchToolExecutor は BeingAttachmentResolver を持たない。"""
-        executor = SemanticMemorySearchToolExecutor(semantic_store=store)
-        assert not hasattr(executor, "being_attachment_resolver")
 
 
 class TestEpisodicSemanticClusterPromotionServiceNewPath:

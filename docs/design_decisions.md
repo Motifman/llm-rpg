@@ -1048,6 +1048,8 @@ HIDDEN) で制御する案。物理的にその場に居る者が「消えた人
 
 **その後**: `belief_goal_full` と `ablation_base` は、古い記憶の部品を使う profile として Issue #1631 で退役させた。過去の run の結果は `var/runs` に残る。
 
+能動想起の 4 つの道具 (`memory_recall_episodes` / `memory_recall_by_handle` / `memory_explore_related` / `memory_search_semantic`) と、その露出の設定 (`EPISODIC_RECALL_ENABLED` / `EPISODIC_EXPLORE_RELATED_ENABLED` / `SEMANTIC_SEARCH_ENABLED`) は、Issue #1631 の #1767 で消した。いまは目次つきのエピソード (`episode_recall`、D1623) が呼び出しの道具になる。
+
 ## 34. memo A/B は「蒸留ありの手帳」と「手帳なし」を比較する
 
 v4 第3回 run では `memo_add` / `memo_done` / `memo_list` が全行動の約15%を
@@ -7947,6 +7949,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **関連**: Issue #1616 / #1587 / #1621、design_decisions 1 / 44。
 
 **その後**: 全部入りの profile (`memory_jev_mine_v1_v41_thinking_capped`) とメモだけの profile は Issue #1631 で退役させた。試験は、新しい記憶の profile に全部入りの run が入れていた古い部品を戻して全部入りの設定を作る。退役前の profile と、止める部品ごとの 1 ターン目のプロンプトが一致することを確かめてから置き換えた。
+
+能動想起の道具は Issue #1631 の #1767 で消した。`active_recall_offered` と `ACTIVE_RECALL_TOOL_NAMES` も消え、書き分けは【関連する記憶】の有無の 2 通りになった。【関連する記憶】だけがある設定と、どちらも無い設定の文は、消す前とバイト単位で同じ。試験の名前の表には能動想起の名前を残し、どの設定でもプロンプトに戻ってこないことを見張る。
 
 ---
 

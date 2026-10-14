@@ -76,10 +76,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
     "BELIEF_EVIDENCE_ENABLED",
     "DISTANT_VIEW_TRACE_ENABLED",
-    "EPISODIC_EXPLORE_RELATED_ENABLED",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
-    "EPISODIC_RECALL_ENABLED",
     "END_ON_ALL_DOWN",
     "LLM_AFTERGLOW_CAPACITY",
     "LLM_AFTERGLOW_ENABLED",
@@ -120,7 +118,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
     "SEMANTIC_PASSIVE_TOP_K",
-    "SEMANTIC_SEARCH_ENABLED",
     "SHORT_TERM_MEMORY_KIND",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
@@ -206,16 +203,12 @@ class ResolvedLlmRuntimeConfig:
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
-        episodic_explore_related_enabled: ``EPISODIC_EXPLORE_RELATED_ENABLED=1``
-            で memory_explore_related tool を露出
 
         # === Semantic memory (Phase 1b-1d) ===
         semantic_llm_gist_enabled: ``SEMANTIC_LLM_GIST_ENABLED=1`` で episodic →
             semantic 昇格時に LLM 要約を生成
         semantic_passive_top_k: ``SEMANTIC_PASSIVE_TOP_K`` 整数。>0 で prompt
             に §learned section が出る
-        semantic_search_enabled: ``SEMANTIC_SEARCH_ENABLED=1`` で能動 semantic
-            検索 tool を露出
     """
 
     # Short-term memory
@@ -261,14 +254,12 @@ class ResolvedLlmRuntimeConfig:
     # Episodic memory
     episodic_enabled: bool
     episodic_subjective_enabled: bool
-    episodic_explore_related_enabled: bool
     episodic_promotion_force_full_scan: bool
     episodic_promotion_expansion_hops: int
 
     # Semantic memory
     semantic_llm_gist_enabled: bool
     semantic_passive_top_k: int
-    semantic_search_enabled: bool
 
 
     # #526 段階 2: 慣化ペナルティ (recall された episode のスコアを decay_window
@@ -311,7 +302,6 @@ class ResolvedLlmRuntimeConfig:
     afterglow_max_residence: int = 10
 
     # Active episodic recall tool (Issue #526 後続)。
-    episodic_recall_enabled: bool = False
 
     # Prediction / belief / semantic journal 系。いずれも実験条件を変える
     # flag なので、run_start / manifest に残すため本 DTO に集約する。
@@ -450,13 +440,10 @@ class ResolvedLlmRuntimeConfig:
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
-            resolve_episodic_explore_related_enabled,
-            resolve_episodic_recall_enabled,
             resolve_memo_tools_enabled,
             resolve_recall_hit_boost_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
-            resolve_semantic_search_enabled,
             resolve_short_term_memory_kind,
             resolve_short_term_memory_turn_window,
         )
@@ -472,13 +459,8 @@ class ResolvedLlmRuntimeConfig:
             short_term_memory_turn_cap,
             short_term_memory_turn_compact_count,
         ) = resolve_short_term_memory_turn_window(env=source)
-        episodic_explore_related_enabled = resolve_episodic_explore_related_enabled(
-            env=source
-        )
         semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled(env=source)
         semantic_passive_top_k = resolve_semantic_passive_top_k(env=source)
-        semantic_search_enabled = resolve_semantic_search_enabled(env=source)
-        episodic_recall_enabled = resolve_episodic_recall_enabled(env=source)
 
         # LLM client kind (factory と同じロジックで解決)
         llm_client_kind = _resolve_llm_client_kind(source)
@@ -760,12 +742,10 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
-            episodic_explore_related_enabled=episodic_explore_related_enabled,
             episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
             semantic_passive_top_k=semantic_passive_top_k,
-            semantic_search_enabled=semantic_search_enabled,
             recall_habituation_enabled=recall_habituation_enabled,
             recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
             recall_slot_enabled=recall_slot_enabled,
@@ -777,7 +757,6 @@ class ResolvedLlmRuntimeConfig:
             afterglow_enabled=afterglow_enabled,
             afterglow_capacity=afterglow_capacity,
             afterglow_max_residence=afterglow_max_residence,
-            episodic_recall_enabled=episodic_recall_enabled,
             belief_evidence_enabled=belief_evidence_enabled,
             belief_consolidation_enabled=belief_consolidation_enabled,
             belief_attribution_enabled=belief_attribution_enabled,
@@ -862,12 +841,10 @@ class ResolvedLlmRuntimeConfig:
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
-            episodic_explore_related_enabled=False,
             episodic_promotion_force_full_scan=False,
             episodic_promotion_expansion_hops=4,
             semantic_llm_gist_enabled=False,
             semantic_passive_top_k=0,
-            semantic_search_enabled=False,
             recall_habituation_enabled=False,
             recall_habituation_decay_window_ticks=5,
             recall_slot_enabled=False,
@@ -879,7 +856,6 @@ class ResolvedLlmRuntimeConfig:
             afterglow_enabled=False,
             afterglow_capacity=10,
             afterglow_max_residence=10,
-            episodic_recall_enabled=False,
             belief_evidence_enabled=False,
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,
