@@ -1406,11 +1406,14 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
         def test_effective_stats_filters_expired_effects_via_domain_service(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
+            """期限切れを計算から除き、整理後の公開一覧には期限内の効果だけを残す。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
-            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
+            expired_effect = StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5))
+            active_effect = StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20))
+            monster.add_status_effect(expired_effect)
+            monster.add_status_effect(active_effect)
 
             tick = WorldTick(10)
             effective_stats = compute_effective_stats(
@@ -1419,6 +1422,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert effective_stats.attack == 30  # 20 * 1.5 のみ
             monster.cleanup_expired_effects(tick)
             assert len(monster.active_effects) == 1
+            assert monster.active_effects == [active_effect]
 
         def test_buff_and_debuff_stacking_via_domain_service(
             self, monster: MonsterAggregate, spot_id: SpotId
