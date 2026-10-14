@@ -4,7 +4,7 @@ prefix cache の工夫 (section reorder + rolling summary) が実 LLM 経由で
 **provider 側 prefix cache hit rate** / **cost** / **latency** にどう効くかを
 最小限の A/B で確認した記録。
 
-> 比べた `PROMPT_SECTION_ORDER=legacy` は、記憶ではない設定の片付け (#1631) の #PRNUM で消した。本書は実験の記録として残す。
+> 比べた `PROMPT_SECTION_ORDER=legacy` は、記憶ではない設定の片付け (#1631) の #1754 で消した。本書は実験の記録として残す。
 
 ## 設定
 

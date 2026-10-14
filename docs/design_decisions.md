@@ -191,7 +191,7 @@
 **どこでこの判断が出てきたか**:
 - PR #433 で「Parasail A/B 実験 Run B は sliding_window だった」事実が `run_start` payload から判明 → PR #434 で対策
 
-`PROMPT_SECTION_ORDER` は、どの profile も `stable_to_volatile` だったので、記憶ではない設定の片付け (#1631) の #PRNUM でキーごと消した。
+`PROMPT_SECTION_ORDER` は、どの profile も `stable_to_volatile` だったので、記憶ではない設定の片付け (#1631) の #1754 でキーごと消した。
 
 ---
 
