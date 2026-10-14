@@ -59,8 +59,7 @@ class RecallSlotPolicy:
     # 新規挿入の最小スコア (= multi_cue_score、cue 軸でマッチした distinct
     # canonical 数)。これ未満の候補は slot に入らない。default 2 は「2 軸以上
     # で当たった episode だけを鮮明な記憶として扱う」方針。0 で閾値無効化。
-    # 弱い候補も後段の Afterglow index に乗ることで「ぼんやり覚えてる」状態
-    # を表現できるようにし、slot は「希少資源」として強い signal だけが入る。
+    # slot は「希少資源」として強い signal だけが入る。
     insert_score_threshold: int = 2
 
     def __post_init__(self) -> None:

@@ -31,9 +31,6 @@ if TYPE_CHECKING:
     # application/being/ 層、参照先 VO は application/llm/services/ 配下なので
     # 単純な top-level import でも 循環は起きないが、他の codec 群と書式を
     # 揃え + dataclass の構築コストを呼び出し時に閉じ込めるためこの形を取る)。
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        AfterglowEntry,
-    )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         RecallSlotEntry,
     )
@@ -410,7 +407,7 @@ def dict_to_subjective_episode(
     )
 
 
-# ── PR-G: Recall Layer (Slot / Afterglow / Habituation) codec ──
+# ── PR-G: Recall Layer (Slot / Habituation) codec ──
 # 想起階層 (PR #580 / #588 / #526 段階 2) の per-Being 状態を snapshot に乗せる
 # ための VO ↔ dict 変換。slot cooldown と habituation は (episode_id, tick) の
 # ペアなので共通の codec を使う。
@@ -435,32 +432,6 @@ def dict_to_recall_slot_entry(data: dict[str, Any]) -> RecallSlotEntry:
     )
 
 
-def afterglow_entry_to_dict(entry: AfterglowEntry) -> dict[str, Any]:
-    """AfterglowEntry → dict。``source`` は AfterglowSource.value (= 文字列)。"""
-    return {
-        "episode_id": entry.episode_id,
-        "heading": entry.heading,
-        "entered_tick": entry.entered_tick,
-        "source": entry.source.value,
-    }
-
-
-def dict_to_afterglow_entry(data: dict[str, Any]) -> AfterglowEntry:
-    """dict → AfterglowEntry。未知の source は AfterglowSource(...) が
-    ValueError を投げる (= _decode_list で BeingMemoryPayloadFormatError に
-    wrap される)。"""
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        AfterglowEntry,
-        AfterglowSource,
-    )
-    return AfterglowEntry(
-        episode_id=str(data["episode_id"]),
-        heading=str(data["heading"]),
-        entered_tick=int(data["entered_tick"]),
-        source=AfterglowSource(str(data["source"])),
-    )
-
-
 def episode_tick_pair_to_dict(episode_id: str, tick: int) -> dict[str, Any]:
     """(episode_id, tick) → dict。cooldown / habituation で共有する shape。"""
     return {"episode_id": episode_id, "tick": int(tick)}
@@ -469,19 +440,6 @@ def episode_tick_pair_to_dict(episode_id: str, tick: int) -> dict[str, Any]:
 def dict_to_episode_tick_pair(data: dict[str, Any]) -> tuple[str, int]:
     """dict → (episode_id, tick)。"""
     return (str(data["episode_id"]), int(data["tick"]))
-
-
-def episode_hit_count_pair_to_dict(episode_id: str, hit_count: int) -> dict[str, Any]:
-    """U9b (予測誤差統一設計 部品5・想起の信用割り当て): (episode_id, hit_count)
-
-    → dict。``episode_tick_pair_to_dict`` と構造は同じだが、hit_count を
-    tick フィールド名で表現すると意味を誤読しやすいので専用 key にする。"""
-    return {"episode_id": episode_id, "hit_count": int(hit_count)}
-
-
-def dict_to_episode_hit_count_pair(data: dict[str, Any]) -> tuple[str, int]:
-    """dict → (episode_id, hit_count)。"""
-    return (str(data["episode_id"]), int(data["hit_count"]))
 
 
 # ---- belief_evidence (U2: 証拠台帳統一設計) ------------------------------------

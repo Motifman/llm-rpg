@@ -177,7 +177,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'RECALL_HIT_BOOST_ENABLED': '1', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
@@ -203,7 +203,6 @@ class TestFromEnvExplicit:
         assert cfg.belief_consolidation_enabled is True
         assert cfg.belief_attribution_enabled is True
         assert cfg.memo_tools_enabled is False
-        assert cfg.recall_hit_boost_enabled is True
         assert cfg.scenario_random_seed == 42
 
     def test_end_on_all_down_flag_defaults_off_and_can_be_enabled(self) -> None:
@@ -314,6 +313,10 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",
+            "LLM_AFTERGLOW_ENABLED",
+            "LLM_AFTERGLOW_CAPACITY",
+            "LLM_AFTERGLOW_MAX_RESIDENCE",
+            "RECALL_HIT_BOOST_ENABLED",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:

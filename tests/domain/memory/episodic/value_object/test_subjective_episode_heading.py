@@ -1,4 +1,4 @@
-"""SubjectiveEpisode の heading フィールドが、Afterglow index で使う
+"""SubjectiveEpisode の heading フィールドが、
 1 行見出しとして安全に出し入れできることを保証する。
 
 heading は recall されたエピソードを「鮮明には浮かばないがヒントを与えれば
@@ -29,7 +29,7 @@ def _episode(**overrides) -> SubjectiveEpisode:
     return SubjectiveEpisode(**base)
 
 class TestSubjectiveEpisodeHeading:
-    """heading フィールドが Afterglow index 用の Optional 見出しとして
+    """heading フィールドが主観補完の書く Optional 見出しとして
     安全に初期化される挙動を保証する。"""
 
     def test_heading_default_is_none(self) -> None:
@@ -49,8 +49,8 @@ class TestSubjectiveEpisodeHeading:
             _episode(heading='')
 
     def test_whitespace_only_heading_raises_value_error(self) -> None:
-        """空白文字だけを heading として受け入れると afterglow index に
-        「見えない見出し」が並んでしまうため、空文字と同様に value object
+        """空白文字だけを heading として受け入れると
+        「見えない見出し」になってしまうため、空文字と同様に value object
         層で弾く。"""
         import pytest
         with pytest.raises(ValueError):

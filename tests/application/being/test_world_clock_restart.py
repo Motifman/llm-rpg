@@ -22,7 +22,6 @@ def _payload(**overrides: object) -> str:
         "belief_evidence_buffer": [],
         "recall_slot_entries": [],
         "recall_slot_cooldown": [],
-        "afterglow_entries": [],
         "recall_habituation_last_recalled": [],
         "pending_predictions": [],
         "memory_turn": [7],
@@ -63,11 +62,10 @@ class TestRestartWorldClockInPayload:
         assert report.reset_tick_fields == 0
 
     def test_recall_layer_ticks_become_round_start(self) -> None:
-        """想起の枠・冷却期間・余韻・慣れの tick はどれも 0 になる。"""
+        """想起の枠・冷却期間・慣れの tick はどれも 0 になる。"""
         payload = _payload(
             recall_slot_entries=[{"episode_id": "e1", "entered_tick": 80}],
             recall_slot_cooldown=[{"episode_id": "e2", "tick": 120}],
-            afterglow_entries=[{"episode_id": "e3", "entered_tick": 85}],
             recall_habituation_last_recalled=[{"episode_id": "e4", "tick": 88}],
         )
 
@@ -76,9 +74,17 @@ class TestRestartWorldClockInPayload:
         out = json.loads(out_json)
         assert out["recall_slot_entries"][0]["entered_tick"] == 0
         assert out["recall_slot_cooldown"][0]["tick"] == 0
-        assert out["afterglow_entries"][0]["entered_tick"] == 0
         assert out["recall_habituation_last_recalled"][0]["tick"] == 0
-        assert report.reset_tick_fields == 4
+        assert report.reset_tick_fields == 3
+
+    def test_afterglow_entries_of_old_snapshots_are_dropped(self) -> None:
+        """見出しの欄を消す前 (#1631) の snapshot の afterglow_entries は、前の回の tick を持っていても止めずに捨てる。"""
+        payload = _payload(afterglow_entries=[{"episode_id": "e3", "entered_tick": 85}])
+
+        out_json, report = restart_world_clock_in_payload(payload)
+
+        assert "afterglow_entries" not in json.loads(out_json)
+        assert report.reset_tick_fields == 0
 
     def test_belief_evidence_ticks_become_round_start(self) -> None:
         """信念の材料の tick は 0 になり、観測ターンは残る。"""
@@ -166,7 +172,6 @@ class TestRestartedPayloadRestoresIntoStores:
 
         from tests.application.being.test_being_memory_snapshot_coverage import _make_service
 
-        from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import RecallSlotEntry
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -175,9 +180,6 @@ class TestRestartedPayloadRestoresIntoStores:
         src = _make_service()
         src._memo.add_by_being(being, "井戸は北", current_tick=90)
         src._recall_slot.replace_all_by_being(being, [RecallSlotEntry(episode_id="e1", entered_tick=80)], {"e2": 120})
-        src._afterglow.replace_all_by_being(
-            being, [AfterglowEntry(episode_id="e3", heading="h", entered_tick=85, source=list(AfterglowSource)[0])]
-        )
         src._recall_habituation.replace_all_by_being(being, {"e4": 88})
         src._acquaintance.record_meeting(being, environment_name="島", name="カイト", turn=12)
         src._acquaintance.record_meeting(being, environment_name="島", name="カイト", turn=30)
@@ -189,8 +191,7 @@ class TestRestartedPayloadRestoresIntoStores:
         assert [m.added_at_tick for m in dst._memo.list_all_by_being(being)] == [0]
         assert [e.entered_tick for e in dst._recall_slot.get_slot(being)] == [0]
         assert dst._recall_slot.get_cooldown_until(being) == {"e2": 0}
-        assert [e.entered_tick for e in dst._afterglow.get_index(being)] == [0]
         assert dst._recall_habituation.list_all_by_being(being) == {"e4": 0}
         assert dst._acquaintance.list_by_being(being) == src._acquaintance.list_by_being(being)
-        assert report.reset_tick_fields == 5
+        assert report.reset_tick_fields == 4
         assert report.dropped_pending_predictions == 0

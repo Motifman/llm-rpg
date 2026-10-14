@@ -76,7 +76,7 @@ class SubjectiveEpisode:
     # 持ち、既定は空タプル。既存の全構築箇所・snapshot 往復が co_present を
     # 意識せずに作っても壊れない後方互換を保つ。
     co_present: tuple[str, ...] = ()
-    # Afterglow index で使う 1 行見出し (#526 段階 3 後続)。新規 LLM コールは
+    # 1 行見出し (#526 段階 3 後続)。新規 LLM コールは
     # 増やさず、既存の主観文付与で interpreted / recall_text と同じ pass で
     # 書かせる方針のため、未指定や空文字も None として畳み込む Optional に保つ。
     heading: str | None = None

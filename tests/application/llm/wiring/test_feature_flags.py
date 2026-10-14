@@ -11,7 +11,6 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_BELIEF_ATTRIBUTION_ENABLED,
     ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_MEMO_TOOLS_ENABLED,
-    ENV_RECALL_HIT_BOOST_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
     ENV_SHORT_TERM_MEMORY_KIND,
     SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
@@ -19,13 +18,11 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     log_belief_attribution_enabled_state,
     log_belief_evidence_enabled_state,
     log_memo_tools_enabled_state,
-    log_recall_hit_boost_enabled_state,
     log_semantic_passive_top_k_state,
     log_short_term_memory_kind_state,
     resolve_belief_attribution_enabled,
     resolve_belief_evidence_enabled,
     resolve_memo_tools_enabled,
-    resolve_recall_hit_boost_enabled,
     resolve_semantic_passive_top_k,
     resolve_short_term_memory_kind,
 )
@@ -279,40 +276,3 @@ class TestResolveBeliefAttributionEnabled:
         assert any("ENABLED" in m for m in messages)
         assert any("DISABLED" in m for m in messages)
 
-
-class TestResolveRecallHitBoostEnabled:
-    """U9b: ``RECALL_HIT_BOOST_ENABLED`` の env パース。"""
-
-    def test_env_unset_default_off_2(self) -> None:
-        """env 未設定なら default OFF。"""
-        assert resolve_recall_hit_boost_enabled(env={}) is False
-
-    @pytest.mark.parametrize("raw", ["1", "true", "True", "yes", "on"])
-    def test_truthy_value_2(self, raw: str) -> None:
-        """truthy な値は ON。"""
-        assert resolve_recall_hit_boost_enabled(
-            env={ENV_RECALL_HIT_BOOST_ENABLED: raw}
-        ) is True
-
-    @pytest.mark.parametrize("raw", ["0", "false", "no", "off"])
-    def test_falsy_value_off_2(self, raw: str) -> None:
-        """falsy な値は OFF。"""
-        assert resolve_recall_hit_boost_enabled(
-            env={ENV_RECALL_HIT_BOOST_ENABLED: raw}
-        ) is False
-
-    def test_unknown_raises_value_error_2(self) -> None:
-        """未知の値は ValueError。"""
-        with pytest.raises(ValueError):
-            resolve_recall_hit_boost_enabled(
-                env={ENV_RECALL_HIT_BOOST_ENABLED: "yesplz"}
-            )
-
-    def test_log_state_log_2(self, caplog: pytest.LogCaptureFixture) -> None:
-        """log state はレベル情報でログを出す。"""
-        with caplog.at_level(logging.INFO):
-            log_recall_hit_boost_enabled_state(True)
-            log_recall_hit_boost_enabled_state(False)
-        messages = [rec.message for rec in caplog.records]
-        assert any("ENABLED" in m for m in messages)
-        assert any("DISABLED" in m for m in messages)

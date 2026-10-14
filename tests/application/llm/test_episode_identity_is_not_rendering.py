@@ -11,8 +11,8 @@
 (replay / バックフィル / 版を跨ぐ分析) を足したときで、そのとき気付ける
 保証が無い。だから同一性の材料を先に structural な値だけへ絞る。
 
-版は接尾辞 `#e2` で示す。**接頭辞にはしない** — afterglow の handle は
-`episode_id` の先頭 6 文字から作られるので、先頭を版で潰すと handle の
+版は接尾辞 `#e2` で示す。**接頭辞にはしない** — 見出しの欄 (afterglow、#1631 で
+消した) の handle は `episode_id` の先頭 6 文字から作っていたので、先頭を版で潰すと handle の
 エントロピーが 3 文字になり、想起が別の出来事を引き当てる。
 """
 from __future__ import annotations
@@ -117,16 +117,3 @@ class TestTheVersionIsVisibleAndMachineReadable:
         old = 'c4d308e7-1492-5f29-b251-9c7214e77fe5'
         assert not old.endswith(EPISODE_ID_VERSION_SUFFIX)
         assert _chunk_episode_id().endswith(EPISODE_ID_VERSION_SUFFIX)
-
-    def test_the_version_does_not_eat_the_handle_entropy(self) -> None:
-        """版は接尾辞なので、handle (先頭 6 文字) は uuid 部分から作られる。
-
-        接頭辞にすると handle は全部 `ep_e2-…` になり、実質 3 文字しか残らない。
-        1 being あたり数十件の episode で誕生日衝突が起き、想起が別の出来事を
-        引き当てる。
-        """
-        from ai_rpg_world.application.llm.services.afterglow_store import make_afterglow_handle
-        ids = {_action_episode_id(player_id=pid, occurred_at=datetime(2026, 7, 5, 9, minute, tzinfo=timezone.utc)) for pid in range(1, 11) for minute in range(0, 30)}
-        handles = {make_afterglow_handle(i) for i in ids}
-        assert len(ids) == 300
-        assert len(handles) == len(ids), f'handle が衝突している。版が id の先頭を潰していないか (id {len(ids)} 件に対し handle {len(handles)} 件)'

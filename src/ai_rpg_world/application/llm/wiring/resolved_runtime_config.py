@@ -79,9 +79,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "END_ON_ALL_DOWN",
-    "LLM_AFTERGLOW_CAPACITY",
-    "LLM_AFTERGLOW_ENABLED",
-    "LLM_AFTERGLOW_MAX_RESIDENCE",
     "LLM_CLIENT",
     "LLM_EPISODIC_ENABLED",
     "LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS",
@@ -113,7 +110,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_REQUIRE_PARAMS",
     "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
-    "RECALL_HIT_BOOST_ENABLED",
     "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
@@ -284,7 +280,7 @@ class ResolvedLlmRuntimeConfig:
     # N=4 / K_insert=1 / L=8 / C=5 / threshold=2。
     # K=1 で 1 tick で 1 件しか入れ替えないため recall section の前半が
     # 安定し、prefix cache が育つ。閾値 2 で「2 軸以上の cue で当たった
-    # 強い signal だけ」が slot に入る (弱い候補は後段の Afterglow 行き)。
+    # 強い signal だけ」が slot に入る。
     recall_slot_enabled: bool = False
     recall_slot_capacity: int = 4
     recall_slot_insert_per_tick: int = 1
@@ -292,14 +288,6 @@ class ResolvedLlmRuntimeConfig:
     recall_slot_cooldown_ticks: int = 5
     recall_slot_insert_score_threshold: int = 2
 
-    # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)。
-    # ``LLM_AFTERGLOW_ENABLED=1`` で ON (要 slot enable)。容量 M と滞在期間
-    # M_L は env で上書き可:
-    #   ``LLM_AFTERGLOW_CAPACITY``       (default 10)
-    #   ``LLM_AFTERGLOW_MAX_RESIDENCE``  (default 10 tick)
-    afterglow_enabled: bool = False
-    afterglow_capacity: int = 10
-    afterglow_max_residence: int = 10
 
     # Active episodic recall tool (Issue #526 後続)。
 
@@ -315,7 +303,6 @@ class ResolvedLlmRuntimeConfig:
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
     belief_candidate_top_k: int = _DEFAULT_BELIEF_CANDIDATE_TOP_K
     belief_create_gate_min_confidence: float = _DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE
-    recall_hit_boost_enabled: bool = False
 
     # Goal / stagnation 系。
 
@@ -441,7 +428,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
             resolve_memo_tools_enabled,
-            resolve_recall_hit_boost_enabled,
             resolve_semantic_llm_gist_enabled,
             resolve_semantic_passive_top_k,
             resolve_short_term_memory_kind,
@@ -615,16 +601,6 @@ class ResolvedLlmRuntimeConfig:
             source, "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD", default=2
         )
 
-        # #526 段階 3 PR-C: afterglow index (default off / M=10, M_L=10)
-        afterglow_enabled = _parse_truthy(
-            source.get("LLM_AFTERGLOW_ENABLED"), default=False
-        )
-        afterglow_capacity = _resolve_non_negative_int(
-            source, "LLM_AFTERGLOW_CAPACITY", default=10
-        )
-        afterglow_max_residence = _resolve_non_negative_int(
-            source, "LLM_AFTERGLOW_MAX_RESIDENCE", default=10
-        )
 
         belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
         belief_consolidation_enabled = resolve_belief_consolidation_enabled(env=source)
@@ -661,7 +637,6 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
-        recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
         prompt_dataset_capture_enabled = _parse_truthy(
             source.get("PROMPT_DATASET_CAPTURE_ENABLED"), default=False
@@ -754,9 +729,6 @@ class ResolvedLlmRuntimeConfig:
             recall_slot_insert_score_threshold=recall_slot_insert_score_threshold,
             recall_slot_max_residence=recall_slot_max_residence,
             recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
-            afterglow_enabled=afterglow_enabled,
-            afterglow_capacity=afterglow_capacity,
-            afterglow_max_residence=afterglow_max_residence,
             belief_evidence_enabled=belief_evidence_enabled,
             belief_consolidation_enabled=belief_consolidation_enabled,
             belief_attribution_enabled=belief_attribution_enabled,
@@ -766,7 +738,6 @@ class ResolvedLlmRuntimeConfig:
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
-            recall_hit_boost_enabled=recall_hit_boost_enabled,
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
             scenario_random_seed=scenario_random_seed,
@@ -853,9 +824,6 @@ class ResolvedLlmRuntimeConfig:
             recall_slot_max_residence=8,
             recall_slot_cooldown_ticks=5,
             recall_slot_insert_score_threshold=2,
-            afterglow_enabled=False,
-            afterglow_capacity=10,
-            afterglow_max_residence=10,
             belief_evidence_enabled=False,
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,
@@ -865,7 +833,6 @@ class ResolvedLlmRuntimeConfig:
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
-            recall_hit_boost_enabled=False,
             memo_tools_enabled=True,
             being_memo_enabled=False,
             scenario_random_seed=None,

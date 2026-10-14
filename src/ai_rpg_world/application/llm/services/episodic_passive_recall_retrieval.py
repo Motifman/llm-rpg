@@ -14,12 +14,6 @@ from ai_rpg_world.application.llm.passive_recall_cue_families import (
     passive_recall_object_value_granularity_weight,
     passive_recall_place_axis_granularity_weight,
 )
-from ai_rpg_world.application.llm.services.afterglow_store import (
-    AfterglowEntry,
-    AfterglowSource,
-    IAfterglowStore,
-    apply_afterglow_policy,
-)
 from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
     IEpisodicRecallHabituationStore,
     compute_habituation_penalty,
@@ -29,9 +23,6 @@ from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
     RecallSlotDecision,
     RecallSlotPolicy,
     apply_slot_policy,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-    IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
@@ -44,11 +35,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 
 PASSIVE_RECALL_AXIS_TEMPORAL = "temporal"
 PASSIVE_RECALL_AXIS_SPREADING = "spreading"
-
-# U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 boost の既定 cap。
-# 「当たる記憶」が固定化して想起の多様性が死ぬのを防ぐための上限
-# (habituation penalty と綱引きになる設計を意識し、小さく始める)。
-RECALL_HIT_BOOST_DEFAULT_CAP = 3
 
 
 def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
@@ -193,21 +179,11 @@ class EpisodicPassiveRecallRetrievalDebug:
     penalty=0 のものや habituation off 時は空 tuple。post-hoc で「どの episode
     がどれだけ沈んだか」を計測できる。"""
     habituation_penalty_by_episode: tuple[tuple[str, int], ...] = ()
-    """U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 boost が
-    適用された episode の (id, boost)。boost=0 のものや hit_boost off 時は
-    空 tuple。M3 で「想起の多様性が落ちていないか」を post-hoc に計測する
-    材料になる (habituation_penalty_by_episode と対称)。"""
-    hit_boost_by_episode: tuple[tuple[str, int], ...] = ()
     """#526 後続 段階 3: 想起スロットが有効なときの 1 tick 分の更新内容。
     slot off (= 従来挙動) のときは ``None``。
     retained / inserted / evicted_ids を見ると prefix cache 親和性と慣化の
     動きが post-hoc で追える。"""
     recall_slot_decision: RecallSlotDecision | None = None
-    """#526 段階 3 PR-C: 想起の階層構造の下層 (= afterglow = ぼんやり覚えてる)
-    の今 tick の状態。slot から押し出された記憶 + slot 閾値で入れなかった
-    弱い候補のうち heading 付きのものが並ぶ。afterglow off (= store 未注入)
-    のときは None。"""
-    afterglow_index: tuple[AfterglowEntry, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -234,14 +210,8 @@ class EpisodicPassiveRecallRetrievalService:
         habituation_store: IEpisodicRecallHabituationStore | None = None,
         habituation_decay_window_ticks: int = 5,
         habituation_strength: int = 2,
-        recall_success_store: IEpisodicRecallSuccessStore | None = None,
-        hit_boost_strength: int = 0,
-        hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
         slot_store: IEpisodicRecallSlotStore | None = None,
         slot_policy: RecallSlotPolicy | None = None,
-        afterglow_store: IAfterglowStore | None = None,
-        afterglow_capacity: int = 10,
-        afterglow_max_residence: int = 10,
     ) -> None:
         if not isinstance(habituation_decay_window_ticks, int) or isinstance(
             habituation_decay_window_ticks, bool
@@ -261,18 +231,6 @@ class EpisodicPassiveRecallRetrievalService:
             raise TypeError("habituation_strength must be int")
         if habituation_strength < 0:
             raise ValueError("habituation_strength must be 0 or greater")
-        # U9b (想起の信用割り当て・的中側): boost の強さと cap。store 未注入
-        # または strength=0 (既定) なら boost 0 = 既存挙動と byte 一致。
-        if not isinstance(hit_boost_strength, int) or isinstance(
-            hit_boost_strength, bool
-        ):
-            raise TypeError("hit_boost_strength must be int")
-        if hit_boost_strength < 0:
-            raise ValueError("hit_boost_strength must be 0 or greater")
-        if not isinstance(hit_boost_cap, int) or isinstance(hit_boost_cap, bool):
-            raise TypeError("hit_boost_cap must be int")
-        if hit_boost_cap < 0:
-            raise ValueError("hit_boost_cap must be 0 or greater")
         self._store = store
         self._link_store = link_store
         self._spreading_max_hops = spreading_max_hops
@@ -281,11 +239,6 @@ class EpisodicPassiveRecallRetrievalService:
         self._habituation_store = habituation_store
         self._habituation_decay_window_ticks = habituation_decay_window_ticks
         self._habituation_strength = habituation_strength
-        # U9b: 的中側 sidecar。store 未注入なら boost 計算 skip
-        # (= default off で既存挙動と完全同一)。
-        self._recall_success_store = recall_success_store
-        self._hit_boost_strength = hit_boost_strength
-        self._hit_boost_cap = hit_boost_cap
         # #526 段階 3: 想起スロット (working memory)。store + policy が両方
         # 揃ったときだけ動く。default off で既存挙動と完全同一。
         if slot_store is not None and slot_policy is None:
@@ -294,15 +247,6 @@ class EpisodicPassiveRecallRetrievalService:
             )
         self._slot_store = slot_store
         self._slot_policy = slot_policy
-        # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる)。store 未注入
-        # なら一切動かさず result.debug.afterglow_index は None になる。
-        if afterglow_capacity < 0:
-            raise ValueError("afterglow_capacity must be 0 or greater")
-        if afterglow_max_residence < 0:
-            raise ValueError("afterglow_max_residence must be 0 or greater")
-        self._afterglow_store = afterglow_store
-        self._afterglow_capacity = afterglow_capacity
-        self._afterglow_max_residence = afterglow_max_residence
 
     def retrieve(
         self,
@@ -425,31 +369,6 @@ class EpisodicPassiveRecallRetrievalService:
                 decay_window=self._habituation_decay_window_ticks,
             )
 
-        # U9b (想起の信用割り当て・的中側): store 注入 + being_id 解決が
-        # 揃ったときだけ boost を計算する。条件が欠ければ boost 0 で
-        # 既存挙動を保つ (= habituation と同じ「明示的に off 状態を返す」)。
-        hit_boost_active = (
-            self._recall_success_store is not None
-            and self._hit_boost_strength > 0
-        )
-
-        hit_boost_records: dict[str, int] = {}
-
-        def hit_boost(eid: str) -> int:
-            if not hit_boost_active:
-                return 0
-            assert self._recall_success_store is not None
-            hit_count = self._recall_success_store.get_hit_count_by_being(
-                being_id, eid
-            )
-            capped = min(hit_count, self._hit_boost_cap)
-            boost = capped * self._hit_boost_strength
-            if boost > 0:
-                # debug 用に記録 (boost=0 は記録しない)。同 episode が複数 arm
-                # で評価されても結果は同じなので dict で上書き OK。
-                hit_boost_records[eid] = boost
-            return boost
-
         def _arm_score_key(ep: SubjectiveEpisode) -> int:
             penalty = habituation_penalty(ep.episode_id)
             if penalty > 0:
@@ -459,13 +378,9 @@ class EpisodicPassiveRecallRetrievalService:
             # PR-I: penalty に倍率を掛けてスコアを下げる。倍率 2 なら 4 cue
             # 一致の episode (= score 4) に penalty 3 を引いても score -2 まで
             # 沈み、他の penalty=0 / score 2-3 の候補に確実に席を譲る。
-            # U9b: 「思い出して立てた予測が当たった」回数を cap 付きで加算する。
-            # habituation penalty と綱引きになる設計を意識し、boost は小さく
-            # 始める前提 (既定 strength=0 なら既存挙動と byte 一致)。
             return (
                 multi_cue_score(ep.episode_id)
                 - penalty * self._habituation_strength
-                + hit_boost(ep.episode_id)
             )
 
         cue_arms = [
@@ -569,67 +484,6 @@ class EpisodicPassiveRecallRetrievalService:
                 source_axes_by_episode[entry.episode_id].add("slot_retained")
             capped_ids = [e.episode_id for e in slot_decision.new_slot]
 
-        # #526 段階 3 PR-C: afterglow 投入 (= 「ぼんやり覚えてる」index)。
-        # 経路は 2 つ:
-        #   1. SLOT_EVICTED: slot_decision.evicted_ids
-        #   2. WEAK_RECALL: 候補にはあったが slot にも入らず evict もされて
-        #      いない (= score 閾値で落ちた弱い hit)
-        # いずれも episode.heading が乗っていないと意味がない (= 見出しを
-        # 並べるため) ので skip。
-        afterglow_index_result: tuple[AfterglowEntry, ...] | None = None
-        if (
-            self._afterglow_store is not None
-            and current_tick is not None
-            and slot_decision is not None
-        ):
-            new_slot_ids = {e.episode_id for e in slot_decision.new_slot}
-            evicted_set = set(slot_decision.evicted_ids)
-            incoming: list[AfterglowEntry] = []
-
-            def _heading_or_none(eid: str) -> str | None:
-                ep = episode_by_id.get(eid)
-                if ep is None:
-                    ep = self._store.get_by_being(being_id, eid)
-                if ep is None:
-                    return None
-                return getattr(ep, "heading", None)
-
-            for eid in slot_decision.evicted_ids:
-                h = _heading_or_none(eid)
-                if not h:
-                    continue
-                incoming.append(
-                    AfterglowEntry(
-                        episode_id=eid,
-                        heading=h,
-                        entered_tick=current_tick,
-                        source=AfterglowSource.SLOT_EVICTED,
-                    )
-                )
-            for eid, _score in candidates_with_score:
-                if eid in new_slot_ids or eid in evicted_set:
-                    continue
-                h = _heading_or_none(eid)
-                if not h:
-                    continue
-                incoming.append(
-                    AfterglowEntry(
-                        episode_id=eid,
-                        heading=h,
-                        entered_tick=current_tick,
-                        source=AfterglowSource.WEAK_RECALL,
-                    )
-                )
-
-            prev_index = self._afterglow_store.get_index(being_id)
-            afterglow_index_result = apply_afterglow_policy(
-                prev_index=prev_index,
-                incoming=tuple(incoming),
-                current_tick=current_tick,
-                capacity=self._afterglow_capacity,
-                max_residence=self._afterglow_max_residence,
-            )
-
         candidates: list[EpisodicPassiveRecallCandidate] = []
         candidate_sources: list[tuple[str, tuple[str, ...]]] = []
         axis_hits: defaultdict[str, int] = defaultdict(int)
@@ -647,18 +501,13 @@ class EpisodicPassiveRecallRetrievalService:
         habituation_payload = tuple(
             sorted(habituation_penalty_records.items(), key=lambda t: t[0])
         )
-        hit_boost_payload = tuple(
-            sorted(hit_boost_records.items(), key=lambda t: t[0])
-        )
         debug = EpisodicPassiveRecallRetrievalDebug(
             raw_row_count_by_axis=tuple(raw_counts),
             union_episode_count_before_max_cap=union_before_cap,
             candidate_episode_sources=tuple(candidate_sources),
             final_episode_count_by_source_axis=final_axis_counts,
             habituation_penalty_by_episode=habituation_payload,
-            hit_boost_by_episode=hit_boost_payload,
             recall_slot_decision=slot_decision,
-            afterglow_index=afterglow_index_result,
         )
         return EpisodicPassiveRecallRetrievalResult(candidates=tuple(candidates), debug=debug)
 

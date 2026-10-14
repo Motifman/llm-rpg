@@ -1,7 +1,7 @@
 """EpisodicChunkSubjectiveFieldsService が heading フィールドを LLM に
 要求し、出力を episode に書き込み、欠落・失敗時にも壊れないことを保証する。
 
-heading は afterglow index で使う 1 行見出し。新規 LLM コールを増やさず、
+heading は主観補完が書く 1 行見出し。新規 LLM コールを増やさず、
 既存の interpreted / recall_text と同じ pass でついでに書かせる方針のため、
 - system prompt が heading キーを要求していること
 - LLM 出力に heading があれば episode.heading に乗ること
@@ -53,8 +53,7 @@ def _make_encoding() -> Any:
 class TestSystemPromptIncludesHeading:
     """LLM への指示に heading キーが含まれているかを保証する。
 
-    afterglow index は LLM が書いた heading が無いと「ぼんやり覚えてる」を
-    表現できないため、prompt 側でこれを必ず要求する。応答形式の例にも
+    heading は LLM が書かないと埋まらないため、prompt 側でこれを必ず要求する。応答形式の例にも
     heading キーが入っている必要がある。
     """
 
@@ -96,7 +95,7 @@ class TestHeadingMergeFromLlmOutput:
 
     def test_long_heading_is_truncated(self) -> None:
         """LLM が指示を無視して 30 文字を超える heading を返した場合、
-        prompt 表示を太らせず afterglow の視認性を保つため 30 文字に
+        見出しを 1 行に収めるため 30 文字に
         切り詰め、末尾に「…」を付けて切れたことを示す。"""
         enc = _make_encoding()
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))

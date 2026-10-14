@@ -11,10 +11,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from ai_rpg_world.application.llm.services.afterglow_store import (
-    make_afterglow_handle,
-    resolve_episode_id_prefix_from_handle,
-)
 from ai_rpg_world.application.llm.services.episode_identity import EPISODE_ID_VERSION_SUFFIX, is_current_version
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -46,32 +42,3 @@ class TestBothVersionsLiveInOneStore:
         """どちらの版で作られた id かを機械的に判別できる。"""
         assert not is_current_version(_OLD_ID)
         assert is_current_version(_NEW_ID)
-
-class TestRecallByHandleWorksForBothVersions:
-    """handle からの引き当ては、版が混ざっても正しい出来事を引く。"""
-
-    def test_each_handle_resolves_to_its_own_episode(self) -> None:
-        """旧 id と新 id のどちらの handle も、それぞれの episode を引く。
-
-        handle は id の先頭 6 文字なので、**版を接尾辞にしている限り**
-        両者は別の handle になる。接頭辞にしていたら、新 id の handle は
-        全部同じ 3 文字を共有して衝突する。
-        """
-        store = InMemorySubjectiveEpisodeStore()
-        being = BeingId('being_w1_p1')
-        store.put_by_being(being, _episode(_OLD_ID, '昔の出来事'))
-        store.put_by_being(being, _episode(_NEW_ID, 'いまの出来事'))
-        found = {}
-        for episode_id in (_OLD_ID, _NEW_ID):
-            prefix = resolve_episode_id_prefix_from_handle(make_afterglow_handle(episode_id))
-            matches = [episode for episode in store.list_recent_by_being(being, limit=10) if episode.episode_id.startswith(prefix)]
-            assert len(matches) == 1, f'{episode_id} の handle が一意に引けない'
-            found[episode_id] = matches[0].what
-        assert found[_OLD_ID] == '昔の出来事'
-        assert found[_NEW_ID] == 'いまの出来事'
-
-    def test_the_new_handle_is_built_from_the_uuid_not_the_version(self) -> None:
-        """新 id の handle は uuid 部分から作られる (版が桁を食っていない)。"""
-        handle = make_afterglow_handle(_NEW_ID)
-        assert handle == 'ep_89b0cf'
-        assert EPISODE_ID_VERSION_SUFFIX not in handle

@@ -63,7 +63,7 @@ system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前
         → S7【同じ局面にいる者】 → S8【渡される文面の内訳】 → S9【行動ルール】 → S10【独白と一言の書き方】
         → S11【文脈と履歴の限界】 (S12 SSoT は #1631 で消した)
 user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
-        → U10【関連する学び】 → U11【関連する記憶】 → U12 見出し
+        → U10【関連する学び】 → U11【関連する記憶】 (U12 見出しは #1631 で消した)
         → U13【進行中のメモ】 → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
         → 繰り返しの警告 (U7) → U21 指示の前の知らせ → U22 行動指示
 tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, memo_add, memo_list, memo_done,
@@ -111,7 +111,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U9 【保留中の予測】 | (#1631 で消した) | - | - | - | - |
 | U10 【関連する学び】 | 「- 釣りには釣竿が必要だ」「- 狼煙には流木・枯れ葉・火打ち石が必要だ」 | `run_semantic_passive_recall` (`semantic_recall.py:80`) | semantic store。profile の `semantic_passive_top_k` | Being の持ち物 | semantic store |
 | U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:257`)、空の置き文は 463 行 | episodic store、recall slot (再解釈は #1631 で消した) | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
-| U12 さっき思い出した記憶の見出し | 「【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)」「気になる見出しがあれば memory_recall_by_handle にその handle を渡して…」「- [ep_02c662] 釣竿作りが流木不足で失敗した」 | `_format_afterglow_section` (`episodic_recall.py:72`)。U11 の本文の末尾につながり、【関連する記憶】の中に入る | afterglow。profile の `afterglow_enabled` | Being の持ち物 | afterglow |
+| U12 さっき思い出した記憶の見出し | (#1631 で消した) | - | - | - | - |
 | U13 【進行中のメモ】 | 「- [memo_718918…] [tick=11, 経過 13 tick] 狼煙に必要な物: …」 | `_build_active_memos_text` (`prompt_builder.py:971`) → `format_active_memos` (`llm/services/active_memos_formatter.py:19`) | memo store と世界の tick。profile の `memo_tools_enabled` | Being の持ち物 | memo (表示の時計が世界の tick) |
 | U14 現在地の塊 | 「現在地: 高地の泉 (初めて訪れた)」「  山の中腹に湧く泉。…」「雰囲気: …」「天候: 弱い晴れ（屋外）」「現在時刻: Day 1 12:00」「時刻帯: 昼」 | `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`)、注記は `_annotate_current_spot_familiarity` (`llm/services/spot_graph_ui_context_builder.py:628`)。死亡後の【いまの存在状態】は同 529 行 | 世界の snapshot (spot の名前と説明、眺望、天候、時刻、会議の状況、点検の進み具合、残り行動量、自分の状態)。「(初めて訪れた)」は encounter | 混ざっている (環境の描写と、行った場所の記録) | 無 (encounter はシナリオの spot ID と `PlayerId` の鍵) |
 | U15 この場で働きかけられるもの | 「接続先:」「  - "山麓への道" → "山麓"（通行可）」「オブジェクト:」「  - "湧水の口" (今は汲めない・時間を置けば戻る) — …」「      いまできない: 湧水を汲む → "drink_water"（…）」「同じ場所に居るモンスター: (このスポットにモンスターはいない)」 | `SpotGraphUiContextBuilder` の `_build_connection_section` (720 行)、`_build_object_section` (801 行)、`_build_monster_section` (1078 行)、地面のアイテム・商人・市場・所持金・取引の節 | 世界の snapshot とシナリオの物と操作。商人などはシナリオで宣言したときだけ | 環境の材料 | 無 |
@@ -135,7 +135,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | T3 発話の引数 `say_inline` | 「この行動をしながら発する一言 (任意、200 字以内)。書き方は【独白と一言の書き方】。」 | `say_inline_property` (`tool_catalog/say_inline.py:47`)、各ツールの定義に直接入っている | 固定の定義 | 環境の材料 (説明が Being 側の節名を参照している。5-3) | 無 |
 | T4 予期の引数 `expectations` | (#1631 で消した) | - | - | - | - |
 | T5 目的の引数 `goal_update` / `goal_outcome` | (#1631 で消した) | - | - | - | - |
-| T6 記憶のツール | `memo_add`「ターンを跨いで覚えておきたい情報…を memo として記録します。」、`memo_list`、`memo_done`、`memory_recall_episodes`「受動想起 (= prompt の『関連する記憶』 section) は…」、`memory_recall_by_handle`「prompt の『【さっき思い出した記憶の見出し】』section に並んでいる handle…」 | `get_memory_specs` (`tool_catalog/memory.py:297`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py:1727`) | 固定の定義。profile の `memo_tools_enabled`、`episodic_recall_enabled`、`semantic_search_enabled`、`episodic_explore_related_enabled` と実行部の有無。`ToolExposure` を通らない | Being の持ち物 | memo / episodic store / semantic store。実行部はゲームのパッケージにある (#1469) |
+| T6 記憶のツール | `memo_add`「ターンを跨いで覚えておきたい情報…を memo として記録します。」、`memo_list`、`memo_done`、`episode_recall`、`episode_revise_index` (能動想起の 4 つの道具は #1631 で消した) | `get_memory_specs` (`tool_catalog/memory.py`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py`) | 固定の定義。profile の `memo_tools_enabled` と目次つきのエピソードの設定、実行部の有無。`ToolExposure` を通らない | Being の持ち物 | memo / Being のエピソード。実行部はゲームのパッケージにある (#1469) |
 | T7 tool の並びと出し分け | 共通の塊が先、フェーズ固有の塊が後。run では 17 個 (0 章) | `ToolExposure.order_for_payload` と `_PAYLOAD_TOOL_ORDER` (`llm/tool_exposure.py:147`、228 行)、`split_for_phase`、`filter_definitions_for_escape_llm` (`llm/services/world_llm_turn/escape_tools.py:33`) | 固定の並び。会議中か、投票済みか、死亡後か | 組み立ての決まり | 無 |
 
 ### 1-4. 分類の集計
@@ -187,7 +187,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 |---|---|---|
 | 現在の目的 | (goal journal は #1631 で消した) | いまはシナリオの目的の文をそのまま描く。Being が目的を持つ store は無い |
 | 関連する学び | semantic store | — |
-| 関連する記憶・見出し | episodic / afterglow / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
+| 関連する記憶・見出し | episodic / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
 | 進行中のメモ | memo | 表示の `tick=…, 経過 … tick` を Being のターン数に替える |
 | 記憶ツールと主観の引数 | 引数と記憶ツール | ツールの実行部はゲームのパッケージにある (#1469) |
 
@@ -240,7 +240,7 @@ encounter はいま、環境の判定にも使われている (確認)。
 
 ### 5-3. tool 名を書くときの露出判断
 
-- 記憶ツールの露出は `ToolExposure` の外 (profile と実行部の有無) で決まる。想起の見出しの本文は `memory_recall_by_handle` を直書きしていて、出すかの判断が別の場所にある (推測: 出さないのに本文が宣伝する組み合わせがありうる)。Being が組み立てるなら、Being のツールの露出を 1 か所で決め、Being の節の本文もそれを通す
+- 記憶ツールの露出は `ToolExposure` の外 (profile と実行部の有無) で決まる。Being が組み立てるなら、Being のツールの露出を 1 か所で決め、Being の節の本文もそれを通す
 - system prompt とツールの説明が、環境の `say_inline` 引数の名前を Being 側の固定文に書いている。`say_inline` を出さない環境では、無い引数を宣伝する。環境の `interface_notes` に移す
 - `tests/demos/test_disabled_tools_vanish_from_the_prompt.py` は環境のツールを 1 つずつ無効にする検査で、Being のツールは対象外 (推測)。同じ総当たりを Being 側にも持つ
 
