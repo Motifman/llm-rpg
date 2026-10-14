@@ -617,16 +617,28 @@ class TestMonsterBehaviorStateMachineShouldReturnToTerritory:
             is True
         )
 
-    def test_returns_false_when_inside_radius(self, sm):
-        """テリトリ内なら False"""
+    @pytest.mark.parametrize(
+        ("actor_coordinate", "territory_radius", "expected"),
+        [
+            (Coordinate(2, 0, 0), 10, False),
+            (Coordinate(3, 3, 0), 5, False),
+            (Coordinate(3, 4, 0), 5, False),
+            (Coordinate(4, 4, 0), 5, True),
+        ],
+        ids=["original_inside", "diagonal_inside", "exact_radius", "diagonal_outside"],
+    )
+    def test_return_decision_uses_euclidean_radius_boundary(
+        self, sm, actor_coordinate, territory_radius, expected
+    ):
+        """CHASE は直線距離が半径を超えたときだけ帰還し、等値では帰還しない。"""
         assert (
             sm.should_return_to_territory(
-                actor_coordinate=Coordinate(2, 0, 0),
+                actor_coordinate=actor_coordinate,
                 behavior_initial_position=Coordinate(0, 0, 0),
-                territory_radius=10,
+                territory_radius=territory_radius,
                 current_state=BehaviorStateEnum.CHASE,
             )
-            is False
+            is expected
         )
 
     def test_returns_false_when_territory_radius_zero(self, sm):
