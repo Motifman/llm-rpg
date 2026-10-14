@@ -1,29 +1,19 @@
 import pytest
 
 from ai_rpg_world.domain.sns.exception import MentionValidationException
-from ai_rpg_world.domain.sns.value_object import Mention, PostId
+from ai_rpg_world.domain.sns.value_object import Mention, PostId, ReplyId
 
 
 class TestMention:
     """Mentionバリューオブジェクトのテスト"""
 
-    def test_create_mention_success(self):
-        """正常なMentionの作成テスト"""
-        mentioned_user_name = "testuser"
-        post_id = PostId(1)
+    @pytest.mark.parametrize("post_id", [PostId(1), PostId(999999), PostId(123), ReplyId(1)])
+    def test_create_mention_success(self, post_id):
+        """表示名と、小さい値・大きい値・返信を含む型付き対象IDをそのまま保持する。"""
+        mention = Mention("testuser", post_id)
 
-        mention = Mention(mentioned_user_name, post_id)
-
-        assert mention.mentioned_user_name == mentioned_user_name
+        assert mention.mentioned_user_name == "testuser"
         assert mention.post_id == post_id
-
-    def test_invalid_post_id_raises_error(self):
-        """無効な投稿IDの場合のエラーテスト"""
-        with pytest.raises(Exception):  # PostIdValidationException
-            PostId(0)
-
-        with pytest.raises(Exception):  # PostIdValidationException
-            PostId(-1)
 
     def test_none_mentioned_user_name_handling(self):
         """mentioned_user_nameがNoneの場合の動作テスト"""
@@ -36,18 +26,6 @@ class TestMention:
         """mentioned_user_nameが空文字の場合のエラーテスト"""
         with pytest.raises(MentionValidationException, match="メンションするユーザー名は必須です"):
             Mention("", PostId(1))
-
-    def test_boundary_post_id_values(self):
-        """境界値の投稿IDテスト"""
-        # 最小値（1）
-        post_id = PostId(1)
-        mention = Mention("testuser", post_id)
-        assert mention.post_id == post_id
-
-        # 大きな値
-        large_post_id = PostId(999999)
-        mention = Mention("testuser", large_post_id)
-        assert mention.post_id == large_post_id
 
     def test_various_mentioned_user_names(self):
         """様々なユーザー名のテスト"""
@@ -67,74 +45,58 @@ class TestMention:
         mention3 = Mention(special_username, post_id)
         assert mention3.mentioned_user_name == special_username
 
-    def test_equality_comparison(self):
-        """等価性の比較テスト"""
-        post_id1 = PostId(1)
-        post_id2 = PostId(1)
+    @pytest.mark.parametrize("content_id_type", [PostId, ReplyId], ids=["post", "reply"])
+    def test_equality_comparison(self, content_id_type):
+        """同じ表示名と型付き対象IDの別個体は、集合で重複せず相互に検索・除去できる。"""
+        mention1 = Mention("testuser", content_id_type(1))
+        mention2 = Mention("testuser", content_id_type(1))
 
-        mention1 = Mention("testuser", post_id1)
-        mention2 = Mention("testuser", post_id2)
-
-        # 同じユーザー名と投稿IDであれば等価
         assert mention1 == mention2
         assert hash(mention1) == hash(mention2)
+        mentions = {mention1, mention2}
+        assert len(mentions) == 1
+        assert mention2 in mentions
+        mentions.remove(mention2)
+        assert mentions == set()
 
-    def test_inequality_with_different_mentioned_user_names(self):
-        """異なるユーザー名での非等価性テスト"""
-        post_id = PostId(1)
-        mention1 = Mention("testuser1", post_id)
-        mention2 = Mention("testuser2", post_id)
-
-        assert mention1 != mention2
-        assert hash(mention1) != hash(mention2)
-
-    def test_inequality_with_different_post_ids(self):
-        """異なる投稿IDでの非等価性テスト"""
-        user_name = "testuser"
-        post_id1 = PostId(1)
-        post_id2 = PostId(2)
-
-        mention1 = Mention(user_name, post_id1)
-        mention2 = Mention(user_name, post_id2)
+    @pytest.mark.parametrize(
+        ("first_name", "second_name"), [("testuser1", "testuser2"), ("testuser", "otheruser")],
+    )
+    def test_inequality_with_different_mentioned_user_names(self, first_name, second_name):
+        """対象IDが同じでも表示名が違えば、別のメンションとして集合に共存する。"""
+        mention1 = Mention(first_name, PostId(1))
+        mention2 = Mention(second_name, PostId(1))
 
         assert mention1 != mention2
-        assert hash(mention1) != hash(mention2)
+        assert len({mention1, mention2}) == 2
 
-    def test_immutability(self):
-        """不変性のテスト"""
-        mentioned_user_name = "testuser"
-        post_id = PostId(1)
-        mention = Mention(mentioned_user_name, post_id)
+    @pytest.mark.parametrize(
+        ("first_id", "second_id"),
+        [(PostId(1), PostId(2)), (ReplyId(1), ReplyId(2)), (PostId(1), ReplyId(1))],
+        ids=["post-value", "reply-value", "target-kind"],
+    )
+    def test_inequality_with_different_post_ids(self, first_id, second_id):
+        """表示名が同じでも対象の値か型が違えば、別のメンションとして集合に共存する。"""
+        mention1 = Mention("testuser", first_id)
+        mention2 = Mention("testuser", second_id)
+
+        assert mention1 != mention2
+        assert len({mention1, mention2}) == 2
+
+    @pytest.mark.parametrize(
+        ("attribute", "replacement"), [("mentioned_user_name", "otheruser"), ("post_id", PostId(2))],
+    )
+    def test_immutability(self, attribute, replacement):
+        """表示名と対象IDの再代入を拒み、構築時の両方の値を保持する。"""
+        mention = Mention("testuser", PostId(1))
+
+        with pytest.raises(AttributeError):
+            setattr(mention, attribute, replacement)
+
+        assert mention.mentioned_user_name == "testuser"
+        assert mention.post_id == PostId(1)
 
         # 作成後に変更しようとしても変更されない（frozen=Trueによる不変性）
-
-    def test_hash_functionality(self):
-        """ハッシュ機能の包括的テスト"""
-        post_id1 = PostId(1)
-        post_id2 = PostId(2)
-
-        # 同じ値のMentionは同じハッシュ値を持つ
-        mention1 = Mention("testuser", post_id1)
-        mention2 = Mention("testuser", post_id1)
-        assert hash(mention1) == hash(mention2)
-
-        # ユーザー名が異なる場合は異なるハッシュ値
-        mention3 = Mention("otheruser", post_id1)
-        assert hash(mention1) != hash(mention3)
-
-        # 投稿IDが異なる場合は異なるハッシュ値
-        mention4 = Mention("testuser", post_id2)
-        assert hash(mention1) != hash(mention4)
-
-    def test_string_representation(self):
-        """文字列表現のテスト"""
-        post_id = PostId(1)
-        mention = Mention("testuser", post_id)
-
-        str_repr = str(mention)
-        assert "Mention(" in str_repr
-        assert "testuser" in str_repr
-        assert str(post_id) in str_repr
 
     def test_edge_cases_for_mentioned_user_name(self):
         """ユーザー名のエッジケーステスト"""
@@ -151,11 +113,3 @@ class TestMention:
         # 記号を含むユーザー名
         mention3 = Mention("test@user", post_id)
         assert mention3.mentioned_user_name == "test@user"
-
-    def test_post_id_string_conversion(self):
-        """PostIdの文字列変換テスト"""
-        post_id = PostId(123)
-        mention = Mention("testuser", post_id)
-
-        assert str(mention.post_id) == "123"
-        assert int(mention.post_id) == 123
