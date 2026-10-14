@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import pytest
@@ -40,25 +41,38 @@ class TestCombatLogicService:
             assert damage.is_critical is False
 
         @pytest.mark.parametrize(
-            ("attacker_values", "defender_values"),
+            ("attacker_values", "defender_values", "random_value"),
             [
                 pytest.param(
                     (100, 50, 50, 20, 10, 0.0, 0.0),
                     (100, 50, 20, 30, 10, 0.0, 1.0),
+                    None,
                     id="original-calculation",
                 ),
                 pytest.param(
                     (100, 50, 40, 10, 10, 0.0, 0.0),
                     (100, 50, 20, 15, 10, 0.05, 1.0),
+                    None,
                     id="transferred-player-evasion",
+                ),
+                pytest.param(
+                    (100, 30, 50, 5, 12, 0.0, 0.0),
+                    (100, 50, 20, 15, 10, 0.05, 0.03),
+                    0.0,
+                    id="transferred-monster-evasion",
                 ),
             ],
         )
-        def test_calculate_damage_evaded(self, attacker_values, defender_values):
-            """回避率1の防御側には、回避あり・損傷0の結果を返す。"""
+        def test_calculate_damage_evaded(self, attacker_values, defender_values, random_value):
+            """回避率1、または回避率0.03に乱数0を与えた場合は、回避あり・損傷0を返す。"""
             attacker_stats = BaseStats(*attacker_values)
             evasive_defender = BaseStats(*defender_values)
-            damage = CombatLogicService.calculate_damage(attacker_stats, evasive_defender)
+            random_context = (
+                nullcontext() if random_value is None
+                else patch("random.random", return_value=random_value)
+            )
+            with random_context:
+                damage = CombatLogicService.calculate_damage(attacker_stats, evasive_defender)
             assert damage.is_evaded is True
             assert damage.value == 0
 
