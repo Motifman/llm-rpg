@@ -192,7 +192,7 @@
 - PR #433 で「Parasail A/B 実験 Run B は sliding_window だった」事実が `run_start` payload から判明 → PR #434 で対策
 
 `PROMPT_SECTION_ORDER` は、どの profile も `stable_to_volatile` だったので、記憶ではない設定の片付け (#1631) の #1754 でキーごと消した。
-`SHORT_TERM_MEMORY_SCHEDULER_MODE` も #PRNUM でキーごと消した。ThreadPool の scheduler (`ThreadPoolShortTermMemoryScheduler`) を設定から組んでいたのは、2026-06-07 (a9eded93b) から 2026-06-21 (2bfd0d3a1) まで full wiring (`wiring/__init__.py`) だけだった。実験と本番が通る escape の経路 (いまの world_runtime) は一度も組んでおらず、`thread_pool` と記録された run も、短期記憶の要約は同期 (inline) で作っていた。非同期の部品は、非同期化を作り直すときのために残す。
+`SHORT_TERM_MEMORY_SCHEDULER_MODE` も #1759 でキーごと消した。ThreadPool の scheduler (`ThreadPoolShortTermMemoryScheduler`) を設定から組んでいたのは、2026-06-07 (a9eded93b) から 2026-06-21 (2bfd0d3a1) まで full wiring (`wiring/__init__.py`) だけだった。実験と本番が通る escape の経路 (いまの world_runtime) は一度も組んでおらず、`thread_pool` と記録された run も、短期記憶の要約は同期 (inline) で作っていた。非同期の部品は、非同期化を作り直すときのために残す。
 
 ---
 

@@ -1,6 +1,6 @@
 # K run 分析: deepseek-v4-flash + thread_pool で物語が動的進行した (2026-06-13)
 
-> **注 (#1631)**: この run は記録上 `thread_pool` だが、実験が通る escape の経路は ThreadPool の scheduler を組んでいなかった (組んでいたのは到達しない full wiring だけ)。そのため短期記憶の要約は同期 (inline) で作られていた可能性が高く、本文の tick 時間の改善を thread_pool の効果とは読めない。設定のキー (`SHORT_TERM_MEMORY_SCHEDULER_MODE`) は #PRNUM で消した。
+> **注 (#1631)**: この run は記録上 `thread_pool` だが、実験が通る escape の経路は ThreadPool の scheduler を組んでいなかった (組んでいたのは到達しない full wiring だけ)。そのため短期記憶の要約は同期 (inline) で作られていた可能性が高く、本文の tick 時間の改善を thread_pool の効果とは読めない。設定のキー (`SHORT_TERM_MEMORY_SCHEDULER_MODE`) は #1759 で消した。
 
 PR #454/455/456/457/464 全部入りに **thread_pool scheduler** と **DeepInfra fp4
 (deepseek-v4-flash)** を組み合わせた、140 tick の本番 run の分析記録。
