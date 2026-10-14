@@ -15,8 +15,9 @@
 「もう盤上に居ないか」を聞いているのに、**enum メンバを足すと全部が黙って
 取りこぼす**。
 
-`is_eliminated` を enum 側に持たせ、全メンバが値を宣言していることをテストで
-要求する。次にメンバを足す人は、退場扱いにするかを必ず決めることになる。
+`is_eliminated` を enum 側に持たせ、既存の結果ごとの意味と、全メンバの
+戻り値が真偽値であることを別々に検査する。型の検査だけでは、新しい結果を
+退場扱いにするかどうかまでは決まらない。
 """
 
 from __future__ import annotations
@@ -84,11 +85,7 @@ class TestEliminationPredicate:
 
 
 class TestEveryMemberDeclaresElimination:
-    """全メンバが is_eliminated を持つ。
-
-    ここが無いと、メンバを足した人が退場扱いを決めないまま通せる。
-    既定値に落ちた新メンバは、陣営の生存数に**黙って混ざる**。
-    """
+    """全メンバの is_eliminated が例外なく真偽値を返す。"""
 
     @pytest.mark.parametrize(
         "outcome", list(PlayerOutcomeEnum), ids=lambda o: o.value
@@ -96,14 +93,3 @@ class TestEveryMemberDeclaresElimination:
     def test_predicate_is_a_bool(self, outcome) -> None:
         """どのメンバでも真偽値が返る (例外にならない)。"""
         assert isinstance(outcome.is_eliminated, bool)
-
-    def test_at_least_one_member_is_eliminated(self) -> None:
-        """述語が全部 False に潰れていない。
-
-        実装を `return False` に縮めても上のテストは通ってしまう。
-        """
-        assert any(o.is_eliminated for o in PlayerOutcomeEnum)
-
-    def test_at_least_one_member_is_not(self) -> None:
-        """逆に全部 True にも潰れていない。"""
-        assert any(not o.is_eliminated for o in PlayerOutcomeEnum)
