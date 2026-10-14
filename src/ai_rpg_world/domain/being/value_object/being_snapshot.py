@@ -11,7 +11,7 @@ store ごとの内訳構造は ``BeingMemorySnapshotService`` (application 層) 
 担当する。これにより:
 
 - domain/being/ から各 memory context (memo / semantic / memory_link /
-  recall_buffer / reinterpretation_journal / episodic_episode) への依存を
+  episodic_episode など) への依存を
   避けられる (= primitive-only snapshot の設計哲学を維持)
 - 将来 memory store の VO 形が変わっても、本 VO の schema は変えなくてよい
   (application 層の codec が JSON schema を版管理する)

@@ -2589,8 +2589,6 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
     assert stub.episodic_episode_store is runtime._episodic_stack.episode_store
     assert stub.semantic_memory_store is None
     assert stub.memory_link_store is None
-    assert stub.episodic_recall_buffer_store is None
-    assert stub.episodic_reinterpretation_journal_store is None
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository
 

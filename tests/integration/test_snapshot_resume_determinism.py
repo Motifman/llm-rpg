@@ -36,10 +36,6 @@ from ai_rpg_world.application.being.being_attachment_resolver import BeingAttach
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-    InMemoryEpisodicRecallBufferStore,
-    InMemoryEpisodicReinterpretationJournalStore,
-)
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
@@ -53,13 +49,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_location import Ep
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
-    EpisodicReinterpretationEntry,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
-    EpisodicReinterpretationStatus,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
@@ -74,7 +63,7 @@ def _make_stack():
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     return (wiring, provisioning)
 
 def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
@@ -90,8 +79,6 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     wiring.semantic_memory_store.register_cluster_signature_if_new_by_being(being_id, 'sig-forest')
     wiring.semantic_memory_store.register_cluster_signature_if_new_by_being(being_id, 'sig-village')
     wiring.memory_link_store.upsert_link_by_being(being_id, MemoryLink(link_id='mlk-1', player_id=1, being_id=being_id, episode_id_a='ep-1', episode_id_b='ep-2', link_type=MemoryLinkType.CO_RECALL, strength=0.7, co_activation_count=3, created_at=_FIXED_TIME, last_activated_at=_FIXED_TIME, decay_rate=0.001))
-    wiring.episodic_recall_buffer_store.append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, episode_id='ep-1', recalled_at=_FIXED_TIME, source_axes=('temporal', 'spatial'), current_state_snapshot='state-snap', recent_events_snapshot='events-snap', persona_snapshot='persona-snap', situation_cues=('cue-a', 'cue-b'), turn_index=5))
-    wiring.episodic_reinterpretation_journal_store.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='je-1', player_id=1, being_id=being_id, episode_id='ep-1', created_at=_FIXED_TIME, turn_index=5, current_interpretation='interp', current_recall_text='recall text', source_recall_ids=('r-1',), status=EpisodicReinterpretationStatus.ACTIVE))
     wiring.episodic_episode_store.put_by_being(being_id, SubjectiveEpisode(episode_id='ep-1', player_id=1, being_id=being_id, occurred_at=_FIXED_TIME, game_time_label='day 1', source=EpisodeSource(event_ids=('e1', 'e2')), location=EpisodeLocation(spot_id=42, tile_area_ids=(1, 2)), action=EpisodeAction(tool_name='walk'), who=('ada', 'ben'), what='explored forest', why='curious', observed='trees and birds', expected='silence', outcome='encountered wolf', prediction_error='surprise', felt='afraid', interpreted='dangerous area', cues=(EpisodicCue(axis='place_spot', value='42', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='recall body', recall_count=2, last_recalled_at=_FIXED_TIME))
 
 def _strip_volatile_metadata(payload_dict: dict) -> dict:

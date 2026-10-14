@@ -26,8 +26,6 @@ habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOA
   "semantic_entries": [...],
   "semantic_cluster_signatures": [...],
   "memory_links": [...],
-  "recall_buffer_pending": [...],
-  "reinterpretation_journal": [...],
   "episodic_episodes": [...],
   "recall_slot_entries": [...],
   "recall_slot_cooldown": [...],
@@ -82,18 +80,14 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
-    dict_to_recall_observation,
     dict_to_recall_slot_entry,
-    dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
     episode_hit_count_pair_to_dict,
     episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
-    recall_observation_to_dict,
     recall_slot_entry_to_dict,
-    reinterpretation_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
 )
@@ -115,12 +109,6 @@ from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationE
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    EpisodicReinterpretationJournalRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
@@ -239,8 +227,6 @@ class BeingMemorySnapshotService:
         "semantic_entries",
         "semantic_cluster_signatures",
         "memory_links",
-        "recall_buffer_pending",
-        "reinterpretation_journal",
         "episodic_episodes",
         "recall_slot_entries",
         "recall_slot_cooldown",
@@ -264,8 +250,6 @@ class BeingMemorySnapshotService:
         memo_store: MemoRepository,
         semantic_store: SemanticMemoryRepository,
         memory_link_store: MemoryLinkRepository,
-        recall_buffer_store: EpisodicRecallBufferRepository,
-        reinterpretation_journal_store: EpisodicReinterpretationJournalRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
         recall_slot_store: IEpisodicRecallSlotStore,
         afterglow_store: IAfterglowStore,
@@ -283,16 +267,6 @@ class BeingMemorySnapshotService:
             raise TypeError("semantic_store must be SemanticMemoryRepository")
         if not isinstance(memory_link_store, MemoryLinkRepository):
             raise TypeError("memory_link_store must be MemoryLinkRepository")
-        if not isinstance(recall_buffer_store, EpisodicRecallBufferRepository):
-            raise TypeError(
-                "recall_buffer_store must be EpisodicRecallBufferRepository"
-            )
-        if not isinstance(
-            reinterpretation_journal_store, EpisodicReinterpretationJournalRepository
-        ):
-            raise TypeError(
-                "reinterpretation_journal_store must be EpisodicReinterpretationJournalRepository"
-            )
         if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
             raise TypeError(
                 "episodic_episode_store must be EpisodicEpisodeRepository"
@@ -333,8 +307,6 @@ class BeingMemorySnapshotService:
         self._memo = memo_store
         self._semantic = semantic_store
         self._memory_link = memory_link_store
-        self._recall_buffer = recall_buffer_store
-        self._reinterpretation_journal = reinterpretation_journal_store
         self._episodic_episode = episodic_episode_store
         self._recall_slot = recall_slot_store
         self._afterglow = afterglow_store
@@ -366,14 +338,6 @@ class BeingMemorySnapshotService:
             "memory_links": [
                 memory_link_to_dict(ln)
                 for ln in self._memory_link.list_all_links_for_being(being_id)
-            ],
-            "recall_buffer_pending": [
-                recall_observation_to_dict(o)
-                for o in self._recall_buffer.list_pending_by_being(being_id)
-            ],
-            "reinterpretation_journal": [
-                reinterpretation_entry_to_dict(e)
-                for e in self._reinterpretation_journal.list_all_by_being(being_id)
             ],
             "episodic_episodes": [
                 subjective_episode_to_dict(ep)
@@ -510,16 +474,6 @@ class BeingMemorySnapshotService:
             lambda d: dict_to_memory_link(d, fallback_being_id=being_id),
             "memory_links",
         )
-        recall_observations = _decode_list(
-            payload["recall_buffer_pending"],
-            dict_to_recall_observation,
-            "recall_buffer_pending",
-        )
-        journal_entries = _decode_list(
-            payload["reinterpretation_journal"],
-            lambda d: dict_to_reinterpretation_entry(d, fallback_being_id=being_id),
-            "reinterpretation_journal",
-        )
         episodes = _decode_list(
             payload["episodic_episodes"],
             lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
@@ -604,20 +558,14 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
             ) from exc
-        # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない、
-        # memory_link / reinterpretation_journal / recall_buffer は episode に
-        # 参照するが、本 service は参照整合性まで保証しない (= 各 store 独立)。
+        # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない。
+        # memory_link は episode を参照するが、本 service は参照整合性まで
+        # 保証しない (= 各 store 独立)。
         self._memo.replace_all_by_being(being_id, memo_entries)
         self._semantic.replace_all_by_being(
             being_id, semantic_entries, cluster_signatures
         )
         self._memory_link.replace_all_by_being(being_id, memory_links)
-        self._recall_buffer.replace_all_pending_by_being(
-            being_id, recall_observations
-        )
-        self._reinterpretation_journal.replace_all_by_being(
-            being_id, journal_entries
-        )
         self._episodic_episode.replace_all_by_being(being_id, episodes)
         # PR-G: 想起階層の bulk overwrite。
         self._recall_slot.replace_all_by_being(

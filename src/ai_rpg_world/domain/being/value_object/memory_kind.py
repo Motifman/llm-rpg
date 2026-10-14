@@ -26,7 +26,7 @@ class MemoryKind(str, Enum):
     """Being が所有しうる記憶 store の種類。
 
     str を継承しているのは、シリアライズ時に enum value を文字列として扱える
-    ようにするため (= 既存 ``EpisodicReinterpretationStatus`` と同じパターン)。
+    ようにするため。
     """
 
     SHORT_TERM = "short_term"

@@ -14,7 +14,6 @@ uv run python scripts/being_snapshot_cli.py save \
     --being-db var/game/beings.db \
     --memory-db var/game/memory_graph.db \
     --episode-db var/game/episodes.db \
-    --reinterpretation-db var/game/reinterpretation.db \
     --being-id being_w1_p1 \
     --output var/snapshots/being_w1_p1.json
 ```
@@ -26,7 +25,6 @@ uv run python scripts/being_snapshot_cli.py load \
     --being-db var/restored_beings.db \
     --memory-db var/restored_memory.db \
     --episode-db var/restored_episodes.db \
-    --reinterpretation-db var/restored_reinterpretation.db \
     --input var/snapshots/being_w1_p1.json
 ```
 
@@ -73,9 +71,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E40
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (  # noqa: E402
     SqliteBeingRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (  # noqa: E402
-    SqliteEpisodicReinterpretationStore,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (  # noqa: E402
     SqliteMemoryLinkStore,
 )
@@ -94,13 +89,12 @@ def _build_stack(
     being_db: Path,
     memory_db: Path,
     episode_db: Path,
-    reinterpretation_db: Path,
 ) -> tuple[
     SqliteBeingRepository,
     BeingMemorySnapshotService,
     BeingSnapshotFileGateway,
 ]:
-    """4 つの sqlite DB + in-memory memo store から本 CLI 用 stack を組む。
+    """3 つの sqlite DB + in-memory memo store から本 CLI 用 stack を組む。
 
     memo store は SQLite 実装がないため in-memory で常に新規。snapshot JSON
     に memo が入っていれば restore で書き戻される。
@@ -113,9 +107,6 @@ def _build_stack(
     # semantic / memory_link は同一接続を共有 (= apply_memory_graph_migrations
     # が共通の memory_graph schema を扱うため)
 
-    reinterpretation_store = SqliteEpisodicReinterpretationStore.connect(
-        str(reinterpretation_db)
-    )
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
 
     # PR-G: 想起階層 (slot / afterglow / habituation) は CLI 経由の単発 dump で
@@ -153,8 +144,6 @@ def _build_stack(
         memo_store=InMemoryMemoStore(),
         semantic_store=semantic_store,
         memory_link_store=memory_link_store,
-        recall_buffer_store=reinterpretation_store,
-        reinterpretation_journal_store=reinterpretation_store,
         episodic_episode_store=episode_store,
         recall_slot_store=InMemoryEpisodicRecallSlotStore(),
         afterglow_store=InMemoryAfterglowStore(),
@@ -192,12 +181,6 @@ def _add_db_args(parser: argparse.ArgumentParser) -> None:
         required=True,
         help="SqliteSubjectiveEpisodeStore の DB ファイル",
     )
-    parser.add_argument(
-        "--reinterpretation-db",
-        type=Path,
-        required=True,
-        help="SqliteEpisodicReinterpretationStore の DB ファイル (= recall_buffer + reinterpretation_journal)",
-    )
 
 
 def cmd_save(args: argparse.Namespace) -> int:
@@ -216,7 +199,6 @@ def cmd_save(args: argparse.Namespace) -> int:
         being_db=args.being_db,
         memory_db=args.memory_db,
         episode_db=args.episode_db,
-        reinterpretation_db=args.reinterpretation_db,
     )
     # PR-G: CLI 経由の dump は RAM 上の sidecar (slot / afterglow / habituation)
     # に到達できないので、これらは常に空のまま保存される。実験 run 中の想起
@@ -263,7 +245,6 @@ def cmd_load(args: argparse.Namespace) -> int:
         being_db=args.being_db,
         memory_db=args.memory_db,
         episode_db=args.episode_db,
-        reinterpretation_db=args.reinterpretation_db,
     )
     use_case = RestoreBeingSnapshotFromFileUseCase(
         being_repository=being_repo,

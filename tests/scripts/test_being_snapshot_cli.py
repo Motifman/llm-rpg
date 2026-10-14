@@ -90,11 +90,10 @@ class TestBeingSnapshotCliEndToEnd:
         src_being_db = tmp_path / "src_beings.db"
         src_memory_db = tmp_path / "src_memory.db"
         src_episode_db = tmp_path / "src_episodes.db"
-        src_reinterp_db = tmp_path / "src_reinterp.db"
         being_id = _populate_source_dbs(
             being_db=src_being_db, memory_db=src_memory_db
         )
-        # episode / reinterpretation は空 DB で OK (= 空 store からの capture)
+        # episode は空 DB で OK (= 空 store からの capture)
 
         snapshot_json = tmp_path / "snapshot.json"
         rc = cli.main(
@@ -106,8 +105,6 @@ class TestBeingSnapshotCliEndToEnd:
                 str(src_memory_db),
                 "--episode-db",
                 str(src_episode_db),
-                "--reinterpretation-db",
-                str(src_reinterp_db),
                 "--being-id",
                 being_id.value,
                 "--output",
@@ -126,7 +123,6 @@ class TestBeingSnapshotCliEndToEnd:
         dst_being_db = tmp_path / "dst_beings.db"
         dst_memory_db = tmp_path / "dst_memory.db"
         dst_episode_db = tmp_path / "dst_episodes.db"
-        dst_reinterp_db = tmp_path / "dst_reinterp.db"
         rc = cli.main(
             [
                 "load",
@@ -136,8 +132,6 @@ class TestBeingSnapshotCliEndToEnd:
                 str(dst_memory_db),
                 "--episode-db",
                 str(dst_episode_db),
-                "--reinterpretation-db",
-                str(dst_reinterp_db),
                 "--input",
                 str(snapshot_json),
             ]
@@ -167,8 +161,6 @@ class TestBeingSnapshotCliEndToEnd:
                 str(tmp_path / "x_memory.db"),
                 "--episode-db",
                 str(tmp_path / "x_episodes.db"),
-                "--reinterpretation-db",
-                str(tmp_path / "x_reinterp.db"),
                 "--being-id",
                 "being_w1_p1",
                 "--output",
@@ -189,8 +181,6 @@ class TestBeingSnapshotCliEndToEnd:
                 str(tmp_path / "dst_m.db"),
                 "--episode-db",
                 str(tmp_path / "dst_e.db"),
-                "--reinterpretation-db",
-                str(tmp_path / "dst_r.db"),
                 "--input",
                 str(tmp_path / "no-such-file.json"),
             ]
@@ -209,8 +199,6 @@ class TestBeingSnapshotCliEndToEnd:
                 str(tmp_path / "x_memory.db"),
                 "--episode-db",
                 str(tmp_path / "x_episodes.db"),
-                "--reinterpretation-db",
-                str(tmp_path / "x_reinterp.db"),
                 "--being-id",
                 "being_w1_p99",
                 "--output",

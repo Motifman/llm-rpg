@@ -348,6 +348,8 @@ schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管
 - 既存 `BeingSnapshot` docstring の「(b) 後で payload field を増やす」方針
   を具体化する形
 
+**その後**: memory payload の `recall_buffer_pending` / `reinterpretation_journal` は、再解釈と一緒に Issue #1631 で消した。消す前の snapshot も読める (restore は足りないキーだけを拒む)。
+
 ---
 
 ## 21. world snapshot は scenario 一致を hard-error で要求する (= cross-scenario load は不可)
@@ -601,6 +603,9 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 **どこでこの判断が出てきたか**:
 - Phase 5 着手時 (= 本 PR)
 - 将来 memo SQLite を入れるときは ``--memo-db`` 引数を追加する
+
+
+**その後**: 再解釈の保存先を消したので、CLI の `--reinterpretation-db` を Issue #1631 で外した。見出しと本文の「4 SQLite DB」は消す前の構成で、いまは 3 つの SQLite DB と in-memory memo で動く。
 
 ---
 
@@ -5221,7 +5226,7 @@ snapshot Being から復元する。payload と fallback の両方があり不�
 **この PR で触らない**: `EpisodicRecallObservation` への being_id 載せ、
 `SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
 
-**その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。
+**その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。想起の記録と再解釈エントリの保存先、値の型、Being の snapshot のキー `recall_buffer_pending` / `reinterpretation_journal` も、続く PR で消した。消す前の snapshot も読める。
 
 ## 210. 履歴には、次に真似しても通る形だけを残す
 

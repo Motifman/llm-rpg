@@ -183,22 +183,6 @@ def _empty_memory_link_store() -> Any:
     return InMemoryMemoryLinkStore()
 
 
-def _empty_recall_buffer_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-        InMemoryEpisodicRecallBufferStore,
-    )
-
-    return InMemoryEpisodicRecallBufferStore()
-
-
-def _empty_journal_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-        InMemoryEpisodicReinterpretationJournalStore,
-    )
-
-    return InMemoryEpisodicReinterpretationJournalStore()
-
-
 def _empty_episode_store() -> Any:
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
         InMemorySubjectiveEpisodeStore,
@@ -398,7 +382,7 @@ class ExperimentSnapshotSession:
             )
 
         # 任意 store: 「未配線なら空 in-memory store で代用」する。world_runtime
-        # runtime のように semantic / memory_link / recall_buffer / journal を
+        # runtime のように semantic / memory_link を
         # 使わない構成でも snapshot を取れるようにするため (= 空の payload に
         # なるが file の整合性は保たれる)。memo / episode は普段使うので強く
         # 期待するが、None でも fallback できる方が安全。
@@ -408,14 +392,6 @@ class ExperimentSnapshotSession:
         )
         memory_link_store = (
             wiring_result.memory_link_store or _empty_memory_link_store()
-        )
-        recall_buffer_store = (
-            wiring_result.episodic_recall_buffer_store
-            or _empty_recall_buffer_store()
-        )
-        journal_store = (
-            wiring_result.episodic_reinterpretation_journal_store
-            or _empty_journal_store()
         )
         episode_store = (
             wiring_result.episodic_episode_store or _empty_episode_store()
@@ -457,8 +433,6 @@ class ExperimentSnapshotSession:
                 "memo_store",
                 "semantic_memory_store",
                 "memory_link_store",
-                # 再解釈 (#1631 で消した) の想起の記録と journal は、いつも空の
-                # 代用品で運ぶので監視しない。
                 "episodic_episode_store",
                 # PR-G: 想起階層 3 store も fallback 監視対象に入れる。配線漏れで
                 # 空 store にフォールバックしたことを後追いできるようにする。
@@ -483,8 +457,6 @@ class ExperimentSnapshotSession:
             memo_store=memo_store,
             semantic_store=semantic_store,
             memory_link_store=memory_link_store,
-            recall_buffer_store=recall_buffer_store,
-            reinterpretation_journal_store=journal_store,
             episodic_episode_store=episode_store,
             recall_slot_store=recall_slot_store,
             afterglow_store=afterglow_store,

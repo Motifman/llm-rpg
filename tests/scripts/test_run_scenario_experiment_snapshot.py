@@ -57,8 +57,6 @@ class TestWiringStub:
         # 他 5 store は world_runtime 経路では拾えないので None
         assert stub.semantic_memory_store is None
         assert stub.memory_link_store is None
-        assert stub.episodic_recall_buffer_store is None
-        assert stub.episodic_reinterpretation_journal_store is None
         # U2: episodic_stack が belief_evidence_buffer_store を持たない
         # (= BELIEF_EVIDENCE_ENABLED OFF) なら None。
         assert stub.belief_evidence_buffer_store is None
