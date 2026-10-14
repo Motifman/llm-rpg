@@ -107,7 +107,7 @@ class TestRestoreRoundTrip:
         assert json.loads(payload_json) == json.loads(dst_svc.capture(being))
 
     def test_restore_ignores_keys_of_snapshots_saved_before_removal(self) -> None:
-        """部品を消す前 (#1631) に保存した snapshot の pending_predictions / recall_buffer_received_event_ids / recall_buffer_pending / reinterpretation_journal / afterglow_entries / recall_success_hit_count / recall_success_received_event_ids / recall_slot_entries / recall_slot_cooldown / recall_habituation_last_recalled は読み飛ばし、ほかの store は復元する。"""
+        """部品を消す前 (#1631) に保存した snapshot に残る、消した部品のキーは読み飛ばし、ほかの store は復元する。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         _populate(src_stores, being)

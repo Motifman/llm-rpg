@@ -22,9 +22,9 @@
 
 ### D. 記憶システム
 - **D-25 episodic_recall の K 分布と質**: 1 call で何件出したか分布 + 3-5 件サンプリングして役に立っていたか
-- **D-26 recall habituation の効果**: 同じ episode が連続採用されてないか
-- **D-27 recall slot 動作**: working memory の保持 / 入れ替わり
-- **D-28 afterglow / score 構造**: 採用候補・非採用候補のスコア構造が観測できるか
+- **D-26 recall habituation の効果** (#1631 前の trace のみ): 同じ episode が連続採用されてないか
+- **D-27 recall slot 動作** (#1631 前の trace のみ): working memory の保持 / 入れ替わり
+- **D-28 afterglow / score 構造** (afterglow は #1631 前の trace のみ): 採用候補・非採用候補のスコア構造が観測できるか
 - **D-29 episodic_chunk_written と subjective_filled の 1:1 整合**: episode_id ベースで diff
 - **D-30 short / long summary クオリティ**: 1-2 件の中身評価
 - **D-31 memo 重複と done balance**: 同じ memo を何度も add してないか

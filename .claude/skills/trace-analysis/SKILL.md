@@ -106,9 +106,9 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 
 **D. 記憶システム** (Agent 2 担当)
 - D-25 episodic_recall K 分布と質
-- D-26 recall habituation 効果
-- D-27 recall slot 動作
-- D-28 afterglow / score 構造
+- D-26 recall habituation 効果 (#1631 前の trace のみ)
+- D-27 recall slot 動作 (#1631 前の trace のみ)
+- D-28 afterglow / score 構造 (afterglow は #1631 前の trace のみ)
 - D-29 episodic_chunk_written と subjective_filled の整合
 - D-30 short / long summary クオリティ
 - D-31 memo 重複と done balance
