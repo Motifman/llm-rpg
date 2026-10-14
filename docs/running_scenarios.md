@@ -181,7 +181,7 @@ make experiment-relay ISSUE154_MAX_TICKS=30 \
 
 フィルタ: `ISSUE154_RUNS=R1_default,R3_contention`（カンマ区切り）。
 
-TODO 系を外して比べる `R2_pure` (`LLM_TOOL_MODE=pure_spot_graph`) は、#1631 の #PRNUM で消した。
+TODO 系を外して比べる `R2_pure` (`LLM_TOOL_MODE=pure_spot_graph`) は、#1631 の #1762 で消した。
 
 ---
 
