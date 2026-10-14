@@ -1838,11 +1838,6 @@ def main(argv: list[str] | None = None) -> int:
         "(runtime_config.SHORT_TERM_MEMORY_KIND)",
         flush=True,
     )
-    print(
-        f"[run] short_term_memory_scheduler_mode={cfg.short_term_memory_scheduler_mode} "
-        "(runtime_config.SHORT_TERM_MEMORY_SCHEDULER_MODE)",
-        flush=True,
-    )
     # OpenRouter provider routing: 設定されているときだけ表示
     if cfg.openrouter_provider or cfg.openrouter_quantization or cfg.openrouter_require_params:
         print(

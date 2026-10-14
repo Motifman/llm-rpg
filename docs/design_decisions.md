@@ -171,7 +171,7 @@
 
 ## 10. 実験 env の不正値は silent fallback せず fail-fast
 
-**何を**: `PROMPT_SECTION_ORDER` / `SHORT_TERM_MEMORY_KIND` / `SHORT_TERM_MEMORY_SCHEDULER_MODE` / `SEMANTIC_PASSIVE_TOP_K` / 各種 bool 系 env 等の **解決層**で、未知の値が来たら warning + default に縮退 (silent fallback) ではなく **`ValueError` を投げて即停止**する。
+**何を**: `SHORT_TERM_MEMORY_KIND` / `SEMANTIC_PASSIVE_TOP_K` / 各種 bool 系 env 等の **解決層**で、未知の値が来たら warning + default に縮退 (silent fallback) ではなく **`ValueError` を投げて即停止**する。
 
 **なぜ**:
 - 短縮形や typo (例: `SHORT_TERM_MEMORY_KIND=rolling` ← 正しくは `rolling_summary`) が silent fallback されると、**実験が間違った設定で走る**
@@ -179,7 +179,7 @@
 - 不正値は **shell の export ミス / 別の env を混同 / Makefile 引数の typo** など。実験者が意図して入れる事はほぼ無い → 黙って受理する価値より、即時 fail させて打ち直す方が安全
 
 **どう実装するか**:
-- enum 系 (`section_order`, `memory_kind`, `scheduler_mode`): 未知文字列で `ValueError(env_name + bad_value + valid_list)`
+- enum 系 (`memory_kind` など。`section_order` と `scheduler_mode` は #1631 で消した): 未知文字列で `ValueError(env_name + bad_value + valid_list)`
 - 数値系 (`semantic_passive_top_k`): 非整数 / 負数で `ValueError`
 - bool 系 (`_parse_bool_env`): TRUTHY と FALSY 両方の明示集合を持ち、どちらにも該当しない値で `ValueError`
 - **未設定 / 空文字** は意図的な「default 採用」と解釈し、引き続き default を返す (この決定は維持)
@@ -192,6 +192,7 @@
 - PR #433 で「Parasail A/B 実験 Run B は sliding_window だった」事実が `run_start` payload から判明 → PR #434 で対策
 
 `PROMPT_SECTION_ORDER` は、どの profile も `stable_to_volatile` だったので、記憶ではない設定の片付け (#1631) の #1754 でキーごと消した。
+`SHORT_TERM_MEMORY_SCHEDULER_MODE` も #PRNUM でキーごと消した。ThreadPool の scheduler (`ThreadPoolShortTermMemoryScheduler`) を設定から組んでいたのは、2026-06-07 (a9eded93b) から 2026-06-21 (2bfd0d3a1) まで full wiring (`wiring/__init__.py`) だけだった。実験と本番が通る escape の経路 (いまの world_runtime) は一度も組んでおらず、`thread_pool` と記録された run も、短期記憶の要約は同期 (inline) で作っていた。非同期の部品は、非同期化を作り直すときのために残す。
 
 ---
 
