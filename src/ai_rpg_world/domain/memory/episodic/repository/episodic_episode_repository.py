@@ -8,8 +8,8 @@ Phase 3 Step 3e-3 (Issue #470): legacy player_id 版 API (4 method) を撤去し
 being_id 版のみを残した。caller は全て ``*_by_being`` 経路で読み書きする
 (Step 3e-2 で caller 切替済)。
 
-これで Phase 3 で扱う 5 store (memo / semantic / memory_link /
-recall_buffer + reinterpretation_journal / episodic_episode) すべての
+これで Phase 3 で扱う store (memo / semantic / memory_link /
+episodic_episode。再解釈の store は #1631 で消した) すべての
 Being keyed 化が完了する。
 """
 

@@ -1,8 +1,6 @@
 """BeliefEvidence バッファ用の in-memory ストア実装。
 
-U2 (証拠台帳統一設計)。``InMemoryEpisodicRecallBufferStore``
-(``in_memory_episodic_reinterpretation_stores.py``) と同型の Being ごとの
-list 保持。
+U2 (証拠台帳統一設計)。Being ごとの list 保持。
 
 横断レビュー H-3/M2 で thread-safe 化: ThreadPool の chunk 補完ワーカー
 (``episodic_subjective_completion_schedulers.py``) が ``append_by_being``

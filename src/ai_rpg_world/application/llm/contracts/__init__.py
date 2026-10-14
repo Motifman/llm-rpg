@@ -36,14 +36,6 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
     EpisodicEpisodeRepository,
 )
 
-# -- domain Repository re-exports: episodic reinterpretation (Issue #470 Phase 1 PR5) --
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    EpisodicReinterpretationJournalRepository,
-)
-
 # -- domain VO re-exports (Issue #470 Phase 1 PR2) --
 # 旧 ``application/llm/contracts/episodic_memory.py`` から domain に昇格した
 # Value Object 群を、既存 import パターン互換のため本 __init__ で re-export する。
@@ -60,16 +52,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import
 )
 
 # -- end domain re-exports --
-# -- domain VO re-exports: episodic reinterpretation (Issue #470 Phase 1 PR5) --
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
-    EpisodicRecallObservation,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
-    EpisodicReinterpretationEntry,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
-    EpisodicReinterpretationStatus,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
@@ -87,7 +69,6 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context impor
     MemoFulfillmentContext,
 )
 
-# -- end episodic reinterpretation re-exports --
 # -- domain VO re-exports: persona (Issue #470 Phase 1 PR4) --
 # 旧 ``persona.py`` から domain に昇格した VO の後方互換 re-export。
 # 新規コードは concrete file から import すること:
@@ -111,11 +92,6 @@ __all__ = [
     "EpisodeLocation",
     "EpisodeSource",
     "SubjectiveEpisode",
-    "EpisodicRecallObservation",
-    "EpisodicReinterpretationEntry",
-    "EpisodicReinterpretationStatus",
-    "EpisodicRecallBufferRepository",
-    "EpisodicReinterpretationJournalRepository",
     "ActionResultEntry",
     "LlmCommandResultDto",
     "SystemPromptPlayerInfoDto",

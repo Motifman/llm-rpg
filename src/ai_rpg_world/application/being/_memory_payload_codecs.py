@@ -65,15 +65,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
     EpisodicCueSource,
 )
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
-    EpisodicRecallObservation,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
-    EpisodicReinterpretationEntry,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
-    EpisodicReinterpretationStatus,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     MemoryLink,
     MemoryLinkType,
@@ -289,93 +280,6 @@ def dict_to_memory_link(
         created_at=_iso_to_dt(str(data["created_at"])),
         last_activated_at=_iso_to_dt(str(data["last_activated_at"])),
         decay_rate=float(data["decay_rate"]),
-    )
-
-
-# ---- recall_buffer ------------------------------------------------------------
-
-def recall_observation_to_dict(obs: EpisodicRecallObservation) -> dict[str, Any]:
-    return {
-        "recall_id": obs.recall_id,
-        "player_id": obs.player_id,
-        "episode_id": obs.episode_id,
-        "recalled_at": _dt_to_iso(obs.recalled_at),
-        "source_axes": list(obs.source_axes),
-        "current_state_snapshot": obs.current_state_snapshot,
-        "recent_events_snapshot": obs.recent_events_snapshot,
-        "persona_snapshot": obs.persona_snapshot,
-        "situation_cues": list(obs.situation_cues),
-        "turn_index": obs.turn_index,
-    }
-
-
-def dict_to_recall_observation(data: dict[str, Any]) -> EpisodicRecallObservation:
-    return EpisodicRecallObservation(
-        recall_id=str(data["recall_id"]),
-        player_id=int(data["player_id"]),
-        episode_id=str(data["episode_id"]),
-        recalled_at=_iso_to_dt(str(data["recalled_at"])),
-        source_axes=tuple(str(x) for x in data.get("source_axes", ())),
-        current_state_snapshot=str(data.get("current_state_snapshot", "")),
-        recent_events_snapshot=str(data.get("recent_events_snapshot", "")),
-        persona_snapshot=str(data.get("persona_snapshot", "")),
-        situation_cues=tuple(str(x) for x in data.get("situation_cues", ())),
-        turn_index=int(data.get("turn_index", 0)),
-    )
-
-
-# ---- reinterpretation_journal -------------------------------------------------
-
-def reinterpretation_entry_to_dict(
-    entry: EpisodicReinterpretationEntry,
-) -> dict[str, Any]:
-    return {
-        "entry_id": entry.entry_id,
-        "player_id": entry.player_id,
-        "being_id": entry.being_id.value,
-        "episode_id": entry.episode_id,
-        "created_at": _dt_to_iso(entry.created_at),
-        "turn_index": entry.turn_index,
-        "current_interpretation": entry.current_interpretation,
-        "current_recall_text": entry.current_recall_text,
-        "source_recall_ids": list(entry.source_recall_ids),
-        "status": entry.status.value,
-        "superseded_at": _dt_to_iso(entry.superseded_at)
-        if entry.superseded_at
-        else None,
-    }
-
-
-def dict_to_reinterpretation_entry(
-    data: dict[str, Any],
-    *,
-    fallback_being_id: BeingId | None = None,
-) -> EpisodicReinterpretationEntry:
-    raw_being_id = data.get("being_id")
-    if raw_being_id is not None:
-        parsed = BeingId(str(raw_being_id))
-        if fallback_being_id is not None and parsed != fallback_being_id:
-            raise ValueError(
-                "reinterpretation entry being_id does not match snapshot being"
-            )
-        being_id = parsed
-    elif fallback_being_id is not None:
-        being_id = fallback_being_id
-    else:
-        raise ValueError("being_id is required to decode EpisodicReinterpretationEntry")
-    superseded = data.get("superseded_at")
-    return EpisodicReinterpretationEntry(
-        entry_id=str(data["entry_id"]),
-        player_id=int(data["player_id"]),
-        being_id=being_id,
-        episode_id=str(data["episode_id"]),
-        created_at=_iso_to_dt(str(data["created_at"])),
-        turn_index=int(data["turn_index"]),
-        current_interpretation=str(data["current_interpretation"]),
-        current_recall_text=str(data["current_recall_text"]),
-        source_recall_ids=tuple(str(x) for x in data.get("source_recall_ids", ())),
-        status=EpisodicReinterpretationStatus(str(data["status"])),
-        superseded_at=_iso_to_dt(str(superseded)) if superseded else None,
     )
 
 

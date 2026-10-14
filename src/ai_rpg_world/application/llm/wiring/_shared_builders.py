@@ -1,11 +1,10 @@
 """LLM wiring と escape episodic stack の共有ビルダー群。
 
-Issue #227 後続: wiring factory 間で完全重複していた 4 ブロックを抽出した:
+Issue #227 後続: wiring factory 間で完全重複していたブロックを抽出した:
 
 1. effective_view_distance の argument 解決
 2. EpisodicPromotionFrontier + memory_link_bundle + semantic_promotion の構築
-3. recall_buffer / reinterpretation_coord / episodic_coord の構築
-4. game_time_label_provider クロージャ生成 (action_result の時刻ラベル用)
+3. game_time_label_provider クロージャ生成 (action_result の時刻ラベル用)
 
 呼び出し側のロジックを薄くし、episodic/link/semantic 構築の挙動が drift しないことを保証する。
 """

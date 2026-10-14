@@ -2,8 +2,7 @@
 
 U2 (証拠台帳統一設計): 固着パス (belief journal への統合、U3) が周期的に
 drain するまでの間、``BeliefEvidence`` を Being ごとに溜めておくバッファ。
-``EpisodicReinterpretationJournalRepository`` / ``episodic_recall_buffer``
-系と同型の per-Being store (一次キーは ``BeingId``)。
+per-Being store (一次キーは ``BeingId``)。
 
 U3b (固着 coordinator): ``remove_by_being`` を追加した。固着パス
 (``BeliefConsolidationCoordinator``) が 1 batch を処理し終えた evidence を
@@ -78,8 +77,7 @@ class BeliefEvidenceBufferRepository(ABC):
         """being_id 配下の evidence を ``evidences`` で完全置換する。
 
         snapshot restore primitive。Snapshot 経路以外からの呼び出しは
-        想定しない (``EpisodicReinterpretationJournalRepository.replace_all_by_being``
-        と同じ規約)。
+        想定しない。
         """
 
 

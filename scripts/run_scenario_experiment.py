@@ -559,8 +559,8 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """``WorldRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
 
     Phase 6 (Issue #470): world_runtime runtime には ``LlmAgentWiringResult`` の
-    全 store ハンドルが揃わない (semantic / memory_link / recall_buffer /
-    journal は world_runtime の通常経路では作られない) ため、runtime の
+    全 store ハンドルが揃わない (semantic / memory_link は world_runtime の
+    通常経路では作られないことがある) ため、runtime の
     内部 field から **拾える分だけ** 集めて wiring 風オブジェクトを返す。
     足りない store は ``ExperimentSnapshotSession`` 側で空 in-memory に
     fallback する。
@@ -639,9 +639,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
         memory_link_store=memory_link_store,
-        # 再解釈 (#1631 で消した) の想起の記録と journal は、snapshot の空の代用品で運ぶ。
-        episodic_recall_buffer_store=None,
-        episodic_reinterpretation_journal_store=None,
         episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
