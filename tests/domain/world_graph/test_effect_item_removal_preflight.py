@@ -12,9 +12,11 @@ from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InsufficientEffectItemsException,
     InteractionEffectValidationException,
@@ -29,6 +31,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 _ORE = ItemSpecId.create(41)
 
@@ -82,25 +85,54 @@ def _item() -> ItemAggregate:
 class TestEffectItemRemovalPreflight:
     """削除要求の不足時に、後続効果が一切開始されないことを保証する。"""
 
-    def test_item_state_is_unchanged_when_removal_is_insufficient(self) -> None:
-        """道具状態変更より後にREMOVE_ITEMを書いても、不足時は状態を変えない。"""
+    @pytest.mark.parametrize("entrypoint", ["declared", "object"])
+    @pytest.mark.parametrize("removal_kind", ["single", "split", "combine"])
+    def test_item_state_changes_only_after_all_removals_are_available(
+        self, entrypoint: str, removal_kind: str,
+    ) -> None:
+        """道具・物体入口は削除全量2個が揃う前に実体を変えず、揃えば状態と削除予約を返す。"""
         item = _item()
         change = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
             parameters={"state_updates": {"used": True}},
         )
+        removals = {
+            "single": (_remove_two(),),
+            "split": (InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.REMOVE_ITEM,
+                parameters={"item_spec_id": int(_ORE)},
+            ),) * 2,
+            "combine": (InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.COMBINE_ITEMS,
+                parameters={"input_item_spec_ids": [int(_ORE), int(_ORE)], "output_item_spec_id": 43},
+            ),),
+        }[removal_kind]
+        interaction = _interaction(change, *removals)
+        obj = SpotObject(
+            object_id=SpotObjectId.create(1), name="作業台", description="",
+            object_type=SpotObjectTypeEnum.OTHER, state={}, interactions=(interaction,),
+        )
+        service = SpotInteractionService()
 
-        with pytest.raises(InsufficientEffectItemsException):
-            SpotInteractionService().execute_declared_interaction(
-                _empty_interior(),
-                _interaction(change, _remove_two()),
-                frozenset({_ORE}),
-                frozenset(),
-                owned_item_spec_counts={_ORE: 1},
-                acting_item_aggregate=item,
+        def execute(owned: int):
+            kwargs = {"owned_item_spec_counts": {_ORE: owned}, "acting_item_aggregate": item}
+            if entrypoint == "declared":
+                return service.execute_declared_interaction(
+                    _empty_interior(), interaction, frozenset({_ORE}), frozenset(), **kwargs,
+                )
+            return service.execute_interaction(
+                SpotInterior((), (obj,), (), ()), obj.object_id, "test",
+                frozenset({_ORE}), frozenset(), **kwargs,
             )
 
+        with pytest.raises(InsufficientEffectItemsException):
+            execute(1)
         assert item.state == {"used": False}
+
+        result = execute(2)
+        assert item.state == {"used": True}
+        assert result.item_spec_ids_to_remove == (_ORE, _ORE)
+        assert result.item_spec_ids_to_grant == ((ItemSpecId.create(43),) if removal_kind == "combine" else ())
 
     def test_player_state_is_unchanged_when_removal_is_insufficient(self) -> None:
         """プレイヤー状態変更より後にREMOVE_ITEMを書いても、不足時は状態を変えない。"""
