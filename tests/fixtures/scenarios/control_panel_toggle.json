@@ -1,0 +1,207 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "control_panel_toggle",
+    "title": "操作盤の入/切 — 試験用の世界",
+    "description": "relay_puzzle_demo から切り出した試験用の世界。出荷シナリオではなく、実験の入口からは選べない (#1631 で relay_puzzle_demo を退役させるために作った)。制御室・中央廊下・金庫室の 3 部屋と、制御室の操作盤 (電源を入れる / 切る) だけを持つ。電源の入/切は、互いの状態 (OBJECT_STATE) を前提条件にしている。効果・観測・場所の前提条件・失敗の文面の試験が、この操作盤を受け皿に使う。",
+    "theme": "test",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "test",
+    "tags": [
+      "test_fixture",
+      "control_panel"
+    ],
+    "llm_public_intro": "試験用の世界。制御室・中央廊下・金庫室の 3 部屋があり、制御室には操作盤がある。金庫扉は閉じたままで、金庫室へは行けない。",
+    "llm_objective_text": "- 試験用の世界で、達成できる目的は無い。"
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {
+        "weather_type": "CLEAR",
+        "intensity": 0.0
+      },
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "control_room",
+      "name": "制御室",
+      "description": "操作盤がある狭い部屋。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "control_panel",
+            "name": "操作盤",
+            "description": "中央に電源スイッチがある操作盤。",
+            "object_type": "SWITCH",
+            "state": {
+              "power_on": false
+            },
+            "interactions": [
+              {
+                "action_name": "power_on",
+                "display_label": "電源を入れる",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "control_panel",
+                    "required_state": {
+                      "power_on": false
+                    },
+                    "failure_message": "操作盤は既に電源が入っている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "control_panel",
+                      "state_updates": {
+                        "power_on": true
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "操作盤に電源が入った。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "power_off",
+                "display_label": "電源を切る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "control_panel",
+                    "required_state": {
+                      "power_on": true
+                    },
+                    "failure_message": "操作盤の電源は既に切れている。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "control_panel",
+                      "state_updates": {
+                        "power_on": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "操作盤の電源を切った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "corridor",
+      "name": "中央廊下",
+      "description": "制御室と金庫室を繋ぐ廊下。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": []
+      }
+    },
+    {
+      "id": "vault",
+      "name": "金庫室",
+      "description": "重厚な扉の奥にある部屋。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": []
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "control_to_corridor",
+      "from": "control_room",
+      "to": "corridor",
+      "name": "制御室の扉",
+      "description": "制御室と廊下を繋ぐ常時開放の扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "corridor_to_vault",
+      "from": "corridor",
+      "to": "vault",
+      "name": "金庫扉",
+      "description": "電子ロック付きの分厚い扉。閉じたままで開かない。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "DOOR",
+        "state": "LOCKED",
+        "sound_permeability": 0.3
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": "player_a",
+      "name": "カイト",
+      "spawn_spot": "control_room",
+      "initial_items": []
+    },
+    {
+      "id": "player_b",
+      "name": "リン",
+      "spawn_spot": "corridor",
+      "initial_items": []
+    }
+  ],
+  "game_end_conditions": {
+    "win": [
+      {
+        "type": "ALL_AT_SPOT",
+        "target_spot": "vault"
+      }
+    ],
+    "lose": [
+      {
+        "type": "TICK_LIMIT",
+        "tick_limit": 50
+      }
+    ]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "passages": [],
+    "objects": []
+  }
+}
