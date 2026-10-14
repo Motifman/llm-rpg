@@ -2403,6 +2403,8 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 - 会議は開始と終了を別 event にし、未終了 run でも開始を失わない
 - 要約あり・なしの両短期記憶が同じ圧縮 trace 契約を持つ
 
+会議の逐次化 (`LLM_MEETING_SERIAL_TURNS`) は、どの profile も既定の並列 (false) で動かしていたので、記憶ではない設定の片付け (#1631) の #PRNUM で消した。会議も自由時間も wave 並列だけになる。上の本文と「どう守るか」にある逐次化の記述 (設定を明示した会議だけ worker 数を 1 にする、逐次会議の後続 prompt に同 tick 発言が入る) は、判断の記録として残すが、もう使えない。
+
 ## 87. 長走比較では短期記憶だけを要約し、補助 JSON 呼び出しは熟考しない
 
 **何を**: `station_drill_lean` と `station_drill_thinking` は 80 tick の長走に備えて

@@ -36,11 +36,9 @@ class _RuntimeStub:
         workers: int,
         *,
         meeting: bool = False,
-        meeting_serial_turns: bool = False,
     ) -> None:
         self._runtime_config = SimpleNamespace(
             llm_turn_parallel_workers=workers,
-            llm_meeting_serial_turns=meeting_serial_turns,
         )
         self._game_phase_store = _GamePhaseStoreStub(meeting)
         self._player_life_query = PlayerLifeQuery(
@@ -60,12 +58,10 @@ class _WiringStub:
         workers: int,
         *,
         meeting: bool = False,
-        meeting_serial_turns: bool = False,
     ) -> None:
         self.runtime = _RuntimeStub(
             workers,
             meeting=meeting,
-            meeting_serial_turns=meeting_serial_turns,
         )
         self.short_term_memory = DefaultSlidingWindowMemory(
             turn_cap=10,
@@ -111,12 +107,10 @@ def _run_two_players(
     *,
     workers: int,
     meeting: bool = False,
-    meeting_serial_turns: bool = False,
 ) -> _WiringStub:
     wiring = _WiringStub(
         workers,
         meeting=meeting,
-        meeting_serial_turns=meeting_serial_turns,
     )
     trigger = _WorldLlmTurnTrigger(wiring=wiring)
     trigger.schedule_turn(PlayerId(1))
@@ -145,35 +139,21 @@ def test_parallel_execution_closes_one_turn_per_player() -> None:
     assert store.completed_turn_count(PlayerId(2)) == 1
 
 
-def test_enabled_meeting_serialization_exposes_same_tick_speech_to_later_turns() -> None:
-    """逐次化を有効にした会議では、後続者が同 tick の先行発言を読んでから話す。"""
+def test_meeting_keeps_wave_parallel() -> None:
+    """会議でも wave 並列を保ち、同 tick 発言を互いに見せない。"""
     wiring = _run_two_players(
         workers=4,
         meeting=True,
-        meeting_serial_turns=True,
-    )
-
-    first, second = list(wiring.prompt_snapshots)
-    assert f"player-{first} の同 tick 発言" in wiring.prompt_snapshots[second]
-
-
-def test_disabled_meeting_serialization_keeps_meeting_wave_parallel() -> None:
-    """逐次化が無効なら会議でも wave 並列を保ち、同 tick 発言を互いに見せない。"""
-    wiring = _run_two_players(
-        workers=4,
-        meeting=True,
-        meeting_serial_turns=False,
     )
 
     assert all(prompt == "" for prompt in wiring.prompt_snapshots.values())
 
 
 def test_free_roam_keeps_wave_parallel_prompts_isolated_within_the_tick() -> None:
-    """逐次化を有効にしても自由時間は並列を保ち、同 tick の他者行動を混ぜない。"""
+    """自由時間は並列を保ち、同 tick の他者行動を混ぜない。"""
     wiring = _run_two_players(
         workers=4,
         meeting=False,
-        meeting_serial_turns=True,
     )
 
     assert all(prompt == "" for prompt in wiring.prompt_snapshots.values())

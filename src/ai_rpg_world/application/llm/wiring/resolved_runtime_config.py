@@ -93,7 +93,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
     "LLM_MAX_OUTPUT_TOKENS",
-    "LLM_MEETING_SERIAL_TURNS",
     "LLM_MODEL",
     "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
     "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
@@ -222,7 +221,6 @@ class ResolvedLlmRuntimeConfig:
     llm_rate_limit_retry_attempts: int
     llm_rate_limit_retry_base_sleep: float
     llm_turn_parallel_workers: int
-    llm_meeting_serial_turns: bool
     llm_idle_timeout_ticks: int
     llm_failure_streak_abort: int
     llm_tool_choice: str
@@ -470,9 +468,6 @@ class ResolvedLlmRuntimeConfig:
         llm_turn_parallel_workers = _resolve_non_negative_int(
             source, "LLM_TURN_PARALLEL_WORKERS", default=0
         )
-        llm_meeting_serial_turns = _parse_truthy(
-            source.get("LLM_MEETING_SERIAL_TURNS"), default=False
-        )
         llm_idle_timeout_ticks = _resolve_positive_int(
             source, "LLM_IDLE_TIMEOUT_TICKS", default=6
         )
@@ -689,7 +684,6 @@ class ResolvedLlmRuntimeConfig:
             llm_rate_limit_retry_attempts=llm_rate_limit_retry_attempts,
             llm_rate_limit_retry_base_sleep=llm_rate_limit_retry_base_sleep,
             llm_turn_parallel_workers=llm_turn_parallel_workers,
-            llm_meeting_serial_turns=llm_meeting_serial_turns,
             llm_idle_timeout_ticks=llm_idle_timeout_ticks,
             llm_failure_streak_abort=llm_failure_streak_abort,
             llm_tool_choice=llm_tool_choice,
@@ -780,7 +774,6 @@ class ResolvedLlmRuntimeConfig:
             llm_rate_limit_retry_attempts=3,
             llm_rate_limit_retry_base_sleep=2.0,
             llm_turn_parallel_workers=0,
-            llm_meeting_serial_turns=False,
             llm_idle_timeout_ticks=6,
             llm_failure_streak_abort=DEFAULT_FAILURE_STREAK_ABORT,
             llm_tool_choice="required",

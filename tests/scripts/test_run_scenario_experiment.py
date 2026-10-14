@@ -813,7 +813,6 @@ class TestExperimentProfileManifest:
         assert "run 034" in profile["description"]
         assert "並列数を 8" in profile["description"]
         assert profile["max_world_ticks"] == 50
-        assert profile["runtime_config"]["LLM_MEETING_SERIAL_TURNS"] is False
         assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
         assert {
             key: profile["runtime_config"][key]
