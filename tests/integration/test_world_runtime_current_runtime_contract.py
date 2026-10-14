@@ -92,7 +92,6 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "SEMANTIC_LLM_GIST_ENABLED",
         "SEMANTIC_SEARCH_ENABLED",
         "SHORT_TERM_MEMORY_KIND",
-        "LLM_TOOL_MODE",
         "MEMO_TOOLS_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -102,6 +101,7 @@ def _create_runtime(
     config: ResolvedLlmRuntimeConfig | None = None,
     *,
     scenario_path: Path = _SCENARIO_PATH,
+    include_todo_tools: bool = True,
 ):
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
@@ -110,6 +110,7 @@ def _create_runtime(
     return create_world_runtime(
         scenario_path,
         config=config or ResolvedLlmRuntimeConfig.for_tests(),
+        include_todo_tools=include_todo_tools,
     )
 
 
@@ -1635,16 +1636,16 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
     assert wiring.memo_completion_hint_service is None
 
 
-def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
+def test_runtime_without_todo_tools_hides_memory_tools_before_individual_flags(
     clean_runtime_env: None,
 ) -> None:
-    """pure_spot_graph mode では個別フラグより粗い補助ツール遮断を優先する。"""
+    """include_todo_tools=False で組んだ runtime では、個別フラグより粗い補助ツール遮断を優先する。"""
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            tool_mode="pure_spot_graph",
             episodic_enabled=False,
             semantic_search_enabled=True,
-        )
+        ),
+        include_todo_tools=False,
     )
 
     tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Issue #154 / #188 再実験: R1 / R2 / R3 を順に実走し、観測・tool_call を横断記録して表 A〜D を Markdown 生成する。
+Issue #154 / #188 再実験: R1 / R3 を順に実走し、観測・tool_call を横断記録して表 A〜D を Markdown 生成する。
 
 Issue #188 向け追加集計: recipient_position 分布、B の inner_thought 音関連語、
 隣接音観測 tick、B の role 逸脱 tick。
@@ -20,11 +20,8 @@ tick=20 の A プロンプト 1 件サンプル。
   ISSUE154_MAX_TICKS  各試行の「外側」advance_tick 呼び出しの最大回数（既定 18）。
                       移動(do_move)や待機(do_wait)ツール内でさらに時刻が進むため、
                       表の tick 列はワールド時刻でありこの回数と一致しない。
-  ISSUE154_RUNS      実行する試行キーをカンマ区切り（例: R1_default,R2_pure）。省略時は
-                      「既定セット」(R1_default, R3_contention) のみ走る。R2_pure (memo OFF
-                      アブレーション) は memo が既定路線になったので routine から外した。
-                      使いたいときは明示的に `ISSUE154_RUNS=R2_pure` または含めて opt-in。
-  LLM_TOOL_MODE      R1/R2 はスクリプトが上書き。手で固定したい場合は未指定でよい。
+  ISSUE154_RUNS      実行する試行キーをカンマ区切り（例: R1_default）。省略時は
+                      「既定セット」(R1_default, R3_contention) が走る。
   LLM_MODEL          省略時はコード既定モデル。「openai/&lt;served-model-name&gt;」形式が vLLM で扱いやすいことが多い
   OPENAI_API_BASE    省略時は直 OpenAI API。`/v1` まで含めたベース URL（ローカルトンネル先 vLLM）
 
@@ -66,14 +63,11 @@ if str(_ROOT) not in sys.path:
 #
 # ALL_RUNS は「実装上選べる試行」の宣言集。``ISSUE154_RUNS`` 環境変数で
 # 明示すればここから選ばれる。
-# DEFAULT_RUN_KEYS は「環境変数未指定で routine 実行されるセット」。memo を
-# 役に立つ既定路線として扱うため、memo OFF アブレーションの R2_pure は
-# routine から外し、必要なときだけ ``ISSUE154_RUNS=R2_pure`` で opt-in する。
+# DEFAULT_RUN_KEYS は「環境変数未指定で routine 実行されるセット」。
 # ──────────────────────────────────────────────────────────────────
 ALL_RUNS: dict = {
-    "R1_default": ("relay_puzzle_demo", None),
-    "R2_pure": ("relay_puzzle_demo", "pure_spot_graph"),
-    "R3_contention": ("single_relic_contention_demo", None),
+    "R1_default": "relay_puzzle_demo",
+    "R3_contention": "single_relic_contention_demo",
 }
 DEFAULT_RUN_KEYS: tuple = ("R1_default", "R3_contention")
 
@@ -450,9 +444,9 @@ def _markdown_section_g2(all_stats: list[RunStats]) -> str:
 
 def _markdown_section_g3(all_stats: list[RunStats]) -> str:
     """G3: relay_puzzle_demo での control_panel 発見 tick と power_on 成功 tick。"""
-    relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
+    relay_stats = [s for s in all_stats if "R1" in s.label]
     if not relay_stats:
-        return "_G3: relay_puzzle_demo 試行（R1/R2）が見つかりませんでした。_"
+        return "_G3: relay_puzzle_demo 試行（R1）が見つかりませんでした。_"
     lines = [
         "| 試行 | control_panel 発見 tick | power_on 成功 tick | 扉固定スイッチ tick |",
         "|------|------------------------|-------------------|---------------------|",
@@ -467,7 +461,7 @@ def _markdown_section_g3(all_stats: list[RunStats]) -> str:
 
 def _markdown_section_issue188(all_stats: list[RunStats]) -> str:
     """Issue #188: 位置ベース観測・B の音認識・role 逸脱。"""
-    relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
+    relay_stats = [s for s in all_stats if "R1" in s.label]
     if not relay_stats:
         return "_Issue #188: relay_puzzle 試行がありません。_"
     lines: list[str] = []
@@ -503,7 +497,7 @@ def _markdown_section_issue188(all_stats: list[RunStats]) -> str:
 
 def _markdown_section_issue190(all_stats: list[RunStats]) -> str:
     """Issue #190: 自己三人称呼び・プロンプトサンプル。"""
-    relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
+    relay_stats = [s for s in all_stats if "R1" in s.label]
     if not relay_stats:
         return "_Issue #190: relay_puzzle 試行がありません。_"
     lines: list[str] = []
@@ -527,10 +521,10 @@ def _markdown_section_issue190(all_stats: list[RunStats]) -> str:
 
 
 def _markdown_section_g4(all_stats: list[RunStats]) -> str:
-    """G4: R1/R2 の TODO 系ツール使用回数。"""
-    relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
+    """G4: R1 の TODO 系ツール使用回数。"""
+    relay_stats = [s for s in all_stats if "R1" in s.label]
     if not relay_stats:
-        return "_G4: R1/R2 試行が見つかりませんでした。_"
+        return "_G4: R1 試行が見つかりませんでした。_"
     lines = [
         "| 試行 | TODO 系ツール呼び出し回数 |",
         "|------|------------------------|",
@@ -582,7 +576,6 @@ def _run_one(
     label: str,
     world_id: str,
     max_ticks: int,
-    tool_mode: str | None,
     scenarios_dir: Path,
     progress: Callable[[str], None],
 ) -> tuple[Transcript, RunStats]:
@@ -599,8 +592,6 @@ def _run_one(
 
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
     config_values = {"LLM_CLIENT": "litellm"}
-    if tool_mode is not None:
-        config_values["LLM_TOOL_MODE"] = tool_mode
     runtime_config = ResolvedLlmRuntimeConfig.from_mapping(values=config_values)
 
     tr = Transcript()
@@ -695,13 +686,12 @@ def main() -> int:
 
     transcripts: dict[str, Transcript] = {}
     all_stats: list[RunStats] = []
-    for key, (wid, mode) in runs.items():
-        progress(f"--- 試行 {key} world={wid} LLM_TOOL_MODE={mode!r} ---")
+    for key, wid in runs.items():
+        progress(f"--- 試行 {key} world={wid} ---")
         tr, st = _run_one(
             label=key,
             world_id=wid,
             max_ticks=max_ticks,
-            tool_mode=mode,
             scenarios_dir=scenarios_dir,
             progress=progress,
         )
@@ -733,7 +723,7 @@ def main() -> int:
     parts.append(_markdown_section_g3(all_stats))
     parts.append("\n\n")
 
-    parts.append("## G4 — TODO 系ツール使用回数（R1/R2）\n\n")
+    parts.append("## G4 — TODO 系ツール使用回数（R1）\n\n")
     parts.append(_markdown_section_g4(all_stats))
     parts.append("\n\n")
 

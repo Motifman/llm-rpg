@@ -44,7 +44,6 @@ class TestFromEnvDefaults:
         assert cfg.semantic_search_enabled is False
         assert cfg.belief_evidence_enabled is False
         assert cfg.memo_tools_enabled is True
-        assert cfg.tool_mode == 'default'
         assert cfg.scenario_random_seed is None
         assert cfg.prompt_dataset_capture_enabled is False
         assert cfg.prompt_dataset_capture_failure_policy == 'fail'
@@ -180,7 +179,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'RECALL_HIT_BOOST_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'RECALL_HIT_BOOST_ENABLED': '1', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
@@ -210,7 +209,6 @@ class TestFromEnvExplicit:
         assert cfg.belief_attribution_enabled is True
         assert cfg.memo_tools_enabled is False
         assert cfg.recall_hit_boost_enabled is True
-        assert cfg.tool_mode == 'pure_spot_graph'
         assert cfg.scenario_random_seed == 42
 
     def test_end_on_all_down_flag_defaults_off_and_can_be_enabled(self) -> None:
@@ -274,11 +272,6 @@ class TestFromEnvFailFast:
         with pytest.raises(ValueError, match='SEMANTIC_PASSIVE_TOP_K'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'SEMANTIC_PASSIVE_TOP_K': '-1'})
 
-    def test_llm_tool_mode_unknown_raises_value_error(self) -> None:
-        """実験条件を変える tool mode の typo は fail-fast。"""
-        with pytest.raises(ValueError, match='LLM_TOOL_MODE'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_TOOL_MODE': 'pure'})
-
 
 class TestTheRemovedMemoryPartKeysAreRejected:
     """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
@@ -322,6 +315,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "ESCAPE_LLM_SSOT",
             "PROMPT_SECTION_ORDER",
             "SHORT_TERM_MEMORY_SCHEDULER_MODE",
+            "LLM_TOOL_MODE",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
@@ -432,7 +426,6 @@ class TestToTraceDict:
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
         assert 'belief_evidence_enabled' in d
-        assert 'tool_mode' in d
 
     def test_api_key(self) -> None:
         """API key の生値は絶対に trace に出さない (漏洩防止)。"""

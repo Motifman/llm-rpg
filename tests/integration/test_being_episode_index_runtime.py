@@ -49,12 +49,16 @@ class _PromptCaptureClient:
         return {"name": "wait", "arguments": {}}
 
 
-def _runtime(**extra: str):
+def _runtime(*, include_todo_tools: bool = True, **extra: str):
     values = {
         "TYPED_JUDGMENT_PROVIDER": "stub",
         **extra,
     }
-    runtime = create_world_runtime(_ISLAND, config=ResolvedLlmRuntimeConfig.from_mapping(values=values))
+    runtime = create_world_runtime(
+        _ISLAND,
+        config=ResolvedLlmRuntimeConfig.from_mapping(values=values),
+        include_todo_tools=include_todo_tools,
+    )
     recorder = _Recorder()
     runtime.set_trace_recorder(recorder)
     return runtime, recorder
@@ -370,12 +374,12 @@ class TestMemoFromAnEpisode:
         assert memo.provenance is not None and memo.provenance.source_from == sunk.handle
 
 
-class TestThePureSpotGraphMode:
-    """記憶のツールを隠す純スポットグラフでは、呼び出せない目次を出さないことを保証する (#1631)。"""
+class TestTheRuntimeWithoutTodoTools:
+    """記憶のツールを隠した runtime では、呼び出せない目次を出さないことを保証する (#1631)。"""
 
     def test_neither_the_index_nor_its_tools_appear(self) -> None:
-        """LLM_TOOL_MODE=pure_spot_graph では、エピソードがあっても【思い出せる出来事】も 2 つのツールもプロンプト全文に出ない。"""
-        runtime, recorder = _runtime(LLM_TOOL_MODE="pure_spot_graph")
+        """include_todo_tools=False で組むと、エピソードがあっても【思い出せる出来事】も 2 つのツールもプロンプト全文に出ない。"""
+        runtime, recorder = _runtime(include_todo_tools=False)
         pid = runtime.get_player_ids()[0]
         _write(runtime, pid, 1, summary="火を起こした")
 
@@ -390,7 +394,7 @@ class TestThePureSpotGraphMode:
         assert [k for k, _, _ in recorder.events if k == TraceEventKind.EPISODE_INDEX_SHOWN] == []
 
     def test_the_default_mode_shows_both(self) -> None:
-        """既定のツールの出し方では、同じ準備で【思い出せる出来事】と 2 つのツールが出る。"""
+        """TODO 系を含む既定の構成では、同じ準備で【思い出せる出来事】と 2 つのツールが出る。"""
         runtime, _ = _runtime()
         pid = runtime.get_player_ids()[0]
         _write(runtime, pid, 1, summary="火を起こした")

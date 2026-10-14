@@ -105,7 +105,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_REASONING_EFFORT",
     "LLM_REQUEST_TIMEOUT_SECONDS",
     "LLM_SESSION_ID_ENABLED",
-    "LLM_TOOL_MODE",
     "LLM_TOOL_CHOICE",
     "LLM_TURN_PARALLEL_WORKERS",
     "LLM_WALL_TIME_CAP_SECONDS",
@@ -330,9 +329,7 @@ class ResolvedLlmRuntimeConfig:
 
     # Goal / stagnation 系。
 
-    # Prompt / tool 表面。``tool_mode`` は TODO 系 tool の露出を切り替えるため、
-    # 実験条件として trace に残す。
-    tool_mode: str = "default"
+    # Prompt / tool 表面。
     memo_tools_enabled: bool = True
     # #1628: メモ帳と、環境の tool に付ける引数 memo。今のメモの道具とは並べない。
     being_memo_enabled: bool = False
@@ -379,11 +376,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 "short-term memory turn window requires "
                 "0 < compact_count < cap"
-            )
-        if self.tool_mode not in _VALID_TOOL_MODES:
-            raise ValueError(
-                f"tool_mode={self.tool_mode!r} is not recognized. "
-                f"valid: {sorted(_VALID_TOOL_MODES)}"
             )
         if self.llm_reasoning_effort not in _VALID_REASONING_EFFORTS:
             raise ValueError(
@@ -688,7 +680,6 @@ class ResolvedLlmRuntimeConfig:
         except ValueError as exc:
             raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
         recall_hit_boost_enabled = resolve_recall_hit_boost_enabled(env=source)
-        tool_mode = _resolve_tool_mode(source)
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
         prompt_dataset_capture_enabled = _parse_truthy(
             source.get("PROMPT_DATASET_CAPTURE_ENABLED"), default=False
@@ -797,7 +788,6 @@ class ResolvedLlmRuntimeConfig:
             belief_candidate_top_k=belief_candidate_top_k,
             belief_create_gate_min_confidence=belief_create_gate_min_confidence,
             recall_hit_boost_enabled=recall_hit_boost_enabled,
-            tool_mode=tool_mode,
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
             scenario_random_seed=scenario_random_seed,
@@ -900,7 +890,6 @@ class ResolvedLlmRuntimeConfig:
             belief_candidate_top_k=_DEFAULT_BELIEF_CANDIDATE_TOP_K,
             belief_create_gate_min_confidence=_DEFAULT_BELIEF_CREATE_GATE_MIN_CONFIDENCE,
             recall_hit_boost_enabled=False,
-            tool_mode="default",
             memo_tools_enabled=True,
             being_memo_enabled=False,
             scenario_random_seed=None,
@@ -1056,7 +1045,6 @@ def _parse_truthy(value: str | None, *, default: bool) -> bool:
     )
 
 
-_VALID_TOOL_MODES = frozenset({"default", "pure_spot_graph"})
 _VALID_TOOL_CHOICES = frozenset({"required", "auto"})
 _VALID_REASONING_EFFORTS = frozenset({
     "",
@@ -1067,23 +1055,6 @@ _VALID_REASONING_EFFORTS = frozenset({
     "high",
     "xhigh",
 })
-
-
-def _resolve_tool_mode(source: Mapping[str, str]) -> str:
-    """``LLM_TOOL_MODE`` を解決する。
-
-    旧 world_runtime 経路は未知値を warning + default fallback にしていたが、
-    実験条件では typo を黙って受ける価値が低いため fail-fast に揃える。
-    """
-    raw = (source.get("LLM_TOOL_MODE") or "").strip().lower()
-    if not raw:
-        return "default"
-    if raw not in _VALID_TOOL_MODES:
-        raise ValueError(
-            f"LLM_TOOL_MODE={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_TOOL_MODES)}"
-        )
-    return raw
 
 
 def _resolve_ratio_with_default(

@@ -1310,9 +1310,8 @@ def make_auxiliary_tool_handler(
 ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
     """TODO/memo ツール用のハンドラを tool_name 固定で返す。
 
-    NOTE: pure_spot_graph mode (B-4 / Issue #155) では TODO/memo ツールは
-    LLM の tools リストに含まれないため、通常到達しない。安全側のフォール
-    バックとして残し、デフォルト構成で memo を使う際の経路を維持する。
+    ``include_todo_tools=False`` で組んだ runtime では TODO/memo ツールが LLM の
+    tools リストに含まれないため、通常到達しない。
     """
 
     def handler(

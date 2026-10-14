@@ -1,5 +1,5 @@
 .PHONY: test test-cov test-html lint lint-fix typecheck clean install dev-install help \
-	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
+	experiment-relay experiment-relay-r1 experiment-relay-cloud \
 	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
 	check-no-internal-hostnames build-trace-viewer fuzz-scenario
 
@@ -21,9 +21,8 @@ help:
 	@echo "  make test-cov     - カバレッジ付きでテストを実行"
 	@echo "  make test-html    - HTMLカバレッジレポートを生成"
 	@echo "  make clean        - 一時ファイルを削除"
-	@echo "  make experiment-relay         - relay_puzzle R1+R2（クラウド既定）"
+	@echo "  make experiment-relay         - relay_puzzle R1（クラウド既定）"
 	@echo "  make experiment-relay-r1      - R1 のみ"
-	@echo "  make experiment-relay-r2      - R2 のみ"
 	@echo "  make experiment-relay-cloud   - experiment-relay と等価 (名前で参照されているため残す)"
 	@echo "  make experiment [EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory] [OUT=...]"
 	@echo "                                - profile に固定した汎用シナリオ実験"
@@ -89,7 +88,7 @@ clean:
 experiment-relay:
 	@mkdir -p var
 	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
-	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default,R2_pure \
+	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
 experiment-relay-r1:
@@ -98,16 +97,10 @@ experiment-relay-r1:
 	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
-experiment-relay-r2:
-	@mkdir -p var
-	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
-	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R2_pure \
-	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
-
 experiment-relay-cloud:
 	@mkdir -p var
 	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
-	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default,R2_pure \
+	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
 # 汎用シナリオ実験 (Issue #188 Phase 1d) — 任意 scenario JSON で実行し

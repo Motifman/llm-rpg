@@ -11,14 +11,13 @@
 | `LLM_MODEL` | `openai/gemma-4-31b-it-nvfp4` |
 | `OPENAI_API_BASE` | `http://127.0.0.1:8001/v1` |
 | `ISSUE154_MAX_TICKS` | 30 |
-| 試行 | R1_default / R2_pure |
+| 試行 | R1_default |
 
 ## G1 — ゲーム終了結果
 
 | 試行 | 結果 | 終了 tick | 所要 (s) |
 |------|------|-----------|----------|
 | R1_default | | | |
-| R2_pure | | | |
 
 ## 会話ロール / persona
 

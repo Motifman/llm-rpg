@@ -4401,10 +4401,6 @@ class WorldRuntime:
         return str(value)
 
 
-_LLM_TOOL_MODE_DEFAULT = "default"
-_LLM_TOOL_MODE_PURE_SPOT_GRAPH = "pure_spot_graph"
-
-
 def _build_short_term_memory(
     cfg: ResolvedLlmRuntimeConfig,
     *,
@@ -4654,7 +4650,7 @@ def create_world_runtime(
     *,
     world_character: CharacterPromptInput | None = None,
     llm_turn_trigger: ILlmTurnTrigger | None = None,
-    include_todo_tools: bool | None = None,
+    include_todo_tools: bool = True,
     config: ResolvedLlmRuntimeConfig | None = None,
     round_number: int = 1,
 ) -> WorldRuntime:
@@ -4664,10 +4660,8 @@ def create_world_runtime(
         llm_turn_trigger: 省略時は :class:`WorldStandaloneNoopLlmTurnTrigger`。
             スポットグラフのティック後フック用。プレゼン層のセッションでは
             ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
-        include_todo_tools: ``True`` で TODO 系を含める従来構成、``False`` で
-            純スポットグラフモード (TODO 系を除外、speech は残す)。``None``
-            (既定) の場合は環境変数 ``LLM_TOOL_MODE`` から解決する。Issue #155
-            (TODO 設計の再評価) の判断材料を取るための比較実験用。
+        include_todo_tools: ``True`` (既定) で TODO 系を含める。``False`` で
+            TODO 系を除外し、speech は残す。
         config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
             ``ResolvedLlmRuntimeConfig.from_mapping()`` で空設定から既定値を
             resolve。entrypoint (run_scenario_experiment 等) で既に
@@ -6483,11 +6477,7 @@ def create_world_runtime(
         # monster placements の無いシナリオでは両方とも None のまま。
         _monster_repo=monster_repo if scenario.monster_placements else None,
         _attack_orchestrator=monster_attack_orchestrator,
-        _include_todo_tools=(
-            include_todo_tools
-            if include_todo_tools is not None
-            else config.tool_mode != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
-        ),
+        _include_todo_tools=include_todo_tools,
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )

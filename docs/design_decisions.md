@@ -7931,7 +7931,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **なぜ**: `var/runs/mine_v1_007_memo` (profile `memory_jev_mine_v1_v41_thinking_capped_memo_only`、エピソードと想起を止めた設定) のシステムプロンプトが、「【関連する記憶】または能動想起で取り出した内容だけが確かな記憶」「【関連する記憶】が空のときは能動想起の手段を試す」を指示し続けた。この run では欄もツールも出ていない。サヨ T20 は「The instructions mention 能動想起 but no tool」と探し、ゲン T20・T23、サヨ T26 も同じように探した。記憶を比べる run で、記憶なしの条件が無い手段を探すことに手番を使うと、比較が濁る。CLAUDE.md の「プロンプト本文にツール名を書くときは、必ず露出判断を通す」と同じ穴で、欄の名前にも同じ扱いが要る。
 
-**設定値ではなくツールの一覧から決める理由**: 能動想起のツールは、設定と実行器の有無の両方がそろったときに出る。`memory_recall_by_handle` には設定が無く、見出しと想起スロットの store がそろったときだけ出る。`LLM_TOOL_MODE` の純スポットグラフでは、記憶のツールが丸ごと隠れる。設定から推すと、これらの経路で本文と一覧がずれる。一覧は design_decisions 44 の入口が決めたものなので、本文もそれを読む。
+**設定値ではなくツールの一覧から決める理由**: 能動想起のツールは、設定と実行器の有無の両方がそろったときに出る。`memory_recall_by_handle` には設定が無く、見出しと想起スロットの store がそろったときだけ出る。`LLM_TOOL_MODE` の純スポットグラフでは、記憶のツールが丸ごと隠れる (この設定は #1631 の #PRNUM で消した。いまは `include_todo_tools=False` で組んだときに隠れる)。設定から推すと、これらの経路で本文と一覧がずれる。一覧は design_decisions 44 の入口が決めたものなので、本文もそれを読む。
 
 **既定値を置かない理由**: 置くと、渡し忘れた呼び出しが「両方ある」文へ黙って戻り、無い欄とツールをまた探させる。
 
@@ -8023,7 +8023,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1623 / #1621 / #1626、design_decisions 1 / 10 / D1616 / D1623 / D1626 / D1628。
 
-**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。 記憶のツールを隠す純スポットグラフ (`LLM_TOOL_MODE=pure_spot_graph`) では、呼び出せない目次を出さない。
+**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。 記憶のツールを隠す純スポットグラフ (#PRNUM で設定を消し、いまは `include_todo_tools=False`。`LLM_TOOL_MODE=pure_spot_graph`) では、呼び出せない目次を出さない。
 
 ---
 
