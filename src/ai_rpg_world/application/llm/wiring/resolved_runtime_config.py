@@ -123,7 +123,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SEMANTIC_PASSIVE_TOP_K",
     "SEMANTIC_SEARCH_ENABLED",
     "SHORT_TERM_MEMORY_KIND",
-    "SHORT_TERM_MEMORY_SCHEDULER_MODE",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
     "SUBJECTIVE_EPISODE_DB_PATH",
@@ -171,7 +170,6 @@ class ResolvedLlmRuntimeConfig:
     Attributes:
         # === Short-term memory (Phase 2) ===
         short_term_memory_kind: ``"rolling_summary"`` だけ。``"sliding_window"`` は起動時に拒む (D1631)
-        short_term_memory_scheduler_mode: ``"inline"`` | ``"thread_pool"``
 
         # === LLM client / model ===
         llm_client_kind: ``"stub"`` | ``"litellm"``
@@ -223,7 +221,6 @@ class ResolvedLlmRuntimeConfig:
 
     # Short-term memory
     short_term_memory_kind: str
-    short_term_memory_scheduler_mode: str
 
     # LLM client
     llm_client_kind: str
@@ -469,7 +466,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_semantic_passive_top_k,
             resolve_semantic_search_enabled,
             resolve_short_term_memory_kind,
-            resolve_short_term_memory_scheduler_mode,
             resolve_short_term_memory_turn_window,
         )
 
@@ -480,9 +476,6 @@ class ResolvedLlmRuntimeConfig:
         # ここでは必ず明示 mapping を渡す。実験設定の入力経路を
         # profile/config → 本 DTO の 1 本に固定するため。
         short_term_memory_kind = resolve_short_term_memory_kind(env=source)
-        short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode(
-            env=source
-        )
         (
             short_term_memory_turn_cap,
             short_term_memory_turn_compact_count,
@@ -735,7 +728,6 @@ class ResolvedLlmRuntimeConfig:
 
         return cls(
             short_term_memory_kind=short_term_memory_kind,
-            short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
             short_term_memory_turn_cap=short_term_memory_turn_cap,
             short_term_memory_turn_compact_count=short_term_memory_turn_compact_count,
             llm_client_kind=llm_client_kind,
@@ -837,10 +829,6 @@ class ResolvedLlmRuntimeConfig:
             short_term_memory_kind="rolling_summary",
             short_term_memory_turn_cap=20,
             short_term_memory_turn_compact_count=10,
-            # PR #467: K run #466 で thread_pool を本番 default に。テスト
-            # factory も from_mapping と整合させる。テストで inline を要求するなら
-            # 明示 override する。
-            short_term_memory_scheduler_mode="thread_pool",
             llm_client_kind="stub",
             llm_model=None,
             llm_api_key=None,

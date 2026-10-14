@@ -60,7 +60,6 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for key in (
         "SHORT_TERM_MEMORY_KIND",
-        "SHORT_TERM_MEMORY_SCHEDULER_MODE",
         "LLM_CLIENT",
         "LLM_MODEL",
         "LLM_REQUEST_TIMEOUT_SECONDS",

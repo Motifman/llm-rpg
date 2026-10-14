@@ -615,8 +615,9 @@ class SummarizingShortTermMemory(IShortTermMemory):
         前提にしている。同一プレイヤーに対して 2 つの L5 task が並列実行されると
         どちらも同じ ``previous_l5`` snapshot を保持したまま LLM を呼び、
         後勝ちで新世代が古い ``evicted_l4`` に基づく内容で上書きされる risk が
-        ある。default 構成 (wiring 経由の ``_build_short_term_memory``) では
-        max_workers=1 を使うので影響なし。
+        ある。本番の ``_build_short_term_memory`` は scheduler を渡さず、同期の
+        ``InlineShortTermMemoryScheduler`` で動くので影響しない。ThreadPool を
+        渡すときは max_workers=1 が前提。
         """
         with self._long_lock:
             previous_l5 = self._long.get(pid)
