@@ -2,8 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Optional
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
@@ -18,12 +17,6 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    EpisodicReinterpretationJournalRepository,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
-    EpisodicRecallObservation,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -100,44 +93,12 @@ def _format_afterglow_section(
 
 
 def _join_passive_recall_texts(
-    player_id: int,
     candidates: tuple[EpisodicPassiveRecallCandidate, ...],
-    journal_store: EpisodicReinterpretationJournalRepository | None = None,
-    *,
-    being_id: Optional["BeingId"] = None,
 ) -> str:
-    """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。
-
-    Phase 3 Step 3d-3: legacy player_id 経路は撤去済。``being_id`` が ``None``
-    の場合は journal をスキップして生の ``recall_text`` を使う (= prompt
-    強化の graceful degradation)。``journal_store`` 自体が ``None`` の場合も
-    同じく生 recall に縮退する。
-
-    ``player_id`` は warning ログ用に保持 (journal 走査は being_id 経由のみ)。
-    後続フェーズで Being の player_id 逆引きが容易になった場合は引数から
-    削除可能。
-    """
+    """retrieve の候補順のまま、各 episode の recall text を改行で連結する。"""
     parts: list[str] = []
     for cand in candidates:
-        active = None
-        if journal_store is not None and being_id is not None:
-            try:
-                active = journal_store.get_active_by_being(
-                    being_id, cand.episode.episode_id
-                )
-            except Exception:
-                # 再解釈 store の障害で recall を止めず生の recall_text に縮退する。
-                # 「sail と active が drift している」状況を後追いできるよう WARN
-                # で traceback ごと残す (silent failure 防止)。
-                _module_logger.warning(
-                    "journal_store.get_active_by_being failed for player=%s "
-                    "episode=%s; falling back to raw recall_text",
-                    player_id,
-                    cand.episode.episode_id,
-                    exc_info=True,
-                )
-                active = None
-        raw = active.current_recall_text if active is not None else cand.episode.recall_text
+        raw = cand.episode.recall_text
         text = raw.strip() if isinstance(raw, str) else ""
         if text:
             game_time_label = cand.episode.game_time_label
@@ -145,26 +106,6 @@ def _join_passive_recall_texts(
                 text = f"[{game_time_label.strip()}] {text}"
             parts.append(text)
     return "\n".join(parts)
-
-
-def append_recall_observation(
-    builder: "DefaultPromptBuilder",
-    being_id: Optional["BeingId"],
-    observation: EpisodicRecallObservation,
-) -> None:
-    """recall observation を recall_buffer_store に書く helper。
-
-    Phase 3 Step 3d-3: legacy player_id 経路は撤去済。Being 未解決時は
-    silent skip (= prompt 強化の graceful fallback、turn は止めない)。
-    ``builder._episodic_recall_buffer_store is None`` は呼出側で先に弾く前提。
-
-    ``being_id is None`` 時のデバッグ可視性は、呼出側 ``run_episodic_passive_recall``
-    で 1 回の warning ログとして残す (= silent failure 構造的対処)。
-    """
-    assert builder._episodic_recall_buffer_store is not None
-    if being_id is None:
-        return
-    builder._episodic_recall_buffer_store.append_by_being(being_id, observation)
 
 
 def emit_episodic_recall_trace(
@@ -334,7 +275,6 @@ def run_episodic_passive_recall(
     2. passive_recall.retrieve で候補 episode を取得
     3. 候補を改行で連結して relevant_memories_text を作る
     4. memory_link_service があれば passive recall 通知を流す
-    5. recall_buffer_store があれば EpisodicRecallObservation を append
 
     候補件数は ``None`` で 「機構自体が未注入」 を表す (= 「0 件しか
     浮かばなかった」 と意味が異なる)。 ``int`` で 「機構は走ったが N 件」
@@ -412,12 +352,7 @@ def run_episodic_passive_recall(
         min_occurred_at=min_recall_dt,
         current_tick=current_tick_for_habituation,
     )
-    relevant_memories_text = _join_passive_recall_texts(
-        player_id.value,
-        recall_result.candidates,
-        builder._episodic_reinterpretation_journal_store,
-        being_id=being_id,
-    )
+    relevant_memories_text = _join_passive_recall_texts(recall_result.candidates)
 
     # #526 段階 3 PR-C: afterglow index を 1 行見出しの section として連結。
     # 「鮮明な記憶」(= recall_text の本文) の後ろに「さっき思い出した記憶の
@@ -519,48 +454,6 @@ def run_episodic_passive_recall(
             recall_result.candidates,
             now=recall_now,
         )
-
-    if builder._episodic_recall_buffer_store is not None:
-        turn_index = (
-            builder._episodic_turn_index_provider(player_id)
-            if builder._episodic_turn_index_provider is not None
-            else 0
-        )
-        situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
-        # Phase 3 Step 3d-3: legacy 経路は撤去済。Being 未解決時は
-        # `_append_recall_observation` が silent skip する (turn は継続)。
-        # 未解決をデバッグ可能にするため、ここで 1 度だけ warning ログを
-        # 残す (= 候補ごとには出さず recall buffer 全体への記録試行と
-        # して 1 回。silent failure 構造的対処、design_decisions.md #5)。
-        if being_id is None and recall_result.candidates:
-            builder._logger.warning(
-                "episodic_recall_buffer skipped: being_id unresolved "
-                "(player_id=%s, candidates=%d). 再解釈 sidecar は動かないが "
-                "turn は継続する。",
-                player_id.value,
-                len(recall_result.candidates),
-            )
-        for cand in recall_result.candidates:
-            try:
-                observation = EpisodicRecallObservation(
-                    recall_id=f"recall-{uuid4().hex}",
-                    player_id=player_id.value,
-                    episode_id=cand.episode.episode_id,
-                    recalled_at=datetime.now(timezone.utc),
-                    source_axes=cand.source_axes,
-                    current_state_snapshot=current_state_text,
-                    recent_events_snapshot=recent_events_text,
-                    persona_snapshot=player_info.persona_block,
-                    situation_cues=situation_cue_keys,
-                    turn_index=turn_index,
-                )
-                append_recall_observation(builder, being_id, observation)
-            except Exception as e:
-                builder._logger.warning(
-                    "Failed to record episodic recall observation; prompt build continues: %s",
-                    e,
-                    exc_info=True,
-                )
 
     # Issue #526 後続: 候補 0 件のときも「受動想起の機構は走ったが何も
     # 浮かばなかった」事実を agent 側で可観測にする。``_episodic_passive_recall``

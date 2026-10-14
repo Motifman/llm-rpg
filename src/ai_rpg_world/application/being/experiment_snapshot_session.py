@@ -457,8 +457,8 @@ class ExperimentSnapshotSession:
                 "memo_store",
                 "semantic_memory_store",
                 "memory_link_store",
-                "episodic_recall_buffer_store",
-                "episodic_reinterpretation_journal_store",
+                # 再解釈 (#1631 で消した) の想起の記録と journal は、いつも空の
+                # 代用品で運ぶので監視しない。
                 "episodic_episode_store",
                 # PR-G: 想起階層 3 store も fallback 監視対象に入れる。配線漏れで
                 # 空 store にフォールバックしたことを後追いできるようにする。

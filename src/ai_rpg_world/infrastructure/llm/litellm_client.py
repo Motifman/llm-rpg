@@ -42,9 +42,6 @@ from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port imp
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
-from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
-    IEpisodicReinterpretationCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
@@ -311,7 +308,6 @@ _Result = TypeVar("_Result")
 class LiteLLMClient(
     ILLMClient,
     IEpisodicChunkSubjectiveCompletionPort,
-    IEpisodicReinterpretationCompletionPort,
     ISemanticGistCompletionPort,
     IBeliefConsolidationCompletionPort,
     IShortTermMemorySummaryCompletionPort,
@@ -1138,13 +1134,6 @@ class LiteLLMClient(
                 error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
             )
         return parsed
-
-    def complete_episodic_reinterpretation_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで想起後再解釈 JSON object を返す。"""
-        return self._complete_aux_json(messages, AuxLlmComponent.EPISODIC_REINTERPRETATION)
 
     def complete_semantic_gist_json(
         self,

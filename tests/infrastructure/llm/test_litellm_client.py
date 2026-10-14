@@ -814,20 +814,6 @@ class TestLiteLLMClientJsonCompletion:
         assert "reasoning_effort" not in kwargs
         assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
 
-    def test_reinterpretation_json_completion_extracts_after_think_tag(self, client):
-        """thinking 系モデルの思考タグ後にある JSON を抽出する。"""
-        content = (
-            "<think>hidden reasoning</think>\n"
-            '{"episode_updates": [{"episode_id": "ep-a", '
-            '"current_interpretation": "意味", "current_recall_text": "回想"}]}'
-        )
-        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_episodic_reinterpretation_json(
-                [{"role": "user", "content": "json"}],
-            )
-        assert result["episode_updates"][0]["episode_id"] == "ep-a"
-
     def test_belief_consolidation_json_completion_delegates_and_returns_dict(self, client):
         """complete_belief_consolidation_json は messages を litellm に渡し、
         返り値の JSON を decisions を含む dict として返す。"""

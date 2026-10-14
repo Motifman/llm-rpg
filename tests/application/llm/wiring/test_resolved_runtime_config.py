@@ -44,7 +44,6 @@ class TestFromEnvDefaults:
         assert cfg.semantic_llm_gist_enabled is False
         assert cfg.semantic_passive_top_k == 0
         assert cfg.semantic_search_enabled is False
-        assert cfg.episodic_reinterpretation_enabled is False
         assert cfg.belief_evidence_enabled is False
         assert cfg.memo_tools_enabled is True
         assert cfg.tool_mode == 'default'
@@ -112,23 +111,6 @@ class TestReasonFirstTwoStepConfig:
         """run_start / manifest から reason-first 有効化条件を後で確認できる。"""
         cfg = ResolvedLlmRuntimeConfig.for_tests(reason_first_two_step_enabled=True)
         assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
-
-class TestEpisodicReinterpretationEnabled:
-    """段1 (エピソード再解釈) の on/off 解決。"""
-
-    def test_unset_false_2(self) -> None:
-        """LLM_EPISODIC_REINTERPRETATION_ENABLED 未設定なら False (= 従来 episodic-only)。"""
-        assert ResolvedLlmRuntimeConfig.from_mapping(values={}).episodic_reinterpretation_enabled is False
-
-    def test_truthy_true_2(self) -> None:
-        """1/true 等で True。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_REINTERPRETATION_ENABLED': '1'})
-        assert cfg.episodic_reinterpretation_enabled is True
-
-    def test_for_tests_default_False(self) -> None:
-        """for_tests の default は False、override 可。"""
-        assert ResolvedLlmRuntimeConfig.for_tests().episodic_reinterpretation_enabled is False
-        assert ResolvedLlmRuntimeConfig.for_tests(episodic_reinterpretation_enabled=True).episodic_reinterpretation_enabled is True
 
 class TestRecallHabituationEnabled:
     """段階 2 (慣化ペナルティ) の on/off + decay_window の解決。"""
@@ -350,6 +332,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "UNCONSCIOUS_CONTEXT_ENABLED",
             "PENDING_PREDICTION_ENABLED",
             "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
+            "LLM_EPISODIC_REINTERPRETATION_ENABLED",
             "ESCAPE_LLM_SSOT",
         ],
     )

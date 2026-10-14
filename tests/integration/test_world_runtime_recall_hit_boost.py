@@ -30,10 +30,7 @@ _SCENARIO_PATH = (
 
 def _common_memory_config(**overrides):
     """想起の信用割り当てが実際に流れるための前提設定一式を作る。"""
-    return episodic_config(
-        episodic_reinterpretation_enabled=True,
-        **overrides,
-    )
+    return episodic_config(**overrides)
 
 
 class TestWorldRuntimeRecallHitBoostWiring:
@@ -68,19 +65,3 @@ class TestWorldRuntimeRecallHitBoostWiring:
 
         assert stack.recall_success_store is None
         assert stack.passive_recall._recall_success_store is None
-
-    def test_recall_success_store_exists_without_targets_when_reinterpretation_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """LLM_EPISODIC_REINTERPRETATION_ENABLED が無いと、再解釈 coordinator は
-        組まれないが、的中側 sidecar は組まれる。
-        """
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=episodic_config(
-                recall_hit_boost_enabled=True,
-            ),
-        )
-        stack = runtime._episodic_stack
-        assert stack is not None
-        assert stack.reinterpretation_coordinator is None

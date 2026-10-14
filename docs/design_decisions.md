@@ -3656,6 +3656,8 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 **入口**: `WorldLlmTurnTrigger` が `_acting_being_for` で一度決めて渡す。
 未付着なら sidecar だけ skip し、手番は止めない。
 
+**その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。
+
 ## 146. 記憶リンクとクラスタ昇格は呼び出し側の BeingId を使う
 
 **何を**: `EpisodicMemoryLinkApplicationService` と
@@ -5216,6 +5218,7 @@ snapshot Being から復元する。payload と fallback の両方があり不�
 **この PR で触らない**: `EpisodicRecallObservation` への being_id 載せ、
 `SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
 
+**その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。
 
 ## 210. 履歴には、次に真似しても通る形だけを残す
 

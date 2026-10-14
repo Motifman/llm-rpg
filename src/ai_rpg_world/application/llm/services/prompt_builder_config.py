@@ -42,12 +42,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.world.services.world_query_service import (
     WorldQueryService,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    EpisodicReinterpretationJournalRepository,
-)
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
@@ -164,9 +158,6 @@ class EpisodicRecallConfig:
     passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS
     passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES
     memory_link_service: EpisodicMemoryLinkApplicationService | None = None
-    recall_buffer_store: EpisodicRecallBufferRepository | None = None
-    reinterpretation_journal_store: EpisodicReinterpretationJournalRepository | None = None
-    turn_index_provider: Callable[[PlayerId], int] | None = None
     # Issue #283 後続: 観測 prose に含まれる固有名詞から自動 cue を立てる
     # マッチャ。None なら自由文経路は無効化 (= 構造化フィールドだけが cue 源)。
     # 実装は ``IWorldNounMatcher`` 準拠の任意クラス (Aho-Corasick / Null / C 拡張等)。

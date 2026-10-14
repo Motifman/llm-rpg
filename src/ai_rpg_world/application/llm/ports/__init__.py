@@ -14,9 +14,6 @@ NOTE: スケジューリング抽象 ``IEpisodicSubjectiveCompletionScheduler``
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
-from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
-    IEpisodicReinterpretationCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
@@ -39,7 +36,6 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
 __all__ = [
     "ChoiceQuestion",
     "IEpisodicChunkSubjectiveCompletionPort",
-    "IEpisodicReinterpretationCompletionPort",
     "ILLMClient",
     "ISemanticGistCompletionPort",
     "IShortTermMemoryLongSummaryCompletionPort",

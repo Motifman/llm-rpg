@@ -48,9 +48,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
         IBeliefConsolidationCompletionPort,
     )
-    from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
-        IEpisodicReinterpretationCompletionPort,
-    )
     from ai_rpg_world.application.llm.services.afterglow_store import (
         IAfterglowStore,
     )
@@ -69,9 +66,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         IEpisodicRecallSuccessStore,
     )
-    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-        EpisodicReinterpretationCoordinator,
-    )
     from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
         EpisodicSemanticClusterPromotionService,
     )
@@ -80,12 +74,6 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.being.domain.memory_turn_clock import (
         MemoryTurnReader,
-    )
-    from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-        EpisodicRecallBufferRepository,
-    )
-    from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-        EpisodicReinterpretationJournalRepository,
     )
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -218,19 +206,6 @@ class EpisodicStack:
     # 永遠に 0 のままで昇格ゲート (recall_count>=3) を誰も超えられない
     # (memory_full_002 実験で発覚した静かな失敗)。
     link_service: Any | None = None
-    # reinterpretation 拡張 (段1 / default OFF)。``reinterpretation_enabled`` のとき
-    # build_episodic_stack が recall_buffer + journal + coordinator を構築する。
-    # OFF のときは全て None で、prompt builder の guard で覗かない = 従来動作。
-    #
-    #   reinterpretation_coordinator: turn 後に after_turn_completed を呼び、
-    #       interval 到達時に LLM 再解釈を flush する coordinator
-    #   reinterpretation_journal: 再解釈結果 (active recall text) の journal。
-    #       prompt builder が想起時に覗いて recall_text を上書きする
-    #   recall_buffer_store: prompt 用 recall buffer (completion 有効時のみ非 None)。
-    #       想起した episode を pending として積み、coordinator が batch 再解釈する
-    reinterpretation_coordinator: EpisodicReinterpretationCoordinator | None = None
-    reinterpretation_journal: EpisodicReinterpretationJournalRepository | None = None
-    recall_buffer_store: EpisodicRecallBufferRepository | None = None
     # #526 段階 2: 慣化 sidecar (default off)。env で enable 時に in-memory store
     # を構築し、passive_recall service と prompt_builder の両方に渡す。
     recall_habituation_store: IEpisodicRecallHabituationStore | None = None
@@ -358,8 +333,6 @@ def build_episodic_stack(
     semantic_passive_top_k: int = 0,
     semantic_gist_service: Any | None = None,
     semantic_persona_resolver: Any | None = None,
-    reinterpretation_enabled: bool = False,
-    reinterpretation_completion: IEpisodicReinterpretationCompletionPort | None = None,
     recall_habituation_enabled: bool = False,
     recall_habituation_decay_window_ticks: int = 5,
     # #526 段階 3 + PR-A: 想起スロット (working memory) 配線。env で enable する。
@@ -531,43 +504,8 @@ def build_episodic_stack(
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
 
-    # reinterpretation 拡張 (段1 / default OFF)。ON のとき recall_buffer + journal +
-    # coordinator を直接構築する。escape は chunk_coordinator を既に上で持つので、
-    # chunk_coordinator も束ねる汎用 stack builder は使わず、再解釈に必要な 3 点だけを
-    # 組む (semantic とは独立 = mem_bundle 不要)。
-    reinterpretation_coordinator: Any | None = None
-    reinterpretation_journal: Any | None = None
-    prompt_recall_buffer: Any | None = None
-    recall_buffer: Any | None = None
-    if reinterpretation_enabled:
-        from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-            EpisodicReinterpretationCoordinator,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-            InMemoryEpisodicRecallBufferStore,
-            InMemoryEpisodicReinterpretationJournalStore,
-        )
-
-        # escape は in-memory baseline なので具象 in-memory store を直接使う
-        # (full wiring の SQLite 永続経路は実験 runtime では使わない)。
-        recall_buffer = InMemoryEpisodicRecallBufferStore()
-        reinterpretation_journal = InMemoryEpisodicReinterpretationJournalStore()
-        reinterpretation_coordinator = EpisodicReinterpretationCoordinator(
-            episode_store=episode_store,
-            recall_buffer_store=recall_buffer,
-            journal_store=reinterpretation_journal,
-            completion=reinterpretation_completion,
-        )
-        # prompt が recall buffer を覗くのは completion が有効なときだけ。completion が
-        # None だと再解釈 LLM が走らず buffer が pending を溜め続けるだけなので、
-        # prompt builder には None を渡して無駄な query を防ぐ (full wiring と同じ
-        # graceful fallback: _shared_builders.py の prompt_recall_buffer None 化)。
-        prompt_recall_buffer = (
-            recall_buffer if reinterpretation_completion is not None else None
-        )
-
     # U9b (想起の信用割り当て・的中側 / default off): enable 時のみ的中側
-    # sidecar を構築する。U9a の habituation store と同じ「flag ON のときだけ
+    # sidecar を構築する。habituation store と同じ「flag ON のときだけ
     # 実体を作る」パターン。SQLite 永続経路は無い (慣化 sidecar と同型)。
     recall_success_store: Any | None = None
     if recall_hit_boost_enabled:
@@ -681,9 +619,6 @@ def build_episodic_stack(
         semantic_memory_store=semantic_memory_store,
         memory_link_store=memory_link_store,
         link_service=link_service,
-        reinterpretation_coordinator=reinterpretation_coordinator,
-        reinterpretation_journal=reinterpretation_journal,
-        recall_buffer_store=prompt_recall_buffer,
         recall_habituation_store=recall_habituation_store,
         recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
         recall_slot_store=recall_slot_store,

@@ -62,7 +62,6 @@ from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall impor
     _gather_additional_freetexts_for_recall,
     _join_passive_recall_texts,
     _module_logger,
-    append_recall_observation,
     emit_episodic_recall_trace,
     run_episodic_passive_recall,
 )
@@ -85,13 +84,6 @@ from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-    EpisodicReinterpretationJournalRepository,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
@@ -188,9 +180,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_passive_recall_limit_per_axis = episodic.passive_recall_limit_per_axis
         episodic_passive_recall_max_candidates = episodic.passive_recall_max_candidates
         episodic_memory_link_service = episodic.memory_link_service
-        episodic_recall_buffer_store = episodic.recall_buffer_store
-        episodic_reinterpretation_journal_store = episodic.reinterpretation_journal_store
-        episodic_turn_index_provider = episodic.turn_index_provider
         # Issue #283 後続: 観測 prose 経由の自由文 cue 抽出マッチャ (任意)。
         noun_matcher = episodic.noun_matcher
         # Phase 1c: semantic memory の passive top-K (任意)。
@@ -261,24 +250,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError(
                 "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
             )
-        if episodic_recall_buffer_store is not None and not isinstance(
-            episodic_recall_buffer_store, EpisodicRecallBufferRepository
-        ):
-            raise TypeError(
-                "episodic_recall_buffer_store must be EpisodicRecallBufferRepository or None"
-            )
-        if episodic_reinterpretation_journal_store is not None and not isinstance(
-            episodic_reinterpretation_journal_store,
-            EpisodicReinterpretationJournalRepository,
-        ):
-            raise TypeError(
-                "episodic_reinterpretation_journal_store must be "
-                "EpisodicReinterpretationJournalRepository or None"
-            )
-        if episodic_turn_index_provider is not None and not callable(
-            episodic_turn_index_provider
-        ):
-            raise TypeError("episodic_turn_index_provider must be callable or None")
         # Phase 1c: semantic passive top-K の型検証 (import は service 構築時のみ
         # 必要なので遅延 import)。service=None または top_k=0 のときは validate 不要。
         if semantic_passive_recall is not None:
@@ -368,9 +339,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
         self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
         self._episodic_memory_link_service = episodic_memory_link_service
-        self._episodic_recall_buffer_store = episodic_recall_buffer_store
-        self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
-        self._episodic_turn_index_provider = episodic_turn_index_provider
         # #526 段階 2: 慣化 sidecar (任意)。default off。retrieve service 側
         # にも別途注入されており、prompt_builder 側は record_recall (書込)
         # のためにだけ参照する (retrieve は read-only)。
@@ -857,13 +825,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             situation_cues=situation_cues,
             candidates=candidates,
         )
-
-    def _append_recall_observation(
-        self,
-        being_id: Optional["BeingId"],
-        observation: "EpisodicRecallObservation",
-    ) -> None:
-        append_recall_observation(self, being_id, observation)
 
     def _fetch_uncompleted_memos(self, being_id: BeingId) -> list[MemoEntry]:
         """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
