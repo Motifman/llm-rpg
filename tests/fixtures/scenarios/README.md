@@ -9,6 +9,6 @@
 `darkened_station.json` は `station_drill.json` の派生元として、削除した場所や対象を
 文章が案内していないことを比較検査するために保持している。
 
-`control_panel_toggle.json` は、`relay_puzzle_demo.json` (#1631 で退役させる) から試験に要る
+`control_panel_toggle.json` は、`relay_puzzle_demo.json` (#1631 で退役させた) から試験に要る
 部分だけを切り出した世界。制御室の操作盤の入/切 (互いの状態を前提条件にする組) を、効果・観測・場所の
 前提条件・失敗の文面の試験が受け皿に使う。
