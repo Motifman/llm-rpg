@@ -43,6 +43,9 @@ class TestEveryConditionTypeIsClassified:
 
         assert not undeclared, f"扱いが宣言されていない条件: {undeclared}"
 
+        assert all(c in CONDITION_VISIBILITY for c in InteractionConditionTypeEnum)
+        assert set(CONDITION_VISIBILITY.values()) <= set(ConditionVisibility)
+
     def test_the_map_does_not_name_conditions_that_vanished(self) -> None:
         """消えた条件が表に残らない。
 
@@ -54,18 +57,20 @@ class TestEveryConditionTypeIsClassified:
         assert not stale, f"実在しない条件が表に残っています: {stale}"
 
 
-class TestRoleConditionsAreHidden:
-    """誰が何者かに依存する条件は隠す。"""
+class TestPrivateConditionsAreHidden:
+    """伏せられた役割と対象者の所持品に依存する条件は隠す。"""
 
     @pytest.mark.parametrize(
         "condition_type",
         [
             InteractionConditionTypeEnum.PLAYER_STATE_IS,
             InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS,
+            InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+            InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM,
         ],
     )
-    def test_free_state_conditions_are_hidden(self, condition_type) -> None:
-        """自由 state による条件は隠す側。
+    def test_private_conditions_are_hidden(self, condition_type) -> None:
+        """役割の自由状態と対象者の所持品による条件は隠す側。
 
         役割 (role=keeper) のような伏せた属性がここに入る。
         """
@@ -108,11 +113,3 @@ class TestUnknownDefaultsToHiding:
             pass
 
         assert is_hidden(_Unknown()) is True
-
-    def test_the_default_is_not_reachable_in_practice(self) -> None:
-        """とはいえ、実在する条件はすべて宣言済み。
-
-        既定に頼るのは書き忘れたときだけ、という状態を保つ。
-        """
-        assert all(c in CONDITION_VISIBILITY for c in InteractionConditionTypeEnum)
-        assert set(CONDITION_VISIBILITY.values()) <= set(ConditionVisibility)
