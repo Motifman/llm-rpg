@@ -60,22 +60,11 @@ def test_prompt_builder_uses_shared_active_memos_formatter() -> None:
 
 
 def test_world_runtime_holds_formatter_instances_as_class_vars() -> None:
-    """world_runtime runtime が formatter を class-level に、context_strategy を
-    env 注入式の instance field として保持している。
-
-    旧: 両方 ClassVar (= 毎回 new を避ける HIGH-3 改善)。
-    PR #445: ``_context_strategy`` だけ instance field に格上げした。
-    ClassVar の hard-coded default で PROMPT_SECTION_ORDER env を黙って無視する
-    silent failure が見つかったため (3 つ目の config-init split)。
-    formatter (stateless) は ClassVar のまま維持。
-    """
+    """world_runtime runtime が formatter を class-level に、context_strategy を instance field として保持している。"""
     world_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py")
     # formatter は引き続き ClassVar (stateless / env 依存無し)
     assert "_recent_events_formatter: ClassVar" in world_runtime
-    # _context_strategy は instance field に格上げ + cfg 由来 factory で注入
     assert "_context_strategy: SectionBasedContextFormatStrategy = field" in world_runtime
-    # PR #451 (PR 6/6): _from_env → _from_config に rename
-    assert "_build_context_format_strategy_from_config" in world_runtime
 
 
 def test_world_runtime_build_full_prompt_uses_default_prompt_builder() -> None:

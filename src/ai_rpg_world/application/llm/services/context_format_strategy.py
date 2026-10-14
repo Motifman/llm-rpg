@@ -1,41 +1,19 @@
 """コンテキストフォーマット戦略 (world_runtime format に統一)。"""
 
-import logging
-from collections.abc import Mapping
-
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
 from ai_rpg_world.being.application.episode_index_text import EPISODE_INDEX_HEADING
-
-# 順序ポリシー識別子。実験で A/B 比較できるよう constructor で切替可能。
-# 詳細根拠は docs/memory_system/short_term_memory_design.md §5。
-SECTION_ORDER_STABLE_TO_VOLATILE = "stable_to_volatile"
-SECTION_ORDER_LEGACY = "legacy"
-
-_VALID_SECTION_ORDERS = frozenset({
-    SECTION_ORDER_STABLE_TO_VOLATILE,
-    SECTION_ORDER_LEGACY,
-})
-
-# 実験スクリプトから A/B 切替するための env var 名。
-# 既存の他の knob (EPISODIC_PROMOTION_FORCE_FULL_SCAN, SUBJECTIVE_EPISODE_DB_PATH
-# 等) と同じ env-var パターンに揃える。
-ENV_PROMPT_SECTION_ORDER = "PROMPT_SECTION_ORDER"
-
-
-_logger = logging.getLogger(__name__)
 
 
 class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     """``【...】`` 見出し形式でコンテキストを組み立てる戦略。
 
     Issue #356 後続 (Phase 0): prefix cache 効率と Lost-in-the-middle 緩和を
-    目的に section の並び順を見直した。default は ``stable_to_volatile`` で、
-    更新頻度の低い section を上に、毎ターン変動する section を末尾近くに
-    置く。A/B 検証のため ``legacy`` 順序も残してある。
+    目的に section の並び順を見直した。更新頻度の低い section を上に、毎ターン
+    変動する section を末尾近くに置く。
 
     詳細根拠は ``docs/memory_system/short_term_memory_design.md`` §5。
 
-    ## stable_to_volatile (default, Phase 0 以降)
+    ## 並び
 
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
     1b. **【知っている人】** — known_people_text (Being が知っている人。新しい人を知ったときだけ変わる)
@@ -55,30 +33,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         Liu et al. 2023) が末尾に強く向き、「今ここ」情報の重みが上がる。
       - 「関連する記憶」も末尾近くに置くと recall 内容への attention が高まり、
         副産物として hallucination 抑制効果が見込める。
-
-    ## legacy (旧順序、A/B 用)
-
-    1. **【現在の目的】**
-    2. **【現在地と周囲】**
-    3. **【進行中のメモ】**
-    4. **【直近の出来事】**
-    5. **【関連する記憶】**
-    Issue #227 chore β で導入された順序。「現在地」を上部に置いていたため
-    prefix cache が user content 序盤で切れる課題があった。
     """
-
-    def __init__(self, section_order: str = SECTION_ORDER_STABLE_TO_VOLATILE) -> None:
-        if section_order not in _VALID_SECTION_ORDERS:
-            raise ValueError(
-                f"section_order must be one of {sorted(_VALID_SECTION_ORDERS)}; "
-                f"got {section_order!r}"
-            )
-        self._section_order = section_order
-
-    @property
-    def section_order(self) -> str:
-        """現在の section 順序ポリシー識別子。"""
-        return self._section_order
 
     def format(
         self,
@@ -112,21 +67,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             if not isinstance(value, str):
                 raise TypeError(f"{name} must be str")
 
-        if self._section_order == SECTION_ORDER_LEGACY:
-            return _format_legacy(
-                current_state_text=current_state_text,
-                recent_events_text=recent_events_text,
-                relevant_memories_text=relevant_memories_text,
-                active_memos_text=active_memos_text,
-                objective_text=objective_text,
-                inventory_text=inventory_text,
-                learned_text=learned_text,
-                mid_summary_text=mid_summary_text,
-                long_summary_text=long_summary_text,
-                known_people_text=known_people_text,
-                episode_index_text=episode_index_text,
-                being_memo_text=being_memo_text,
-            )
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
@@ -141,59 +81,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             episode_index_text=episode_index_text,
             being_memo_text=being_memo_text,
         )
-
-
-# ──────────────────────────────────────────────────────────────────
-# env var 由来の factory。実験スクリプトから A/B 切替する用途。
-# ──────────────────────────────────────────────────────────────────
-
-
-def resolve_section_order_from_env(
-    env: Mapping[str, str] | None = None,
-) -> str:
-    """``PROMPT_SECTION_ORDER`` 設定値から section 順序を解決する。
-
-    実験スクリプト経由で A/B 検証する用途。``env`` を渡せばその dict を見る。
-    ``env=None`` は古い呼び出し経路の取りこぼしとして失敗させる。
-
-    - 値が未設定・空文字なら default の ``stable_to_volatile`` を返す
-    - 値が未知の文字列なら ``ValueError`` (silent fallback 防止 / PR #433 経緯)
-
-    Raises:
-        ValueError: 未知の文字列のとき
-    """
-    if env is None:
-        raise TypeError(
-            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
-        )
-    source = env
-    raw = (source.get(ENV_PROMPT_SECTION_ORDER) or "").strip()
-    if not raw:
-        return SECTION_ORDER_STABLE_TO_VOLATILE
-    if raw not in _VALID_SECTION_ORDERS:
-        raise ValueError(
-            f"{ENV_PROMPT_SECTION_ORDER}={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_SECTION_ORDERS)}"
-        )
-    return raw
-
-
-def build_section_format_strategy_from_env(
-    env: Mapping[str, str] | None = None,
-) -> SectionBasedContextFormatStrategy:
-    """``PROMPT_SECTION_ORDER`` env var を見て strategy を構築するファクトリ。
-
-    wiring から呼ぶ。env 未設定なら default の stable_to_volatile で動く。
-    """
-    order = resolve_section_order_from_env(env=env)
-    _logger.info("SectionBasedContextFormatStrategy section_order=%s", order)
-    return SectionBasedContextFormatStrategy(section_order=order)
-
-
-# ──────────────────────────────────────────────────────────────────
-# 順序ごとの実装。順序ポリシーは差し替え可能だが、各 section の
-# 文言・空時の placeholder・前置きは共通なのでヘルパに切り出す。
-# ──────────────────────────────────────────────────────────────────
 
 
 _PLACEHOLDER_CURRENT_STATE = "（情報なし）"
@@ -432,42 +319,4 @@ def _format_stable_to_volatile(
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
     ])
-    return "\n".join(sections)
-
-
-def _format_legacy(
-    *,
-    current_state_text: str,
-    recent_events_text: str,
-    relevant_memories_text: str,
-    active_memos_text: str,
-    objective_text: str,
-    inventory_text: str,
-    learned_text: str,
-    mid_summary_text: str,
-    long_summary_text: str,
-    known_people_text: str = "",
-    episode_index_text: str = "",
-    being_memo_text: str = "",
-) -> str:
-    """Issue #227 chore β 時代の旧順序。A/B 検証用に保持。
-
-    順序: objective → long_summary (Phase 3) → learned (Phase 1c) →
-    mid_summary (Phase 2) → current_state → memos → recent_events →
-    memories。所持品は current_state に一本化する。
-    """
-    sections: list[str] = []
-
-    _emit_objective(sections, objective_text)
-    _emit_known_people(sections, known_people_text)
-    _emit_long_summary(sections, long_summary_text)
-    _emit_learned(sections, learned_text)
-    _emit_mid_summary(sections, mid_summary_text)
-    _emit_current_state(sections, current_state_text)
-    _emit_active_memos(sections, active_memos_text)
-    _emit_being_memo(sections, being_memo_text)
-    _emit_recent_events(sections, recent_events_text)
-    _emit_relevant_memories(sections, relevant_memories_text)
-    _emit_episode_index(sections, episode_index_text)
-
     return "\n".join(sections)

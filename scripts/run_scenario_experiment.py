@@ -1814,11 +1814,6 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     print(
-        f"[run] section_order={cfg.prompt_section_order} "
-        "(runtime_config.PROMPT_SECTION_ORDER)",
-        flush=True,
-    )
-    print(
         f"[run] episodic_explore_related={'on' if cfg.episodic_explore_related_enabled else 'off'} "
         "(runtime_config.EPISODIC_EXPLORE_RELATED_ENABLED)",
         flush=True,

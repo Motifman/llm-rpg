@@ -18,7 +18,7 @@ LLM 出力自体は非決定論的なので「同じ run を 2 回回せば同�
 
 prompt ordering / cache 議論との関係:
 - snapshot は **memory store の中身だけ** を保存する
-- ``PROMPT_SECTION_ORDER`` / ``SHORT_TERM_MEMORY_KIND`` / ``LLM_MODEL`` 等の
+- ``SHORT_TERM_MEMORY_KIND`` / ``LLM_MODEL`` 等の
   env-var は snapshot に含まれない (= 別レイヤーの設定)
 - したがって snapshot の決定性は prompt config と直交する。test も
   memory store 内容に focus する

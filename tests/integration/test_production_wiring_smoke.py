@@ -61,7 +61,6 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in (
         "SHORT_TERM_MEMORY_KIND",
         "SHORT_TERM_MEMORY_SCHEDULER_MODE",
-        "PROMPT_SECTION_ORDER",
         "LLM_CLIENT",
         "LLM_MODEL",
         "LLM_REQUEST_TIMEOUT_SECONDS",
@@ -264,40 +263,6 @@ class TestLiteLLMClientTimeout:
         )
         assert isinstance(client, LiteLLMClient)
         assert client._timeout_seconds == 45.0
-
-
-# ──────────────────────────────────────────────────────────────────
-# Section order: env <-> 実体一致
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestSectionOrderConfigVsRuntime:
-    """prompt_section_order 設定と prompt builder の strategy が一致する。"""
-
-    def test_config_unspecified_stable_volatile_default(self) -> None:
-        """設定未指定なら stable to volatile default。"""
-        from ai_rpg_world.application.llm.services.context_format_strategy import (
-            SECTION_ORDER_STABLE_TO_VOLATILE,
-        )
-
-        runtime = _build_runtime()
-        # context_strategy field が存在する想定。なければ test を更新
-        strategy = getattr(runtime, "_context_strategy", None)
-        assert strategy is not None
-        assert strategy.section_order == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_legacy_strategy(self) -> None:
-        """legacy 明示で legacy strategy。"""
-        from ai_rpg_world.application.llm.services.context_format_strategy import (
-            SECTION_ORDER_LEGACY,
-        )
-
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(prompt_section_order="legacy")
-        )
-        strategy = getattr(runtime, "_context_strategy", None)
-        assert strategy is not None
-        assert strategy.section_order == SECTION_ORDER_LEGACY
 
 
 # ──────────────────────────────────────────────────────────────────
