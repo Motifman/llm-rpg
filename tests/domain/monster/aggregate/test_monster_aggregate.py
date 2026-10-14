@@ -137,11 +137,13 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
 
     class TestCreate:
         def test_create_success(self, monster: MonsterAggregate, monster_template: MonsterTemplate):
-            # Then
+            """未出現の識別・時刻・初回座標と作成通知を公開する。"""
             assert monster.monster_id.value == 1
             assert monster.template == monster_template
             assert monster.status == MonsterStatusEnum.DEAD
             assert monster.coordinate is None
+            assert monster.get_respawn_coordinate() is None
+            assert monster.spawned_at_tick is None
 
             events = monster.get_events()
             assert len(events) == 1
@@ -154,16 +156,26 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert hasattr(event, "occurred_at")
 
     class TestSpawn:
-        def test_spawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
-            coordinate = Coordinate(10, 20, 0)
-            current_tick = WorldTick(0)
+        @pytest.mark.parametrize(
+            "coordinate, current_tick, expected_coordinate",
+            [
+                (Coordinate(10, 20, 0), WorldTick(0), {"x": 10, "y": 20, "z": 0}),
+                (Coordinate(0, 0, 0), WorldTick(42), {"x": 0, "y": 0, "z": 0}),
+            ],
+            ids=["initial_position", "nonzero_spawn_tick"],
+        )
+        def test_spawn_success(
+            self, monster: MonsterAggregate, spot_id: SpotId,
+            coordinate, current_tick, expected_coordinate,
+        ):
+            """出現位置・時刻・満HP/MPを保存し、同じ地点と座標を通知する。"""
 
             # When
             monster.spawn(coordinate, spot_id, current_tick)
 
             # Then
             assert monster.coordinate == coordinate
+            assert monster.get_respawn_coordinate() == coordinate
             assert monster.spot_id == spot_id
             assert monster.status == MonsterStatusEnum.ALIVE
             assert monster.spawned_at_tick == current_tick
@@ -173,7 +185,7 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             events = monster.get_events()
             assert any(isinstance(e, MonsterSpawnedEvent) for e in events)
             spawn_event = next(e for e in events if isinstance(e, MonsterSpawnedEvent))
-            assert spawn_event.coordinate == {"x": 10, "y": 20, "z": 0}
+            assert spawn_event.coordinate == expected_coordinate
             assert spawn_event.spot_id == spot_id
 
         def test_spawn_already_spawned_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
@@ -197,26 +209,16 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert monster.pack_id is None
             assert monster.is_pack_leader is False
 
-        def test_get_respawn_coordinate_before_spawn_returns_none(self, monster: MonsterAggregate):
-            """スポーン前に get_respawn_coordinate は None を返すこと"""
-            assert monster.get_respawn_coordinate() is None
-
-        def test_get_respawn_coordinate_after_spawn_returns_initial_position(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
-            """スポーン後に get_respawn_coordinate は初期スポーン座標を返すこと"""
-            coordinate = Coordinate(10, 20, 0)
-            monster.spawn(coordinate, spot_id, WorldTick(0))
-            assert monster.get_respawn_coordinate() == coordinate
-
         def test_get_respawn_coordinate_after_respawn_unchanged(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
-            """リスポーン後も get_respawn_coordinate は最初のスポーン座標のままであること"""
+            """復活で出現時刻を更新し、復活先が違っても初回出現座標を保持する。"""
             initial = Coordinate(0, 0, 0)
             monster.spawn(initial, spot_id, WorldTick(0))
+            assert monster.spawned_at_tick == WorldTick(0)
             monster.apply_damage(100, WorldTick(100))
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
+            assert monster.spawned_at_tick == WorldTick(200)
             assert monster.get_respawn_coordinate() == initial
 
         def test_respawn_preserves_pack_id_and_leader(self, monster: MonsterAggregate, spot_id: SpotId):
@@ -227,14 +229,6 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.pack_id == pack_id
             assert monster.is_pack_leader is False
-
-        def test_respawn_sets_spawned_at_tick(self, monster: MonsterAggregate, spot_id: SpotId):
-            """リスポーン時に spawned_at_tick が current_tick で更新されること"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            assert monster.spawned_at_tick == WorldTick(0)
-            monster.apply_damage(100, WorldTick(100))
-            monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
-            assert monster.spawned_at_tick == WorldTick(200)
 
     class TestPursuitAlignment:
         def test_apply_behavior_transition_spot_target_starts_aligned_pursuit(
@@ -1125,8 +1119,16 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
     class TestDieFromOldAge:
         """die_from_old_age のテスト"""
 
-        def test_die_from_old_age_success(self, monster_template: MonsterTemplate, spot_id: SpotId):
-            """経過ティックが max_age_ticks 以上で NATURAL 死亡し True を返す"""
+        @pytest.mark.parametrize(
+            "spawn_tick, before_tick, death_tick",
+            [(WorldTick(0), None, WorldTick(50)), (WorldTick(37), WorldTick(86), WorldTick(87))],
+            ids=["original_zero_origin", "nonzero_origin_boundary"],
+        )
+        def test_die_from_old_age_success(
+            self, monster_template: MonsterTemplate, spot_id: SpotId,
+            spawn_tick, before_tick, death_tick,
+        ):
+            """出現から寿命50が経過する直前は生存し、丁度でNATURAL死亡する。"""
             template_with_age = MonsterTemplate(
                 template_id=monster_template.template_id,
                 name=monster_template.name,
@@ -1147,10 +1149,14 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 WorldObjectId.create(1001),
                 skill_loadout=loadout,
             )
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id, spawn_tick)
             monster.clear_events()
 
-            result = monster.die_from_old_age(WorldTick(50))
+            if before_tick is not None:
+                assert monster.die_from_old_age(before_tick) is False
+                assert monster.status == MonsterStatusEnum.ALIVE
+
+            result = monster.die_from_old_age(death_tick)
 
             assert result is True
             assert monster.status == MonsterStatusEnum.DEAD
@@ -1506,21 +1512,6 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             )
             assert effective_stats.attack == 15  # 20 * 1.5 * 0.5
 
-    class TestSpawnedAtTick:
-        """spawned_at_tick のテスト"""
-
-        def test_spawned_at_tick_before_spawn_is_none(self, monster: MonsterAggregate):
-            """スポーン前は spawned_at_tick が None であること"""
-            assert monster.spawned_at_tick is None
-
-        def test_spawned_at_tick_after_spawn_equals_current_tick(
-            self, monster: MonsterAggregate, spot_id: SpotId
-        ):
-            """スポーン時に渡した current_tick が spawned_at_tick にセットされること"""
-            tick = WorldTick(42)
-            monster.spawn(Coordinate(0, 0, 0), spot_id, tick)
-            assert monster.spawned_at_tick == tick
-
     class TestGrowthStages:
         """成長段階（get_current_growth_multiplier / get_base_stats_with_growth + compute_effective_stats）のテスト"""
 
@@ -1590,13 +1581,15 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
         def test_get_base_stats_with_growth_applies_growth_multiplier_juvenile(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
         ):
-            """幼体時は get_base_stats_with_growth の攻撃・防御・速度に 0.8 が掛かること"""
+            """幼体の攻撃・防御・速度・最大HP/MPへ乗率0.8を適用する。"""
             monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             stats = monster_with_growth.get_base_stats_with_growth(WorldTick(50))
             # base: attack=20, defense=15, speed=10
             assert stats.attack == 16  # 20 * 0.8
             assert stats.defense == 12  # 15 * 0.8
             assert stats.speed == 8  # 10 * 0.8
+            assert stats.max_hp == 80
+            assert stats.max_mp == 40
 
         def test_get_base_stats_with_growth_applies_growth_multiplier_adult(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
@@ -1625,16 +1618,6 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             stats = monster.get_base_stats_with_growth(WorldTick(1000))
             assert stats.attack == monster.template.base_stats.attack
             assert stats.defense == monster.template.base_stats.defense
-
-        def test_get_base_stats_with_growth_applies_growth_to_max_hp_mp(
-            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
-        ):
-            """成長段階の乗率が max_hp, max_mp にも適用されること"""
-            monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            stats = monster_with_growth.get_base_stats_with_growth(WorldTick(50))
-            # base max_hp=100, max_mp=50、幼体 0.8 → 80, 40
-            assert stats.max_hp == 80
-            assert stats.max_mp == 40
 
         def test_spawn_initializes_hp_mp_with_effective_stats_juvenile(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
