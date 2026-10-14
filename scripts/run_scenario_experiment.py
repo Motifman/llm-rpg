@@ -7,23 +7,20 @@
     - HTML 自動生成: 実行後に trace.html / viewer.html / episodic.html / timeline.html を出力
     - 汎用レポート: WIN/LOSE/tick/action 数/memo 数の最小集計を Markdown で
 
-scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など) は
-``scripts/issue154_full_tables_experiment.py`` に残し、本スクリプトとは独立。
-
 使い方::
 
     python scripts/run_scenario_experiment.py \\
-        --scenario data/scenarios/relay_puzzle_demo.json \\
+        --scenario data/scenarios/forbidden_library_demo.json \\
         --max-world-ticks 30 \\
-        --out var/runs/relay-foo
+        --out var/runs/library-foo
 
     # 出力:
-    #   var/runs/relay-foo/trace.jsonl
-    #   var/runs/relay-foo/report.md
-    #   var/runs/relay-foo/trace.html
-    #   var/runs/relay-foo/viewer.html
-    #   var/runs/relay-foo/episodic.html
-    #   var/runs/relay-foo/timeline.html
+    #   var/runs/library-foo/trace.jsonl
+    #   var/runs/library-foo/report.md
+    #   var/runs/library-foo/trace.html
+    #   var/runs/library-foo/viewer.html
+    #   var/runs/library-foo/episodic.html
+    #   var/runs/library-foo/timeline.html
 """
 
 from __future__ import annotations
@@ -637,7 +634,7 @@ def _drive_scenario(
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
     GameRuntimeManager を内部で使う。:class:`WorldRuntime` 経由なので
-    既存の world_runtime / relay_puzzle 路線と互換。
+    既存の world_runtime 路線と互換。
 
     Args:
         max_world_ticks: ループ終了条件 (#404 P1)。``runtime.current_tick()`` が
@@ -1619,7 +1616,7 @@ def main(argv: list[str] | None = None) -> int:
         "--scenario",
         type=Path,
         default=None,
-        help="Path to scenario JSON (e.g. data/scenarios/relay_puzzle_demo.json)",
+        help="Path to scenario JSON (e.g. data/scenarios/forbidden_library_demo.json)",
     )
     parser.add_argument(
         "--profile",

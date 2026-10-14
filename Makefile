@@ -1,13 +1,8 @@
 .PHONY: test test-cov test-html lint lint-fix typecheck clean install dev-install help \
-	experiment-relay experiment-relay-r1 experiment-relay-cloud \
 	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
 	check-no-internal-hostnames build-trace-viewer fuzz-scenario
 
-# relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
 PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
-ISSUE154_MAX_TICKS ?= 30
-EXPERIMENT_OUTPUT ?= var/experiment_relay_report.md
-CLOUD_LLM_MODEL ?= openai/gpt-5-mini
 
 # デフォルトターゲット
 help:
@@ -21,9 +16,6 @@ help:
 	@echo "  make test-cov     - カバレッジ付きでテストを実行"
 	@echo "  make test-html    - HTMLカバレッジレポートを生成"
 	@echo "  make clean        - 一時ファイルを削除"
-	@echo "  make experiment-relay         - relay_puzzle R1（クラウド既定）"
-	@echo "  make experiment-relay-r1      - R1 のみ"
-	@echo "  make experiment-relay-cloud   - experiment-relay と等価 (名前で参照されているため残す)"
 	@echo "  make experiment [EXPERIMENT_PROFILE=memory_jev_mine_v1_v41_thinking_capped_being_memory] [OUT=...]"
 	@echo "                                - profile に固定した汎用シナリオ実験"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
@@ -76,32 +68,6 @@ clean:
 	rm -rf .coverage
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
-
-# relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
-#
-# 以前はローカル vLLM を既定にしていたが、vLLM 運用をやめたのでクラウドを
-# 既定にした。別のエンドポイントで走らせたい場合は OPENAI_API_BASE と
-# LLM_MODEL をシェルから渡す。
-#
-# experiment-relay-cloud は既定が変わって等価になったが、docs や履歴から
-# 名前で参照されているので残す。
-experiment-relay:
-	@mkdir -p var
-	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
-	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
-	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
-
-experiment-relay-r1:
-	@mkdir -p var
-	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
-	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
-	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
-
-experiment-relay-cloud:
-	@mkdir -p var
-	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
-	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
-	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
 # 汎用シナリオ実験 (Issue #188 Phase 1d) — 任意 scenario JSON で実行し
 # trace.jsonl + report.md + trace.html を出力する。

@@ -1,7 +1,8 @@
 # relay_puzzle 実験 — 実行履歴と再現条件
 
 Issue [#188](https://github.com/Motifman/llm-rpg/issues/188) の LLM 実走記録。
-**再現手順の正本**は [running_scenarios.md](../running_scenarios.md)。
+
+> relay_puzzle の実験 (シナリオ本体、`make experiment-relay*`、relay 用の scripts) は #1631 で退役させた。ここに書いた手順はもう動かない。本書は実験の記録として残す。
 
 ---
 
