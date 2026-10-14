@@ -7,7 +7,7 @@ R21/F18/C0/D0。宣言を削除せず、元139確認式・入力・固有例外�
 
 この変更は [状態効果の保持修理 #1722](https://github.com/Motifman/llm-rpg/pull/1722) に依存する。
 固定基準は `7aaa8bbc7a5628de63fb95c4807b2fada58009d4`、
-基準ブランチは `codex/test-audit-player-effects-20261014`。
+基準ブランチは `codex/test-audit-player-active-effects-20261014`。
 この基準に含まれる先行修理を再計上しない。
 
 対象ファイルの元68宣言は、今回39、既監査の注意3＋状態効果3、未監査23に分かれる。
