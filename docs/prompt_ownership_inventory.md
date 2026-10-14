@@ -20,7 +20,7 @@
    - `safe_world_intro_text` (`llm/services/world_llm_prompt.py:50`) が `metadata.llm_public_intro` を返す (4877 行)
    - `build_world_briefing` (`llm/services/world_briefing.py:438`) が見取り図・陣営の内訳・点検の割り当て・会議の決まりを組み、概要の後ろにつなぐ (4888 行)
    - player ごとのループ (4948〜4997 行) で、ペルソナ (`spawn.persona_prompt` があればそれ) と `scenario.role_personas[役職]` をつなぎ、自分以外の名前の一覧 (`mutually_known_roles` の役職なら「(あなたと同じ側)」を付ける) を作る
-   - `build_world_system_prompt` (`llm/services/world_llm_prompt.py:235`) が、これらと profile の値 (`escape_llm_ssot_enabled`) から本文を組む
+   - `build_world_system_prompt` (`llm/services/world_llm_prompt.py:235`) が、これらから本文を組む (profile の値 `escape_llm_ssot_enabled` で SSoT を足す分岐は #1631 で消した)
 2. できた文字列は `_world_llm_system_prompts_by_player_id` に入れ、run 中は変えない
 3. 毎ターン、`DefaultPromptBuilder.build` が `WorldSystemPromptBuilder.build` (`world_runtime/default_prompt_builder_adapters.py:103`) を呼び、名前から player を引いて `WorldRuntime.build_system_prompt` (1196 行) で保持済みの文字列を返す
 
@@ -61,7 +61,7 @@ reason_first の起動判定 (`resolve_reason_first_gate`) が通ったターン
 ```
 system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前提】S4 タイトルと概要 → S5 見取り図など → S6 行動の制限
         → S7【同じ局面にいる者】 → S8【渡される文面の内訳】 → S9【行動ルール】 → S10【独白と一言の書き方】
-        → S11【文脈と履歴の限界】 → S12 SSoT
+        → S11【文脈と履歴の限界】 (S12 SSoT は #1631 で消した)
 user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
         → U10【関連する学び】 → U11【関連する記憶】 → U12 見出し
         → U13【進行中のメモ】 → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
@@ -90,7 +90,7 @@ tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run で�
 | S9 【行動ルール】 | 「- 1 回の応答で選べる tool は 1 つだけである。」「- ラベル（接続先・オブジェクト・相手プレイヤー等）は…『現在地と周囲』等に表示されたものだけを使う。」「- **このシナリオの勝利条件 (最終目的) は…【現在の目的】section に記される**。」 | 本文 (`world_llm_prompt.py:338`)。profile で変わる行は勝利条件の行 (282 行) | 固定文。勝敗条件の有無 | 混ざっている (1 手の決まり・捏造しない・記憶の扱いは Being、ラベルと物の操作の読み方と勝利条件の枠付けは環境) | 無 |
 | S10 【独白と一言の書き方】 | 「- `inner_thought` を持つツールでは…あなた自身の頭の中の独白を…」「- `say_inline` を持つツールでは…同じ場所と隣の場所へ届く。」 | 本文 (`world_llm_prompt.py:351`) | 固定文 | 混ざっている (`inner_thought` の書き方は Being、`say_inline` の届く範囲は環境) | 無 |
 | S11 【文脈と履歴の限界】 | 「- 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る…」 | 本文 (`world_llm_prompt.py:355`) | 固定文 | 組み立ての決まり | 無 |
-| S12 SSoT | (この run では無し) 「【String Seed of Thought（SSoT）— 本ターンのツール選択】」 | `_ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK` (`world_llm_prompt.py:151`) | profile の `escape_llm_ssot_enabled` | 組み立ての決まり | 無 |
+| S12 SSoT | (#1631 で消した) | - | - | - | - |
 
 S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`create_world_runtime` が `tool_schema_mode` を渡していないので、run では使われない (確認)。
 

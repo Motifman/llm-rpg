@@ -148,18 +148,6 @@ def build_persona_block_from_character(
     return builder.build(persona)
 
 
-# 論文由来の String Seed of Thought（mod でツールインデックスを決める）。
-# n は「当該リクエストの function calling で渡される全ツール名を辞書順に並べたときの件数」とする。
-_ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK = """
-【String Seed of Thought（SSoT）— 本ターンのツール選択】
-- ステップ1: 推論の冒頭で、英数字を混ぜたランダム文字列を十分な長さ（最低24文字）で生成する（説明に書いてもよい）。
-- ステップ2: その文字列から整数を得る（例: 各文字の Unicode コードポイントの合計）。
-- ステップ3: このリクエストで function calling として渡されている**全ツール（関数）の名前**を、辞書順（昇順）で並べ、先頭から 0,1,…,n-1 とインデックスを振る（n はその個数）。
-- ステップ4: ステップ2の整数を n で割った余りを r とし、インデックス r に対応する名前のツールを、必ず1回だけ呼び出す。他のツールは選ばない。
-- 外部の乱数APIや Python の random は使わない。上記手順のみで選ぶ。
-""".strip()
-
-
 def _fallback_persona_block(display_name: str) -> str:
     persona = AgentPersonaDto(
         character_id="anonymous",
@@ -272,7 +260,6 @@ def build_world_system_prompt(
     safe_intro: str,
     relevant_memories_shown: bool,
     active_recall_offered: bool,
-    enable_string_seed_of_thought: bool = False,
     tool_schema_mode: str = "legacy",
     has_goal: bool = True,
     limits_actions: bool = True,
@@ -296,10 +283,6 @@ def build_world_system_prompt(
         user 文面に【関連する記憶】の欄を出す設定か、能動想起のツールを出しているか。
         記憶の指示は、出ているものだけを指す (#1616)。既定値を置かないのは、渡し忘れが
         「両方ある」文へ黙って戻り、無い欄とツールをまた探させるため。
-
-    enable_string_seed_of_thought:
-        True のとき、ツール選択に String Seed of Thought（ランダム文字列の操作結果を n で割った余りで
-        辞書順ツール列のインデックスを決める）を追記する。n は当該リクエストで渡される全ツール数。
 
     episode_index_shown / episode_recall_offered:
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
@@ -393,6 +376,4 @@ def build_world_system_prompt(
 【文脈と履歴の限界】
 - 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る（全履歴の写しではない）。{history_limit_rule}{_episode_index_rule(shown=episode_index_shown, recall_offered=episode_recall_offered)}
 {_memo_rules(being_memo_enabled)}"""
-    if enable_string_seed_of_thought:
-        return body.rstrip() + "\n\n" + _ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK + "\n"
     return body

@@ -4796,7 +4796,6 @@ def create_world_runtime(
             safe_intro=safe_intro,
             relevant_memories_shown=relevant_memories_shown,
             active_recall_offered=active_recall_offered,
-            enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
             being_memo_enabled=config.being_memo_enabled,
             has_goal=_has_goal,
             limits_actions=scenario.metadata.limits_actions,

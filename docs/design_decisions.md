@@ -5479,6 +5479,8 @@ tick 単位の起動判定 (#219) に置き換えた。判断の付き方 (作�
 **どこで出てきたか**: Jev (#1319) の 3 つ目の用途。観察 profile は
 `station_drill_reply_gate`。
 
+観察 profile の `station_drill_reply_gate` と `station_drill_gemma_reply_gate` は、観察する仕組みが無くなったので #1693 で退役させた (#1631)。
+
 ## 218. 二人で合わせる操作の入口は interact に統合する
 
 **何を**: 同期グループ (`synchronized_action_groups`) の required action を
