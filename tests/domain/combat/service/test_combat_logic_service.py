@@ -39,16 +39,25 @@ class TestCombatLogicService:
             assert damage.is_evaded is False
             assert damage.is_critical is False
 
-        def test_calculate_damage_evaded(self, attacker_stats: BaseStats):
-            evasive_defender = BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=20,
-                defense=30,
-                speed=10,
-                critical_rate=0.0,
-                evasion_rate=1.0,
-            )
+        @pytest.mark.parametrize(
+            ("attacker_values", "defender_values"),
+            [
+                pytest.param(
+                    (100, 50, 50, 20, 10, 0.0, 0.0),
+                    (100, 50, 20, 30, 10, 0.0, 1.0),
+                    id="original-calculation",
+                ),
+                pytest.param(
+                    (100, 50, 40, 10, 10, 0.0, 0.0),
+                    (100, 50, 20, 15, 10, 0.05, 1.0),
+                    id="transferred-player-evasion",
+                ),
+            ],
+        )
+        def test_calculate_damage_evaded(self, attacker_values, defender_values):
+            """回避率1の防御側には、回避あり・損傷0の結果を返す。"""
+            attacker_stats = BaseStats(*attacker_values)
+            evasive_defender = BaseStats(*defender_values)
             damage = CombatLogicService.calculate_damage(attacker_stats, evasive_defender)
             assert damage.is_evaded is True
             assert damage.value == 0

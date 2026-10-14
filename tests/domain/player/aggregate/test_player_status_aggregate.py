@@ -292,47 +292,13 @@ class TestPlayerStatusAggregate:
         assert aggregate.is_down == False
         assert len(aggregate.get_events()) == 0
 
-    def test_application_style_damage_flow_evaded(self):
-        """アプリケーション層経由で回避時にPlayerEvadedEventが発行されること"""
-        aggregate = create_test_status_aggregate(hp=80)
-        attacker_stats = create_test_base_stats(
-            attack=40,
-            defense=10,
-            critical_rate=0.0,
-            evasion_rate=0.0,
-        )
-        # テストの決定性を担保するため、防御側の回避率を100%にする
-        defender_stats = create_test_base_stats(
-            attack=aggregate.base_stats.attack,
-            defense=aggregate.base_stats.defense,
-            critical_rate=aggregate.base_stats.critical_rate,
-            evasion_rate=1.0,
-        )
-
-        damage = CombatLogicService.calculate_damage(
-            attacker_stats=attacker_stats,
-            defender_stats=defender_stats,
-        )
-        if damage.is_evaded:
-            aggregate.record_evasion()
-        else:
-            aggregate.apply_damage(damage.value)
-
-        assert aggregate.hp.value == 80
-        events = aggregate.get_events()
-        assert len(events) == 1
-        event = events[0]
-        assert isinstance(event, PlayerEvadedEvent)
-        assert event.aggregate_id == aggregate.player_id
-        assert event.aggregate_type == "PlayerStatusAggregate"
-        assert event.current_hp == 80
-
     def test_record_evasion_success(self):
         """回避記録時にイベントが発行されること"""
         aggregate = create_test_status_aggregate(hp=80, is_down=False)
 
         aggregate.record_evasion()
 
+        assert aggregate.hp.value == 80
         events = aggregate.get_events()
         assert len(events) == 1
         event = events[0]
