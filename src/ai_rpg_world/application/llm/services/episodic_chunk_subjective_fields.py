@@ -64,7 +64,7 @@ prediction_error は、ユーザメッセージに「## 確定して外れた予
 
 
 _MAX_SUBJECTIVE_FIELD_CHARS = 700
-# heading は 1 行見出し。読み手だった見出しの欄 (afterglow) は #1631 で消した。長すぎると視認性を損ね、
+# heading は 1 行見出し。長すぎると視認性を損ね、
 # prompt も嵩むため切り詰める。30 文字は「行動 + 印象的な 1 要素」を入れる
 # 余裕としてユーザとの議論で合意した上限。
 _MAX_HEADING_CHARS = 30

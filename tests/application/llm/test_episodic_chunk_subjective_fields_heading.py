@@ -1,7 +1,7 @@
 """EpisodicChunkSubjectiveFieldsService が heading フィールドを LLM に
 要求し、出力を episode に書き込み、欠落・失敗時にも壊れないことを保証する。
 
-heading は 1 行見出し。読み手だった見出しの欄 (afterglow) は #1631 で消した。新規 LLM コールを増やさず、
+heading は主観補完が書く 1 行見出し。新規 LLM コールを増やさず、
 既存の interpreted / recall_text と同じ pass でついでに書かせる方針のため、
 - system prompt が heading キーを要求していること
 - LLM 出力に heading があれば episode.heading に乗ること

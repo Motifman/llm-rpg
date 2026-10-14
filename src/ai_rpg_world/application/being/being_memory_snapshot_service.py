@@ -1,18 +1,17 @@
-"""BeingMemorySnapshotService — Being 単位で 9 memory store を JSON 1 本に save / restore する。
+"""BeingMemorySnapshotService — Being 単位で memory store を JSON 1 本に save / restore する。
 
 Phase 4 Step 4-2b (Issue #470): run 途中再開 (mid-run resume) を実現するため、
 Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JSON)
 の **中身を作る・読む application service** を提供する。
 
-PR-G で想起階層 (slot / afterglow / habituation) の store を足した。afterglow は
-#1631 で消した。新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
+新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
 近くの docstring を参照。
 
 責務:
 
-- ``capture(being_id) -> str``: 9 store の状態を読み出し、内部 schema v1 の
+- ``capture(being_id) -> str``: 各 store の状態を読み出し、内部 schema v1 の
   JSON 文字列にシリアライズ
-- ``restore(being_id, payload_json) -> None``: JSON 文字列を 9 store に
+- ``restore(being_id, payload_json) -> None``: JSON 文字列を 各 store に
   bulk overwrite で書き戻す。**best-effort: store ごとに順番に書き戻す
   (cross-store atomicity なし)**。各 store 内では Phase 4-2a の
   ``replace_all_*_by_being`` が single-transaction を保証する
@@ -42,7 +41,7 @@ PR-G で想起階層 (slot / afterglow / habituation) の store を足した。a
 各 store の ``replace_all_*_by_being`` は単一 transaction (sqlite) または
 原子的 dict 操作 (in-memory) で **store 内 atomicity を保証する**。一方
 本 service は **複数 store に跨る atomicity は保証しない** (= 設計判断、
-9 store は独立したリソースで 2-phase commit を導入するコストに見合わない)。
+各 store は独立したリソースで 2-phase commit を導入するコストに見合わない)。
 代わりに:
 
 1. 全 store を順序を決めて書き換える (失敗順序が予測可能)
@@ -188,7 +187,7 @@ def _validate_snapshot_payload_coverage(
 
 
 class BeingMemorySnapshotService:
-    """9 memory store の状態を Being 単位で JSON 1 本に save / restore する。
+    """memory store の状態を Being 単位で JSON 1 本に save / restore する。
 
     ステートレス: 全 store を constructor で受け取り、``capture`` / ``restore``
     のみが副作用を持つ。
@@ -255,7 +254,7 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "episodic_episode_store must be EpisodicEpisodeRepository"
             )
-        # PR-G: 想起階層 3 store は Protocol 一致を isinstance() で確認する
+        # PR-G: 想起階層の store は Protocol 一致を isinstance() で確認する
         # (runtime_checkable Protocol)。
         if not isinstance(recall_slot_store, IEpisodicRecallSlotStore):
             raise TypeError(
@@ -295,7 +294,7 @@ class BeingMemorySnapshotService:
         self._memory_turn_clock = memory_turn_clock
 
     def capture(self, being_id: BeingId) -> str:
-        """10 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
+        """各 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         payload: dict[str, Any] = {
@@ -366,7 +365,7 @@ class BeingMemorySnapshotService:
         return json.dumps(payload, ensure_ascii=False)
 
     def restore(self, being_id: BeingId, payload_json: str) -> None:
-        """payload JSON を 9 store に bulk overwrite で書き戻す。
+        """payload JSON を 各 store に bulk overwrite で書き戻す。
 
         **store ごとに順番に書き戻す best-effort 動作**。各 store 内では
         ``replace_all_*_by_being`` が single transaction で atomic だが、
