@@ -64,7 +64,7 @@ prediction_error は、ユーザメッセージに「## 確定して外れた予
 
 
 _MAX_SUBJECTIVE_FIELD_CHARS = 700
-# heading は afterglow index で並べる 1 行見出し。長すぎると視認性を損ね、
+# heading は 1 行見出し。読み手だった見出しの欄 (afterglow) は #1631 で消した。長すぎると視認性を損ね、
 # prompt も嵩むため切り詰める。30 文字は「行動 + 印象的な 1 要素」を入れる
 # 余裕としてユーザとの議論で合意した上限。
 _MAX_HEADING_CHARS = 30
@@ -289,7 +289,7 @@ class EpisodicChunkSubjectiveFieldsService:
             else:
                 interp_llm = _normalize_llm_str(raw_obj.get("interpreted"))
                 recall_llm = _normalize_llm_str(raw_obj.get("recall_text"))
-                # heading は afterglow index 用の 1 行見出し (#526 段階 3 後続)。
+                # heading は 1 行見出し (#526 段階 3 後続)。
                 # 失敗時 / 欠落時は None に倒し、SubjectiveEpisode に渡る前に
                 # 30 文字へ切り詰める (後続テストで保証)。
                 heading_llm = _normalize_heading(raw_obj.get("heading"))

@@ -814,6 +814,8 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 スロット、#588 が afterglow、Issue #526 段階 2 が慣化 store) すべてが本
 手順を踏んでいなかったことが判明したため、再発防止として本項を追加。
 
+**その後**: 見出しの欄 (afterglow) の store と、役に立った回数の store (`recall_success`) は、Issue #1631 の段 9 で snapshot のキー (`afterglow_entries` / `recall_success_hit_count` / `recall_success_received_event_ids`) ごと消した。手順の 1〜4 を逆にたどって外した。restore は足りないキーだけを拒むので、消す前の snapshot も読める。replay で世界の時計を巻き戻すときは、古い snapshot に残る `afterglow_entries` を読まずに捨てる (`world_clock_restart.py`)。
+
 ## 28. 実験に意味を持つ設定は profile/config だけから入れる
 
 **何を**: LLM 実験の挙動を変える設定は、`data/experiment_profiles/*.json`
@@ -2954,6 +2956,8 @@ episode で誕生日衝突が起きて想起が別の出来事を引き当てる
 - 新 id が接尾辞を持ち、旧 id と機械的に区別できることを確かめる
 - 版が handle の桁を食っていないこと (新旧混在で handle が一意に引ける) を確かめる
 - 材料を減らして衝突が増えていないことを、実 snapshot の全 episode で数える
+
+**その後**: handle を作っていた見出しの欄 (afterglow) は Issue #1631 の段 9 で消した。版を接尾辞で示す決まりはそのまま残し、handle の桁を確かめる試験は消した。
 
 ## 110. 招集の判断材料には集合後の経過だけを末尾で渡す
 
@@ -6542,6 +6546,8 @@ U9a / U9b) は外す (Issue #1443)。
 **その後**: 確定した予期を信念の材料・想起の手柄・区切りのメモに返す受け取る側は Issue #1631 で消した。古いエピソードの区切りの `prediction_error` は、外れを決める清算が無くなったので、いつも空になる。
 
 誤差駆動の再解釈 (`ERROR_DRIVEN_REINTERPRETATION_ENABLED`)、ずれを想起の記録に書き添える `stamp_prediction_outcome_for_episodes_by_being`、想起の記録の `prediction_outcome_error` と受け取り済みの出来事の ID も Issue #1631 で消した。Being の snapshot は `recall_buffer_received_event_ids` を書かなくなった。消す前の snapshot も読める。
+
+役に立った回数 (`RECALL_HIT_BOOST_ENABLED` と的中の store) は、書き手を消したあと常に 0 で効いていなかったので、Issue #1631 の段 9 で消した。
 
 ## D1484. 予期の根拠は形と同じ呼び出しで 1 件ずつ問い、確定した当否は根拠にだけ返す
 

@@ -48,9 +48,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
         IBeliefConsolidationCompletionPort,
     )
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        IAfterglowStore,
-    )
     from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
         BeliefConsolidationCoordinator,
     )
@@ -62,9 +59,6 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         IEpisodicRecallSlotStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-        IEpisodicRecallSuccessStore,
     )
     from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
         EpisodicSemanticClusterPromotionService,
@@ -93,7 +87,6 @@ from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields impo
     EpisodicChunkSubjectiveFieldsService,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    RECALL_HIT_BOOST_DEFAULT_CAP,
     EpisodicPassiveRecallRetrievalService,
 )
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
@@ -217,12 +210,6 @@ class EpisodicStack:
     recall_slot_store: IEpisodicRecallSlotStore | None = None
     recall_slot_cooldown_ticks: int = 5
     recall_slot_capacity: int = 4
-    # #526 段階 3 PR-C: afterglow index sidecar (= ぼんやり覚えてる 1 行見出し)。
-    # default off。slot 退去や score 閾値で slot 入りできなかった弱い hit を
-    # heading 付きで保持し、prompt の見出し section に使う。
-    afterglow_store: IAfterglowStore | None = None
-    afterglow_capacity: int = 10
-    afterglow_max_residence: int = 10
     # U2 (証拠台帳統一設計 / default OFF): belief evidence buffer は呼び出し側
     # (world_runtime.py) が flag を見て構築する。stack はここに store の参照
     # だけ公開する (snapshot 用。実体は呼び出し側が保持)。
@@ -232,14 +219,6 @@ class EpisodicStack:
     # 唯一の書き込み経路として動く。未注入時は evidence buffer に証拠だけが
     # 溜まり続ける (= U2 までの挙動)。
     belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
-    # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default off): 的中側
-    # sidecar (default None = flag OFF 相当)。enable 時に in-memory store を
-    # 構築し、chunk_coordinator / passive_recall / prompt_builder (書込みは
-    # コーディネータ / scheduler 側なので prompt_builder への配線は不要) に
-    # 同一インスタンスを渡す。
-    recall_success_store: IEpisodicRecallSuccessStore | None = None
-    recall_hit_boost_strength: int = 0
-    recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP
 
 
 def build_scenario_noun_matcher(
@@ -340,10 +319,6 @@ def build_episodic_stack(
     recall_slot_max_residence: int = 8,
     recall_slot_cooldown_ticks: int = 5,
     recall_slot_insert_score_threshold: int = 2,
-    # #526 段階 3 PR-C: afterglow index 配線。env で enable。
-    afterglow_enabled: bool = False,
-    afterglow_capacity: int = 10,
-    afterglow_max_residence: int = 10,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -371,13 +346,6 @@ def build_episodic_stack(
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のとき固着の
     # prompt に CONFIRMATION 節を足す (BeliefConsolidationCoordinator に渡す)。
     belief_attribution_enabled: bool = False,
-    # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default False =
-    # flag OFF): True のとき的中側 sidecar store を構築し、passive_recall の
-    # multi_cue_score に的中の回数ぶんの boost を加算する。的中を数える書き手
-    # (record_hit) は #1631 で消したので、boost は常に 0 で安全に縮退する。
-    recall_hit_boost_enabled: bool = False,
-    recall_hit_boost_strength: int = 0,
-    recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP,
     # semantic promotion の走査幅。実験条件なので ResolvedLlmRuntimeConfig
     # から渡す。既定値はサービス側の従来値と同じ。
     episodic_promotion_force_full_scan: bool = False,
@@ -501,17 +469,6 @@ def build_episodic_stack(
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
 
-    # U9b (想起の信用割り当て・的中側 / default off): enable 時のみ的中側
-    # sidecar を構築する。habituation store と同じ「flag ON のときだけ
-    # 実体を作る」パターン。SQLite 永続経路は無い (慣化 sidecar と同型)。
-    recall_success_store: Any | None = None
-    if recall_hit_boost_enabled:
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
-        )
-
-        recall_success_store = InMemoryEpisodicRecallSuccessStore()
-
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
     # 渡すことで write/read 経路の cue 生成を対称化する。
@@ -566,26 +523,12 @@ def build_episodic_stack(
             cooldown_ticks=recall_slot_cooldown_ticks,
             insert_score_threshold=recall_slot_insert_score_threshold,
         )
-    # #526 段階 3 PR-C: afterglow index。slot off のときは afterglow も off に
-    # 倒す (= 上層の slot が居ないと「ぼんやり」の階層構造の意味が薄れる)。
-    afterglow_store: IAfterglowStore | None = None
-    if afterglow_enabled and recall_slot_enabled:
-        from ai_rpg_world.application.llm.services.afterglow_store import (
-            InMemoryAfterglowStore,
-        )
-        afterglow_store = InMemoryAfterglowStore()
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         habituation_store=recall_habituation_store,
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
-        recall_success_store=recall_success_store,
-        hit_boost_strength=recall_hit_boost_strength,
-        hit_boost_cap=recall_hit_boost_cap,
         slot_store=recall_slot_store,
         slot_policy=recall_slot_policy_obj,
-        afterglow_store=afterglow_store,
-        afterglow_capacity=afterglow_capacity,
-        afterglow_max_residence=afterglow_max_residence,
     )
     # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
@@ -621,14 +564,8 @@ def build_episodic_stack(
         recall_slot_store=recall_slot_store,
         recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
         recall_slot_capacity=recall_slot_capacity,
-        afterglow_store=afterglow_store,
-        afterglow_capacity=afterglow_capacity,
-        afterglow_max_residence=afterglow_max_residence,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         belief_consolidation_coordinator=belief_consolidation_coordinator,
-        recall_success_store=recall_success_store,
-        recall_hit_boost_strength=recall_hit_boost_strength,
-        recall_hit_boost_cap=recall_hit_boost_cap,
     )
 
 

@@ -81,17 +81,16 @@ class TestWiringStub:
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.belief_evidence_buffer_store is belief_evidence_buffer_store
 
-    def test_finds_recall_three_store_episodic_stack(self) -> None:
-        """PR-G (想起階層: slot / afterglow / habituation) の 3 store が
+    def test_finds_recall_layer_stores_on_episodic_stack(self) -> None:
+        """PR-G (想起階層: slot / habituation) の store が
         episodic_stack にあるとき stub が拾うことを保証する。
 
         これらは checklist #27 の追従漏れが実際に発生していた箇所:
         belief_evidence_buffer_store 等より後に ``EpisodicStack`` に生えたが、
         この stub 側の pickup が追加されないまま残り、実験の save/load で
-        slot / afterglow / habituation の状態が無音で失われていた。
+        slot / habituation の状態が無音で失われていた。
         """
         recall_slot_store = object()
-        afterglow_store = object()
         recall_habituation_store = object()
         runtime = SimpleNamespace(
             _todo_store="memo-handle",
@@ -100,13 +99,11 @@ class TestWiringStub:
             _episodic_stack=SimpleNamespace(
                 episode_store=object(),
                 recall_slot_store=recall_slot_store,
-                afterglow_store=afterglow_store,
                 recall_habituation_store=recall_habituation_store,
             ),
         )
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.recall_slot_store is recall_slot_store
-        assert stub.afterglow_store is afterglow_store
         assert stub.recall_habituation_store is recall_habituation_store
 
     def test_episodic_stack_none_episode_store_none(self) -> None:
@@ -170,17 +167,11 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
-        from ai_rpg_world.application.llm.services.afterglow_store import (
-            InMemoryAfterglowStore,
-        )
         from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
             InMemoryEpisodicRecallHabituationStore,
         )
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
             InMemoryEpisodicRecallSlotStore,
-        )
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
         )
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
@@ -221,9 +212,7 @@ class TestExpectedPayloadKeysCoverage:
             semantic_memory_store=InMemorySemanticMemoryStore(),
             memory_link_store=InMemoryMemoryLinkStore(),
             belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
-            recall_success_store=InMemoryEpisodicRecallSuccessStore(),
             recall_slot_store=InMemoryEpisodicRecallSlotStore(),
-            afterglow_store=InMemoryAfterglowStore(),
             recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
         )
         return SimpleNamespace(

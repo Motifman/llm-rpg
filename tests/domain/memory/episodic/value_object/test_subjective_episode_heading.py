@@ -1,4 +1,4 @@
-"""SubjectiveEpisode の heading フィールドが、Afterglow index で使う
+"""SubjectiveEpisode の heading フィールドが、
 1 行見出しとして安全に出し入れできることを保証する。
 
 heading は recall されたエピソードを「鮮明には浮かばないがヒントを与えれば

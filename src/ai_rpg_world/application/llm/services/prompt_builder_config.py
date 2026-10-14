@@ -53,9 +53,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.encounter.contracts.interfaces import (
         IEncounterMemory,
     )
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        IAfterglowStore,
-    )
     from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
         EpisodicMemoryLinkApplicationService,
     )
@@ -191,12 +188,6 @@ class EpisodicRecallConfig:
     # 必要なのは ``cooldown_ticks`` のみ (他 3 つは retrieve service 側で保持)。
     recall_slot_store: IEpisodicRecallSlotStore | None = None
     recall_slot_cooldown_ticks: int = 5
-    # #526 段階 3 PR-C: afterglow index sidecar (= ぼんやり覚えてる)。
-    # 注入時のみ動く (= default off で既存挙動と同一)。retrieve service
-    # 側で apply_afterglow_policy の結果が ``debug.afterglow_index`` に乗る
-    # ので、prompt_builder は store.apply_decision (書込) と prompt 表示の
-    # ために参照する。
-    afterglow_store: IAfterglowStore | None = None
 
 
 @dataclass(frozen=True)

@@ -49,13 +49,11 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "BELIEF_CONSOLIDATION_ENABLED": "true",
     "BELIEF_CREATE_GATE_ENABLED": "true",
     "BELIEF_EVIDENCE_ENABLED": "true",
-    "LLM_AFTERGLOW_ENABLED": "true",
     "LLM_EPISODIC_ENABLED": "true",
     "LLM_EPISODIC_RECALL_HABITUATION_ENABLED": "true",
     "LLM_EPISODIC_RECALL_SLOT_ENABLED": "true",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED": "true",
     "MEMO_TOOLS_ENABLED": "true",
-    "RECALL_HIT_BOOST_ENABLED": "true",
     "SEMANTIC_LLM_GIST_ENABLED": "true",
     "BEING_MEMO_ENABLED": "false",
 }
@@ -121,9 +119,9 @@ _ALL_NAMES = (
 #: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
 #: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
 #:
-#: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具は #1631 で消したので、
-#: 全部入りでも出ない。見出しの欄は能動想起の道具の説明だけが名指ししていた。名前の表に残し、どの組み合わせでもプロンプトに戻ってこないことを
-#: 見張る。
+#: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具、見出しの欄は #1631 で
+#: 消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
+#: 戻ってこないことを見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _LEARNED,
     _PENDING_PREDICTIONS,

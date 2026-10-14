@@ -58,7 +58,6 @@ from ai_rpg_world.application.llm.services.prompt_builder_config import (
 from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
     _R4_PER_TEXT_CHAR_CAP,
     _R4_RECENT_FREETEXT_LIMIT,
-    _format_afterglow_section,
     _gather_additional_freetexts_for_recall,
     _join_passive_recall_texts,
     _module_logger,
@@ -350,11 +349,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_recall_slot_cooldown_ticks = (
             episodic.recall_slot_cooldown_ticks
         )
-        # #526 段階 3 PR-C: afterglow index sidecar (任意)。default off。
-        # retrieve service 側で apply_afterglow_policy の結果が
-        # ``debug.afterglow_index`` に乗ってくるので、ここでは store.apply_decision
-        # (書込) のためにだけ参照する。retrieve は read-only。
-        self._afterglow_store = episodic.afterglow_store
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall

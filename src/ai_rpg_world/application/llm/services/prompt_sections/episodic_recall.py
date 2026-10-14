@@ -8,7 +8,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     SystemPromptPlayerInfoDto,
 )
-from ai_rpg_world.application.llm.services.afterglow_store import make_afterglow_handle
 from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
@@ -67,27 +66,6 @@ def _gather_additional_freetexts_for_recall(
         if ar.result_summary:
             out.append(ar.result_summary[:_R4_PER_TEXT_CHAR_CAP])
     return out
-
-
-def _format_afterglow_section(
-    afterglow_index: tuple[Any, ...] | None,
-) -> str:
-    """afterglow index を 1 行見出しの section text に整形する。
-
-    None / 空のときは空文字を返し、上位は section ごと省略する。各エントリは
-    ``[handle] heading`` 形式の 1 行で並べ、LLM から「ぼんやり覚えてる
-    記憶」として visible にする。handle は make_afterglow_handle で生成され、
-    同じ episode は常に同じ handle になる。
-    """
-    if not afterglow_index:
-        return ""
-    lines = [
-        "【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)",
-    ]
-    for entry in afterglow_index:
-        handle = make_afterglow_handle(entry.episode_id)
-        lines.append(f"- [{handle}] {entry.heading}")
-    return "\n".join(lines)
 
 
 def _join_passive_recall_texts(
@@ -207,22 +185,6 @@ def emit_episodic_recall_trace(
                     ],
                     "evicted_ids": list(slot_decision.evicted_ids),
                     "new_slot_size": len(slot_decision.new_slot),
-                }
-            # #526 段階 3 PR-C: afterglow index の状態を trace に乗せる。
-            # off 時は index=None なので key 自体を出さない (= 既存挙動)。
-            afterglow_index = retrieval_debug.afterglow_index
-            if afterglow_index is not None:
-                debug_kwargs["afterglow"] = {
-                    "size": len(afterglow_index),
-                    "entries": [
-                        {
-                            "episode_id": e.episode_id,
-                            "heading": e.heading,
-                            "entered_tick": e.entered_tick,
-                            "source": e.source.value,
-                        }
-                        for e in afterglow_index
-                    ],
                 }
         except Exception:
             # debug 構造が想定外でも recall trace 本体は落とさない。
@@ -352,21 +314,6 @@ def run_episodic_passive_recall(
     )
     relevant_memories_text = _join_passive_recall_texts(recall_result.candidates)
 
-    # #526 段階 3 PR-C: afterglow index を 1 行見出しの section として連結。
-    # 「鮮明な記憶」(= recall_text の本文) の後ろに「さっき思い出した記憶の
-    # 見出し」を並べ、LLM に「ぼんやり覚えてる」の層が見える形にする。
-    # afterglow off / 空のときは何も足さない。
-    afterglow_text = _format_afterglow_section(
-        recall_result.debug.afterglow_index
-    )
-    if afterglow_text:
-        if relevant_memories_text:
-            relevant_memories_text = (
-                f"{relevant_memories_text}\n\n{afterglow_text}"
-            )
-        else:
-            relevant_memories_text = afterglow_text
-
     # #526 段階 2: 慣化 sidecar の更新は retrieve 後に呼び出し側で行う
     # (retrieve は read-only を保つ)。store / being_id / tick が揃った
     # ときだけ書き込み、いずれかが欠ければ silent skip。
@@ -410,24 +357,6 @@ def run_episodic_passive_recall(
         except Exception:
             builder._logger.warning(
                 "recall_slot_store.apply_decision failed; recall は完走しました",
-                exc_info=True,
-            )
-
-    # #526 段階 3 PR-C: afterglow store の更新も retrieve 後に行う。
-    # retrieve service が apply_afterglow_policy の結果を
-    # ``debug.afterglow_index`` に乗せているので、それを store へ反映する。
-    # afterglow off のときは index が None なので silent skip。
-    afterglow_index = recall_result.debug.afterglow_index
-    if (
-        builder._afterglow_store is not None
-        and being_id is not None
-        and afterglow_index is not None
-    ):
-        try:
-            builder._afterglow_store.apply_decision(being_id, afterglow_index)
-        except Exception:
-            builder._logger.warning(
-                "afterglow_store.apply_decision failed; recall は完走しました",
                 exc_info=True,
             )
 

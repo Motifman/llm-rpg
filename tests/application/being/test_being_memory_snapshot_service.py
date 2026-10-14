@@ -40,12 +40,10 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     """新しい in-memory store 群を構築し、service と store ハンドルを返す。"""
-    from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
     from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
         InMemoryEpisodicRecallHabituationStore,
     )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-    from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -54,15 +52,13 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     link = InMemoryMemoryLinkStore()
     episode = InMemorySubjectiveEpisodeStore()
     slot = InMemoryEpisodicRecallSlotStore()
-    afterglow = InMemoryAfterglowStore()
     habituation = InMemoryEpisodicRecallHabituationStore()
     belief_evidence = InMemoryBeliefEvidenceBufferStore()
-    success = InMemoryEpisodicRecallSuccessStore()
     acquaintances = InMemoryAcquaintanceRepository()
     being_episodes = InMemoryEpisodeRepository()
     being_memo = InMemoryMemoBookRepository()
-    svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, recall_slot_store=slot, afterglow_store=afterglow, recall_habituation_store=habituation, belief_evidence_buffer_store=belief_evidence, recall_success_store=success, acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock())
-    return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'episode': episode, 'belief_evidence': belief_evidence, 'success': success, 'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo})
+    svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, recall_slot_store=slot, recall_habituation_store=habituation, belief_evidence_buffer_store=belief_evidence, acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock())
+    return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'episode': episode, 'belief_evidence': belief_evidence, 'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo})
 
 def _populate(stores: dict[str, object], being_id: BeingId) -> None:
     """memo / semantic / memory_link / episode に最小サンプルデータを書き込む。"""
@@ -117,12 +113,12 @@ class TestRestoreRoundTrip:
         assert json.loads(payload_json) == json.loads(dst_svc.capture(being))
 
     def test_restore_ignores_keys_of_snapshots_saved_before_removal(self) -> None:
-        """部品を消す前 (#1631) に保存した snapshot の pending_predictions / recall_buffer_received_event_ids / recall_buffer_pending / reinterpretation_journal は読み飛ばし、ほかの store は復元する。"""
+        """部品を消す前 (#1631) に保存した snapshot の pending_predictions / recall_buffer_received_event_ids / recall_buffer_pending / reinterpretation_journal / afterglow_entries / recall_success_hit_count / recall_success_received_event_ids は読み飛ばし、ほかの store は復元する。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         _populate(src_stores, being)
         payload = json.loads(src_svc.capture(being))
-        old_payload = {**payload, 'pending_predictions': [{'pending_id': 'p1', 'text': '夕方にカイトと会う'}], 'recall_buffer_received_event_ids': ['exp-3@6'], 'recall_buffer_pending': [{'recall_id': 'r-1'}], 'reinterpretation_journal': [{'entry_id': 'je-1'}]}
+        old_payload = {**payload, 'pending_predictions': [{'pending_id': 'p1', 'text': '夕方にカイトと会う'}], 'recall_buffer_received_event_ids': ['exp-3@6'], 'recall_buffer_pending': [{'recall_id': 'r-1'}], 'reinterpretation_journal': [{'entry_id': 'je-1'}], 'afterglow_entries': [{'episode_id': 'e3', 'heading': 'h', 'entered_tick': 85, 'source': 'weak_recall'}], 'recall_success_hit_count': [{'episode_id': 'ep-1', 'hit_count': 2}], 'recall_success_received_event_ids': ['exp-2@4']}
         (dst_svc, _) = _make_service()
 
         dst_svc.restore(being, json.dumps(old_payload))
@@ -176,24 +172,8 @@ class TestRestoreRoundTrip:
         assert len(restored) == 1
         assert restored[0] == evidence
 
-    def test_recall_success_hit_count_round_trip(self) -> None:
-        """U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
-
-        capture → restore で中身が一致することを保証する
-        (snapshot 追従 checklist #27)。"""
-        (src_svc, src_stores) = _make_service()
-        being = BeingId('ada')
-        src_stores['success'].record_hit_by_being(being, 'ep-1')
-        src_stores['success'].record_hit_by_being(being, 'ep-1')
-        src_stores['success'].record_hit_by_being(being, 'ep-2')
-        payload_json = src_svc.capture(being)
-        (dst_svc, dst_stores) = _make_service()
-        dst_svc.restore(being, payload_json)
-        restored = dst_stores['success'].list_all_by_being(being)
-        assert restored == {'ep-1': 2, 'ep-2': 1}
-
     def test_received_expectation_event_ids_round_trip(self) -> None:
-        """証拠バッファ・的中の記録が持つ受け取り済みの出来事の ID は、capture → restore で戻り、戻した先で同じ出来事を積み直さない (#1443)。"""
+        """証拠バッファが持つ受け取り済みの出来事の ID は、capture → restore で戻り、戻した先で同じ出来事を積み直さない (#1443)。"""
         from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
             BeliefEvidence,
         )
@@ -204,14 +184,11 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         evidence = BeliefEvidence(evidence_id='belief-evidence-exp-1@3', source_kind=BeliefEvidenceSourceKind.PREDICTION_ERROR, episode_ids=('exp-1',), cue_signature='expectation:miss', text='予期は外れた', salience='low', occurred_at=_NOW, observed_turn=3)
         src_stores['belief_evidence'].append_received_by_being(being, evidence, event_id='exp-1@3')
-        src_stores['success'].record_hits_received_by_being(being, ('ep-1',), event_id='exp-2@4')
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
         dst_svc.restore(being, payload_json)
         assert dst_stores['belief_evidence'].list_received_event_ids_by_being(being) == ['exp-1@3']
-        assert dst_stores['success'].list_received_event_ids_by_being(being) == ['exp-2@4']
         assert dst_stores['belief_evidence'].append_received_by_being(being, evidence, event_id='exp-1@3') is False
-        assert dst_stores['success'].record_hits_received_by_being(being, ('ep-1',), event_id='exp-2@4') is False
 
 
     def test_acquaintances_round_trip(self) -> None:
@@ -594,21 +571,21 @@ class TestRestoreValidation:
     def test_memo_element_id_missing_raises_format_error(self) -> None:
         """list 要素内の dict key 欠落は KeyError ではなく FormatError に wrap される。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [{'content': 'no id'}], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [{'content': 'no id'}], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'belief_evidence_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='memo'):
             svc.restore(BeingId('ada'), bad)
 
     def test_unknown_enum_value_raises_format_error(self) -> None:
         """memory_link の link_type が未知値なら FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [{'link_id': 'x', 'player_id': 1, 'episode_id_a': 'a', 'episode_id_b': 'b', 'link_type': 'UNKNOWN_TYPE', 'strength': 0.5, 'co_activation_count': 1, 'created_at': '2026-06-14T12:00:00+00:00', 'last_activated_at': '2026-06-14T12:00:00+00:00', 'decay_rate': 0.001}], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [{'link_id': 'x', 'player_id': 1, 'episode_id_a': 'a', 'episode_id_b': 'b', 'link_type': 'UNKNOWN_TYPE', 'strength': 0.5, 'co_activation_count': 1, 'created_at': '2026-06-14T12:00:00+00:00', 'last_activated_at': '2026-06-14T12:00:00+00:00', 'decay_rate': 0.001}], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'belief_evidence_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='memory_links'):
             svc.restore(BeingId('ada'), bad)
 
     def test_required_key_list_raises_format_error(self) -> None:
         """required key の値が list でないと FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': 'not-list', 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': 'not-list', 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'belief_evidence_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='must be list'):
             svc.restore(BeingId('ada'), bad)
 
@@ -617,16 +594,12 @@ class TestConstructor:
 
     def test_memo_store_raises_type_error(self) -> None:
         """memo store 型違反。"""
-        from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
         from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
             InMemoryEpisodicRecallHabituationStore,
         )
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-            InMemoryEpisodicRecallSuccessStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
         with pytest.raises(TypeError, match='memo_store'):
-            BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+            BeingMemorySnapshotService(memo_store='bad', semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())

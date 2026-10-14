@@ -2445,9 +2445,6 @@ class WorldRuntime:
                 recall_slot_cooldown_ticks=(
                     self._episodic_stack.recall_slot_cooldown_ticks
                 ),
-                # #526 段階 3 PR-C: afterglow store。stack で enable された
-                # 時のみ非 None。retrieve 側にも同一 store が注入されている。
-                afterglow_store=self._episodic_stack.afterglow_store,
                 encounter_memory=self._encounter_memory,
                 encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
                     "spot", spot_str_id
@@ -7265,21 +7262,10 @@ def create_world_runtime(
             log_belief_attribution_enabled_state,
             log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
-            log_recall_hit_boost_enabled_state,
         )
 
         _belief_evidence_enabled = config.belief_evidence_enabled
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): 的中側
-        # (思い出したから当たった) を recall ranking boost に
-        # 還流する。的中を数える書き手は #1631 で消したので、record_hit は
-        # 行われず安全に縮退する。
-        # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
-        # 始める前提の定数 (habituation_strength と同じく env 非公開。
-        # 「当たる記憶」の固定化を防ぐための上限)。
-        _recall_hit_boost_enabled = config.recall_hit_boost_enabled
-        log_recall_hit_boost_enabled_state(_recall_hit_boost_enabled)
-        _recall_hit_boost_strength = 1
         # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
         _belief_attribution_enabled = config.belief_attribution_enabled
         log_belief_attribution_enabled_state(_belief_attribution_enabled)
@@ -7491,10 +7477,6 @@ def create_world_runtime(
             recall_slot_insert_score_threshold=(
                 config.recall_slot_insert_score_threshold
             ),
-            # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)
-            afterglow_enabled=config.afterglow_enabled,
-            afterglow_capacity=config.afterglow_capacity,
-            afterglow_max_residence=config.afterglow_max_residence,
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。
@@ -7518,10 +7500,6 @@ def create_world_runtime(
             ),
             # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
             belief_attribution_enabled=_belief_attribution_enabled,
-            # U9b (想起の信用割り当て・的中側): 的中側 sidecar を作り、
-            # passive_recall の順位に使う。回数を足す書き手は #1631 で消した。
-            recall_hit_boost_enabled=_recall_hit_boost_enabled,
-            recall_hit_boost_strength=_recall_hit_boost_strength,
             episodic_promotion_force_full_scan=(
                 config.episodic_promotion_force_full_scan
             ),

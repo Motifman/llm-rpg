@@ -4,8 +4,8 @@ Phase 4 Step 4-2b (Issue #470): run 途中再開 (mid-run resume) を実現す�
 Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JSON)
 の **中身を作る・読む application service** を提供する。
 
-PR-G で対象 store が 6 → 9 に増えた (= 想起階層 slot / afterglow /
-habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
+PR-G で想起階層 (slot / afterglow / habituation) の store を足した。afterglow は
+#1631 で消した。新 store を足すときの手順は ``EXPECTED_PAYLOAD_KEYS``
 近くの docstring を参照。
 
 責務:
@@ -29,7 +29,6 @@ habituation を追加)。新 store を足すときの手順は ``EXPECTED_PAYLOA
   "episodic_episodes": [...],
   "recall_slot_entries": [...],
   "recall_slot_cooldown": [...],
-  "afterglow_entries": [...],
   "recall_habituation_last_recalled": [...]
 }
 ```
@@ -67,23 +66,19 @@ from typing import Any
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
     acquaintance_to_dict,
-    afterglow_entry_to_dict,
     being_episode_to_dict,
     being_memo_to_dict,
     belief_evidence_to_dict,
     dict_to_acquaintance,
-    dict_to_afterglow_entry,
     dict_to_being_episode,
     dict_to_being_memo,
     dict_to_belief_evidence,
-    dict_to_episode_hit_count_pair,
     dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
     dict_to_recall_slot_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
-    episode_hit_count_pair_to_dict,
     episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
@@ -91,15 +86,11 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     semantic_entry_to_dict,
     subjective_episode_to_dict,
 )
-from ai_rpg_world.application.llm.services.afterglow_store import IAfterglowStore
 from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
     IEpisodicRecallHabituationStore,
 )
 from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
     IEpisodicRecallSlotStore,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-    IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
@@ -216,12 +207,10 @@ class BeingMemorySnapshotService:
 
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
-    # PR-G: 想起階層 (slot / afterglow / habituation) 3 store ぶん 4 key を追加。
-    # slot は entries と cooldown を別 key に split (= 既存 restore() の
-    # ``isinstance(list)`` 検証規約に合わせるため)。
+    # PR-G: 想起階層 (slot / habituation) の 3 key。slot は entries と cooldown
+    # を別 key に split (= 既存 restore() の ``isinstance(list)`` 検証規約に
+    # 合わせるため)。
     # U2 (証拠台帳統一設計): belief_evidence_buffer store 1 key を追加。
-    # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar
-    # (recall_success_hit_count) 1 key を追加。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
         "semantic_entries",
@@ -230,14 +219,11 @@ class BeingMemorySnapshotService:
         "episodic_episodes",
         "recall_slot_entries",
         "recall_slot_cooldown",
-        "afterglow_entries",
         "recall_habituation_last_recalled",
         "belief_evidence_buffer",
-        "recall_success_hit_count",
         # #1443: 予期の出来事を受け取った記録。材料と同じ store が持つので、
         # 戻さないと再開した run で配り直された出来事を積み直す。
         "belief_evidence_received_event_ids",
-        "recall_success_received_event_ids",
         "memory_turn",
         "acquaintances",
         "being_episodes",
@@ -252,10 +238,8 @@ class BeingMemorySnapshotService:
         memory_link_store: MemoryLinkRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
         recall_slot_store: IEpisodicRecallSlotStore,
-        afterglow_store: IAfterglowStore,
         recall_habituation_store: IEpisodicRecallHabituationStore,
         belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
-        recall_success_store: IEpisodicRecallSuccessStore,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
@@ -277,8 +261,6 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "recall_slot_store must implement IEpisodicRecallSlotStore"
             )
-        if not isinstance(afterglow_store, IAfterglowStore):
-            raise TypeError("afterglow_store must implement IAfterglowStore")
         if not isinstance(
             recall_habituation_store, IEpisodicRecallHabituationStore
         ):
@@ -291,10 +273,6 @@ class BeingMemorySnapshotService:
         ):
             raise TypeError(
                 "belief_evidence_buffer_store must be BeliefEvidenceBufferRepository"
-            )
-        if not isinstance(recall_success_store, IEpisodicRecallSuccessStore):
-            raise TypeError(
-                "recall_success_store must implement IEpisodicRecallSuccessStore"
             )
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
@@ -309,10 +287,8 @@ class BeingMemorySnapshotService:
         self._memory_link = memory_link_store
         self._episodic_episode = episodic_episode_store
         self._recall_slot = recall_slot_store
-        self._afterglow = afterglow_store
         self._recall_habituation = recall_habituation_store
         self._belief_evidence_buffer = belief_evidence_buffer_store
-        self._recall_success = recall_success_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
@@ -352,10 +328,6 @@ class BeingMemorySnapshotService:
                 episode_tick_pair_to_dict(eid, tick)
                 for eid, tick in self._recall_slot.get_cooldown_until(being_id).items()
             ],
-            "afterglow_entries": [
-                afterglow_entry_to_dict(e)
-                for e in self._afterglow.get_index(being_id)
-            ],
             "recall_habituation_last_recalled": [
                 episode_tick_pair_to_dict(eid, tick)
                 for eid, tick in self._recall_habituation.list_all_by_being(
@@ -367,21 +339,10 @@ class BeingMemorySnapshotService:
                 belief_evidence_to_dict(e)
                 for e in self._belief_evidence_buffer.list_all_by_being(being_id)
             ],
-            # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar
-            # の per-Being state。
-            "recall_success_hit_count": [
-                episode_hit_count_pair_to_dict(eid, hit_count)
-                for eid, hit_count in self._recall_success.list_all_by_being(
-                    being_id
-                ).items()
-            ],
             "belief_evidence_received_event_ids": (
                 self._belief_evidence_buffer.list_received_event_ids_by_being(
                     being_id
                 )
-            ),
-            "recall_success_received_event_ids": (
-                self._recall_success.list_received_event_ids_by_being(being_id)
             ),
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
@@ -491,11 +452,6 @@ class BeingMemorySnapshotService:
             dict_to_episode_tick_pair,
             "recall_slot_cooldown",
         )
-        afterglow_entries = _decode_list(
-            payload["afterglow_entries"],
-            dict_to_afterglow_entry,
-            "afterglow_entries",
-        )
         habituation_pairs = _decode_list(
             payload["recall_habituation_last_recalled"],
             dict_to_episode_tick_pair,
@@ -507,20 +463,9 @@ class BeingMemorySnapshotService:
             dict_to_belief_evidence,
             "belief_evidence_buffer",
         )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
-        # デコード。(episode_id, hit_count) ペアの list。
-        recall_success_pairs = _decode_list(
-            payload["recall_success_hit_count"],
-            dict_to_episode_hit_count_pair,
-            "recall_success_hit_count",
-        )
         belief_evidence_received = _decode_received_event_ids(
             payload["belief_evidence_received_event_ids"],
             "belief_evidence_received_event_ids",
-        )
-        recall_success_received = _decode_received_event_ids(
-            payload["recall_success_received_event_ids"],
-            "recall_success_received_event_ids",
         )
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
@@ -571,7 +516,6 @@ class BeingMemorySnapshotService:
         self._recall_slot.replace_all_by_being(
             being_id, slot_entries, dict(cooldown_pairs)
         )
-        self._afterglow.replace_all_by_being(being_id, afterglow_entries)
         self._recall_habituation.replace_all_by_being(
             being_id, dict(habituation_pairs)
         )
@@ -579,16 +523,8 @@ class BeingMemorySnapshotService:
         self._belief_evidence_buffer.replace_all_by_being(
             being_id, belief_evidences
         )
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て): 的中側 sidecar の
-        # bulk overwrite。
-        self._recall_success.replace_all_by_being(
-            being_id, dict(recall_success_pairs)
-        )
         self._belief_evidence_buffer.replace_received_event_ids_by_being(
             being_id, belief_evidence_received
-        )
-        self._recall_success.replace_received_event_ids_by_being(
-            being_id, recall_success_received
         )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
