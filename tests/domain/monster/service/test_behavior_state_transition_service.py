@@ -1,7 +1,7 @@
 """
 BehaviorStateTransitionService のテスト
 
-正常ケース・境界ケース・返却イベントの検証を網羅する。
+観測から返す遷移意図の値と優先順位を検査する。実イベントは集約が生成する。
 """
 
 import pytest
@@ -10,7 +10,6 @@ from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
     BehaviorStateTransitionService,
     SpotTargetParams,
-    StateTransitionResult,
 )
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -59,16 +58,6 @@ class TestSpotTargetParams:
         assert params.effective_flee_threshold is None
         assert params.allow_chase is None
 
-    def test_create_with_optional(self):
-        """オプション付きで作成できること"""
-        params = SpotTargetParams(
-            target_id=WorldObjectId(2),
-            coordinate=Coordinate(3, 4),
-            effective_flee_threshold=0.3,
-            allow_chase=True,
-        )
-        assert params.effective_flee_threshold == 0.3
-        assert params.allow_chase is True
 
     def test_spot_target_params_is_frozen(self):
         """SpotTargetParams は frozen であること"""
@@ -78,21 +67,6 @@ class TestSpotTargetParams:
         )
         with pytest.raises(AttributeError):
             params.target_id = WorldObjectId(2)  # type: ignore[misc]
-
-
-class TestStateTransitionResult:
-    """StateTransitionResult の生成とフィールド"""
-
-    def test_create_defaults(self):
-        """デフォルトで空の結果で作成できること"""
-        result = StateTransitionResult()
-        assert result.apply_enrage is False
-        assert result.flee_from_threat_id is None
-        assert result.flee_from_threat_coordinate is None
-        assert result.spot_target_params is None
-        assert result.do_lose_target is False
-        assert result.lost_target_id is None
-        assert result.last_known_coordinate is None
 
 
 class TestBehaviorStateTransitionServiceNormal:
@@ -113,27 +87,35 @@ class TestBehaviorStateTransitionServiceNormal:
     def test_compute_transition_no_change_returns_empty_result(
         self, service, actor_id, actor_coordinate
     ):
-        """脅威・ターゲット・フェーズなし・ターゲット持っていないとき何も遷移しないこと"""
+        """脅威・対象・フェーズがなければ、全遷移指示と付随値が空の結果を返す。"""
         snapshot = BehaviorStateSnapshot(state=BehaviorStateEnum.IDLE)
         obs = _observation()
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.apply_enrage is False
         assert result.flee_from_threat_id is None
+        assert result.flee_from_threat_coordinate is None
         assert result.spot_target_params is None
         assert result.do_lose_target is False
+        assert result.lost_target_id is None
+        assert result.last_known_coordinate is None
 
-    def test_compute_transition_enrage_only_when_phase_below_threshold(
-        self, service, actor_id, actor_coordinate
+    @pytest.mark.parametrize(
+        ("hp_percentage", "expected_enrage"),
+        [(0.3, True), (0.5, True), (0.51, False)],
+        ids=["original_below", "equal_threshold", "above_threshold"],
+    )
+    def test_compute_transition_enrage_at_first_phase_threshold(
+        self, service, actor_id, actor_coordinate, hp_percentage, expected_enrage
     ):
-        """phase_thresholds ありで HP が閾値以下のとき ENRAGE のみ適用されること"""
+        """IDLEではHPが先頭フェーズ閾値以下のときだけENRAGEを指示する。"""
         snapshot = BehaviorStateSnapshot(
             state=BehaviorStateEnum.IDLE,
-            hp_percentage=0.3,
+            hp_percentage=hp_percentage,
             phase_thresholds=(0.5, 0.25),
         )
         obs = _observation()
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
-        assert result.apply_enrage is True
+        assert result.apply_enrage is expected_enrage
         assert result.flee_from_threat_id is None
         assert result.spot_target_params is None
         assert result.do_lose_target is False
@@ -164,26 +146,43 @@ class TestBehaviorStateTransitionServiceNormal:
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.apply_enrage is False
 
-    def test_compute_transition_flee_when_visible_threats(
-        self, service, actor_id, actor_coordinate
+    @pytest.mark.parametrize(
+        ("threat_inputs", "expected_coordinate"),
+        [
+            ([(202, 0, 0), (201, 6, 5)], Coordinate(6, 5)),
+            ([(203, 0, 0), (202, 8, 5), (201, 5, 6)], Coordinate(5, 6)),
+            ([(202, 10, 5), (201, 8, 8)], Coordinate(8, 8)),
+            ([(202, 9, 9), (201, 10, 5)], Coordinate(10, 5)),
+        ],
+        ids=[
+            "original_two_threats", "former_three_threats",
+            "euclidean_not_manhattan", "euclidean_not_chebyshev",
+        ],
+    )
+    def test_compute_transition_selects_nearest_threat_by_euclidean_distance(
+        self, service, actor_id, actor_coordinate, threat_inputs, expected_coordinate
     ):
-        """visible_threats がいるとき FLEE 遷移となり最も近い脅威が選ばれること"""
-        threat_near = _obj(201, 6, 5)
-        threat_far = _obj(202, 0, 0)
+        """視界内の脅威から直線距離で最寄りの対象を選び、逃走だけを指示する。"""
+        threats = [_obj(oid, x, y) for oid, x, y in threat_inputs]
         snapshot = BehaviorStateSnapshot(state=BehaviorStateEnum.IDLE)
-        obs = _observation(visible_threats=[threat_far, threat_near])
+        obs = _observation(visible_threats=threats)
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.apply_enrage is False
-        assert result.flee_from_threat_id == threat_near.object_id
-        assert result.flee_from_threat_coordinate == threat_near.coordinate
+        assert result.flee_from_threat_id == WorldObjectId(201)
+        assert result.flee_from_threat_coordinate == expected_coordinate
         assert result.spot_target_params is None
         assert result.do_lose_target is False
 
+    @pytest.mark.parametrize(
+        ("target_id", "x", "y"),
+        [(1, 7, 5), (2, 3, 4)],
+        ids=["original_target", "former_optional_params"],
+    )
     def test_compute_transition_spot_target_when_selected_target_no_threats(
-        self, service, actor_id, actor_coordinate
+        self, service, actor_id, actor_coordinate, target_id, x, y
     ):
-        """selected_target のみで visible_threats がないとき spot_target_params が返ること"""
-        target = _obj(1, 7, 5)
+        """脅威がなければ選択対象と成長条件をそのまま発見の指示へ渡す。"""
+        target = _obj(target_id, x, y)
         snapshot = BehaviorStateSnapshot(state=BehaviorStateEnum.IDLE)
         growth = GrowthContext(effective_flee_threshold=0.3, allow_chase=True)
         obs = _observation(selected_target=target, growth_context=growth)
@@ -332,19 +331,6 @@ class TestBehaviorStateTransitionServiceBoundary:
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.flee_from_threat_id is None
         assert result.flee_from_threat_coordinate is None
-
-    def test_nearest_threat_selected_among_multiple(
-        self, service, actor_id, actor_coordinate
-    ):
-        """複数脅威がいるとき最も近いものが選ばれること"""
-        near = _obj(201, 5, 6)
-        mid = _obj(202, 8, 5)
-        far = _obj(203, 0, 0)
-        snapshot = BehaviorStateSnapshot(state=BehaviorStateEnum.IDLE)
-        obs = _observation(visible_threats=[far, mid, near])
-        result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
-        assert result.flee_from_threat_id == near.object_id
-        assert result.flee_from_threat_coordinate == near.coordinate
 
 
 class TestBehaviorStateTransitionServiceGrowthContext:
