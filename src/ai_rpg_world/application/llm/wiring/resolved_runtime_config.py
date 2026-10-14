@@ -81,14 +81,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "END_ON_ALL_DOWN",
     "LLM_CLIENT",
     "LLM_EPISODIC_ENABLED",
-    "LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS",
-    "LLM_EPISODIC_RECALL_HABITUATION_ENABLED",
-    "LLM_EPISODIC_RECALL_SLOT_CAPACITY",
-    "LLM_EPISODIC_RECALL_SLOT_COOLDOWN",
-    "LLM_EPISODIC_RECALL_SLOT_ENABLED",
-    "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK",
-    "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
-    "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
@@ -258,35 +250,9 @@ class ResolvedLlmRuntimeConfig:
     semantic_passive_top_k: int
 
 
-    # #526 段階 2: 慣化ペナルティ (recall された episode のスコアを decay_window
-    # tick の間だけ下げる)。``LLM_EPISODIC_RECALL_HABITUATION_ENABLED=1`` で ON。
-    # default OFF で既存挙動と完全同一。decay_window は
-    # ``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で 0 以上の整数で上書き可。
-    recall_habituation_enabled: bool = False
-    recall_habituation_decay_window_ticks: int = 5
     short_term_memory_turn_cap: int = 20
     short_term_memory_turn_compact_count: int = 10
 
-    # #526 段階 3: 想起スロット (working memory)。
-    # ``LLM_EPISODIC_RECALL_SLOT_ENABLED=1`` で ON、各パラメータは env で
-    # 上書き可:
-    #   ``LLM_EPISODIC_RECALL_SLOT_CAPACITY``           (N)
-    #   ``LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK``    (K_insert)
-    #   ``LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE``      (L)
-    #   ``LLM_EPISODIC_RECALL_SLOT_COOLDOWN``           (C)
-    #   ``LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD`` (score 閾値)
-    #
-    # PR-A: slot を「希少資源」化する default に更新。
-    # N=4 / K_insert=1 / L=8 / C=5 / threshold=2。
-    # K=1 で 1 tick で 1 件しか入れ替えないため recall section の前半が
-    # 安定し、prefix cache が育つ。閾値 2 で「2 軸以上の cue で当たった
-    # 強い signal だけ」が slot に入る。
-    recall_slot_enabled: bool = False
-    recall_slot_capacity: int = 4
-    recall_slot_insert_per_tick: int = 1
-    recall_slot_max_residence: int = 8
-    recall_slot_cooldown_ticks: int = 5
-    recall_slot_insert_score_threshold: int = 2
 
 
     # Active episodic recall tool (Issue #526 後続)。
@@ -573,33 +539,6 @@ class ResolvedLlmRuntimeConfig:
 
         # Prediction (#526 / U3): エピソード再解釈 on/off
 
-        # #526 段階 2: 慣化ペナルティ (default off / decay 5 tick)
-        recall_habituation_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_RECALL_HABITUATION_ENABLED"), default=False
-        )
-        recall_habituation_decay_window_ticks = _resolve_recall_habituation_decay(
-            source
-        )
-
-        # #526 段階 3 + PR-A: 想起スロット (default off / N=4 K=1 L=8 C=5 / 閾値=2)
-        recall_slot_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_RECALL_SLOT_ENABLED"), default=False
-        )
-        recall_slot_capacity = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_CAPACITY", default=4
-        )
-        recall_slot_insert_per_tick = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK", default=1
-        )
-        recall_slot_max_residence = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE", default=8
-        )
-        recall_slot_cooldown_ticks = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_COOLDOWN", default=5
-        )
-        recall_slot_insert_score_threshold = _resolve_non_negative_int(
-            source, "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD", default=2
-        )
 
 
         belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
@@ -721,14 +660,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
             semantic_passive_top_k=semantic_passive_top_k,
-            recall_habituation_enabled=recall_habituation_enabled,
-            recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
-            recall_slot_enabled=recall_slot_enabled,
-            recall_slot_capacity=recall_slot_capacity,
-            recall_slot_insert_per_tick=recall_slot_insert_per_tick,
-            recall_slot_insert_score_threshold=recall_slot_insert_score_threshold,
-            recall_slot_max_residence=recall_slot_max_residence,
-            recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
             belief_evidence_enabled=belief_evidence_enabled,
             belief_consolidation_enabled=belief_consolidation_enabled,
             belief_attribution_enabled=belief_attribution_enabled,
@@ -816,14 +747,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_promotion_expansion_hops=4,
             semantic_llm_gist_enabled=False,
             semantic_passive_top_k=0,
-            recall_habituation_enabled=False,
-            recall_habituation_decay_window_ticks=5,
-            recall_slot_enabled=False,
-            recall_slot_capacity=4,
-            recall_slot_insert_per_tick=1,
-            recall_slot_max_residence=8,
-            recall_slot_cooldown_ticks=5,
-            recall_slot_insert_score_threshold=2,
             belief_evidence_enabled=False,
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,
@@ -1096,8 +1019,7 @@ def _resolve_non_negative_int(
 ) -> int:
     """``key`` を 0 以上の整数として解決。未設定 / 空文字 → ``default``。
 
-    負値・非数値は ``ValueError`` で fail-fast。``_resolve_recall_habituation_decay``
-    と同じ方針を共有 helper として一般化したもの。
+    負値・非数値は ``ValueError`` で fail-fast。
     """
     raw = (source.get(key) or "").strip()
     if not raw:
@@ -1162,27 +1084,6 @@ def _resolve_optional_positive_float(
         raise ValueError(f"{key}={raw!r} is not a number") from e
     if value <= 0:
         raise ValueError(f"{key}={value} must be greater than 0")
-    return value
-
-
-def _resolve_recall_habituation_decay(source: Mapping[str, str]) -> int:
-    """``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` を解決 (#526 段階 2)。
-
-    未設定 / 空文字 → default 5。負値・非数値は fail-fast で ``ValueError``。
-    """
-    raw = (source.get("LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS") or "").strip()
-    if not raw:
-        return 5
-    try:
-        value = int(raw)
-    except ValueError as e:
-        raise ValueError(
-            f"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS={raw!r} is not an integer"
-        ) from e
-    if value < 0:
-        raise ValueError(
-            f"LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS={value} must be 0 or greater"
-        )
     return value
 
 

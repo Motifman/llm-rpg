@@ -14,16 +14,6 @@ from ai_rpg_world.application.llm.passive_recall_cue_families import (
     passive_recall_object_value_granularity_weight,
     passive_recall_place_axis_granularity_weight,
 )
-from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-    IEpisodicRecallHabituationStore,
-    compute_habituation_penalty,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-    IEpisodicRecallSlotStore,
-    RecallSlotDecision,
-    RecallSlotPolicy,
-    apply_slot_policy,
-)
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
 )
@@ -175,15 +165,6 @@ class EpisodicPassiveRecallRetrievalDebug:
     candidate_episode_sources: tuple[tuple[str, tuple[str, ...]], ...]
     """最終リストにおいて、各軸ラベルを source に持つ episode 数。"""
     final_episode_count_by_source_axis: tuple[tuple[str, int], ...]
-    """#526 後続 段階 2: 慣化ペナルティが適用された episode の (id, penalty)。
-    penalty=0 のものや habituation off 時は空 tuple。post-hoc で「どの episode
-    がどれだけ沈んだか」を計測できる。"""
-    habituation_penalty_by_episode: tuple[tuple[str, int], ...] = ()
-    """#526 後続 段階 3: 想起スロットが有効なときの 1 tick 分の更新内容。
-    slot off (= 従来挙動) のときは ``None``。
-    retained / inserted / evicted_ids を見ると prefix cache 親和性と慣化の
-    動きが post-hoc で追える。"""
-    recall_slot_decision: RecallSlotDecision | None = None
 
 
 @dataclass(frozen=True)
@@ -207,46 +188,10 @@ class EpisodicPassiveRecallRetrievalService:
         *,
         link_store: MemoryLinkRepository | None = None,
         spreading_max_hops: int = 2,
-        habituation_store: IEpisodicRecallHabituationStore | None = None,
-        habituation_decay_window_ticks: int = 5,
-        habituation_strength: int = 2,
-        slot_store: IEpisodicRecallSlotStore | None = None,
-        slot_policy: RecallSlotPolicy | None = None,
     ) -> None:
-        if not isinstance(habituation_decay_window_ticks, int) or isinstance(
-            habituation_decay_window_ticks, bool
-        ):
-            raise TypeError("habituation_decay_window_ticks must be int")
-        if habituation_decay_window_ticks < 0:
-            raise ValueError(
-                "habituation_decay_window_ticks must be 0 or greater"
-            )
-        # PR-I (Y_after_issue621 後続): 罰則の倍率。Y 観察で「penalty 3 が
-        # multi_cue_score 4 を打ち消せず、同 episode が 8 tick 連続採用」
-        # された。倍率を 2 にして score 0 まで下げられるように既定強化。
-        # ``strength=0`` は罰則 off の経路 (= #526 段階 2 直後の挙動を再現)。
-        if not isinstance(habituation_strength, int) or isinstance(
-            habituation_strength, bool
-        ):
-            raise TypeError("habituation_strength must be int")
-        if habituation_strength < 0:
-            raise ValueError("habituation_strength must be 0 or greater")
         self._store = store
         self._link_store = link_store
         self._spreading_max_hops = spreading_max_hops
-        # #526 段階 2: 慣化ペナルティ。store 未注入なら penalty 計算 skip
-        # (= default off で既存挙動と完全同一)。
-        self._habituation_store = habituation_store
-        self._habituation_decay_window_ticks = habituation_decay_window_ticks
-        self._habituation_strength = habituation_strength
-        # #526 段階 3: 想起スロット (working memory)。store + policy が両方
-        # 揃ったときだけ動く。default off で既存挙動と完全同一。
-        if slot_store is not None and slot_policy is None:
-            raise ValueError(
-                "slot_policy must be provided when slot_store is given"
-            )
-        self._slot_store = slot_store
-        self._slot_policy = slot_policy
 
     def retrieve(
         self,
@@ -257,7 +202,6 @@ class EpisodicPassiveRecallRetrievalService:
         max_candidates: int,
         now: datetime | None = None,
         min_occurred_at: datetime | None = None,
-        current_tick: int | None = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
         """過去 episode を situation cues に基づいて recall する。
 
@@ -267,13 +211,6 @@ class EpisodicPassiveRecallRetrievalService:
         PR5 (R2): temporal 軸は **situation_cues が空のときのみ** 発火する
         fallback として動かす。cue が立つ通常 turn では「直近の出来事」を
         recall に紛れ込ませない。
-
-        #526 段階 2: ``current_tick`` と ``habituation_store`` が両方揃った
-        とき、直近で recall された episode に慣化ペナルティを score から引く。
-        どちらかが欠ければ penalty 計算は skip し既存挙動を保つ。
-        ``record_recall`` (= sidecar への書込) はこの service ではなく
-        呼び出し側 (prompt_builder) が candidates 確定後に行う。retrieve
-        自身は副作用なしを保つ。
         """
         # R2: temporal 軸の発火条件。cue が立っている通常 turn では skip し、
         # cue が一切無い idle 等の状況でのみ「直近の出来事」を fallback として
@@ -345,43 +282,8 @@ class EpisodicPassiveRecallRetrievalService:
         def multi_cue_score(eid: str) -> int:
             return len(multi_cue_canonicals.get(eid, frozenset()))
 
-        # #526 段階 2: 慣化ペナルティ。store 注入 + current_tick 指定が
-        # 揃ったときだけ計算し、score から減算する。条件が欠ければ
-        # 0 ペナルティで既存挙動を保つ (= silent fallback ではなく明示的に
-        # 「current_tick が無いから慣化は使えない」状態を返す)。
-        habituation_active = (
-            self._habituation_store is not None
-            and current_tick is not None
-            and self._habituation_decay_window_ticks > 0
-        )
-        habituation_penalty_records: dict[str, int] = {}
-
-        def habituation_penalty(eid: str) -> int:
-            if not habituation_active:
-                return 0
-            # mypy 緩和: habituation_active=True なら以下は非 None
-            assert self._habituation_store is not None
-            assert current_tick is not None
-            last = self._habituation_store.get_last_recalled_tick(being_id, eid)
-            return compute_habituation_penalty(
-                last_recalled_tick=last,
-                current_tick=current_tick,
-                decay_window=self._habituation_decay_window_ticks,
-            )
-
         def _arm_score_key(ep: SubjectiveEpisode) -> int:
-            penalty = habituation_penalty(ep.episode_id)
-            if penalty > 0:
-                # debug 用に記録 (penalty=0 は記録しない)。同 episode が複数
-                # arm で評価されても結果は同じなので dict で上書き OK。
-                habituation_penalty_records[ep.episode_id] = penalty
-            # PR-I: penalty に倍率を掛けてスコアを下げる。倍率 2 なら 4 cue
-            # 一致の episode (= score 4) に penalty 3 を引いても score -2 まで
-            # 沈み、他の penalty=0 / score 2-3 の候補に確実に席を譲る。
-            return (
-                multi_cue_score(ep.episode_id)
-                - penalty * self._habituation_strength
-            )
+            return multi_cue_score(ep.episode_id)
 
         cue_arms = [
             (label, sorted(rows, key=_arm_score_key, reverse=True), granular, cue_keys)
@@ -442,48 +344,6 @@ class EpisodicPassiveRecallRetrievalService:
 
         capped_ids = _round_robin_pick_episode_ids(arms, max_candidates)
 
-        # #526 段階 3: 想起スロットが有効なら、capped_ids を score 順候補
-        # として扱い、prev_slot を持ち越し / cooldown を尊重 / K_insert で
-        # 新規挿入数を絞った new_slot 順に並べ替える。slot off (= store /
-        # policy 未注入 or being_id 未解決) のときは round-robin 結果を
-        # そのまま使い既存挙動を保つ。
-        slot_decision: RecallSlotDecision | None = None
-        if (
-            self._slot_store is not None
-            and self._slot_policy is not None
-            and current_tick is not None
-        ):
-            prev_slot = self._slot_store.get_slot(being_id)
-            cooldown_until = self._slot_store.get_cooldown_until(being_id)
-            # PR-A: 候補を ``(eid, multi_cue_score)`` ペアで渡し、policy 側で
-            # 閾値 (= 弱い signal を slot から弾く) を効かせる。temporal /
-            # spreading 軸由来の episode は multi_cue_score=0 なので閾値を
-            # 満たさず、空 slot のときだけ fallback で 1 件採用される設計。
-            candidates_with_score: list[tuple[str, int]] = [
-                (eid, multi_cue_score(eid)) for eid in capped_ids
-            ]
-            slot_decision = apply_slot_policy(
-                prev_slot=prev_slot,
-                candidate_episode_ids_in_score_order=candidates_with_score,
-                cooldown_until=cooldown_until,
-                current_tick=current_tick,
-                policy=self._slot_policy,
-            )
-            # slot.new_slot に居る episode が今 tick の recall。retained は
-            # 前 tick の episode_by_id に無い可能性があるため、足りない分は
-            # store から取りに行く (= 想起の長続きを実現する核)。
-            for entry in slot_decision.new_slot:
-                if entry.episode_id in episode_by_id:
-                    continue
-                retained_ep = self._store.get_by_being(being_id, entry.episode_id)
-                if retained_ep is None:
-                    continue
-                episode_by_id[entry.episode_id] = retained_ep
-                # retained 由来は cue arm から外れているので source_axes に
-                # 「slot_retained」を立て、trace で識別可能にする。
-                source_axes_by_episode[entry.episode_id].add("slot_retained")
-            capped_ids = [e.episode_id for e in slot_decision.new_slot]
-
         candidates: list[EpisodicPassiveRecallCandidate] = []
         candidate_sources: list[tuple[str, tuple[str, ...]]] = []
         axis_hits: defaultdict[str, int] = defaultdict(int)
@@ -498,16 +358,11 @@ class EpisodicPassiveRecallRetrievalService:
 
         final_axis_counts = tuple(sorted(axis_hits.items(), key=lambda t: t[0]))
 
-        habituation_payload = tuple(
-            sorted(habituation_penalty_records.items(), key=lambda t: t[0])
-        )
         debug = EpisodicPassiveRecallRetrievalDebug(
             raw_row_count_by_axis=tuple(raw_counts),
             union_episode_count_before_max_cap=union_before_cap,
             candidate_episode_sources=tuple(candidate_sources),
             final_episode_count_by_source_axis=final_axis_counts,
-            habituation_penalty_by_episode=habituation_payload,
-            recall_slot_decision=slot_decision,
         )
         return EpisodicPassiveRecallRetrievalResult(candidates=tuple(candidates), debug=debug)
 

@@ -118,18 +118,6 @@ def emit_episodic_recall_trace(
         cue_keys = [c.to_canonical() for c in situation_cues]
     except Exception:
         cue_keys = []
-    # PR-E (Y_after_issue621 後続): habituation_penalty を per-candidate に
-    # 埋め込み、recall ランキングの動きを 1 つの candidate だけで読めるよう
-    # にする。retrieval_debug が無い (= 旧経路) ときは全候補 penalty=0。
-    penalty_by_ep: dict[str, int] = {}
-    if retrieval_debug is not None:
-        try:
-            penalty_by_ep = {
-                eid: penalty
-                for eid, penalty in retrieval_debug.habituation_penalty_by_episode
-            }
-        except Exception:
-            penalty_by_ep = {}
     cand_payload: list[dict[str, Any]] = []
     for cand in candidates:
         try:
@@ -140,8 +128,6 @@ def emit_episodic_recall_trace(
                     "episode_id": ep_id,
                     "source_axes": list(cand.source_axes),
                     "recall_text_snippet": (getattr(ep, "recall_text", "") or "")[:120],
-                    # PR-E: dict に未登録なら罰則なし扱い (= 0)。
-                    "habituation_penalty": penalty_by_ep.get(ep_id, 0),
                 }
             )
         except Exception:
@@ -161,31 +147,6 @@ def emit_episodic_recall_trace(
                 axis: count
                 for axis, count in retrieval_debug.final_episode_count_by_source_axis
             }
-            # #526 段階 2 (PR #565) 続き: 慣化ペナルティが適用された
-            # episode の (id → penalty 値) も載せる。PR #565 で dataclass
-            # field は追加されたが本 emission code は更新漏れだったため、
-            # ペナルティが trace から見えず「慣化が動いているか」の判定が
-            # 不可能になっていた。
-            debug_kwargs["habituation_penalty_by_episode"] = {
-                eid: penalty
-                for eid, penalty in retrieval_debug.habituation_penalty_by_episode
-            }
-            # #526 段階 3: 想起スロットの 1 tick 分の動きを trace に残す。
-            # off 時は decision=None なので何も書かない (= 既存挙動)。
-            slot_decision = retrieval_debug.recall_slot_decision
-            if slot_decision is not None:
-                debug_kwargs["recall_slot"] = {
-                    "retained": [
-                        {"episode_id": e.episode_id, "entered_tick": e.entered_tick}
-                        for e in slot_decision.retained
-                    ],
-                    "inserted": [
-                        {"episode_id": e.episode_id, "entered_tick": e.entered_tick}
-                        for e in slot_decision.inserted
-                    ],
-                    "evicted_ids": list(slot_decision.evicted_ids),
-                    "new_slot_size": len(slot_decision.new_slot),
-                }
         except Exception:
             # debug 構造が想定外でも recall trace 本体は落とさない。
             builder._logger.debug(
@@ -290,19 +251,6 @@ def run_episodic_passive_recall(
         )
         raw_oldest = None
     min_recall_dt: datetime | None = raw_oldest
-    # #526 段階 2: 慣化ペナルティのため現在 tick を retrieve に渡す。
-    # provider が None / 例外を返したときは慣化を skip (= 既存挙動)。
-    current_tick_for_habituation: int | None = None
-    if builder._current_tick_provider is not None:
-        try:
-            tick_val = builder._current_tick_provider()
-            if isinstance(tick_val, int) and not isinstance(tick_val, bool):
-                current_tick_for_habituation = tick_val
-        except Exception:
-            builder._logger.debug(
-                "current_tick_provider raised; habituation を skip して進む",
-                exc_info=True,
-            )
     recall_result = builder._episodic_passive_recall.retrieve(
         being_id=being_id,
         situation_cues=situation_cues,
@@ -310,55 +258,8 @@ def run_episodic_passive_recall(
         max_candidates=builder._episodic_passive_recall_max_candidates,
         now=recall_now,
         min_occurred_at=min_recall_dt,
-        current_tick=current_tick_for_habituation,
     )
     relevant_memories_text = _join_passive_recall_texts(recall_result.candidates)
-
-    # #526 段階 2: 慣化 sidecar の更新は retrieve 後に呼び出し側で行う
-    # (retrieve は read-only を保つ)。store / being_id / tick が揃った
-    # ときだけ書き込み、いずれかが欠ければ silent skip。
-    if (
-        builder._episodic_recall_habituation_store is not None
-        and being_id is not None
-        and current_tick_for_habituation is not None
-        and recall_result.candidates
-    ):
-        try:
-            builder._episodic_recall_habituation_store.record_recall(
-                being_id,
-                [c.episode.episode_id for c in recall_result.candidates],
-                current_tick_for_habituation,
-            )
-        except Exception:
-            # sidecar 書き込み失敗は recall 自体を止めない (graceful)。
-            builder._logger.warning(
-                "habituation_store.record_recall failed; recall は完走しました",
-                exc_info=True,
-            )
-
-    # #526 段階 3: 想起スロット sidecar の更新も retrieve 後に行う。
-    # retrieve 内で apply_slot_policy の結果が ``debug.recall_slot_decision``
-    # に乗っているので、それを store に反映する。slot off (= decision None)
-    # のときは silent skip。
-    slot_decision = recall_result.debug.recall_slot_decision
-    if (
-        builder._episodic_recall_slot_store is not None
-        and being_id is not None
-        and current_tick_for_habituation is not None
-        and slot_decision is not None
-    ):
-        try:
-            builder._episodic_recall_slot_store.apply_decision(
-                being_id,
-                slot_decision,
-                current_tick=current_tick_for_habituation,
-                cooldown_ticks=builder._episodic_recall_slot_cooldown_ticks,
-            )
-        except Exception:
-            builder._logger.warning(
-                "recall_slot_store.apply_decision failed; recall は完走しました",
-                exc_info=True,
-            )
 
     # Issue #283 後続: recall 結果を trace に残す (Viewer / jq から
     # 「どのエピソードが想起されたか」を後追いできる)。candidates が 0

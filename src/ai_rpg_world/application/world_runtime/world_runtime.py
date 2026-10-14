@@ -2434,17 +2434,6 @@ class WorldRuntime:
                 memory_link_service=self._episodic_stack.link_service,
                 semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
                 semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
-                # #526 段階 2: 慣化 sidecar。stack で enable された時のみ非 None。
-                recall_habituation_store=self._episodic_stack.recall_habituation_store,
-                recall_habituation_decay_window_ticks=(
-                    self._episodic_stack.recall_habituation_decay_window_ticks
-                ),
-                # #526 段階 3: 想起スロット sidecar。stack で enable された
-                # 時のみ非 None。retrieve 側にも別注入されている (同 store)。
-                recall_slot_store=self._episodic_stack.recall_slot_store,
-                recall_slot_cooldown_ticks=(
-                    self._episodic_stack.recall_slot_cooldown_ticks
-                ),
                 encounter_memory=self._encounter_memory,
                 encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
                     "spot", spot_str_id
@@ -7463,20 +7452,6 @@ def create_world_runtime(
             semantic_passive_top_k=_semantic_top_k,
             semantic_gist_service=_semantic_gist_service,
             semantic_persona_resolver=_semantic_persona_resolver,
-            # #526 段階 2: 慣化ペナルティ (default off)
-            recall_habituation_enabled=config.recall_habituation_enabled,
-            recall_habituation_decay_window_ticks=(
-                config.recall_habituation_decay_window_ticks
-            ),
-            # #526 段階 3 + PR-A: 想起スロット (working memory / default off)
-            recall_slot_enabled=config.recall_slot_enabled,
-            recall_slot_capacity=config.recall_slot_capacity,
-            recall_slot_insert_per_tick=config.recall_slot_insert_per_tick,
-            recall_slot_max_residence=config.recall_slot_max_residence,
-            recall_slot_cooldown_ticks=config.recall_slot_cooldown_ticks,
-            recall_slot_insert_score_threshold=(
-                config.recall_slot_insert_score_threshold
-            ),
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。

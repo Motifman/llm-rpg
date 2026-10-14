@@ -338,17 +338,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
         self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
         self._episodic_memory_link_service = episodic_memory_link_service
-        # #526 段階 2: 慣化 sidecar (任意)。default off。retrieve service 側
-        # にも別途注入されており、prompt_builder 側は record_recall (書込)
-        # のためにだけ参照する (retrieve は read-only)。
-        self._episodic_recall_habituation_store = episodic.recall_habituation_store
-        # #526 段階 3: 想起スロット sidecar (任意)。default off。retrieve service
-        # 側にも別途注入されており、prompt_builder 側は apply_decision (書込)
-        # のためにだけ参照する (retrieve は read-only)。
-        self._episodic_recall_slot_store = episodic.recall_slot_store
-        self._episodic_recall_slot_cooldown_ticks = (
-            episodic.recall_slot_cooldown_ticks
-        )
         self._noun_matcher = noun_matcher
         # Phase 1c
         self._semantic_passive_recall = semantic_passive_recall

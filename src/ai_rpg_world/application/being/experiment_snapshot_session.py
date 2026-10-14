@@ -191,24 +191,6 @@ def _empty_episode_store() -> Any:
     return InMemorySubjectiveEpisodeStore()
 
 
-def _empty_recall_slot_store() -> Any:
-    """PR-G: snapshot 配線時に slot が未配線なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        InMemoryEpisodicRecallSlotStore,
-    )
-
-    return InMemoryEpisodicRecallSlotStore()
-
-
-def _empty_recall_habituation_store() -> Any:
-    """PR-G: snapshot 配線時に habituation が未配線なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        InMemoryEpisodicRecallHabituationStore,
-    )
-
-    return InMemoryEpisodicRecallHabituationStore()
-
-
 def _empty_belief_evidence_buffer_store() -> Any:
     """U2 (証拠台帳統一設計): snapshot 配線時に belief evidence buffer が
     未配線 (= flag OFF) なら空 in-memory store で代用する。"""
@@ -376,17 +358,6 @@ class ExperimentSnapshotSession:
         episode_store = (
             wiring_result.episodic_episode_store or _empty_episode_store()
         )
-        # PR-G: 想起階層 (slot / habituation) は wiring_result が
-        # 露出していないことが多い (= episodic_stack が enable のときだけ wire
-        # される) ので、未配線なら空 in-memory store にフォールバックする。
-        recall_slot_store = (
-            getattr(wiring_result, "recall_slot_store", None)
-            or _empty_recall_slot_store()
-        )
-        recall_habituation_store = (
-            getattr(wiring_result, "recall_habituation_store", None)
-            or _empty_recall_habituation_store()
-        )
         # U2 (証拠台帳統一設計): belief evidence buffer も未配線なら空
         # in-memory store にフォールバックする (= flag OFF の run でも
         # snapshot 自体は壊れず「空の payload」で整合性が保たれる)。
@@ -406,8 +377,6 @@ class ExperimentSnapshotSession:
                 "episodic_episode_store",
                 # PR-G: 想起階層の store も fallback 監視対象に入れる。配線漏れで
                 # 空 store にフォールバックしたことを後追いできるようにする。
-                "recall_slot_store",
-                "recall_habituation_store",
                 # U2: belief evidence buffer も同じ監視対象に入れる。
                 "belief_evidence_buffer_store",
             )
@@ -425,8 +394,6 @@ class ExperimentSnapshotSession:
             semantic_store=semantic_store,
             memory_link_store=memory_link_store,
             episodic_episode_store=episode_store,
-            recall_slot_store=recall_slot_store,
-            recall_habituation_store=recall_habituation_store,
             belief_evidence_buffer_store=belief_evidence_buffer_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
