@@ -2570,13 +2570,6 @@ class WorldRuntime:
     _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
         DefaultRecentEventsFormatter()
     )
-    # PR #445: _context_strategy は env (PROMPT_SECTION_ORDER) を尊重するため
-    # **instance field に格上げ**。ClassVar の hard-coded default だと
-    # run_scenario_experiment が env を読んで run_start trace に書くのに、
-    # 実体は無視するという 3 つ目の config-init split silent failure を起こす。
-    # PR #438 の Run A (legacy) はこの bug で実際は stable_to_volatile で
-    # 動いていた可能性が高い。create_world_runtime 末尾で env から作って
-    # 注入する。
     _context_strategy: SectionBasedContextFormatStrategy = field(
         default_factory=SectionBasedContextFormatStrategy
     )
@@ -4421,13 +4414,6 @@ class WorldRuntime:
 
 _LLM_TOOL_MODE_DEFAULT = "default"
 _LLM_TOOL_MODE_PURE_SPOT_GRAPH = "pure_spot_graph"
-
-
-def _build_context_format_strategy_from_config(
-    cfg: ResolvedLlmRuntimeConfig,
-) -> SectionBasedContextFormatStrategy:
-    """resolved config から context format strategy を組む。"""
-    return SectionBasedContextFormatStrategy(section_order=cfg.prompt_section_order)
 
 
 def _build_short_term_memory(
@@ -6492,8 +6478,6 @@ def create_world_runtime(
         _memory_turn_clock=memory_turn_clock,
         _acquaintance_store=acquaintance_store,
         _player_acquaintances=player_acquaintances,
-        # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
-        _context_strategy=_build_context_format_strategy_from_config(config),
         _time_provider=time_provider,
         _simulation_service=simulation_service,
         _world_tick_failure_isolator=world_tick_failure_isolator,

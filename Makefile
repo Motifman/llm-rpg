@@ -168,7 +168,6 @@ experiment-with-snapshot:
 		WORKERS=$(WORKERS) \
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
-		SECTION_ORDER=$(SECTION_ORDER) \
 		MEMORY_KIND=$(MEMORY_KIND) \
 		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
@@ -194,7 +193,6 @@ experiment-resume:
 		WORKERS=$(WORKERS) \
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
-		SECTION_ORDER=$(SECTION_ORDER) \
 		MEMORY_KIND=$(MEMORY_KIND) \
 		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
@@ -209,7 +207,7 @@ experiment-publish:
 	$(MAKE) experiment \
 		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
 		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) \
-		SECTION_ORDER=$(SECTION_ORDER) MEMORY_KIND=$(MEMORY_KIND) \
+		MEMORY_KIND=$(MEMORY_KIND) \
 		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) QUANTIZATION=$(QUANTIZATION) \
 		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
@@ -223,14 +221,11 @@ experiment-publish:
 # 使い方:
 #   make experiment-survival OUT=var/runs/issue390_exp27_off_r1
 #   make experiment-survival OUT=var/runs/issue390_exp27_on_full_r1 EPISODIC=1
-#   # prefix cache A/B (vLLM / 第30回相当):
-#   make experiment-survival OUT=var/runs/exp30_A SECTION_ORDER=legacy MEMORY_KIND=sliding
-#   make experiment-survival OUT=var/runs/exp30_C SECTION_ORDER=stable_to_volatile MEMORY_KIND=rolling_summary
 #
 # 上書き可能な変数 (省略時の survival 既定値):
 #   MAX_WORLD_TICKS=140  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-#   SECTION_ORDER / MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
+#   MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
 #   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
 SURVIVAL_MAX_WORLD_TICKS ?= 140
 SURVIVAL_WORKERS ?= 4
@@ -243,7 +238,6 @@ experiment-survival:
 		OUT=$(OUT) \
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
-		SECTION_ORDER=$(SECTION_ORDER) \
 		MEMORY_KIND=$(MEMORY_KIND) \
 		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
@@ -266,7 +260,7 @@ experiment-survival:
 # 上書き可能な変数 (省略時の coop 既定値):
 #   MAX_WORLD_TICKS=240 (= stranded_at_tick)  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-#   SECTION_ORDER / MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
+#   MEMORY_KIND / SCHEDULER_MODE / PROVIDER /
 #   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
 COOP_MAX_WORLD_TICKS ?= 240
 COOP_WORKERS ?= 4
@@ -279,7 +273,6 @@ experiment-survival-coop:
 		OUT=$(OUT) \
 		EPISODIC=$(EPISODIC) \
 		IDLE_TICKS=$(IDLE_TICKS) \
-		SECTION_ORDER=$(SECTION_ORDER) \
 		MEMORY_KIND=$(MEMORY_KIND) \
 		SCHEDULER_MODE=$(SCHEDULER_MODE) \
 		PROVIDER=$(PROVIDER) \
@@ -294,7 +287,7 @@ experiment-survival-coop:
 #   make experiment-recall-probe OUT=var/runs/recall_probe_001
 #   make experiment-recall-probe DRY_RUN=1 OUT=/tmp/dryrun   # LLM 呼ばずに構造確認
 #
-# 既定: K run 設定 (rolling_summary / thread_pool / stable_to_volatile) +
+# 既定: K run 設定 (rolling_summary / thread_pool) +
 #       DeepInfra fp4 / deepseek-v4-flash。OPENAI_API_KEY が要る。
 #
 # 引数:

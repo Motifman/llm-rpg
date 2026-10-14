@@ -117,7 +117,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_REQUIRE_PARAMS",
     "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
-    "PROMPT_SECTION_ORDER",
     "RECALL_HIT_BOOST_ENABLED",
     "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
@@ -175,9 +174,6 @@ class ResolvedLlmRuntimeConfig:
         short_term_memory_kind: ``"rolling_summary"`` だけ。``"sliding_window"`` は起動時に拒む (D1631)
         short_term_memory_scheduler_mode: ``"inline"`` | ``"thread_pool"``
 
-        # === Prompt section ordering (Phase 0) ===
-        prompt_section_order: ``"stable_to_volatile"`` | ``"legacy"``
-
         # === LLM client / model ===
         llm_client_kind: ``"stub"`` | ``"litellm"``
         llm_model: model 名 (例: ``"openrouter/google/gemma-4-31b-it"``)。
@@ -229,9 +225,6 @@ class ResolvedLlmRuntimeConfig:
     # Short-term memory
     short_term_memory_kind: str
     short_term_memory_scheduler_mode: str
-
-    # Prompt
-    prompt_section_order: str
 
     # LLM client
     llm_client_kind: str
@@ -462,7 +455,6 @@ class ResolvedLlmRuntimeConfig:
 
         - ``values`` 省略時は空設定として扱う。環境変数は読まない
         - 各フィールドは既存 resolver (``feature_flags.resolve_*`` /
-          ``context_format_strategy.resolve_section_order_from_env`` /
           ``_llm_client_factory`` の値) を呼ぶ薄いラッパー
         - 不正値は各 resolver が ``ValueError`` を投げる (PR #434 fail-fast 継承)
 
@@ -470,9 +462,6 @@ class ResolvedLlmRuntimeConfig:
             ValueError: values のいずれかが不正値のとき
         """
         # 既存 resolver の import は関数内で行い、循環参照を避ける
-        from ai_rpg_world.application.llm.services.context_format_strategy import (
-            resolve_section_order_from_env,
-        )
         from ai_rpg_world.application.llm.wiring.feature_flags import (
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
@@ -503,7 +492,6 @@ class ResolvedLlmRuntimeConfig:
             short_term_memory_turn_cap,
             short_term_memory_turn_compact_count,
         ) = resolve_short_term_memory_turn_window(env=source)
-        prompt_section_order = resolve_section_order_from_env(env=source)
         episodic_explore_related_enabled = resolve_episodic_explore_related_enabled(
             env=source
         )
@@ -758,7 +746,6 @@ class ResolvedLlmRuntimeConfig:
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
             short_term_memory_turn_cap=short_term_memory_turn_cap,
             short_term_memory_turn_compact_count=short_term_memory_turn_compact_count,
-            prompt_section_order=prompt_section_order,
             llm_client_kind=llm_client_kind,
             llm_model=llm_model,
             llm_api_key=llm_api_key,
@@ -849,7 +836,6 @@ class ResolvedLlmRuntimeConfig:
 
         - LLM 系は全部 ``stub`` / None で「実 LLM を呼ばない」
         - feature flag は全部 OFF
-        - prompt_section_order は ``stable_to_volatile`` (= default)
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
@@ -864,7 +850,6 @@ class ResolvedLlmRuntimeConfig:
             # factory も from_mapping と整合させる。テストで inline を要求するなら
             # 明示 override する。
             short_term_memory_scheduler_mode="thread_pool",
-            prompt_section_order="stable_to_volatile",
             llm_client_kind="stub",
             llm_model=None,
             llm_api_key=None,

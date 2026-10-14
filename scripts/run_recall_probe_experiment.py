@@ -217,7 +217,6 @@ def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> tuple[Any, Any, str]
             "LLM_EPISODIC_ENABLED": "1",
             "SHORT_TERM_MEMORY_KIND": "rolling_summary",
             "SHORT_TERM_MEMORY_SCHEDULER_MODE": "thread_pool",
-            "PROMPT_SECTION_ORDER": "stable_to_volatile",
             "LLM_IDLE_TIMEOUT_TICKS": "1",
             "LLM_TURN_PARALLEL_WORKERS": "1",
         }

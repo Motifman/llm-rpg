@@ -23,7 +23,6 @@ class TestFromEnvDefaults:
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_scheduler_mode == 'thread_pool'
-        assert cfg.prompt_section_order == 'stable_to_volatile'
         assert cfg.llm_client_kind == 'stub'
         assert cfg.llm_model is None
         assert cfg.llm_api_key is None
@@ -200,12 +199,11 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'PROMPT_SECTION_ORDER': 'legacy', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'RECALL_HIT_BOOST_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'RECALL_HIT_BOOST_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.short_term_memory_scheduler_mode == 'thread_pool'
-        assert cfg.prompt_section_order == 'legacy'
         assert cfg.llm_client_kind == 'litellm'
         assert cfg.llm_model == 'openrouter/google/gemma-4-31b-it'
         assert cfg.llm_api_key is None
@@ -270,11 +268,6 @@ class TestFromEnvFailFast:
         """scheduler mode 未知の値は ValueError。"""
         with pytest.raises(ValueError, match='SHORT_TERM_MEMORY_SCHEDULER_MODE'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'async_io'})
-
-    def test_section_order_typo_raises_value_error(self) -> None:
-        """section order typo は ValueError。"""
-        with pytest.raises(ValueError, match='PROMPT_SECTION_ORDER'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_SECTION_ORDER': 'stable_to_volatil'})
 
     def test_llm_client_unknown_raises_value_error(self) -> None:
         """llm client 未知の値は ValueError。"""
@@ -351,6 +344,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "PENDING_PREDICTION_ENABLED",
             "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
             "ESCAPE_LLM_SSOT",
+            "PROMPT_SECTION_ORDER",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
@@ -405,10 +399,8 @@ class TestFromMappingIgnoresOsEnviron:
     def test_values_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """values 省略時も os environ を読まない。"""
         monkeypatch.setenv('SHORT_TERM_MEMORY_KIND', 'sliding_window')
-        monkeypatch.setenv('PROMPT_SECTION_ORDER', 'legacy')
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
         assert cfg.short_term_memory_kind == 'rolling_summary'
-        assert cfg.prompt_section_order == 'stable_to_volatile'
 
     def test_subjective_episode_db_path_os_environ_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """SUBJECTIVE_EPISODE_DB_PATH が env にあっても config は読まない (二重入口撤去)。"""
@@ -445,7 +437,6 @@ class TestForTestsFactory:
         cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', llm_client_kind='litellm')
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.llm_client_kind == 'litellm'
-        assert cfg.prompt_section_order == 'stable_to_volatile'
         assert cfg.semantic_passive_top_k == 0
 
     def test_unknown_override_key_raises_type_error(self) -> None:
@@ -458,10 +449,9 @@ class TestToTraceDict:
 
     def test_all_dict_rendered(self) -> None:
         """全フィールドが dict に出る。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', prompt_section_order='stable_to_volatile', llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
+        cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
         d = cfg.to_trace_dict()
         assert d['short_term_memory_kind'] == 'rolling_summary'
-        assert d['prompt_section_order'] == 'stable_to_volatile'
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
         assert 'belief_evidence_enabled' in d
@@ -491,13 +481,6 @@ class TestExistingResolverParity:
         values = {'SHORT_TERM_MEMORY_KIND': 'rolling_summary'}
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
         assert cfg.short_term_memory_kind == resolve_short_term_memory_kind(env=values)
-
-    def test_section_order_existing_resolver_matches(self) -> None:
-        """sectionorder は既存 resolver と一致。"""
-        from ai_rpg_world.application.llm.services.context_format_strategy import resolve_section_order_from_env
-        values = {'PROMPT_SECTION_ORDER': 'legacy'}
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
-        assert cfg.prompt_section_order == resolve_section_order_from_env(env=values)
 
     def test_semantic_passive_top_k_existing_resolver_matches(self) -> None:
         """semanticpassivetopk は既存 resolver と一致。"""

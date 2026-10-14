@@ -92,7 +92,6 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "SEMANTIC_LLM_GIST_ENABLED",
         "SEMANTIC_SEARCH_ENABLED",
         "SHORT_TERM_MEMORY_KIND",
-        "PROMPT_SECTION_ORDER",
         "LLM_TOOL_MODE",
         "MEMO_TOOLS_ENABLED",
     ):

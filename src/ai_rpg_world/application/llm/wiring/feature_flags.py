@@ -2,7 +2,7 @@
 
 実験スクリプトから A/B 検証する用途で、scenario 内容と直交する knob を
 ここに集約する。既存の他の env var (``EPISODIC_PROMOTION_FORCE_FULL_SCAN``,
-``SUBJECTIVE_EPISODE_DB_PATH``, ``LLM_MODEL``, ``PROMPT_SECTION_ORDER`` 等) と
+``SUBJECTIVE_EPISODE_DB_PATH``, ``LLM_MODEL`` 等) と
 同じ慣例に揃える。
 
 設計指針:
