@@ -36,7 +36,7 @@
    - 現在地と周囲: `WorldRuntimeQueryAdapter` → `_build_minimal_player_state_dto` → `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`) で現在地の塊を作り、`SpotGraphUiContextBuilder.build` (`llm/services/spot_graph_ui_context_builder.py:513`) が `prompt_section_layout.sections_for` の順に接続先・オブジェクト・その場の人などの節を足す
    - 直近の出来事: `UnifiedRecentEventStore.get_active_timeline` を `RecentEventsFormatter.format_unified_entries` (`llm/services/recent_events_formatter.py:47`) で行にする
    - 保留中の予測と、前回の予測と実際は #1631 で消した
-   - 関連する記憶と見出し (`prompt_sections/episodic_recall.py:257`)、関連する学び (`prompt_sections/semantic_recall.py:80`)
+   - 関連する記憶 (`prompt_sections/episodic_recall.py`)。見出しと関連する学びは #1631 で消した
    - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、最近の流れと自己像と世界観 (短期記憶の `get_mid_summary_text` / `get_long_summary_text`)
 3. `SectionBasedContextFormatStrategy.format` (`llm/services/context_format_strategy.py`) が見出しを付けて並べる (747 行)。run の設定は `stable_to_volatile` で、`_format_stable_to_volatile` (300 行) の順になる
 4. 繰り返しの警告 (`_build_loop_warning_prefix`、780 行) を指示の前に付け、本文の後ろに置く (783 行)
@@ -63,7 +63,7 @@ system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前
         → S7【同じ局面にいる者】 → S8【渡される文面の内訳】 → S9【行動ルール】 → S10【独白と一言の書き方】
         → S11【文脈と履歴の限界】 (S12 SSoT は #1631 で消した)
 user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
-        → U10【関連する学び】 → U11【関連する記憶】 (U12 見出しは #1631 で消した)
+        → U11【関連する記憶】 (U10【関連する学び】と U12 見出しは #1631 で消した)
         → U13【進行中のメモ】 → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
         → 繰り返しの警告 (U7) → U21 指示の前の知らせ → U22 行動指示
 tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, memo_add, memo_list, memo_done,
@@ -109,7 +109,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U7 繰り返しの警告 | 指示の前の「⚠ 直前のあなたは `wait` を同じ引数で 2 ターン連続実行しました。…」(run では 1 呼び出し)。直近の出来事に入る「⚠ … を 3 回続けて同じ引数で実行している。…」(run には出ていない) | `_build_loop_warning_prefix` (`llm/services/prompt_builder.py:559`)、直近の出来事の行は `llm/services/loop_guard_warning.py` | `ToolCallLoopGuardService` の連続記録 | Being の持ち物 | 無 (整数の player 鍵) |
 | U8 【前回の予測と実際】 | (#1631 で消した) | - | - | - | - |
 | U9 【保留中の予測】 | (#1631 で消した) | - | - | - | - |
-| U10 【関連する学び】 | 「- 釣りには釣竿が必要だ」「- 狼煙には流木・枯れ葉・火打ち石が必要だ」 | `run_semantic_passive_recall` (`semantic_recall.py:80`) | semantic store。profile の `semantic_passive_top_k` | Being の持ち物 | semantic store |
+| U10 【関連する学び】 | (#1631 で消した) | - | - | - | - |
 | U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:257`)、空の置き文は 463 行 | episodic store、recall slot (再解釈は #1631 で消した) | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
 | U12 さっき思い出した記憶の見出し | (#1631 で消した) | - | - | - | - |
 | U13 【進行中のメモ】 | 「- [memo_718918…] [tick=11, 経過 13 tick] 狼煙に必要な物: …」 | `_build_active_memos_text` (`prompt_builder.py:971`) → `format_active_memos` (`llm/services/active_memos_formatter.py:19`) | memo store と世界の tick。profile の `memo_tools_enabled` | Being の持ち物 | memo (表示の時計が世界の tick) |
@@ -186,8 +186,8 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 部分 | store | 注意 |
 |---|---|---|
 | 現在の目的 | (goal journal は #1631 で消した) | いまはシナリオの目的の文をそのまま描く。Being が目的を持つ store は無い |
-| 関連する学び | semantic store | — |
-| 関連する記憶・見出し | episodic / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
+| 関連する学び | (#1631 で消した) | - |
+| 関連する記憶 | episodic (見出しと想起の枠は #1631 で消した) | 想起の手がかりが環境の ID に依存 (#1454) |
 | 進行中のメモ | memo | 表示の `tick=…, 経過 … tick` を Being のターン数に替える |
 | 記憶ツールと主観の引数 | 引数と記憶ツール | ツールの実行部はゲームのパッケージにある (#1469) |
 

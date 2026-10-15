@@ -39,7 +39,6 @@ class TestFromEnvDefaults:
         assert cfg.episodic_promotion_force_full_scan is False
         assert cfg.episodic_promotion_expansion_hops == 4
         assert cfg.semantic_llm_gist_enabled is False
-        assert cfg.semantic_passive_top_k == 0
         assert cfg.belief_evidence_enabled is False
         assert cfg.memo_tools_enabled is True
         assert cfg.scenario_random_seed is None
@@ -131,7 +130,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
@@ -152,7 +151,6 @@ class TestFromEnvExplicit:
         assert cfg.episodic_promotion_force_full_scan is True
         assert cfg.episodic_promotion_expansion_hops == 6
         assert cfg.semantic_llm_gist_enabled is True
-        assert cfg.semantic_passive_top_k == 3
         assert cfg.belief_evidence_enabled is True
         assert cfg.belief_consolidation_enabled is True
         assert cfg.belief_attribution_enabled is True
@@ -209,17 +207,6 @@ class TestFromEnvFailFast:
         """openrouter require params typo は ValueError。"""
         with pytest.raises(ValueError, match='boolean'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'OPENROUTER_REQUIRE_PARAMS': 'tru'})
-
-    def test_semantic_passive_top_k_raises_value_error_2(self) -> None:
-        """semantic passive top k 非数値は ValueError。"""
-        with pytest.raises(ValueError, match='SEMANTIC_PASSIVE_TOP_K'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SEMANTIC_PASSIVE_TOP_K': 'abc'})
-
-    def test_semantic_passive_top_k_raises_value_error(self) -> None:
-        """semantic passive top k 負数は ValueError。"""
-        with pytest.raises(ValueError, match='SEMANTIC_PASSIVE_TOP_K'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SEMANTIC_PASSIVE_TOP_K': '-1'})
-
 
 class TestTheRemovedMemoryPartKeysAreRejected:
     """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
@@ -280,6 +267,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
             "LLM_EPISODIC_RECALL_SLOT_COOLDOWN",
             "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
+            "SEMANTIC_PASSIVE_TOP_K",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
@@ -372,7 +360,6 @@ class TestForTestsFactory:
         cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', llm_client_kind='litellm')
         assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.llm_client_kind == 'litellm'
-        assert cfg.semantic_passive_top_k == 0
 
     def test_unknown_override_key_raises_type_error(self) -> None:
         """typo を発見する fail-fast。"""
@@ -415,10 +402,3 @@ class TestExistingResolverParity:
         values = {'SHORT_TERM_MEMORY_KIND': 'rolling_summary'}
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
         assert cfg.short_term_memory_kind == resolve_short_term_memory_kind(env=values)
-
-    def test_semantic_passive_top_k_existing_resolver_matches(self) -> None:
-        """semanticpassivetopk は既存 resolver と一致。"""
-        from ai_rpg_world.application.llm.wiring.feature_flags import resolve_semantic_passive_top_k
-        values = {'SEMANTIC_PASSIVE_TOP_K': '5'}
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
-        assert cfg.semantic_passive_top_k == resolve_semantic_passive_top_k(env=values)

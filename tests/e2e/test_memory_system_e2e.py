@@ -5,12 +5,11 @@ memory 機能が **1 つのシナリオの中で一貫して動く** ことを�
 
 検証範囲:
 - Phase 0: prompt section の順序 (stable_to_volatile)
-- Phase 1c: §「【関連する学び】」 (semantic passive top-K)
 - Phase 2: §「【最近の流れ】」 (L4 mid summary) が本人ターン上限で生成
 - Phase 2.1: scheduler 経由で L4 生成 (Inline で同期実行)
 - Phase 3: §「【自己像と世界観】」 (L5 long summary) が 4 世代目 L4 evict で
   生成、3 世代を超えると最古が L5 に統合される
-- 全 trace event の経路が alive (``SEMANTIC_PASSIVE_RECALL`` / ``PROMPT_SECTION_BREAKDOWN`` 等)
+- 全 trace event の経路が alive (``PROMPT_SECTION_BREAKDOWN`` 等)
 - silent failure 防止: LLM stub が例外を投げた場合 template fallback ＋
   warning ログが出る
 
@@ -31,10 +30,6 @@ from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistService
-from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-    SemanticPassiveRecallService,
-    format_semantic_recall_section,
-)
 from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
     ShortTermMemoryLongSummaryService,
 )
@@ -50,8 +45,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import L4MidSummary
@@ -59,7 +52,6 @@ from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import L
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SUMMARY_INPUT_COUNT = 15
-from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
 
 
 class _StubSummaryPort:
@@ -228,23 +220,22 @@ class TestRollingSummaryFallbackChain:
 
 class TestPromptSectionsE2E:
     """``SectionBasedContextFormatStrategy`` に全 section を渡すと、
-    Phase 0 / 1c / 2 / 3 の section が正しい順序で並ぶ。"""
+    Phase 0 / 2 / 3 の section が正しい順序で並ぶ。"""
 
     def test_all_stable_volatile_order(self) -> None:
         """全部入り stable to volatile 順序。"""
         strategy = SectionBasedContextFormatStrategy()
-        text = strategy.format(current_state_text='現在地: 海岸', recent_events_text='- 直近の出来事', relevant_memories_text='- 過去シーン', active_memos_text='- メモ', objective_text='生き延びる', inventory_text='- 流木 x3', learned_text='- タカシは信頼できる', mid_summary_text='[最新] 北東を探索', long_summary_text='私について: 慎重な漁師')
+        text = strategy.format(current_state_text='現在地: 海岸', recent_events_text='- 直近の出来事', relevant_memories_text='- 過去シーン', active_memos_text='- メモ', objective_text='生き延びる', inventory_text='- 流木 x3', mid_summary_text='[最新] 北東を探索', long_summary_text='私について: 慎重な漁師')
         assert '【現在の目的】' in text
         assert '【自己像と世界観】' in text
-        assert '【関連する学び】' in text
         assert '【最近の流れ】' in text
         assert '【進行中のメモ】' in text
         assert '【所持・判明した物証】' not in text
         assert '【関連する記憶】' in text
         assert '【直近の出来事】' in text
         assert '【現在地と周囲】' in text
-        idx = {'obj': text.index('【現在の目的】'), 'l5': text.index('【自己像と世界観】'), 'learned': text.index('【関連する学び】'), 'l4': text.index('【最近の流れ】'), 'events': text.index('【直近の出来事】'), 'memos': text.index('【進行中のメモ】'), 'mem': text.index('【関連する記憶】'), 'current': text.index('【現在地と周囲】')}
-        assert idx['obj'] < idx['l5'] < idx['l4'] < idx['events'] < idx['learned'] < idx['mem'] < idx['memos'] < idx['current']
+        idx = {'obj': text.index('【現在の目的】'), 'l5': text.index('【自己像と世界観】'), 'l4': text.index('【最近の流れ】'), 'events': text.index('【直近の出来事】'), 'memos': text.index('【進行中のメモ】'), 'mem': text.index('【関連する記憶】'), 'current': text.index('【現在地と周囲】')}
+        assert idx['obj'] < idx['l5'] < idx['l4'] < idx['events'] < idx['mem'] < idx['memos'] < idx['current']
 
     def test_l5_l4_section(self) -> None:
         """RollingSummary が L4 / L5 両方を生成した後の text が正しく組み立つ。"""
@@ -266,28 +257,6 @@ class TestPromptSectionsE2E:
         full = strategy.format(current_state_text='now', recent_events_text='recent', mid_summary_text=mid, long_summary_text=long_text)
         assert full.index('【自己像と世界観】') < full.index('【最近の流れ】')
         assert full.index('【最近の流れ】') < full.index('【現在地と周囲】')
-
-class TestSemanticPassiveRecallE2E:
-    """Phase 1c: semantic store の top-K が prompt §learned に出る。"""
-
-    def test_passive_recall_section_format(self) -> None:
-        """passiverecall と sectionformat の連動。"""
-        setup = make_semantic_being_setup()
-        setup.provision(_PID.value)
-        setup.populate(_PID.value, _make_semantic_entry(entry_id='s1', text='タカシは信頼できる', importance=8, tags=('タカシ', '信頼')))
-        setup.populate(_PID.value, _make_semantic_entry(entry_id='s2', text='北の洞窟は危険', importance=9, tags=('北の洞窟', '危険')))
-        setup.populate(_PID.value, _make_semantic_entry(entry_id='s3', text='嵐の前は鳥が消える', importance=4, tags=('嵐',)))
-        svc = SemanticPassiveRecallService(setup.semantic_store)
-        being_id = setup.being_id_for(_PID.value)
-        cues = (EpisodicCue(axis='entity', value='タカシ', source=EpisodicCueSource.RUNTIME_CONTEXT),)
-        candidates = svc.retrieve(being_id=being_id, situation_cues=cues, top_k=2, now=datetime(2026, 6, 2, tzinfo=timezone.utc))
-        assert len(candidates) == 2
-        assert candidates[0].entry.entry_id == 's1'
-        learned_text = format_semantic_recall_section(candidates)
-        strategy = SectionBasedContextFormatStrategy()
-        full = strategy.format(current_state_text='x', recent_events_text='y', learned_text=learned_text)
-        assert '【関連する学び】' in full
-        assert 'タカシは信頼できる' in full
 
 class TestSemanticGistE2E:
     """Phase 1b: semantic gist 生成 (LLM 化された場合の経路)。"""

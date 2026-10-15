@@ -23,14 +23,7 @@ from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion i
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
-from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-    SemanticPassiveRecallService,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
-    EpisodicCueSource,
-)
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
@@ -82,66 +75,6 @@ def _make_entry(
         importance_score=8,
         tags=tags,
     )
-
-
-class TestSemanticPassiveRecallServiceNewPath:
-    """SemanticPassiveRecallService: Resolver 注入時に being_id store から読む。"""
-
-    def test_retrieve_being_id_store_entry(
-        self,
-        store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
-        provisioning: BeingProvisioningService,
-    ) -> None:
-        """being store に entry を入れて、Resolver 経由で retrieve できる。"""
-        being_id = provisioning.ensure_attached(PlayerId(2))
-        store.add_by_being(being_id, _make_entry(text="りんご"))
-
-        service = SemanticPassiveRecallService(
-            store,
-        )
-        result = service.retrieve(
-            being_id=being_id,
-            situation_cues=(
-                EpisodicCue(
-                    axis="object", value="apple", source=EpisodicCueSource.TOOL
-                ),
-            ),
-            top_k=5,
-        )
-        assert len(result) == 1
-        assert result[0].entry.text == "りんご"
-
-    def test_provision_empty_store_returns_empty(
-        self,
-        store: InMemorySemanticMemoryStore,
-        provisioning: BeingProvisioningService,
-    ) -> None:
-        """being store が空なら retrieve も空 list。"""
-        being_id = provisioning.ensure_attached(PlayerId(2))
-        service = SemanticPassiveRecallService(store)
-        result = service.retrieve(
-            being_id=being_id,
-            situation_cues=(),
-            top_k=5,
-        )
-        assert result == []
-
-    def test_unprovisioned_being_store_empty(
-        self,
-        store: InMemorySemanticMemoryStore,
-    ) -> None:
-        """store に entry が無ければ空 list。"""
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
-
-        service = SemanticPassiveRecallService(store)
-        result = service.retrieve(
-            being_id=BeingId("being_w1_p2"),
-            situation_cues=(),
-            top_k=5,
-        )
-        assert result == []
 
 
 class TestEpisodicSemanticClusterPromotionServiceNewPath:

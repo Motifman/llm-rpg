@@ -59,9 +59,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
         EpisodicPassiveRecallRetrievalService,
     )
-    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-        SemanticPassiveRecallService,
-    )
     from ai_rpg_world.application.llm.services.world_noun_matcher import (
         IWorldNounMatcher,
     )
@@ -153,11 +150,6 @@ class EpisodicRecallConfig:
     # マッチャ。None なら自由文経路は無効化 (= 構造化フィールドだけが cue 源)。
     # 実装は ``IWorldNounMatcher`` 準拠の任意クラス (Aho-Corasick / Null / C 拡張等)。
     noun_matcher: IWorldNounMatcher | None = None
-    # Phase 1c: semantic memory の passive top-K recall。
-    # service=None または top_k=0 なら prompt §「【関連する学び】」は出ない。
-    # 詳細は docs/memory_system/semantic_memory_activation_plan.md §4。
-    semantic_passive_recall: SemanticPassiveRecallService | None = None
-    semantic_passive_top_k: int = 0
     # PR8 (R5): Encounter Memory を recall cue trigger として使う。注入時、
     # 直近 ``encounter_recent_window_ticks`` 以内に encounter した entity /
     # spot / event が ``ENCOUNTER`` source の cue として recall に乗る。

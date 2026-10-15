@@ -40,7 +40,7 @@ marker に分けてあります (`docs/llm_provider_selection.md` の「実呼�
 | ID | テスト | doc | 目的 |
 |---|---|---|---|
 | `yesterday_v1` | `tests/quality/test_yesterday_v1.py` | `yesterday_v1_baseline.md` | 「昨日何してた?」に答えられるか (= 自伝的時系列 / 能動想起) |
-| `prediction_v1` | `tests/quality/test_prediction_v1.py` | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
+| `prediction_v1` | (Issue #1631 で外した) | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
 
 ## 使い方
 

@@ -84,7 +84,6 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in (
         "LLM_EPISODIC_ENABLED",
         "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-        "SEMANTIC_PASSIVE_TOP_K",
         "SEMANTIC_LLM_GIST_ENABLED",
         "SHORT_TERM_MEMORY_KIND",
         "MEMO_TOOLS_ENABLED",
@@ -122,29 +121,6 @@ def _system_prompt_text(prompt: dict) -> str:
         m.get("content", "")
         for m in prompt.get("messages", [])
         if m.get("role") == "system"
-    )
-
-
-def _seed_semantic_learning(runtime, player_id, text: str) -> None:
-    stack = runtime._episodic_stack
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert stack.semantic_memory_store is not None
-    stack.semantic_memory_store.add_by_being(
-        being,
-        SemanticMemoryEntry(
-            entry_id="contract-semantic-entry",
-            player_id=int(player_id.value),
-            being_id=being,
-            text=text,
-            evidence_episode_ids=("contract-episode",),
-            confidence=0.8,
-            created_at=datetime.now(timezone.utc),
-            importance_score=8,
-            tags=("contract",),
-        ),
     )
 
 
@@ -624,7 +600,6 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
 
     assert "【現在地と周囲】" in user
     assert "【直近の出来事】" in user
-    assert "【関連する学び】" not in user
     assert "visible_tile_map" not in user
     assert "current_terrain_type" not in user
     assert "travel_to" in tool_names
@@ -1383,8 +1358,6 @@ def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     assert stack.chunk_coordinator is not None
     assert stack.passive_recall is not None
     assert stack.noun_matcher is not None
-    assert stack.semantic_passive_recall is None
-    assert stack.semantic_passive_top_k == 0
     assert stack.episodic_semantic_promotion is None
     assert stack.semantic_memory_store is None
     assert stack.memory_link_store is None
@@ -1412,7 +1385,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
-            semantic_passive_top_k=3,
             memo_tools_enabled=False,
         )
     )
@@ -1425,7 +1397,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
     assert runtime._episodic_stack is not None
     assert runtime._episodic_stack.passive_recall is not None
-    assert runtime._episodic_stack.semantic_passive_recall is not None
 
 
 def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
@@ -1475,42 +1446,26 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
     assert wiring.memo_completion_hint_service is None
 
 
-def test_semantic_config_wires_world_runtime_stack_and_prompt_learning(
+def test_semantic_config_wires_world_runtime_stack(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """SEMANTIC config enables stores, links, promotion, and prompt learning."""
+    """SEMANTIC_LLM_GIST_ENABLED の config で、意味記憶の store・リンク・昇格が組まれる。"""
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
     monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
-            semantic_passive_top_k=3,
-            semantic_llm_gist_enabled=False,
+            semantic_llm_gist_enabled=True,
         )
     )
-    player_id = runtime.get_player_ids()[0]
     stack = runtime._episodic_stack
 
     assert stack is not None
-    assert stack.semantic_passive_top_k == 3
-    assert stack.semantic_passive_recall is not None
     assert stack.episodic_semantic_promotion is not None
     assert stack.semantic_memory_store is not None
     assert stack.memory_link_store is not None
-
-    _seed_semantic_learning(
-        runtime,
-        player_id,
-        "CONTRACT_SEMANTIC_MARKER: 禁書庫ではノアの沈黙が手がかりになる",
-    )
-    prompt = runtime.build_full_prompt(player_id)
-    user = _user_prompt_text(prompt)
-
-    assert "【関連する学び】" in user
-    assert "CONTRACT_SEMANTIC_MARKER" in user
 
 
 def test_action_result_recording_runs_semantic_promotion_hook_when_enabled(
@@ -1522,7 +1477,7 @@ def test_action_result_recording_runs_semantic_promotion_hook_when_enabled(
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
+            episodic_enabled=True, semantic_llm_gist_enabled=True
         )
     )
     player_id = runtime.get_player_ids()[0]
@@ -1555,7 +1510,7 @@ def test_record_action_result_preserves_escape_hook_order(
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
+            episodic_enabled=True, semantic_llm_gist_enabled=True
         )
     )
     player_id = runtime.get_player_ids()[0]
@@ -1662,7 +1617,7 @@ def test_record_action_result_keeps_action_success_when_memory_hooks_fail(
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
+            episodic_enabled=True, semantic_llm_gist_enabled=True
         )
     )
     player_id = runtime.get_player_ids()[0]
@@ -2354,21 +2309,17 @@ def test_semantic_env_does_not_override_explicit_config_off(
     """world_runtime semantic flags follow ResolvedLlmRuntimeConfig, not direct env reads."""
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "5")
     monkeypatch.setenv("SEMANTIC_LLM_GIST_ENABLED", "1")
 
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
-            semantic_passive_top_k=0,
             semantic_llm_gist_enabled=False,
         )
     )
     stack = runtime._episodic_stack
 
     assert stack is not None
-    assert stack.semantic_passive_top_k == 0
-    assert stack.semantic_passive_recall is None
     assert stack.semantic_memory_store is None
     assert stack.memory_link_store is None
 
@@ -2404,7 +2355,7 @@ def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
+            episodic_enabled=True, semantic_llm_gist_enabled=True
         )
     )
 

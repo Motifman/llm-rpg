@@ -47,14 +47,13 @@ def _load(name: str) -> dict:
 class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
     """新しい記憶の profile が、古い記憶の部品を止め、新しい記憶を入れることを保証する。"""
 
-    def test_old_memory_parts_are_off_and_learned_shows_nothing(self) -> None:
-        """古い記憶の部品はすべて false で書かれ、【関連する学び】は 0 件。"""
+    def test_old_memory_parts_are_off(self) -> None:
+        """古い記憶の部品はすべて false で書かれている。"""
         being = _load(_BEING_MEMORY)["runtime_config"]
 
         not_off = {key for key in _OLD_MEMORY_PARTS_TURNED_OFF if being.get(key) is not False}
 
         assert not_off == set()
-        assert being["SEMANTIC_PASSIVE_TOP_K"] == 0
 
     def test_new_memory_is_on_with_the_compared_settings(self) -> None:
         """メモ帳が入り、常に入る目次は比べた設定 (10 件、一度に 3 件) で出る。"""
@@ -94,4 +93,3 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert cfg.being_memo_enabled is True
         assert cfg.memo_tools_enabled is False
         assert cfg.episodic_enabled is False
-        assert cfg.semantic_passive_top_k == 0

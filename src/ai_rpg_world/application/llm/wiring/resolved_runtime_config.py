@@ -104,7 +104,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
-    "SEMANTIC_PASSIVE_TOP_K",
     "SHORT_TERM_MEMORY_KIND",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
@@ -194,8 +193,6 @@ class ResolvedLlmRuntimeConfig:
         # === Semantic memory (Phase 1b-1d) ===
         semantic_llm_gist_enabled: ``SEMANTIC_LLM_GIST_ENABLED=1`` で episodic →
             semantic 昇格時に LLM 要約を生成
-        semantic_passive_top_k: ``SEMANTIC_PASSIVE_TOP_K`` 整数。>0 で prompt
-            に §learned section が出る
     """
 
     # Short-term memory
@@ -245,7 +242,6 @@ class ResolvedLlmRuntimeConfig:
 
     # Semantic memory
     semantic_llm_gist_enabled: bool
-    semantic_passive_top_k: int
 
 
     short_term_memory_turn_cap: int = 20
@@ -393,7 +389,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_belief_evidence_enabled,
             resolve_memo_tools_enabled,
             resolve_semantic_llm_gist_enabled,
-            resolve_semantic_passive_top_k,
             resolve_short_term_memory_kind,
             resolve_short_term_memory_turn_window,
         )
@@ -410,7 +405,6 @@ class ResolvedLlmRuntimeConfig:
             short_term_memory_turn_compact_count,
         ) = resolve_short_term_memory_turn_window(env=source)
         semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled(env=source)
-        semantic_passive_top_k = resolve_semantic_passive_top_k(env=source)
 
         # LLM client kind (factory と同じロジックで解決)
         llm_client_kind = _resolve_llm_client_kind(source)
@@ -653,7 +647,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
-            semantic_passive_top_k=semantic_passive_top_k,
             belief_evidence_enabled=belief_evidence_enabled,
             belief_consolidation_enabled=belief_consolidation_enabled,
             belief_attribution_enabled=belief_attribution_enabled,
@@ -687,7 +680,7 @@ class ResolvedLlmRuntimeConfig:
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                semantic_passive_top_k=3,
+                semantic_llm_gist_enabled=True,
             )
         """
         defaults: dict[str, Any] = dict(
@@ -739,7 +732,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_promotion_force_full_scan=False,
             episodic_promotion_expansion_hops=4,
             semantic_llm_gist_enabled=False,
-            semantic_passive_top_k=0,
             belief_evidence_enabled=False,
             belief_consolidation_enabled=False,
             belief_attribution_enabled=False,
