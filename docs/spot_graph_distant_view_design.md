@@ -319,7 +319,7 @@ trace は実験後に「見えていたはずの遠景が本当に prompt に入
 
 ambient 系の trace は毎ターン全エージェントで出すと trace を膨らませる。`DISTANT_VIEW_RENDERED` / `DISTANT_VIEW_SKIPPED` は capture flag または debug profile 限定にする。状態変化系の `DISTANT_CUE_STATE_CHANGED` / `DISTANT_CUE_DELIVERED` は、世界変化と記憶流入の根拠になるため常時記録する。
 
-**その後**: `DISTANT_VIEW_RENDERED` / `DISTANT_VIEW_SKIPPED` を出すかを決めていた `DISTANT_VIEW_TRACE_ENABLED` は、記憶ではない設定の片付け (#1631) の #PRNUM で消した。今は prompt build のたびに常に記録する。trace は膨らむが、遠景が prompt に入ったかを run の後で確かめられないほうが困る、という判断にした。
+**その後**: `DISTANT_VIEW_RENDERED` / `DISTANT_VIEW_SKIPPED` を出すかを決めていた `DISTANT_VIEW_TRACE_ENABLED` は、記憶ではない設定の片付け (#1631) の #1791 で消した。今は prompt build のたびに常に記録する。trace は膨らむが、遠景が prompt に入ったかを run の後で確かめられないほうが困る、という判断にした。
 
 候補:
 
