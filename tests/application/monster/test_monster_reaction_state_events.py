@@ -308,7 +308,7 @@ class TestAbandonedChaseEvent:
         (= last_observed が None で `_handle_lost_target` の冒頭分岐) に
         到達する公開経路は存在しない。`target_lost` は将来「last_observed
         を None にする経路」を導入したときに使えるよう reason 文字列だけ
-        予約してある状態 (event 定義側でテストする)。
+        予約してある状態 (公開formatterの理由値試験で構築と保持を確かめる)。
         """
         handler = _make_handler(player=None)
         monster, graph = self._setup_chasing_monster(
