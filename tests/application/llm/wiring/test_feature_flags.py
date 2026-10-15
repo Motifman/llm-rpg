@@ -7,83 +7,16 @@ import logging
 import pytest
 
 from ai_rpg_world.application.llm.wiring.feature_flags import (
-    DEFAULT_SEMANTIC_PASSIVE_TOP_K,
     ENV_BELIEF_ATTRIBUTION_ENABLED,
     ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_MEMO_TOOLS_ENABLED,
-    ENV_SEMANTIC_PASSIVE_TOP_K,
     log_belief_attribution_enabled_state,
     log_belief_evidence_enabled_state,
     log_memo_tools_enabled_state,
-    log_semantic_passive_top_k_state,
     resolve_belief_attribution_enabled,
     resolve_belief_evidence_enabled,
     resolve_memo_tools_enabled,
-    resolve_semantic_passive_top_k,
 )
-
-
-class TestResolveSemanticPassiveTopK:
-    """``SEMANTIC_PASSIVE_TOP_K`` env パース (Phase 1c)。"""
-
-    def test_default_zero(self) -> None:
-        """default は 0 (= prompt §learned 非表示)。検証中の安定設定。"""
-        assert DEFAULT_SEMANTIC_PASSIVE_TOP_K == 0
-        assert resolve_semantic_passive_top_k(env={}) == 0
-
-    def test_env_unset_default_zero(self) -> None:
-        """env 未設定なら default 0。"""
-        assert resolve_semantic_passive_top_k(
-            env={ENV_SEMANTIC_PASSIVE_TOP_K: ""}
-        ) == 0
-
-    def test_value(self) -> None:
-        """有効な正整数なら その値。"""
-        assert resolve_semantic_passive_top_k(
-            env={ENV_SEMANTIC_PASSIVE_TOP_K: "3"}
-        ) == 3
-        assert resolve_semantic_passive_top_k(
-            env={ENV_SEMANTIC_PASSIVE_TOP_K: "  5  "}
-        ) == 5
-
-    def test_returns_zero_0(self) -> None:
-        """明示的に 0 を渡しても受理。"""
-        assert resolve_semantic_passive_top_k(
-            env={ENV_SEMANTIC_PASSIVE_TOP_K: "0"}
-        ) == 0
-
-    def test_case_raises_value_error_2(self) -> None:
-        """typo / 非整数で silent fallback すると実験前提を壊すので fail-fast (PR #434)。"""
-        with pytest.raises(ValueError) as exc_info:
-            resolve_semantic_passive_top_k(
-                env={ENV_SEMANTIC_PASSIVE_TOP_K: "abc"}
-            )
-        assert "SEMANTIC_PASSIVE_TOP_K" in str(exc_info.value)
-        assert "non-integer" in str(exc_info.value)
-
-    def test_case_raises_value_error(self) -> None:
-        """負の値を渡すのは意図がないと考え、fail-fast (PR #434)。"""
-        with pytest.raises(ValueError) as exc_info:
-            resolve_semantic_passive_top_k(
-                env={ENV_SEMANTIC_PASSIVE_TOP_K: "-3"}
-            )
-        assert "SEMANTIC_PASSIVE_TOP_K" in str(exc_info.value)
-        assert ">= 0" in str(exc_info.value)
-
-
-class TestLogSemanticPassiveTopKState:
-    """解決結果を INFO ログ 1 件で残す。"""
-
-    def test_top_k_value_log_rendered(self, caplog: pytest.LogCaptureFixture) -> None:
-        """topk の値が log に出る。"""
-        with caplog.at_level(
-            logging.INFO,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            log_semantic_passive_top_k_state(3)
-            log_semantic_passive_top_k_state(0)
-        assert any("3" in rec.message for rec in caplog.records)
-        assert any("0" in rec.message for rec in caplog.records)
 
 
 class TestResolveBeliefEvidenceEnabled:

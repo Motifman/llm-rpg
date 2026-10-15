@@ -152,14 +152,6 @@ class TraceEventKind:
     # 落とすが、run 中の状態変化で発見した場合は実験データを守るため
     # trace に残して続行する。payload: violation_count / violations[]。
     PROMPT_ARGUMENT_CONTRACT_VIOLATION = "prompt_argument_contract_violation"
-    # Phase 1c: semantic memory passive top-K の発火結果。prompt build 時に
-    # ``SemanticPassiveRecallService.retrieve`` が走ったタイミングで 1 件記録。
-    # payload: situation_cues / top_k / candidate_count / candidates[].entry_id /
-    # candidates[].score / .recency / .importance / .relevance / .text_snippet /
-    # .tags / .importance_score
-    # 検証中は top_k=0 (default) で発火しない。SEMANTIC_PASSIVE_TOP_K env で
-    # 明示的に有効化したときだけ trace に出る。
-    SEMANTIC_PASSIVE_RECALL = "semantic_passive_recall"
     # Phase 2.1: 短期記憶 L4 生成タスクが scheduler でキュー満杯 / shutdown 後に
     # drop された瞬間。payload: reason / queue_size / max_queue_size。
     # silent failure 防止のため、drop は trace + warning で必ず可観測化する。

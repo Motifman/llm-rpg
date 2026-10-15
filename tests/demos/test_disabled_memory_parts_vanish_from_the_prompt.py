@@ -56,11 +56,6 @@ _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "BEING_MEMO_ENABLED": "false",
 }
 
-#: 全部入りの run も止めていた【関連する学び】も有効にして、全部入りにする。
-#: 目次つきのエピソードは設定で止められず、常に入る (#1631)。
-_ALL_MEMORY_PARTS = {
-    "SEMANTIC_PASSIVE_TOP_K": "3",
-}
 
 #: 記憶の部品ごとの、本文に出てはいけない名前。
 _RELEVANT_MEMORIES = "関連する記憶"
@@ -109,16 +104,14 @@ _ALL_NAMES = (
 #: 全部入りのとき、1 ターン目のプロンプトに出る名前。
 #:
 #: **これが正の対照。** 止めたときに「消えること」だけを見ると、もともと出て
-#: いなかった名前でも緑になる。【関連する学び】は中身ができてから出る欄で、
-#: 1 ターン目には出ない。この総当たりは、本文が将来それを指したときに落ちる
-#: 見張りになる。
+#: いなかった名前でも緑になる。
 #:
 #: メモ帳は今のメモの道具と並べられない (設定で止める) ので、全部入りには入らない。
 #: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
 #: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
 #:
-#: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具、見出しの欄は #1631 で
-#: 消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
+#: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具、見出しの欄、
+#: 【関連する学び】は #1631 で消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
 #: 戻ってこないことを見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _LEARNED,
@@ -142,11 +135,6 @@ _MEMO_BOOK_INSTEAD = {
 
 #: (止める部品, 設定の差分, 消えるべき名前)。
 _DISABLED_PARTS = [
-    pytest.param(
-        {"SEMANTIC_PASSIVE_TOP_K": "0"},
-        (_LEARNED,),
-        id="learned",
-    ),
     pytest.param(
         {"MEMO_TOOLS_ENABLED": "false"},
         (_ACTIVE_MEMOS, *_MEMO_TOOLS, *_MEMO_BOOK_NAMES),
@@ -205,7 +193,6 @@ def _full_prompt_with(overrides: dict[str, str]) -> str:
             **mapping,
             **_OFFLINE,
             **_OLD_MEMORY_PARTS_OF_THE_FULL_RUN,
-            **_ALL_MEMORY_PARTS,
             **overrides,
         },
     )

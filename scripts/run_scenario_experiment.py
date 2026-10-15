@@ -577,7 +577,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
-    # #526 後続: SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED が ON だと
+    # #526 後続: SEMANTIC_LLM_GIST_ENABLED / BELIEF_CONSOLIDATION_ENABLED が ON だと
     # episodic_stack が semantic store + memory link store を持つ。あれば snapshot に
     # 拾う (OFF なら従来どおり None = 空 in-memory fallback)。link store も拾わないと
     # semantic entries だけ保存され、昇格根拠の link graph が空 fallback になる。
@@ -1775,11 +1775,6 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
         "(runtime_config.SEMANTIC_LLM_GIST_ENABLED)",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_passive_top_k={cfg.semantic_passive_top_k} "
-        "(runtime_config.SEMANTIC_PASSIVE_TOP_K)",
         flush=True,
     )
     # OpenRouter provider routing: 設定されているときだけ表示

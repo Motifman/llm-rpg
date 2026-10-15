@@ -64,11 +64,6 @@ from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall impor
     emit_episodic_recall_trace,
     run_episodic_passive_recall,
 )
-from ai_rpg_world.application.llm.services.prompt_sections.semantic_recall import (
-    _gather_semantic_topic_words_for_recall,
-    emit_semantic_passive_recall_trace,
-    run_semantic_passive_recall,
-)
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
@@ -181,10 +176,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_memory_link_service = episodic.memory_link_service
         # Issue #283 後続: 観測 prose 経由の自由文 cue 抽出マッチャ (任意)。
         noun_matcher = episodic.noun_matcher
-        # Phase 1c: semantic memory の passive top-K (任意)。
-        # service=None または top_k=0 なら prompt §「【関連する学び】」は出ない。
-        semantic_passive_recall = episodic.semantic_passive_recall
-        semantic_passive_top_k = episodic.semantic_passive_top_k
         # PR8 (R5): encounter memory を recall cue 源にする。注入時のみ動く。
         encounter_memory_for_recall = episodic.encounter_memory
         encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
@@ -249,18 +240,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError(
                 "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
             )
-        # Phase 1c: semantic passive top-K の型検証 (import は service 構築時のみ
-        # 必要なので遅延 import)。service=None または top_k=0 のときは validate 不要。
-        if semantic_passive_recall is not None:
-            from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-                SemanticPassiveRecallService,
-            )
-            if not isinstance(semantic_passive_recall, SemanticPassiveRecallService):
-                raise TypeError(
-                    "semantic_passive_recall must be SemanticPassiveRecallService or None"
-                )
-        if semantic_passive_top_k < 0:
-            raise ValueError("semantic_passive_top_k must be 0 or greater")
         if memo_store is not None and not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
@@ -339,9 +318,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
         self._episodic_memory_link_service = episodic_memory_link_service
         self._noun_matcher = noun_matcher
-        # Phase 1c
-        self._semantic_passive_recall = semantic_passive_recall
-        self._semantic_passive_top_k = semantic_passive_top_k
         # PR8 (R5)
         self._encounter_memory_for_recall = encounter_memory_for_recall
         self._encounter_recent_window_ticks = encounter_recent_window_ticks
@@ -606,19 +582,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
         )
 
-        # 6b. Phase 1c: semantic memory の passive top-K (任意)。
-        # service=None または top_k=0 なら空文字を返し prompt §「【関連する学び】」
-        # は出ない。状況連想キューは episodic 受動想起と同じ situation_cues を
-        # 使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
-        learned_text = self._run_semantic_passive_recall(
-            player_id=player_id,
-            being_id=being_id,
-            observations=observations,
-            action_results=action_results,
-            ui_context=ui_context,
-            current_state_dto=current_state_dto,
-        )
-
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
         # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
         # メモは review してほしい」を視覚化。
@@ -680,7 +643,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             active_memos_text=active_memos_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
-            learned_text=learned_text,
             mid_summary_text=mid_summary_text,
             long_summary_text=long_summary_text,
             known_people_text=known_people_text,
@@ -773,40 +735,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             recent_events_text=recent_events_text,
             player_info=player_info,
             current_state_dto=current_state_dto,
-        )
-
-    def _run_semantic_passive_recall(
-        self,
-        *,
-        player_id: PlayerId,
-        being_id: BeingId,
-        observations: list[ObservationEntry],
-        action_results: list[Any],
-        ui_context: Any,
-        current_state_dto: Any | None = None,
-    ) -> str:
-        return run_semantic_passive_recall(
-            self,
-            player_id=player_id,
-            being_id=being_id,
-            observations=observations,
-            action_results=action_results,
-            ui_context=ui_context,
-            current_state_dto=current_state_dto,
-        )
-
-    def _emit_semantic_passive_recall_trace(
-        self,
-        *,
-        player_id: PlayerId,
-        situation_cues: tuple[Any, ...],
-        candidates: list[Any],
-    ) -> None:
-        emit_semantic_passive_recall_trace(
-            self,
-            player_id=player_id,
-            situation_cues=situation_cues,
-            candidates=candidates,
         )
 
     def _fetch_uncompleted_memos(self, being_id: BeingId) -> list[MemoEntry]:

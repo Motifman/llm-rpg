@@ -57,9 +57,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
         EpisodicSemanticClusterPromotionService,
     )
-    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-        SemanticPassiveRecallService,
-    )
     from ai_rpg_world.being.domain.memory_turn_clock import (
         MemoryTurnReader,
     )
@@ -171,18 +168,14 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
-    # semantic 拡張 (default OFF)。``semantic_passive_top_k > 0`` または LLM gist
-    # 有効時に full 共有 builder (build_episodic_memory_stack) で組み、
-    # world_runtime でも「学びを作る (promotion) + 学びを出す (passive recall)」が
-    # 動くようにする。OFF のときは全て None / 0 で従来の episodic-only 動作。
+    # semantic 拡張 (default OFF)。LLM gist か固着の有効時に full 共有 builder
+    # (build_episodic_memory_stack) で組み、world_runtime でも「学びを作る
+    # (promotion)」が動くようにする。OFF のときは全て None で従来の
+    # episodic-only 動作。
     #
-    #   semantic_passive_recall: prompt の【関連する学び】用 (top_k>0 のとき非 None)
-    #   semantic_passive_top_k: prompt に出す semantic 件数 (0 = 出さない)
     #   episodic_semantic_promotion: action 後に on_after_tool_turn を呼ぶ昇格 service
     #   semantic_memory_store: 昇格先 store (snapshot / 検証用に公開)
     #   memory_link_store: 昇格の根拠となる memory link graph (snapshot 用に公開)
-    semantic_passive_recall: SemanticPassiveRecallService | None = None
-    semantic_passive_top_k: int = 0
     episodic_semantic_promotion: EpisodicSemanticClusterPromotionService | None = None
     # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
     semantic_memory_store: Any | None = None
@@ -289,7 +282,6 @@ def build_episodic_stack(
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
     episode_store: EpisodicEpisodeRepository | None = None,
     semantic_enabled: bool = False,
-    semantic_passive_top_k: int = 0,
     semantic_gist_service: Any | None = None,
     semantic_persona_resolver: Any | None = None,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
@@ -352,8 +344,6 @@ def build_episodic_stack(
       None なら新規作成
     - ``semantic_enabled``: True で本家 ``build_episodic_memory_stack`` を再利用し
       link/semantic/promotion を組む (default False = 従来の episodic-only)
-    - ``semantic_passive_top_k``: >0 で ``SemanticPassiveRecallService`` を作り
-      prompt の【関連する学び】に出す。0 (gist のみ ON) は write-only 構成
     - ``semantic_gist_service`` / ``semantic_persona_resolver``: cluster 昇格時の
       LLM gist と persona。``build_episodic_memory_stack`` にそのまま渡す
 
@@ -473,29 +463,12 @@ def build_episodic_stack(
     passive_recall = EpisodicPassiveRecallRetrievalService(episode_store)
     # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
-    # semantic passive recall は top_k>0 のときだけ作る (= prompt の【関連する学び】)。
-    # gist のみ ON (top_k=0) は「学びを作るが prompt には出さない」write-only 構成で、
-    # ここで recall=None になるのは意図どおり (promotion は上で配線済)。
-    semantic_passive_recall: Any | None = None
-    if semantic_enabled and semantic_passive_top_k > 0:
-        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-            SemanticPassiveRecallService,
-        )
-
-        # semantic_enabled のときは semantic スタックが store を組む
-        assert semantic_memory_store is not None
-        semantic_passive_recall = SemanticPassiveRecallService(
-            semantic_memory_store,
-        )
-
     return EpisodicStack(
         chunk_coordinator=chunk_coordinator,
         passive_recall=passive_recall,
         noun_matcher=noun_matcher,
         episode_store=episode_store,
         subjective_completion_scheduler=subjective_completion_scheduler,
-        semantic_passive_recall=semantic_passive_recall,
-        semantic_passive_top_k=semantic_passive_top_k if semantic_enabled else 0,
         episodic_semantic_promotion=episodic_semantic_promotion,
         semantic_memory_store=semantic_memory_store,
         memory_link_store=memory_link_store,

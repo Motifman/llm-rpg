@@ -188,7 +188,7 @@ class TestEncounterCuesReachEpisodicRecall:
         from tests.runtime_config_helpers import episodic_config
 
         runtime = create_world_runtime(
-            _SCENARIO_PATH, config=episodic_config(semantic_passive_top_k=3)
+            _SCENARIO_PATH, config=episodic_config()
         )
         rin = runtime.get_player_ids()[1]
         tick = runtime.current_tick()
@@ -208,10 +208,10 @@ class TestEncounterCuesReachEpisodicRecall:
         return cues
 
     def test_met_player_and_visited_spot_become_situation_cues(self) -> None:
-        """知り合いの記録で直近に会った 'カイト' と、環境の encounter でいま居ない場所 entrance_hall に遭遇した記録から、episodic と semantic の両方の受動想起の situation_cues に entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が入る。"""
+        """知り合いの記録で直近に会った 'カイト' と、環境の encounter でいま居ない場所 entrance_hall に遭遇した記録から、episodic の受動想起の situation_cues に entity:actor_カイト と entrance_hall の数値 ID の place_spot cue が入る。"""
         from ai_rpg_world.application.trace.events import TraceEventKind
 
-        kinds = (TraceEventKind.EPISODIC_RECALL, TraceEventKind.SEMANTIC_PASSIVE_RECALL)
+        kinds = (TraceEventKind.EPISODIC_RECALL,)
 
         cues = self._situation_cues_by_recall(kinds)
 

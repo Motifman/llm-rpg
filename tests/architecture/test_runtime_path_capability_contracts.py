@@ -53,14 +53,11 @@ def test_world_runtime_memory_stack_has_flag_gated_semantic_extension() -> None:
         "passive_recall",
         "noun_matcher",
         "episode_store",
-        "semantic_passive_recall",
-        "semantic_passive_top_k",
         "episodic_semantic_promotion",
         "semantic_memory_store",
         "memory_link_store",
     } <= stack_fields
     assert build_params["semantic_enabled"].default is False
-    assert build_params["semantic_passive_top_k"].default == 0
     assert "semantic_gist_service" in build_params
     assert "semantic_persona_resolver" in build_params
 

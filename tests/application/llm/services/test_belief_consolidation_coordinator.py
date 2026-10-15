@@ -1759,8 +1759,7 @@ class TestMalformedResponseHandling:
 class TestHeardGuessesStayGuesses:
     """他の人の推測を材料にした信念が、言い切りの世界の決まりとして出ないための入力の組み立てと表示を保証する (#1602)。
 
-    言い切りにするかどうかは LLM の判断なので見ない。LLM に渡る決まりと材料、
-    および LLM が言い切りで作ってしまったときの【関連する学び】の表示を見る。
+    言い切りにするかどうかは LLM の判断なので見ない。LLM に渡る決まりと材料を見る。
     """
 
     # mine_v1_006 のサヨ (P4) が T34 に信念をまとめたときの材料。どれもミオの推測か依頼。
@@ -1824,18 +1823,3 @@ class TestHeardGuessesStayGuesses:
         user = json.loads(setup.port.calls[0][1]["content"].split("\n", 1)[1])
         assert user["shortlist"]
         assert all("hearsay_support_count" not in b for b in user["shortlist"])
-
-    def test_sayo_t34_belief_written_as_fact_is_shown_as_heard(self) -> None:
-        """LLM がサヨの T34 の材料から言い切りの信念を作っても、【関連する学び】の行には「(人から聞いた話)」が付く。"""
-        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-            belief_recall_line,
-        )
-
-        setup = self._sayo_t34()
-
-        setup.coordinator.flush_player(setup.player_id, setup.being_id)
-
-        (created,) = setup.semantic_store.list_for_being(setup.being_id)
-        assert belief_recall_line(created) == (
-            "- 切り替え弁の目盛りが正しくないと昇降機に動力が来ない (人から聞いた話)"
-        )
