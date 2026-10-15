@@ -41,12 +41,6 @@ dev = [
     "mypy==2.3.1",
     "ruff==0.16.8",
 ]
-# 手元で埋め込みを作る絞り込み (Ruri v3、#1454)。torch を含み重いので、ふだんの
-# 依存と CI には入れない。入っていないとき、その手法のテストは飛ばす。
-embedding-local = [
-    "sentence-transformers>=5.0",
-    "sentencepiece>=0.2",
-]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -164,11 +158,6 @@ files = [
 [[tool.mypy.overrides]]
 module = "litellm.*"
 implicit_reexport = true
-
-# sentence-transformers は任意の依存 embedding-local で、CI の型検査には入れない。
-[[tool.mypy.overrides]]
-module = "sentence_transformers.*"
-ignore_missing_imports = true
 
 [tool.uv.sources]
 semantic-resolver = { git = "https://github.com/Motifman/semantic-resolver.git", rev = "f164e0973c0cb6aa59aaa75837107f2a962b4d08" }

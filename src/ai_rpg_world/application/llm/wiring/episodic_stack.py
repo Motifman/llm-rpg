@@ -51,9 +51,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
         BeliefConsolidationCoordinator,
     )
-    from ai_rpg_world.application.llm.services.belief_create_gate import (
-        BeliefCreateGate,
-    )
     from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
         EpisodicSemanticClusterPromotionService,
     )
@@ -304,7 +301,6 @@ def build_episodic_stack(
     # 呼び出し側 (world_runtime.py) が両フラグの整合を取る)。
     belief_consolidation_enabled: bool = False,
     belief_consolidation_completion: IBeliefConsolidationCompletionPort | None = None,
-    belief_create_gate: BeliefCreateGate | None = None,
     # #1452: 固着パスが作る証拠と信念に付ける記憶のターン数の読み口。
     # 固着パスを組むときは必須。
     memory_turn_reader: MemoryTurnReader | None = None,
@@ -427,7 +423,6 @@ def build_episodic_stack(
                 # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
                 # (OFF = pre-U4 と byte 一致)。
                 belief_attribution_enabled=belief_attribution_enabled,
-                create_gate=belief_create_gate,
             )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
