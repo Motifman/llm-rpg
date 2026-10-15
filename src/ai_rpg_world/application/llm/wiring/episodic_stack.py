@@ -54,12 +54,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.belief_create_gate import (
         BeliefCreateGate,
     )
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        IEpisodicRecallHabituationStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        IEpisodicRecallSlotStore,
-    )
     from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
         EpisodicSemanticClusterPromotionService,
     )
@@ -199,17 +193,6 @@ class EpisodicStack:
     # 永遠に 0 のままで昇格ゲート (recall_count>=3) を誰も超えられない
     # (memory_full_002 実験で発覚した静かな失敗)。
     link_service: Any | None = None
-    # #526 段階 2: 慣化 sidecar (default off)。env で enable 時に in-memory store
-    # を構築し、passive_recall service と prompt_builder の両方に渡す。
-    recall_habituation_store: IEpisodicRecallHabituationStore | None = None
-    recall_habituation_decay_window_ticks: int = 5
-    # #526 段階 3: 想起スロット sidecar (default off)。env で enable 時に
-    # in-memory store を構築し、passive_recall と prompt_builder の両方に渡す。
-    # 4 パラメータ (capacity / insert_per_tick / max_residence / cooldown_ticks)
-    # で運用を調整する。
-    recall_slot_store: IEpisodicRecallSlotStore | None = None
-    recall_slot_cooldown_ticks: int = 5
-    recall_slot_capacity: int = 4
     # U2 (証拠台帳統一設計 / default OFF): belief evidence buffer は呼び出し側
     # (world_runtime.py) が flag を見て構築する。stack はここに store の参照
     # だけ公開する (snapshot 用。実体は呼び出し側が保持)。
@@ -309,16 +292,6 @@ def build_episodic_stack(
     semantic_passive_top_k: int = 0,
     semantic_gist_service: Any | None = None,
     semantic_persona_resolver: Any | None = None,
-    recall_habituation_enabled: bool = False,
-    recall_habituation_decay_window_ticks: int = 5,
-    # #526 段階 3 + PR-A: 想起スロット (working memory) 配線。env で enable する。
-    # default は「希少資源」化された slot 運用値 (N=4 / K=1 / L=8 / C=5 / 閾値=2)。
-    recall_slot_enabled: bool = False,
-    recall_slot_capacity: int = 4,
-    recall_slot_insert_per_tick: int = 1,
-    recall_slot_max_residence: int = 8,
-    recall_slot_cooldown_ticks: int = 5,
-    recall_slot_insert_score_threshold: int = 2,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -497,39 +470,7 @@ def build_episodic_stack(
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
     )
-    # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
-    # passive_recall に注入する。prompt_builder 側にも同 store を渡して
-    # 採用 episode の last_recalled_tick を retrieve 後に書き込む。
-    recall_habituation_store: IEpisodicRecallHabituationStore | None = None
-    if recall_habituation_enabled:
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-            InMemoryEpisodicRecallHabituationStore,
-        )
-        recall_habituation_store = InMemoryEpisodicRecallHabituationStore()
-    # #526 段階 3: 想起スロット (working memory)。慣化と独立に on/off できる。
-    # store + policy が揃ったときだけ passive_recall に注入される。
-    recall_slot_store: IEpisodicRecallSlotStore | None = None
-    recall_slot_policy_obj = None
-    if recall_slot_enabled:
-        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-            InMemoryEpisodicRecallSlotStore,
-            RecallSlotPolicy,
-        )
-        recall_slot_store = InMemoryEpisodicRecallSlotStore()
-        recall_slot_policy_obj = RecallSlotPolicy(
-            capacity=recall_slot_capacity,
-            insert_per_tick=recall_slot_insert_per_tick,
-            max_residence=recall_slot_max_residence,
-            cooldown_ticks=recall_slot_cooldown_ticks,
-            insert_score_threshold=recall_slot_insert_score_threshold,
-        )
-    passive_recall = EpisodicPassiveRecallRetrievalService(
-        episode_store,
-        habituation_store=recall_habituation_store,
-        habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
-        slot_store=recall_slot_store,
-        slot_policy=recall_slot_policy_obj,
-    )
+    passive_recall = EpisodicPassiveRecallRetrievalService(episode_store)
     # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
     # semantic passive recall は top_k>0 のときだけ作る (= prompt の【関連する学び】)。
@@ -559,11 +500,6 @@ def build_episodic_stack(
         semantic_memory_store=semantic_memory_store,
         memory_link_store=memory_link_store,
         link_service=link_service,
-        recall_habituation_store=recall_habituation_store,
-        recall_habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
-        recall_slot_store=recall_slot_store,
-        recall_slot_cooldown_ticks=recall_slot_cooldown_ticks,
-        recall_slot_capacity=recall_slot_capacity,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         belief_consolidation_coordinator=belief_consolidation_coordinator,
     )

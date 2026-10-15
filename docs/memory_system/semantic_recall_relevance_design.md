@@ -19,7 +19,7 @@ belief が常時 surface**する(例: 床板の前で刃物が無いのに「床
 `prompt_builder.py:1322` で `situation_cues = build_situation_episodic_cues(...)` を **1 回**生成し、
 **episodic recall(:1372/:1473)と semantic recall(unconscious_context_provider 経由)の両方**に流している (unconscious_context_provider は #1631 の #1690 で消した)。
 episodic recall は「マッチした cue canonical(`axis:value`)の数 = multi_cue_score」でスコアする
-(`episodic_recall_slot_store.py:59-60`)。**よって既存 axis に値を足すと episodic 側のスコアが動く**。
+(`episodic_recall_slot_store.py:59-60`、このファイルは #1631 で消した)。**よって既存 axis に値を足すと episodic 側のスコアが動く**。
 
 ## 方針: 新 axis `topic` で"意味語 cue"を追加(episodic には inert)
 

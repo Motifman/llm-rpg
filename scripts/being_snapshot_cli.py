@@ -109,15 +109,8 @@ def _build_stack(
 
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
 
-    # PR-G: 想起階層 (slot / habituation) は CLI 経由の単発 dump で
-    # 使う場面が無いので、空の in-memory store を渡すだけで足る。
-    # U2: belief evidence buffer も同様に CLI では in-memory で足りる。
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        InMemoryEpisodicRecallHabituationStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        InMemoryEpisodicRecallSlotStore,
-    )
+    # U2: belief evidence buffer は CLI 経由の単発 dump で使う場面が無いので、
+    # 空の in-memory store を渡すだけで足る。
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -139,8 +132,6 @@ def _build_stack(
         semantic_store=semantic_store,
         memory_link_store=memory_link_store,
         episodic_episode_store=episode_store,
-        recall_slot_store=InMemoryEpisodicRecallSlotStore(),
-        recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
         belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
@@ -188,11 +179,11 @@ def cmd_save(args: argparse.Namespace) -> int:
         memory_db=args.memory_db,
         episode_db=args.episode_db,
     )
-    # PR-G: CLI 経由の dump は RAM 上の sidecar (slot / habituation)
-    # に到達できないので、これらは常に空のまま保存される。実験 run 中の想起
-    # 状態を取りこぼしていることがユーザに伝わるよう、明示的に warning を残す。
+    # CLI 経由の dump は RAM 上の sidecar に到達できないので、これらは常に
+    # 空のまま保存される。取りこぼしていることがユーザに伝わるよう、明示的に
+    # warning を残す。
     logger.warning(
-        "recall_slot / habituation / memory turn / acquaintances / being "
+        "memory turn / acquaintances / being "
         "episodes / being memo book are in-memory sidecars and "
         "are NOT captured via this CLI. The resulting snapshot will have "
         "those layers empty."

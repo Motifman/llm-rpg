@@ -34,10 +34,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_being_repository import Sqlit
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dict[str, object]]:
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        InMemoryEpisodicRecallHabituationStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
@@ -45,7 +41,7 @@ def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dic
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
     episode = InMemorySubjectiveEpisodeStore()
-    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     svc = BeingPersistenceService(being_repository=being_repo, memory_snapshot_service=snapshot_svc)
     return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'episode': episode})
 
@@ -134,10 +130,6 @@ class TestConstructorTypeGuards:
 
     def test_being_repository_raises_type_error(self) -> None:
         """being repository 型違反。"""
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-            InMemoryEpisodicRecallHabituationStore,
-        )
-        from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
         from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
             InMemoryBeliefEvidenceBufferStore,
         )
@@ -145,7 +137,7 @@ class TestConstructorTypeGuards:
         semantic = InMemorySemanticMemoryStore()
         link = InMemoryMemoryLinkStore()
         episode = InMemorySubjectiveEpisodeStore()
-        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, recall_slot_store=InMemoryEpisodicRecallSlotStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         with pytest.raises(TypeError, match='being_repository'):
             BeingPersistenceService(being_repository='bad', memory_snapshot_service=snap_svc)
 

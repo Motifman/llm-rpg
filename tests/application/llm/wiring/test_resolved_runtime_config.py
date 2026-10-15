@@ -107,52 +107,6 @@ class TestReasonFirstTwoStepConfig:
         cfg = ResolvedLlmRuntimeConfig.for_tests(reason_first_two_step_enabled=True)
         assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
 
-class TestRecallHabituationEnabled:
-    """段階 2 (慣化ペナルティ) の on/off + decay_window の解決。"""
-
-    def test_unset_false(self) -> None:
-        """``LLM_EPISODIC_RECALL_HABITUATION_ENABLED`` 未設定なら False。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.recall_habituation_enabled is False
-        assert cfg.recall_habituation_decay_window_ticks == 5
-
-    def test_truthy_true(self) -> None:
-        """truthy で True。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_ENABLED': '1'})
-        assert cfg.recall_habituation_enabled is True
-
-    def test_decay_window_can_be_set_explicitly(self) -> None:
-        """``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で window を上書き。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_ENABLED': '1', 'LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS': '8'})
-        assert cfg.recall_habituation_decay_window_ticks == 8
-
-    def test_decay_window_negative_raises_value_error(self) -> None:
-        """負値は fail-fast。"""
-        with pytest.raises(ValueError, match='HABITUATION_DECAY_TICKS'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS': '-1'})
-
-    def test_decay_window_raises_value_error(self) -> None:
-        """decay window 非数値は ValueError。"""
-        with pytest.raises(ValueError, match='HABITUATION_DECAY_TICKS'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS': 'abc'})
-
-    def test_for_tests_default(self) -> None:
-        cfg = ResolvedLlmRuntimeConfig.for_tests()
-        assert cfg.recall_habituation_enabled is False
-        assert cfg.recall_habituation_decay_window_ticks == 5
-
-    def test_for_tests_override(self) -> None:
-        cfg = ResolvedLlmRuntimeConfig.for_tests(recall_habituation_enabled=True, recall_habituation_decay_window_ticks=10)
-        assert cfg.recall_habituation_enabled is True
-        assert cfg.recall_habituation_decay_window_ticks == 10
-
-    def test_trace_dict_included_2(self) -> None:
-        """totracedict に含まれる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(recall_habituation_enabled=True, recall_habituation_decay_window_ticks=7)
-        d = cfg.to_trace_dict()
-        assert d['recall_habituation_enabled'] is True
-        assert d['recall_habituation_decay_window_ticks'] == 7
-
 class TestShortTermMemoryTurnWindow:
     """自分のターン単位の窓設定を、全構築経路で同じ不変条件に保つ。"""
 
@@ -317,6 +271,14 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "LLM_AFTERGLOW_CAPACITY",
             "LLM_AFTERGLOW_MAX_RESIDENCE",
             "RECALL_HIT_BOOST_ENABLED",
+            "LLM_EPISODIC_RECALL_HABITUATION_ENABLED",
+            "LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS",
+            "LLM_EPISODIC_RECALL_SLOT_ENABLED",
+            "LLM_EPISODIC_RECALL_SLOT_CAPACITY",
+            "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK",
+            "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
+            "LLM_EPISODIC_RECALL_SLOT_COOLDOWN",
+            "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:

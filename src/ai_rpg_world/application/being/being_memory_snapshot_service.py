@@ -25,10 +25,7 @@ Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JS
   "semantic_entries": [...],
   "semantic_cluster_signatures": [...],
   "memory_links": [...],
-  "episodic_episodes": [...],
-  "recall_slot_entries": [...],
-  "recall_slot_cooldown": [...],
-  "recall_habituation_last_recalled": [...]
+  "episodic_episodes": [...]
 }
 ```
 
@@ -72,24 +69,14 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_being_episode,
     dict_to_being_memo,
     dict_to_belief_evidence,
-    dict_to_episode_tick_pair,
     dict_to_memo_entry,
     dict_to_memory_link,
-    dict_to_recall_slot_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
-    episode_tick_pair_to_dict,
     memo_entry_to_dict,
     memory_link_to_dict,
-    recall_slot_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-    IEpisodicRecallHabituationStore,
-)
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-    IEpisodicRecallSlotStore,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
@@ -206,9 +193,6 @@ class BeingMemorySnapshotService:
 
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
-    # PR-G: 想起階層 (slot / habituation) の 3 key。slot は entries と cooldown
-    # を別 key に split (= 既存 restore() の ``isinstance(list)`` 検証規約に
-    # 合わせるため)。
     # U2 (証拠台帳統一設計): belief_evidence_buffer store 1 key を追加。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
@@ -216,9 +200,6 @@ class BeingMemorySnapshotService:
         "semantic_cluster_signatures",
         "memory_links",
         "episodic_episodes",
-        "recall_slot_entries",
-        "recall_slot_cooldown",
-        "recall_habituation_last_recalled",
         "belief_evidence_buffer",
         # #1443: 予期の出来事を受け取った記録。材料と同じ store が持つので、
         # 戻さないと再開した run で配り直された出来事を積み直す。
@@ -236,8 +217,6 @@ class BeingMemorySnapshotService:
         semantic_store: SemanticMemoryRepository,
         memory_link_store: MemoryLinkRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
-        recall_slot_store: IEpisodicRecallSlotStore,
-        recall_habituation_store: IEpisodicRecallHabituationStore,
         belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
@@ -253,19 +232,6 @@ class BeingMemorySnapshotService:
         if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
             raise TypeError(
                 "episodic_episode_store must be EpisodicEpisodeRepository"
-            )
-        # PR-G: 想起階層の store は Protocol 一致を isinstance() で確認する
-        # (runtime_checkable Protocol)。
-        if not isinstance(recall_slot_store, IEpisodicRecallSlotStore):
-            raise TypeError(
-                "recall_slot_store must implement IEpisodicRecallSlotStore"
-            )
-        if not isinstance(
-            recall_habituation_store, IEpisodicRecallHabituationStore
-        ):
-            raise TypeError(
-                "recall_habituation_store must implement "
-                "IEpisodicRecallHabituationStore"
             )
         if not isinstance(
             belief_evidence_buffer_store, BeliefEvidenceBufferRepository
@@ -285,8 +251,6 @@ class BeingMemorySnapshotService:
         self._semantic = semantic_store
         self._memory_link = memory_link_store
         self._episodic_episode = episodic_episode_store
-        self._recall_slot = recall_slot_store
-        self._recall_habituation = recall_habituation_store
         self._belief_evidence_buffer = belief_evidence_buffer_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
@@ -317,21 +281,6 @@ class BeingMemorySnapshotService:
             "episodic_episodes": [
                 subjective_episode_to_dict(ep)
                 for ep in self._episodic_episode.list_all_by_being(being_id)
-            ],
-            # PR-G: 想起階層の per-Being state を snapshot に乗せる。
-            "recall_slot_entries": [
-                recall_slot_entry_to_dict(e)
-                for e in self._recall_slot.get_slot(being_id)
-            ],
-            "recall_slot_cooldown": [
-                episode_tick_pair_to_dict(eid, tick)
-                for eid, tick in self._recall_slot.get_cooldown_until(being_id).items()
-            ],
-            "recall_habituation_last_recalled": [
-                episode_tick_pair_to_dict(eid, tick)
-                for eid, tick in self._recall_habituation.list_all_by_being(
-                    being_id
-                ).items()
             ],
             # U2 (証拠台帳統一設計): evidence buffer の per-Being state。
             "belief_evidence_buffer": [
@@ -439,23 +388,6 @@ class BeingMemorySnapshotService:
             lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
             "episodic_episodes",
         )
-        # PR-G: 想起階層のデコード。slot は entries と cooldown を別 list で
-        # 受け取り、cooldown と habituation は (episode_id, tick) ペアの list。
-        slot_entries = _decode_list(
-            payload["recall_slot_entries"],
-            dict_to_recall_slot_entry,
-            "recall_slot_entries",
-        )
-        cooldown_pairs = _decode_list(
-            payload["recall_slot_cooldown"],
-            dict_to_episode_tick_pair,
-            "recall_slot_cooldown",
-        )
-        habituation_pairs = _decode_list(
-            payload["recall_habituation_last_recalled"],
-            dict_to_episode_tick_pair,
-            "recall_habituation_last_recalled",
-        )
         # U2 (証拠台帳統一設計): evidence buffer のデコード。
         belief_evidences = _decode_list(
             payload["belief_evidence_buffer"],
@@ -511,13 +443,6 @@ class BeingMemorySnapshotService:
         )
         self._memory_link.replace_all_by_being(being_id, memory_links)
         self._episodic_episode.replace_all_by_being(being_id, episodes)
-        # PR-G: 想起階層の bulk overwrite。
-        self._recall_slot.replace_all_by_being(
-            being_id, slot_entries, dict(cooldown_pairs)
-        )
-        self._recall_habituation.replace_all_by_being(
-            being_id, dict(habituation_pairs)
-        )
         # U2 (証拠台帳統一設計): evidence buffer の bulk overwrite。
         self._belief_evidence_buffer.replace_all_by_being(
             being_id, belief_evidences

@@ -31,9 +31,6 @@ if TYPE_CHECKING:
     # application/being/ 層、参照先 VO は application/llm/services/ 配下なので
     # 単純な top-level import でも 循環は起きないが、他の codec 群と書式を
     # 揃え + dataclass の構築コストを呼び出し時に閉じ込めるためこの形を取る)。
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        RecallSlotEntry,
-    )
     from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
         BeliefEvidence,
     )
@@ -405,41 +402,6 @@ def dict_to_subjective_episode(
         # U6: 旧 snapshot (salience キー無し) は "low" に倒す。
         salience=str(data.get("salience", "low")),
     )
-
-
-# ── PR-G: Recall Layer (Slot / Habituation) codec ──
-# 想起階層 (PR #580 / #588 / #526 段階 2) の per-Being 状態を snapshot に乗せる
-# ための VO ↔ dict 変換。slot cooldown と habituation は (episode_id, tick) の
-# ペアなので共通の codec を使う。
-
-
-def recall_slot_entry_to_dict(entry: RecallSlotEntry) -> dict[str, Any]:
-    """RecallSlotEntry → dict。"""
-    return {
-        "episode_id": entry.episode_id,
-        "entered_tick": entry.entered_tick,
-    }
-
-
-def dict_to_recall_slot_entry(data: dict[str, Any]) -> RecallSlotEntry:
-    """dict → RecallSlotEntry。"""
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        RecallSlotEntry,
-    )
-    return RecallSlotEntry(
-        episode_id=str(data["episode_id"]),
-        entered_tick=int(data["entered_tick"]),
-    )
-
-
-def episode_tick_pair_to_dict(episode_id: str, tick: int) -> dict[str, Any]:
-    """(episode_id, tick) → dict。cooldown / habituation で共有する shape。"""
-    return {"episode_id": episode_id, "tick": int(tick)}
-
-
-def dict_to_episode_tick_pair(data: dict[str, Any]) -> tuple[str, int]:
-    """dict → (episode_id, tick)。"""
-    return (str(data["episode_id"]), int(data["tick"]))
 
 
 # ---- belief_evidence (U2: 証拠台帳統一設計) ------------------------------------

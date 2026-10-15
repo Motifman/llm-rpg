@@ -59,12 +59,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
         EpisodicPassiveRecallRetrievalService,
     )
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        IEpisodicRecallHabituationStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        IEpisodicRecallSlotStore,
-    )
     from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
         SemanticPassiveRecallService,
     )
@@ -177,17 +171,6 @@ class EpisodicRecallConfig:
     # 記録から引く。「直近」は Being のターン数で数える。
     acquaintances: PlayerAcquaintances | None = None
     acquaintance_recent_window_turns: int = 5
-    # #526 段階 2: 慣化ペナルティの sidecar store。注入時のみ動く
-    # (= default off で既存挙動と同一)。retrieve 後に prompt_builder が
-    # 採用された episode の last_recalled_tick を記録する。
-    recall_habituation_store: IEpisodicRecallHabituationStore | None = None
-    recall_habituation_decay_window_ticks: int = 5
-    # #526 段階 3: 想起スロット (working memory) の sidecar store と
-    # cooldown 設定。注入時のみ動く (= default off で既存挙動と同一)。
-    # 4 つのスロット運用パラメータのうち、prompt_builder が apply_decision で
-    # 必要なのは ``cooldown_ticks`` のみ (他 3 つは retrieve service 側で保持)。
-    recall_slot_store: IEpisodicRecallSlotStore | None = None
-    recall_slot_cooldown_ticks: int = 5
 
 
 @dataclass(frozen=True)
