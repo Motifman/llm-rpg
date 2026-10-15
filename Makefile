@@ -21,10 +21,10 @@ help:
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
 	@echo "  make fuzz-scenario [SCENARIO=...] [SEEDS=0-19] [FUZZ_TICKS=40]"
 	@echo "                                - でたらめに行動するスタブで回し、例外と内部番号の漏れを探す (実 LLM なし)"
-	@echo "  make experiment-survival OUT=... [EPISODIC=1]"
-	@echo "                                - survival_island_v2 専用 (140 tick / workers 4 / publish 既定)"
-	@echo "  make experiment-survival-coop OUT=... [EPISODIC=1]"
-	@echo "                                - survival_island_v3_coop 専用 (stranded_at_tick=240 / workers 4 / publish 既定)"
+	@echo "  make experiment-survival OUT=..."
+	@echo "                                - survival_island_v2 専用 (140 tick / publish 既定)"
+	@echo "  make experiment-survival-coop OUT=..."
+	@echo "                                - survival_island_v3_coop 専用 (stranded_at_tick=240 / publish 既定)"
 	@echo "  make experiment-recall-probe OUT=... [DRY_RUN=1]"
 	@echo "                                - Issue #526 不在 2 検証用 (recall_probe_v1 / 15 tick / 1 player)"
 	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
@@ -124,11 +124,6 @@ experiment-with-snapshot:
 		SCENARIO=$(SCENARIO) \
 		MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) \
 		OUT=$(OUT) \
-		WORKERS=$(WORKERS) \
-		EPISODIC=$(EPISODIC) \
-		IDLE_TICKS=$(IDLE_TICKS) \
-		PROVIDER=$(PROVIDER) \
-		QUANTIZATION=$(QUANTIZATION) \
 		PUBLISH=$(PUBLISH) \
 		SNAPSHOT_SAVE_DIR=$(OUT)/snapshots
 
@@ -146,11 +141,6 @@ experiment-resume:
 		SCENARIO=$(SCENARIO) \
 		MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) \
 		OUT=$(OUT) \
-		WORKERS=$(WORKERS) \
-		EPISODIC=$(EPISODIC) \
-		IDLE_TICKS=$(IDLE_TICKS) \
-		PROVIDER=$(PROVIDER) \
-		QUANTIZATION=$(QUANTIZATION) \
 		PUBLISH=$(PUBLISH) \
 		SNAPSHOT_LOAD_DIR=$(SNAPSHOT_LOAD_DIR) \
 		SNAPSHOT_SAVE_DIR=$(if $(OUT),$(OUT)/snapshots,)
@@ -159,37 +149,24 @@ experiment-resume:
 experiment-publish:
 	$(MAKE) experiment \
 		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
-		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) \
-		PROVIDER=$(PROVIDER) QUANTIZATION=$(QUANTIZATION) \
 		PUBLISH=1
 
 # survival_island_v2 専用のショートカット。
-# 4 player + 14 day (= 140 driver tick) + parallel workers=4 + 自動 publish を
+# 4 player + 14 day (= 140 driver tick) + 自動 publish を
 # デフォルトに固定して、何度も同じパラメータを打ち直す煩雑さを解消する。
-# EPISODIC のみ切り替えて OFF / ON_FULL の 2 run を回すのが定例。
 #
 # 使い方:
 #   make experiment-survival OUT=var/runs/issue390_exp27_off_r1
-#   make experiment-survival OUT=var/runs/issue390_exp27_on_full_r1 EPISODIC=1
 #
 # 上書き可能な変数 (省略時の survival 既定値):
-#   MAX_WORLD_TICKS=140  WORKERS=4  PUBLISH=1
-#   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-#   PROVIDER /
-#   QUANTIZATION も同様に上位 experiment target へ素通し。
+#   MAX_WORLD_TICKS=140  PUBLISH=1
 SURVIVAL_MAX_WORLD_TICKS ?= 140
-SURVIVAL_WORKERS ?= 4
 SURVIVAL_PUBLISH ?= 1
 experiment-survival:
 	$(MAKE) experiment \
 		SCENARIO=data/scenarios/survival_island_v2.json \
 		MAX_WORLD_TICKS=$(SURVIVAL_MAX_WORLD_TICKS) \
-		WORKERS=$(SURVIVAL_WORKERS) \
 		OUT=$(OUT) \
-		EPISODIC=$(EPISODIC) \
-		IDLE_TICKS=$(IDLE_TICKS) \
-		PROVIDER=$(PROVIDER) \
-		QUANTIZATION=$(QUANTIZATION) \
 		PUBLISH=$(SURVIVAL_PUBLISH)
 
 # survival_island_v3_coop 専用のショートカット。
@@ -202,26 +179,16 @@ experiment-survival:
 #
 # 使い方:
 #   make experiment-survival-coop OUT=var/runs/m7_coop_r1
-#   make experiment-survival-coop OUT=var/runs/m7_coop_r1_episodic EPISODIC=1
 #
 # 上書き可能な変数 (省略時の coop 既定値):
-#   MAX_WORLD_TICKS=240 (= stranded_at_tick)  WORKERS=4  PUBLISH=1
-#   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
-#   PROVIDER /
-#   QUANTIZATION も同様に上位 experiment target へ素通し。
+#   MAX_WORLD_TICKS=240 (= stranded_at_tick)  PUBLISH=1
 COOP_MAX_WORLD_TICKS ?= 240
-COOP_WORKERS ?= 4
 COOP_PUBLISH ?= 1
 experiment-survival-coop:
 	$(MAKE) experiment \
 		SCENARIO=data/scenarios/survival_island_v3_coop.json \
 		MAX_WORLD_TICKS=$(COOP_MAX_WORLD_TICKS) \
-		WORKERS=$(COOP_WORKERS) \
 		OUT=$(OUT) \
-		EPISODIC=$(EPISODIC) \
-		IDLE_TICKS=$(IDLE_TICKS) \
-		PROVIDER=$(PROVIDER) \
-		QUANTIZATION=$(QUANTIZATION) \
 		PUBLISH=$(COOP_PUBLISH)
 
 # Issue #526 後続: 能動 recall (memory_recall_episodes) 検証用の小規模実験。

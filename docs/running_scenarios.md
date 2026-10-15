@@ -56,10 +56,10 @@ stranded 判定が発火する前に実験が打ち切られ、協調が破綻�
 make experiment-survival-coop OUT=var/runs/m7_coop_r1
 # 等価 (make experiment 直接):
 make experiment SCENARIO=data/scenarios/survival_island_v3_coop.json \
-                MAX_WORLD_TICKS=240 WORKERS=4 OUT=var/runs/m7_coop_r1
+                MAX_WORLD_TICKS=240 OUT=var/runs/m7_coop_r1
 ```
 
-`make experiment-survival-coop` は `MAX_WORLD_TICKS=240` / `WORKERS=4` / `PUBLISH=1` を既定に固定したショートカット
+`make experiment-survival-coop` は `MAX_WORLD_TICKS=240` / `PUBLISH=1` を既定に固定したショートカット
 （`make experiment-survival` の v2 版に相当）。他シナリオ (`survival_island_v2` など) の既定値には影響しない。
 
 ### Gist 自動 publish (リモート実験を依頼者と共有)
