@@ -6162,7 +6162,7 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 
 **関連**: #1436 / #1453 / #1414 / #1463 / #234。
 
-作る前の判定 (`BELIEF_CREATE_GATE_*`、`belief_create_gate.py`) と候補の絞り込み (`BELIEF_CANDIDATE_*`) は、記憶の部品の撤去 (#1631) の段 10 で消した。どの profile でも無効だった。測った記録の `scripts/jev_belief_create_gate_measure.py` も一緒に消した。
+作る前の判定 (`BELIEF_CREATE_GATE_*`、`belief_create_gate.py`) と候補の絞り込み (`BELIEF_CANDIDATE_*`) は、記憶の部品の撤去 (#1631) の #1787 で消した。どの profile でも無効だった。測った記録の `scripts/jev_belief_create_gate_measure.py` も一緒に消した。
 
 ## 238. 目的の達成 hint は、判断が得られないとき規則へ縮退しない。清算できない目的は問わない
 
@@ -6931,7 +6931,7 @@ D1440) と同じ扱い。
 
 **関連**: design_decisions D1414 / Issue #1414 / #1453。
 
-文字の 2 字組の BM25 (`text_candidate_narrowing.py`) は、使い手だった作る前の判定と一緒に、記憶の部品の撤去 (#1631) の段 10 で消した。
+文字の 2 字組の BM25 (`text_candidate_narrowing.py`) は、使い手だった作る前の判定と一緒に、記憶の部品の撤去 (#1631) の #1787 で消した。
 
 ## D1414-8. 想起は状況の全部の項目をつなげた 1 本の問い合わせで引き、上位 3 件を載せる
 
@@ -6997,7 +6997,7 @@ D1440) と同じ扱い。
 
 **関連**: design_decisions D1414-7 / D1414-8 / Issue #1498 / Issue #1454 / Issue #1414。
 
-絞り込みの差し替えの部品 (`text_candidate_narrowing.py`) は、記憶の部品の撤去 (#1631) の段 10 で消した。
+絞り込みの差し替えの部品 (`text_candidate_narrowing.py`) は、記憶の部品の撤去 (#1631) の #1787 で消した。
 
 ## D1454. 埋め込みの手法は絞り込みの差し替えとして足し、作る部品・ベクトルの索引・縮退を分けて差し替える
 
@@ -7062,7 +7062,7 @@ D1440) と同じ扱い。
 
 **関連**: design_decisions 27 / D1414-8 / D1498 / Issue #1454 / Issue #1436。
 
-埋め込みの絞り込み (`embedding_narrowing.py`、OpenRouter と Ruri v3 の埋め込み) と任意の依存 `embedding-local` は、記憶の部品の撤去 (#1631) の段 10 で消した。比べた記録 (`scripts/situation_recall_review.py` の出力) は残る。
+埋め込みの絞り込み (`embedding_narrowing.py`、OpenRouter と Ruri v3 の埋め込み) と任意の依存 `embedding-local` は、記憶の部品の撤去 (#1631) の #1787 で消した。比べた記録 (`scripts/situation_recall_review.py` の出力) は残る。
 
 ## D1461. SNSの対象には作成時の不変識別子を保存し、表示参照と分ける
 

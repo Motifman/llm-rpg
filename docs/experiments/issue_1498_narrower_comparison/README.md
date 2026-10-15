@@ -2,7 +2,7 @@
 
 > `scripts/situation_recall_probe.py` と、それが呼んでいた状況の項目から引く想起は、#1631 の #1656 で消した。この記録の再現手順は、いまのコードでは動かない。
 >
-> `scripts/jev_belief_create_gate_measure.py` と文字の 2 字組の絞り込みも、#1631 の段 10 で消した。
+> `scripts/jev_belief_create_gate_measure.py` と文字の 2 字組の絞り込みも、#1631 の #1787 で消した。
 
 状況の 6 つの項目をつないだ 1 本の文で信念を引くとき (design_decisions D1414-8)、絞り込みの手法を
 次の 3 つで並べた。Jev も LLM も呼んでいない。比べたあと、既定は 2 字組のままにし、形態素解析の 2 手法は
