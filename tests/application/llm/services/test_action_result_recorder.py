@@ -38,23 +38,9 @@ class _ChunkSpy:
         self.calls.append((player_id, being_id))
 
 
-class _PromotionSpy:
-    def __init__(self, events, *, raises=False):
-        self._events = events
-        self._raises = raises
-        self.calls = []
-
-    def on_after_tool_turn(self, player_id_value, being_id):
-        if self._raises:
-            raise RuntimeError("promotion boom")
-        self._events.append("promotion")
-        self.calls.append((player_id_value, being_id))
-
-
 class _Stack:
-    def __init__(self, chunk, promotion):
+    def __init__(self, chunk):
         self.chunk_coordinator = chunk
-        self.episodic_semantic_promotion = promotion
 
 
 def _recorder(events):
@@ -62,7 +48,7 @@ def _recorder(events):
 
 
 class TestActionResultRecorder:
-    """append + chunk + promotion の束ね挙動 (escape baseline)。"""
+    """append + chunk の束ね挙動 (escape baseline)。"""
 
     def test_records_only_append_when_episodic_stack(self) -> None:
         """episodic_stack=None なら append だけ (記憶 hook skip)。"""
@@ -72,45 +58,26 @@ class TestActionResultRecorder:
         )
         assert events == ["append"]
 
-    def test_hook_order_append_then_chunk_then_promotion(self) -> None:
-        """順序は append → chunk → promotion。"""
+    def test_hook_order_append_then_chunk(self) -> None:
+        """順序は append → chunk。"""
         events: list[str] = []
-        stack = _Stack(_ChunkSpy(events), _PromotionSpy(events))
-        ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
-        )
-        assert events == ["append", "chunk", "promotion"]
-        assert stack.chunk_coordinator.calls == [(PlayerId(1), TEST_BEING_ID)]
-        assert stack.episodic_semantic_promotion.calls == [(1, TEST_BEING_ID)]
-
-    def test_promotion_skipped_when_None(self) -> None:
-        """promotion が None なら chunk まで。"""
-        events: list[str] = []
-        stack = _Stack(_ChunkSpy(events), None)
+        stack = _Stack(_ChunkSpy(events))
         ActionResultRecorder(_StoreSpy(events)).record(
             PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
         )
         assert events == ["append", "chunk"]
+        assert stack.chunk_coordinator.calls == [(PlayerId(1), TEST_BEING_ID)]
 
     def test_chunk_exception_is_isolated(self) -> None:
-        """chunk が例外でも append 済み・promotion は走り・record は raise しない。"""
+        """chunk が例外でも append 済みで、record は raise しない。"""
         events: list[str] = []
-        stack = _Stack(_ChunkSpy(events, raises=True), _PromotionSpy(events))
+        stack = _Stack(_ChunkSpy(events, raises=True))
         # 例外を伝播しない
         ActionResultRecorder(_StoreSpy(events)).record(
             PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
         )
-        # append は済み、chunk は記録されず (raise)、promotion は独立に走る
-        assert events == ["append", "promotion"]
-
-    def test_promotion_exception_is_isolated(self) -> None:
-        """promotion が例外でも append/chunk 済み・record は raise しない。"""
-        events: list[str] = []
-        stack = _Stack(_ChunkSpy(events), _PromotionSpy(events, raises=True))
-        ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
-        )
-        assert events == ["append", "chunk"]
+        # append は済み、chunk は記録されず (raise)
+        assert events == ["append"]
 
     def test_subjective_fields_passed_through_store(self) -> None:
         """intention/emotion_hint を store.append に通す口がある (U2 配線用)。"""

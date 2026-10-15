@@ -268,14 +268,6 @@ class TraceEventKind:
     # root_condition_type / failed_condition_type / failed_path / missing_context /
     # probability_decisions
     SCENARIO_PREDICATE_EVALUATED = "scenario_predicate_evaluated"
-    # U2 (証拠台帳統一設計): chunk 主観補完が prediction_error を非 None で
-    # 埋めた瞬間、ルールベースの転記で BeliefEvidence 1 件を evidence buffer
-    # に積んだタイミング。学習の素材がどれだけ流れているかを観測するための
-    # trace (M1 マイルストーンで流量を確認する)。semantic の想起挙動は
-    # 変えない (buffer に積むだけ)。
-    # payload: evidence_id / source_kind / episode_ids / cue_signature /
-    # text_snippet / salience
-    BELIEF_EVIDENCE = "belief_evidence"
     # 常時遠景の prompt 表示可視化。ambient 系なので既定では発火せず、
     # DISTANT_VIEW_TRACE_ENABLED 等の明示設定時だけ prompt build ごとに残す。
     # payload: spot_id / current_area_id / candidate_count / rendered_count /

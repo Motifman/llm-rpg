@@ -86,8 +86,8 @@ def _actor_from_observation_structured(structured: Mapping[str, Any]) -> str | N
     """観測 structured から episode.who 用 actor marker を作る。
 
     対象専用文面で秘匿された対人観測では、structured["actor"] に実 actor が
-    残っていても who に実名を載せない。who は belief evidence の cue_signature
-    にも使われるため、cues だけでなく who 側も同じ匿名 marker に寄せる。
+    残っていても who に実名を載せない。cues だけでなく who 側も同じ匿名 marker に
+    寄せる。
     """
     if is_secret_target_actor_observation(structured):
         return f"entity:{SECRET_TARGET_ACTOR_ENTITY_CUE_VALUE}"

@@ -1,20 +1,20 @@
 """行動結果の記録 + 直後の記憶 hook を 1 箇所に束ねる共有サービス (U1)。
 
 従来 world_runtime._record_action_result が inline で持っていた
-「action store append → chunk_coordinator.after_action_recorded →
-semantic_promotion.on_after_tool_turn」を共有コアに抽出する。escape runtime は
+「action store append → chunk_coordinator.after_action_recorded」を共有コアに
+抽出する (直後に呼んでいたクラスタ昇格は #1631 で消した)。escape runtime は
 この recorder への thin delegate になり、挙動は不変 (#553 で contract 化済み)。
 
 # 設計判断
 
-- **hook 順序は escape baseline**: append → chunk → promotion。full orchestrator は
+- **hook 順序は escape baseline**: append → chunk。full orchestrator は
   append と chunk の間に loop_guard を挟むため、loop_guard はこの recorder に
-  含めず呼び出し側に残す。なお ``record()`` は append→chunk→promotion を一体で
+  含めず呼び出し側に残す。なお ``record()`` は append→chunk を一体で
   実行する粒度なので、full path がこのまま drop-in 採用できるわけではない
   (full の append→loop_guard→chunk 順に挿入するには append と after-append hooks を
   分離する / after_append callback を受ける等の API 調整が要る)。これは U-later の
   full 採用時に詰める。
-- **error isolation**: chunk / promotion が例外を投げても logger.exception で記録し、
+- **error isolation**: chunk が例外を投げても logger.exception で記録し、
   append 済みの action 完了は止めない (memory pipeline の失敗を行動完了に波及させない)。
 - **episodic_stack は呼び出しごとに受ける**: stack は runtime 構築後に遅延配線
   されるため、recorder は保持せず record() の引数で受ける。``None`` なら記憶 hook
@@ -109,16 +109,6 @@ class ActionResultRecorder:
                 "episodic chunk_coordinator.after_action_recorded failed for player=%s",
                 pid_value,
             )
-        # chunk write 直後に semantic promotion (semantic 有効時のみ非 None)。
-        promotion = getattr(episodic_stack, "episodic_semantic_promotion", None)
-        if promotion is not None:
-            try:
-                promotion.on_after_tool_turn(pid_value, being_id)
-            except Exception:
-                self._logger.exception(
-                    "episodic_semantic_promotion.on_after_tool_turn failed for player=%s",
-                    pid_value,
-                )
 
 
 __all__ = ["ActionResultRecorder"]

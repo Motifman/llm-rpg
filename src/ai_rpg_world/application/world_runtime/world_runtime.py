@@ -7193,21 +7193,6 @@ def create_world_runtime(
         subjective_scheduler = None
         persona_provider: Callable[[PlayerId], str] | None = None
         shared_episode_store = None  # scheduler が wire されたときだけ事前生成
-        # U2 (証拠台帳統一設計 / default OFF): BELIEF_EVIDENCE_ENABLED のときだけ
-        # evidence buffer を構築する。OFF なら None のまま扱う。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_belief_evidence_enabled_state,
-        )
-
-        _belief_evidence_enabled = config.belief_evidence_enabled
-        log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        belief_evidence_buffer_store = None
-        if _belief_evidence_enabled:
-            from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-                InMemoryBeliefEvidenceBufferStore,
-            )
-
-            belief_evidence_buffer_store = InMemoryBeliefEvidenceBufferStore()
         if config.episodic_subjective_enabled:
             from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
                 EpisodicChunkSubjectiveFieldsService,
@@ -7285,55 +7270,6 @@ def create_world_runtime(
                     "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
                     "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
                 )
-        # #526 後続: semantic 拡張のフラグ解決。world_runtime でも
-        # SEMANTIC_LLM_GIST_ENABLED で「学びを作る (promotion)」を on/off
-        # できるようにする。既定 OFF で従来の episodic-only 動作を保つ。
-        # フラグは env を直読みせず ResolvedLlmRuntimeConfig (= config) から取る。
-        # こうしないと create_world_runtime(config=...) の明示 config が
-        # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
-        _semantic_gist_enabled = config.semantic_llm_gist_enabled
-        _semantic_enabled = _semantic_gist_enabled
-        _semantic_gist_service = None
-        _semantic_persona_resolver = None
-        if _semantic_enabled:
-            _names_by_pid = {
-                int(s.player_id): (s.name or "") for s in scenario.player_spawns
-            }
-            # persona resolver: player_id(int) → (player_name, persona_block)。
-            # gist prompt / promotion が persona を載せるために使う。
-            _semantic_persona_resolver = (
-                lambda pid_int, _n=_names_by_pid, _p=persona_block: (
-                    _n.get(int(pid_int), ""),
-                    _p,
-                )
-            )
-            # gist は短期記憶 builder と同じく config.llm_client_kind で gate する
-            # (config が stub なのに env 側で litellm が動く余地を残さない)。
-            if _semantic_gist_enabled and config.llm_client_kind == "litellm":
-                # R2c-1: full wiring 本体 (wiring/__init__) の private helper でなく、
-                # 抽出済みの optional_llm_services から取る (= wiring/__init__ からの
-                # symbol 依存を廃止)。import-time に wiring/__init__ がロードされる依存は
-                # R2c-2 の __init__ 軽量化 (full wiring 本体削除) で解消する。
-                from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                    create_llm_client_from_config,
-                )
-                from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                    optional_semantic_gist_service,
-                )
-
-                try:
-                    _gist_client = create_llm_client_from_config(
-                        config, aux_call_sink=aux_llm_call_sink
-                    )
-                except Exception:
-                    logger.exception(
-                        "LLM client factory failed; semantic gist disabled"
-                    )
-                    _gist_client = None
-                if _gist_client is not None:
-                    _semantic_gist_service = optional_semantic_gist_service(
-                        _gist_client, True
-                    )
         runtime._episodic_stack = build_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
@@ -7345,15 +7281,12 @@ def create_world_runtime(
             # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
             trace_recorder_provider=lambda: runtime._trace_recorder,
             current_tick_provider=runtime.current_tick,
-            memory_turn_reader=runtime._memory_turn_clock,
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
             episode_store=shared_episode_store,
-            # semantic 有効時は link / promotion が build_episodic_memory_stack で
-            # 組まれる (BeingId は各 caller 入口で渡す)。
-            semantic_enabled=_semantic_enabled,
-            semantic_gist_service=_semantic_gist_service,
-            semantic_persona_resolver=_semantic_persona_resolver,
+            # link と意味記憶の store は episodic stack と一緒に組む。昇格と gist
+            # を消すまでは gist の設定で組んでいた (#1631)。
+            semantic_enabled=True,
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。
@@ -7365,16 +7298,6 @@ def create_world_runtime(
             runtime_context_provider=lambda pid: runtime.build_llm_context(
                 pid
             ).tool_runtime_context,
-            # U2 (証拠台帳統一設計): store を snapshot 用に stack へ公開する。
-            # semantic スタックを組むときは、クラスタ昇格がこの store に
-            # FAMILIARITY の材料を出す。
-            belief_evidence_buffer_store=belief_evidence_buffer_store,
-            episodic_promotion_force_full_scan=(
-                config.episodic_promotion_force_full_scan
-            ),
-            episodic_promotion_expansion_hops=(
-                config.episodic_promotion_expansion_hops
-            ),
             # episode store の永続化先。subjective 経路は shared_episode_store を
             # 先に組んで渡すため resolve_default はそれを尊重する (db_path 未使用)。
             # config の __post_init__ が「db_path + subjective」の無視組み合わせを

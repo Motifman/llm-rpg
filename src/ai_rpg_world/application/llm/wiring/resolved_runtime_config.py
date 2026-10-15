@@ -64,10 +64,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BEING_EPISODE_INDEX_LIMIT",
     "BEING_EPISODE_RECALL_MAX_HANDLES",
     "BEING_MEMO_ENABLED",
-    "BELIEF_EVIDENCE_ENABLED",
     "DISTANT_VIEW_TRACE_ENABLED",
-    "EPISODIC_PROMOTION_EXPANSION_HOPS",
-    "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "END_ON_ALL_DOWN",
     "LLM_CLIENT",
     "LLM_EPISODIC_ENABLED",
@@ -92,7 +89,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
-    "SEMANTIC_LLM_GIST_ENABLED",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
     "SUBJECTIVE_EPISODE_DB_PATH",
@@ -161,10 +157,6 @@ class ResolvedLlmRuntimeConfig:
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
-
-        # === Semantic memory (Phase 1b-1d) ===
-        semantic_llm_gist_enabled: ``SEMANTIC_LLM_GIST_ENABLED=1`` で episodic →
-            semantic 昇格時に LLM 要約を生成
     """
 
     # LLM client
@@ -205,11 +197,6 @@ class ResolvedLlmRuntimeConfig:
     # Episodic memory
     episodic_enabled: bool
     episodic_subjective_enabled: bool
-    episodic_promotion_force_full_scan: bool
-    episodic_promotion_expansion_hops: int
-
-    # Semantic memory
-    semantic_llm_gist_enabled: bool
 
 
     short_term_memory_turn_cap: int = 20
@@ -219,9 +206,6 @@ class ResolvedLlmRuntimeConfig:
 
     # Active episodic recall tool (Issue #526 後続)。
 
-    # Prediction / belief / semantic journal 系。いずれも実験条件を変える
-    # flag なので、run_start / manifest に残すため本 DTO に集約する。
-    belief_evidence_enabled: bool = False
     # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
@@ -339,9 +323,7 @@ class ResolvedLlmRuntimeConfig:
         """
         # 既存 resolver の import は関数内で行い、循環参照を避ける
         from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_belief_evidence_enabled,
             resolve_memo_tools_enabled,
-            resolve_semantic_llm_gist_enabled,
             resolve_short_term_memory_turn_window,
         )
 
@@ -355,7 +337,6 @@ class ResolvedLlmRuntimeConfig:
             short_term_memory_turn_cap,
             short_term_memory_turn_compact_count,
         ) = resolve_short_term_memory_turn_window(env=source)
-        semantic_llm_gist_enabled = resolve_semantic_llm_gist_enabled(env=source)
 
         # LLM client kind (factory と同じロジックで解決)
         llm_client_kind = _resolve_llm_client_kind(source)
@@ -467,18 +448,11 @@ class ResolvedLlmRuntimeConfig:
         episodic_subjective_enabled = _parse_truthy(
             source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED"), default=True
         )
-        episodic_promotion_force_full_scan = _parse_truthy(
-            source.get("EPISODIC_PROMOTION_FORCE_FULL_SCAN"), default=False
-        )
-        episodic_promotion_expansion_hops = _resolve_non_negative_int(
-            source, "EPISODIC_PROMOTION_EXPANSION_HOPS", default=4
-        )
 
         # Prediction (#526 / U3): エピソード再解釈 on/off
 
 
 
-        belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
         being_episode_index_limit = _resolve_positive_int(
             source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
         )
@@ -571,10 +545,6 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
-            episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
-            episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
-            semantic_llm_gist_enabled=semantic_llm_gist_enabled,
-            belief_evidence_enabled=belief_evidence_enabled,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             memo_tools_enabled=memo_tools_enabled,
@@ -601,7 +571,7 @@ class ResolvedLlmRuntimeConfig:
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                semantic_llm_gist_enabled=True,
+                episodic_enabled=True,
             )
         """
         defaults: dict[str, Any] = dict(
@@ -648,10 +618,6 @@ class ResolvedLlmRuntimeConfig:
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
-            episodic_promotion_force_full_scan=False,
-            episodic_promotion_expansion_hops=4,
-            semantic_llm_gist_enabled=False,
-            belief_evidence_enabled=False,
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             memo_tools_enabled=True,

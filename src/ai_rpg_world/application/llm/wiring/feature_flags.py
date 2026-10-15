@@ -1,8 +1,8 @@
 """LLM 配線まわりの env-driven feature flag。
 
 実験スクリプトから A/B 検証する用途で、scenario 内容と直交する knob を
-ここに集約する。既存の他の env var (``EPISODIC_PROMOTION_FORCE_FULL_SCAN``,
-``SUBJECTIVE_EPISODE_DB_PATH``, ``LLM_MODEL`` 等) と
+ここに集約する。既存の他の env var (``SUBJECTIVE_EPISODE_DB_PATH``,
+``LLM_MODEL`` 等) と
 同じ慣例に揃える。
 
 設計指針:
@@ -13,7 +13,7 @@
 - **「配線 (wire)」と「有効化 (enable)」を分離**: コードパスは常に通って
   いるが env 未設定なら不活性
 - 値は ``"1" / "true" / "yes" / "on"`` (case-insensitive) を ON とみなす。
-  ``EPISODIC_PROMOTION_FORCE_FULL_SCAN`` と同じパース規則
+  ``LLM_EPISODIC_ENABLED`` と同じパース規則
 """
 
 from __future__ import annotations
@@ -69,40 +69,6 @@ def _parse_bool_env(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Semantic memory: LLM gist generation
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_SEMANTIC_LLM_GIST_ENABLED = "SEMANTIC_LLM_GIST_ENABLED"
-
-
-def resolve_semantic_llm_gist_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``SemanticGistService`` を ``EpisodicSemanticClusterPromotionService`` に
-    注入するか。
-
-    `SEMANTIC_LLM_GIST_ENABLED=1` で ON、未設定 / その他は OFF。
-
-    OFF だと cluster 昇格時の gist は決定論的な concat のまま (検証中の
-    挙動保持)。ON にすると LLM 抽象化を試み、失敗時は決定論 gist にフォール
-    バックする (silent failure 防止のため warning ログを出す)。
-
-    詳細は docs/memory_system/semantic_memory_activation_plan.md §9。
-    """
-    return _parse_bool_env(ENV_SEMANTIC_LLM_GIST_ENABLED, env=env, default=False)
-
-
-def log_semantic_llm_gist_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_SEMANTIC_LLM_GIST_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-# ──────────────────────────────────────────────────────────────────
 # Short-term memory: rolling summary (Phase 2)
 # ──────────────────────────────────────────────────────────────────
 
@@ -149,40 +115,6 @@ def resolve_short_term_memory_turn_window(
 
 
 # ──────────────────────────────────────────────────────────────────
-# Semantic memory: belief evidence buffer 転記 (U2, 証拠台帳統一設計)
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_BELIEF_EVIDENCE_ENABLED = "BELIEF_EVIDENCE_ENABLED"
-
-
-def resolve_belief_evidence_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``BeliefEvidence`` の evidence buffer を作るか。
-
-    ``BELIEF_EVIDENCE_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    この flag 自身が足していた書き手 (chunk の外れ、約束の清算) と、読み手の固着は
-    #1631 で消した。いまは buffer を作るだけで、積むのはクラスタ昇格だけになる。
-    buffer そのものは昇格を消す段で扱う。
-
-    詳細は docs/memory_system/semantic_learning_consolidation_design.md。
-    """
-    return _parse_bool_env(ENV_BELIEF_EVIDENCE_ENABLED, env=env, default=False)
-
-
-def log_belief_evidence_enabled_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_BELIEF_EVIDENCE_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
-
-
-
-# ──────────────────────────────────────────────────────────────────
 # Memo tool exposure
 # ──────────────────────────────────────────────────────────────────
 
@@ -211,11 +143,5 @@ def log_memo_tools_enabled_state(enabled: bool) -> None:
         ENV_MEMO_TOOLS_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
-
-
-# ──────────────────────────────────────────────────────────────────
-# Semantic memory: attribution + CONFIRMATION (U4)
-# ──────────────────────────────────────────────────────────────────
-
 
 

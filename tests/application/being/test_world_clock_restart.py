@@ -19,7 +19,6 @@ def _payload(**overrides: object) -> str:
     base: dict[str, object] = {
         "schema_version": 1,
         "memo": [],
-        "belief_evidence_buffer": [],
         "pending_predictions": [],
         "memory_turn": [7],
     }
@@ -65,30 +64,20 @@ class TestRestartWorldClockInPayload:
             ("recall_slot_entries", {"episode_id": "e1", "entered_tick": 80}),
             ("recall_slot_cooldown", {"episode_id": "e2", "tick": 120}),
             ("recall_habituation_last_recalled", {"episode_id": "e4", "tick": 88}),
+            ("belief_evidence_buffer", {"evidence_id": "b1", "tick": 70, "observed_turn": 12}),
+            ("belief_evidence_received_event_ids", "exp-1@3"),
         ],
     )
     def test_recall_layer_entries_of_old_snapshots_are_dropped(
-        self, key: str, element: dict[str, object]
+        self, key: str, element: object
     ) -> None:
-        """想起の階層を消す前 (#1631) の snapshot に残る欄は、前の回の tick を持っていても止めずに捨てる。"""
+        """想起の階層と証拠のバッファを消す前 (#1631) の snapshot に残る欄は、前の回の tick を持っていても止めずに捨てる。"""
         payload = _payload(**{key: [element]})
 
         out_json, report = restart_world_clock_in_payload(payload)
 
         assert key not in json.loads(out_json)
         assert report.reset_tick_fields == 0
-
-    def test_belief_evidence_ticks_become_round_start(self) -> None:
-        """信念の材料の tick は 0 になり、観測ターンは残る。"""
-        payload = _payload(
-            belief_evidence_buffer=[{"evidence_id": "b1", "tick": 70, "observed_turn": 12}],
-        )
-
-        out_json, _ = restart_world_clock_in_payload(payload)
-
-        out = json.loads(out_json)
-        assert out["belief_evidence_buffer"][0]["tick"] == 0
-        assert out["belief_evidence_buffer"][0]["observed_turn"] == 12
 
     def test_pending_predictions_of_old_snapshots_are_dropped_and_counted(self) -> None:
         """約束を消す前 (#1631) の snapshot に残る保留中の予測は、前の回の tick を持つので捨て、捨てた件数を報告する。"""

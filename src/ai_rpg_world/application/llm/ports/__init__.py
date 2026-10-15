@@ -15,9 +15,6 @@ from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_por
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
-from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
-    ISemanticGistCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
@@ -37,7 +34,6 @@ __all__ = [
     "ChoiceQuestion",
     "IEpisodicChunkSubjectiveCompletionPort",
     "ILLMClient",
-    "ISemanticGistCompletionPort",
     "IShortTermMemoryLongSummaryCompletionPort",
     "IShortTermMemorySummaryCompletionPort",
     "ITypedJudgmentPort",

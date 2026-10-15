@@ -10,9 +10,6 @@ from ai_rpg_world.application.llm.services.episodic_memory_link_application_serv
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
-from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
-    EpisodicPromotionFrontier,
-)
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
 )
@@ -72,15 +69,10 @@ def build_episodic_memory_link_bundle(
     episode_store: EpisodicEpisodeRepository,
     *,
     link_store: MemoryLinkRepository | None = None,
-    promotion_frontier: EpisodicPromotionFrontier | None = None,
 ) -> EpisodicMemoryLinkBundle:
     """link_service / passive_recall を組み立てる。"""
     ls = link_store if link_store is not None else InMemoryMemoryLinkStore()
-    link_service = EpisodicMemoryLinkApplicationService(
-        episode_store,
-        ls,
-        promotion_frontier=promotion_frontier,
-    )
+    link_service = EpisodicMemoryLinkApplicationService(episode_store, ls)
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         link_store=ls,
