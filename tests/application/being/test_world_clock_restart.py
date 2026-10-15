@@ -68,7 +68,7 @@ class TestRestartWorldClockInPayload:
             ("belief_evidence_received_event_ids", "exp-1@3"),
         ],
     )
-    def test_recall_layer_entries_of_old_snapshots_are_dropped(
+    def test_removed_part_entries_of_old_snapshots_are_dropped(
         self, key: str, element: object
     ) -> None:
         """想起の階層と証拠のバッファを消す前 (#1631) の snapshot に残る欄は、前の回の tick を持っていても止めずに捨てる。"""

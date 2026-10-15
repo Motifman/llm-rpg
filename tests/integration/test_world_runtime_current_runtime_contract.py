@@ -1316,7 +1316,7 @@ def test_episodic_stack_gate_follows_config_not_env(
     assert off._episodic_stack is None
 
 
-def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
+def test_episodic_on_builds_link_and_semantic_stores_with_episode_recall(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
