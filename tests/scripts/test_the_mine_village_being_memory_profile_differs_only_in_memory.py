@@ -29,8 +29,6 @@ _BEING_MEMORY = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 
 #: 全部入りの run (mine_v1_006) が入れていて、この profile が止める古い記憶の部品。
 _OLD_MEMORY_PARTS_TURNED_OFF = frozenset({
-    "BELIEF_ATTRIBUTION_ENABLED",
-    "BELIEF_CONSOLIDATION_ENABLED",
     "BELIEF_EVIDENCE_ENABLED",
     "LLM_EPISODIC_ENABLED",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",

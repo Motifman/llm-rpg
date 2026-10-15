@@ -4,9 +4,9 @@ U2 (証拠台帳統一設計): 固着パス (belief journal への統合、U3) �
 drain するまでの間、``BeliefEvidence`` を Being ごとに溜めておくバッファ。
 per-Being store (一次キーは ``BeingId``)。
 
-U3b (固着 coordinator): ``remove_by_being`` を追加した。固着パス
-(``BeliefConsolidationCoordinator``) が 1 batch を処理し終えた evidence を
-buffer から取り除くための drain 操作。U2 時点では「証拠が観測可能に溜まる」
+U3b (固着 coordinator): ``remove_by_being`` を追加した。固着パスが 1 batch を
+処理し終えた evidence を buffer から取り除くための drain 操作 (固着パスは #1631
+で消した)。U2 時点では「証拠が観測可能に溜まる」
 ことだけが目的だったため未導入だったが、固着パス本体が evidence を消費する
 ようになったので、処理済みの evidence を再処理しないための除去 API が要る。
 """

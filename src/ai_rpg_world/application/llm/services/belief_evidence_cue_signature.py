@@ -21,15 +21,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 
 _TOOL_NAME_UNKNOWN = "none"
 
-# 自分についての cue を分ける軸名。保存済みの belief に残る self: 軸の cue の
-# 区別を保つ。cue_signature 上は
-# ``self:<value>`` の形で先頭に立つ。他の軸 (tool/spot/player) は value 部だけで
-# 一意に区別できるので cue_tokens が軸名を捨てるが、self: だけは同一人物を指す
-# value が player: 軸と一致してしまう (どちらも ``entity:actor:{id}``)。この軸は
-# 「値ではなく軸そのもの」が区別情報なので、cue_tokens が例外的に軸名を残す。
-_SELF_CUE_AXIS = "self"
-
-
 def build_belief_evidence_cue_signature(episode: SubjectiveEpisode) -> str:
     """episode の構造化フィールドから決定論的な cue_signature を組む。
 
@@ -53,59 +44,6 @@ def build_belief_evidence_cue_signature(episode: SubjectiveEpisode) -> str:
     return "|".join(parts)
 
 
-def cue_tokens(cue_signature: str) -> tuple[str, ...]:
-    """cue_signature を照合用トークン (軸の値部分、小文字化) に分解する。
-
-    ``"tool:explore|spot:12|player:カイ"`` → ``("explore", "12", "カイ")``。
-    ``:`` の後ろ (軸の値) だけを取り、軸名 (tool/spot/player) は落とす。
-    固着パス (``belief_consolidation_coordinator._cue_tokens``) の shortlist
-    照合と同じ規則を単一の実装に集約したもの (P3: CONFIRMATION 関連性ゲートが
-    同じ照合を再利用するため)。
-
-    例外は ``self:`` 軸。他の軸は value だけで区別できるが、self: の
-    value は同一人物を指す player: 軸の value と同じ (``entity:actor:{id}``) に
-    なるため、軸名を落とすと「自分についての噂」が「その人物についての player 軸
-    の噂・直接体験」と同じトークンに潰れて分離が消える。この軸だけは軸名込みの
-    ``self:entity:actor:{id}`` をトークンにして、照合層まで区別を貫通させる。
-    """
-    tokens: list[str] = []
-    for part in cue_signature.split("|"):
-        part = part.strip()
-        if not part:
-            continue
-        if ":" in part:
-            axis, _, value = part.partition(":")
-            # self: 軸は軸名が唯一の区別情報なので、value だけに落とさず丸ごと残す。
-            if axis.strip().lower() == _SELF_CUE_AXIS:
-                value = part.strip().lower()
-            else:
-                value = value.strip().lower()
-        else:
-            value = part.lower()
-        if value:
-            tokens.append(value)
-    return tuple(tokens)
-
-
-def belief_matches_cue_tokens(
-    tags: tuple[str, ...], text: str, tokens: tuple[str, ...]
-) -> bool:
-    """belief の tags / text が cue トークンのいずれかと一致するか。
-
-    固着 shortlist のスコアリングと同じ規則 (トークンが tag 集合に含まれる、
-    または text に部分文字列として現れる) で「1 つでも一致すれば True」。
-    P3 の CONFIRMATION ゲートはこれで「行動 context と関係する belief にだけ
-    支持を積む」を判定する。tokens が空なら常に False (照合材料が無い)。
-    """
-    if not tokens:
-        return False
-    tag_set = {t.lower() for t in tags}
-    text_lower = text.lower()
-    return any(tok in tag_set or tok in text_lower for tok in tokens)
-
-
 __all__ = [
     "build_belief_evidence_cue_signature",
-    "cue_tokens",
-    "belief_matches_cue_tokens",
 ]

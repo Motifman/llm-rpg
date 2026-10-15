@@ -64,8 +64,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BEING_EPISODE_INDEX_LIMIT",
     "BEING_EPISODE_RECALL_MAX_HANDLES",
     "BEING_MEMO_ENABLED",
-    "BELIEF_ATTRIBUTION_ENABLED",
-    "BELIEF_CONSOLIDATION_ENABLED",
     "BELIEF_EVIDENCE_ENABLED",
     "DISTANT_VIEW_TRACE_ENABLED",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
@@ -224,8 +222,6 @@ class ResolvedLlmRuntimeConfig:
     # Prediction / belief / semantic journal 系。いずれも実験条件を変える
     # flag なので、run_start / manifest に残すため本 DTO に集約する。
     belief_evidence_enabled: bool = False
-    belief_consolidation_enabled: bool = False
-    belief_attribution_enabled: bool = False
     # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
@@ -343,8 +339,6 @@ class ResolvedLlmRuntimeConfig:
         """
         # 既存 resolver の import は関数内で行い、循環参照を避ける
         from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_belief_attribution_enabled,
-            resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
             resolve_memo_tools_enabled,
             resolve_semantic_llm_gist_enabled,
@@ -485,8 +479,6 @@ class ResolvedLlmRuntimeConfig:
 
 
         belief_evidence_enabled = resolve_belief_evidence_enabled(env=source)
-        belief_consolidation_enabled = resolve_belief_consolidation_enabled(env=source)
-        belief_attribution_enabled = resolve_belief_attribution_enabled(env=source)
         being_episode_index_limit = _resolve_positive_int(
             source, "BEING_EPISODE_INDEX_LIMIT", default=_DEFAULT_BEING_EPISODE_INDEX_LIMIT
         )
@@ -583,8 +575,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             semantic_llm_gist_enabled=semantic_llm_gist_enabled,
             belief_evidence_enabled=belief_evidence_enabled,
-            belief_consolidation_enabled=belief_consolidation_enabled,
-            belief_attribution_enabled=belief_attribution_enabled,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             memo_tools_enabled=memo_tools_enabled,
@@ -662,8 +652,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_promotion_expansion_hops=4,
             semantic_llm_gist_enabled=False,
             belief_evidence_enabled=False,
-            belief_consolidation_enabled=False,
-            belief_attribution_enabled=False,
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             memo_tools_enabled=True,

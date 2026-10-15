@@ -15,7 +15,6 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_en
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_belief_evidence_cue_signature,
-    cue_tokens,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
@@ -71,23 +70,6 @@ class TestBuildBeliefEvidenceCueSignature:
     def test_rejects_non_episode_argument(self) -> None:
         with pytest.raises(TypeError):
             build_belief_evidence_cue_signature('not-an-episode')
-class TestSelfAxisSeparationInCueTokens:
-    """self: 軸の cue が、照合トークン層で同一人物の player: 軸の cue と別クラスタに保たれることを保証する。
-
-    ``cue_tokens`` が最初の ``:`` で軸接頭辞を剥がすと ``self:entity:actor:7`` と
-    ``player:entity:actor:7`` が同じトークンに潰れる。保存済みの belief に self: 軸の
-    cue が残っているので、伝聞の部品を消したあと (#1631) も分離を保つ。
-    """
-
-    def test_self_and_player_tokens_of_same_person_do_not_collide(self) -> None:
-        """同一人物 (player 7) の self: 軸の cue と player: 軸の cue は共通トークンを持たない。"""
-        assert set(cue_tokens('self:entity:actor:7')) & set(cue_tokens('player:entity:actor:7')) == set()
-
-    def test_self_token_does_not_collide_with_direct_experience_of_same_person(self) -> None:
-        """self: 軸の cue は、同一人物 (player 7) の直接体験の cue とも共通トークンを持たない。"""
-        direct_cue = build_belief_evidence_cue_signature(_episode(who=('entity:actor:7',)))
-        assert set(cue_tokens('self:entity:actor:7')) & set(cue_tokens(direct_cue)) == set()
-
 class TestJapaneseActorReachesPlayerAxis:
     """日本語名の相手が chunk episode の who を経て cue_signature の player: 軸に届く。"""
 

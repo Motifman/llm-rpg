@@ -163,9 +163,9 @@ def resolve_belief_evidence_enabled(
 
     ``BELIEF_EVIDENCE_ENABLED=1`` で ON、未設定 / その他は OFF。
 
-    この flag 自身が足していた書き手 (chunk の外れ、約束の清算) は #1631 で消した。
-    いまは buffer を作るだけで、積むのは固着パス (``BELIEF_CONSOLIDATION_ENABLED``)
-    のクラスタ昇格だけになる。buffer そのものは信念の部品を消す段で扱う。
+    この flag 自身が足していた書き手 (chunk の外れ、約束の清算) と、読み手の固着は
+    #1631 で消した。いまは buffer を作るだけで、積むのはクラスタ昇格だけになる。
+    buffer そのものは昇格を消す段で扱う。
 
     詳細は docs/memory_system/semantic_learning_consolidation_design.md。
     """
@@ -180,42 +180,6 @@ def log_belief_evidence_enabled_state(enabled: bool) -> None:
         "ENABLED" if enabled else "DISABLED",
     )
 
-
-# ──────────────────────────────────────────────────────────────────
-# Semantic memory: 固着パス BeliefConsolidationCoordinator (U3b)
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_BELIEF_CONSOLIDATION_ENABLED = "BELIEF_CONSOLIDATION_ENABLED"
-
-
-def resolve_belief_consolidation_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """``BeliefConsolidationCoordinator`` を配線し belief journal への
-    唯一の書き込み経路として動かすか。
-
-    ``BELIEF_CONSOLIDATION_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    OFF (既定) のときは、``EpisodicSemanticClusterPromotionService`` が
-    現行どおり semantic store に直接書き込む (recall_count>=3 ゲート込み)。
-    ON にすると、その直書きが FAMILIARITY ``BeliefEvidence`` の emit
-    (ゲート無し) に切り替わり、belief journal への書き込みは
-    ``BeliefConsolidationCoordinator`` の固着パス経由に一本化される。
-
-    詳細は docs/memory_system/semantic_learning_consolidation_design.md
-    「固着パス: BeliefConsolidationCoordinator」節。
-    """
-    return _parse_bool_env(ENV_BELIEF_CONSOLIDATION_ENABLED, env=env, default=False)
-
-
-def log_belief_consolidation_enabled_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_BELIEF_CONSOLIDATION_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -253,42 +217,5 @@ def log_memo_tools_enabled_state(enabled: bool) -> None:
 # Semantic memory: attribution + CONFIRMATION (U4)
 # ──────────────────────────────────────────────────────────────────
 
-
-ENV_BELIEF_ATTRIBUTION_ENABLED = "BELIEF_ATTRIBUTION_ENABLED"
-
-
-def resolve_belief_attribution_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """「信じて行動した」の attribution (S3) + CONFIRMATION (的中の支持) を
-    動かすか。
-
-    ``BELIEF_ATTRIBUTION_ENABLED=1`` で ON、未設定 / その他は OFF。
-
-    OFF (既定) のとき:
-    - PREDICTION_ERROR evidence に in-context belief が添付されない
-    - CONFIRMATION evidence が生成されない
-    - 固着パスの shortlist に in-context belief を強制搭載する経路が働かない
-      (``BeliefEvidence.in_context_belief_ids`` が常に空のため)
-
-    prompt build 時に in-context だった belief_id を行動に記録する仕組み
-    (``PREDICTION_CONTEXT_ID_ENABLED``) は #1631 で消したので、ON にしても
-    ``BeliefEvidence.in_context_belief_ids`` は常に空のまま縮退する。
-
-    詳細は docs/memory_system/semantic_learning_consolidation_design.md
-    「信用割り当て: attribution ledger」節、
-    docs/memory_system/prediction_error_unified_implementation_plan.md の
-    U4 節。
-    """
-    return _parse_bool_env(ENV_BELIEF_ATTRIBUTION_ENABLED, env=env, default=False)
-
-
-def log_belief_attribution_enabled_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_BELIEF_ATTRIBUTION_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )
 
 

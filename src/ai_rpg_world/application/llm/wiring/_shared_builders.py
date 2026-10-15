@@ -91,8 +91,7 @@ def build_episodic_memory_stack(
     - ``belief_evidence_buffer_store`` を渡すと ``episodic_semantic_promotion``
       が FAMILIARITY 転用モードになる (store 直書き・recall_count ゲートを
       やめ、evidence buffer に emit する)。呼び出し側 (``episodic_stack.py``)
-      が ``BELIEF_CONSOLIDATION_ENABLED`` を見て渡すかどうかを決める
-      (「配線と有効化の分離」既存パターン)。
+      は buffer があれば渡す。
     """
     shared_episode_store = resolve_default_episodic_episode_store(
         episodic_episode_store, db_path=subjective_episode_db_path

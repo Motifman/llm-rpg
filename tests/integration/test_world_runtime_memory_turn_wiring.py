@@ -1,7 +1,7 @@
-"""記憶のターン数の数え手が、証拠と信念を作る部品まで届くことを保証する (#1452)。
+"""記憶のターン数の数え手が、証拠を作る部品まで届くことを保証する (#1452)。
 
 配線はキーワード引数の受け渡しで繋がっているので、途中で別の数え手を渡すと、
-1 手ごとにターン数を進めても証拠と信念のターン数が 0 のまま残る。
+1 手ごとにターン数を進めても証拠のターン数が 0 のまま残る。
 LLM は呼ばない。
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
-from tests.runtime_config_helpers import belief_consolidation_config
+from tests.runtime_config_helpers import familiarity_evidence_config
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -24,31 +24,50 @@ _SCENARIO_PATH = (
 def _runtime():
     return create_world_runtime(
         _SCENARIO_PATH,
-        config=belief_consolidation_config(
+        config=familiarity_evidence_config(
         ),
     )
 
 
 class TestMemoryTurnReaderWiring:
-    """runtime が持つ 1 つの数え手を、証拠と信念を作る部品が共有することを保証する。"""
+    """runtime が持つ 1 つの数え手を、証拠を作る部品が共有することを保証する。"""
 
     def test_runtime_owns_one_memory_turn_counter(self) -> None:
-        """固着パスを組んだ runtime は、記憶のターン数の数え手を 1 つ持つ。"""
+        """証拠を作る部品を組んだ runtime は、記憶のターン数の数え手を 1 つ持つ。"""
         runtime = _runtime()
 
         assert isinstance(runtime._memory_turn_clock, MemoryTurnClock)
 
-    def test_all_evidence_and_belief_makers_read_the_runtime_counter(self) -> None:
-        """固める処理とクラスタ昇格が、どちらも runtime の数え手を読む。"""
+    def test_promotion_reads_the_runtime_counter(self) -> None:
+        """FAMILIARITY の材料を出すクラスタ昇格が、runtime の数え手を読む。"""
         runtime = _runtime()
-        counter = runtime._memory_turn_clock
-        stack = runtime._episodic_stack
 
-        readers = {
-            "consolidation": stack.belief_consolidation_coordinator._memory_turn_reader,
-            "promotion": stack.episodic_semantic_promotion.memory_turn_reader,
-        }
+        promotion = runtime._episodic_stack.episodic_semantic_promotion
 
-        assert {name: reader is counter for name, reader in readers.items()} == {
-            name: True for name in readers
-        }
+        assert promotion.memory_turn_reader is runtime._memory_turn_clock
+
+
+class TestPromotionEmitsToTheEvidenceBuffer:
+    """証拠のバッファがあるとき、クラスタ昇格が FAMILIARITY 転用モードになることを保証する。
+
+    転用モードでは意味記憶の store に直接書かず、gist の LLM も呼ばない。固着を消したあとも
+    station_drill がこのモードのままでいることを、バッファの有無だけで決まる形で固定する。
+    """
+
+    def test_promotion_writes_to_the_runtime_evidence_buffer(self) -> None:
+        """BELIEF_EVIDENCE_ENABLED のとき、昇格は runtime の証拠のバッファに材料を出す。"""
+        stack = _runtime()._episodic_stack
+
+        assert stack.belief_evidence_buffer_store is not None
+        assert stack.episodic_semantic_promotion.belief_evidence_buffer_store is (
+            stack.belief_evidence_buffer_store
+        )
+
+    def test_promotion_without_evidence_buffer_is_not_in_familiarity_mode(self) -> None:
+        """BELIEF_EVIDENCE_ENABLED が無いとき、昇格は証拠のバッファを持たない。"""
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=familiarity_evidence_config(belief_evidence_enabled=False),
+        )
+
+        assert runtime._episodic_stack.episodic_semantic_promotion.belief_evidence_buffer_store is None

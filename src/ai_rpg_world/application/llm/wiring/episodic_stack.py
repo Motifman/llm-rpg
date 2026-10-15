@@ -45,12 +45,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
-        IBeliefConsolidationCompletionPort,
-    )
-    from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
-        BeliefConsolidationCoordinator,
-    )
     from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
         EpisodicSemanticClusterPromotionService,
     )
@@ -165,7 +159,7 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
-    # semantic 拡張 (default OFF)。LLM gist か固着の有効時に full 共有 builder
+    # semantic 拡張 (default OFF)。LLM gist の有効時に full 共有 builder
     # (build_episodic_memory_stack) で組み、world_runtime でも「学びを作る
     # (promotion)」が動くようにする。OFF のときは全て None で従来の
     # episodic-only 動作。
@@ -187,11 +181,6 @@ class EpisodicStack:
     # (world_runtime.py) が flag を見て構築する。stack はここに store の参照
     # だけ公開する (snapshot 用。実体は呼び出し側が保持)。
     belief_evidence_buffer_store: Any | None = None
-    # U3b (固着パス / default None = flag OFF 相当): 注入時のみ turn 後
-    # フックから ``after_turn_completed`` が呼ばれ、belief journal への
-    # 唯一の書き込み経路として動く。未注入時は evidence buffer に証拠だけが
-    # 溜まり続ける (= U2 までの挙動)。
-    belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
 
 
 def build_scenario_noun_matcher(
@@ -291,22 +280,11 @@ def build_episodic_stack(
     runtime_context_provider: Callable[..., Any] | None = None,
     # U2 (証拠台帳統一設計 / default None = flag OFF 相当): 呼び出し側が
     # BELIEF_EVIDENCE_ENABLED を見て構築した store を渡す。snapshot 用に
-    # stack へそのまま公開する。
+    # stack へそのまま公開する。semantic スタックを組むときは、クラスタ昇格を
+    # FAMILIARITY 転用モードにして、この store に材料を出す。
     belief_evidence_buffer_store: Any | None = None,
-    # U3b (固着パス / default False = flag OFF): True のとき
-    # ``episodic_semantic_promotion`` が FAMILIARITY 転用モードになり、
-    # ``BeliefConsolidationCoordinator`` が構築される。``semantic_enabled``
-    # も合わせて True である必要がある (belief journal への書き込み先である
-    # semantic_memory_store は semantic スタック側でしか組まれないため。
-    # 呼び出し側 (world_runtime.py) が両フラグの整合を取る)。
-    belief_consolidation_enabled: bool = False,
-    belief_consolidation_completion: IBeliefConsolidationCompletionPort | None = None,
-    # #1452: 固着パスが作る証拠と信念に付ける記憶のターン数の読み口。
-    # 固着パスを組むときは必須。
+    # #1452: FAMILIARITY の材料に付ける記憶のターン数の読み口。転用モードでは必須。
     memory_turn_reader: MemoryTurnReader | None = None,
-    # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のとき固着の
-    # prompt に CONFIRMATION 節を足す (BeliefConsolidationCoordinator に渡す)。
-    belief_attribution_enabled: bool = False,
     # semantic promotion の走査幅。実験条件なので ResolvedLlmRuntimeConfig
     # から渡す。既定値はサービス側の従来値と同じ。
     episodic_promotion_force_full_scan: bool = False,
@@ -363,16 +341,11 @@ def build_episodic_stack(
     episodic_semantic_promotion: Any | None = None
     semantic_memory_store: Any | None = None
     memory_link_store: Any | None = None
-    belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
-    consolidation_wired = (
-        semantic_enabled
-        and belief_consolidation_enabled
-        and belief_evidence_buffer_store is not None
-    )
-    if consolidation_wired and memory_turn_reader is None:
+    familiarity_wired = semantic_enabled and belief_evidence_buffer_store is not None
+    if familiarity_wired and memory_turn_reader is None:
         raise ValueError(
-            "belief consolidation requires memory_turn_reader "
-            "(観測のターン数の無い証拠と信念を作らない)"
+            "FAMILIARITY evidence requires memory_turn_reader "
+            "(観測のターン数の無い証拠を作らない)"
         )
     if semantic_enabled:
         # 循環 import 回避のため関数内 import。
@@ -384,12 +357,10 @@ def build_episodic_stack(
             episode_store,
             semantic_gist_service=semantic_gist_service,
             semantic_persona_resolver=semantic_persona_resolver,
-            # U3b: 固着パス有効時のみクラスタ昇格を FAMILIARITY 転用モードに
+            # 証拠のバッファがあればクラスタ昇格を FAMILIARITY 転用モードに
             # 切り替える (未指定なら従来の store 直書き)。
-            belief_evidence_buffer_store=(
-                belief_evidence_buffer_store if belief_consolidation_enabled else None
-            ),
-            memory_turn_reader=memory_turn_reader if consolidation_wired else None,
+            belief_evidence_buffer_store=belief_evidence_buffer_store,
+            memory_turn_reader=memory_turn_reader if familiarity_wired else None,
             episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
             episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             subjective_episode_db_path=subjective_episode_db_path,
@@ -404,26 +375,6 @@ def build_episodic_stack(
         # promotion の根拠となる link graph も snapshot 用に公開する
         # (semantic entries だけ保存して link graph が空 fallback になるのを防ぐ)。
         memory_link_store = mem_stack.mem_bundle.link_store
-        # U3b: 固着パス有効時のみ coordinator を構築する。belief journal
-        # (semantic_memory_store) への書き込みはここが唯一の入口になる。
-        if consolidation_wired:
-            from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
-                BeliefConsolidationCoordinator,
-            )
-
-            assert memory_turn_reader is not None
-            assert belief_evidence_buffer_store is not None
-            belief_consolidation_coordinator = BeliefConsolidationCoordinator(
-                evidence_buffer_store=belief_evidence_buffer_store,
-                semantic_store=semantic_memory_store,
-                completion=belief_consolidation_completion,
-                memory_turn_reader=memory_turn_reader,
-                trace_recorder_provider=trace_recorder_provider,
-                current_tick_provider=current_tick_provider,
-                # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
-                # (OFF = pre-U4 と byte 一致)。
-                belief_attribution_enabled=belief_attribution_enabled,
-            )
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
 
@@ -469,7 +420,6 @@ def build_episodic_stack(
         memory_link_store=memory_link_store,
         link_service=link_service,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
-        belief_consolidation_coordinator=belief_consolidation_coordinator,
     )
 
 

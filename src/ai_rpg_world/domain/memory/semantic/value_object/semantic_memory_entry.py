@@ -4,9 +4,8 @@ DDD 再編 (Issue #470 Phase 1 PR3): 元
 ``application/llm/contracts/semantic_memory_entry.py`` から domain に昇格。
 
 U3a (belief journal 化): semantic_learning_consolidation_design.md
-「保存 (ルール): belief journal」節の構造だけを導入する。LLM 呼び出しや
-固着 coordinator は含まない (U3b で別 PR)。既定挙動 (全 entry が active)
-は不変で、既存の想起結果は変わらない。
+「保存 (ルール): belief journal」節の構造だけを導入する。LLM 呼び出しは
+含まない。既定挙動 (全 entry が active) は不変。
 """
 
 from __future__ import annotations
