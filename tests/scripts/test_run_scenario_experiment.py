@@ -804,7 +804,7 @@ class TestExperimentProfileManifest:
     def test_station_drill_lean_keeps_the_long_run_comparison_conditions(
         self,
     ) -> None:
-        """50 tick の長走比較は要約だけを足し、他の記憶機能を無効のまま保つ。"""
+        """50 tick の長走比較は、他の記憶機能を無効のまま保つ。"""
         profile = self._load_profile("station_drill_lean")
 
         # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
@@ -813,7 +813,6 @@ class TestExperimentProfileManifest:
         assert "run 034" in profile["description"]
         assert "並列数を 8" in profile["description"]
         assert profile["max_world_ticks"] == 50
-        assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
         assert {
             key: profile["runtime_config"][key]
             for key in (

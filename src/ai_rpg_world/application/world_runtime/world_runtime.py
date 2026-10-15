@@ -106,7 +106,6 @@ from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     find_prompt_argument_contract_violations,
 )
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
 )
@@ -2139,7 +2138,7 @@ class WorldRuntime:
 
         memory = self._short_term_memory
         if not isinstance(memory, SummarizingShortTermMemory):
-            raise RuntimeError("episode writing needs SHORT_TERM_MEMORY_KIND=rolling_summary")
+            raise RuntimeError("episode writing needs SummarizingShortTermMemory")
         for player_id in self.get_player_ids():
             if skip_reason is not None:
                 self._player_episode_writing.skip(
@@ -4193,20 +4192,6 @@ def _build_short_term_memory(
         world_character: 操作対象キャラ (rich persona を割り当てる対象)
         persona_block: world_character 由来の persona テキスト
     """
-    from ai_rpg_world.application.llm.wiring.feature_flags import (
-        SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
-        log_short_term_memory_kind_state,
-    )
-
-    log_short_term_memory_kind_state(cfg.short_term_memory_kind)
-    if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
-        return DefaultSlidingWindowMemory(
-            event_store=event_store,
-            turn_cap=cfg.short_term_memory_turn_cap,
-            compact_turn_count=cfg.short_term_memory_turn_compact_count,
-        )
-
-    # rolling_summary 経路: LLM 経路を **構築時点で揃える**
     from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
         ShortTermMemoryLongSummaryService,
     )

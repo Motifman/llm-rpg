@@ -2430,6 +2430,8 @@ run の変化を短期要約へ帰属できない。JSON 抽出は行動選択�
 - 補助抽出用の設定項目は増やさず、熟考比較が必要になった時点で別途判断する
 - 圧縮発火は `SHORT_TERM_MEMORY_COMPACTED`、要約結果は既存 trace で観測する
 
+`SHORT_TERM_MEMORY_KIND` は、どの profile も `rolling_summary` で動かしていたので、記憶ではない設定の片付け (#1631) の #1785 で消した。短期記憶は常に要約するので、`rolling_summary` をリテラルで見る試験も外した。
+
 ## 88. REMOVE_ITEMは予約されていない具体instanceを全量確保してから消費する
 
 **何を**: `REMOVE_ITEM` の消費可能個数には予約中のinstanceを含めない。削除時は
@@ -8271,4 +8273,4 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。
 
-**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。
+**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。キー、解決、`DefaultSlidingWindowMemory` を組む分岐は #1785 で消した。`DefaultSlidingWindowMemory` は試験の代役として残る。
