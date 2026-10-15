@@ -1555,7 +1555,7 @@ Being へ記録するため。
 そのものに価値があるため変更しない。この変更は原則との不整合と順位の揺れを直すが、
 キャッシュ改善量は実測前に主張しない。
 
-【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の段 9 で消した。
+【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の #1786 で消した。
 
 ## 54. 直近の出来事は自分のターンを単位に、まとめて畳む
 
@@ -6734,7 +6734,7 @@ U9a / U9b) は外す (Issue #1443)。
 
 状況の項目から引く想起 (`SITUATION_BELIEF_RECALL_ENABLED` / `_NARROWER`) は、記憶の部品の撤去 (#1631) の #1656 で消した。【関連する学び】は受動想起 (`SEMANTIC_PASSIVE_TOP_K`) が出す。
 
-【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の段 9 で消した。
+【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の #1786 で消した。
 
 ## D1414-3. ~~次のターンの想起で残す欄は、ターンの終わりの清算の呼び出しで毎ターン問い、予期の判定とは分けて読む~~
 
@@ -7845,7 +7845,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 伝聞を抜き出す部品と固める側の伝聞節 (`HEARSAY_ENABLED`) は、記憶の部品の撤去 (#1631) の #1649 で消した。「推測の言い方を残す」決まりは残る。【関連する学び】の印の処理と伝聞の件数 `hearsay_support_count` は、信念の残りを消すまで残る。伝聞の証拠が作られなくなったので、新しく作る信念に印は付かない。
 
-【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の段 9 で消した。印を付ける行 (`belief_recall_line`) も一緒に消えた。
+【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の #1786 で消した。印を付ける行 (`belief_recall_line`) も一緒に消えた。
 
 ---
 
