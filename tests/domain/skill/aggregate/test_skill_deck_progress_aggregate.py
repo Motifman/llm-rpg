@@ -1,60 +1,63 @@
+from collections import Counter
+
 import pytest
 
-from ai_rpg_world.domain.player.enum.player_enum import Element, Race, Role
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import SkillDeckProgressAggregate
-from ai_rpg_world.domain.skill.enum.skill_enum import SkillProposalType
-from ai_rpg_world.domain.skill.event.skill_events import SkillDeckExpGainedEvent, SkillDeckLeveledUpEvent
-from ai_rpg_world.domain.skill.service.skill_proposal_domain_service import SkillProposalDomainService
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
+from ai_rpg_world.domain.skill.event.skill_events import (
+    SkillDeckExpGainedEvent,
+    SkillDeckLeveledUpEvent,
+    SkillEvolutionAcceptedEvent,
+    SkillProposalGeneratedEvent,
+)
 from ai_rpg_world.domain.skill.value_object.skill_deck_exp_table import SkillDeckExpTable
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.skill.value_object.skill_proposal import (
-    SkillProposalContext,
-    SkillProposalTable,
-    SkillProposalTableEntry,
-)
+from ai_rpg_world.domain.skill.value_object.skill_proposal import SkillProposal
 
 
 class TestSkillDeckProgressAggregate:
     class TestGrantExp:
-        def test_grant_exp_levels_up_and_capacity_bonus_increases(self):
-            exp_table = SkillDeckExpTable(base_exp=10, exponent=1.0, level_offset=0)
+        @pytest.mark.parametrize(
+            "initial_exp,amount,growth,total,level,bonus,level_steps",
+            [
+                pytest.param(0, 25, 2, 25, 3, 4, [(1, 2), (2, 3)], id="original-25"),
+                pytest.param(
+                    0, 65, 1, 65, 7, 6,
+                    [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)],
+                    id="original-65",
+                ),
+                pytest.param(0, 9, 1, 9, 1, 0, [], id="below-level-two"),
+                pytest.param(0, 10, 1, 10, 2, 1, [(1, 2)], id="at-level-two"),
+                pytest.param(5, 20, 2, 25, 3, 4, [(1, 2), (2, 3)], id="accumulates"),
+            ],
+        )
+        def test_grant_exp_levels_up_and_capacity_bonus_increases(
+            self, initial_exp, amount, growth, total, level, bonus, level_steps
+        ):
+            """経験値を累積して段階別の容量へ進め、獲得量と各昇格を一度ずつ通知する。"""
             agg = SkillDeckProgressAggregate(
                 progress_id=SkillDeckProgressId(1),
                 owner_id=100,
-                exp_table=exp_table,
-                capacity_growth_per_level=2,
+                deck_exp=initial_exp,
+                exp_table=SkillDeckExpTable(base_exp=10, exponent=1.0, level_offset=0),
+                capacity_growth_per_level=growth,
             )
-            agg.grant_exp(25)
 
-            assert agg.deck_level == 3
-            assert agg.capacity_bonus() == 4
-            
-            # イベント検証
-            events = agg.get_events()
-            assert any(isinstance(e, SkillDeckExpGainedEvent) for e in events)
-            assert any(isinstance(e, SkillDeckLeveledUpEvent) for e in events)
+            agg.grant_exp(amount)
 
-        def test_grant_exp_multiple_level_ups(self):
-            exp_table = SkillDeckExpTable(base_exp=10, exponent=1.0, level_offset=0)
-            agg = SkillDeckProgressAggregate(
-                progress_id=SkillDeckProgressId(1),
-                owner_id=100,
-                exp_table=exp_table,
-                capacity_growth_per_level=1,
-            )
-            # base=10, offset=0, exponent=1.0:
-            # L2: 10, L3: 20, L4: 30, L5: 40, L6: 50, L7: 60, L8: 70
-            agg.grant_exp(65)
-            
-            assert agg.deck_level == 7
-            assert agg.deck_exp == 65
-            
+            assert agg.deck_level == level
+            assert agg.deck_exp == total
+            assert agg.capacity_bonus() == bonus
             events = agg.get_events()
-            level_up_events = [e for e in events if isinstance(e, SkillDeckLeveledUpEvent)]
-            assert len(level_up_events) == 6
-            assert level_up_events[0].new_level == 2
-            assert level_up_events[-1].new_level == 7
+            gained = [event for event in events if isinstance(event, SkillDeckExpGainedEvent)]
+            assert [
+                (event.aggregate_id, event.gained_exp, event.total_exp) for event in gained
+            ] == [(SkillDeckProgressId(1), amount, total)]
+            leveled = [event for event in events if isinstance(event, SkillDeckLeveledUpEvent)]
+            assert [
+                (event.aggregate_id, event.old_level, event.new_level) for event in leveled
+            ] == [(SkillDeckProgressId(1), old, new) for old, new in level_steps]
 
     class TestCapacityBonus:
         def test_capacity_bonus_uses_level_table_when_provided(self):
@@ -71,33 +74,49 @@ class TestSkillDeckProgressAggregate:
             assert agg.capacity_bonus() == 3
 
     class TestProposalManagement:
-        def test_register_and_accept_proposal(self):
+        @pytest.mark.parametrize("with_other_proposals", [False, True], ids=["original-single", "keep-others"])
+        def test_register_and_accept_proposal(self, with_other_proposals):
+            """指定した提案だけを受諾し、他の保留提案を残して登録・受諾の対象を通知する。"""
             agg = SkillDeckProgressAggregate(progress_id=SkillDeckProgressId(2), owner_id=100)
-            proposal = SkillProposalDomainService().generate(
-                context=SkillProposalContext(
-                    player_level=10,
-                    player_race=Race.HUMAN,
-                    player_element=Element.NEUTRAL,
-                    player_role=Role.ADVENTURER,
-                    free_capacity_ratio=0.5,
-                    current_skill_ids=(SkillId(1),),
-                    current_slots=(SkillId(1), None, None, None, None),
-                ),
-                table=SkillProposalTable(
-                    table_id=1,
-                    entries=(
-                        SkillProposalTableEntry(
-                            proposal_type=SkillProposalType.ADD,
-                            offered_skill_id=SkillId(99),
-                            weight=1,
-                        ),
-                    ),
-                ),
-                max_proposals=1,
-            )[0]
+            proposal = SkillProposal(
+                1, SkillProposalType.ADD, SkillId(99), target_slot_index=1,
+                reason="提案種別: add / 推奨レベル帯: 1~上限なし / 空き容量条件: 0.00~1.00",
+            )
+            before = SkillProposal(
+                2, SkillProposalType.FUSE, SkillId(101),
+                deck_tier=DeckTier.AWAKENED, target_slot_index=4,
+                required_skill_ids=(SkillId(1),),
+            )
+            after = SkillProposal(3, SkillProposalType.REPLACE, SkillId(102), target_slot_index=2)
+            proposals = [before, proposal, after] if with_other_proposals else [proposal]
 
-            agg.register_proposals([proposal])
+            expected_proposals = tuple(proposals)
+            expected_generated = Counter(
+                (SkillDeckProgressId(2), item.proposal_id, item.proposal_type, item.offered_skill_id)
+                for item in expected_proposals
+            )
+
+            agg.register_proposals(proposals)
+
+            assert tuple(agg.pending_proposals) == expected_proposals
+            generated = agg.get_events()
+            assert all(isinstance(event, SkillProposalGeneratedEvent) for event in generated)
+            assert Counter(
+                (event.aggregate_id, event.proposal_id, event.proposal_type, event.offered_skill_id)
+                for event in generated
+            ) == expected_generated
+            agg.clear_events()
+
             accepted = agg.accept_proposal(proposal.proposal_id)
 
-            assert accepted.offered_skill_id == SkillId(99)
-            assert agg.pending_proposals == []
+            assert accepted == proposal
+            assert agg.pending_proposals == ([before, after] if with_other_proposals else [])
+            events = agg.get_events()
+            assert len(events) == 1
+            assert isinstance(events[0], SkillEvolutionAcceptedEvent)
+            assert (
+                events[0].aggregate_id,
+                events[0].proposal_id,
+                events[0].proposal_type,
+                events[0].offered_skill_id,
+            ) == (SkillDeckProgressId(2), 1, SkillProposalType.ADD, SkillId(99))
