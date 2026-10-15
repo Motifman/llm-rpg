@@ -1778,11 +1778,10 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     # OpenRouter provider routing: 設定されているときだけ表示
-    if cfg.openrouter_provider or cfg.openrouter_quantization or cfg.openrouter_require_params:
+    if cfg.openrouter_provider or cfg.openrouter_quantization:
         print(
             f"[run] openrouter routing: provider={cfg.openrouter_provider or '-'} "
-            f"quantization={cfg.openrouter_quantization or '-'} "
-            f"require_params={'true' if cfg.openrouter_require_params else '-'}",
+            f"quantization={cfg.openrouter_quantization or '-'}",
             flush=True,
         )
     print(f"[out] {out_dir}", flush=True)

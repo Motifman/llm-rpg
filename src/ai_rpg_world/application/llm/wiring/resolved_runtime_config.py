@@ -98,7 +98,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENAI_API_BASE",
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
-    "OPENROUTER_REQUIRE_PARAMS",
     "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "REASON_FIRST_TWO_STEP_ENABLED",
@@ -161,7 +160,6 @@ class ResolvedLlmRuntimeConfig:
         # === OpenRouter provider routing (PR #426) ===
         openrouter_provider: provider 名 (例: ``"Parasail"``)。未設定なら None
         openrouter_quantization: quant 指定 (例: ``"fp8"``)。未設定なら None
-        openrouter_require_params: True なら必須 param 全対応 provider のみ
 
         # === 型付き判断 (#1319) ===
         typed_judgment_provider: ``"off"`` | ``"jev"`` | ``"stub"``。
@@ -211,7 +209,6 @@ class ResolvedLlmRuntimeConfig:
     # OpenRouter routing
     openrouter_provider: str | None
     openrouter_quantization: str | None
-    openrouter_require_params: bool
 
     # 型付き判断 (#1319)
     typed_judgment_provider: str
@@ -494,9 +491,6 @@ class ResolvedLlmRuntimeConfig:
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
         openrouter_quantization = _strip_or_none(source.get("OPENROUTER_QUANTIZATION"))
-        openrouter_require_params = _parse_truthy(
-            source.get("OPENROUTER_REQUIRE_PARAMS"), default=False
-        )
 
         # Episodic on/off (旧来は episodic_stack.is_episodic_enabled が同等の
         # ロジック。bool 解釈は _parse_truthy で統一)
@@ -607,7 +601,6 @@ class ResolvedLlmRuntimeConfig:
             llm_session_id_enabled=llm_session_id_enabled,
             openrouter_provider=openrouter_provider,
             openrouter_quantization=openrouter_quantization,
-            openrouter_require_params=openrouter_require_params,
             typed_judgment_provider=typed_judgment_provider,
             typed_judgment_endpoint=typed_judgment_endpoint,
             typed_judgment_model=typed_judgment_model,
@@ -687,7 +680,6 @@ class ResolvedLlmRuntimeConfig:
             llm_session_id_enabled=True,
             openrouter_provider=None,
             openrouter_quantization=None,
-            openrouter_require_params=False,
             typed_judgment_provider="off",
             typed_judgment_endpoint=_DEFAULT_TYPED_JUDGMENT_ENDPOINT,
             typed_judgment_model=_DEFAULT_TYPED_JUDGMENT_MODEL,

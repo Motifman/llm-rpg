@@ -67,7 +67,6 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENAI_API_KEY",
         "OPENROUTER_PROVIDER",
         "OPENROUTER_QUANTIZATION",
-        "OPENROUTER_REQUIRE_PARAMS",
     ):
         monkeypatch.delenv(key, raising=False)
     # litellm の dotenv 自動読込を抑える (.env 内の OPENAI_API_KEY 等が混入する)

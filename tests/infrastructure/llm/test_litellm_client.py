@@ -16,7 +16,6 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     # OpenRouter routing 系: 開発者のシェルで設定されていてもテスト挙動を汚さない
     monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_QUANTIZATION", raising=False)
-    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMS", raising=False)
     # reasoning effort: 開発者シェルの LLM_REASONING_EFFORT がテストに混入すると
     # 既定 "none" 前提のアサーションが揺れるので隔離する。
     monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
@@ -970,16 +969,17 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             openrouter_provider="DeepSeek",
         )
         routing = client.openrouter_routing
-        assert routing == {"provider": {"only": ["DeepSeek"]}}
+        assert routing == {
+            "provider": {"only": ["DeepSeek"], "require_parameters": True}
+        }
 
-    def test_quantization_and_require_params_are_both_included(self) -> None:
-        """provider + quantization + require_params を同時に指定。"""
+    def test_provider_and_quantization_are_both_included(self) -> None:
+        """provider と quantization を同時に指定すると、両方の絞り込みと require_parameters が入る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
             openrouter_provider="DeepInfra",
             openrouter_quantization="fp8",
-            openrouter_require_params=True,
         )
         assert client.openrouter_routing == {
             "provider": {
@@ -990,29 +990,15 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         }
 
     def test_quantization_config_provider_not_included(self) -> None:
-        """provider 指定無しなら only は付けず、quantization だけを絞る。"""
+        """provider 指定無しなら only は付けず、quantization を絞って require_parameters を入れる。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
             openrouter_quantization="fp8",
         )
-        assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"]}}
-
-    def test_require_params_true_require_parameters(self) -> None:
-        """truthy 解釈は設定 DTO 側で済ませ、クライアントは bool を受け取る。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_require_params=True
-        )
         assert client.openrouter_routing == {
-            "provider": {"require_parameters": True}
+            "provider": {"quantizations": ["fp8"], "require_parameters": True}
         }
-
-    def test_require_params_false(self) -> None:
-        """False なら他に routing 設定が無いため routing 全体が None になる。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_require_params=False
-        )
-        assert client.openrouter_routing is None
 
     def test_completion_base_kwargs_extra_body_injected(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1032,6 +1018,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         assert eb["provider"] == {
             "only": ["DeepInfra"],
             "quantizations": ["fp8"],
+            "require_parameters": True,
         }
         # reasoning は default OFF として乗っているはず (別テストで保証)
 
@@ -1056,6 +1043,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             assert call_kw["extra_body"]["provider"] == {
                 "only": ["DeepInfra"],
                 "quantizations": ["fp8"],
+                "require_parameters": True,
             }
 
     def test_returns_openrouter_routing_property(
@@ -1070,7 +1058,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         snapshot["provider"]["only"] = ["Hacked"]
         # 再取得しても汚染されていない
         assert client.openrouter_routing == {
-            "provider": {"only": ["DeepInfra"]}
+            "provider": {"only": ["DeepInfra"], "require_parameters": True}
         }
 
 
@@ -1162,6 +1150,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         assert eb["provider"] == {
             "only": ["DeepInfra"],
             "quantizations": ["fp8"],
+            "require_parameters": True,
         }
         assert eb["usage"] == {"include": True}
 

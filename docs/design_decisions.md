@@ -8266,3 +8266,17 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。
 
 **その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。キー、解決、`DefaultSlidingWindowMemory` を組む分岐は #1785 で消した。`DefaultSlidingWindowMemory` は試験の代役として残る。
+
+---
+
+## D1631-2. OpenRouter の provider を固定したら、送る引数をすべて受け付ける provider にだけ送る
+
+**何を**: `OPENROUTER_PROVIDER` か `OPENROUTER_QUANTIZATION` を書いた run は、routing の塊にいつも `require_parameters=true` を入れる。`OPENROUTER_REQUIRE_PARAMS` のキーは #PRNUM で消した。どちらも書かない呼び出しは、今までどおり routing の塊を作らない。
+
+**なぜ**: このリポジトリでは、行動のターンに `tool_choice="required"` を送るのがほぼ前提になっている (#1053)。`require_parameters` が無いと、OpenRouter はその引数を受け付けない provider にも送ることがあり、引数は無視される。そのため `required` が効かないまま run が進む。true にすると、受け付けない provider には送らず、送る前にエラーで止まる。静かな失敗を、起動直後に見える失敗に変える。
+
+**どうしないと壊れるか**: provider の対応状況は予告なく変わる (`docs/llm_provider_selection.md`)。provider が `required` の対応をやめたとき、false のままだとツールを呼ばない応答が混ざる。それでも run は成功として終わる。 `require_parameters` は `tool_choice` だけでなく、送る引数 (`max_tokens`、`reasoning` など) をすべて見る。どれか 1 つを受け付けない provider に固定した run も、送る前に止まる。
+
+**将来の方針**: `tool_choice="required"` を受け付ける適したモデルが無くなったら、`required` を外す。代わりにプロンプトの末尾に、必ずツールを 1 つ選ぶ指示を足して選ばせる。これは #1053 でやめた形と同じで、その部品 (`force_tool_call_instruction`) は #1677 で消した。戻すときは、#1053 が退けた理由 (行動しない応答を許すこと、比べる run のプロンプトの byte が変わること) を受け入れたうえで判断する。
+
+**関連**: Issue #1631、PR #1053 (熟考の有無にかかわらず `required` を使う)、PR #1677 (末尾の指示の部品を消した)、`docs/llm_provider_selection.md`。

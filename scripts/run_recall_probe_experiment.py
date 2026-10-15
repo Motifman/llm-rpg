@@ -213,7 +213,6 @@ def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> tuple[Any, Any, str]
             "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
             "OPENROUTER_PROVIDER": "DeepInfra",
             "OPENROUTER_QUANTIZATION": "fp4",
-            "OPENROUTER_REQUIRE_PARAMS": "1",
             "LLM_EPISODIC_ENABLED": "1",
             "LLM_IDLE_TIMEOUT_TICKS": "1",
             "LLM_TURN_PARALLEL_WORKERS": "1",

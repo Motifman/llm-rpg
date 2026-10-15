@@ -23,7 +23,6 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_BASE", raising=False)
     monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_QUANTIZATION", raising=False)
-    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMS", raising=False)
     monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
     monkeypatch.setattr(
         "ai_rpg_world.infrastructure.llm.litellm_client._load_dotenv_if_available",
