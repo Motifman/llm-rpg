@@ -65,7 +65,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BEING_EPISODE_RECALL_MAX_HANDLES",
     "BEING_MEMO_ENABLED",
     "BELIEF_EVIDENCE_ENABLED",
-    "DISTANT_VIEW_TRACE_ENABLED",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
     "END_ON_ALL_DOWN",
@@ -235,7 +234,6 @@ class ResolvedLlmRuntimeConfig:
     scenario_random_seed: int | None = None
     prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
-    distant_view_trace_enabled: bool = False
     # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
     # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
     reason_first_two_step_enabled: bool = False
@@ -501,9 +499,6 @@ class ResolvedLlmRuntimeConfig:
         prompt_dataset_capture_failure_policy = (
             source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
         ).strip().lower()
-        distant_view_trace_enabled = _parse_truthy(
-            source.get("DISTANT_VIEW_TRACE_ENABLED"), default=False
-        )
         try:
             reason_first_two_step_enabled = _parse_truthy(
                 source.get("REASON_FIRST_TWO_STEP_ENABLED"), default=False
@@ -582,7 +577,6 @@ class ResolvedLlmRuntimeConfig:
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
-            distant_view_trace_enabled=distant_view_trace_enabled,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
             end_on_all_down=end_on_all_down,
             subjective_episode_db_path=subjective_episode_db_path,
@@ -659,7 +653,6 @@ class ResolvedLlmRuntimeConfig:
             scenario_random_seed=None,
             prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
-            distant_view_trace_enabled=False,
             reason_first_two_step_enabled=False,
             end_on_all_down=False,
             subjective_episode_db_path=None,

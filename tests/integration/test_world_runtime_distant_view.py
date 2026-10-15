@@ -77,7 +77,7 @@ class TestDistantViewRuntimePrompt:
         """隠し入江は海に開けた屋外拠点なので、屋内扱いで山影の遠景を抑止しない。"""
         runtime = create_world_runtime(
             _V4,
-            config=runtime_config(distant_view_trace_enabled=True),
+            config=runtime_config(),
         )
         recorder = _TraceRecorderSpy()
         runtime.set_trace_recorder(recorder)
@@ -189,25 +189,13 @@ class TestDistantViewRuntimePrompt:
 
 
 class TestDistantViewRuntimeTrace:
-    """現在状態系の遠景 trace が既定で出ず、明示時だけ出ることを固定する。"""
+    """prompt build のたびに、現在状態系の遠景 trace が構造化 payload で残ることを固定する。"""
 
-    def test_trace_is_not_recorded_by_default(self) -> None:
-        """DISTANT_VIEW_TRACE_ENABLED が false なら prompt build 時に遠景 trace は出ない。"""
-        runtime = create_world_runtime(_V4, config=runtime_config())
-        recorder = _TraceRecorderSpy()
-        runtime.set_trace_recorder(recorder)
-
-        runtime.build_llm_context(PlayerId(1))
-
-        kinds = [kind for kind, _ in recorder.events]
-        assert TraceEventKind.DISTANT_VIEW_RENDERED not in kinds
-        assert TraceEventKind.DISTANT_VIEW_SKIPPED not in kinds
-
-    def test_trace_records_rendered_payload_when_enabled(self) -> None:
-        """trace 有効時は rendered area と閾値を構造化 payload に残す。"""
+    def test_trace_records_rendered_payload_on_every_prompt_build(self) -> None:
+        """設定を書かなくても、rendered area と閾値を構造化 payload に残す。"""
         runtime = create_world_runtime(
             _V4,
-            config=runtime_config(distant_view_trace_enabled=True),
+            config=runtime_config(),
         )
         recorder = _TraceRecorderSpy()
         runtime.set_trace_recorder(recorder)
@@ -229,10 +217,10 @@ class TestDistantViewRuntimeTrace:
         assert payload["thresholds"]["score"] == 0.20
 
     def test_trace_records_rendered_cue_ids_when_active_cue_is_rendered(self) -> None:
-        """trace 有効時は表示された cue id と active cue 件数を構造化 payload に残す。"""
+        """表示された cue id と active cue 件数を構造化 payload に残す。"""
         runtime = create_world_runtime(
             _V4,
-            config=runtime_config(distant_view_trace_enabled=True),
+            config=runtime_config(),
         )
         _set_signal_fire_lit(runtime, True)
         recorder = _TraceRecorderSpy()
@@ -259,7 +247,7 @@ class TestDistantViewRuntimeTrace:
         """cue の source object が runtime で解決不能なら、警告ログと trace に理由を残す。"""
         runtime = create_world_runtime(
             _V4,
-            config=runtime_config(distant_view_trace_enabled=True),
+            config=runtime_config(),
         )
         summit_id = SpotId(runtime.id_mapper.get_int("spot", "summit"))
         object_id = SpotObjectId.create(runtime.id_mapper.get_int("object", "signal_fire_pit"))
@@ -455,11 +443,11 @@ class TestDistantCueAppearanceRuntime:
         assert changed[0]["delivery_skipped_reason"] == "no_visible_recipients"
         assert _trace_payloads(recorder, TraceEventKind.DISTANT_CUE_DELIVERED) == []
 
-    def test_missing_source_object_records_debug_skipped_reason(self, caplog) -> None:
-        """境界検出側でも source object 解決不能を警告ログと debug trace に残す。"""
+    def test_missing_source_object_records_skipped_reason(self, caplog) -> None:
+        """境界検出側でも source object 解決不能を警告ログと trace に残す。"""
         runtime = create_world_runtime(
             _V4,
-            config=runtime_config(distant_view_trace_enabled=True),
+            config=runtime_config(),
         )
         summit_id = SpotId(runtime.id_mapper.get_int("spot", "summit"))
         object_id = SpotObjectId.create(runtime.id_mapper.get_int("object", "signal_fire_pit"))
