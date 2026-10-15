@@ -45,3 +45,29 @@ class TestMemoryTurnReaderWiring:
         promotion = runtime._episodic_stack.episodic_semantic_promotion
 
         assert promotion.memory_turn_reader is runtime._memory_turn_clock
+
+
+class TestPromotionEmitsToTheEvidenceBuffer:
+    """証拠のバッファがあるとき、クラスタ昇格が FAMILIARITY 転用モードになることを保証する。
+
+    転用モードでは意味記憶の store に直接書かず、gist の LLM も呼ばない。固着を消したあとも
+    station_drill がこのモードのままでいることを、バッファの有無だけで決まる形で固定する。
+    """
+
+    def test_promotion_writes_to_the_runtime_evidence_buffer(self) -> None:
+        """BELIEF_EVIDENCE_ENABLED のとき、昇格は runtime の証拠のバッファに材料を出す。"""
+        stack = _runtime()._episodic_stack
+
+        assert stack.belief_evidence_buffer_store is not None
+        assert stack.episodic_semantic_promotion.belief_evidence_buffer_store is (
+            stack.belief_evidence_buffer_store
+        )
+
+    def test_promotion_without_evidence_buffer_is_not_in_familiarity_mode(self) -> None:
+        """BELIEF_EVIDENCE_ENABLED が無いとき、昇格は証拠のバッファを持たない。"""
+        runtime = create_world_runtime(
+            _SCENARIO_PATH,
+            config=familiarity_evidence_config(belief_evidence_enabled=False),
+        )
+
+        assert runtime._episodic_stack.episodic_semantic_promotion.belief_evidence_buffer_store is None
