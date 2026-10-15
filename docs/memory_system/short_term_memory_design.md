@@ -308,7 +308,7 @@ wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingSh
 - A/B 実験の比較対象として残す
 - 短いシナリオ (escape_game のような数十ターンで完結する) では sliding window で十分
 
-**その後**: 6.1 と 6.2 の方針はもう使えない。どの profile も `rolling_summary` で動かしていたので、`SHORT_TERM_MEMORY_KIND` は #1631 の #PRNUM で消した。短期記憶は常に `SummarizingShortTermMemory` で組む。`DefaultSlidingWindowMemory` は試験の代役としてだけ残る。
+**その後**: 6.1 と 6.2 の方針はもう使えない。どの profile も `rolling_summary` で動かしていたので、`SHORT_TERM_MEMORY_KIND` は #1631 の #1785 で消した。短期記憶は常に `SummarizingShortTermMemory` で組む。`DefaultSlidingWindowMemory` は試験の代役としてだけ残る。
 
 ---
 
