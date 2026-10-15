@@ -264,6 +264,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "PROMPT_SECTION_ORDER",
             "SHORT_TERM_MEMORY_SCHEDULER_MODE",
             "LLM_TOOL_MODE",
+            "LLM_MEETING_SERIAL_TURNS",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",
