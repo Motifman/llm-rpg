@@ -87,21 +87,6 @@ _ERROR_DETAIL_MAX_CHARS = 500
 _ENV_VAR_LLM_WALL_CAP = "LLM_WALL_TIME_CAP_SECONDS"
 _DEFAULT_WALL_CAP_BUFFER_SECONDS = 5.0
 
-# OpenRouter provider routing 用の env 群。
-# `OPENROUTER_PROVIDER=DeepInfra OPENROUTER_QUANTIZATION=fp8` のように指定すると
-# 全 litellm.completion 呼び出しに `extra_body.provider.{only, quantizations,
-# require_parameters}` を注入する。
-# OpenRouter docs: https://openrouter.ai/docs/provider-routing
-#
-# なぜ必要か: api_base=https://openrouter.ai/api/v1 で叩くと OpenRouter が
-# provider を自由に選ぶ。例えば Gemma 4 31B では DeepInfra が turbo (fp4) /
-# fp8 の 2 variant を出しており、turbo は tools / response_format / structured_outputs
-# を非対応のため、tool_choice="required" や JSON mode 経路が即座に壊れる。
-# 実験 mid-run の事故を防ぐため、provider を明示的に固定する。
-_ENV_VAR_OPENROUTER_PROVIDER = "OPENROUTER_PROVIDER"
-_ENV_VAR_OPENROUTER_QUANTIZATION = "OPENROUTER_QUANTIZATION"
-_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
-
 # Reasoning effort 制御 (deepseek-v4-flash 等の reasoning model 対策)。
 #
 # 背景: deepseek-v4-flash は reasoning model で、default で `effort: "high"` が
@@ -182,6 +167,16 @@ def _detect_openrouter_base(api_base: str | None) -> bool:
     return "openrouter.ai" in api_base.lower()
 
 
+# runtime_config に `"OPENROUTER_PROVIDER": "DeepInfra"`、`"OPENROUTER_QUANTIZATION": "fp8"`
+# を書くと、全 litellm.completion 呼び出しに `extra_body.provider.{only, quantizations,
+# require_parameters}` を注入する。
+# OpenRouter docs: https://openrouter.ai/docs/provider-routing
+#
+# なぜ必要か: api_base=https://openrouter.ai/api/v1 で叩くと OpenRouter が
+# provider を自由に選ぶ。例えば Gemma 4 31B では DeepInfra が turbo (fp4) /
+# fp8 の 2 variant を出しており、turbo は tools / response_format / structured_outputs
+# を非対応のため、tool_choice="required" や JSON mode 経路が即座に壊れる。
+# 実験 mid-run の事故を防ぐため、provider を明示的に固定する。
 def _build_openrouter_routing(
     *,
     provider: str | None,
