@@ -9,6 +9,7 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
     ObservedEventRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.sns.enum import PostVisibility
 from ai_rpg_world.domain.sns.event import (
     SnsContentLikedEvent,
     SnsPostCreatedEvent,
@@ -55,6 +56,8 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
         return []
 
     def _resolve_post_created(self, event: SnsPostCreatedEvent) -> list[PlayerId]:
+        if event.content.visibility == PostVisibility.PRIVATE:
+            return []
         # 投稿者本人はツール結果で投稿成功を認識できるため、観測フィードへは送らない。
         # プッシュ通知相当のメンション・購読者にのみ配信する。
         result: list[PlayerId] = []
@@ -70,6 +73,8 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
         return result
 
     def _resolve_reply_created(self, event: SnsReplyCreatedEvent) -> list[PlayerId]:
+        if event.content.visibility == PostVisibility.PRIVATE:
+            return []
         result: list[PlayerId] = []
 
         if event.parent_author_id is not None:
