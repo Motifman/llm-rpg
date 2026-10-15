@@ -1,6 +1,6 @@
 # 外れた予期の信念の材料に、実際に起きたことを付けて比べ直す (#1509)
 
-> 信念をまとめる固着 (`BeliefConsolidationCoordinator`) は #1631 の段 10 で消した。`probe.py` と `baseline_probe.py` は、いまのコードでは動かない。
+> 信念をまとめる固着 (`BeliefConsolidationCoordinator`) は #1631 の #1790 で消した。`probe.py` と `baseline_probe.py` は、いまのコードでは動かない。
 
 実 run `var/runs/memory_jev_e2e_v4_001` の外れ 30 件を、#1509 で実装した渡し方 (C) で信念をまとめる LLM に問い直し、#1491 の比較 (A、B1) と並べた。
 
