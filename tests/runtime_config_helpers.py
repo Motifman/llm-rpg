@@ -21,12 +21,12 @@ def episodic_config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
     return runtime_config(**values)
 
 
-def belief_consolidation_config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
-    """belief consolidation coordinator まで組むテストの前提設定。"""
+def familiarity_evidence_config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
+    """クラスタ昇格が FAMILIARITY の材料を証拠のバッファに出すまで組むテストの前提設定。"""
     values: dict[str, Any] = {
         "episodic_enabled": True,
+        "semantic_llm_gist_enabled": True,
         "belief_evidence_enabled": True,
-        "belief_consolidation_enabled": True,
     }
     values.update(overrides)
     return runtime_config(**values)

@@ -7196,26 +7196,13 @@ def create_world_runtime(
         # U2 (証拠台帳統一設計 / default OFF): BELIEF_EVIDENCE_ENABLED のときだけ
         # evidence buffer を構築する。OFF なら None のまま扱う。
         from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_belief_attribution_enabled_state,
-            log_belief_consolidation_enabled_state,
             log_belief_evidence_enabled_state,
         )
 
         _belief_evidence_enabled = config.belief_evidence_enabled
         log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
-        _belief_attribution_enabled = config.belief_attribution_enabled
-        log_belief_attribution_enabled_state(_belief_attribution_enabled)
-        # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
-        # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
-        # どちらか一方でも ON なら buffer store 自体は作る。
-        _belief_consolidation_enabled = config.belief_consolidation_enabled
-        log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
         belief_evidence_buffer_store = None
-        if (
-            _belief_evidence_enabled
-            or _belief_consolidation_enabled
-        ):
+        if _belief_evidence_enabled:
             from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
                 InMemoryBeliefEvidenceBufferStore,
             )
@@ -7305,10 +7292,7 @@ def create_world_runtime(
         # こうしないと create_world_runtime(config=...) の明示 config が
         # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
         _semantic_gist_enabled = config.semantic_llm_gist_enabled
-        # U3b: 固着パスは belief journal (semantic_memory_store) への書き込みを
-        # 前提とするため、他の semantic 系フラグが OFF でも semantic スタック
-        # 自体は組む必要がある。
-        _semantic_enabled = _semantic_gist_enabled or _belief_consolidation_enabled
+        _semantic_enabled = _semantic_gist_enabled
         _semantic_gist_service = None
         _semantic_persona_resolver = None
         if _semantic_enabled:
@@ -7350,29 +7334,6 @@ def create_world_runtime(
                     _semantic_gist_service = optional_semantic_gist_service(
                         _gist_client, True
                     )
-        # U3b: 固着パスの completion port。BELIEF_CONSOLIDATION_ENABLED かつ
-        # litellm client が取れるときだけ実 LLM を配線する。client が stub
-        # (llm_client_kind != "litellm") のときは coordinator 自体は構築される
-        # が completion=None のまま (= flush が no-op、evidence は buffer に
-        # 溜まり続けるだけの安全な縮退)。
-        _belief_consolidation_completion = None
-        if _belief_consolidation_enabled and config.llm_client_kind == "litellm":
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-            try:
-                _belief_consolidation_client = create_llm_client_from_config(
-                    config, aux_call_sink=aux_llm_call_sink
-                )
-            except Exception:
-                logger.exception(
-                    "LLM client factory failed; belief consolidation disabled"
-                )
-                _belief_consolidation_client = None
-            if isinstance(_belief_consolidation_client, LiteLLMClient):
-                _belief_consolidation_completion = _belief_consolidation_client
         runtime._episodic_stack = build_episodic_stack(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
@@ -7405,14 +7366,9 @@ def create_world_runtime(
                 pid
             ).tool_runtime_context,
             # U2 (証拠台帳統一設計): store を snapshot 用に stack へ公開する。
+            # semantic スタックを組むときは、クラスタ昇格がこの store に
+            # FAMILIARITY の材料を出す。
             belief_evidence_buffer_store=belief_evidence_buffer_store,
-            # U3b (固着パス): default OFF。ON のときのみクラスタ昇格が
-            # FAMILIARITY 転用モードになり、BeliefConsolidationCoordinator が
-            # 構築される。
-            belief_consolidation_enabled=_belief_consolidation_enabled,
-            belief_consolidation_completion=_belief_consolidation_completion,
-            # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
-            belief_attribution_enabled=_belief_attribution_enabled,
             episodic_promotion_force_full_scan=(
                 config.episodic_promotion_force_full_scan
             ),

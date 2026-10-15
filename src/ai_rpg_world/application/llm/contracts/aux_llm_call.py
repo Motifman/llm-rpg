@@ -17,7 +17,6 @@ class AuxLlmComponent(str, Enum):
 
     EPISODE_SUBJECTIVE = "episode_subjective"
     SEMANTIC_GIST = "semantic_gist"
-    BELIEF_CONSOLIDATION = "belief_consolidation"
     SHORT_TERM_SUMMARY = "short_term_summary"
     SHORT_TERM_LONG_SUMMARY = "short_term_long_summary"
     EPISODE_WRITING = "episode_writing"

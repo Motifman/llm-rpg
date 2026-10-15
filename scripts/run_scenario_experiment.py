@@ -577,7 +577,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
-    # #526 後続: SEMANTIC_LLM_GIST_ENABLED / BELIEF_CONSOLIDATION_ENABLED が ON だと
+    # #526 後続: SEMANTIC_LLM_GIST_ENABLED が ON だと
     # episodic_stack が semantic store + memory link store を持つ。あれば snapshot に
     # 拾う (OFF なら従来どおり None = 空 in-memory fallback)。link store も拾わないと
     # semantic entries だけ保存され、昇格根拠の link graph が空 fallback になる。
@@ -1169,7 +1169,6 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 _AUX_COMPONENT_LABELS: dict[str, str] = {
     AuxLlmComponent.EPISODE_SUBJECTIVE.value: "主観の書き込み",
     AuxLlmComponent.SEMANTIC_GIST.value: "意味記憶の要旨",
-    AuxLlmComponent.BELIEF_CONSOLIDATION.value: "信念の統合",
     AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
     AuxLlmComponent.SHORT_TERM_LONG_SUMMARY.value: "短期記憶の長い要約",
     AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
@@ -1300,13 +1299,8 @@ def _build_report(
     llm_calls: list[Any] = []
     aux_calls: list[Any] = []
     aux_record_failures: list[Any] = []
-    consolidation_actions: Counter[str] = Counter()
     by_player: dict[int, dict[str, int]] = {}
     for e in events:
-        if e.kind == TraceEventKind.BELIEF_CONSOLIDATION:
-            for decision in e.payload.get("decisions") or ():
-                if isinstance(decision, dict):
-                    consolidation_actions[str(decision.get("action"))] += 1
         if e.kind == TraceEventKind.ACTION:
             actions.append(e)
         elif e.kind == TraceEventKind.ACTION_RESULT:
@@ -1401,16 +1395,6 @@ def _build_report(
     lines.append(f"- memo_hint: {len(memo_hints)}")
     lines.append(f"- position_change: {len(position_changes)}")
     lines.append("")
-    if consolidation_actions:
-        lines.append("## 信念を固めた操作")
-        lines.append("")
-        lines.append(
-            "適用した操作の件数。explain_change は状態の信念を変わり方の信念に置き換えた件数。"
-        )
-        lines.append("")
-        for action, count in sorted(consolidation_actions.items()):
-            lines.append(f"- {action}: {count}")
-        lines.append("")
     if by_player:
         lines.append("## プレイヤー別集計")
         lines.append("")

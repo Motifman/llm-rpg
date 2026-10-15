@@ -106,5 +106,5 @@ class TestEveryProductionClientIsGivenTheSink:
                 if not any(k.arg == "aux_call_sink" for k in node.keywords):
                     missing.append(where)
 
-        assert len(calls) >= 7
+        assert len(calls) >= 6
         assert missing == []

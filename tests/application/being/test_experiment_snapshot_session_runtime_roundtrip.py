@@ -53,7 +53,7 @@ def _snapshot_runtime_config() -> Any:
     """本命観察 run 周辺で使う per-Being store を実体化する設定を返す。"""
     return runtime_config(
         episodic_enabled=True,
-        belief_consolidation_enabled=True,
+        semantic_llm_gist_enabled=True,
         belief_evidence_enabled=True,
     )
 

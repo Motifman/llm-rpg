@@ -3680,6 +3680,8 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 
 **その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。
 
+固着の coordinator (`BeliefConsolidationCoordinator`) と、その帰属の節 (`BELIEF_ATTRIBUTION_ENABLED`) は、記憶の部品の撤去 (#1631) の段 10 で消した。
+
 ## 146. 記憶リンクとクラスタ昇格は呼び出し側の BeingId を使う
 
 **何を**: `EpisodicMemoryLinkApplicationService` と
@@ -5218,6 +5220,8 @@ VO に復元する (スキーマ変更は不要)。
 **この PR で触らない**: `MemoryLink` / `SubjectiveEpisode.player_id` の削除、
 再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
 `being_id` 引数削除、SQLite スキーマ変更。
+
+**その後**: `BeliefConsolidationCoordinator` は記憶の部品の撤去 (#1631) の段 10 で消した。いまの profile では、意味記憶エントリを書く部品は動かない。
 
 ## 209. 再解釈エントリに経験の主体 BeingId を載せる
 

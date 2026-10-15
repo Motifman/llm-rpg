@@ -4,8 +4,8 @@ U2 (証拠台帳統一設計)。Being ごとの list 保持。
 
 横断レビュー H-3/M2 で thread-safe 化: ThreadPool の chunk 補完ワーカー
 (``episodic_subjective_completion_schedulers.py``) が ``append_by_being``
-で書く一方、メイン thread は固着 flush (``belief_consolidation_coordinator``)
-で ``list_all_by_being`` → ``remove_by_being`` の read-modify-write を行う。
+で書く一方、別の thread が ``list_all_by_being`` → ``remove_by_being`` の
+read-modify-write を行いうる (以前は固着 flush がそうしていた)。
 lock なしだと ``remove_by_being`` が「list 再構築 → 差し替え」する短い窓に
 ワーカーが append すると evidence が無音で消える。#309 の
 ``InMemorySubjectiveEpisodeStore`` と同じ ``threading.RLock`` パターンを踏襲

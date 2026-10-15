@@ -9,8 +9,8 @@ U3b (固着パス): ``belief_evidence_buffer_store`` を注入すると
 「FAMILIARITY 転用モード」になる。semantic_learning_consolidation_design.md
 「既存機構の役割整理」節が指示するとおり、store への直接書き込みをやめ、
 検出したクラスタを ``BeliefEvidenceSourceKind.FAMILIARITY`` の
-``BeliefEvidence`` として evidence buffer に emit し、belief journal への
-実際の書き込みは ``BeliefConsolidationCoordinator`` (固着パス) に委ねる。
+``BeliefEvidence`` として evidence buffer に emit する。buffer を読んで
+belief journal に書いていた固着パスは #1631 で消した。
 このモードでは ``recall_count>=3`` ゲート (``MIN_RECALL_COUNT``) も外れる
 (学習のゲートではなく、本来の役割であるエピソード想起の spreading /
 優先度に純化する設計判断)。未注入 (default) なら従来どおり store 直書き +
@@ -314,9 +314,7 @@ class EpisodicSemanticClusterPromotionService:
 
         text はクラスタ代表 (決定論 gist の concat)、cue_signature は
         代表 episode (最古の 1 件) の構造化フィールドから決定論生成する
-        (= 新しい抽出ロジックを発明しない、U2 の方針を踏襲)。belief journal
-        への実際の反映は固着パス (``BeliefConsolidationCoordinator``) に
-        委ねる。
+        (= 新しい抽出ロジックを発明しない、U2 の方針を踏襲)。
         """
         if self.belief_evidence_buffer_store is None:
             return

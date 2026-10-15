@@ -36,9 +36,6 @@ from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetricsSink,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
-    IBeliefConsolidationCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
@@ -308,7 +305,6 @@ class LiteLLMClient(
     ILLMClient,
     IEpisodicChunkSubjectiveCompletionPort,
     ISemanticGistCompletionPort,
-    IBeliefConsolidationCompletionPort,
     IShortTermMemorySummaryCompletionPort,
     IShortTermMemoryLongSummaryCompletionPort,
     EpisodeWritingCompletion,
@@ -1142,17 +1138,6 @@ class LiteLLMClient(
         使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
         """
         return self._complete_aux_json(messages, AuxLlmComponent.SEMANTIC_GIST)
-
-    def complete_belief_consolidation_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで固着パス (belief journal 統合) の decisions JSON を返す (U3b)。
-
-        ``complete_episode_subjective_json`` と同じ json_object 強制完了を
-        使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.BELIEF_CONSOLIDATION)
 
     def complete_short_term_summary_json(
         self,
