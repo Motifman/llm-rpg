@@ -15,59 +15,12 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     StateTransitionResult,
 )
 from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
-    AttackedTransitionResult,
     EventSpec,
     MonsterBehaviorStateMachine,
     TransitionApplicationOutput,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-
-class TestAttackedTransitionResult:
-    """AttackedTransitionResult の生成と不変性"""
-
-    def test_create_no_transition(self):
-        """no_transition=True で何も変更しない結果"""
-        result = AttackedTransitionResult(no_transition=True)
-        assert result.no_transition is True
-        assert result.new_state is None
-        assert result.new_target_id is None
-        assert result.new_last_known_position is None
-        assert result.clear_pursuit is False
-        assert result.sync_pursuit is False
-
-    def test_create_flee_transition(self):
-        """FLEE 遷移の結果"""
-        oid = WorldObjectId(99)
-        coord = Coordinate(1, 2, 0)
-        result = AttackedTransitionResult(
-            new_state=BehaviorStateEnum.FLEE,
-            new_target_id=oid,
-            new_last_known_position=coord,
-            clear_pursuit=True,
-            sync_pursuit=False,
-        )
-        assert result.no_transition is False
-        assert result.new_state == BehaviorStateEnum.FLEE
-        assert result.new_target_id == oid
-        assert result.new_last_known_position == coord
-        assert result.clear_pursuit is True
-        assert result.sync_pursuit is False
-
-    def test_create_chase_transition_with_sync(self):
-        """CHASE 遷移で pursuit 同期あり"""
-        oid = WorldObjectId(100)
-        coord = Coordinate(5, 5, 0)
-        result = AttackedTransitionResult(
-            new_state=BehaviorStateEnum.CHASE,
-            new_target_id=oid,
-            new_last_known_position=coord,
-            clear_pursuit=False,
-            sync_pursuit=True,
-        )
-        assert result.sync_pursuit is True
-        assert result.clear_pursuit is False
 
 
 class TestEventSpec:
@@ -136,7 +89,19 @@ class TestMonsterBehaviorStateMachineComputeAttackedTransition:
             )
             assert result.no_transition is True
             assert result.new_state is None
+            assert result.new_target_id is None
+            assert result.new_last_known_position is None
+            assert result.clear_pursuit is False
+            assert result.sync_pursuit is False
 
+        @pytest.mark.parametrize(
+            ("attacker_id", "attacker_coord"),
+            [
+                (WorldObjectId(200), Coordinate(5, 5, 0)),
+                (WorldObjectId(99), Coordinate(1, 2, 0)),
+            ],
+            ids=["original_attacker", "former_result_input"],
+        )
         def test_flee_only_returns_flee_clear_pursuit(self, sm, attacker_id, attacker_coord):
             """FLEE_ONLY は FLEE に遷移、clear_pursuit"""
             result = sm.compute_attacked_transition(
@@ -157,13 +122,25 @@ class TestMonsterBehaviorStateMachineComputeAttackedTransition:
             assert result.clear_pursuit is True
             assert result.sync_pursuit is False
 
-        def test_normal_hp_low_returns_flee(self, sm, attacker_id, attacker_coord):
-            """HP% が閾値以下なら FLEE"""
+        @pytest.mark.parametrize(
+            ("hp_percentage", "expected_state", "expected_clear", "expected_sync"),
+            [
+                (0.1, BehaviorStateEnum.FLEE, True, False),
+                (0.2, BehaviorStateEnum.FLEE, True, False),
+                (0.21, BehaviorStateEnum.CHASE, False, True),
+            ],
+            ids=["below_threshold", "at_threshold", "above_threshold"],
+        )
+        def test_normal_hp_boundary_selects_flee_or_chase(
+            self, sm, attacker_id, attacker_coord,
+            hp_percentage, expected_state, expected_clear, expected_sync,
+        ):
+            """NORMALはHP割合が閾値以下なら逃走し、直上なら攻撃者を追跡して情報を同期する。"""
             result = sm.compute_attacked_transition(
                 attacker_id=attacker_id,
                 attacker_coordinate=attacker_coord,
                 ecology_type=EcologyTypeEnum.NORMAL,
-                hp_percentage=0.1,
+                hp_percentage=hp_percentage,
                 effective_flee_threshold=0.2,
                 allow_chase=True,
                 current_behavior_state=BehaviorStateEnum.IDLE,
@@ -171,9 +148,20 @@ class TestMonsterBehaviorStateMachineComputeAttackedTransition:
                 ambush_chase_range=None,
             )
             assert result.no_transition is False
-            assert result.new_state == BehaviorStateEnum.FLEE
-            assert result.clear_pursuit is True
+            assert result.new_state == expected_state
+            assert result.new_target_id == attacker_id
+            assert result.new_last_known_position == attacker_coord
+            assert result.clear_pursuit is expected_clear
+            assert result.sync_pursuit is expected_sync
 
+        @pytest.mark.parametrize(
+            ("attacker_id", "attacker_coord"),
+            [
+                (WorldObjectId(200), Coordinate(5, 5, 0)),
+                (WorldObjectId(100), Coordinate(5, 5, 0)),
+            ],
+            ids=["original_attacker", "former_result_input"],
+        )
         def test_normal_hp_high_allow_chase_returns_chase(self, sm, attacker_id, attacker_coord):
             """HP 十分・allow_chase で CHASE、sync_pursuit"""
             result = sm.compute_attacked_transition(
@@ -229,15 +217,19 @@ class TestMonsterBehaviorStateMachineComputeAttackedTransition:
     class TestAmbush:
         """AMBUSH 生態タイプ"""
 
+        @pytest.mark.parametrize(
+            "attacker_coordinate",
+            [Coordinate(100, 0, 0), Coordinate(3, 3, 0)],
+            ids=["distant_axis", "diagonal_manhattan_outside"],
+        )
         def test_ambush_out_of_range_returns_no_transition(
-            self, sm, attacker_id, attacker_coord
+            self, sm, attacker_id, attacker_coordinate
         ):
-            """初期位置から ambush_chase_range 外なら no_transition"""
+            """初期位置からのマンハッタン距離が範囲を超えれば、対角でも被弾遷移を拒否する。"""
             initial = Coordinate(0, 0, 0)
-            attacker_far = Coordinate(100, 0, 0)
             result = sm.compute_attacked_transition(
                 attacker_id=attacker_id,
-                attacker_coordinate=attacker_far,
+                attacker_coordinate=attacker_coordinate,
                 ecology_type=EcologyTypeEnum.AMBUSH,
                 hp_percentage=1.0,
                 effective_flee_threshold=0.2,
@@ -248,15 +240,19 @@ class TestMonsterBehaviorStateMachineComputeAttackedTransition:
             )
             assert result.no_transition is True
 
+        @pytest.mark.parametrize(
+            "attacker_coordinate",
+            [Coordinate(2, 0, 0), Coordinate(3, 2, 0)],
+            ids=["inside_range", "at_manhattan_limit"],
+        )
         def test_ambush_in_range_returns_chase(
-            self, sm, attacker_id, attacker_coord
+            self, sm, attacker_id, attacker_coordinate
         ):
-            """初期位置から範囲内なら CHASE"""
+            """初期位置からのマンハッタン距離が範囲以下なら、境界ちょうどもCHASEを許可する。"""
             initial = Coordinate(0, 0, 0)
-            attacker_near = Coordinate(2, 0, 0)
             result = sm.compute_attacked_transition(
                 attacker_id=attacker_id,
-                attacker_coordinate=attacker_near,
+                attacker_coordinate=attacker_coordinate,
                 ecology_type=EcologyTypeEnum.AMBUSH,
                 hp_percentage=1.0,
                 effective_flee_threshold=0.2,
