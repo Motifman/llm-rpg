@@ -156,7 +156,7 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
-    # link / semantic の store (default OFF)。full 共有 builder
+    # link / semantic の store (semantic_enabled のときだけ)。full 共有 builder
     # (build_episodic_memory_stack) で組む。OFF のときは全て None。
     #
     #   semantic_memory_store: 意味記憶の store (snapshot / 検証用に公開)
@@ -305,7 +305,7 @@ def build_episodic_stack(
     # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
     # ため (両者が違う store だと、worker が書き込んだ merged episode を
     # passive_recall が読めない)。
-    # semantic 拡張 (default OFF)。ON のときは full 共有 builder で link / semantic
+    # semantic_enabled のときは full 共有 builder で link / semantic
     # の store を組み、chunk_coordinator に link service を渡す。
     link_service: Any | None = None
     semantic_memory_store: Any | None = None

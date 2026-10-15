@@ -143,5 +143,3 @@ def log_memo_tools_enabled_state(enabled: bool) -> None:
         ENV_MEMO_TOOLS_ENABLED,
         "ENABLED" if enabled else "DISABLED",
     )
-
-
