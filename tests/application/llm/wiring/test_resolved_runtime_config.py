@@ -32,7 +32,6 @@ class TestFromEnvDefaults:
         assert cfg.llm_rate_limit_retry_base_sleep == 2.0
         assert cfg.openrouter_provider is None
         assert cfg.openrouter_quantization is None
-        assert cfg.openrouter_require_params is False
         assert cfg.episodic_enabled is False
         assert cfg.episodic_subjective_enabled is True
         assert cfg.episodic_promotion_force_full_scan is False
@@ -129,7 +128,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.llm_client_kind == 'litellm'
@@ -143,7 +142,6 @@ class TestFromEnvExplicit:
         assert cfg.llm_rate_limit_retry_base_sleep == 1.5
         assert cfg.openrouter_provider == 'Parasail'
         assert cfg.openrouter_quantization == 'fp8'
-        assert cfg.openrouter_require_params is True
         assert cfg.episodic_enabled is True
         assert cfg.episodic_subjective_enabled is False
         assert cfg.episodic_promotion_force_full_scan is True
@@ -196,11 +194,6 @@ class TestFromEnvFailFast:
         with pytest.raises(ValueError, match='boolean'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': 'yeah'})
 
-    def test_openrouter_require_params_typo_raises_value_error(self) -> None:
-        """openrouter require params typo は ValueError。"""
-        with pytest.raises(ValueError, match='boolean'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'OPENROUTER_REQUIRE_PARAMS': 'tru'})
-
 class TestTheRemovedMemoryPartKeysAreRejected:
     """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
 
@@ -246,6 +239,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "LLM_TOOL_MODE",
             "LLM_MEETING_SERIAL_TURNS",
             "SHORT_TERM_MEMORY_KIND",
+            "OPENROUTER_REQUIRE_PARAMS",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",

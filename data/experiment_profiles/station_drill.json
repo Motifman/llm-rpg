@@ -9,7 +9,6 @@
     "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
     "OPENROUTER_PROVIDER": "DeepSeek",
-    "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "none",
     "LLM_TURN_PARALLEL_WORKERS": 2,
     "LLM_IDLE_TIMEOUT_TICKS": 6,

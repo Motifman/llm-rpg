@@ -103,7 +103,6 @@ _DEFAULT_WALL_CAP_BUFFER_SECONDS = 5.0
 # 実験 mid-run の事故を防ぐため、provider を明示的に固定する。
 _ENV_VAR_OPENROUTER_PROVIDER = "OPENROUTER_PROVIDER"
 _ENV_VAR_OPENROUTER_QUANTIZATION = "OPENROUTER_QUANTIZATION"
-_ENV_VAR_OPENROUTER_REQUIRE_PARAMS = "OPENROUTER_REQUIRE_PARAMS"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 # Reasoning effort 制御 (deepseek-v4-flash 等の reasoning model 対策)。
@@ -190,12 +189,11 @@ def _build_openrouter_routing(
     *,
     provider: str | None,
     quantization: str | None,
-    require_params: bool,
 ) -> dict[str, Any] | None:
     """明示値から OpenRouter provider routing 設定を組む。"""
     provider = (provider or "").strip()
     quantization = (quantization or "").strip()
-    if not provider and not quantization and not require_params:
+    if not provider and not quantization:
         return None
     block: dict[str, Any] = {}
     if provider:
@@ -205,8 +203,9 @@ def _build_openrouter_routing(
         block["only"] = [provider]
     if quantization:
         block["quantizations"] = [quantization]
-    if require_params:
-        block["require_parameters"] = True
+    # tool_choice="required" を受け付けない provider へ黙って流さず、OpenRouter に
+    # 送る前に止めさせる (design_decisions D1631-2)。
+    block["require_parameters"] = True
     return {"provider": block}
 
 
@@ -328,7 +327,6 @@ class LiteLLMClient(
         timeout_seconds: float | None = None,
         openrouter_provider: str | None = None,
         openrouter_quantization: str | None = None,
-        openrouter_require_params: bool = False,
         reasoning_effort: str = _DEFAULT_REASONING_EFFORT,
         max_output_tokens: int | None = None,
         wall_cap_seconds: float | None = None,
@@ -371,7 +369,6 @@ class LiteLLMClient(
         self._openrouter_routing: dict[str, Any] | None = _build_openrouter_routing(
             provider=openrouter_provider,
             quantization=openrouter_quantization,
-            require_params=openrouter_require_params,
         )
 
         self._reasoning_effort = _validate_reasoning_effort(

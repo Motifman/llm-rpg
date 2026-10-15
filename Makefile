@@ -129,7 +129,6 @@ experiment-with-snapshot:
 		IDLE_TICKS=$(IDLE_TICKS) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
-		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(PUBLISH) \
 		SNAPSHOT_SAVE_DIR=$(OUT)/snapshots
 
@@ -152,7 +151,6 @@ experiment-resume:
 		IDLE_TICKS=$(IDLE_TICKS) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
-		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(PUBLISH) \
 		SNAPSHOT_LOAD_DIR=$(SNAPSHOT_LOAD_DIR) \
 		SNAPSHOT_SAVE_DIR=$(if $(OUT),$(OUT)/snapshots,)
@@ -163,7 +161,6 @@ experiment-publish:
 		SCENARIO=$(SCENARIO) MAX_WORLD_TICKS=$(MAX_WORLD_TICKS) OUT=$(OUT) \
 		WORKERS=$(WORKERS) EPISODIC=$(EPISODIC) IDLE_TICKS=$(IDLE_TICKS) \
 		PROVIDER=$(PROVIDER) QUANTIZATION=$(QUANTIZATION) \
-		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=1
 
 # survival_island_v2 専用のショートカット。
@@ -179,7 +176,7 @@ experiment-publish:
 #   MAX_WORLD_TICKS=140  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
 #   PROVIDER /
-#   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
+#   QUANTIZATION も同様に上位 experiment target へ素通し。
 SURVIVAL_MAX_WORLD_TICKS ?= 140
 SURVIVAL_WORKERS ?= 4
 SURVIVAL_PUBLISH ?= 1
@@ -193,7 +190,6 @@ experiment-survival:
 		IDLE_TICKS=$(IDLE_TICKS) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
-		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(SURVIVAL_PUBLISH)
 
 # survival_island_v3_coop 専用のショートカット。
@@ -212,7 +208,7 @@ experiment-survival:
 #   MAX_WORLD_TICKS=240 (= stranded_at_tick)  WORKERS=4  PUBLISH=1
 #   EPISODIC は未指定 (= OFF)。1 で ON_FULL。
 #   PROVIDER /
-#   QUANTIZATION / REQUIRE_PARAMS も同様に上位 experiment target へ素通し。
+#   QUANTIZATION も同様に上位 experiment target へ素通し。
 COOP_MAX_WORLD_TICKS ?= 240
 COOP_WORKERS ?= 4
 COOP_PUBLISH ?= 1
@@ -226,7 +222,6 @@ experiment-survival-coop:
 		IDLE_TICKS=$(IDLE_TICKS) \
 		PROVIDER=$(PROVIDER) \
 		QUANTIZATION=$(QUANTIZATION) \
-		REQUIRE_PARAMS=$(REQUIRE_PARAMS) \
 		PUBLISH=$(COOP_PUBLISH)
 
 # Issue #526 後続: 能動 recall (memory_recall_episodes) 検証用の小規模実験。

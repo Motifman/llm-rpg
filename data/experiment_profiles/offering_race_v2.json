@@ -9,7 +9,6 @@
     "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
     "OPENROUTER_PROVIDER": "Baidu",
-    "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_WALL_TIME_CAP_SECONDS": 30,
     "LLM_REASONING_EFFORT": "minimal",
     "LLM_TURN_PARALLEL_WORKERS": 8,
