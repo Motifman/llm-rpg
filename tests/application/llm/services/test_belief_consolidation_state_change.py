@@ -33,9 +33,6 @@ from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_stor
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
-from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-    SemanticPassiveRecallService,
-)
 from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
     TextCandidate,
 )
@@ -399,18 +396,20 @@ class TestExplainChange:
         assert change.importance_score == 8
         assert "枯れ葉" in change.tags
 
-    def test_superseded_state_belief_is_not_recalled(self) -> None:
-        """置き換えられた状態の信念は頭に載る候補 (SemanticPassiveRecallService) に出ず、変わり方の信念だけが出る。"""
+    def test_superseded_state_belief_is_no_longer_active(self) -> None:
+        """置き換えられた状態の信念は active でなくなり、active な信念は変わり方の信念だけになる。"""
         s = _setup([_explain_change()])
         s.semantic_store.add_by_being(_BEING, _belief())
         s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
 
         s.coordinator.flush_player(_PLAYER, _BEING)
 
-        recalled = SemanticPassiveRecallService(s.semantic_store).retrieve(
-            being_id=_BEING, situation_cues=(), top_k=10
-        )
-        assert [c.entry.text for c in recalled] == [_REGROWS]
+        active = [
+            e.text
+            for e in s.semantic_store.list_for_being(_BEING)
+            if e.status == SEMANTIC_MEMORY_STATUS_ACTIVE
+        ]
+        assert active == [_REGROWS]
 
     def test_superseded_state_belief_leaves_the_next_shortlist(self) -> None:
         """置き換えたあとの次の固めでは、状態の信念は候補に出ず、変わり方の信念が出る。"""

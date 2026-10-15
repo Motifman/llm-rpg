@@ -127,40 +127,12 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(current_state_text="a", recent_events_text="")
         assert "（なし）" in text
 
-    def test_learned_text_joins_recall_sections_after_recent_events(self, strategy):
-        """【関連する学び】は直近の出来事の後、関連する記憶とメモの前に置かれる。"""
+    def test_mid_summary_precedes_recent_events(self, strategy):
+        """【最近の流れ】は直近の出来事より前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
-            learned_text="- タカシは信頼できる",
-            active_memos_text="メモ",
-            relevant_memories_text="- 思い出",
-        )
-        assert "【関連する学び】" in text
-        assert "- タカシは信頼できる" in text
-        idx_prediction = text.index("【直近の出来事】")
-        idx_learned = text.index("【関連する学び】")
-        idx_memory = text.index("【関連する記憶】")
-        idx_memos = text.index("【進行中のメモ】")
-        assert idx_prediction < idx_learned < idx_memory < idx_memos
-
-    def test_returns_empty_when_learned_text_section(self, strategy):
-        """空文字なら section ヘッダも出ない。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            learned_text="",
-        )
-        assert "【関連する学び】" not in text
-
-    def test_mid_summary_precedes_learned_recall_section(self, strategy):
-        """【最近の流れ】は直近の出来事より前、学びは出来事より後に置かれる。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            objective_text="目的",
-            learned_text="- 学び",
             mid_summary_text="[最新] 動き",
             active_memos_text="メモ",
         )
@@ -168,8 +140,7 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "[最新] 動き" in text
         idx_mid = text.index("【最近の流れ】")
         idx_events = text.index("【直近の出来事】")
-        idx_learned = text.index("【関連する学び】")
-        assert idx_mid < idx_events < idx_learned
+        assert idx_mid < idx_events
 
     def test_returns_empty_when_mid_summary_text_section(self, strategy):
         """midsummarytext が空なら section ごと省略。"""
@@ -180,24 +151,22 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" not in text
 
-    def test_long_summary_text_precedes_mid_summary_and_learned(self, strategy):
-        """【自己像と世界観】は最近の流れより前、学びは出来事より後に置かれる。"""
+    def test_long_summary_text_precedes_mid_summary(self, strategy):
+        """【自己像と世界観】は目的の後、最近の流れより前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
             long_summary_text="私について: 寡黙な漁師",
-            learned_text="- タカシは信頼できる",
             mid_summary_text="[最新] 動き",
         )
         assert "【自己像と世界観】" in text
         assert "私について: 寡黙な漁師" in text
         idx_obj = text.index("【現在の目的】")
         idx_long = text.index("【自己像と世界観】")
-        idx_learned = text.index("【関連する学び】")
         idx_mid = text.index("【最近の流れ】")
         idx_events = text.index("【直近の出来事】")
-        assert idx_obj < idx_long < idx_mid < idx_events < idx_learned
+        assert idx_obj < idx_long < idx_mid < idx_events
 
     def test_known_people_follow_objective_and_precede_self_image(self, strategy):
         """【知っている人】は【現在の目的】の直後、【自己像と世界観】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
@@ -293,14 +262,4 @@ class TestSectionBasedContextFormatStrategyValidation:
                 current_state_text="",
                 recent_events_text="",
                 inventory_text=None,  # type: ignore[arg-type]
-            )
-
-    def test_non_string_learned_text_raises_type_error(self):
-        """learned_text が str でないとき TypeError を投げる (Phase 1c)。"""
-        strategy = SectionBasedContextFormatStrategy()
-        with pytest.raises(TypeError, match="learned_text must be str"):
-            strategy.format(
-                current_state_text="",
-                recent_events_text="",
-                learned_text=[],  # type: ignore[arg-type]
             )

@@ -65,7 +65,6 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LLM_REQUEST_TIMEOUT_SECONDS",
         "LLM_EPISODIC_ENABLED",
         "SEMANTIC_LLM_GIST_ENABLED",
-        "SEMANTIC_PASSIVE_TOP_K",
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
         "OPENROUTER_PROVIDER",

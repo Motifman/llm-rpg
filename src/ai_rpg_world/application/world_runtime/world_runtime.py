@@ -2422,8 +2422,6 @@ class WorldRuntime:
         # (recall section が出ない)。
         episodic_config = EpisodicRecallConfig()
         if self._episodic_stack is not None:
-            # #526 後続: stack に semantic passive recall があれば
-            # 【関連する学び】section を出すために渡す (default OFF では None/0)。
             episodic_config = EpisodicRecallConfig(
                 passive_recall=self._episodic_stack.passive_recall,
                 noun_matcher=self._episodic_stack.noun_matcher,
@@ -2432,8 +2430,6 @@ class WorldRuntime:
                 # 昇格ゲート (recall_count>=3) を永遠に超えられない
                 # (memory_full_002 実験で発覚)。
                 memory_link_service=self._episodic_stack.link_service,
-                semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
-                semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
                 encounter_memory=self._encounter_memory,
                 encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
                     "spot", spot_str_id
@@ -7351,22 +7347,16 @@ def create_world_runtime(
                     "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
                 )
         # #526 後続: semantic 拡張のフラグ解決。world_runtime でも
-        # SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED で「学びを作る
-        # (promotion) / 出す (passive recall)」を on/off できるようにする。
-        # 既定 OFF (top_k=0 / gist off) で従来の episodic-only 動作を保つ。
+        # SEMANTIC_LLM_GIST_ENABLED で「学びを作る (promotion)」を on/off
+        # できるようにする。既定 OFF で従来の episodic-only 動作を保つ。
         # フラグは env を直読みせず ResolvedLlmRuntimeConfig (= config) から取る。
         # こうしないと create_world_runtime(config=...) の明示 config が
         # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
-        _semantic_top_k = config.semantic_passive_top_k
         _semantic_gist_enabled = config.semantic_llm_gist_enabled
         # U3b: 固着パスは belief journal (semantic_memory_store) への書き込みを
         # 前提とするため、他の semantic 系フラグが OFF でも semantic スタック
         # 自体は組む必要がある。
-        _semantic_enabled = (
-            _semantic_top_k > 0
-            or _semantic_gist_enabled
-            or _belief_consolidation_enabled
-        )
+        _semantic_enabled = _semantic_gist_enabled or _belief_consolidation_enabled
         _semantic_gist_service = None
         _semantic_persona_resolver = None
         if _semantic_enabled:
@@ -7449,7 +7439,6 @@ def create_world_runtime(
             # semantic 有効時は link / promotion が build_episodic_memory_stack で
             # 組まれる (BeingId は各 caller 入口で渡す)。
             semantic_enabled=_semantic_enabled,
-            semantic_passive_top_k=_semantic_top_k,
             semantic_gist_service=_semantic_gist_service,
             semantic_persona_resolver=_semantic_persona_resolver,
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
