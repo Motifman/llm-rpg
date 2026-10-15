@@ -20,21 +20,11 @@ from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port imp
 from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
     BeliefConsolidationCoordinator,
 )
-from ai_rpg_world.application.llm.services.belief_create_gate import (
-    OUTCOME_CREATE,
-    OUTCOME_SKIP_CURRENT_SITUATION,
-    OUTCOME_STRENGTHEN,
-    BeliefCreateGate,
-    BeliefCreateReview,
-)
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,
 )
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
-)
-from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
-    TextCandidate,
 )
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -70,29 +60,6 @@ class _FakePort(IBeliefConsolidationCompletionPort):
         return self.outcome
 
 
-class _FakeGate(BeliefCreateGate):
-    """決まった結果を返し、問われた文と候補を覚える作る前の判断。"""
-
-    def __init__(self, outcome: str, target_key: str | None = None) -> None:
-        self._outcome = outcome
-        self._target_key = target_key
-        self.asked: list[tuple[str, list[TextCandidate]]] = []
-
-    def review(
-        self, text: str, existing: list[TextCandidate]
-    ) -> BeliefCreateReview:  # type: ignore[override]
-        self.asked.append((text, list(existing)))
-        return BeliefCreateReview(
-            text=text,
-            candidates=(),
-            outcome=self._outcome,
-            target_key=self._target_key,
-            narrower="fake",
-            top_k=5,
-            min_confidence=0.5,
-        )
-
-
 class _Recorder:
     def __init__(self) -> None:
         self._inner = NullTraceRecorder()
@@ -120,7 +87,6 @@ def _setup(
     decisions: list[dict[str, Any]],
     *,
     current_turn: int = 40,
-    create_gate: BeliefCreateGate | None = None,
 ) -> _Setup:
     evidence_buffer = InMemoryBeliefEvidenceBufferStore()
     semantic_store = InMemorySemanticMemoryStore()
@@ -132,7 +98,6 @@ def _setup(
         completion=port,
         memory_turn_reader=FixedMemoryTurnReader(current_turn),
         trace_recorder_provider=lambda: recorder,
-        create_gate=create_gate,
     )
     return _Setup(coordinator, evidence_buffer, semantic_store, port, recorder)
 
@@ -449,79 +414,6 @@ class TestExplainChange:
         assert [e.text for e in _active(s.semantic_store)] == [_DEPLETED]
         [trace] = [e for e in s.recorder.events if e.kind == TraceEventKind.BELIEF_CONSOLIDATION]
         assert [d["reason"] for d in trace.payload["skipped_decisions"]] == [reason]
-
-
-class TestExplainChangeThroughCreateGate:
-    """変わり方の信念も、作る直前の判断 (#1453) を通ることを保証する。"""
-
-    def test_gate_is_asked_without_the_belief_being_replaced(self) -> None:
-        """作る前の判断には変わり方の文を問い、置き換える状態の信念は同じ意味の候補から外す。"""
-        gate = _FakeGate(OUTCOME_CREATE)
-        s = _setup([_explain_change()], create_gate=gate)
-        s.semantic_store.add_by_being(_BEING, _belief())
-        s.semantic_store.add_by_being(
-            _BEING, _belief(entry_id="sem-other", text="森の小川は澄んでいる")
-        )
-        s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
-
-        s.coordinator.flush_player(_PLAYER, _BEING)
-
-        [(text, existing)] = gate.asked
-        assert text == _REGROWS
-        assert [c.key for c in existing] == ["sem-other"]
-
-    def test_current_situation_is_not_made_a_belief_and_state_belief_stays(self) -> None:
-        """作る前の判断が「いまの状況」と答えたら、変わり方の信念を作らず、状態の信念も置き換えない。"""
-        gate = _FakeGate(OUTCOME_SKIP_CURRENT_SITUATION)
-        s = _setup([_explain_change()], create_gate=gate)
-        s.semantic_store.add_by_being(_BEING, _belief())
-        s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
-
-        s.coordinator.flush_player(_PLAYER, _BEING)
-
-        assert [e.text for e in _active(s.semantic_store)] == [_DEPLETED]
-        [trace] = [e for e in s.recorder.events if e.kind == TraceEventKind.BELIEF_CONSOLIDATION]
-        assert [d["reason"] for d in trace.payload["skipped_decisions"]] == [
-            "explain_change_current_situation"
-        ]
-
-    def test_same_meaning_change_belief_is_strengthened_and_state_belief_superseded(
-        self,
-    ) -> None:
-        """同じ意味の変わり方の信念がすでにあれば、新しく作らずそれを強め、状態の信念は superseded にする。"""
-        gate = _FakeGate(OUTCOME_STRENGTHEN, target_key="sem-regrows")
-        s = _setup([_explain_change()], create_gate=gate)
-        s.semantic_store.add_by_being(_BEING, _belief())
-        s.semantic_store.add_by_being(
-            _BEING,
-            _belief(entry_id="sem-regrows", text=_REGROWS, support=("e-x",), last_observed_turn=30),
-        )
-        s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
-
-        s.coordinator.flush_player(_PLAYER, _BEING)
-
-        entries = {e.entry_id: e for e in s.semantic_store.list_for_being(_BEING)}
-        assert entries["sem-depleted"].status == SEMANTIC_MEMORY_STATUS_SUPERSEDED
-        [active] = _active(s.semantic_store)
-        assert active.belief_id == "sem-regrows"
-        assert set(active.support_evidence_ids) == {"e-x", "e-now"}
-        assert active.last_observed_turn == 40
-
-
-    def test_strengthen_target_missing_keeps_state_belief_and_tells_why(self) -> None:
-        """作る前の判断が強める先に存在しない信念を返したら、何も強めず、状態の信念は active のまま残り、explain_change 由来と分かる理由で見送られる。"""
-        gate = _FakeGate(OUTCOME_STRENGTHEN, target_key="sem-missing")
-        s = _setup([_explain_change()], create_gate=gate)
-        s.semantic_store.add_by_being(_BEING, _belief())
-        s.evidence_buffer.append_by_being(_BEING, _evidence("e-now", observed_turn=40))
-
-        s.coordinator.flush_player(_PLAYER, _BEING)
-
-        assert [e.text for e in _active(s.semantic_store)] == [_DEPLETED]
-        [trace] = [e for e in s.recorder.events if e.kind == TraceEventKind.BELIEF_CONSOLIDATION]
-        assert [d["reason"] for d in trace.payload["skipped_decisions"]] == [
-            "explain_change_strengthen_belief_not_found"
-        ]
 
 
 class TestConsolidationTraceShowsTurnsAndActions:

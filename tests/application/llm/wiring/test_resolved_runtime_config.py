@@ -256,6 +256,10 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "LLM_EPISODIC_RECALL_SLOT_COOLDOWN",
             "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
             "SEMANTIC_PASSIVE_TOP_K",
+            "BELIEF_CREATE_GATE_ENABLED",
+            "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
+            "BELIEF_CANDIDATE_NARROWER",
+            "BELIEF_CANDIDATE_TOP_K",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
