@@ -102,8 +102,6 @@ def log_semantic_llm_gist_state(enabled: bool) -> None:
     )
 
 
-
-
 # ──────────────────────────────────────────────────────────────────
 # Short-term memory: rolling summary (Phase 2)
 # ──────────────────────────────────────────────────────────────────

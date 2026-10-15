@@ -20,10 +20,10 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     2. **【自己像と世界観】** — long_summary_text (L5)
     3. **【最近の流れ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
-    6. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
-    6b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
-    7. **【進行中のメモ】** — active_memos_text
-    8. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
+    5. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
+    5b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
+    6. **【進行中のメモ】** — active_memos_text
+    7. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
     意図:
       - prefix cache は直近の出来事の安定した先頭まで残す。「関連する記憶」は
@@ -256,7 +256,7 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 7. 関連する記憶 (volatile、cue 再計算で 19-32% 変動)
+    # 5. 関連する記憶 (volatile、cue 再計算で 19-32% 変動)
     # 受動想起 service が未注入なら空文字 → section ごと省略。
     # 末尾近くに置くことで「今ここで関連する記憶」への attention を強める
     # (Lost in the Middle 緩和)。
@@ -267,19 +267,19 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 7b. 思い出せる出来事 (エピソードの目次、#1623)。書き起こしと呼び出しのときだけ
+    # 5b. 思い出せる出来事 (エピソードの目次、#1623)。書き起こしと呼び出しのときだけ
     # 変わるので、毎ターン伸びる直近の出来事より後ろ、メモより前に置く。
     if episode_index_text.strip():
         sections.extend([EPISODE_INDEX_HEADING, episode_index_text.rstrip(), ""])
 
-    # 8. 進行中のメモ (high-volatile、空なら省略)
+    # 6. 進行中のメモ (high-volatile、空なら省略)
     if active_memos_text.strip():
         sections.extend([
             "【進行中のメモ】",
             active_memos_text.strip(),
             "",
         ])
-    # 8b. メモ帳 (#1628)。進行中のメモと同じ位置。両方を出す設定は起動前に止めている。
+    # 6b. メモ帳 (#1628)。進行中のメモと同じ位置。両方を出す設定は起動前に止めている。
     if being_memo_text.strip():
         sections.extend([
             "【メモ】",
@@ -287,7 +287,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 9. 現在地と周囲 (必須、最 volatile なので末尾)
+    # 7. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
