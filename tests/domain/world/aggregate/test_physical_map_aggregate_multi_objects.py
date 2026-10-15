@@ -8,7 +8,7 @@ from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
     DuplicateObjectException,
     InvalidMovementException,
-    InvalidPlacementException,
+    ObjectNotFoundException,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -44,9 +44,9 @@ class TestPhysicalMapAggregateMultiObjects:
         aggregate.add_object(WorldObject(p2_id, coord, ObjectTypeEnum.PLAYER, is_blocking=False))
         
         # Then: Both should exist at the same coordinate
-        assert p1_id in aggregate._object_positions[coord]
-        assert p2_id in aggregate._object_positions[coord]
-        assert len(aggregate._object_positions[coord]) == 2
+        assert sorted(obj.object_id.value for obj in aggregate.get_objects_at(coord)) == [1, 2]
+        assert aggregate.get_object(p1_id).coordinate == coord
+        assert aggregate.get_object(p2_id).coordinate == coord
 
     def test_blocking_object_cannot_be_placed_where_objects_exist(self, aggregate):
         # Given: A player at (2,2)
@@ -96,7 +96,7 @@ class TestPhysicalMapAggregateMultiObjects:
         aggregate.remove_object(p1_id)
         
         # Then: p2 should still be there, but p1 should be gone
-        assert coord in aggregate._object_positions
-        assert p1_id not in aggregate._object_positions[coord]
-        assert p2_id in aggregate._object_positions[coord]
-        assert p1_id not in aggregate._objects
+        assert [obj.object_id for obj in aggregate.get_objects_at(coord)] == [p2_id]
+        assert aggregate.get_object(p2_id).coordinate == coord
+        with pytest.raises(ObjectNotFoundException):
+            aggregate.get_object(p1_id)
