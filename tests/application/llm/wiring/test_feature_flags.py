@@ -12,19 +12,14 @@ from ai_rpg_world.application.llm.wiring.feature_flags import (
     ENV_BELIEF_EVIDENCE_ENABLED,
     ENV_MEMO_TOOLS_ENABLED,
     ENV_SEMANTIC_PASSIVE_TOP_K,
-    ENV_SHORT_TERM_MEMORY_KIND,
-    SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
-    SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
     log_belief_attribution_enabled_state,
     log_belief_evidence_enabled_state,
     log_memo_tools_enabled_state,
     log_semantic_passive_top_k_state,
-    log_short_term_memory_kind_state,
     resolve_belief_attribution_enabled,
     resolve_belief_evidence_enabled,
     resolve_memo_tools_enabled,
     resolve_semantic_passive_top_k,
-    resolve_short_term_memory_kind,
 )
 
 
@@ -89,72 +84,6 @@ class TestLogSemanticPassiveTopKState:
             log_semantic_passive_top_k_state(0)
         assert any("3" in rec.message for rec in caplog.records)
         assert any("0" in rec.message for rec in caplog.records)
-
-
-class TestResolveShortTermMemoryKind:
-    """``SHORT_TERM_MEMORY_KIND`` env 解決 (Phase 2)。"""
-
-    def test_default_short_term_memory(self) -> None:
-        """設定に書かなければ rolling_summary になる。新しい記憶の書き起こしは畳むときに呼ばれる (#1631)。"""
-        assert resolve_short_term_memory_kind(env={}) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
-
-    def test_env_empty_string_default_2(self) -> None:
-        """空文字を渡しても、書かなかったときと同じ rolling_summary になる。"""
-        assert resolve_short_term_memory_kind(
-            env={ENV_SHORT_TERM_MEMORY_KIND: ""}
-        ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
-
-    def test_short_term_memory(self) -> None:
-        """有効な sliding window。"""
-        assert resolve_short_term_memory_kind(
-            env={ENV_SHORT_TERM_MEMORY_KIND: "sliding_window"}
-        ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
-
-    def test_rolling_summary(self) -> None:
-        """有効な rolling summary。"""
-        assert resolve_short_term_memory_kind(
-            env={ENV_SHORT_TERM_MEMORY_KIND: "rolling_summary"}
-        ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
-
-    def test_case_insensitive(self) -> None:
-        assert resolve_short_term_memory_kind(
-            env={ENV_SHORT_TERM_MEMORY_KIND: "ROLLING_SUMMARY"}
-        ) == SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
-
-    def test_unknown_raises_value_error_10(self) -> None:
-        """短縮形 (``rolling``) や typo を渡したら silent fallback せず即落とす。
-
-        PR #433 経緯: ``rolling`` を渡したのに sliding_window で実験が走り、
-        実験 24h 分が無駄になりかけた事例。
-        """
-        with pytest.raises(ValueError) as exc_info:
-            resolve_short_term_memory_kind(
-                env={ENV_SHORT_TERM_MEMORY_KIND: "rolling"}
-            )
-        msg = str(exc_info.value)
-        assert "SHORT_TERM_MEMORY_KIND" in msg
-        assert "rolling" in msg  # bad value
-        # 有効値リストがメッセージに含まれる (ユーザーが正しい綴りを発見しやすい)
-        assert "rolling_summary" in msg
-        assert "sliding_window" in msg
-
-
-class TestLogShortTermMemoryKindState:
-    """解決結果を INFO ログ 1 件で残す (Phase 2)。"""
-
-    def test_log_kind_value_rendered(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """log に kind の値が 出る。"""
-        with caplog.at_level(
-            logging.INFO,
-            logger="ai_rpg_world.application.llm.wiring.feature_flags",
-        ):
-            log_short_term_memory_kind_state("sliding_window")
-            log_short_term_memory_kind_state("rolling_summary")
-        messages = [rec.message for rec in caplog.records]
-        assert any("sliding_window" in m for m in messages)
-        assert any("rolling_summary" in m for m in messages)
 
 
 class TestResolveBeliefEvidenceEnabled:

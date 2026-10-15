@@ -167,7 +167,7 @@ class TestActionResultStoreCodec:
         assert captured["entries"] == []
 
 class TestSlidingWindowCodecRollingSummaryBackend:
-    """``MEMORY_KIND=rolling_summary`` (= K run の最適構成) backend での
+    """``SummarizingShortTermMemory`` backend での
     capture / restore を検証する (#471 後続)。L4 / L5 が失われると agent の
     self_image / world_view が空に戻るため、永続化は実験再現性に必須。"""
 

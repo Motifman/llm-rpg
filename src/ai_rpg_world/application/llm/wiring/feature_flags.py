@@ -162,52 +162,8 @@ def log_semantic_passive_top_k_state(top_k: int) -> None:
 # ──────────────────────────────────────────────────────────────────
 
 
-ENV_SHORT_TERM_MEMORY_KIND = "SHORT_TERM_MEMORY_KIND"
 ENV_SHORT_TERM_MEMORY_TURN_CAP = "SHORT_TERM_MEMORY_TURN_CAP"
 ENV_SHORT_TERM_MEMORY_TURN_COMPACT_COUNT = "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT"
-SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW = "sliding_window"
-SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY = "rolling_summary"
-_VALID_SHORT_TERM_MEMORY_KINDS = frozenset({
-    SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW,
-    SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
-})
-
-
-def resolve_short_term_memory_kind(
-    env: Mapping[str, str] | None = None,
-) -> str:
-    """``SHORT_TERM_MEMORY_KIND`` env を解決する。
-
-    - default は ``rolling_summary``。新しい記憶の書き起こし (#1626) は畳む
-      ときに呼ばれ、``sliding_window`` には畳む瞬間が無い (#1631)
-    - 未知文字列は ``ValueError`` (silent fallback 防止 / PR #433 経緯:
-      短縮形 ``rolling`` を渡したのに silent fallback で sliding_window が
-      使われ、実験 24h 分が無駄になりかけた)
-
-    詳細は docs/memory_system/short_term_memory_design.md §6.1。
-
-    Raises:
-        ValueError: 未知の文字列 (短縮形 typo 等) のとき
-    """
-    if env is None:
-        raise TypeError(
-            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
-        )
-    source = env
-    raw = (source.get(ENV_SHORT_TERM_MEMORY_KIND) or "").strip().lower()
-    if not raw:
-        return SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY
-    if raw not in _VALID_SHORT_TERM_MEMORY_KINDS:
-        raise ValueError(
-            f"{ENV_SHORT_TERM_MEMORY_KIND}={raw!r} is not recognized. "
-            f"valid: {sorted(_VALID_SHORT_TERM_MEMORY_KINDS)}"
-        )
-    return raw
-
-
-def log_short_term_memory_kind_state(kind: str) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info("%s resolved to %s", ENV_SHORT_TERM_MEMORY_KIND, kind)
 
 
 def resolve_short_term_memory_turn_window(

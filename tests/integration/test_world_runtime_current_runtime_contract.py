@@ -86,7 +86,6 @@ def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LLM_EPISODIC_SUBJECTIVE_ENABLED",
         "SEMANTIC_PASSIVE_TOP_K",
         "SEMANTIC_LLM_GIST_ENABLED",
-        "SHORT_TERM_MEMORY_KIND",
         "MEMO_TOOLS_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)

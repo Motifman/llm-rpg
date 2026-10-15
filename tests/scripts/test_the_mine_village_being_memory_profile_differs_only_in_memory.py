@@ -73,13 +73,12 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
             "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
         }
 
-    def test_thinking_output_cap_and_short_term_summary_are_kept(self) -> None:
-        """thinking、出力の上限、短期記憶の要約は、比べた全部入りの run と同じ値のまま。"""
+    def test_thinking_and_output_cap_are_kept(self) -> None:
+        """thinking と出力の上限は、比べた全部入りの run と同じ値のまま。"""
         being = _load(_BEING_MEMORY)["runtime_config"]
 
         assert being["LLM_REASONING_EFFORT"] == "minimal"
         assert being["LLM_MAX_OUTPUT_TOKENS"] == 4096
-        assert being["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
 
     def test_profile_resolves_with_new_memory_on_and_old_memory_off(self) -> None:
         """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードとメモ帳が入り、古いエピソードと古いメモは止まっている。"""
