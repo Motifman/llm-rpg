@@ -32,7 +32,7 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
    (PR #434 ポリシー継承)
 3. **外側 shell を読まない**: ``from_mapping`` は引数 mapping だけを読む
 4. **trace 表現**: ``to_trace_dict()`` で run_start payload に書ける dict を返す
-5. **既存 resolver の活用**: 内部で既存 ``resolve_short_term_memory_kind`` 等を
+5. **既存 resolver の活用**: 内部で既存 ``resolve_short_term_memory_turn_window`` 等を
    呼ぶ薄いラッパー (= 段階移行可能 / behavior 等価)
 
 # 将来計画
@@ -104,7 +104,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SEMANTIC_LLM_GIST_ENABLED",
-    "SHORT_TERM_MEMORY_KIND",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
     "SUBJECTIVE_EPISODE_DB_PATH",
@@ -150,9 +149,6 @@ class ResolvedLlmRuntimeConfig:
     2 箇所で別解釈する silent failure」を構造で防ぐ。
 
     Attributes:
-        # === Short-term memory (Phase 2) ===
-        short_term_memory_kind: ``"rolling_summary"`` だけ。``"sliding_window"`` は起動時に拒む (D1631)
-
         # === LLM client / model ===
         llm_client_kind: ``"stub"`` | ``"litellm"``
         llm_model: model 名 (例: ``"openrouter/google/gemma-4-31b-it"``)。
@@ -194,9 +190,6 @@ class ResolvedLlmRuntimeConfig:
         semantic_llm_gist_enabled: ``SEMANTIC_LLM_GIST_ENABLED=1`` で episodic →
             semantic 昇格時に LLM 要約を生成
     """
-
-    # Short-term memory
-    short_term_memory_kind: str
 
     # LLM client
     llm_client_kind: str
@@ -332,12 +325,6 @@ class ResolvedLlmRuntimeConfig:
                 "valid: ['fail', 'warn']"
             )
         self._validate_belief_create_gate()
-        if self.short_term_memory_kind != "rolling_summary":
-            # エピソードの書き起こし (#1626) を呼ぶ口は畳んで要約する短期記憶にしか無い。
-            # 書き起こしは常に入るので、ほかの種類では目次が黙って空のまま走る (D1631)。
-            raise ValueError(
-                "SHORT_TERM_MEMORY_KIND must be rolling_summary: episode writing is always on"
-            )
         if self.being_memo_enabled and self.memo_tools_enabled:
             raise ValueError(
                 "BEING_MEMO_ENABLED=1 requires MEMO_TOOLS_ENABLED=false "
@@ -389,7 +376,6 @@ class ResolvedLlmRuntimeConfig:
             resolve_belief_evidence_enabled,
             resolve_memo_tools_enabled,
             resolve_semantic_llm_gist_enabled,
-            resolve_short_term_memory_kind,
             resolve_short_term_memory_turn_window,
         )
 
@@ -399,7 +385,6 @@ class ResolvedLlmRuntimeConfig:
         # 既存 resolver は env=None だと os.environ を読むものがあるため、
         # ここでは必ず明示 mapping を渡す。実験設定の入力経路を
         # profile/config → 本 DTO の 1 本に固定するため。
-        short_term_memory_kind = resolve_short_term_memory_kind(env=source)
         (
             short_term_memory_turn_cap,
             short_term_memory_turn_compact_count,
@@ -603,7 +588,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(f"WORLD_TICK_FAILURE_POLICY: {exc}") from exc
 
         return cls(
-            short_term_memory_kind=short_term_memory_kind,
             short_term_memory_turn_cap=short_term_memory_turn_cap,
             short_term_memory_turn_compact_count=short_term_memory_turn_compact_count,
             llm_client_kind=llm_client_kind,
@@ -684,7 +668,6 @@ class ResolvedLlmRuntimeConfig:
             )
         """
         defaults: dict[str, Any] = dict(
-            short_term_memory_kind="rolling_summary",
             short_term_memory_turn_cap=20,
             short_term_memory_turn_compact_count=10,
             llm_client_kind="stub",

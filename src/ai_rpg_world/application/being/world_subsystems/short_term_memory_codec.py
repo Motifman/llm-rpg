@@ -15,9 +15,9 @@ resume 時に直近の出来事が空だと agent は **「直前の出来事を
 
 ``ShortTermMemorySubsystemCodec`` は 2 つの backend に対応する:
 
-- ``DefaultSlidingWindowMemory`` (``MEMORY_KIND=sliding_window``): 単一 L1
+- ``DefaultSlidingWindowMemory`` (試験の代役): 単一 L1
   raw store のみ
-- ``SummarizingShortTermMemory`` (``MEMORY_KIND=rolling_summary``):
+- ``SummarizingShortTermMemory`` (本番の短期記憶):
   L1 raw + L4 mid summary (3 generations) + L5 long summary (1 per player)
   の 3 階層
 

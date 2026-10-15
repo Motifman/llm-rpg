@@ -21,7 +21,6 @@ class TestFromEnvDefaults:
     def test_empty_config_default_resolve(self) -> None:
         """空設定で default に resolve。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.short_term_memory_kind == 'rolling_summary'
         assert cfg.llm_client_kind == 'stub'
         assert cfg.llm_model is None
         assert cfg.llm_api_key is None
@@ -130,8 +129,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
-        assert cfg.short_term_memory_kind == 'rolling_summary'
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.llm_client_kind == 'litellm'
@@ -182,11 +180,6 @@ class TestFromEnvFailFast:
         """秘密情報は profile ではなく process environment だけに置く。"""
         with pytest.raises(ValueError, match='secret key'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'OPENAI_API_KEY': 'sk-secret'})
-
-    def test_short_term_memory_kind_raises_value_error(self) -> None:
-        """shorttermmemorykind 短縮形は ValueError。"""
-        with pytest.raises(ValueError, match='SHORT_TERM_MEMORY_KIND'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling'})
 
     def test_llm_client_unknown_raises_value_error(self) -> None:
         """llm client 未知の値は ValueError。"""
@@ -252,6 +245,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "SHORT_TERM_MEMORY_SCHEDULER_MODE",
             "LLM_TOOL_MODE",
             "LLM_MEETING_SERIAL_TURNS",
+            "SHORT_TERM_MEMORY_KIND",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",
@@ -321,9 +315,9 @@ class TestFromMappingIgnoresOsEnviron:
 
     def test_values_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """values 省略時も os environ を読まない。"""
-        monkeypatch.setenv('SHORT_TERM_MEMORY_KIND', 'sliding_window')
+        monkeypatch.setenv('SHORT_TERM_MEMORY_TURN_CAP', '99')
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
-        assert cfg.short_term_memory_kind == 'rolling_summary'
+        assert cfg.short_term_memory_turn_cap == 20
 
     def test_subjective_episode_db_path_os_environ_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """SUBJECTIVE_EPISODE_DB_PATH が env にあっても config は読まない (二重入口撤去)。"""
@@ -339,7 +333,7 @@ class TestImmutability:
         from dataclasses import FrozenInstanceError
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         with pytest.raises(FrozenInstanceError):
-            cfg.short_term_memory_kind = 'rolling_summary'
+            cfg.llm_client_kind = 'litellm'
 
     def test_hash(self) -> None:
         """frozen=True なので hash できる (= set / dict key に使える)。"""
@@ -357,8 +351,7 @@ class TestForTestsFactory:
 
     def test_override_keyword(self) -> None:
         """override だけ keyword で指定できる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', llm_client_kind='litellm')
-        assert cfg.short_term_memory_kind == 'rolling_summary'
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm')
         assert cfg.llm_client_kind == 'litellm'
 
     def test_unknown_override_key_raises_type_error(self) -> None:
@@ -371,9 +364,9 @@ class TestToTraceDict:
 
     def test_all_dict_rendered(self) -> None:
         """全フィールドが dict に出る。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
         d = cfg.to_trace_dict()
-        assert d['short_term_memory_kind'] == 'rolling_summary'
+        assert d['short_term_memory_turn_cap'] == 20
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
         assert 'belief_evidence_enabled' in d
@@ -390,15 +383,3 @@ class TestToTraceDict:
         cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key=None)
         d = cfg.to_trace_dict()
         assert d['llm_api_key'] is None
-
-class TestExistingResolverParity:
-    """``from_mapping`` が既存 resolver と同じ値を返すことを担保する (= 移行時の
-    behavior 等価)。PR 3/6 で既存 wiring を本 DTO に置き換えるときに、両経路で
-    結果が一致することを構造的に保証する。"""
-
-    def test_short_term_memory_kind_existing_resolver_matches(self) -> None:
-        """shorttermmemorykind は既存 resolver と一致。"""
-        from ai_rpg_world.application.llm.wiring.feature_flags import resolve_short_term_memory_kind
-        values = {'SHORT_TERM_MEMORY_KIND': 'rolling_summary'}
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
-        assert cfg.short_term_memory_kind == resolve_short_term_memory_kind(env=values)
