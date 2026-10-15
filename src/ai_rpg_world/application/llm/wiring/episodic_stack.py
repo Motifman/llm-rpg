@@ -357,7 +357,7 @@ def build_episodic_stack(
             episode_store,
             semantic_gist_service=semantic_gist_service,
             semantic_persona_resolver=semantic_persona_resolver,
-            # U3b: 証拠のバッファがあればクラスタ昇格を FAMILIARITY 転用モードに
+            # 証拠のバッファがあればクラスタ昇格を FAMILIARITY 転用モードに
             # 切り替える (未指定なら従来の store 直書き)。
             belief_evidence_buffer_store=belief_evidence_buffer_store,
             memory_turn_reader=memory_turn_reader if familiarity_wired else None,

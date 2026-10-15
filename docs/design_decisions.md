@@ -6416,7 +6416,8 @@ snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。sn
   観測は引き継がない。「いまの状況」と判断されたら作らず、状態の信念も置き換えない
 - **状態の変化か前の学びの誤りかは指示文で分ける**: 見落としていた所での発見は前の学びの
   誤りとして `revise` / `contradict` に回す。機械の試験では守れないので、
-  `scripts/belief_state_change_probe.py` の対照の場面で読む (#1452 の確認で 3/5 → 1/5)
+  `scripts/belief_state_change_probe.py` の対照の場面で読む (#1452 の確認で 3/5 → 1/5)。
+  この script は固着と一緒に #1631 の段 10 で消した
 - **snapshot の互換は保たない**: 証拠の payload に `observed_turn` が無ければ読み込まずに
   止める。いつ見たかを捏造しない。信念の `last_observed_turn` は、キーが無ければ不明として
   戻す。不明は値として表せるので、止めるほどではない
