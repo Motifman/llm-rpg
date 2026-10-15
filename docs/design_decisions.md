@@ -8271,7 +8271,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 ## D1631-2. OpenRouter の provider を固定したら、送る引数をすべて受け付ける provider にだけ送る
 
-**何を**: `OPENROUTER_PROVIDER` か `OPENROUTER_QUANTIZATION` を書いた run は、routing の塊にいつも `require_parameters=true` を入れる。`OPENROUTER_REQUIRE_PARAMS` のキーは #PRNUM で消した。どちらも書かない呼び出しは、今までどおり routing の塊を作らない。
+**何を**: `OPENROUTER_PROVIDER` か `OPENROUTER_QUANTIZATION` を書いた run は、routing の塊にいつも `require_parameters=true` を入れる。`OPENROUTER_REQUIRE_PARAMS` のキーは #1788 で消した。どちらも書かない呼び出しは、今までどおり routing の塊を作らない。
 
 **なぜ**: このリポジトリでは、行動のターンに `tool_choice="required"` を送るのがほぼ前提になっている (#1053)。`require_parameters` が無いと、OpenRouter はその引数を受け付けない provider にも送ることがあり、引数は無視される。そのため `required` が効かないまま run が進む。true にすると、受け付けない provider には送らず、送る前にエラーで止まる。静かな失敗を、起動直後に見える失敗に変える。
 
