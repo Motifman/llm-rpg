@@ -238,6 +238,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "LLM_MEETING_SERIAL_TURNS",
             "SHORT_TERM_MEMORY_KIND",
             "OPENROUTER_REQUIRE_PARAMS",
+            "DISTANT_VIEW_TRACE_ENABLED",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",

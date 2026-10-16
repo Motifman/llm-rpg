@@ -276,14 +276,13 @@ class TraceEventKind:
     # payload: evidence_id / source_kind / episode_ids / cue_signature /
     # text_snippet / salience
     BELIEF_EVIDENCE = "belief_evidence"
-    # 常時遠景の prompt 表示可視化。ambient 系なので既定では発火せず、
-    # DISTANT_VIEW_TRACE_ENABLED 等の明示設定時だけ prompt build ごとに残す。
+    # 常時遠景の prompt 表示可視化。prompt build ごとに残す。
     # payload: spot_id / current_area_id / candidate_count / rendered_count /
     # rendered_area_ids / skipped_reasons / thresholds
     DISTANT_VIEW_RENDERED = "distant_view_rendered"
     DISTANT_VIEW_SKIPPED = "distant_view_skipped"
     # 動的遠景 cue の source 条件が false→true になった境界。
-    # ambient 系の DISTANT_VIEW_* と違い、世界状態変化そのものなので常時残す。
+    # prompt build ごとの DISTANT_VIEW_* と違い、世界状態変化そのものを残す。
     # payload: cue_id / old_active / new_active / initialized_before /
     # origin_area_id / source_kind / source_state_key / visible_recipient_count /
     # delivery_skipped_reason
