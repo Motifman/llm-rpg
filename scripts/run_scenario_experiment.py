@@ -577,10 +577,9 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
-    # #526 後続: SEMANTIC_LLM_GIST_ENABLED が ON だと
-    # episodic_stack が semantic store + memory link store を持つ。あれば snapshot に
-    # 拾う (OFF なら従来どおり None = 空 in-memory fallback)。link store も拾わないと
-    # semantic entries だけ保存され、昇格根拠の link graph が空 fallback になる。
+    # #526 後続: episodic stack を組むと semantic store + memory link store を持つ。
+    # あれば snapshot に拾う (無ければ None = 空 in-memory fallback)。link store も
+    # 拾わないと semantic entries だけ保存され、link graph が空 fallback になる。
     semantic_store = (
         getattr(episodic_stack, "semantic_memory_store", None)
         if episodic_stack is not None
@@ -591,16 +590,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         if episodic_stack is not None
         else None
     )
-    # U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき episodic_stack が
-    # belief evidence buffer store を持つ。checklist #27 (memory_full_003 で
-    # stub 追従漏れが実際に起きた教訓) に従い、ここで拾わないと flag ON でも
-    # evidence が save/load で silent に失われる。OFF なら None = 従来どおり
-    # 空 in-memory fallback。
-    belief_evidence_buffer_store = (
-        getattr(episodic_stack, "belief_evidence_buffer_store", None)
-        if episodic_stack is not None
-        else None
-    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
         semantic_memory_store=semantic_store,
@@ -608,7 +597,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
-        belief_evidence_buffer_store=belief_evidence_buffer_store,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
@@ -1168,7 +1156,6 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 _AUX_COMPONENT_LABELS: dict[str, str] = {
     AuxLlmComponent.EPISODE_SUBJECTIVE.value: "主観の書き込み",
-    AuxLlmComponent.SEMANTIC_GIST.value: "意味記憶の要旨",
     AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
     AuxLlmComponent.SHORT_TERM_LONG_SUMMARY.value: "短期記憶の長い要約",
     AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
@@ -1754,11 +1741,6 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
-        "(runtime_config.SEMANTIC_LLM_GIST_ENABLED)",
         flush=True,
     )
     # OpenRouter provider routing: 設定されているときだけ表示

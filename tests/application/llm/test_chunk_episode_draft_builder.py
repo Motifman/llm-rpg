@@ -415,5 +415,5 @@ class TestChunkWhoKeepsActorDisplayName:
         assert _who_for_actors('バド', ' バド ', decomposed) == ('entity:actor:バド',)
 
     def test_separator_characters_in_name_are_replaced(self) -> None:
-        """actor 名に cue_signature の区切り '|' や ':' が含まれても、marker では '_' に置き換わる。"""
+        """actor 名に区切り文字 '|' や ':' が含まれても、marker では '_' に置き換わる。"""
         assert _who_for_actors('ノア|カイ:2') == ('entity:actor:ノア_カイ_2',)

@@ -16,7 +16,6 @@ class AuxLlmComponent(str, Enum):
     """呼び出した部品。report.md はこの単位で費用を分ける。"""
 
     EPISODE_SUBJECTIVE = "episode_subjective"
-    SEMANTIC_GIST = "semantic_gist"
     SHORT_TERM_SUMMARY = "short_term_summary"
     SHORT_TERM_LONG_SUMMARY = "short_term_long_summary"
     EPISODE_WRITING = "episode_writing"

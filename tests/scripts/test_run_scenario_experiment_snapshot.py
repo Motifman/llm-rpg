@@ -56,29 +56,6 @@ class TestWiringStub:
         # 他 5 store は world_runtime 経路では拾えないので None
         assert stub.semantic_memory_store is None
         assert stub.memory_link_store is None
-        # U2: episodic_stack が belief_evidence_buffer_store を持たない
-        # (= BELIEF_EVIDENCE_ENABLED OFF) なら None。
-        assert stub.belief_evidence_buffer_store is None
-
-    def test_finds_belief_evidence_buffer_store_episodic_stack(
-        self,
-    ) -> None:
-        """U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき
-        episodic_stack が持つ belief_evidence_buffer_store を stub が拾う。
-        拾い忘れると flag ON でも evidence が snapshot に乗らず、save/load で
-        silent に失われる (checklist #27 の教訓)。"""
-        belief_evidence_buffer_store = object()
-        runtime = SimpleNamespace(
-            _todo_store="memo-handle",
-            _aux_being_repository="repo-handle",
-            aux_being_resolver="resolver-handle",
-            _episodic_stack=SimpleNamespace(
-                episode_store=object(),
-                belief_evidence_buffer_store=belief_evidence_buffer_store,
-            ),
-        )
-        stub = _wiring_stub_from_world_runtime(runtime)
-        assert stub.belief_evidence_buffer_store is belief_evidence_buffer_store
 
     def test_episodic_stack_none_episode_store_none(self) -> None:
         """episodic stack が None なら episode store も None。"""
@@ -141,9 +118,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
             InMemoryMemoryLinkStore,
         )
@@ -179,7 +153,6 @@ class TestExpectedPayloadKeysCoverage:
             episode_store=InMemorySubjectiveEpisodeStore(),
             semantic_memory_store=InMemorySemanticMemoryStore(),
             memory_link_store=InMemoryMemoryLinkStore(),
-            belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
             )
         return SimpleNamespace(
             _todo_store=InMemoryMemoStore(),
@@ -243,10 +216,10 @@ class TestExpectedPayloadKeysCoverage:
         runtime = self._runtime_stub_with_all_stores()
         # 1 store を欠く = stub は None を渡し、session が
         # 空 in-memory fallback に倒れてログを出すはず。
-        del runtime._episodic_stack.belief_evidence_buffer_store
+        del runtime._episodic_stack.memory_link_store
 
         wiring_stub = _wiring_stub_from_world_runtime(runtime)
-        assert wiring_stub.belief_evidence_buffer_store is None
+        assert wiring_stub.memory_link_store is None
 
         with caplog.at_level("INFO"):
             ExperimentSnapshotSession(
@@ -261,7 +234,7 @@ class TestExpectedPayloadKeysCoverage:
         )
         # 欠いた store 名がログの引数 (fallback 対象リスト) に含まれる。
         assert any(
-            "belief_evidence_buffer_store" in str(r.args) for r in fallback_logs
+            "memory_link_store" in str(r.args) for r in fallback_logs
         )
 
 

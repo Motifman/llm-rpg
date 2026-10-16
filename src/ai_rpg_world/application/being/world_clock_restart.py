@@ -17,26 +17,26 @@ from typing import Any
 WORLD_TICK_FIELDS_BY_CODEC: dict[str, frozenset[str]] = {
     "memo_entry_to_dict": frozenset({"added_at_tick"}),
     "_fulfillment_to_dict": frozenset({"completed_at_tick"}),
-    "belief_evidence_to_dict": frozenset({"tick"}),
 }
 
 _RESET_TO_ROUND_START: dict[str, tuple[tuple[str, ...], ...]] = {
     "memo": (("added_at_tick",), ("fulfillment_context", "completed_at_tick")),
-    "belief_evidence_buffer": (("tick",),),
 }
 
 # 約束 (pending prediction) は #1631 で消した。古い snapshot に残る約束は、窓が
 # 前の回の世界の時計を指していて tick の欄を持つので、読まずに捨てる。
 _DROPPED_AT_ROUND_START = "pending_predictions"
 
-# 想起の階層 (見出しの欄・想起の枠・慣れ) は #1631 で消した。古い snapshot に
-# 残る欄は tick を持つので、読まずに捨てる。restore は足りないキーだけを拒むので、
-# 消しても読める。
+# 想起の階層 (見出しの欄・想起の枠・慣れ) と証拠のバッファは #1631 で消した。古い
+# snapshot に残る欄は tick を持つので、読まずに捨てる。restore は足りないキーだけを
+# 拒むので、消しても読める。
 _REMOVED_AT_ROUND_START = (
     "afterglow_entries",
     "recall_slot_entries",
     "recall_slot_cooldown",
     "recall_habituation_last_recalled",
+    "belief_evidence_buffer",
+    "belief_evidence_received_event_ids",
 )
 
 

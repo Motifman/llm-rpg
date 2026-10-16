@@ -45,9 +45,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-        EpisodicSemanticClusterPromotionService,
-    )
     from ai_rpg_world.being.domain.memory_turn_clock import (
         MemoryTurnReader,
     )
@@ -159,28 +156,18 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
-    # semantic 拡張 (default OFF)。LLM gist の有効時に full 共有 builder
-    # (build_episodic_memory_stack) で組み、world_runtime でも「学びを作る
-    # (promotion)」が動くようにする。OFF のときは全て None で従来の
-    # episodic-only 動作。
+    # link / semantic の store (semantic_enabled のときだけ)。full 共有 builder
+    # (build_episodic_memory_stack) で組む。OFF のときは全て None。
     #
-    #   episodic_semantic_promotion: action 後に on_after_tool_turn を呼ぶ昇格 service
-    #   semantic_memory_store: 昇格先 store (snapshot / 検証用に公開)
-    #   memory_link_store: 昇格の根拠となる memory link graph (snapshot 用に公開)
-    episodic_semantic_promotion: EpisodicSemanticClusterPromotionService | None = None
+    #   semantic_memory_store: 意味記憶の store (snapshot / 検証用に公開)
+    #   memory_link_store: memory link graph (snapshot 用に公開)
     # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
     semantic_memory_store: Any | None = None
     memory_link_store: Any | None = None
-    # 想起→強化 (recall_count 加算 / CO_RECALL リンク / ヘブ則強化) を担う
-    # link service。chunk_coordinator (TEMPORAL リンク) だけでなく prompt builder
-    # の passive recall 経路にも同一インスタンスを配線しないと、recall_count が
-    # 永遠に 0 のままで昇格ゲート (recall_count>=3) を誰も超えられない
-    # (memory_full_002 実験で発覚した静かな失敗)。
+    # 想起→強化 (recall_count 加算 / CO_RECALL リンク) を担う link service。
+    # chunk_coordinator (TEMPORAL リンク) と prompt builder の passive recall 経路に
+    # 同一インスタンスを配線する。
     link_service: Any | None = None
-    # U2 (証拠台帳統一設計 / default OFF): belief evidence buffer は呼び出し側
-    # (world_runtime.py) が flag を見て構築する。stack はここに store の参照
-    # だけ公開する (snapshot 用。実体は呼び出し側が保持)。
-    belief_evidence_buffer_store: Any | None = None
 
 
 def build_scenario_noun_matcher(
@@ -268,8 +255,6 @@ def build_episodic_stack(
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
     episode_store: EpisodicEpisodeRepository | None = None,
     semantic_enabled: bool = False,
-    semantic_gist_service: Any | None = None,
-    semantic_persona_resolver: Any | None = None,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -278,17 +263,6 @@ def build_episodic_stack(
     # #526 後続 C2: chunk write 時に player の現在の runtime_context を返す
     # provider。注入時のみ動く (= default None で挙動不変)。
     runtime_context_provider: Callable[..., Any] | None = None,
-    # U2 (証拠台帳統一設計 / default None = flag OFF 相当): 呼び出し側が
-    # BELIEF_EVIDENCE_ENABLED を見て構築した store を渡す。snapshot 用に
-    # stack へそのまま公開する。semantic スタックを組むときは、クラスタ昇格を
-    # FAMILIARITY 転用モードにして、この store に材料を出す。
-    belief_evidence_buffer_store: Any | None = None,
-    # #1452: FAMILIARITY の材料に付ける記憶のターン数の読み口。転用モードでは必須。
-    memory_turn_reader: MemoryTurnReader | None = None,
-    # semantic promotion の走査幅。実験条件なので ResolvedLlmRuntimeConfig
-    # から渡す。既定値はサービス側の従来値と同じ。
-    episodic_promotion_force_full_scan: bool = False,
-    episodic_promotion_expansion_hops: int = 4,
     # episode store の永続化先 (ResolvedLlmRuntimeConfig.subjective_episode_db_path)。
     # None なら in-memory。semantic 有効時に build_episodic_memory_stack が store を
     # 解決する経路 (episode_store 未指定) でだけ効く。
@@ -317,9 +291,7 @@ def build_episodic_stack(
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
       None なら新規作成
     - ``semantic_enabled``: True で本家 ``build_episodic_memory_stack`` を再利用し
-      link/semantic/promotion を組む (default False = 従来の episodic-only)
-    - ``semantic_gist_service`` / ``semantic_persona_resolver``: cluster 昇格時の
-      LLM gist と persona。``build_episodic_memory_stack`` にそのまま渡す
+      link / semantic の store を組む (default False = 従来の episodic-only)
 
     # 履歴
 
@@ -333,20 +305,11 @@ def build_episodic_stack(
     # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
     # ため (両者が違う store だと、worker が書き込んだ merged episode を
     # passive_recall が読めない)。
-    # semantic 拡張 (default OFF)。ON のときは full 共有 builder で link/semantic/
-    # promotion を組み、chunk_coordinator に link service を渡す。world_runtime の
-    # 軽量 MVP では従来 semantic を持たなかったが、フラグで本家 builder に委譲する
-    # ことで「学びを作る/出す」を実験経路でも動かせるようにする (#526 後続)。
+    # semantic_enabled のときは full 共有 builder で link / semantic
+    # の store を組み、chunk_coordinator に link service を渡す。
     link_service: Any | None = None
-    episodic_semantic_promotion: Any | None = None
     semantic_memory_store: Any | None = None
     memory_link_store: Any | None = None
-    familiarity_wired = semantic_enabled and belief_evidence_buffer_store is not None
-    if familiarity_wired and memory_turn_reader is None:
-        raise ValueError(
-            "FAMILIARITY evidence requires memory_turn_reader "
-            "(観測のターン数の無い証拠を作らない)"
-        )
     if semantic_enabled:
         # 循環 import 回避のため関数内 import。
         from ai_rpg_world.application.llm.wiring._shared_builders import (
@@ -355,25 +318,15 @@ def build_episodic_stack(
 
         mem_stack = build_episodic_memory_stack(
             episode_store,
-            semantic_gist_service=semantic_gist_service,
-            semantic_persona_resolver=semantic_persona_resolver,
-            # 証拠のバッファがあればクラスタ昇格を FAMILIARITY 転用モードに
-            # 切り替える (未指定なら従来の store 直書き)。
-            belief_evidence_buffer_store=belief_evidence_buffer_store,
-            memory_turn_reader=memory_turn_reader if familiarity_wired else None,
-            episodic_promotion_force_full_scan=episodic_promotion_force_full_scan,
-            episodic_promotion_expansion_hops=episodic_promotion_expansion_hops,
             subjective_episode_db_path=subjective_episode_db_path,
         )
         # build_episodic_memory_stack が episode_store を解決して返す。以降は
-        # 全コンポーネントがこの shared store を共有する (chunk write / recall /
-        # promotion が同じ store を見る整合性条件)。
+        # 全コンポーネントがこの shared store を共有する (chunk write / recall
+        # が同じ store を見る整合性条件)。
         episode_store = mem_stack.shared_episode_store
         link_service = mem_stack.mem_bundle.link_service
-        episodic_semantic_promotion = mem_stack.episodic_semantic_promotion
         semantic_memory_store = mem_stack.semantic_memory_store
-        # promotion の根拠となる link graph も snapshot 用に公開する
-        # (semantic entries だけ保存して link graph が空 fallback になるのを防ぐ)。
+        # link graph も snapshot 用に公開する。
         memory_link_store = mem_stack.mem_bundle.link_store
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
@@ -402,8 +355,8 @@ def build_episodic_stack(
         chunk_subjective_fields_service=chunk_subjective_fields_service,
         subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
-        # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
-        # 必要な memory link を chunk write 経路に通す。
+        # semantic OFF なら link service なし (= MVP の従来動作)。ON なら memory
+        # link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
     )
     passive_recall = EpisodicPassiveRecallRetrievalService(episode_store)
@@ -415,11 +368,9 @@ def build_episodic_stack(
         noun_matcher=noun_matcher,
         episode_store=episode_store,
         subjective_completion_scheduler=subjective_completion_scheduler,
-        episodic_semantic_promotion=episodic_semantic_promotion,
         semantic_memory_store=semantic_memory_store,
         memory_link_store=memory_link_store,
         link_service=link_service,
-        belief_evidence_buffer_store=belief_evidence_buffer_store,
     )
 
 

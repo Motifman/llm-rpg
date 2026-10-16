@@ -108,32 +108,6 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         assert 'seed' in ids
         assert 'far' in ids
 
-class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
-    """``EpisodicSemanticClusterPromotionService.on_after_tool_turn`` の link 走査が
-    being_id keyed only で動くことを確認する。"""
-
-    def test_caller_being_id_drives_link_scan(self) -> None:
-        """呼び出し側の being_id で link 走査と semantic 書き込みが行われる。"""
-        from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
-
-        from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-            EpisodicSemanticClusterPromotionService,
-        )
-        episodes = InMemorySubjectiveEpisodeStore()
-        link_store = make_memory_link_being_setup().link_store
-        sem_setup = make_semantic_being_setup()
-        being_id = sem_setup.provision(1)
-        for (i, eid) in enumerate(['x', 'y', 'z']):
-            from dataclasses import replace as _replace
-            base = _ep(episode_id=eid)
-            episodes.put_by_being(being_id, _replace(base, interpreted=f'主観文{i}'))
-        link_store.upsert_link_by_being(being_id, _link(a='x', b='y'))
-        link_store.upsert_link_by_being(being_id, _link(a='y', b='z'))
-        link_store.upsert_link_by_being(being_id, _link(a='x', b='z'))
-        promo = EpisodicSemanticClusterPromotionService(episode_store=episodes, link_store=link_store, semantic_store=sem_setup.semantic_store, promotion_frontier=None)
-        promo.on_after_tool_turn(1, being_id, now=_NOW)
-        assert len(sem_setup.list_entries(1)) == 1
-
 class TestSpreadingActivationBeingIdParam:
     """``neighbor_priming_scores`` は being_id 必須 (Phase 3 Step 3c-3)。"""
 

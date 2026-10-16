@@ -316,26 +316,3 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
         assert len(eps) > 0
         recall_texts = [ep.recall_text for ep in eps]
         assert any(rt == 'ASYNC_RECALL_TEXT_FROM_WORKER' for rt in recall_texts), f'非同期 scheduler 経由で LLM の recall_text 上書きが完了していない: {recall_texts}'
-
-class TestSmokeBeliefEvidenceWiring:
-    """U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED の配線が
-    ``create_world_runtime`` 経路で生きていることの smoke。
-
-    実 LLM は使わない (LiteLLMClient が取れない = subjective scheduler 自体は
-    構築されない環境でもテストが通る必要がある)。ここで保証したいのは
-    「flag ON で evidence buffer store が EpisodicStack に公開され、
-    snapshot 経由で拾える状態になっていること」。
-    """
-
-    def test_flag_off_belief_evidence_buffer_store_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """エピソードだけを有効にし、evidence 系 flag を書かないと、belief evidence buffer store は None。"""
-        runtime = _build_runtime(enabled=True)
-        assert runtime._episodic_stack.belief_evidence_buffer_store is None
-
-    def test_flag_belief_evidence_buffer_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """flag ON なら belief evidence buffer store が公開される。"""
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-            InMemoryBeliefEvidenceBufferStore,
-        )
-        runtime = _build_runtime(enabled=True, belief_evidence_enabled=True)
-        assert isinstance(runtime._episodic_stack.belief_evidence_buffer_store, InMemoryBeliefEvidenceBufferStore)
