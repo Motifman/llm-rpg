@@ -384,7 +384,6 @@ class SpotGraphCurrentStateBuilder:
         areas: Sequence[Any] = (),
         distant_cues: Sequence[Any] = (),
         distant_view_service: DistantViewService | None = None,
-        distant_view_trace_enabled: bool = False,
         trace_recorder_provider: Callable[[], Any] | None = None,
         visible_monster_observer: VisibleMonsterObserver | None = None,
         # 倒れている人を見たことを runtime へ通知する hook。初回判定と観測の
@@ -449,7 +448,6 @@ class SpotGraphCurrentStateBuilder:
         self._areas = tuple(areas)
         self._distant_cues = tuple(distant_cues)
         self._distant_view_service = distant_view_service or DistantViewService()
-        self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
         self._fallen_body_observer = fallen_body_observer
@@ -923,9 +921,7 @@ class SpotGraphCurrentStateBuilder:
         current_area_id: str | None,
         result: DistantViewResult,
     ) -> None:
-        """遠景の現在状態系 trace を明示フラグ有効時だけ記録する。"""
-        if not self._distant_view_trace_enabled:
-            return
+        """遠景の現在状態系 trace を記録する。"""
         if self._trace_recorder_provider is None:
             return
         recorder = self._trace_recorder_provider()

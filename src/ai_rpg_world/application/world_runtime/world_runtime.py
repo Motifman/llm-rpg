@@ -3673,9 +3673,7 @@ class WorldRuntime:
             )
 
     def _record_distant_cue_skipped(self, *, cue: Any, reason: str) -> None:
-        """debug profile のときだけ cue 境界検出の skipped 理由を trace に残す。"""
-        if not bool(getattr(self._state_builder, "_distant_view_trace_enabled", False)):
-            return
+        """cue 境界検出の skipped 理由を trace に残す。"""
         recorder = self._trace_recorder
         if recorder is None:
             return
@@ -5489,7 +5487,6 @@ def create_world_runtime(
         # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
         # 見えていないと受けようがない。
         incoming_trade_offers_provider=_incoming_trade_offers_for,
-        distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
         fallen_body_observer=_observe_fallen_body_for_player,
