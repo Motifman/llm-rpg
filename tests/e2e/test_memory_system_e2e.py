@@ -39,7 +39,6 @@ from ai_rpg_world.application.llm.services.short_term_memory_summary_service imp
 from ai_rpg_world.application.llm.services.summarizing_short_term_memory import SummarizingShortTermMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
