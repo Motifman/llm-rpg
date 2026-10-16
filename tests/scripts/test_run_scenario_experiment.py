@@ -773,14 +773,10 @@ class TestExperimentProfileManifest:
             for key in (
                 "LLM_EPISODIC_ENABLED",
                 "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-                "SEMANTIC_LLM_GIST_ENABLED",
-                "BELIEF_EVIDENCE_ENABLED",
             )
         } == {
             "LLM_EPISODIC_ENABLED": False,
             "LLM_EPISODIC_SUBJECTIVE_ENABLED": False,
-            "SEMANTIC_LLM_GIST_ENABLED": False,
-            "BELIEF_EVIDENCE_ENABLED": False,
         }
         assert {
             key: profile["runtime_config"][key]
@@ -923,8 +919,6 @@ class TestExperimentProfileManifest:
         assert cfg.llm_client_kind == "stub"
         assert cfg.episodic_enabled is False
         assert cfg.reason_first_two_step_enabled is False
-        # profile 使用時は runtime_config だけを見るので、外側 shell の値は混入しない。
-        assert cfg.belief_evidence_enabled is False
 
         resolved = json.loads(
             (out_dir / "experiment.config.resolved.json").read_text(encoding="utf-8")
@@ -932,7 +926,6 @@ class TestExperimentProfileManifest:
         assert resolved["profile"] == "smoke_stub"
         assert resolved["runtime_config"]["llm_client_kind"] == "stub"
         assert resolved["runtime_config"]["reason_first_two_step_enabled"] is False
-        assert resolved["runtime_config"]["belief_evidence_enabled"] is False
         assert "sk-secret" not in json.dumps(resolved, ensure_ascii=False)
         assert resolved["scenario_sha256"]
         assert resolved["git"]["dirty"] in (True, False)
@@ -943,7 +936,6 @@ class TestExperimentProfileManifest:
         payload = first["payload"]
         assert payload["experiment_profile"] == "smoke_stub"
         assert payload["experiment_manifest_sha256"]
-        assert payload["belief_evidence_enabled"] is False
 
     def test_experiment_config_scenario_max_world_ticks_can_use(
         self,

@@ -312,6 +312,8 @@ player_id keyed のまま残す。``EpisodicMemoryLinkApplicationService`` か�
 - 後続 Phase で frontier を being_id 化したら ``_player_id_for`` helper は
   撤去する
 
+**その後**: 昇格フロンティア (`EpisodicPromotionFrontier`) は、クラスタ昇格と一緒に記憶の部品の撤去 (#1631) の #1792 で消した。
+
 ---
 
 ## 15. BeingSnapshot v2 は memory payload を「オペーク JSON」として持つ
@@ -3695,6 +3697,8 @@ link / promotion だけが葉で付着を引き直していた。
 **入口**: chunk の `on_episode_committed`、prompt の受動想起候補、
 `ActionResultRecorder` の `on_after_tool_turn`、explore の `ActingBeing`。
 
+**その後**: クラスタ昇格 (`EpisodicSemanticClusterPromotionService`) は、記憶の部品の撤去 (#1631) の #1792 で消した。記憶リンクは受動想起と一緒に続く PR で消す。
+
 ## 147. Unit of Workは永続化に絞り、CommandScopeがcommand完了を統括する
 
 **何を**: 1回のアプリケーションコマンドは1つの `CommandScope` で実行する。
@@ -4437,6 +4441,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 **この PR で触らない**: `MemoryLink.player_id` / `SemanticMemoryEntry.player_id`
 の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
 `SubjectiveEpisode` の再設計。
+
+**その後**: 昇格フロンティアは、クラスタ昇格と一緒に記憶の部品の撤去 (#1631) の #1792 で消した。
 
 ## 176. エピソードがある経路では BeingId を VO から読む
 
@@ -5222,6 +5228,8 @@ VO に復元する (スキーマ変更は不要)。
 `being_id` 引数削除、SQLite スキーマ変更。
 
 **その後**: `BeliefConsolidationCoordinator` は記憶の部品の撤去 (#1631) の #1790 で消した。いまの profile では、意味記憶エントリを書く部品は動かない。
+
+クラスタ昇格と gist (`SEMANTIC_LLM_GIST_ENABLED`) も #1792 で消したので、意味記憶エントリを書く部品は無くなった。意味記憶の store は続く PR で消す。
 
 ## 209. 再解釈エントリに経験の主体 BeingId を載せる
 
@@ -6428,6 +6436,8 @@ snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。sn
 
 **関連**: design_decisions D1439 (記憶のターン数の保存先) / Issue #1436 / #1440 (ターン数を進める配線) /
 #1443 (予期の外れを証拠につなぐ) / #1453 (作る前の判断)。
+
+**その後**: 証拠のバッファ (`BeliefEvidence`、`BELIEF_EVIDENCE_ENABLED`) は、読み手の固着を #1790 で消したあと、記憶の部品の撤去 (#1631) の #1792 で消した。Being の snapshot のキー `belief_evidence_buffer` / `belief_evidence_received_event_ids` も外した。消す前の snapshot も読める。信念の `last_observed_turn` は、意味記憶の store と一緒に続く PR で消す。
 
 ## D1441. 予期は環境の tool の引数として一律に書かせ、その手のターンの予期として積む
 

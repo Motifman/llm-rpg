@@ -64,11 +64,9 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     acquaintance_to_dict,
     being_episode_to_dict,
     being_memo_to_dict,
-    belief_evidence_to_dict,
     dict_to_acquaintance,
     dict_to_being_episode,
     dict_to_being_memo,
-    dict_to_belief_evidence,
     dict_to_memo_entry,
     dict_to_memory_link,
     dict_to_semantic_entry,
@@ -91,9 +89,6 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
     MemoryLinkRepository,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
-    BeliefEvidenceBufferRepository,
-)
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
@@ -123,16 +118,6 @@ def _decode_list(
                 f"payload[{key!r}][{idx}] is malformed: {exc!r}"
             ) from exc
     return out
-
-
-def _decode_received_event_ids(raw_list: list[Any], key: str) -> list[str]:
-    """受け取り済みの出来事の ID の list。空文字や str 以外は形式エラーにする。"""
-    for idx, item in enumerate(raw_list):
-        if not isinstance(item, str) or not item.strip():
-            raise BeingMemoryPayloadFormatError(
-                f"payload[{key!r}][{idx}] must be a non-empty str, got {item!r}"
-            )
-    return list(raw_list)
 
 
 class BeingMemoryPayloadSchemaError(Exception):
@@ -193,17 +178,12 @@ class BeingMemorySnapshotService:
 
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
-    # U2 (証拠台帳統一設計): belief_evidence_buffer store 1 key を追加。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
         "semantic_entries",
         "semantic_cluster_signatures",
         "memory_links",
         "episodic_episodes",
-        "belief_evidence_buffer",
-        # #1443: 予期の出来事を受け取った記録。材料と同じ store が持つので、
-        # 戻さないと再開した run で配り直された出来事を積み直す。
-        "belief_evidence_received_event_ids",
         "memory_turn",
         "acquaintances",
         "being_episodes",
@@ -217,7 +197,6 @@ class BeingMemorySnapshotService:
         semantic_store: SemanticMemoryRepository,
         memory_link_store: MemoryLinkRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
-        belief_evidence_buffer_store: BeliefEvidenceBufferRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
@@ -233,12 +212,6 @@ class BeingMemorySnapshotService:
             raise TypeError(
                 "episodic_episode_store must be EpisodicEpisodeRepository"
             )
-        if not isinstance(
-            belief_evidence_buffer_store, BeliefEvidenceBufferRepository
-        ):
-            raise TypeError(
-                "belief_evidence_buffer_store must be BeliefEvidenceBufferRepository"
-            )
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
         if not isinstance(being_episode_store, EpisodeRepository):
@@ -251,7 +224,6 @@ class BeingMemorySnapshotService:
         self._semantic = semantic_store
         self._memory_link = memory_link_store
         self._episodic_episode = episodic_episode_store
-        self._belief_evidence_buffer = belief_evidence_buffer_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
@@ -282,16 +254,6 @@ class BeingMemorySnapshotService:
                 subjective_episode_to_dict(ep)
                 for ep in self._episodic_episode.list_all_by_being(being_id)
             ],
-            # U2 (証拠台帳統一設計): evidence buffer の per-Being state。
-            "belief_evidence_buffer": [
-                belief_evidence_to_dict(e)
-                for e in self._belief_evidence_buffer.list_all_by_being(being_id)
-            ],
-            "belief_evidence_received_event_ids": (
-                self._belief_evidence_buffer.list_received_event_ids_by_being(
-                    being_id
-                )
-            ),
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
         payload["memory_turn"] = [memory_turn] if memory_turn else []
@@ -388,16 +350,6 @@ class BeingMemorySnapshotService:
             lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
             "episodic_episodes",
         )
-        # U2 (証拠台帳統一設計): evidence buffer のデコード。
-        belief_evidences = _decode_list(
-            payload["belief_evidence_buffer"],
-            dict_to_belief_evidence,
-            "belief_evidence_buffer",
-        )
-        belief_evidence_received = _decode_received_event_ids(
-            payload["belief_evidence_received_event_ids"],
-            "belief_evidence_received_event_ids",
-        )
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
             isinstance(v, int) and not isinstance(v, bool) and v > 0
@@ -443,13 +395,6 @@ class BeingMemorySnapshotService:
         )
         self._memory_link.replace_all_by_being(being_id, memory_links)
         self._episodic_episode.replace_all_by_being(being_id, episodes)
-        # U2 (証拠台帳統一設計): evidence buffer の bulk overwrite。
-        self._belief_evidence_buffer.replace_all_by_being(
-            being_id, belief_evidences
-        )
-        self._belief_evidence_buffer.replace_received_event_ids_by_being(
-            being_id, belief_evidence_received
-        )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)

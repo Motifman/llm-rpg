@@ -67,7 +67,6 @@ def _client(sink: Any) -> LiteLLMClient:
 
 _METHOD_TO_COMPONENT = [
     ("complete_episode_subjective_json", AuxLlmComponent.EPISODE_SUBJECTIVE),
-    ("complete_semantic_gist_json", AuxLlmComponent.SEMANTIC_GIST),
     ("complete_short_term_summary_json", AuxLlmComponent.SHORT_TERM_SUMMARY),
     ("complete_short_term_long_summary_json", AuxLlmComponent.SHORT_TERM_LONG_SUMMARY),
     ("complete_episode_writing_json", AuxLlmComponent.EPISODE_WRITING),
@@ -155,7 +154,7 @@ class TestFailedCallsAreRecordedToo:
                 "not json", usage=_usage(prompt=200, completion=40, cached=0, cost=0.001)
             )
             with pytest.raises(LlmApiCallException):
-                client.complete_semantic_gist_json([{"role": "user", "content": "x"}])
+                client.complete_short_term_summary_json([{"role": "user", "content": "x"}])
 
         call = sink.calls[0]
         assert call.success is False

@@ -29,7 +29,6 @@ import pytest
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistService
 from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
     ShortTermMemoryLongSummaryService,
 )
@@ -55,20 +54,18 @@ _SUMMARY_INPUT_COUNT = 15
 
 
 class _StubSummaryPort:
-    """L4 / L5 / semantic gist 用の deterministic LLM port。
+    """L4 / L5 用の deterministic LLM port。
 
     呼び出しごとに call_count を増やし、テストで「LLM が何回呼ばれたか」を
     確認できる。``raise_on_n_th`` で N 回目だけ例外を投げる挙動も模擬可能
     (template fallback の検証用)。
     """
 
-    def __init__(self, l4_response: dict[str, Any], l5_response: dict[str, Any], gist_response: dict[str, Any]) -> None:
+    def __init__(self, l4_response: dict[str, Any], l5_response: dict[str, Any]) -> None:
         self.l4_response = l4_response
         self.l5_response = l5_response
-        self.gist_response = gist_response
         self.l4_calls = 0
         self.l5_calls = 0
-        self.gist_calls = 0
         self.raise_on_l4_call: int | None = None
 
     def complete_short_term_summary_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -80,10 +77,6 @@ class _StubSummaryPort:
     def complete_short_term_long_summary_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.l5_calls += 1
         return dict(self.l5_response)
-
-    def complete_semantic_gist_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
-        self.gist_calls += 1
-        return dict(self.gist_response)
 
 def _capture_trace(recorder: NullTraceRecorder) -> list:
     captured: list = []
@@ -125,7 +118,7 @@ class TestRollingSummaryE2E:
 
     def test_four_l4_generations_create_l5_and_the_fifth_updates_it(self) -> None:
         """L4 の4世代目で L5 を作り、5世代目で L5 の世代番号を進める。"""
-        stub = _StubSummaryPort(l4_response={'compressed_activity': '北東を探索', 'emotional_summary': '疲労', 'unresolved': ['水源']}, l5_response={'self_image': '私は慎重な漁師', 'world_view': '島は資源豊富だが北は危険'}, gist_response={'gist_text': 'タカシは信頼できる', 'importance_score': 7, 'tags': ['タカシ']})
+        stub = _StubSummaryPort(l4_response={'compressed_activity': '北東を探索', 'emotional_summary': '疲労', 'unresolved': ['水源']}, l5_response={'self_image': '私は慎重な漁師', 'world_view': '島は資源豊富だが北は危険'})
         mem = _build_memory(stub)
         for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _make_observation(f'obs-{i}', seq=i))
@@ -174,7 +167,7 @@ class TestRollingSummaryE2EAsync:
         があるので、graceful shutdown には完了待ちポーリングが必要。
         """
         import time as _time
-        stub = _StubSummaryPort(l4_response={'compressed_activity': 'ok', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 'self', 'world_view': 'world'}, gist_response={'gist_text': 'g', 'importance_score': 5, 'tags': []})
+        stub = _StubSummaryPort(l4_response={'compressed_activity': 'ok', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 'self', 'world_view': 'world'})
         mem = _build_memory(stub, scheduler_kind='thread_pool')
         try:
             for batch in range(4):
@@ -200,13 +193,13 @@ class TestRollingSummaryFallbackChain:
     """LLM 失敗時の二段フォールバックが silent failure にならない。
 
     - L4 LLM が落ちる → template fallback で L4 を生やす (is_fallback=True)
-    - L5 LLM は別 stub で動く前提 (gist は固定値)
+    - L5 LLM は別 stub で動く前提
     - WARNING ログが出る
     """
 
     def test_emits_warning_for_l4_llm_template_fallback(self, caplog: pytest.LogCaptureFixture) -> None:
         """L4 LLM 失敗時の template fallback と warning。"""
-        stub = _StubSummaryPort(l4_response={'compressed_activity': 'should-not-appear-if-failing', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 's', 'world_view': 'w'}, gist_response={'gist_text': 'g', 'importance_score': 5, 'tags': []})
+        stub = _StubSummaryPort(l4_response={'compressed_activity': 'should-not-appear-if-failing', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 's', 'world_view': 'w'})
         stub.raise_on_l4_call = 1
         mem = _build_memory(stub)
         with caplog.at_level(logging.WARNING, logger='ai_rpg_world.application.llm.services.summarizing_short_term_memory'):
@@ -239,7 +232,7 @@ class TestPromptSectionsE2E:
 
     def test_l5_l4_section(self) -> None:
         """RollingSummary が L4 / L5 両方を生成した後の text が正しく組み立つ。"""
-        stub = _StubSummaryPort(l4_response={'compressed_activity': '北東を探索した', 'emotional_summary': 'やや疲労', 'unresolved': ['水源を見つける']}, l5_response={'self_image': '私は寡黙な漁師', 'world_view': '島は資源豊富だが北は危険'}, gist_response={'gist_text': 'g', 'importance_score': 5, 'tags': []})
+        stub = _StubSummaryPort(l4_response={'compressed_activity': '北東を探索した', 'emotional_summary': 'やや疲労', 'unresolved': ['水源を見つける']}, l5_response={'self_image': '私は寡黙な漁師', 'world_view': '島は資源豊富だが北は危険'})
         mem = _build_memory(stub)
         for batch in range(4):
             for i in range(_SUMMARY_INPUT_COUNT):
@@ -258,23 +251,6 @@ class TestPromptSectionsE2E:
         assert full.index('【自己像と世界観】') < full.index('【最近の流れ】')
         assert full.index('【最近の流れ】') < full.index('【現在地と周囲】')
 
-class TestSemanticGistE2E:
-    """Phase 1b: semantic gist 生成 (LLM 化された場合の経路)。"""
-
-    def test_llm_gist_semantic_memory_entry(self) -> None:
-        """LLMgist が生成され SemanticMemoryEntry に反映される。"""
-        stub = _StubSummaryPort(l4_response={'compressed_activity': 'x', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 'x', 'world_view': ''}, gist_response={'gist_text': 'タカシは漁の名手で信頼できる', 'importance_score': 8, 'tags': ['タカシ', '信頼']})
-        gist_svc = SemanticGistService(stub)
-        gist_being_id = BeingId(f'being_w1_p{_PID.value}')
-        eps = []
-        for i in range(3):
-            eps.append(SubjectiveEpisode(episode_id=f'ep-{i}', player_id=_PID.value, being_id=gist_being_id, occurred_at=datetime(2026, 6, 1, 12, i, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=3), action=EpisodeAction(tool_name='x'), who=(), what=f'event-{i}', why=None, observed='観測', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=f'タカシが私を助けてくれた #{i}', cues=(), recall_text=f'recall-{i}', recall_count=3))
-        result = gist_svc.generate(player_name='ハル', persona_block='慎重', cluster_episodes=eps)
-        assert result.gist_text == 'タカシは漁の名手で信頼できる'
-        assert result.importance_score == 8
-        assert result.tags == ('タカシ', '信頼')
-        assert stub.gist_calls == 1
-
 class TestMemoryE2ETraceObservability:
     """fallback / drop の経路が必ず trace + warning で観測可能。
 
@@ -288,7 +264,7 @@ class TestMemoryE2ETraceObservability:
 
             def submit(self, player_id, task):
                 return False
-        stub = _StubSummaryPort(l4_response={'compressed_activity': 'x', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 'x', 'world_view': ''}, gist_response={'gist_text': 'g', 'importance_score': 5, 'tags': []})
+        stub = _StubSummaryPort(l4_response={'compressed_activity': 'x', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 'x', 'world_view': ''})
         mem = SummarizingShortTermMemory(summary_service=ShortTermMemorySummaryService(stub), scheduler=_DroppingScheduler())
         with caplog.at_level(logging.WARNING, logger='ai_rpg_world.application.llm.services.summarizing_short_term_memory'):
             for i in range(_SUMMARY_INPUT_COUNT):
@@ -332,12 +308,11 @@ class TestL5PersonaDriftSurvivesFailure:
         """LLM 失敗の連鎖でも selfimage は v1 のままで延命。"""
 
         class _FailingL5Port:
-            """L5 だけ常に例外、L4 / gist は普通に動く port。"""
+            """L5 だけ常に例外、L4 は普通に動く port。"""
 
             def __init__(self) -> None:
                 self.l4_calls = 0
                 self.l5_calls = 0
-                self.gist_calls = 0
                 self._fail_l5 = False
 
             def complete_short_term_summary_json(self, messages):
@@ -349,10 +324,6 @@ class TestL5PersonaDriftSurvivesFailure:
                 if self._fail_l5:
                     raise LlmApiCallException('sim', error_code='LLM_API_CALL_FAILED')
                 return {'self_image': '私はV1の自己像', 'world_view': 'V1の世界観'}
-
-            def complete_semantic_gist_json(self, messages):
-                self.gist_calls += 1
-                return {'gist_text': 'g', 'importance_score': 5, 'tags': []}
         port = _FailingL5Port()
         mem = SummarizingShortTermMemory(summary_service=ShortTermMemorySummaryService(port), long_summary_service=ShortTermMemoryLongSummaryService(port), persona_resolver=_persona_resolver)
         for batch in range(4):

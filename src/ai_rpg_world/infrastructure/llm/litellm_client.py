@@ -40,9 +40,6 @@ from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_por
     IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
-from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
-    ISemanticGistCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
@@ -299,7 +296,6 @@ _Result = TypeVar("_Result")
 class LiteLLMClient(
     ILLMClient,
     IEpisodicChunkSubjectiveCompletionPort,
-    ISemanticGistCompletionPort,
     IShortTermMemorySummaryCompletionPort,
     IShortTermMemoryLongSummaryCompletionPort,
     EpisodeWritingCompletion,
@@ -1122,17 +1118,6 @@ class LiteLLMClient(
                 error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
             )
         return parsed
-
-    def complete_semantic_gist_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで semantic gist JSON object を返す (Phase 1b)。
-
-        ``complete_episode_subjective_json`` と同じ json_object 強制完了を
-        使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.SEMANTIC_GIST)
 
     def complete_short_term_summary_json(
         self,

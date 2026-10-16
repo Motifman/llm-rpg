@@ -10,9 +10,6 @@ from uuid import uuid4
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
 )
-from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
-    EpisodicPromotionFrontier,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
@@ -50,7 +47,6 @@ class EpisodicMemoryLinkApplicationService:
         episode_store: EpisodicEpisodeRepository,
         link_store: MemoryLinkRepository,
         *,
-        promotion_frontier: EpisodicPromotionFrontier | None = None,
         temporal_initial: float = DEFAULT_TEMPORAL_INITIAL_STRENGTH,
         co_recall_initial: float = DEFAULT_CO_RECALL_INITIAL_STRENGTH,
         decay_rate_initial: float = DEFAULT_DECAY_RATE,
@@ -63,7 +59,6 @@ class EpisodicMemoryLinkApplicationService:
             raise TypeError("link_store must be MemoryLinkRepository")
         self._episodes = episode_store
         self._links = link_store
-        self._promotion_frontier = promotion_frontier
         self._temporal_initial = temporal_initial
         self._co_recall_initial = co_recall_initial
         self._decay_rate_initial = decay_rate_initial
@@ -109,9 +104,6 @@ class EpisodicMemoryLinkApplicationService:
     ) -> None:
         """Passive Recall 候補について CO_RECALL リンクと recall メタデータを更新する。"""
         now = now or datetime.now(timezone.utc)
-        if self._promotion_frontier is not None:
-            for c in candidates:
-                self._promotion_frontier.add(being_id, c.episode.episode_id)
         ordered_ids: list[str] = []
         seen: set[str] = set()
         for c in candidates:
@@ -127,16 +119,6 @@ class EpisodicMemoryLinkApplicationService:
                     being_id, player_id, capped[i], capped[j], now
                 )
                 self._merge_co_recall(being_id, player_id, capped[i], capped[j], now)
-
-    def note_promotion_frontier_episodes(
-        self,
-        being_id: BeingId,
-        episode_ids: Sequence[str],
-    ) -> None:
-        """能動探索など、リンク更新以外で触れたエピソードを昇格フロンティアに記録する。"""
-        if self._promotion_frontier is None:
-            return
-        self._promotion_frontier.add_many(being_id, episode_ids)
 
     def strengthen_from_meta_exploration(
         self,
@@ -209,8 +191,6 @@ class EpisodicMemoryLinkApplicationService:
                 removed = self._links.remove_weakest_link_for_episode_by_being(
                     being_id, eid, now=now
                 )
-                if self._promotion_frontier is not None:
-                    self._promotion_frontier.add(being_id, eid)
                 if not removed:
                     break
 
@@ -250,9 +230,6 @@ class EpisodicMemoryLinkApplicationService:
             decay_rate=self._decay_rate_initial,
         )
         self._links.upsert_link_by_being(being_id, link)
-        if self._promotion_frontier is not None:
-            self._promotion_frontier.add(being_id, a)
-            self._promotion_frontier.add(being_id, b)
 
     def _merge_co_recall(
         self,
@@ -307,9 +284,6 @@ class EpisodicMemoryLinkApplicationService:
             decay_rate=new_decay,
         )
         self._links.upsert_link_by_being(being_id, updated)
-        if self._promotion_frontier is not None:
-            self._promotion_frontier.add(being_id, updated.episode_id_a)
-            self._promotion_frontier.add(being_id, updated.episode_id_b)
 
     def _hebbian_strengthen_pair(
         self,

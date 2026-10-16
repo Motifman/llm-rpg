@@ -53,13 +53,10 @@ def test_world_runtime_memory_stack_has_flag_gated_semantic_extension() -> None:
         "passive_recall",
         "noun_matcher",
         "episode_store",
-        "episodic_semantic_promotion",
         "semantic_memory_store",
         "memory_link_store",
     } <= stack_fields
     assert build_params["semantic_enabled"].default is False
-    assert "semantic_gist_service" in build_params
-    assert "semantic_persona_resolver" in build_params
 
 
 def test_full_wiring_is_retired() -> None:

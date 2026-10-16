@@ -191,16 +191,6 @@ def _empty_episode_store() -> Any:
     return InMemorySubjectiveEpisodeStore()
 
 
-def _empty_belief_evidence_buffer_store() -> Any:
-    """U2 (証拠台帳統一設計): snapshot 配線時に belief evidence buffer が
-    未配線 (= flag OFF) なら空 in-memory store で代用する。"""
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-        InMemoryBeliefEvidenceBufferStore,
-    )
-
-    return InMemoryBeliefEvidenceBufferStore()
-
-
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -358,13 +348,6 @@ class ExperimentSnapshotSession:
         episode_store = (
             wiring_result.episodic_episode_store or _empty_episode_store()
         )
-        # U2 (証拠台帳統一設計): belief evidence buffer も未配線なら空
-        # in-memory store にフォールバックする (= flag OFF の run でも
-        # snapshot 自体は壊れず「空の payload」で整合性が保たれる)。
-        belief_evidence_buffer_store = (
-            getattr(wiring_result, "belief_evidence_buffer_store", None)
-            or _empty_belief_evidence_buffer_store()
-        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
         # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
@@ -377,8 +360,6 @@ class ExperimentSnapshotSession:
                 "episodic_episode_store",
                 # PR-G: 想起階層の store も fallback 監視対象に入れる。配線漏れで
                 # 空 store にフォールバックしたことを後追いできるようにする。
-                # U2: belief evidence buffer も同じ監視対象に入れる。
-                "belief_evidence_buffer_store",
             )
             if getattr(wiring_result, name, None) is None
         ]
@@ -394,7 +375,6 @@ class ExperimentSnapshotSession:
             semantic_store=semantic_store,
             memory_link_store=memory_link_store,
             episodic_episode_store=episode_store,
-            belief_evidence_buffer_store=belief_evidence_buffer_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,

@@ -17,9 +17,6 @@ from ai_rpg_world.application.being.being_attachment_resolver import (
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
-from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-    EpisodicSemanticClusterPromotionService,
-)
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
@@ -76,84 +73,3 @@ def _make_entry(
         tags=tags,
     )
 
-
-class TestEpisodicSemanticClusterPromotionServiceNewPath:
-    """EpisodicSemanticClusterPromotionService の being_id 経路内部ヘルパー検証。
-
-    full promotion フローは複雑な事前条件 (= 強リンク・3 件以上 episode 等) を
-    要するため、本テストでは ``_register_signature`` / ``_add_entry`` の単体
-    挙動だけ確認する。``on_after_tool_turn`` 経由の integration カバレッジは
-    ``test_episodic_memory_link_and_promotion`` / ``test_episodic_semantic_promotion_*``
-    で別途取れている。
-    """
-
-    def test_register_signature_being_id_store(
-        self,
-        store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
-        provisioning: BeingProvisioningService,
-    ) -> None:
-        """provision 済 Being があれば being_id 経路で signature 登録される。"""
-        being_id = provisioning.ensure_attached(PlayerId(2))
-
-        from unittest.mock import MagicMock
-
-        service = EpisodicSemanticClusterPromotionService(
-            episode_store=MagicMock(),
-            link_store=MagicMock(),
-            semantic_store=store,
-        )
-        # 初回 True、2 回目 False
-        assert service._register_signature(being_id, "sig-1") is True
-        assert service._register_signature(being_id, "sig-1") is False
-        # 直接 being_id 経由で再登録試行 → False (= being store に入っている証拠)
-        assert (
-            store.register_cluster_signature_if_new_by_being(being_id, "sig-1")
-            is False
-        )
-
-    def test_add_entry_being_id_store(
-        self,
-        store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
-        provisioning: BeingProvisioningService,
-    ) -> None:
-        """provision 済 Being があれば being_id 経路で entry 追加される。"""
-        being_id = provisioning.ensure_attached(PlayerId(2))
-
-        from unittest.mock import MagicMock
-
-        service = EpisodicSemanticClusterPromotionService(
-            episode_store=MagicMock(),
-            link_store=MagicMock(),
-            semantic_store=store,
-        )
-        entry = _make_entry()
-        service._add_entry(being_id, entry)
-        assert len(store.list_for_being(being_id)) == 1
-
-    def test_being_id_direct_helpers(
-        self,
-        store: InMemorySemanticMemoryStore,
-        being_repo: InMemoryBeingRepository,
-    ) -> None:
-        """内部 helper は being_id を直接受け取り、store に書き込む。"""
-        from unittest.mock import MagicMock
-
-        provisioning = BeingProvisioningService(being_repo)
-        being_id = provisioning.ensure_attached(PlayerId(99))
-
-        service = EpisodicSemanticClusterPromotionService(
-            episode_store=MagicMock(),
-            link_store=MagicMock(),
-            semantic_store=store,
-        )
-        assert service._register_signature(being_id, "sig-x") is True
-        service._add_entry(being_id, _make_entry(player_id=99))
-        assert len(store.list_for_being(being_id)) == 1
-        assert (
-            store.register_cluster_signature_if_new_by_being(being_id, "sig-x")
-            is False
-        )

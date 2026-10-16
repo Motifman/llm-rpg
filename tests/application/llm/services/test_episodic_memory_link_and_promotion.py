@@ -1,4 +1,4 @@
-"""エピソードリンクストア・共想起・セマンティック昇格のユニット検証。"""
+"""エピソードリンクストアと共想起のユニット検証。"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -13,11 +13,6 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
     EpisodicPassiveRecallCandidate,
     EpisodicPassiveRecallRetrievalService,
 )
-from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-    EpisodicSemanticClusterPromotionService,
-)
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
@@ -67,23 +62,6 @@ def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9, being_i
     (na, nb) = (a, b) if a < b else (b, a)
     resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
     return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
-
-def test_semantic_cluster_promotion_writes_store() -> None:
-    from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
-    store = InMemorySubjectiveEpisodeStore()
-    links = InMemoryMemoryLinkStore()
-    setup = make_semantic_being_setup()
-    being_id = setup.provision(1)
-    promo = EpisodicSemanticClusterPromotionService(episode_store=store, link_store=links, semantic_store=setup.semantic_store)
-    for (i, eid) in enumerate(['x', 'y', 'z']):
-        ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f't{i}')
-        store.put_by_being(being_id, ep)
-    now = datetime.now(timezone.utc)
-    links.upsert_link_by_being(being_id, _strong_link(1, 'x', 'y'))
-    links.upsert_link_by_being(being_id, _strong_link(1, 'y', 'z'))
-    links.upsert_link_by_being(being_id, _strong_link(1, 'x', 'z'))
-    promo.on_after_tool_turn(1, being_id, now=now)
-    assert len(setup.list_entries(1)) == 1
 
 def test_link_store_lists_all_for_being() -> None:
     setup = make_memory_link_being_setup()

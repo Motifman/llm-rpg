@@ -109,11 +109,6 @@ def _build_stack(
 
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
 
-    # U2: belief evidence buffer は CLI 経由の単発 dump で使う場面が無いので、
-    # 空の in-memory store を渡すだけで足る。
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-        InMemoryBeliefEvidenceBufferStore,
-    )
     from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
         InMemoryAcquaintanceRepository,
     )
@@ -132,7 +127,6 @@ def _build_stack(
         semantic_store=semantic_store,
         memory_link_store=memory_link_store,
         episodic_episode_store=episode_store,
-        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),

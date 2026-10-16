@@ -23,17 +23,7 @@ service の構築のみ)。
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    # PR-G: codec が触る per-Being store の VO を型注釈のみ用途で前方参照。
-    # 実体は dict_to_* の関数内で遅延 import する (= 本 module は
-    # application/being/ 層、参照先 VO は application/llm/services/ 配下なので
-    # 単純な top-level import でも 循環は起きないが、他の codec 群と書式を
-    # 揃え + dataclass の構築コストを呼び出し時に閉じ込めるためこの形を取る)。
-    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
-        BeliefEvidence,
-    )
+from typing import Any
 
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex, IndexRevision
@@ -404,81 +394,6 @@ def dict_to_subjective_episode(
     )
 
 
-# ---- belief_evidence (U2: 証拠台帳統一設計) ------------------------------------
-
-
-def belief_evidence_to_dict(evidence: BeliefEvidence) -> dict[str, Any]:
-    return {
-        "evidence_id": evidence.evidence_id,
-        "source_kind": evidence.source_kind.value,
-        "episode_ids": list(evidence.episode_ids),
-        "cue_signature": evidence.cue_signature,
-        "text": evidence.text,
-        "salience": evidence.salience,
-        "occurred_at": _dt_to_iso(evidence.occurred_at),
-        "observed_turn": evidence.observed_turn,
-        "tick": evidence.tick,
-        # U4 (予測誤差統一設計 部品3): in-context だった belief_id 群。
-        "in_context_belief_ids": list(evidence.in_context_belief_ids),
-        # P9 (伝聞): HEARSAY evidence の話者。HEARSAY 以外は None。
-        "source_speaker": evidence.source_speaker,
-        "what_happened": list(evidence.what_happened),
-    }
-
-
-def dict_to_belief_evidence(data: dict[str, Any]) -> BeliefEvidence:
-    """dict → BeliefEvidence。
-
-    未知の source_kind は ``BeliefEvidenceSourceKind(...)`` が ValueError を
-    投げる。それ以外の不変条件違反 (salience 不正値など) は BeliefEvidence VO
-    が **ドメイン例外** ``BeliefEvidenceValidationException`` を投げるが、
-    これは組み込み例外を継承しないため、呼び出し元 ``_decode_list`` の
-    ``except (KeyError, ValueError, TypeError)`` に捕まらず契約
-    (一律 ``BeingMemoryPayloadFormatError`` に wrap する) を静かに破る。
-    そこで本 codec 側でドメイン例外を捕えて ``ValueError`` に翻訳し、
-    generic な ``_decode_list`` を semantic ドメイン例外に結合させずに
-    既存の except 契約へ自然に収める (U2 レビュー MEDIUM 指摘対応)。
-    """
-    from ai_rpg_world.domain.memory.semantic.exception.semantic_exception import (
-        BeliefEvidenceValidationException,
-    )
-    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
-        BeliefEvidence,
-    )
-    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
-        BeliefEvidenceSourceKind,
-    )
-
-    try:
-        return BeliefEvidence(
-            evidence_id=str(data["evidence_id"]),
-            source_kind=BeliefEvidenceSourceKind(str(data["source_kind"])),
-            episode_ids=tuple(str(x) for x in data.get("episode_ids", ())),
-            cue_signature=str(data["cue_signature"]),
-            text=str(data["text"]),
-            salience=str(data["salience"]),
-            occurred_at=_iso_to_dt(str(data["occurred_at"])),
-            # #1452: いつ見たかを捏造しないので、キーが無い旧データは読まない。
-            observed_turn=data["observed_turn"],
-            tick=int(data["tick"]) if data.get("tick") is not None else None,
-            # U4: 旧データ (U4 導入前) には無いキーなので .get で空タプルに倒す
-            # (= 後方互換。attribution 機構 OFF 時の evidence とも同じ形になる)。
-            in_context_belief_ids=tuple(
-                str(x) for x in data.get("in_context_belief_ids", ())
-            ),
-            # P9: 旧データ (P9 導入前) には無いキーなので .get で None に倒す。
-            source_speaker=(
-                str(data["source_speaker"])
-                if data.get("source_speaker") is not None
-                else None
-            ),
-            # #1509: 旧データには無いキー。外れの理由を持たない材料として戻す。
-            what_happened=_str_tuple(
-                data.get("what_happened", []), name="what_happened"
-            ),
-        )
-    except BeliefEvidenceValidationException as exc:
-        raise ValueError(f"invalid BeliefEvidence payload: {exc}") from exc
 
 
 def _str_tuple(value: Any, *, name: str) -> tuple[str, ...]:
