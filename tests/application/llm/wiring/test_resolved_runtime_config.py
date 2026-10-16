@@ -151,12 +151,6 @@ class TestFromEnvExplicit:
         assert cfg.memo_tools_enabled is False
         assert cfg.scenario_random_seed == 42
 
-    def test_end_on_all_down_flag_defaults_off_and_can_be_enabled(self) -> None:
-        """END_ON_ALL_DOWN は既定 off で、profile/runtime_config から明示的に ON にできる。"""
-        assert ResolvedLlmRuntimeConfig.from_mapping().end_on_all_down is False
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'END_ON_ALL_DOWN': 'true'})
-        assert cfg.end_on_all_down is True
-
     def test_empty_string_env_default(self) -> None:
         """空文字は「未設定」と等価 (PR #434 ポリシー)。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_MODEL': '', 'OPENROUTER_PROVIDER': ''})
@@ -239,6 +233,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "SHORT_TERM_MEMORY_KIND",
             "OPENROUTER_REQUIRE_PARAMS",
             "DISTANT_VIEW_TRACE_ENABLED",
+            "END_ON_ALL_DOWN",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",

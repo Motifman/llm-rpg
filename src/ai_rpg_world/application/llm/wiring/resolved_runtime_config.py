@@ -67,7 +67,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_EVIDENCE_ENABLED",
     "EPISODIC_PROMOTION_EXPANSION_HOPS",
     "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
-    "END_ON_ALL_DOWN",
     "LLM_CLIENT",
     "LLM_EPISODIC_ENABLED",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
@@ -237,9 +236,6 @@ class ResolvedLlmRuntimeConfig:
     # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
     # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
     reason_first_two_step_enabled: bool = False
-    # 全員が down または outcome 確定済みなら、DEAD 猶予を待たず outcome モードを
-    # 終了する。既定 OFF で、蘇生手段を実験したい profile は従来どおり猶予を残す。
-    end_on_all_down: bool = False
 
     # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
     # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
@@ -510,12 +506,6 @@ class ResolvedLlmRuntimeConfig:
         # 2段階経路を実効 OFF にし、解決済み設定にも false として残す。
         if llm_tool_choice == "auto":
             reason_first_two_step_enabled = False
-        try:
-            end_on_all_down = _parse_truthy(
-                source.get("END_ON_ALL_DOWN"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"END_ON_ALL_DOWN: {exc}") from exc
         subjective_episode_db_path = _strip_or_none(
             source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
@@ -578,7 +568,6 @@ class ResolvedLlmRuntimeConfig:
             prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
-            end_on_all_down=end_on_all_down,
             subjective_episode_db_path=subjective_episode_db_path,
             world_tick_failure_policy=world_tick_failure_policy,
         )
@@ -654,7 +643,6 @@ class ResolvedLlmRuntimeConfig:
             prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
             reason_first_two_step_enabled=False,
-            end_on_all_down=False,
             subjective_episode_db_path=None,
             world_tick_failure_policy=WorldTickFailurePolicy.ISOLATE.value,
         )
