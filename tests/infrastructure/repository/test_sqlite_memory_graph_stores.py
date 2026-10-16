@@ -1,4 +1,4 @@
-"""MemoryLink / セマンティック SQLite ストアの roundtrip と署名登録。"""
+"""MemoryLink SQLite ストアの roundtrip と、memory graph スキーマが古い表を消すこと。"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,15 +7,12 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
-    default_link_and_semantic_stores_for_episode_store,
+    default_link_store_for_episode_store,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import SqliteMemoryLinkStore
-from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import SqliteSemanticMemoryStore
 from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
 
 
@@ -60,41 +57,17 @@ def test_sqlite_legacy_memory_links_table_is_dropped(db_path: Path) -> None:
     table_names = {row['name'] for row in rows}
     assert 'memory_links' not in table_names
 
-def test_default_link_semantic_factory_uses_sqlite_when_episode_is_sqlite(db_path: Path) -> None:
+def test_default_link_factory_uses_sqlite_when_episode_is_sqlite(db_path: Path) -> None:
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
-    (ls, sem) = default_link_and_semantic_stores_for_episode_store(episode_store)
-    assert isinstance(ls, SqliteMemoryLinkStore)
-    assert isinstance(sem, SqliteSemanticMemoryStore)
+    assert isinstance(default_link_store_for_episode_store(episode_store), SqliteMemoryLinkStore)
 
-def test_default_link_semantic_factory_in_memory_when_episode_in_memory() -> None:
-    (ls, sem) = default_link_and_semantic_stores_for_episode_store(InMemorySubjectiveEpisodeStore())
-    assert isinstance(ls, InMemoryMemoryLinkStore)
-    assert isinstance(sem, InMemorySemanticMemoryStore)
-
-def test_sqlite_semantic_signature_and_entries(db_path: Path) -> None:
-    """Phase 3 Step 3b-3: being_id 経路のみで signature + entry が永続化される。
-
-    legacy ``register_cluster_signature_if_new`` / ``add`` / ``list_for_player`` は
-    撤去済 (= schema v3 で legacy テーブルも DROP)。
-    """
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
-    episode_store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
-    sem = SqliteSemanticMemoryStore(episode_store.connection)
-    being_id = BeingId('being_w1_p1')
-    assert sem.register_cluster_signature_if_new_by_being(being_id, 'sig-a') is True
-    assert sem.register_cluster_signature_if_new_by_being(being_id, 'sig-a') is False
-    now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
-    entry = SemanticMemoryEntry(entry_id='sem-1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='hello', evidence_episode_ids=('e1', 'e2'), confidence=0.8, created_at=now)
-    sem.add_by_being(being_id, entry)
-    rows = sem.list_for_being(being_id)
-    assert len(rows) == 1
-    assert rows[0].entry_id == 'sem-1'
-    assert rows[0].evidence_episode_ids == ('e1', 'e2')
+def test_default_link_factory_in_memory_when_episode_in_memory() -> None:
+    assert isinstance(default_link_store_for_episode_store(InMemorySubjectiveEpisodeStore()), InMemoryMemoryLinkStore)
 
 def test_sqlite_legacy_semantic_tables_are_dropped(db_path: Path) -> None:
     """Phase 3 Step 3b-3: schema v3 で legacy テーブルが完全に消えていること。"""
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
-    SqliteSemanticMemoryStore(episode_store.connection)
+    SqliteMemoryLinkStore(episode_store.connection)
     conn = episode_store.connection
     legacy_tables = {'semantic_memory_entries', 'semantic_cluster_signatures'}
     rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()

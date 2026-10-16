@@ -55,9 +55,6 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -1316,11 +1313,11 @@ def test_episodic_stack_gate_follows_config_not_env(
     assert off._episodic_stack is None
 
 
-def test_episodic_on_builds_link_and_semantic_stores_with_episode_recall(
+def test_episodic_on_builds_link_store_with_episode_recall(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """episodic stack を立てると、リンクと意味記憶の store も一緒に組まれ、行動の道具は出る。"""
+    """episodic stack を立てると、リンクの store も一緒に組まれ、行動の道具は出る。"""
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
 
@@ -1329,7 +1326,6 @@ def test_episodic_on_builds_link_and_semantic_stores_with_episode_recall(
     assert stack.chunk_coordinator is not None
     assert stack.passive_recall is not None
     assert stack.noun_matcher is not None
-    assert stack.semantic_memory_store is not None
     assert stack.memory_link_store is not None
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
@@ -2197,17 +2193,16 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
 
     assert stub.memo_store is runtime._todo_store
     assert stub.episodic_episode_store is runtime._episodic_stack.episode_store
-    assert stub.semantic_memory_store is runtime._episodic_stack.semantic_memory_store
     assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository
 
 
-def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
+def test_experiment_wiring_stub_exposes_link_store_when_enabled(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """experiment snapshot surface includes semantic and link stores after #547."""
+    """experiment snapshot surface includes the link store after #547."""
     from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
     monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
@@ -2220,9 +2215,7 @@ def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
 
     stub = _wiring_stub_from_world_runtime(runtime)
 
-    assert stub.semantic_memory_store is runtime._episodic_stack.semantic_memory_store
     assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
-    assert stub.semantic_memory_store is not None
     assert stub.memory_link_store is not None
 
 

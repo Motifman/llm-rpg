@@ -257,7 +257,7 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
                 raise TypeError("links elements must be MemoryLink")
             if ln.being_id != being_id:
                 raise ValueError("link.being_id must match store being_id")
-        # 注意: 明示的 BEGIN を打たない理由は sqlite_semantic_memory_store.py の
+        # 注意: 明示的 BEGIN を打たない理由は sqlite_subjective_episode_store.py の
         # ``replace_all_by_being`` 同コメント参照 (implicit transaction との衝突回避)。
         try:
             self._conn.execute(

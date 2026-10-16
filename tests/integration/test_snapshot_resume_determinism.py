@@ -37,7 +37,6 @@ from ai_rpg_world.application.being.being_provisioning_service import BeingProvi
 from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -51,7 +50,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
@@ -63,11 +61,11 @@ def _make_stack():
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     return (wiring, provisioning)
 
 def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
-    """全 5 memory store に決定論的データを投入する。
+    """全 memory store に決定論的データを投入する。
 
     決定論性のため、すべての datetime は ``_FIXED_TIME`` 固定。これにより
     capture → restore → recapture で payload が bit-identical になる。
@@ -75,9 +73,6 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     m1 = wiring.memo_store.add_by_being(being_id, 'active task')
     m2 = wiring.memo_store.add_by_being(being_id, 'done task')
     wiring.memo_store.complete_by_being(being_id, m2)
-    wiring.semantic_memory_store.add_by_being(being_id, SemanticMemoryEntry(entry_id='se-1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='森は東に位置する', evidence_episode_ids=('ep-1', 'ep-2'), confidence=0.85, created_at=_FIXED_TIME, importance_score=7, tags=('location', 'forest')))
-    wiring.semantic_memory_store.register_cluster_signature_if_new_by_being(being_id, 'sig-forest')
-    wiring.semantic_memory_store.register_cluster_signature_if_new_by_being(being_id, 'sig-village')
     wiring.memory_link_store.upsert_link_by_being(being_id, MemoryLink(link_id='mlk-1', player_id=1, being_id=being_id, episode_id_a='ep-1', episode_id_b='ep-2', link_type=MemoryLinkType.CO_RECALL, strength=0.7, co_activation_count=3, created_at=_FIXED_TIME, last_activated_at=_FIXED_TIME, decay_rate=0.001))
     wiring.episodic_episode_store.put_by_being(being_id, SubjectiveEpisode(episode_id='ep-1', player_id=1, being_id=being_id, occurred_at=_FIXED_TIME, game_time_label='day 1', source=EpisodeSource(event_ids=('e1', 'e2')), location=EpisodeLocation(spot_id=42, tile_area_ids=(1, 2)), action=EpisodeAction(tool_name='walk'), who=('ada', 'ben'), what='explored forest', why='curious', observed='trees and birds', expected='silence', outcome='encountered wolf', prediction_error='surprise', felt='afraid', interpreted='dangerous area', cues=(EpisodicCue(axis='place_spot', value='42', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='recall body', recall_count=2, last_recalled_at=_FIXED_TIME))
 
@@ -97,8 +92,8 @@ def _strip_volatile_metadata(payload_dict: dict) -> dict:
 class TestSnapshotRoundTripDeterminism:
     """P1: capture → restore → recapture で payload が bit-identical。"""
 
-    def test_all_five_store_capture_restore_recapture_matches(self, tmp_path: Path) -> None:
-        """全 5 store を埋めた capture restore recapture で一致。"""
+    def test_all_stores_capture_restore_recapture_matches(self, tmp_path: Path) -> None:
+        """全 store を埋めた capture restore recapture で一致。"""
         (src_wiring, src_prov) = _make_stack()
         src_prov.ensure_attached(PlayerId(1))
         being_id = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))

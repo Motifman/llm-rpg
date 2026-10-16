@@ -60,9 +60,6 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
 )
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
 
 # ---- datetime helpers ---------------------------------------------------------
 
@@ -126,93 +123,6 @@ def _dict_to_fulfillment(data: dict[str, Any]) -> MemoFulfillmentContext:
         ),
         recent_action_summaries=tuple(
             str(x) for x in data.get("recent_action_summaries", ())
-        ),
-    )
-
-
-# ---- semantic -----------------------------------------------------------------
-
-def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
-    return {
-        "entry_id": entry.entry_id,
-        "player_id": entry.player_id,
-        "being_id": entry.being_id.value,
-        "text": entry.text,
-        "evidence_episode_ids": list(entry.evidence_episode_ids),
-        "confidence": entry.confidence,
-        "created_at": _dt_to_iso(entry.created_at),
-        "importance_score": entry.importance_score,
-        "tags": list(entry.tags),
-        # U3a (belief journal 化)。
-        "belief_id": entry.belief_id,
-        "status": entry.status,
-        "supersedes": entry.supersedes,
-        "support_evidence_ids": list(entry.support_evidence_ids),
-        "contradict_evidence_ids": list(entry.contradict_evidence_ids),
-        # P3b: CONFIRMATION 支持の内数。siblings (support/contradict) が
-        # snapshot round-trip される以上、これも round-trip しないと resume 後に
-        # 0 に戻り、以後の strengthen/contradict で CONFIRMATION 支持を通常支持
-        # として過大評価してしまう (confidence の再膨張)。
-        "confirmation_support_count": entry.confirmation_support_count,
-        # P10: HEARSAY 支持の内数。confirmation 同様 sibling が round-trip される
-        # 以上これも往復しないと resume 後に 0 に戻り、以後の strengthen/contradict
-        # で伝聞支持を直接体験として過大評価する (confidence の再膨張)。
-        "hearsay_support_count": entry.hearsay_support_count,
-        "last_observed_turn": entry.last_observed_turn,
-    }
-
-
-def dict_to_semantic_entry(
-    data: dict[str, Any],
-    *,
-    fallback_being_id: BeingId | None = None,
-) -> SemanticMemoryEntry:
-    # U3a: 旧 snapshot (belief journal キー無し) は default に倒す。
-    # belief_id は空文字→ SemanticMemoryEntry.__post_init__ が entry_id に
-    # フォールバックする。
-    raw_being_id = data.get("being_id")
-    if raw_being_id is not None:
-        parsed = BeingId(str(raw_being_id))
-        if fallback_being_id is not None and parsed != fallback_being_id:
-            raise ValueError(
-                "semantic entry being_id does not match snapshot being"
-            )
-        being_id = parsed
-    elif fallback_being_id is not None:
-        being_id = fallback_being_id
-    else:
-        raise ValueError("being_id is required to decode SemanticMemoryEntry")
-    supersedes = data.get("supersedes")
-    return SemanticMemoryEntry(
-        entry_id=str(data["entry_id"]),
-        player_id=int(data["player_id"]),
-        being_id=being_id,
-        text=str(data["text"]),
-        evidence_episode_ids=tuple(
-            str(x) for x in data.get("evidence_episode_ids", ())
-        ),
-        confidence=float(data["confidence"]),
-        created_at=_iso_to_dt(str(data["created_at"])),
-        importance_score=int(data.get("importance_score", 5)),
-        tags=tuple(str(x) for x in data.get("tags", ())),
-        belief_id=str(data.get("belief_id") or ""),
-        status=str(data.get("status", "active")),
-        supersedes=str(supersedes) if supersedes else None,
-        support_evidence_ids=tuple(
-            str(x) for x in data.get("support_evidence_ids", ())
-        ),
-        contradict_evidence_ids=tuple(
-            str(x) for x in data.get("contradict_evidence_ids", ())
-        ),
-        # P3b: 旧 snapshot (このキー無し) は 0 に倒す (VO 既定と一致)。
-        confirmation_support_count=int(data.get("confirmation_support_count", 0)),
-        # P10: 旧 snapshot (このキー無し) は 0 に倒す (VO 既定と一致)。
-        hearsay_support_count=int(data.get("hearsay_support_count", 0)),
-        # #1452: キーが無ければ観測のターン数が分からない信念として戻す。
-        last_observed_turn=(
-            int(data["last_observed_turn"])
-            if data.get("last_observed_turn") is not None
-            else None
         ),
     )
 

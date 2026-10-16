@@ -167,14 +167,6 @@ def _empty_memo_store() -> Any:
     return InMemoryMemoStore()
 
 
-def _empty_semantic_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-        InMemorySemanticMemoryStore,
-    )
-
-    return InMemorySemanticMemoryStore()
-
-
 def _empty_memory_link_store() -> Any:
     from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
         InMemoryMemoryLinkStore,
@@ -334,14 +326,11 @@ class ExperimentSnapshotSession:
             )
 
         # 任意 store: 「未配線なら空 in-memory store で代用」する。world_runtime
-        # runtime のように semantic / memory_link を
+        # runtime のように memory_link を
         # 使わない構成でも snapshot を取れるようにするため (= 空の payload に
         # なるが file の整合性は保たれる)。memo / episode は普段使うので強く
         # 期待するが、None でも fallback できる方が安全。
         memo_store = wiring_result.memo_store or _empty_memo_store()
-        semantic_store = (
-            wiring_result.semantic_memory_store or _empty_semantic_store()
-        )
         memory_link_store = (
             wiring_result.memory_link_store or _empty_memory_link_store()
         )
@@ -350,12 +339,11 @@ class ExperimentSnapshotSession:
         )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
-        # = 「snapshot 取ったけど semantic は空だった」のデバッグ材料。
+        # = 「snapshot 取ったけど link は空だった」のデバッグ材料。
         fallback_used = [
             name
             for name in (
                 "memo_store",
-                "semantic_memory_store",
                 "memory_link_store",
                 "episodic_episode_store",
                 # PR-G: 想起階層の store も fallback 監視対象に入れる。配線漏れで
@@ -372,7 +360,6 @@ class ExperimentSnapshotSession:
 
         self._memory_snapshot = BeingMemorySnapshotService(
             memo_store=memo_store,
-            semantic_store=semantic_store,
             memory_link_store=memory_link_store,
             episodic_episode_store=episode_store,
             acquaintance_store=wiring_result.acquaintance_store,

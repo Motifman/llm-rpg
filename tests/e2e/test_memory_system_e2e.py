@@ -28,7 +28,6 @@ import pytest
 
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
     ShortTermMemoryLongSummaryService,
 )
@@ -45,7 +44,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_action import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import L4MidSummary
 from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import L5LongSummary
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -96,9 +94,6 @@ def _persona_resolver(pid: int) -> tuple[str, str]:
 
 def _make_observation(prose: str, seq: int=0) -> ObservationEntry:
     return ObservationEntry(occurred_at=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc), output=ObservationOutput(prose=prose, structured={}))
-
-def _make_semantic_entry(*, entry_id: str, text: str, importance: int=5, tags: tuple=()) -> SemanticMemoryEntry:
-    return SemanticMemoryEntry(entry_id=entry_id, player_id=_PID.value, being_id=BeingId(f"being_w1_p{_PID.value}"), text=text, evidence_episode_ids=('ep-1',), confidence=0.7, created_at=datetime(2026, 6, 1, tzinfo=timezone.utc), importance_score=importance, tags=tags)
 
 def _build_memory(stub: _StubSummaryPort, *, scheduler_kind: str='inline') -> SummarizingShortTermMemory:
     """全 LLM サービスを stub 接続した SummarizingShortTermMemory を返す。"""
