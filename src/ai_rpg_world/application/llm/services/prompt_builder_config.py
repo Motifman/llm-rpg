@@ -2,14 +2,12 @@
 
 Issue #227 後続レビュー (HIGH-1) 改善: __init__ の 22 引数を 4 つの dataclass に
 グループ化し、テスト fixture や wiring 側の組み立てを楽にする。各 dataclass は
-「機能の塊」として独立しており、Optional な機能 (episodic recall, memo, etc.)
-は丸ごと省略できる。
+「機能の塊」として独立しており、Optional な機能 (memo など) は丸ごと省略できる。
 
 API:
     DefaultPromptBuilder(
         core=PromptBuilderCoreServices(...),     # 必須インフラ
         sections=PromptSectionProviders(...),    # オプション section 群
-        episodic=EpisodicRecallConfig(...),      # 受動想起・記憶リンク
         limits=PromptLimits(...),                # 数値設定・action_instruction
         ui_context_builder=None,
         current_tick_provider=None,
@@ -25,7 +23,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
@@ -49,28 +46,11 @@ from ai_rpg_world.domain.player.repository.player_profile_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.being.player_acquaintances import PlayerAcquaintances
-    from ai_rpg_world.application.encounter.contracts.interfaces import (
-        IEncounterMemory,
-    )
-    from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
-        EpisodicMemoryLinkApplicationService,
-    )
-    from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-        EpisodicPassiveRecallRetrievalService,
-    )
-    from ai_rpg_world.application.llm.services.world_noun_matcher import (
-        IWorldNounMatcher,
-    )
     from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
     from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
     from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 
 
-DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
-DEFAULT_RECENT_ACTIONS_LIMIT = 20
-DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS = 10
-DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
 DEFAULT_TILE_MAP_VIEW_DISTANCE = 5
 DEFAULT_MEMO_STALE_AGE_TICKS = 20
@@ -99,7 +79,6 @@ class PromptBuilderCoreServices:
 
     observation_buffer: IObservationContextBuffer
     short_term_memory: IShortTermMemory
-    action_result_store: IActionResultStore
     recent_event_store: UnifiedRecentEventStore
     # 本体の service ではなく、必要な 1 メソッドだけを要求する。
     # world_runtime は duck-type adapter を渡す (#1371)。
@@ -135,42 +114,9 @@ class PromptSectionProviders:
 
 
 @dataclass(frozen=True)
-class EpisodicRecallConfig:
-    """受動想起・記憶リンク・再解釈の Optional 設定。
-
-    Issue #240 で導入された episodic memory 系の一式。passive_recall が None なら
-    関連処理ごとスキップされ、prompt に「関連する記憶」section が出ない。
-    """
-
-    passive_recall: EpisodicPassiveRecallRetrievalService | None = None
-    passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS
-    passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES
-    memory_link_service: EpisodicMemoryLinkApplicationService | None = None
-    # Issue #283 後続: 観測 prose に含まれる固有名詞から自動 cue を立てる
-    # マッチャ。None なら自由文経路は無効化 (= 構造化フィールドだけが cue 源)。
-    # 実装は ``IWorldNounMatcher`` 準拠の任意クラス (Aho-Corasick / Null / C 拡張等)。
-    noun_matcher: IWorldNounMatcher | None = None
-    # PR8 (R5): Encounter Memory を recall cue trigger として使う。注入時、
-    # 直近 ``encounter_recent_window_ticks`` 以内に encounter した entity /
-    # spot / event が ``ENCOUNTER`` source の cue として recall に乗る。
-    # current_tick 取得は prompt_builder の ``current_tick_provider`` を流用。
-    encounter_memory: IEncounterMemory | None = None
-    encounter_recent_window_ticks: int = 5
-    # encounter の spot key はシナリオの文字列 ID なので、runtime 由来の
-    # place_spot cue (数値 spot_id) と揃えるために数値へ直す。
-    encounter_spot_id_resolver: Callable[[str], int] | None = None
-    # #1520: 直近に会った相手は、環境の encounter ではなく Being の知り合いの
-    # 記録から引く。「直近」は Being のターン数で数える。
-    acquaintances: PlayerAcquaintances | None = None
-    acquaintance_recent_window_turns: int = 5
-
-
-@dataclass(frozen=True)
 class PromptLimits:
     """数値設定・action_instruction・tile_map フラグ。"""
 
-    recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT
-    recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT
     default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION
     tile_map_view_distance: int = DEFAULT_TILE_MAP_VIEW_DISTANCE
     tile_map_enabled: bool = True

@@ -16,7 +16,6 @@ def _build_prompt(
     tool_schema_mode: str = "legacy",
 ) -> str:
     return build_world_system_prompt(
-        relevant_memories_shown=True,
         world_title="テスト世界",
         persona_block="【ペルソナ】名前: エイダ",
         safe_intro="周囲を観察しながら暮らす世界。",
@@ -59,7 +58,6 @@ def test_system_prompt_never_exposes_banned_engine_vocabulary(
 
 def _build_with_persona(persona_block: str) -> str:
     return build_world_system_prompt(
-        relevant_memories_shown=True,
         world_title="テスト世界",
         persona_block=persona_block,
         safe_intro="周囲を観察しながら暮らす世界。",

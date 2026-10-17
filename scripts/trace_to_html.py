@@ -138,7 +138,7 @@ def _build_mermaid_sequence(
             )
             # self-note (actor が自分の記憶に書き込んだ)
             lines.append(f"    {actor}-->{actor}: {label}")
-        elif e.kind == TraceEventKind.EPISODIC_RECALL:
+        elif e.kind == "episodic_recall":
             cand_count = 0
             if isinstance(e.payload, dict):
                 cand_count = int(e.payload.get("candidate_count") or 0)

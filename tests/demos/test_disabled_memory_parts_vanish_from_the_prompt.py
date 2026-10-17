@@ -105,9 +105,10 @@ _ALL_NAMES = (
 #: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
 #:
 #: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具、見出しの欄、
-#: 【関連する学び】は #1631 で消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
+#: 【関連する学び】、受動想起の【関連する記憶】は #1631 で消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
 #: 戻ってこないことを見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
+    _RELEVANT_MEMORIES,
     _LEARNED,
     _PENDING_PREDICTIONS,
     _EXPECTATIONS,

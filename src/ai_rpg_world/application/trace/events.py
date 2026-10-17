@@ -99,11 +99,6 @@ class TraceEventKind:
     # payload: episode_id / boundary_reason / cues (canonical list) /
     # recall_text_snippet / action_count / observation_count
     EPISODIC_CHUNK_WRITTEN = "episodic_chunk_written"
-    # EPISODIC_RECALL: ``DefaultPromptBuilder._run_passive_recall`` が
-    # passive recall を実行した瞬間。
-    # payload: situation_cues (canonical list) / candidate_count /
-    # candidates (episode_id / source_axes / recall_text_snippet)
-    EPISODIC_RECALL = "episodic_recall"
     # Issue #295 後続 (PR #309): episodic subjective LLM 補完を非同期で実行する
     # スケジューラ (``ThreadPoolEpisodicSubjectiveScheduler`` 等) が、
     # LLM 呼び出しを完了して store に「リッチ化された」episode を上書きした瞬間。
@@ -142,7 +137,7 @@ class TraceEventKind:
     # prompt section の文字数内訳 (実験 #356 後続: prefix cache 分析用)。
     # prompt_builder.build() が messages / tools を組み上げた直後に 1 件記録する。
     # payload: system_chars / objective_chars / known_people_chars / current_state_chars / memos_chars /
-    # recent_events_chars / recall_chars / inventory_chars /
+    # recent_events_chars / inventory_chars /
     # instruction_chars / tools_chars / messages_total_chars
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。

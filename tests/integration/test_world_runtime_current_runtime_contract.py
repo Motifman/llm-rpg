@@ -1324,7 +1324,6 @@ def test_episodic_on_builds_link_store_with_episode_recall(
     stack = runtime._episodic_stack
     assert stack is not None
     assert stack.chunk_coordinator is not None
-    assert stack.passive_recall is not None
     assert stack.noun_matcher is not None
     assert stack.memory_link_store is not None
 
@@ -1362,7 +1361,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     assert TOOL_NAME_MEMO_DONE not in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
     assert runtime._episodic_stack is not None
-    assert runtime._episodic_stack.passive_recall is not None
 
 
 def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(

@@ -50,7 +50,6 @@ def test_world_runtime_memory_stack_has_flag_gated_link_extension() -> None:
 
     assert {
         "chunk_coordinator",
-        "passive_recall",
         "noun_matcher",
         "episode_store",
         "memory_link_store",

@@ -13,7 +13,7 @@
 - `observation`: agent への観測配信
 - `llm_call`: LLM 呼び出しメトリクス
 - `prompt_section_breakdown`: prompt の各 section サイズ
-- `episodic_recall`: passive recall 結果
+- `episodic_recall`: passive recall 結果 (#1631 で受動想起を消す前の trace のみ)
 - `memo_add` / `memo_done`: memo 操作
 - `short_term_summary_generated` / `short_term_long_summary_generated`: L4/L5 要約
 - `loop_guard_warning`: 同 tool 連発の警告

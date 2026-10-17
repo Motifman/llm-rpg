@@ -3,8 +3,8 @@
 検証範囲:
 - env 解釈 (``is_episodic_enabled`` / ``is_episodic_subjective_enabled``)
 - ``build_scenario_noun_matcher`` が scenario の spot/character を抽出する
-- ``build_episodic_stack`` が 4 要素 (chunk_coordinator + passive_recall +
-  noun_matcher + episode_store) を組み立てる
+- ``build_episodic_stack`` が 3 要素 (chunk_coordinator + noun_matcher +
+  episode_store) を組み立てる
 - ``episode_store`` 引数で外側 store を共有できる (scheduler 経路の整合性条件)
 - 旧名 (``WorldEpisodicStack`` / ``build_world_episodic_stack``) が
   ``demos/world_runtime/world_episodic_wiring.py`` から後方互換 alias で取れる
@@ -141,15 +141,14 @@ class TestBuildEpisodicStack:
     def _minimal_io(self):
         return (DefaultObservationContextBuffer(), DefaultSlidingWindowMemory(), DefaultActionResultStore())
 
-    def test_episodic_stack_four_element_built(self) -> None:
-        """episodic stack の 4要素が組み立てられる。"""
+    def test_episodic_stack_three_elements_built(self) -> None:
+        """episodic stack の 3 要素が組み立てられる。"""
         graph = _stub_graph(spots={1: '広間'})
         scenario = _stub_scenario(players=[(1, 'テスター')])
         (obs_buf, sliding, action_store) = self._minimal_io()
         stack = build_episodic_stack(scenario=scenario, graph=graph, observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store)
         assert isinstance(stack, EpisodicStack)
         assert stack.chunk_coordinator is not None
-        assert stack.passive_recall is not None
         assert stack.noun_matcher is not None
         assert isinstance(stack.episode_store, InMemorySubjectiveEpisodeStore)
         assert stack.subjective_completion_scheduler is None

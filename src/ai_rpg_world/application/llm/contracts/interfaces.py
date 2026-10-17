@@ -194,7 +194,6 @@ class IContextFormatStrategy(ABC):
         self,
         current_state_text: str,
         recent_events_text: str,
-        relevant_memories_text: str = "",
         active_memos_text: str = "",
         objective_text: str = "",
         inventory_text: str = "",

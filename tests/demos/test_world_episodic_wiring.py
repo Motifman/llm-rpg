@@ -3,8 +3,8 @@
 検証:
 - ``is_episodic_enabled`` の env 解釈
 - ``build_scenario_noun_matcher`` がシナリオから固有名詞を拾う
-- ``build_world_episodic_stack`` が chunk_coordinator + passive_recall +
-  noun_matcher を組み立てて返す
+- ``build_world_episodic_stack`` が chunk_coordinator + noun_matcher を
+  組み立てて返す
 - ``create_world_runtime`` が runtime_config で episodic_stack の有無を
   切り替える
 """
@@ -147,5 +147,4 @@ class TestWorldRuntimeEpisodicSwitch:
         assert runtime._episodic_stack is not None
         # 主要 3 要素が揃っている
         assert runtime._episodic_stack.chunk_coordinator is not None
-        assert runtime._episodic_stack.passive_recall is not None
         assert runtime._episodic_stack.noun_matcher is not None

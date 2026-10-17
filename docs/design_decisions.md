@@ -3591,6 +3591,8 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 **入口**: prompt 節は build 済みの being_id。chunk は
 `WorldRuntime._record_action_result` の `_acting_being_for`。
 
+**その後**: 受動想起 (`EpisodicPassiveRecallRetrievalService` の `retrieve`) は記憶の部品の撤去 (#1631) の #1796 で消した。chunk の書き込みは残る。
+
 ## 135. 応答として書かれた文を、常時出る注記に流用しない
 
 **判断**: シナリオが条件ごとに書く `failure_message` は、**その操作を呼んだ人
@@ -7419,6 +7421,8 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 **関連**: design_decisions 27 / 52 / Issue #1436 / #1465 / #1508。
 
+**その後**: 想起の手がかりの「直近に会った相手」(`PlayerAcquaintances.recently_met_names`) を読んでいた受動想起は、記憶の部品の撤去 (#1631) の #1796 で消した。手がかりを作る側の引数 (`recently_met_names` と encounter の 5 つ) と、読み手のいなくなった `recently_met_names` も一緒に消した。
+
 ---
 
 ## D1516. チームの勝敗は `teams[].win` で決め、個人の勝敗は所属チームの勝敗にそろえる。個人結果 (RESCUED など) とは別の軸で残す
@@ -8002,6 +8006,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **その後**: 全部入りの profile (`memory_jev_mine_v1_v41_thinking_capped`) とメモだけの profile は Issue #1631 で退役させた。試験は、新しい記憶の profile に全部入りの run が入れていた古い部品を戻して全部入りの設定を作る。退役前の profile と、止める部品ごとの 1 ターン目のプロンプトが一致することを確かめてから置き換えた。
 
 能動想起の道具は Issue #1631 の #1767 で消した。`active_recall_offered` と `ACTIVE_RECALL_TOOL_NAMES` も消え、書き分けは【関連する記憶】の有無の 2 通りになった。【関連する記憶】だけがある設定と、どちらも無い設定の文は、消す前とバイト単位で同じ。試験の名前の表には能動想起の名前を残し、どの設定でもプロンプトに戻ってこないことを見張る。
+
+受動想起【関連する記憶】も記憶の部品の撤去 (#1631) の #1796 で消したので、`relevant_memories_shown` と `WorldRuntime._relevant_memories_named_in_system_prompt` も消え、記憶の指示は記憶を止めた設定の文だけになった。station_drill のシステムプロンプトも、この文に変わった。
 
 ---
 

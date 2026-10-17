@@ -45,7 +45,7 @@ class EpisodicMemoryStack:
     """episodic memory の中核コンポーネント束。
 
     shared_episode_store: 全 coordinator が共有する episode store
-    mem_bundle: link service / passive recall などのバンドル
+    mem_bundle: link store と link service のバンドル
     """
 
     shared_episode_store: EpisodicEpisodeRepository
