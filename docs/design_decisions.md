@@ -1547,6 +1547,8 @@ Being へ記録するため。
 
 **その後**: `PROMPT_DATASET_CAPTURE_ENABLED` は記憶ではない設定の片付け (#1631) の #1795 で消し、`make experiment` の run はいつも保存する。起動時の Being の配線も、条件の無い 1 か所にまとめた。
 
+**その後**: 古いエピソードの配線 (`LLM_EPISODIC_ENABLED` / `LLM_EPISODIC_SUBJECTIVE_ENABLED`) は記憶の部品の撤去 (#1631) の #1801 で runtime から外した。Being の配線は、もともとどちらにも依存しない形で組んである。
+
 ## 53. semantic top-K は選抜順位と表示順を分ける
 
 `【関連する学び】` の候補は recency、importance、relevance の score で top-K を
@@ -4432,6 +4434,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 
 **この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
 `on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
+
+**その後**: runtime は主観エピソード (`SubjectiveEpisode`) を書かなくなった (記憶の部品の撤去 (#1631) の #1801)。区切りの書き起こし・主観補完・store は続く PR で消す。 snapshot のキー `episodic_episodes` もそこで消す。それまでは空で書き出し、古い snapshot に入っているエピソードは読んでも空の store に戻るだけで、次に保存するときに無くなる。
 
 ## 175. 昇格フロンティアは BeingId で分ける
 
@@ -8235,6 +8239,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 記憶の部品のために LLM クライアントや Jev を組むときは、`aux_call_sink` を必ず渡す。`tests/application/world_runtime/test_memory_llm_calls_reach_the_trace.py` が、src の中の全呼び出しが `aux_call_sink=` を渡しているかを ast で見張る。新しい部品を足すときは `AuxLlmComponent` に値を足し、report の `_AUX_COMPONENT_LABELS` に日本語の名前を足す (足さなければ部品名がそのまま出る)
 
 **関連**: Issue #1617 / #1587 / #1627 / #1429 / #1631、design_decisions 5 / D1626。
+
+**その後**: 主観補完 (`episode_subjective`) の呼び出しは記憶の部品の撤去 (#1631) の #1801 で消し、`AuxLlmComponent.EPISODE_SUBJECTIVE` も外した。消す前の run の report を読めるよう、表記の対応 (`主観の書き込み`) は文字列のまま残す。
 
 ---
 

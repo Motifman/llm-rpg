@@ -1,9 +1,7 @@
 """LLM 配線まわりの env-driven feature flag。
 
 実験スクリプトから A/B 検証する用途で、scenario 内容と直交する knob を
-ここに集約する。既存の他の env var (``SUBJECTIVE_EPISODE_DB_PATH``,
-``LLM_MODEL`` 等) と
-同じ慣例に揃える。
+ここに集約する。既存の他の env var (``LLM_MODEL`` 等) と同じ慣例に揃える。
 
 設計指針:
 

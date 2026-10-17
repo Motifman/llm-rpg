@@ -751,7 +751,6 @@ class TestExperimentProfileManifest:
         profile = self._load_profile("station_drill_lean")
         runtime_config = profile["runtime_config"]
 
-        assert runtime_config["LLM_EPISODIC_ENABLED"] is False
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
     def test_station_drill_lean_keeps_the_long_run_comparison_conditions(
@@ -766,16 +765,6 @@ class TestExperimentProfileManifest:
         assert "run 034" in profile["description"]
         assert "並列数を 8" in profile["description"]
         assert profile["max_world_ticks"] == 50
-        assert {
-            key: profile["runtime_config"][key]
-            for key in (
-                "LLM_EPISODIC_ENABLED",
-                "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-            )
-        } == {
-            "LLM_EPISODIC_ENABLED": False,
-            "LLM_EPISODIC_SUBJECTIVE_ENABLED": False,
-        }
         assert {
             key: profile["runtime_config"][key]
             for key in (
@@ -915,7 +904,6 @@ class TestExperimentProfileManifest:
         assert rc == 0
         cfg = captured["runtime_config"]
         assert cfg.llm_client_kind == "stub"
-        assert cfg.episodic_enabled is False
         assert cfg.reason_first_two_step_enabled is True
 
         resolved = json.loads(

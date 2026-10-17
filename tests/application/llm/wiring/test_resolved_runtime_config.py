@@ -32,8 +32,6 @@ class TestFromEnvDefaults:
         assert cfg.llm_rate_limit_retry_base_sleep == 2.0
         assert cfg.openrouter_provider is None
         assert cfg.openrouter_quantization is None
-        assert cfg.episodic_enabled is False
-        assert cfg.episodic_subjective_enabled is True
         assert cfg.scenario_random_seed is None
         assert cfg.prompt_dataset_capture_failure_policy == 'fail'
         assert cfg.reason_first_two_step_enabled is True
@@ -123,7 +121,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.llm_client_kind == 'litellm'
@@ -137,8 +135,6 @@ class TestFromEnvExplicit:
         assert cfg.llm_rate_limit_retry_base_sleep == 1.5
         assert cfg.openrouter_provider == 'Parasail'
         assert cfg.openrouter_quantization == 'fp8'
-        assert cfg.episodic_enabled is True
-        assert cfg.episodic_subjective_enabled is False
         assert cfg.scenario_random_seed == 42
 
     def test_empty_string_env_default(self) -> None:
@@ -171,11 +167,6 @@ class TestFromEnvFailFast:
         with pytest.raises(ValueError, match='LLM_REQUEST_TIMEOUT_SECONDS'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_REQUEST_TIMEOUT_SECONDS': 'ten'})
 
-    def test_episodic_enabled_typo_raises_value_error(self) -> None:
-        """episodic enabled typo は ValueError。"""
-        with pytest.raises(ValueError, match='boolean'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': 'yeah'})
-
 class TestTheRemovedMemoryPartKeysAreRejected:
     """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
 
@@ -187,6 +178,9 @@ class TestTheRemovedMemoryPartKeysAreRejected:
         [
             "STATE_COLLAPSE_EVIDENCE_ENABLED",
             "BELIEF_EVIDENCE_ENABLED",
+            "LLM_EPISODIC_ENABLED",
+            "LLM_EPISODIC_SUBJECTIVE_ENABLED",
+            "SUBJECTIVE_EPISODE_DB_PATH",
             "EPISODIC_PROMOTION_EXPANSION_HOPS",
             "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
             "SEMANTIC_LLM_GIST_ENABLED",
@@ -261,46 +255,6 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             ResolvedLlmRuntimeConfig.from_mapping(values={key: "true"})
 
 
-class TestSubjectiveEpisodeDbPath:
-    """SUBJECTIVE_EPISODE_DB_PATH を単一窓口 (config) に載せる (二重入口撤去)。
-
-    従来は ``_default_episodic_episode_store`` が os.environ を直読みしており、
-    profile/config の外で episode store の永続化先が決まってしまっていた
-    (manifest にも残らない silent failure)。config フィールド化して解決経路を
-    from_mapping の 1 本に固定する。
-    """
-
-    def test_unset_is_none(self) -> None:
-        """未設定なら None (= in-memory episode store)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.subjective_episode_db_path is None
-
-    def test_set_resolves_to_path_when_subjective_off(self) -> None:
-        """subjective OFF + episodic ON なら SUBJECTIVE_EPISODE_DB_PATH をそのまま解決する。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SUBJECTIVE_EPISODE_DB_PATH': '  var/episodes.db  '})
-        assert cfg.subjective_episode_db_path == 'var/episodes.db'
-
-    def test_recorded_in_trace_dict(self) -> None:
-        """解決した path は run_start trace / manifest に残る (再現性)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SUBJECTIVE_EPISODE_DB_PATH': 'var/episodes.db'})
-        assert cfg.to_trace_dict()['subjective_episode_db_path'] == 'var/episodes.db'
-
-    def test_for_tests_default_none_and_override(self) -> None:
-        """for_tests の default は None、override 可。"""
-        assert ResolvedLlmRuntimeConfig.for_tests().subjective_episode_db_path is None
-        cfg = ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True, episodic_subjective_enabled=False, subjective_episode_db_path='var/x.db')
-        assert cfg.subjective_episode_db_path == 'var/x.db'
-
-    def test_with_subjective_enabled_raises_value_error(self) -> None:
-        """subjective 経路は常に in-memory なので db_path 併用は静かな無視。fail-fast で落とす。"""
-        with pytest.raises(ValueError, match='SUBJECTIVE_EPISODE_DB_PATH'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '1', 'SUBJECTIVE_EPISODE_DB_PATH': 'var/episodes.db'})
-
-    def test_without_episodic_raises_value_error(self) -> None:
-        """episodic OFF では episode store 自体を組まないので db_path は無視される。fail-fast で落とす。"""
-        with pytest.raises(ValueError, match='SUBJECTIVE_EPISODE_DB_PATH'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '0', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SUBJECTIVE_EPISODE_DB_PATH': 'var/episodes.db'})
-
 class TestFromMappingIgnoresOsEnviron:
     """引数省略時も環境変数を読まず、空設定の既定値になる。"""
 
@@ -309,12 +263,6 @@ class TestFromMappingIgnoresOsEnviron:
         monkeypatch.setenv('SHORT_TERM_MEMORY_TURN_CAP', '99')
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
         assert cfg.short_term_memory_turn_cap == 20
-
-    def test_subjective_episode_db_path_os_environ_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """SUBJECTIVE_EPISODE_DB_PATH が env にあっても config は読まない (二重入口撤去)。"""
-        monkeypatch.setenv('SUBJECTIVE_EPISODE_DB_PATH', '/tmp/leaked.db')
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.subjective_episode_db_path is None
 
 class TestImmutability:
     """frozen dataclass: 構築後の改変を防ぐ (= hash 可能 / 共有 safe)。"""
@@ -360,7 +308,7 @@ class TestToTraceDict:
         assert d['short_term_memory_turn_cap'] == 20
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
-        assert 'episodic_enabled' in d
+        assert 'being_memo_enabled' in d
 
     def test_api_key(self) -> None:
         """API key の生値は絶対に trace に出さない (漏洩防止)。"""

@@ -14,8 +14,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_Bein
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timezone
 
-import pytest
-
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
@@ -203,31 +201,3 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         builder._trace_recorder_provider = None
         builder._current_tick_provider = lambda : 0
         builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(1), system_content='', objective_text='', current_state_text='', memos_text='', recent_events_text='', inventory_text='', instruction='', tools=[], user_content='')
-
-class TestWorldRuntimeEpisodicTraceE2E:
-    """env=1 で trace_recorder を runtime に差し込んで実行すると、chunk
-    write が trace event として記録される。"""
-
-    def test_smoke_run_emits_chunk_written(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """smoke run で chunk written イベントが emit され、受動想起のイベントは出ない。"""
-        from pathlib import Path
-
-        from tests.runtime_config_helpers import episodic_config
-
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        scenario_path = Path(__file__).resolve().parents[4] / 'data' / 'scenarios' / 'forbidden_library_demo.json'
-        runtime = create_world_runtime(scenario_path, config=episodic_config())
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        runtime.set_trace_recorder(recorder)
-        (kaito_id, rin_id) = (runtime.get_player_ids()[0], runtime.get_player_ids()[1])
-        runtime.do_move(rin_id, 'entrance_hall')
-        runtime.do_explore(kaito_id)
-        runtime.do_speech(rin_id, 'カイト、こんにちは', SpeechChannel.SAY)
-        runtime.do_explore(kaito_id)
-        runtime.do_move(kaito_id, 'reading_room')
-        runtime.build_full_prompt(kaito_id)
-        chunk_events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN]
-        assert len(chunk_events) > 0, 'chunk_written 未発火 — write 経路の trace が動いていない'
-        assert not [e for e in captured if e.kind == 'episodic_recall']

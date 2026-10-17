@@ -44,8 +44,6 @@ _OFFLINE = {
 #: 新しい記憶の profile が止めていて、全部入りの run が入れていた古い記憶の部品。
 #: 全部入りの run の古いメモの道具は #1631 で消したので、代わりにメモ帳を入れる。
 _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
-    "LLM_EPISODIC_ENABLED": "true",
-    "LLM_EPISODIC_SUBJECTIVE_ENABLED": "true",
     "BEING_MEMO_ENABLED": "true",
 }
 

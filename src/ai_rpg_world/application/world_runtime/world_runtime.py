@@ -668,11 +668,6 @@ class WorldRuntime:
     _observation_turn_scheduler: ObservationTurnScheduler | None = field(
         default=None, repr=False
     )
-    # Issue #283 後続: episodic memory pipeline (on/off)。
-    # - ``_episodic_stack`` が None なら従来動作 (memory なし)
-    # - 注入されていれば ``_record_action_result`` で chunk が積まれ、
-    #   prompt builder の recall section に過去エピソードが現れる
-    _episodic_stack: Any | None = field(default=None, repr=False)
     # #404 fix: travel_stage を runtime に保持する。create_session 経路から
     # 「到着時の schedule_turn コールバック」を後付けで注入するため、参照を
     # 露出させる必要がある (simulation_service の中に隠れたままだと外から
@@ -1064,28 +1059,6 @@ class WorldRuntime:
         if self._world_tick_failure_isolator is None:
             return {}
         return self._world_tick_failure_isolator.failure_counts()
-
-    def shutdown(self, timeout: float | None = None) -> None:
-        """非同期スケジューラ等の in-flight ジョブを drain して資源を解放する。
-
-        PR #309: ``ThreadPoolEpisodicSubjectiveScheduler`` が裏で走っている
-        LLM 補完を、ゲーム終了時に終わらせるための hook。``timeout`` 秒経っても
-        終わらないジョブは諦めて cancel する (= テンプレ既定値が store に
-        残るだけで損失は限定的)。
-
-        本メソッドは複数回呼ばれても安全 (scheduler 側でも is_shutdown flag を
-        持つ)。``timeout=None`` (既定) は完了まで無期限待機。
-        """
-        stack = self._episodic_stack
-        if stack is None:
-            return
-        scheduler = stack.subjective_completion_scheduler
-        if scheduler is None:
-            return
-        try:
-            scheduler.shutdown(timeout=timeout)
-        except Exception:
-            logger.exception("episodic subjective scheduler shutdown failed")
 
     def set_tool_call_loop_guard(self, guard: Any) -> None:
         """``ToolCallLoopGuardService`` を後から注入する。
@@ -1895,8 +1868,7 @@ class WorldRuntime:
             return
         # tz-aware UTC で統一: HeartbeatObservationEmitter /
         # ActionFailedObservationEmitter が aware を発行するため、world_runtime
-        # 経路の naive と混ざると EpisodicChunkCoordinator の obs_slice
-        # フィルタで TypeError になる。詳細: docs/episodic_memory フォローアップ。
+        # 経路の naive と混ざると時刻の比較で TypeError になる。
         if not appender.append(
             player_id, output, datetime.now(timezone.utc), self._time_label()
         ):
@@ -1921,7 +1893,7 @@ class WorldRuntime:
         intention: str | None = None,
         emotion_hint: str | None = None,
     ) -> None:
-        """action_result_store に 1 件積み、episodic chunk_coordinator を起動する。
+        """action_result_store に 1 件積む。
 
         ``tool_name`` は必須引数: 第20回実験で「episode_cues に常に
         ``action:unknown_tool`` が立つ」問題が観測されたため、呼び出し側で
@@ -1938,16 +1910,11 @@ class WorldRuntime:
         (#526) の入力。do_* 経由で raw args 由来の値が渡る (U2)。露出スキーマが
         OFF の間は全 None なので記録挙動は不変。
         """
-        # U1 (#526 後続): append → chunk write → semantic promotion (escape baseline
-        # の順序・error isolation) を共有 ActionResultRecorder に委譲する。挙動は
-        # #553 で contract 化済みで不変。subjective fields (intention 等) は
-        # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
+        # U1 (#526 後続): store への append を共有 ActionResultRecorder に委譲する。
+        # subjective fields (intention 等) は U2 で do_* → ここ → recorder と配線した
+        # (露出 OFF の間は None)。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
-        recorder = ActionResultRecorder(
-            self._action_result_store,
-            logger=logger,
-        )
-        acting = self._acting_being_for(player_id)
+        recorder = ActionResultRecorder(self._action_result_store)
         recorder.record(
             player_id,
             action_summary=action_summary,
@@ -1966,8 +1933,6 @@ class WorldRuntime:
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
-            episodic_stack=self._episodic_stack if acting is not None else None,
-            being_id=acting.being_id if acting is not None else None,
         )
 
     def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> list[ObservationEntry]:
@@ -4098,7 +4063,7 @@ def _build_persona_resolver(
     """player_id -> (name, persona_block) を引ける callable を組む。
 
     旧 _wire_short_term_llm_services 内に inline されていたロジックを抽出。
-    subjective scheduler wiring と同じ規則:
+    規則:
         - world_character 指定 player には rich persona
         - それ以外は fallback persona
     """
@@ -6981,23 +6946,9 @@ def create_world_runtime(
     runtime._downed_incident_log = downed_incident_log
     runtime._observation_appender = observation_appender
 
-    # Issue #283 後続: episodic memory pipeline の on/off。
-    # episodic ON のときだけ scenario load 時に matcher + chunk coordinator +
-    # passive recall を組み立てる。OFF なら従来動作。
-    # PR #330: シナリオ非依存の builder に統一。world_episodic_wiring 経由の
-    # 旧 alias も後方互換で生きているが、application 層から直接 import する。
-    # #558 MEDIUM-1 後続: 親 gate を env 直読み (is_episodic_enabled) から
-    # config.episodic_enabled に寄せ、ResolvedLlmRuntimeConfig 単一窓口に揃えた。
-    # config=None のときは from_mapping() が空 mapping を解決する (= env は読まず
-    # 全 default = episodic OFF)。実験経路 (run_scenario_experiment.py) は profile
-    # から明示 config を組んで渡すため env に依存しない。explicit config が effect
-    # するので「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
-    from ai_rpg_world.application.llm.wiring.episodic_stack import (
-        build_episodic_stack,
-    )
     # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
     # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
-    # prompt dataset の各行と episodic の stack も being_id を要るので、どちらより先に組む。
+    # prompt dataset の各行も being_id を要るので、それより先に組む。
     # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
     # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
     runtime._wire_being_stack()
@@ -7011,128 +6962,6 @@ def create_world_runtime(
                 f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
                 "渡せない"
             ) from exc
-    if config.episodic_enabled:
-        # Issue #295 後続: LLM 主観文付与の opt-in 配線。
-        # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
-        # が取れるときだけ chunk write 後に裏で LLM が走り、interpreted /
-        # recall_text を上書きする。失敗時は #305 でテンプレ既定値が draft に
-        # 入っているのでそのまま流れる。
-        # PR #309: 同期で LLM を待つとゲーム tick が止まる (1〜3 秒)。
-        # ThreadPoolEpisodicSubjectiveScheduler で裏に逃がし、完了時に
-        # episode_store を同じ episode_id で上書きする (Pattern A:
-        # Fire-and-forget + eventual consistency)。
-        subjective_scheduler = None
-        persona_provider: Callable[[PlayerId], str] | None = None
-        shared_episode_store = None  # scheduler が wire されたときだけ事前生成
-        if config.episodic_subjective_enabled:
-            from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-                EpisodicChunkSubjectiveFieldsService,
-            )
-            from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
-                ThreadPoolEpisodicSubjectiveScheduler,
-            )
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-            try:
-                _client = create_llm_client_from_config(
-                    config, aux_call_sink=aux_llm_call_sink
-                )
-            except Exception:
-                logger.exception("LLM client factory failed; subjective service disabled")
-                _client = None
-            if isinstance(_client, LiteLLMClient):
-                # subjective service は scheduler 内部に閉じ込める。
-                # episode_store は build_episodic_stack 内で作るが、
-                # scheduler に渡す必要があるので先に作ってから stack 構築側に
-                # 渡したい — が wiring の都合で一旦同じ store を共有する経路
-                # にしておく (= scheduler は episode_store への参照を持ち、
-                # stack 側も同じ store を使う)。
-                # 簡潔さ優先で「stack を組んでから scheduler を作って差し戻す」
-                # 二段階構築は避け、ここで store を先に作って両方に渡す。
-                from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-                    InMemorySubjectiveEpisodeStore,
-                )
-
-                shared_episode_store = InMemorySubjectiveEpisodeStore()
-                _subjective_service = EpisodicChunkSubjectiveFieldsService(
-                    _client,
-                )
-                # scheduler と chunk_coordinator (= stack) が同じ store を
-                # 共有することで、worker が書き込んだ merged episode を
-                # chunk の書き込みと同じ store で扱える ( = Pattern A の整合性条件)。
-                # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
-                # 触る。being_id は chunk_coordinator から submit 引数で渡される。
-                subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
-                    _subjective_service,
-                    shared_episode_store,
-                    max_workers=1,
-                    max_queue_size=100,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                )
-                # 各 player の persona_block を player_id 引きで返す provider。
-                # world_character (= 操作対象) は rich persona、その他は spawn 名
-                # 由来の fallback persona になっている personas_by_player_id
-                # と同じ規則で組み立てる。
-                _persona_by_pid: dict[int, str] = {}
-                if len(scenario.player_spawns) > 1 and world_character is not None:
-                    ec_cid = (world_character.character_id or "").strip()
-                    ec_name = (world_character.name or "").strip()
-                    for s in scenario.player_spawns:
-                        if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
-                            _persona_by_pid[int(s.player_id)] = persona_block
-                        else:
-                            _persona_by_pid[int(s.player_id)] = (
-                                build_persona_block_from_character(
-                                    None, fallback_display_name=s.name
-                                )
-                            )
-                elif scenario.player_spawns:
-                    # 単独 spawn (旧来構成) や world_character 未指定: 全 player に
-                    # 既存の persona_block を流用 (fallback 含む)
-                    for s in scenario.player_spawns:
-                        _persona_by_pid[int(s.player_id)] = persona_block
-                persona_provider = lambda pid, _d=_persona_by_pid: _d.get(int(pid.value), "")
-            else:
-                logger.info(
-                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
-                    "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
-                )
-        runtime._episodic_stack = build_episodic_stack(
-            scenario=scenario,
-            graph=spot_graph_repo.find_graph(),
-            observation_buffer=obs_buffer,
-            short_term_memory=short_term_memory,
-            action_result_store=action_result_store,
-            # trace_recorder は set_trace_recorder で後から差し込まれるので
-            # provider 経由で参照。chunk 書き込みごとに
-            # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
-            trace_recorder_provider=lambda: runtime._trace_recorder,
-            current_tick_provider=runtime.current_tick,
-            subjective_completion_scheduler=subjective_scheduler,
-            persona_block_provider=persona_provider,
-            episode_store=shared_episode_store,
-            # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
-            # world_object 名を index できるようにする。SpotNode.interior は
-            # 実 runtime では None で保管され、別 repository に格納されている。
-            spot_interior_repo=spot_interior_repo,
-            # #526 後続 C2: chunk write 時の player 現在状況 (場所 / 視界 object
-            # / 同席者) を episode の固定 cue として焼き付けるための provider。
-            # runtime.build_llm_context(pid).tool_runtime_context を返す lambda
-            # を渡す。例外ハンドリングは builder 側で graceful に行う。
-            runtime_context_provider=lambda pid: runtime.build_llm_context(
-                pid
-            ).tool_runtime_context,
-            # episode store の永続化先。subjective 経路は shared_episode_store を
-            # 先に組んで渡すため resolve_default はそれを尊重する (db_path 未使用)。
-            # config の __post_init__ が「db_path + subjective」の無視組み合わせを
-            # fail-fast 済みなので、ここに来る db_path は非 subjective 経路のみ。
-            subjective_episode_db_path=config.subjective_episode_db_path,
-        )
-
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。

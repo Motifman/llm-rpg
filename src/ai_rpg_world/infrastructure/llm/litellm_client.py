@@ -36,9 +36,6 @@ from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetricsSink,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
@@ -295,7 +292,6 @@ _Result = TypeVar("_Result")
 
 class LiteLLMClient(
     ILLMClient,
-    IEpisodicChunkSubjectiveCompletionPort,
     IShortTermMemorySummaryCompletionPort,
     IShortTermMemoryLongSummaryCompletionPort,
     EpisodeWritingCompletion,
@@ -983,13 +979,6 @@ class LiteLLMClient(
             return float(cost)
         except (TypeError, ValueError):
             return 0.0
-
-    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
-        """
-        tools 無しで JSON object を強制する chat completion を行いパース済み dict を返す。
-        失敗や不正 JSON ではここでは補完せず LlmApiCallException を送出し、呼び出し元が草案テンプレへフォールバックする。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.EPISODE_SUBJECTIVE)
 
     def _complete_aux_json(
         self,

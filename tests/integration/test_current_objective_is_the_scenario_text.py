@@ -15,7 +15,7 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.runtime_config_helpers import episodic_config
+from tests.runtime_config_helpers import runtime_config
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _SCENARIO_FILES = sorted(
@@ -46,7 +46,7 @@ def test_every_scenario_is_checked() -> None:
 @pytest.mark.parametrize("scenario_file", _SCENARIO_FILES)
 def test_current_objective_is_the_text_written_in_the_scenario(scenario_file: str) -> None:
     """各プレイヤーの【現在の目的】の直後に、シナリオに書いた目的の文がそのまま載る。"""
-    runtime = create_world_runtime(_SCENARIOS / scenario_file, config=episodic_config())
+    runtime = create_world_runtime(_SCENARIOS / scenario_file, config=runtime_config())
     written = _written_objectives(scenario_file)
     string_ids = {spawn.player_id: spawn.string_id for spawn in runtime.scenario.player_spawns}
 

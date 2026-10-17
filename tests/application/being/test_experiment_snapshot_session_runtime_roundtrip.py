@@ -48,7 +48,7 @@ _SCENARIO_NAME = "forbidden_library_demo"
 
 def _snapshot_runtime_config() -> Any:
     """本命観察 run 周辺で使う per-Being store を実体化する設定を返す。"""
-    return runtime_config(episodic_enabled=True)
+    return runtime_config()
 
 
 def _create_runtime() -> Any:
