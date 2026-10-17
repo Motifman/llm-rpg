@@ -32,9 +32,6 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -176,23 +173,6 @@ def _populate_runtime_state(runtime: Any) -> None:
         "再開後も忘れてはいけない作業",
         current_tick=37,
     )
-    runtime._episodic_stack.semantic_memory_store.add_by_being(
-        being_id,
-        SemanticMemoryEntry(
-            entry_id="sem-runtime-1",
-            player_id=player_id.value, being_id=BeingId(f"being_w1_p{player_id.value}"),
-            text="古い棚には鍵が隠れていることがある",
-            evidence_episode_ids=("ep-runtime-1",),
-            confidence=0.72,
-            created_at=_NOW,
-            importance_score=8,
-            tags=("library",),
-        ),
-    )
-    runtime._episodic_stack.semantic_memory_store.register_cluster_signature_if_new_by_being(
-        being_id,
-        "spot:ancient_archive|tool:interact",
-    )
 
 
 def _world_snapshot_payload(runtime: Any, session: ExperimentSnapshotSession) -> dict[str, Any]:
@@ -221,8 +201,7 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
 
     world 側は tick / 位置 / HP / needs / inventory / item_instance /
     spot_interior / sliding_window / action_result / encounter を、Being 側は
-    semantic / goal を含む snapshot payload
-    一式を照合する。
+    memo / 知り合いを含む snapshot payload 一式を照合する。
     """
     source_runtime = _create_runtime()
     _populate_runtime_state(source_runtime)
@@ -298,6 +277,5 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
 
     being_payload = expected_memory["being_w1_p1"]
     assert being_payload["memo"][0]["content"] == "再開後も忘れてはいけない作業"
-    assert being_payload["semantic_entries"][0]["entry_id"] == "sem-runtime-1"
     assert "pending_predictions" not in being_payload
     assert [a["name"] for a in being_payload["acquaintances"]] == ["リン"]

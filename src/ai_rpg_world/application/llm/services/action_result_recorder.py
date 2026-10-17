@@ -37,7 +37,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class ActionResultRecorder:
-    """action 記録 + chunk write + semantic promotion を束ねる (escape baseline 順序)。"""
+    """action 記録 + chunk write を束ねる (escape baseline 順序)。"""
 
     def __init__(
         self,

@@ -13,17 +13,11 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
 )
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-    InMemorySemanticMemoryStore,
-)
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
-)
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    SemanticMemoryRepository,
 )
 
 
@@ -42,18 +36,15 @@ class EpisodicMemoryLinkBundle:
     link_service: EpisodicMemoryLinkApplicationService
     passive_recall: EpisodicPassiveRecallRetrievalService
 
-def default_link_and_semantic_stores_for_episode_store(
+def default_link_store_for_episode_store(
     episode_store: EpisodicEpisodeRepository,
-) -> tuple[MemoryLinkRepository, SemanticMemoryRepository]:
+) -> MemoryLinkRepository:
     """
     エピソードストアが SqliteSubjectiveEpisodeStore のとき、同一 DB 接続に
-    MemoryLink / セマンティック表を同居させる。それ以外はインメモリ。
+    MemoryLink 表を同居させる。それ以外はインメモリ。
     """
     from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (
         SqliteMemoryLinkStore,
-    )
-    from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import (
-        SqliteSemanticMemoryStore,
     )
     from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
         SqliteSubjectiveEpisodeStore,
@@ -61,8 +52,8 @@ def default_link_and_semantic_stores_for_episode_store(
 
     if isinstance(episode_store, SqliteSubjectiveEpisodeStore):
         conn = episode_store.connection
-        return SqliteMemoryLinkStore(conn), SqliteSemanticMemoryStore(conn)
-    return InMemoryMemoryLinkStore(), InMemorySemanticMemoryStore()
+        return SqliteMemoryLinkStore(conn)
+    return InMemoryMemoryLinkStore()
 
 
 def build_episodic_memory_link_bundle(

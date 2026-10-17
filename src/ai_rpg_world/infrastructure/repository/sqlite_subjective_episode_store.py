@@ -458,8 +458,10 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
                 raise TypeError("episodes elements must be SubjectiveEpisode")
             if ep.being_id != being_id:
                 raise ValueError("episode.being_id must match store being_id")
-        # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
-        # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
+        # 注意: sqlite3 module は ``isolation_level=''`` (deferred) で動いており、
+        # 最初の DML が implicit transaction を開く。明示的に ``BEGIN`` を打つと
+        # 「既に txn 内」のケースで OperationalError になるので、ここでは打たない。
+        # 失敗時に rollback する範囲は本メソッド内の全 DML になる。
         try:
             cur = self._conn.cursor()
             cur.execute(

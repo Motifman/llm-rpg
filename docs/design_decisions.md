@@ -609,6 +609,8 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 
 **その後**: 再解釈の保存先を消したので、CLI の `--reinterpretation-db` を Issue #1631 で外した。見出しと本文の「4 SQLite DB」は消す前の構成で、いまは 3 つの SQLite DB と in-memory memo で動く。
 
+**その後**: 意味記憶の store (`SqliteSemanticMemoryStore`) は記憶の部品の撤去 (#1631) の #1794 で消した。`--memory-db` の SQLite ファイルにはいま memory_link だけが入る。意味記憶の表を作る版はマイグレーションの履歴として残るので、古い DB ファイルも開ける。
+
 ---
 
 ## 9. 速度より「LLM の判断ミス」を優先して直す
@@ -5235,6 +5237,8 @@ VO に復元する (スキーマ変更は不要)。
 
 クラスタ昇格と gist (`SEMANTIC_LLM_GIST_ENABLED`) も #1792 で消したので、意味記憶エントリを書く部品は無くなった。意味記憶の store は続く PR で消す。
 
+意味記憶エントリ (`SemanticMemoryEntry`) と、その store・Being の snapshot のキー `semantic_entries` / `semantic_cluster_signatures` は #1794 で消した。消す前の snapshot も読める。
+
 ## 209. 再解釈エントリに経験の主体 BeingId を載せる
 
 **何を**: `EpisodicReinterpretationEntry` に必須フィールド `being_id: BeingId`
@@ -6442,6 +6446,8 @@ snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。sn
 #1443 (予期の外れを証拠につなぐ) / #1453 (作る前の判断)。
 
 **その後**: 証拠のバッファ (`BeliefEvidence`、`BELIEF_EVIDENCE_ENABLED`) は、読み手の固着を #1790 で消したあと、記憶の部品の撤去 (#1631) の #1792 で消した。Being の snapshot のキー `belief_evidence_buffer` / `belief_evidence_received_event_ids` も外した。消す前の snapshot も読める。信念の `last_observed_turn` は、意味記憶の store と一緒に続く PR で消す。
+
+信念の `last_observed_turn` も、意味記憶エントリと一緒に #1794 で消した。
 
 ## D1441. 予期は環境の tool の引数として一律に書かせ、その手のターンの予期として積む
 

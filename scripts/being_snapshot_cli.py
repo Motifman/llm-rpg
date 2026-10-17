@@ -74,9 +74,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (  # 
 from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (  # noqa: E402
     SqliteMemoryLinkStore,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import (  # noqa: E402
-    SqliteSemanticMemoryStore,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (  # noqa: E402
     SqliteSubjectiveEpisodeStore,
 )
@@ -101,11 +98,8 @@ def _build_stack(
     """
     being_repo = SqliteBeingRepository.connect(str(being_db))
 
-    semantic_conn = sqlite3.connect(str(memory_db), check_same_thread=False)
-    semantic_store = SqliteSemanticMemoryStore(semantic_conn)
-    memory_link_store = SqliteMemoryLinkStore(semantic_conn)
-    # semantic / memory_link は同一接続を共有 (= apply_memory_graph_migrations
-    # が共通の memory_graph schema を扱うため)
+    memory_conn = sqlite3.connect(str(memory_db), check_same_thread=False)
+    memory_link_store = SqliteMemoryLinkStore(memory_conn)
 
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
 
@@ -124,7 +118,6 @@ def _build_stack(
 
     memory_snapshot = BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
-        semantic_store=semantic_store,
         memory_link_store=memory_link_store,
         episodic_episode_store=episode_store,
         acquaintance_store=InMemoryAcquaintanceRepository(),
@@ -146,7 +139,7 @@ def _add_db_args(parser: argparse.ArgumentParser) -> None:
         "--memory-db",
         type=Path,
         required=True,
-        help="semantic + memory_link を保持する SQLite ファイル (memory_graph schema)",
+        help="memory_link を保持する SQLite ファイル (memory_graph schema)",
     )
     parser.add_argument(
         "--episode-db",

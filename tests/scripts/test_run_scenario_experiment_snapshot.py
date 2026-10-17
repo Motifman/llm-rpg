@@ -53,8 +53,7 @@ class TestWiringStub:
         assert stub.being_repository == "repo-handle"
         assert stub.being_attachment_resolver == "resolver-handle"
         assert stub.episodic_episode_store is episode_store
-        # 他 5 store は world_runtime 経路では拾えないので None
-        assert stub.semantic_memory_store is None
+        # link store は episodic stack が持たないので None
         assert stub.memory_link_store is None
 
     def test_episodic_stack_none_episode_store_none(self) -> None:
@@ -124,9 +123,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
         )
-        from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-            InMemorySemanticMemoryStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
         )
@@ -151,7 +147,6 @@ class TestExpectedPayloadKeysCoverage:
         # 揃える。
         episodic_stack = SimpleNamespace(
             episode_store=InMemorySubjectiveEpisodeStore(),
-            semantic_memory_store=InMemorySemanticMemoryStore(),
             memory_link_store=InMemoryMemoryLinkStore(),
             )
         return SimpleNamespace(

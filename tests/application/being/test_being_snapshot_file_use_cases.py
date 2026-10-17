@@ -1,7 +1,6 @@
 """capture / restore use case の round-trip 挙動 (Phase 5)。"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,6 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import RestoreBeingSnapshotFromFileUseCase
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -26,25 +24,22 @@ from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachm
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
-_NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_environment():
     """新規 store 群 + 2 use case + gateway を組んで返す。"""
     repo = InMemoryBeingRepository()
     memo = InMemoryMemoStore()
-    semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
     episode = InMemorySubjectiveEpisodeStore()
-    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
     restore = RestoreBeingSnapshotFromFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
-    return {'repo': repo, 'memo': memo, 'semantic': semantic, 'link': link, 'episode': episode, 'capture': capture, 'restore': restore}
+    return {'repo': repo, 'memo': memo, 'link': link, 'episode': episode, 'capture': capture, 'restore': restore}
 
 def _make_being() -> Being:
     return Being(being_id=BeingId('being_w1_p1'), identity=BeingIdentity(name='アダ', first_person='わたし'), attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)), declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SEMANTIC])
@@ -80,7 +75,6 @@ class TestRestoreUseCase:
         being = _make_being()
         src['repo'].save(being)
         src['memo'].add_by_being(being.being_id, 'Adventure')
-        src['semantic'].add_by_being(being.being_id, SemanticMemoryEntry(entry_id='s1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='森は東', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=_NOW))
         snap_path = tmp_path / 'snap.json'
         src['capture'].execute(being.being_id, snap_path)
         dst = _make_environment()
@@ -88,8 +82,6 @@ class TestRestoreUseCase:
         assert result.memory_restored is True
         memos = dst['memo'].list_all_by_being(being.being_id)
         assert [m.content for m in memos] == ['Adventure']
-        sems = dst['semantic'].list_for_being(being.being_id)
-        assert [e.entry_id for e in sems] == ['s1']
         loaded = dst['repo'].find_by_id(being.being_id)
         assert loaded is not None
         assert loaded.identity.name == 'アダ'

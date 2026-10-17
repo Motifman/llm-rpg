@@ -20,16 +20,17 @@ from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachm
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
+    MemoryLink,
+    MemoryLinkType,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
     SqliteBeingRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import (
-    SqliteSemanticMemoryStore,
+from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (
+    SqliteMemoryLinkStore,
 )
 
 
@@ -55,27 +56,31 @@ def _populate_source_dbs(
     being_db: Path,
     memory_db: Path,
 ) -> BeingId:
-    """source 側 sqlite DB 群に Being + semantic を書き込み、その being_id を返す。"""
+    """source 側 sqlite DB 群に Being + memory link を書き込み、その being_id を返す。"""
     repo = SqliteBeingRepository.connect(str(being_db))
     being = Being(
         being_id=BeingId("being_w1_p1"),
         identity=BeingIdentity(name="アダ", first_person="わたし"),
         attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)),
-        declared_memory_kinds=[MemoryKind.SEMANTIC],
+        declared_memory_kinds=[MemoryKind.EPISODIC],
     )
     repo.save(being)
 
-    sem_conn = sqlite3.connect(str(memory_db), check_same_thread=False)
-    sem = SqliteSemanticMemoryStore(sem_conn)
-    sem.add_by_being(
+    memory_conn = sqlite3.connect(str(memory_db), check_same_thread=False)
+    SqliteMemoryLinkStore(memory_conn).upsert_link_by_being(
         being.being_id,
-        SemanticMemoryEntry(
-            entry_id="s-cli",
-            player_id=1, being_id=BeingId(f"being_w1_p1"),
-            text="CLI 経由でも生き残る",
-            evidence_episode_ids=("ep-1",),
-            confidence=0.9,
+        MemoryLink(
+            link_id="mlk-cli",
+            player_id=1,
+            being_id=being.being_id,
+            episode_id_a="ep-1",
+            episode_id_b="ep-2",
+            link_type=MemoryLinkType.CO_RECALL,
+            strength=0.9,
+            co_activation_count=1,
             created_at=_NOW,
+            last_activated_at=_NOW,
+            decay_rate=0.001,
         ),
     )
     return being.being_id
@@ -117,7 +122,7 @@ class TestBeingSnapshotCliEndToEnd:
         data = json.loads(snapshot_json.read_text(encoding="utf-8"))
         assert data["snapshot_version"] == 2
         assert data["memory_payload_json"] is not None
-        assert "CLI 経由でも生き残る" in data["memory_payload_json"]
+        assert "mlk-cli" in data["memory_payload_json"]
 
         # 別 DB ファイルに load。
         dst_being_db = tmp_path / "dst_beings.db"
@@ -138,16 +143,15 @@ class TestBeingSnapshotCliEndToEnd:
         )
         assert rc == 0
 
-        # dst 側 DB に Being と semantic が復元されている。
+        # dst 側 DB に Being と memory link が復元されている。
         dst_repo = SqliteBeingRepository.connect(str(dst_being_db))
         loaded = dst_repo.find_by_id(being_id)
         assert loaded is not None
         assert loaded.identity.name == "アダ"
 
-        dst_sem_conn = sqlite3.connect(str(dst_memory_db), check_same_thread=False)
-        dst_sem = SqliteSemanticMemoryStore(dst_sem_conn)
-        entries = dst_sem.list_for_being(being_id)
-        assert [e.entry_id for e in entries] == ["s-cli"]
+        dst_memory_conn = sqlite3.connect(str(dst_memory_db), check_same_thread=False)
+        links = SqliteMemoryLinkStore(dst_memory_conn).list_all_links_for_being(being_id)
+        assert [link.link_id for link in links] == ["mlk-cli"]
 
     def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""
