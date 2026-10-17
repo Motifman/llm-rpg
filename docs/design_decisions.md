@@ -1543,6 +1543,8 @@ capture も episodic 記憶も無効な構成でも、いまは起動時に配�
 Being が持つようになり (design_decisions D1520)、初期配置の同席を最初の手番より前に
 Being へ記録するため。
 
+**その後**: `PROMPT_DATASET_CAPTURE_ENABLED` は記憶ではない設定の片付け (#1631) の #1795 で消し、`make experiment` の run はいつも保存する。起動時の Being の配線も、条件の無い 1 か所にまとめた。
+
 ## 53. semantic top-K は選抜順位と表示順を分ける
 
 `【関連する学び】` の候補は recency、importance、relevance の score で top-K を

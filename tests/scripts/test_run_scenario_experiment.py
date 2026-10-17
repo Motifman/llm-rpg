@@ -753,7 +753,6 @@ class TestExperimentProfileManifest:
         runtime_config = profile["runtime_config"]
 
         assert runtime_config["LLM_EPISODIC_ENABLED"] is False
-        assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
     def test_station_drill_lean_keeps_the_long_run_comparison_conditions(

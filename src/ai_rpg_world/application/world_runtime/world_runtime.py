@@ -7114,34 +7114,23 @@ def create_world_runtime(
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         build_episodic_stack,
     )
-    # prompt dataset は記憶機能ではないが、各行へ安定した being_id を保存する。
-    # episodic の親 gate に入れると lean profile では最初の LLM 呼び出しまで
-    # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
-    # 補助 Being を起動時に構築し、全参加者を fail-fast で provision する。
-    if config.prompt_dataset_capture_enabled:
-        runtime._wire_being_stack()
-        for s in getattr(scenario, "player_spawns", ()):
+    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
+    # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
+    # prompt dataset の各行と episodic の stack も being_id を要るので、どちらより先に組む。
+    # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
+    # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
+    runtime._wire_being_stack()
+    for spawn in scenario.player_spawns:
+        try:
             runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(s.player_id))
+                PlayerId(int(spawn.player_id))
             )
+        except Exception as exc:
+            raise RuntimeError(
+                f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
+                "渡せない"
+            ) from exc
     if config.episodic_enabled:
-        # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler は
-        # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線
-        # を早期に確立し、各 player_spawn 分の Being を provision しておく。
-        if not config.prompt_dataset_capture_enabled:
-            runtime._wire_being_stack()
-            for s in getattr(scenario, "player_spawns", ()):
-                try:
-                    runtime._aux_being_provisioning.ensure_attached(
-                        PlayerId(int(s.player_id))
-                    )
-                except Exception:
-                    logger.exception(
-                        "world_runtime: Being provision failed for player_id=%s (chunk "
-                        "coordinator は silent skip するが、episode が書かれない)",
-                        s.player_id,
-                    )
-
         # Issue #295 後続: LLM 主観文付与の opt-in 配線。
         # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
         # が取れるときだけ chunk write 後に裏で LLM が走り、interpreted /
@@ -7270,21 +7259,6 @@ def create_world_runtime(
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
 
-    # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
-    # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
-    # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
-    # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
-    runtime._wire_being_stack()
-    for spawn in scenario.player_spawns:
-        try:
-            runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(spawn.player_id))
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
-                "渡せない"
-            ) from exc
     runtime._wire_auxiliary_tool_stack()
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
