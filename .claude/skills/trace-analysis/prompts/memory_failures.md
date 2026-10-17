@@ -9,8 +9,8 @@
 ## 着目すべき event
 
 - `episodic_recall`: passive recall の結果。`payload.recalled_episodes` / `payload.candidates` 等。受動想起は #1631 で消したので、それより後の trace には出ない (出ないのが正常)
-- `episodic_chunk_written`: 新しい episode の生成
-- `episodic_subjective_filled`: subjective field (= chunk の意味付け) の埋め込み
+- `episodic_chunk_written`: 新しい episode の生成。古いエピソードは #1631 で消したので、それより後の trace には出ない (出ないのが正常)
+- `episodic_subjective_filled`: subjective field (= chunk の意味付け) の埋め込み。同じく #1631 前の trace のみ
 - `short_term_summary_generated`: L4 short-term summary 更新
 - `short_term_long_summary_generated`: L5 long summary 生成
 - `memo_add` / `memo_done`: agent 起点 memo
@@ -25,7 +25,7 @@
 - **D-26 recall habituation の効果** (#1631 前の trace のみ): 同じ episode が連続採用されてないか
 - **D-27 recall slot 動作** (#1631 前の trace のみ): working memory の保持 / 入れ替わり
 - **D-28 afterglow / score 構造** (afterglow は #1631 前の trace のみ): 採用候補・非採用候補のスコア構造が観測できるか
-- **D-29 episodic_chunk_written と subjective_filled の 1:1 整合**: episode_id ベースで diff
+- **D-29 episodic_chunk_written と subjective_filled の 1:1 整合** (#1631 前の trace のみ): episode_id ベースで diff
 - **D-30 short / long summary クオリティ**: 1-2 件の中身評価
 - **D-31 memo 重複と done balance**: 同じ memo を何度も add してないか
 - **D-32 失敗の記憶化** (#1631 前の trace のみ): recall に失敗エピソードが出ているか (= 学習する記憶か)

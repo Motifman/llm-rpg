@@ -9,7 +9,7 @@
 
 ``TestExpectedPayloadKeysCoverage`` は CLAUDE.md checklist #27 (per-Being
 store 追加時は snapshot 配線まで 1 PR にまとめる) の追従漏れを構造で検出する
-契約テスト。episodic_stack / runtime が持つ全 store を stub 経由で
+契約テスト。runtime が持つ全 store を stub 経由で
 ``ExperimentSnapshotSession`` まで運べているかを、fallback ログの有無で確認
 する。過去に想起階層の 3 store (#1631 で消した) が拾われずに空 fallback へ
 倒れていた実欠落を検出できる形で書いている。
@@ -67,14 +67,14 @@ class TestExpectedPayloadKeysCoverage:
     """checklist #27 の追従漏れを構造で検出する契約テスト。
 
     ``BeingMemorySnapshotService`` が対応する per-Being store が
-    ``episodic_stack`` / ``runtime`` 側に揃っているにもかかわらず、
+    ``runtime`` 側に揃っているにもかかわらず、
     ``_wiring_stub_from_world_runtime`` がそれを拾い忘れていると
     ``ExperimentSnapshotSession`` は空 in-memory store に fallback する
     (= 実験の save/load でその store の状態が無音で失われる)。
 
     このテストは「stub が拾うべき store 名の一覧」を
     ``ExperimentSnapshotSession`` の fallback 監視対象リストと同じ形で持ち、
-    episodic_stack 側に **全部揃っている** 状態を作って
+    runtime 側に **全部揃っている** 状態を作って
     ``ExperimentSnapshotSession`` を構築し、fallback ログが 1 件も出ない
     ことを確認する。新しい per-Being store を追加したのに stub 側の pickup
     を足し忘れると、このテストが red で知らせる。

@@ -109,7 +109,7 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 - D-26 recall habituation 効果 (#1631 前の trace のみ)
 - D-27 recall slot 動作 (#1631 前の trace のみ)
 - D-28 afterglow / score 構造 (afterglow は #1631 前の trace のみ)
-- D-29 episodic_chunk_written と subjective_filled の整合
+- D-29 episodic_chunk_written と subjective_filled の整合 (#1631 で古いエピソードを消す前の trace のみ)
 - D-30 short / long summary クオリティ
 - D-31 memo 重複と done balance
 - D-32 失敗の記憶化
