@@ -83,7 +83,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENAI_API_BASE",
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
-    "PROMPT_DATASET_CAPTURE_ENABLED",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
@@ -215,7 +214,6 @@ class ResolvedLlmRuntimeConfig:
     # #1628: メモ帳と、環境の tool に付ける引数 memo。今のメモの道具とは並べない。
     being_memo_enabled: bool = False
     scenario_random_seed: int | None = None
-    prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
     # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
     # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
@@ -463,9 +461,6 @@ class ResolvedLlmRuntimeConfig:
         except ValueError as exc:
             raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
-        prompt_dataset_capture_enabled = _parse_truthy(
-            source.get("PROMPT_DATASET_CAPTURE_ENABLED"), default=False
-        )
         prompt_dataset_capture_failure_policy = (
             source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
         ).strip().lower()
@@ -535,7 +530,6 @@ class ResolvedLlmRuntimeConfig:
             memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
             scenario_random_seed=scenario_random_seed,
-            prompt_dataset_capture_enabled=prompt_dataset_capture_enabled,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
             subjective_episode_db_path=subjective_episode_db_path,
@@ -606,7 +600,6 @@ class ResolvedLlmRuntimeConfig:
             memo_tools_enabled=True,
             being_memo_enabled=False,
             scenario_random_seed=None,
-            prompt_dataset_capture_enabled=False,
             prompt_dataset_capture_failure_policy="fail",
             reason_first_two_step_enabled=False,
             subjective_episode_db_path=None,
