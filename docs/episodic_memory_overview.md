@@ -212,6 +212,9 @@ scene 境界とは別概念。現実装では `breaks_movement` のみが SALIEN
 
 ### 5.1 環境変数
 
+`LLM_EPISODIC_ENABLED` と `LLM_EPISODIC_SUBJECTIVE_ENABLED` は Issue #1631 の #PRNUM で外した。いまは
+profile に書くと未知のキーとして起動前に止まる。下の表は外す前の記録である。
+
 | 変数 | 既定 | 説明 |
 |---|---|---|
 | `LLM_EPISODIC_ENABLED` | unset (= off) | episodic pipeline 全体の on/off |

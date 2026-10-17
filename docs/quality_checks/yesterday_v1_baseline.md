@@ -14,8 +14,7 @@
 
 ## 初回 baseline (= PR #530 直後 / 主観時間も能動想起も未実装の状態)
 
-dump: [`yesterday_v1_in_window.prompt.txt`](./yesterday_v1_in_window.prompt.txt)
-[`yesterday_v1_out_of_window.prompt.txt`](./yesterday_v1_out_of_window.prompt.txt)
+dump (外した): `yesterday_v1_in_window.prompt.txt`、`yesterday_v1_out_of_window.prompt.txt`
 
 ### in_window 版 — 「素材は揃っているのに時系列ラベルが無い」
 

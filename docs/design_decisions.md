@@ -4435,7 +4435,7 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 **この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
 `on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
 
-**その後**: runtime は主観エピソード (`SubjectiveEpisode`) を書かなくなった (記憶の部品の撤去 (#1631) の #PRNUM)。区切りの書き起こし・主観補完・store は続く PR で消す。
+**その後**: runtime は主観エピソード (`SubjectiveEpisode`) を書かなくなった (記憶の部品の撤去 (#1631) の #PRNUM)。区切りの書き起こし・主観補完・store は続く PR で消す。 snapshot のキー `episodic_episodes` もそこで消す。それまでは空で書き出し、古い snapshot に入っているエピソードは読んでも空の store に戻るだけで、次に保存するときに無くなる。
 
 ## 175. 昇格フロンティアは BeingId で分ける
 
