@@ -8324,7 +8324,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 ## D1631-3. 推論の段階を書かない run は minimal で送る
 
-**何を**: `LLM_REASONING_EFFORT` を書かない設定は `minimal` になる (これまでは `none`)。キーは残し、`none` と書けば熟考なしのまま送る。#PRNUM で変えた。`LiteLLMClient` を直に組むときの引数の既定 (`none`) は変えていない。プローブ (`scripts/openrouter_ping.py`) と試験が使う。
+**何を**: `LLM_REASONING_EFFORT` を書かない設定は `minimal` になる (これまでは `none`)。キーは残し、`none` と書けば熟考なしのまま送る。#1798 で変えた。`LiteLLMClient` を直に組むときの引数の既定 (`none`) は変えていない。プローブ (`scripts/openrouter_ping.py`) と試験が使う。
 
 **なぜ**: 本命の profile をはじめ、実 LLM の run の多くは `minimal` を明示している。`none` で動かす profile も値を明示している。既定の `none` に頼っていたのは、stub の profile と、profile を通らない recall probe だけだった。書き忘れた run だけが熟考なしで走ると、比べたつもりの run と条件がずれる。
 
