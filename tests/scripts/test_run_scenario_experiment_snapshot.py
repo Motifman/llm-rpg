@@ -139,10 +139,10 @@ class TestExpectedPayloadKeysCoverage:
             if self._FALLBACK_LOG_MARKER in r.message
         ]
 
-    def test_episodic_stack_all_store_fallback_wired(
+    def test_runtime_with_all_stores_needs_no_fallback(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """episodic_stack / runtime に全 store が揃っていれば、stub 経由で
+        """runtime に全 store が揃っていれば、stub 経由で
         ExperimentSnapshotSession を構築しても空 in-memory fallback のログが
         1 件も出ない (= 追従漏れの store が無い)。"""
         from ai_rpg_world.application.being.experiment_snapshot_session import (
@@ -159,14 +159,14 @@ class TestExpectedPayloadKeysCoverage:
 
         fallback_logs = self._fallback_logs(caplog)
         assert fallback_logs == [], (
-            "episodic_stack / runtime に store があるのに stub が拾えず "
+            "runtime に store があるのに stub が拾えず "
             f"fallback している: {fallback_logs[0].args if fallback_logs else None}"
         )
 
     def test_store_one_fallback_log_rendered(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """episodic_stack から store を 1 つ欠いた状態では、fallback ログが
+        """runtime から store を 1 つ欠いた状態では、fallback ログが
         ``_FALLBACK_LOG_MARKER`` の文字列で実際に 1 件以上出る。
 
         本体テスト (fallback ログ 0 件で緑) の検出機構が文字列一致に依存する
