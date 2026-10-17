@@ -917,14 +917,14 @@ class TestExperimentProfileManifest:
         cfg = captured["runtime_config"]
         assert cfg.llm_client_kind == "stub"
         assert cfg.episodic_enabled is False
-        assert cfg.reason_first_two_step_enabled is False
+        assert cfg.reason_first_two_step_enabled is True
 
         resolved = json.loads(
             (out_dir / "experiment.config.resolved.json").read_text(encoding="utf-8")
         )
         assert resolved["profile"] == "smoke_stub"
         assert resolved["runtime_config"]["llm_client_kind"] == "stub"
-        assert resolved["runtime_config"]["reason_first_two_step_enabled"] is False
+        assert resolved["runtime_config"]["reason_first_two_step_enabled"] is True
         assert "sk-secret" not in json.dumps(resolved, ensure_ascii=False)
         assert resolved["scenario_sha256"]
         assert resolved["git"]["dirty"] in (True, False)

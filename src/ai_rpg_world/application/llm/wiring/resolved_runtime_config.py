@@ -84,7 +84,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
-    "REASON_FIRST_TWO_STEP_ENABLED",
     "SCENARIO_RANDOM_SEED",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
@@ -217,7 +216,8 @@ class ResolvedLlmRuntimeConfig:
     prompt_dataset_capture_failure_policy: str = "fail"
     # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
     # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
-    reason_first_two_step_enabled: bool = False
+    # 設定のキーは無く、llm_tool_choice から決める (_reason_first_two_step_enabled_for)。
+    reason_first_two_step_enabled: bool = True
 
     # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
     # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
@@ -464,17 +464,9 @@ class ResolvedLlmRuntimeConfig:
         prompt_dataset_capture_failure_policy = (
             source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
         ).strip().lower()
-        try:
-            reason_first_two_step_enabled = _parse_truthy(
-                source.get("REASON_FIRST_TWO_STEP_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"REASON_FIRST_TWO_STEP_ENABLED: {exc}") from exc
-        # reason-first の第1段は named tool_choice を使う。DeepSeek で
-        # thinking + named の対応を実 API なしに保証できないため、auto 比較腕では
-        # 2段階経路を実効 OFF にし、解決済み設定にも false として残す。
-        if llm_tool_choice == "auto":
-            reason_first_two_step_enabled = False
+        reason_first_two_step_enabled = _reason_first_two_step_enabled_for(
+            llm_tool_choice
+        )
         subjective_episode_db_path = _strip_or_none(
             source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
@@ -544,7 +536,8 @@ class ResolvedLlmRuntimeConfig:
         keyword で渡す。test fixture の肥大化を防ぐ。
 
         - LLM 系は全部 ``stub`` / None で「実 LLM を呼ばない」
-        - feature flag は全部 OFF
+        - feature flag は全部 OFF。reason-first 2段階ターンだけは設定で切れないので、
+          本番と同じく llm_tool_choice から決める
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
@@ -601,7 +594,7 @@ class ResolvedLlmRuntimeConfig:
             being_memo_enabled=False,
             scenario_random_seed=None,
             prompt_dataset_capture_failure_policy="fail",
-            reason_first_two_step_enabled=False,
+            reason_first_two_step_enabled=True,
             subjective_episode_db_path=None,
             world_tick_failure_policy=WorldTickFailurePolicy.ISOLATE.value,
         )
@@ -612,6 +605,10 @@ class ResolvedLlmRuntimeConfig:
                 f"valid: {sorted(defaults)}"
             )
         defaults.update(overrides)
+        if "reason_first_two_step_enabled" not in overrides:
+            defaults["reason_first_two_step_enabled"] = (
+                _reason_first_two_step_enabled_for(defaults["llm_tool_choice"])
+            )
         return cls(**defaults)
 
     # ──────────────────────────────────────────────────────────────
@@ -634,6 +631,16 @@ class ResolvedLlmRuntimeConfig:
 # ──────────────────────────────────────────────────────────────────
 # Internal helpers
 # ──────────────────────────────────────────────────────────────────
+
+
+def _reason_first_two_step_enabled_for(llm_tool_choice: str) -> bool:
+    """reason-first 2段階ターンを使うかを tool_choice から決める。
+
+    第1段は named tool_choice を使う。DeepSeek で thinking + named の対応を
+    実 API なしに保証できないため、auto 比較腕では 2段階経路を実効 OFF にし、
+    解決済み設定にも false として残す。
+    """
+    return llm_tool_choice != "auto"
 
 
 #: 型付き判断の provider。``llm`` は未実装なので受け取らない。受け取ると
