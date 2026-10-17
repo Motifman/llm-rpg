@@ -122,13 +122,13 @@ prompt dataset sink は LLM 呼び出しの本文・ツール定義・出力を�
 
 | キー | 既定 | 意味 |
 |---|---:|---|
-| `PROMPT_DATASET_CAPTURE_ENABLED` | (#PRNUM で消した) | プロンプト保存を有効化する。今はいつも保存する |
+| `PROMPT_DATASET_CAPTURE_ENABLED` | (#1795 で消した) | プロンプト保存を有効化する。今はいつも保存する |
 | `PROMPT_DATASET_CAPTURE_FORMAT` | `jsonl` | 実験中の追記形式。初期実装は `jsonl` のみ |
 | `PROMPT_DATASET_CAPTURE_FAILURE_POLICY` | `fail` | 保存失敗時に run を止めるか。`fail` / `warn` |
 | `PROMPT_DATASET_INCLUDE_TOOLS` | `true` | tool 定義を `toolsets.jsonl` に保存する |
 | `PROMPT_DATASET_INCLUDE_SYSTEM_PROMPTS` | `true` | system prompt を `system_prompts.jsonl` に保存する |
 
-**その後**: `PROMPT_DATASET_CAPTURE_ENABLED` は、記憶ではない設定の片付け (#1631) の #PRNUM で消した。`make experiment` の run は、いつもプロンプトを保存する。保存の失敗時の方針 `PROMPT_DATASET_CAPTURE_FAILURE_POLICY` は残る。
+**その後**: `PROMPT_DATASET_CAPTURE_ENABLED` は、記憶ではない設定の片付け (#1631) の #1795 で消した。`make experiment` の run は、いつもプロンプトを保存する。保存の失敗時の方針 `PROMPT_DATASET_CAPTURE_FAILURE_POLICY` は残る。
 
 `PROMPT_DATASET_CAPTURE_FORMAT=parquet` は実験中の直接出力ではなく、後段の
 export コマンドで扱う。実験中は append と壊れた行の調査がしやすい JSONL を使う。
@@ -868,7 +868,7 @@ run id を split に割り当てる。
 
 ## 失敗時の扱い
 
-`PROMPT_DATASET_CAPTURE_ENABLED=false` のときは何もしない (#PRNUM でキーを消し、今はいつも保存する)。
+`PROMPT_DATASET_CAPTURE_ENABLED=false` のときは何もしない (#1795 でキーを消し、今はいつも保存する)。
 
 `true` のとき:
 
