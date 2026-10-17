@@ -36,23 +36,15 @@ class TestFromEnvDefaults:
         assert cfg.episodic_subjective_enabled is True
         assert cfg.memo_tools_enabled is True
         assert cfg.scenario_random_seed is None
-        assert cfg.prompt_dataset_capture_enabled is False
         assert cfg.prompt_dataset_capture_failure_policy == 'fail'
         assert cfg.reason_first_two_step_enabled is False
 
 class TestPromptDatasetCaptureConfig:
-    """prompt dataset capture は episodic 記憶と独立して設定できる。"""
+    """prompt dataset の保存に失敗したときの方針を解決する。"""
 
-    def test_enabled_without_episodic_is_allowed(self) -> None:
-        """capture は記録機能なので episodic 無効でも有効化できる。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_DATASET_CAPTURE_ENABLED': '1'})
-        assert cfg.prompt_dataset_capture_enabled is True
-        assert cfg.episodic_enabled is False
-
-    def test_enabled_with_episodic_resolves_failure_policy(self) -> None:
-        """episodic 有効なら capture を有効化でき、保存失敗時方針も解決される。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'PROMPT_DATASET_CAPTURE_ENABLED': '1', 'PROMPT_DATASET_CAPTURE_FAILURE_POLICY': 'warn'})
-        assert cfg.prompt_dataset_capture_enabled is True
+    def test_failure_policy_resolves_to_warn(self) -> None:
+        """PROMPT_DATASET_CAPTURE_FAILURE_POLICY に warn を書くと、保存失敗時の方針が warn になる。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_DATASET_CAPTURE_FAILURE_POLICY': 'warn'})
         assert cfg.prompt_dataset_capture_failure_policy == 'warn'
 
 class TestWorldTickFailurePolicyConfig:
@@ -230,6 +222,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "OPENROUTER_REQUIRE_PARAMS",
             "DISTANT_VIEW_TRACE_ENABLED",
             "END_ON_ALL_DOWN",
+            "PROMPT_DATASET_CAPTURE_ENABLED",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",

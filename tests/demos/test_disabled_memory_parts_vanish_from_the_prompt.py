@@ -38,7 +38,6 @@ _BEING_MEMORY_PROFILE = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 _OFFLINE = {
     "LLM_CLIENT": "stub",
     "TYPED_JUDGMENT_PROVIDER": "stub",
-    "PROMPT_DATASET_CAPTURE_ENABLED": "false",
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED": "false",
 }
 

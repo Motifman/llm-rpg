@@ -1775,26 +1775,24 @@ def main(argv: list[str] | None = None) -> int:
         no_html=args.no_html,
         no_progress_jsonl=args.no_progress_jsonl,
     )
-    prompt_dataset_sink = None
-    if cfg.prompt_dataset_capture_enabled:
-        from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
-            PromptDatasetCaptureSink,
-        )
+    from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+        PromptDatasetCaptureSink,
+    )
 
-        prompt_dataset_sink = PromptDatasetCaptureSink(
-            run_dir=out_dir,
-            run_id=out_dir.name,
-            run_metadata={
-                "source_run_dir": str(out_dir),
-                "experiment_manifest_path": str(manifest_path),
-                "experiment_manifest_sha256": manifest_sha256,
-                "profile": config_source.get("profile"),
-                "scenario_path": str(args.scenario),
-                "scenario_sha256": _sha256_file(args.scenario),
-                "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
-            },
-            failure_policy=cfg.prompt_dataset_capture_failure_policy,
-        )
+    prompt_dataset_sink = PromptDatasetCaptureSink(
+        run_dir=out_dir,
+        run_id=out_dir.name,
+        run_metadata={
+            "source_run_dir": str(out_dir),
+            "experiment_manifest_path": str(manifest_path),
+            "experiment_manifest_sha256": manifest_sha256,
+            "profile": config_source.get("profile"),
+            "scenario_path": str(args.scenario),
+            "scenario_sha256": _sha256_file(args.scenario),
+            "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
+        },
+        failure_policy=cfg.prompt_dataset_capture_failure_policy,
+    )
 
     with JsonlTraceRecorder(trace_path) as rec:
         # PR #448: trace payload は cfg.to_trace_dict() で一括出力 + scenario /

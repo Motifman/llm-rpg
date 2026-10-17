@@ -103,7 +103,7 @@ def _load_calls(run_dir: Path) -> list[PromptCall]:
     path = dataset_dir / "calls.jsonl"
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} が無い。PROMPT_DATASET_CAPTURE_ENABLED=true で走らせた run を指定する。"
+            f"{path} が無い。prompt dataset を保存した run を指定する。"
         )
     system_prompts = _load_side_table(
         dataset_dir / "system_prompts.jsonl", "system_prompt_id"
