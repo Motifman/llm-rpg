@@ -14,8 +14,6 @@ drift between the code and the team's shared mental model.
 from __future__ import annotations
 
 import importlib
-import inspect
-from dataclasses import fields
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,25 +34,6 @@ def test_experiment_and_server_entrypoints_use_world_runtime() -> None:
     assert "GameRuntimeManager" in app
     assert "create_world_runtime" in manager
     assert "create_spot_graph_wiring" not in experiment
-
-
-def test_world_runtime_memory_stack_exposes_only_the_chunk_pipeline() -> None:
-    """world_runtime's episodic builder exposes the chunk pipeline and no memory link handle."""
-    from ai_rpg_world.application.llm.wiring.episodic_stack import (
-        EpisodicStack,
-        build_episodic_stack,
-    )
-
-    stack_fields = {field.name for field in fields(EpisodicStack)}
-    build_params = inspect.signature(build_episodic_stack).parameters
-
-    assert {
-        "chunk_coordinator",
-        "noun_matcher",
-        "episode_store",
-    } <= stack_fields
-    assert "memory_link_store" not in stack_fields
-    assert "semantic_enabled" not in build_params
 
 
 def test_full_wiring_is_retired() -> None:

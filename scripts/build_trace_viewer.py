@@ -1712,9 +1712,9 @@ def _event_timeline_category(e: TraceEvent) -> str:
     if kind in {TraceEventKind.MEMO_ADD, TraceEventKind.MEMO_DONE, TraceEventKind.MEMO_HINT}:
         return "memo"
     if kind in {
-        TraceEventKind.EPISODIC_CHUNK_WRITTEN,
-        # 受動想起【関連する記憶】と【関連する学び】は #1631 で消した。
-        # 過去の run の trace を読むために残す。
+        # 古いエピソードの区切りの書き込みと、受動想起【関連する記憶】【関連する学び】は
+        # #1631 で消した。過去の run の trace を読むために残す。
+        "episodic_chunk_written",
         "episodic_recall",
         "semantic_passive_recall",
         # 状況の項目から引く想起 (#1414) は #1631 で消した。過去の run の trace を読むために残す。
@@ -2004,8 +2004,8 @@ def _format_event_body(e: TraceEvent) -> str:
         if from_id is None:
             return f"spawn at {esc(to_name)}"
         return f"{esc(from_id)} → {esc(to_name)}"
-    if e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN:
-        # write 経路: どの境界理由で何が保存されたかの 1 行サマリ
+    if e.kind == "episodic_chunk_written":
+        # 古いエピソードの区切りの書き込み (#1631 で消した) の 1 行サマリ。過去の run の trace を読むために残す。
         ep_short = (payload.get("episode_id") or "")[:6]
         reason = payload.get("boundary_reason") or "?"
         snippet = (payload.get("recall_text_snippet") or "")[:60]

@@ -2979,6 +2979,8 @@ episode で誕生日衝突が起きて想起が別の出来事を引き当てる
 
 **その後**: handle を作っていた見出しの欄 (afterglow) は Issue #1631 の段 9 で消した。版を接尾辞で示す決まりはそのまま残し、handle の桁を確かめる試験は消した。
 
+**その後**: エピソードの同一性 (`episode_identity.py`) は、それを使う区切りの書き込みと一緒に記憶の部品の撤去 (#1631) の #1803 で消した。
+
 ## 110. 招集の判断材料には集合後の経過だけを末尾で渡す
 
 **何を**: 会議を使う世界の自由時間では、最後の会議終了からの経過を世界の分数で
@@ -3596,6 +3598,8 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 `WorldRuntime._record_action_result` の `_acting_being_for`。
 
 **その後**: 受動想起 (`EpisodicPassiveRecallRetrievalService` の `retrieve`) は記憶の部品の撤去 (#1631) の #1796 で消した。chunk の書き込みは残る。
+
+区切りの書き込み (`EpisodicChunkCoordinator`) と主観補完の scheduler も、#1803 で消した。
 
 ## 135. 応答として書かれた文を、常時出る注記に流用しない
 
@@ -4436,6 +4440,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 `on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
 
 **その後**: runtime は主観エピソード (`SubjectiveEpisode`) を書かなくなった (記憶の部品の撤去 (#1631) の #1801)。区切りの書き起こし・主観補完・store は続く PR で消す。 snapshot のキー `episodic_episodes` もそこで消す。それまでは空で書き出し、古い snapshot に入っているエピソードは読んでも空の store に戻るだけで、次に保存するときに無くなる。
+
+区切りの書き起こし・主観補完のサービスと scheduler は #1803 で消した。`SubjectiveEpisode` と store は段 12 の 3 本目で消す。
 
 ## 175. 昇格フロンティアは BeingId で分ける
 

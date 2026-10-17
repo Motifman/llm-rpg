@@ -5197,8 +5197,6 @@ def create_world_runtime(
         spot_id_value = int(body.spot_id) if body is not None else None
         structured = {
             "type": "fallen_body_found",
-            # actor / spot_id_value は episodic cue が読む key。ここを外すと
-            # 「誰の」「どこで」が記憶の索引に乗らない。
             "actor": name,
             "is_dead": bool(is_dead),
         }

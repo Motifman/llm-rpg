@@ -29,8 +29,6 @@ class _GamePhaseStoreStub:
 class _RuntimeStub:
     """実行方式の設定だけを持つ runtime 代役。"""
 
-    _episodic_stack = None
-
     def __init__(
         self,
         workers: int,
