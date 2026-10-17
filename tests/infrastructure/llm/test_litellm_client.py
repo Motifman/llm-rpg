@@ -757,12 +757,12 @@ class TestLiteLLMClientJsonCompletion:
     def client(self):
         return LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-dummy")
 
-    def test_subjective_json_completion_extracts_fenced_json(self, client):
+    def test_json_completion_extracts_fenced_json(self, client):
         """vLLM がコードフェンス付き JSON を返しても object を抽出する。"""
         content = '```json\n{"interpreted": "意味", "recall_text": "回想"}\n```'
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_episode_subjective_json(
+            result = client.complete_short_term_summary_json(
                 [{"role": "user", "content": "json"}],
             )
         assert result == {"interpreted": "意味", "recall_text": "回想"}

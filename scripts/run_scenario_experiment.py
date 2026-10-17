@@ -564,13 +564,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """
     from types import SimpleNamespace
 
-    # episode_store は _episodic_stack が None のときは None。
-    episodic_stack = getattr(runtime, "_episodic_stack", None)
-    episode_store = (
-        getattr(episodic_stack, "episode_store", None)
-        if episodic_stack is not None
-        else None
-    )
     # 注意: ``_aux_being_repository`` は private 属性 (public property なし)。
     # ``aux_being_resolver`` の方は public property があるのでそちらを使う。
     # 将来 ``aux_being_repository`` の public property が追加されたら同じ
@@ -579,7 +572,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     aux_repo = getattr(runtime, "_aux_being_repository", None)
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
-        episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
@@ -970,12 +962,7 @@ def _drive_scenario(
             skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None
         )
 
-        # Phase 6: snapshot save。**runtime.shutdown より前** に行う理由:
-        # async LLM scheduler の drain が終わると episode_store に最後の
-        # 主観文 episode が書き込まれる可能性があるが、その後に capture
-        # すると snapshot 経路が ``shutdown=True`` の store を触る恐れがある。
-        # 「shutdown 前の last consistent state」を写し取るのが安全。
-        # 失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
+        # Phase 6: snapshot save。失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
         # Phase 7: source_scenario を埋め込み + trace event 発行。
         if snapshot_session is not None and snapshot_save_dir is not None:
             try:
@@ -1081,22 +1068,6 @@ def _drive_scenario(
                         exc_info=True,
                     )
 
-        # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
-        # ジョブを drain してから return する。これをしないと、scenario 終了
-        # 直後に `with JsonlTraceRecorder` が close され、後追いで完了した worker
-        # が "recorder is already closed" RuntimeError に当たる (第21回/第22回
-        # 実験で各 2 件観測)。30s timeout は max latency (~14s) の余裕分。
-        shutdown = getattr(runtime, "shutdown", None)
-        if callable(shutdown):
-            try:
-                shutdown(timeout=30.0)
-            except Exception:
-                # shutdown 自体の失敗で trace 書き出しを止めない
-                logger.warning(
-                    "runtime.shutdown(timeout=30) raised; "
-                    "async LLM completions may not be fully drained",
-                    exc_info=True,
-                )
         # 実験用の差し替え runtime は持っていないことがある。0 件と区別するため None で返す。
         failure_counts_getter = getattr(runtime, "world_tick_failure_counts", None)
         world_tick_failure_counts = (
@@ -1140,7 +1111,8 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 
 _AUX_COMPONENT_LABELS: dict[str, str] = {
-    AuxLlmComponent.EPISODE_SUBJECTIVE.value: "主観の書き込み",
+    # 主観補完は #1631 で消した。消す前の run の report を読むために残す。
+    "episode_subjective": "主観の書き込み",
     AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
     AuxLlmComponent.SHORT_TERM_LONG_SUMMARY.value: "短期記憶の長い要約",
     AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",

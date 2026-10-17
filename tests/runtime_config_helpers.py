@@ -14,10 +14,4 @@ def runtime_config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
     return ResolvedLlmRuntimeConfig.for_tests(**overrides)
 
 
-def episodic_config(**overrides: Any) -> ResolvedLlmRuntimeConfig:
-    """episodic stack を組むテストの最小設定。"""
-    values: dict[str, Any] = {"episodic_enabled": True}
-    values.update(overrides)
-    return runtime_config(**values)
-
 

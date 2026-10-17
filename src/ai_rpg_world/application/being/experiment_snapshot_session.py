@@ -317,25 +317,20 @@ class ExperimentSnapshotSession:
                 f"{missing_required}."
             )
 
-        # 任意 store: 「未配線なら空 in-memory store で代用」する。episodic を
-        # 使わない構成でも snapshot を取れるようにするため (= 空の payload に
-        # なるが file の整合性は保たれる)。memo / episode は普段使うので強く
-        # 期待するが、None でも fallback できる方が安全。
+        # 任意 store: 「未配線なら空 in-memory store で代用」する (= 空の payload に
+        # なるが file の整合性は保たれる)。memo は普段使うので強く期待するが、None でも
+        # fallback できる方が安全。古いエピソードの store は #1631 で runtime が組まなく
+        # なったので、渡されなければ黙って空にする。キーは snapshot から消すまで残す。
         memo_store = wiring_result.memo_store or _empty_memo_store()
         episode_store = (
-            wiring_result.episodic_episode_store or _empty_episode_store()
+            getattr(wiring_result, "episodic_episode_store", None)
+            or _empty_episode_store()
         )
 
-        # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す
-        # = 「snapshot 取ったけど episode は空だった」のデバッグ材料。
+        # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す。
         fallback_used = [
             name
-            for name in (
-                "memo_store",
-                "episodic_episode_store",
-                # PR-G: 想起階層の store も fallback 監視対象に入れる。配線漏れで
-                # 空 store にフォールバックしたことを後追いできるようにする。
-            )
+            for name in ("memo_store",)
             if getattr(wiring_result, name, None) is None
         ]
         if fallback_used:

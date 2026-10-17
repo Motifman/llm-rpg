@@ -29,8 +29,6 @@ _BEING_MEMORY = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 
 #: 全部入りの run (mine_v1_006) が入れていて、この profile が止める古い記憶の部品。
 _OLD_MEMORY_PARTS_TURNED_OFF = frozenset({
-    "LLM_EPISODIC_ENABLED",
-    "LLM_EPISODIC_SUBJECTIVE_ENABLED",
     "MEMO_TOOLS_ENABLED",
 })
 
@@ -86,4 +84,3 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert cfg.being_episode_recall_max_handles == 3
         assert cfg.being_memo_enabled is True
         assert cfg.memo_tools_enabled is False
-        assert cfg.episodic_enabled is False

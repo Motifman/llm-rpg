@@ -1,9 +1,7 @@
 """LLM 配線まわりの env-driven feature flag。
 
 実験スクリプトから A/B 検証する用途で、scenario 内容と直交する knob を
-ここに集約する。既存の他の env var (``SUBJECTIVE_EPISODE_DB_PATH``,
-``LLM_MODEL`` 等) と
-同じ慣例に揃える。
+ここに集約する。既存の他の env var (``LLM_MODEL`` 等) と同じ慣例に揃える。
 
 設計指針:
 
@@ -12,8 +10,7 @@
   ``docs/memory_system/semantic_memory_activation_plan.md`` §9
 - **「配線 (wire)」と「有効化 (enable)」を分離**: コードパスは常に通って
   いるが env 未設定なら不活性
-- 値は ``"1" / "true" / "yes" / "on"`` (case-insensitive) を ON とみなす。
-  ``LLM_EPISODIC_ENABLED`` と同じパース規則
+- 値は ``"1" / "true" / "yes" / "on"`` (case-insensitive) を ON とみなす
 """
 
 from __future__ import annotations

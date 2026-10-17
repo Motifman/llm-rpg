@@ -28,7 +28,6 @@ _SCENARIO_PATH = (
 
 def _config() -> ResolvedLlmRuntimeConfig:
     return ResolvedLlmRuntimeConfig.for_tests(
-        episodic_enabled=False,
         prompt_dataset_capture_failure_policy="warn",
     )
 
