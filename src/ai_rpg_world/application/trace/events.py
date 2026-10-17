@@ -93,24 +93,6 @@ class TraceEventKind:
     # cumulative_meeting_ticks も持つ。
     MEETING_STARTED = "meeting_started"
     MEETING_ENDED = "meeting_ended"
-    # Issue #283 後続: episodic memory pipeline の可視化。
-    # EPISODIC_CHUNK_WRITTEN: ``EpisodicChunkCoordinator`` が境界を閉じて
-    # SubjectiveEpisode を 1 件 store に書いた瞬間。
-    # payload: episode_id / boundary_reason / cues (canonical list) /
-    # recall_text_snippet / action_count / observation_count
-    EPISODIC_CHUNK_WRITTEN = "episodic_chunk_written"
-    # Issue #295 後続 (PR #309): episodic subjective LLM 補完を非同期で実行する
-    # スケジューラ (``ThreadPoolEpisodicSubjectiveScheduler`` 等) が、
-    # LLM 呼び出しを完了して store に「リッチ化された」episode を上書きした瞬間。
-    # payload: episode_id / latency_ms / recall_text_snippet
-    EPISODIC_SUBJECTIVE_FILLED = "episodic_subjective_filled"
-    # スケジューラが LLM 呼び出しを試みたが失敗 (LLM API エラー / parse 失敗 等)
-    # → draft (= テンプレ既定値) のまま store に残った瞬間。
-    # payload: episode_id / error_code (LLM_API_CALL_FAILED 等)
-    EPISODIC_SUBJECTIVE_FAILED = "episodic_subjective_failed"
-    # キュー満杯で enqueue を諦めた瞬間 (back-pressure)。
-    # payload: episode_id / queue_size / max_queue_size
-    EPISODIC_SUBJECTIVE_DROPPED = "episodic_subjective_dropped"
     # LLM 性能メトリクス (実験 #356 後続): Phase A の LLM 呼び出し 1 件分の
     # 壁時計 latency / token usage / TPS を記録する。
     # payload: model / wall_latency_ms / prompt_tokens / completion_tokens /

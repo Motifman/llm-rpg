@@ -4,12 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    ChunkEncodingInput,
-    build_chunk_encoding_input,
-    chunk_encoding_episode_generation_allowed,
     format_action_result_line_for_recent_events,
     format_unified_timeline_as_recent_events_bullets,
     merge_observations_and_action_results_to_unified_timeline,
@@ -421,45 +416,6 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         assert len(timeline) == 2
         stamps = tuple(line.occurred_at.timestamp() for line in timeline)
         assert stamps == tuple(sorted(stamps))
-
-
-class TestChunkEncodingInput:
-    """ChunkEncodingInput の検証とエピソード起動ゲート"""
-
-    def test_build_chunk_encoding_input_mismatch_timeline_raises(self) -> None:
-        """unified_timeline がマージ結果と一致しない ChunkEncodingInput は拒否される"""
-        obs = ObservationEntry(
-            occurred_at=datetime(2025, 1, 1, 0, 0, 0),
-            output=ObservationOutput(
-                prose="a", structured={}, observation_category="self_only"
-            ),
-        )
-        with pytest.raises(ValueError, match="unified_timeline"):
-            ChunkEncodingInput(
-                player_id=PlayerId(1),
-                observations=(obs,),
-                action_results=(),
-                unified_timeline=(),
-            )
-
-    def test_episode_generation_requires_action(self) -> None:
-        """行動結果が 0 件ならエピソード生成不可"""
-        inp = build_chunk_encoding_input(
-            PlayerId(1),
-            (),
-            (),
-        )
-        assert chunk_encoding_episode_generation_allowed(inp) is False
-
-    def test_episode_generation_allowed_with_action(self) -> None:
-        """行動結果が 1 件以上なら起動可"""
-        act = ActionResultEntry(
-            occurred_at=datetime(2025, 1, 1, 0, 0, 0),
-            action_summary="m",
-            result_summary="r",
-        )
-        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
-        assert chunk_encoding_episode_generation_allowed(inp) is True
 
 
 class TestDrainObservationBufferIntoSlidingWindow:
