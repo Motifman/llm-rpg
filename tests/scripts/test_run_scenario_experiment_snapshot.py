@@ -40,29 +40,16 @@ class TestWiringStub:
         # 既存の WorldRuntime と同じ名前で attribute を立てる。
         # ``aux_being_resolver`` は public property、``_aux_being_repository``
         # は private 属性として直接読む (= helper の現実装に合わせる)。
-        episode_store = object()
         runtime = SimpleNamespace(
             _todo_store="memo-handle",
             _aux_being_repository="repo-handle",
             aux_being_resolver="resolver-handle",
-            _episodic_stack=SimpleNamespace(episode_store=episode_store),
         )
         stub = _wiring_stub_from_world_runtime(runtime)
         assert stub.memo_store == "memo-handle"
         assert stub.being_repository == "repo-handle"
         assert stub.being_attachment_resolver == "resolver-handle"
-        assert stub.episodic_episode_store is episode_store
-
-    def test_episodic_stack_none_episode_store_none(self) -> None:
-        """episodic stack が None なら episode store も None。"""
-        runtime = SimpleNamespace(
-            _todo_store=None,
-            _aux_being_repository=None,
-            aux_being_resolver=None,
-            _episodic_stack=None,
-        )
-        stub = _wiring_stub_from_world_runtime(runtime)
-        assert stub.episodic_episode_store is None
+        assert not hasattr(stub, "episodic_episode_store")
 
     def test_returns_none_attribute_missing(self) -> None:
         """getattr の default 経由で SimpleNamespace ですらない object でも壊れない。"""
@@ -74,7 +61,6 @@ class TestWiringStub:
         assert stub.memo_store is None
         assert stub.being_repository is None
         assert stub.being_attachment_resolver is None
-        assert stub.episodic_episode_store is None
 
 
 class TestExpectedPayloadKeysCoverage:
@@ -110,15 +96,12 @@ class TestExpectedPayloadKeysCoverage:
     @staticmethod
     def _runtime_stub_with_all_stores() -> SimpleNamespace:
         """BeingMemorySnapshotService が対応する全 per-Being store を
-        episodic_stack / runtime に揃えた runtime stub を作る。"""
+        runtime に揃えた runtime stub を作る。"""
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-            InMemorySubjectiveEpisodeStore,
         )
         from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
             InMemoryAcquaintanceRepository,
@@ -137,17 +120,10 @@ class TestExpectedPayloadKeysCoverage:
         )
 
         repo = InMemoryBeingRepository()
-        # episodic_stack 側の attribute 名は EpisodicStack dataclass (実体) と
-        # 揃える。
-        episodic_stack = SimpleNamespace(
-            episode_store=InMemorySubjectiveEpisodeStore(),
-            
-            )
         return SimpleNamespace(
             _todo_store=InMemoryMemoStore(),
             _aux_being_repository=repo,
             aux_being_resolver=BeingAttachmentResolver(repo),
-            _episodic_stack=episodic_stack,
             _memory_turn_clock=InMemoryMemoryTurnClock(),
             _acquaintance_store=InMemoryAcquaintanceRepository(),
             _being_episode_store=InMemoryEpisodeRepository(),
@@ -205,10 +181,10 @@ class TestExpectedPayloadKeysCoverage:
         runtime = self._runtime_stub_with_all_stores()
         # 1 store を欠く = stub は None を渡し、session が
         # 空 in-memory fallback に倒れてログを出すはず。
-        del runtime._episodic_stack.episode_store
+        runtime._todo_store = None
 
         wiring_stub = _wiring_stub_from_world_runtime(runtime)
-        assert wiring_stub.episodic_episode_store is None
+        assert wiring_stub.memo_store is None
 
         with caplog.at_level("INFO"):
             ExperimentSnapshotSession(
@@ -223,7 +199,7 @@ class TestExpectedPayloadKeysCoverage:
         )
         # 欠いた store 名がログの引数 (fallback 対象リスト) に含まれる。
         assert any(
-            "episodic_episode_store" in str(r.args) for r in fallback_logs
+            "memo_store" in str(r.args) for r in fallback_logs
         )
 
 

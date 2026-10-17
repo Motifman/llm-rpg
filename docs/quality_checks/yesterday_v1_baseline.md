@@ -5,7 +5,11 @@
 「カイトに『昨日何してた?』と聞かれたリンが自然に答えられるか」を、prompt
 構造の側から見るシナリオ。LLM は呼ばず、prompt の中身そのものを点検する。
 
-詳細とテストコード: `tests/quality/test_yesterday_v1.py`、README:
+古いエピソードの store を runtime が組まなくなったとき (Issue #1631 の #PRNUM)、テストと dump
+(`yesterday_v1_in_window.prompt.txt` / `yesterday_v1_out_of_window.prompt.txt`) を外した。
+過去を引く受動想起も同じ Issue の #1796 で消している。この文書は記録として残す。
+
+詳細とテストコード (外す前): `tests/quality/test_yesterday_v1.py`、README:
 `docs/quality_checks/README.md`。
 
 ## 初回 baseline (= PR #530 直後 / 主観時間も能動想起も未実装の状態)

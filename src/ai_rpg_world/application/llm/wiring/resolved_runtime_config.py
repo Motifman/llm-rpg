@@ -65,8 +65,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BEING_EPISODE_RECALL_MAX_HANDLES",
     "BEING_MEMO_ENABLED",
     "LLM_CLIENT",
-    "LLM_EPISODIC_ENABLED",
-    "LLM_EPISODIC_SUBJECTIVE_ENABLED",
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
     "LLM_MAX_OUTPUT_TOKENS",
@@ -87,7 +85,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SCENARIO_RANDOM_SEED",
     "SHORT_TERM_MEMORY_TURN_CAP",
     "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
-    "SUBJECTIVE_EPISODE_DB_PATH",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_API_KEY_ENV",
@@ -150,9 +147,6 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_semantic_repeat_min_probability: 繰り返しと見なす確率の閾値。
             警告が待機へ押すのを避けるため高めに置く
         typed_judgment_semantic_repeat_window: 判断に渡す直近の行動の件数
-
-        # === Episodic memory (Phase 1a / Phase B) ===
-        episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
     """
 
     # LLM client
@@ -190,10 +184,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_semantic_repeat_min_probability: float
     typed_judgment_semantic_repeat_window: int
 
-    # Episodic memory
-    episodic_enabled: bool
-    episodic_subjective_enabled: bool
-
 
     short_term_memory_turn_cap: int = 20
     short_term_memory_turn_compact_count: int = 10
@@ -218,13 +208,6 @@ class ResolvedLlmRuntimeConfig:
     # 既存の loop_guard / action_result / stagnation state を読んだ gated 発火にする。
     # 設定のキーは無く、llm_tool_choice から決める (_reason_first_two_step_enabled_for)。
     reason_first_two_step_enabled: bool = True
-
-    # Episode store の永続化先 (``SUBJECTIVE_EPISODE_DB_PATH``)。None なら in-memory。
-    # 実 path 指定時は SQLite 永続化。従来 ``_default_episodic_episode_store`` が
-    # os.environ を直読みしており profile/manifest の外で決まっていた
-    # (PR #736 の単一窓口化で取り残されていた env)。config に載せ替えて
-    # 解決経路を from_mapping の 1 本に固定し、run_start / manifest に残す。
-    subjective_episode_db_path: str | None = None
 
     # 世界の tick の 1 体ぶんの例外を、取りやめて続けるか止めるか (design_decisions D1558)。
     # 既定が isolate なのは、その場で書いた実験設定がキーを書き忘れても run を捨てないため。
@@ -274,25 +257,6 @@ class ResolvedLlmRuntimeConfig:
                 "BEING_MEMO_ENABLED=1 requires MEMO_TOOLS_ENABLED=false "
                 "(メモを書く口と【進行中のメモ】【メモ】が 2 つずつ並ぶ)"
             )
-        # SUBJECTIVE_EPISODE_DB_PATH は episode store が組まれる経路でしか意味を
-        # 持たない。episodic OFF では store 自体を作らず、subjective 経路は
-        # (scheduler と共有する都合で) 常に in-memory を使うため、どちらの場合も
-        # path 指定は静かに無視される。従来 env 直読み時代からの silent failure
-        # なので、無視になる組み合わせは fail-fast で落とす。
-        if self.subjective_episode_db_path:
-            if not self.episodic_enabled:
-                raise ValueError(
-                    "SUBJECTIVE_EPISODE_DB_PATH requires LLM_EPISODIC_ENABLED=1 "
-                    "(episodic OFF では episode store を組まないため path が無視される)"
-                )
-            if self.episodic_subjective_enabled:
-                raise ValueError(
-                    "SUBJECTIVE_EPISODE_DB_PATH is not supported with "
-                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 "
-                    "(subjective 経路は in-memory episode store 固定なので path が"
-                    "無視される)。永続化が要るなら subjective を OFF にするか "
-                    "snapshot を使う"
-                )
 
     # ──────────────────────────────────────────────────────────────
     # Construction
@@ -434,13 +398,6 @@ class ResolvedLlmRuntimeConfig:
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
         openrouter_quantization = _strip_or_none(source.get("OPENROUTER_QUANTIZATION"))
 
-        # Episodic on/off (旧来は episodic_stack.is_episodic_enabled が同等の
-        # ロジック。bool 解釈は _parse_truthy で統一)
-        episodic_enabled = _parse_truthy(source.get("LLM_EPISODIC_ENABLED"), default=False)
-        episodic_subjective_enabled = _parse_truthy(
-            source.get("LLM_EPISODIC_SUBJECTIVE_ENABLED"), default=True
-        )
-
         # Prediction (#526 / U3): エピソード再解釈 on/off
 
 
@@ -466,9 +423,6 @@ class ResolvedLlmRuntimeConfig:
         ).strip().lower()
         reason_first_two_step_enabled = _reason_first_two_step_enabled_for(
             llm_tool_choice
-        )
-        subjective_episode_db_path = _strip_or_none(
-            source.get("SUBJECTIVE_EPISODE_DB_PATH")
         )
         try:
             world_tick_failure_policy = WorldTickFailurePolicy.parse(
@@ -515,8 +469,6 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_semantic_repeat_min_probability
             ),
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
-            episodic_enabled=episodic_enabled,
-            episodic_subjective_enabled=episodic_subjective_enabled,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
             memo_tools_enabled=memo_tools_enabled,
@@ -524,7 +476,6 @@ class ResolvedLlmRuntimeConfig:
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
-            subjective_episode_db_path=subjective_episode_db_path,
             world_tick_failure_policy=world_tick_failure_policy,
         )
 
@@ -541,7 +492,7 @@ class ResolvedLlmRuntimeConfig:
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                episodic_enabled=True,
+                memo_tools_enabled=False,
             )
         """
         defaults: dict[str, Any] = dict(
@@ -586,8 +537,6 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_semantic_repeat_window=(
                 _DEFAULT_TYPED_JUDGMENT_SEMANTIC_REPEAT_WINDOW
             ),
-            episodic_enabled=False,
-            episodic_subjective_enabled=True,
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
             memo_tools_enabled=True,
@@ -595,7 +544,6 @@ class ResolvedLlmRuntimeConfig:
             scenario_random_seed=None,
             prompt_dataset_capture_failure_policy="fail",
             reason_first_two_step_enabled=True,
-            subjective_episode_db_path=None,
             world_tick_failure_policy=WorldTickFailurePolicy.ISOLATE.value,
         )
         unknown = set(overrides) - set(defaults)

@@ -49,6 +49,3 @@ class TestTheEpisodeIndexIsAlwaysOn:
         with pytest.raises(ValueError, match=f"unknown runtime_config key.*{key}"):
             _config(**{key: "off"})
 
-    def test_the_old_episodes_stay_off(self) -> None:
-        """目次つきのエピソードが常に入っても、古いエピソード (SubjectiveEpisode) の記憶は有効にならない。"""
-        assert _config().episodic_enabled is False

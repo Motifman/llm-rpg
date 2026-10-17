@@ -12,12 +12,11 @@ from ai_rpg_world.application.being.experiment_snapshot_session import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from tests.runtime_config_helpers import episodic_config, runtime_config
+from tests.runtime_config_helpers import runtime_config
 
 _SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _V3 = _SCENARIOS_DIR / "survival_island_v3_coop.json"
@@ -103,11 +102,11 @@ class TestDistantViewRuntimePrompt:
         assert "北東の遠くに切り立った山影が見える。" not in text
         assert "遠景:" not in text
 
-    def test_distant_view_is_prompt_only_and_not_written_to_observation_or_episode(
+    def test_distant_view_is_prompt_only_and_not_written_to_observation(
         self,
     ) -> None:
-        """遠景は prompt にだけ出て、recent observation と episode 記憶を汚さない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        """遠景は prompt にだけ出て、recent observation を汚さない。"""
+        runtime = create_world_runtime(_V4, config=runtime_config())
         player_id = PlayerId(1)
         distant_phrase = "北東の遠くに切り立った山影が見える。"
 
@@ -119,18 +118,6 @@ class TestDistantViewRuntimePrompt:
             getattr(entry.output, "prose", "") for entry in recent_observations
         )
         assert distant_phrase not in recent_observation_text
-
-        stack = runtime._episodic_stack
-        assert stack is not None
-        episodes = stack.episode_store.list_recent_by_being(
-            BeingId("being_w1_p1"),
-            limit=20,
-        )
-        episode_text = "\n".join(
-            f"{episode.title}\n{episode.summary}\n{episode.recall_text}"
-            for episode in episodes
-        )
-        assert distant_phrase not in episode_text
 
     def test_v4_signal_smoke_replaces_mountain_area_after_object_state_lit(self) -> None:
         """signal_fire_pit.state.lit=true になると、同方角の山影ではなく白い煙が遠景に出る。"""
@@ -159,9 +146,9 @@ class TestDistantViewRuntimePrompt:
 
         assert "白い煙が見える" not in text
 
-    def test_active_cue_is_prompt_only_and_not_written_to_observation_or_episode(self) -> None:
-        """動的 cue の常時遠景も prompt にだけ出て、recent observation と episode 記憶を汚さない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+    def test_active_cue_is_prompt_only_and_not_written_to_observation(self) -> None:
+        """動的 cue の常時遠景も prompt にだけ出て、recent observation を汚さない。"""
+        runtime = create_world_runtime(_V4, config=runtime_config())
         player_id = PlayerId(1)
         cue_phrase = "北東の山の方に白い煙が見える。"
         _set_signal_fire_lit(runtime, True)
@@ -174,18 +161,6 @@ class TestDistantViewRuntimePrompt:
             getattr(entry.output, "prose", "") for entry in recent_observations
         )
         assert cue_phrase not in recent_observation_text
-
-        stack = runtime._episodic_stack
-        assert stack is not None
-        episodes = stack.episode_store.list_recent_by_being(
-            BeingId("being_w1_p1"),
-            limit=20,
-        )
-        episode_text = "\n".join(
-            f"{episode.title}\n{episode.summary}\n{episode.recall_text}"
-            for episode in episodes
-        )
-        assert cue_phrase not in episode_text
 
 
 class TestDistantViewRuntimeTrace:
@@ -284,7 +259,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_false_to_true_delivers_once_and_records_trace(self) -> None:
         """狼煙 cue は false→true 境界で見える player へ1回だけ届き、継続 true では再発火しない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         recorder = _TraceRecorderSpy()
         scheduler = _TurnSchedulerSpy()
         runtime.set_trace_recorder(recorder)
@@ -324,7 +299,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_initial_true_is_baseline_and_does_not_deliver(self) -> None:
         """初回評価時点ですでに true の cue は baseline として記録し、出現観測を配らない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         recorder = _TraceRecorderSpy()
         runtime.set_trace_recorder(recorder)
         _set_signal_fire_lit(runtime, True)
@@ -341,7 +316,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_delivers_only_to_players_who_can_see_the_origin_area(self) -> None:
         """屋内・現在地 area・隣接 area の player には遠景出現観測を配らない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         _teleport_player(runtime, 2, "summit")
         _teleport_player(runtime, 3, "foothills")
         _teleport_player(runtime, 4, "cave_inner")
@@ -357,7 +332,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_appear_event_observation_enters_observation_history(self) -> None:
         """出現イベントは ambient ではなく観測なので、prompt build で直近出来事に入る。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         player_id = PlayerId(1)
         runtime._evaluate_distant_cue_appearances()
         _set_signal_fire_lit(runtime, True)
@@ -375,7 +350,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_restored_active_true_state_does_not_fire_again(self) -> None:
         """snapshot restore 後に active=true と復元された cue は同じ出現を再発火しない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         _set_signal_fire_lit(runtime, True)
         _restore_distant_cue_state(
             runtime,
@@ -398,7 +373,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_cue_without_appear_event_tracks_state_without_delivery_or_trace(self) -> None:
         """appear_event 未指定 cue は境界状態だけを追い、観測配達と state_changed trace は出さない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         cue = runtime.scenario.distant_cues[0]
         runtime.scenario = replace(
             runtime.scenario,
@@ -427,7 +402,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_no_visible_recipients_still_records_state_changed_trace(self) -> None:
         """誰にも見えない false→true でも、trace に visible_recipient_count=0 を残す。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         recorder = _TraceRecorderSpy()
         runtime.set_trace_recorder(recorder)
         for player_id in (1, 2, 3, 4):
@@ -478,7 +453,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_event_prose_does_not_leak_internal_ids_and_fixed_message_works(self) -> None:
         """出現観測本文には cue_id/object_id/area_id を出さず、placeholder 無し固定文も使える。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         cue = runtime.scenario.distant_cues[0]
         runtime.scenario = replace(
             runtime.scenario,
@@ -514,7 +489,7 @@ class TestDistantCueAppearanceRuntime:
 
     def test_post_tick_detection_fires_after_tick_driven_source_change(self) -> None:
         """毎 tick の post-tick 検出で、interact 以外の state 変化も恒久的に取りこぼさない。"""
-        runtime = create_world_runtime(_V4, config=episodic_config())
+        runtime = create_world_runtime(_V4, config=runtime_config())
         runtime._evaluate_distant_cue_appearances()
         _set_signal_fire_lit(runtime, True)
 

@@ -12,7 +12,6 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -79,8 +78,6 @@ _FIXTURE_SCENARIOS_DIR = (
 def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep these contract tests independent from the caller's shell env."""
     for key in (
-        "LLM_EPISODIC_ENABLED",
-        "LLM_EPISODIC_SUBJECTIVE_ENABLED",
         "MEMO_TOOLS_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -138,25 +135,6 @@ class _OrderedActionStoreSpy:
             "result_summary": result_summary,
             **kwargs,
         }
-
-
-class _OrderedChunkCoordinatorSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-        self.calls: list[PlayerId] = []
-
-    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
-        self.events.append("chunk")
-        self.calls.append(player_id)
-
-
-class _RaisingChunkCoordinatorSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
-        self.events.append("chunk")
-        raise RuntimeError("chunk failed")
 
 
 class _LoopGuardSpy:
@@ -277,7 +255,7 @@ class _ContractRuntime:
         free_text_argument_names: tuple[str, ...] = (),
     ) -> None:
         # 実 escape _record_action_result (U2) と同じ subjective kwargs を受ける。
-        self.events.extend(["append", "chunk"])
+        self.events.append("append")
         self._action_result_store.append(
             player_id,
             action_summary,
@@ -571,7 +549,6 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
     assert "visible_tile_map" not in user
     assert "current_terrain_type" not in user
     assert "travel_to" in tool_names
-    assert runtime._episodic_stack is None
 
 
 def test_synchronized_action_groups_expose_no_tool_of_their_own(
@@ -616,15 +593,13 @@ def test_being_provisioning_failure_stops_runtime_creation(
         BeingProvisioningService,
     )
 
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-
     def _boom(self, player_id):
         raise RuntimeError("provision boom")
 
     monkeypatch.setattr(BeingProvisioningService, "ensure_attached", _boom)
 
     with pytest.raises(RuntimeError, match="player_id=") as excinfo:
-        _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+        _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
     assert "provision boom" in str(excinfo.value.__cause__)
 
 
@@ -1298,38 +1273,6 @@ def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
     assert builder is runtime._get_or_build_default_prompt_builder()
 
 
-def test_episodic_stack_gate_follows_config_not_env(
-    clean_runtime_env: None,
-) -> None:
-    """#558 MEDIUM-1 後続: env 未設定でも explicit config.episodic_enabled だけで
-    stack が立つ。親 gate を env 直読みから config 単一窓口に寄せた回帰テスト。
-
-    clean_runtime_env が LLM_EPISODIC_ENABLED を消すので、env 経路では立たない。
-    config だけで立つことが、env と config を別解釈する silent failure の不在を示す。"""
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    assert runtime._episodic_stack is not None
-    # episodic OFF の config なら立たない (= gate が config を見ている裏付け)
-    off = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=False))
-    assert off._episodic_stack is None
-
-
-def test_episodic_on_builds_the_chunk_pipeline(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """episodic stack を立てると、区切りの書き込みが組まれ、行動の道具は出る。"""
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-
-    stack = runtime._episodic_stack
-    assert stack is not None
-    assert stack.chunk_coordinator is not None
-    assert stack.noun_matcher is not None
-
-    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-
-
 def test_memo_tools_default_visible_in_get_tool_definitions(
     clean_runtime_env: None,
 ) -> None:
@@ -1348,7 +1291,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     """MEMO_TOOLS_ENABLED=false は memo tool だけを隠し、記憶本体と他 tool は残す。"""
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
             memo_tools_enabled=False,
         )
     )
@@ -1359,7 +1301,6 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
     assert TOOL_NAME_MEMO_LIST not in tool_names
     assert TOOL_NAME_MEMO_DONE not in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert runtime._episodic_stack is not None
 
 
 def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
@@ -1368,7 +1309,6 @@ def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
     """memo tool 非露出時は未完了 memo section も消し、使えない memo_done へ誘導しない。"""
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
             memo_tools_enabled=False,
         )
     )
@@ -1409,113 +1349,6 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
     assert wiring.memo_completion_hint_service is None
 
 
-def test_record_action_result_preserves_escape_hook_order(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """escape runtime records action first, then chunk."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    store = _OrderedActionStoreSpy(events)
-    chunk = _OrderedChunkCoordinatorSpy(events)
-
-    runtime._action_result_store = store
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=chunk,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 静けさを確認した",
-        "CONTRACT_RESULT: 記録した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append", "chunk"]
-    # U1: _record_action_result は共有 ActionResultRecorder に委譲し、recorder は
-    # 全フィールドを既定値込みで append に渡す。escape が意味的に渡すフィールドが
-    # 含まれていることを subset で固定する (完全一致は呼び出し形の過剰指定)。
-    assert {
-        "player_id",
-        "action_summary",
-        "result_summary",
-        "occurred_at",
-        "tool_name",
-        "success",
-        "error_code",
-        "scene_boundary",
-        "occurred_tick",
-        "game_time_label",
-    } <= set(store.kwargs)
-    assert store.kwargs["occurred_at"].tzinfo is timezone.utc
-    assert store.kwargs["tool_name"] == "contract_probe"
-    assert store.kwargs["game_time_label"] == runtime._time_label()
-    # escape は当面 subjective fields を渡さない (#553 baseline / U2 で配線)
-    assert store.kwargs["intention"] is None
-    assert store.kwargs["emotion_hint"] is None
-    assert chunk.calls == [player_id]
-
-
-def test_record_action_result_skips_memory_hooks_when_episodic_stack_absent(
-    clean_runtime_env: None,
-) -> None:
-    runtime = _create_runtime()
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._action_result_store = _OrderedActionStoreSpy(events)
-    runtime._episodic_stack = None
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 待機した",
-        "CONTRACT_RESULT: 何も起きなかった",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append"]
-
-
-def test_record_action_result_keeps_action_success_when_memory_hooks_fail(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Chunk failures are logged but do not block the action record."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=_RaisingChunkCoordinatorSpy(events),
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 失敗する記憶 hook を通る",
-        "CONTRACT_RESULT: action 自体は完了した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["chunk"]
-    entries = runtime._action_result_store.get_recent(player_id, 10)
-    assert len(entries) == 1
-    assert entries[0].action_summary == "CONTRACT_ACTION: 失敗する記憶 hook を通る"
-    assert entries[0].success is True
-
-
 def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
     clean_runtime_env: None,
 ) -> None:
@@ -1552,7 +1385,7 @@ def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
     )
 
     assert result.success is True
-    assert events == ["append", "chunk", "loop_guard"]
+    assert events == ["append", "loop_guard"]
 
 
 def test_phase_b_records_tool_trace_payload_in_action_result_trace(
@@ -2182,14 +2015,12 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
 ) -> None:
     from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     stub = _wiring_stub_from_world_runtime(runtime)
 
     assert stub.memo_store is runtime._todo_store
-    assert stub.episodic_episode_store is runtime._episodic_stack.episode_store
+    assert not hasattr(stub, "episodic_episode_store")
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository
 
