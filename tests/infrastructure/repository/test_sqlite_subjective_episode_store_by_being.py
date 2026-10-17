@@ -57,32 +57,12 @@ class TestSqliteByBeingBasic:
         result = store.list_recent_by_being(being, limit=10)
         assert [ep.episode_id for ep in result] == ['new', 'old']
 
-    def test_list_cue_canonical_matches(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
-        """list by cue は canonical 一致。"""
-        cue_a = EpisodicCue(axis='entity', value='alice', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        cue_b = EpisodicCue(axis='entity', value='bob', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put_by_being(being, _episode(episode_id='ea', cues=(cue_a,)))
-        store.put_by_being(being, _episode(episode_id='eb', cues=(cue_b,)))
-        result = store.list_by_cue_by_being(being, cue_a, limit=10)
-        assert [ep.episode_id for ep in result] == ['ea']
-
-    def test_cue_index_put_updated(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
-        """cueindex は put で更新される。"""
-        cue_old = EpisodicCue(axis='entity', value='old', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        cue_new = EpisodicCue(axis='entity', value='new', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put_by_being(being, _episode(episode_id='e1', cues=(cue_old,)))
-        store.put_by_being(being, _episode(episode_id='e1', cues=(cue_new,)))
-        assert store.list_by_cue_by_being(being, cue_old, limit=10) == []
-        assert len(store.list_by_cue_by_being(being, cue_new, limit=10)) == 1
-
     def test_limit_zero_less_empty_list(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """``limit <= 0`` は SQL 発行前に早期 return (= InMemory 側と挙動一致)。"""
         ep = _episode(episode_id='e1')
         store.put_by_being(being, ep)
-        cue = ep.cues[0]
         assert store.list_recent_by_being(being, limit=0) == []
         assert store.list_recent_by_being(being, limit=-1) == []
-        assert store.list_by_cue_by_being(being, cue, limit=0) == []
 
 class TestSqliteSalience:
     """U6 (予測誤差統一設計 / salience): payload_json 経由の round-trip と

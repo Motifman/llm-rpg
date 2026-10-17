@@ -2,8 +2,7 @@
 (Phase 3 Step 3e-1)。
 
 並走追加された 4 ``*_by_being`` メソッドが legacy player_id 版と互いに
-見えないことと、各メソッドの基本挙動を確認する。memo / semantic /
-memory_link と同じパターン。
+見えないことと、各メソッドの基本挙動を確認する。memo と同じパターン。
 """
 from __future__ import annotations
 
@@ -84,27 +83,6 @@ class TestListRecentByBeing:
         store.put_by_being(being, _episode(episode_id='e1'))
         assert store.list_recent_by_being(being, limit=0) == []
 
-class TestListByCueByBeing:
-    """list_by_cue_by_being の挙動。"""
-
-    def test_returns_cue_matches_episode(self, store: InMemorySubjectiveEpisodeStore, being: BeingId) -> None:
-        """cue に一致する episode を返す。"""
-        cue_a = EpisodicCue(axis='entity', value='alice', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        cue_b = EpisodicCue(axis='entity', value='bob', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put_by_being(being, _episode(episode_id='ea', cues=(cue_a,)))
-        store.put_by_being(being, _episode(episode_id='eb', cues=(cue_b,)))
-        result = store.list_by_cue_by_being(being, cue_a, limit=10)
-        assert [ep.episode_id for ep in result] == ['ea']
-
-    def test_cue_index_put_updated(self, store: InMemorySubjectiveEpisodeStore, being: BeingId) -> None:
-        """cueindex は put で更新される。"""
-        cue_old = EpisodicCue(axis='entity', value='old', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        cue_new = EpisodicCue(axis='entity', value='new', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        store.put_by_being(being, _episode(episode_id='e1', cues=(cue_old,)))
-        store.put_by_being(being, _episode(episode_id='e1', cues=(cue_new,)))
-        assert store.list_by_cue_by_being(being, cue_old, limit=10) == []
-        assert len(store.list_by_cue_by_being(being, cue_new, limit=10)) == 1
-
 class TestEvictionByBeing:
     """``max_episodes_per_player`` 上限が being_id 版にも効く。"""
 
@@ -130,18 +108,11 @@ class TestEpisodeReplaceAll:
         ids = [e.episode_id for e in store.list_all_by_being(being)]
         assert ids == ['e2', 'e1']
 
-    def test_replace_all_cue_index(self, store: InMemorySubjectiveEpisodeStore, being: BeingId) -> None:
-        """replace all で全置換とcue index再構築。"""
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-        old = _episode(episode_id='old')
-        store.put_by_being(being, old)
-        cue_new = EpisodicCue(axis='place_spot', value='999', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        new = _episode(episode_id='new', cues=(cue_new,))
-        store.replace_all_by_being(being, [new])
+    def test_replace_all_drops_episodes_not_given(self, store: InMemorySubjectiveEpisodeStore, being: BeingId) -> None:
+        """replace all は渡した episode だけに置き換え、前からあった episode を残さない。"""
+        store.put_by_being(being, _episode(episode_id='old'))
+        store.replace_all_by_being(being, [_episode(episode_id='new')])
         assert [e.episode_id for e in store.list_all_by_being(being)] == ['new']
-        hit = store.list_by_cue_by_being(being, cue_new, limit=10)
-        assert [e.episode_id for e in hit] == ['new']
 
     def test_other_being_does_not_affect(self, store: InMemorySubjectiveEpisodeStore) -> None:
         """他 being は影響しない。"""

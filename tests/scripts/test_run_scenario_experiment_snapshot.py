@@ -20,7 +20,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -53,8 +52,6 @@ class TestWiringStub:
         assert stub.being_repository == "repo-handle"
         assert stub.being_attachment_resolver == "resolver-handle"
         assert stub.episodic_episode_store is episode_store
-        # link store は episodic stack が持たないので None
-        assert stub.memory_link_store is None
 
     def test_episodic_stack_none_episode_store_none(self) -> None:
         """episodic stack が None なら episode store も None。"""
@@ -117,9 +114,6 @@ class TestExpectedPayloadKeysCoverage:
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
-        from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
-            InMemoryMemoryLinkStore,
-        )
         from ai_rpg_world.application.llm.services.in_memory_memo_store import (
             InMemoryMemoStore,
         )
@@ -147,7 +141,7 @@ class TestExpectedPayloadKeysCoverage:
         # 揃える。
         episodic_stack = SimpleNamespace(
             episode_store=InMemorySubjectiveEpisodeStore(),
-            memory_link_store=InMemoryMemoryLinkStore(),
+            
             )
         return SimpleNamespace(
             _todo_store=InMemoryMemoStore(),
@@ -211,10 +205,10 @@ class TestExpectedPayloadKeysCoverage:
         runtime = self._runtime_stub_with_all_stores()
         # 1 store を欠く = stub は None を渡し、session が
         # 空 in-memory fallback に倒れてログを出すはず。
-        del runtime._episodic_stack.memory_link_store
+        del runtime._episodic_stack.episode_store
 
         wiring_stub = _wiring_stub_from_world_runtime(runtime)
-        assert wiring_stub.memory_link_store is None
+        assert wiring_stub.episodic_episode_store is None
 
         with caplog.at_level("INFO"):
             ExperimentSnapshotSession(
@@ -229,7 +223,7 @@ class TestExpectedPayloadKeysCoverage:
         )
         # 欠いた store 名がログの引数 (fallback 対象リスト) に含まれる。
         assert any(
-            "memory_link_store" in str(r.args) for r in fallback_logs
+            "episodic_episode_store" in str(r.args) for r in fallback_logs
         )
 
 

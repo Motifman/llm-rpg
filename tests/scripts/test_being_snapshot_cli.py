@@ -9,28 +9,25 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-
-import pytest
 
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
-from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
-    MemoryLink,
-    MemoryLinkType,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
     SqliteBeingRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (
-    SqliteMemoryLinkStore,
+from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
+    SqliteSubjectiveEpisodeStore,
 )
 
 
@@ -54,9 +51,9 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 def _populate_source_dbs(
     *,
     being_db: Path,
-    memory_db: Path,
+    episode_db: Path,
 ) -> BeingId:
-    """source 側 sqlite DB 群に Being + memory link を書き込み、その being_id を返す。"""
+    """source 側 sqlite DB 群に Being + エピソードを書き込み、その being_id を返す。"""
     repo = SqliteBeingRepository.connect(str(being_db))
     being = Being(
         being_id=BeingId("being_w1_p1"),
@@ -66,21 +63,28 @@ def _populate_source_dbs(
     )
     repo.save(being)
 
-    memory_conn = sqlite3.connect(str(memory_db), check_same_thread=False)
-    SqliteMemoryLinkStore(memory_conn).upsert_link_by_being(
+    SqliteSubjectiveEpisodeStore.connect(str(episode_db)).put_by_being(
         being.being_id,
-        MemoryLink(
-            link_id="mlk-cli",
+        SubjectiveEpisode(
+            episode_id="ep-cli",
             player_id=1,
             being_id=being.being_id,
-            episode_id_a="ep-1",
-            episode_id_b="ep-2",
-            link_type=MemoryLinkType.CO_RECALL,
-            strength=0.9,
-            co_activation_count=1,
-            created_at=_NOW,
-            last_activated_at=_NOW,
-            decay_rate=0.001,
+            occurred_at=_NOW,
+            game_time_label="12:00",
+            source=EpisodeSource(event_ids=("e1",)),
+            location=EpisodeLocation(spot_id=42),
+            action=EpisodeAction(tool_name="walk"),
+            who=("ada",),
+            what="CLI 経由でも生き残る",
+            why=None,
+            observed="o",
+            expected=None,
+            outcome="ok",
+            prediction_error=None,
+            felt=None,
+            interpreted=None,
+            cues=(),
+            recall_text="recall",
         ),
     )
     return being.being_id
@@ -93,12 +97,10 @@ class TestBeingSnapshotCliEndToEnd:
         cli = _load_cli_module()
 
         src_being_db = tmp_path / "src_beings.db"
-        src_memory_db = tmp_path / "src_memory.db"
         src_episode_db = tmp_path / "src_episodes.db"
         being_id = _populate_source_dbs(
-            being_db=src_being_db, memory_db=src_memory_db
+            being_db=src_being_db, episode_db=src_episode_db
         )
-        # episode は空 DB で OK (= 空 store からの capture)
 
         snapshot_json = tmp_path / "snapshot.json"
         rc = cli.main(
@@ -106,8 +108,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "save",
                 "--being-db",
                 str(src_being_db),
-                "--memory-db",
-                str(src_memory_db),
                 "--episode-db",
                 str(src_episode_db),
                 "--being-id",
@@ -122,19 +122,16 @@ class TestBeingSnapshotCliEndToEnd:
         data = json.loads(snapshot_json.read_text(encoding="utf-8"))
         assert data["snapshot_version"] == 2
         assert data["memory_payload_json"] is not None
-        assert "mlk-cli" in data["memory_payload_json"]
+        assert "ep-cli" in data["memory_payload_json"]
 
         # 別 DB ファイルに load。
         dst_being_db = tmp_path / "dst_beings.db"
-        dst_memory_db = tmp_path / "dst_memory.db"
         dst_episode_db = tmp_path / "dst_episodes.db"
         rc = cli.main(
             [
                 "load",
                 "--being-db",
                 str(dst_being_db),
-                "--memory-db",
-                str(dst_memory_db),
                 "--episode-db",
                 str(dst_episode_db),
                 "--input",
@@ -143,15 +140,14 @@ class TestBeingSnapshotCliEndToEnd:
         )
         assert rc == 0
 
-        # dst 側 DB に Being と memory link が復元されている。
+        # dst 側 DB に Being とエピソードが復元されている。
         dst_repo = SqliteBeingRepository.connect(str(dst_being_db))
         loaded = dst_repo.find_by_id(being_id)
         assert loaded is not None
         assert loaded.identity.name == "アダ"
 
-        dst_memory_conn = sqlite3.connect(str(dst_memory_db), check_same_thread=False)
-        links = SqliteMemoryLinkStore(dst_memory_conn).list_all_links_for_being(being_id)
-        assert [link.link_id for link in links] == ["mlk-cli"]
+        episodes = SqliteSubjectiveEpisodeStore.connect(str(dst_episode_db)).list_all_by_being(being_id)
+        assert [ep.episode_id for ep in episodes] == ["ep-cli"]
 
     def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""
@@ -161,8 +157,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "save",
                 "--being-db",
                 str(tmp_path / "nonexistent.db"),  # 存在しない
-                "--memory-db",
-                str(tmp_path / "x_memory.db"),
                 "--episode-db",
                 str(tmp_path / "x_episodes.db"),
                 "--being-id",
@@ -181,8 +175,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "load",
                 "--being-db",
                 str(tmp_path / "dst_b.db"),
-                "--memory-db",
-                str(tmp_path / "dst_m.db"),
                 "--episode-db",
                 str(tmp_path / "dst_e.db"),
                 "--input",
@@ -199,8 +191,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "save",
                 "--being-db",
                 str(tmp_path / "x_beings.db"),
-                "--memory-db",
-                str(tmp_path / "x_memory.db"),
                 "--episode-db",
                 str(tmp_path / "x_episodes.db"),
                 "--being-id",

@@ -52,38 +52,20 @@ class TestSqliteSubjectiveEpisodeStoreBasics:
             assert got is not None
             assert got.co_present == ('ノア', 'カイ')
 
-    def test_list_by_cue_after_reopen(self) -> None:
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
-        being_id = BeingId('being_w1_p7')
-        with tempfile.TemporaryDirectory() as tmp:
-            path = str(Path(tmp) / 'episodes.db')
-            cue = EpisodicCue(axis='place_spot', value='12', source=EpisodicCueSource.RUNTIME_CONTEXT)
-            store = SqliteSubjectiveEpisodeStore.connect(path)
-            store.put_by_being(being_id, _episode(episode_id='a'))
-            del store
-            store2 = SqliteSubjectiveEpisodeStore.connect(path)
-            found = store2.list_by_cue_by_being(being_id, cue, limit=5)
-            assert len(found) == 1
-            assert found[0].episode_id == 'a'
-
 class TestSqliteSubjectiveEpisodeReplaceAll:
     """Phase 4 Step 4-2a: list_all_by_being / replace_all_by_being。"""
 
-    def test_replace_all_cue_index(self) -> None:
-        """replace all で全置換と cue index 再構築。"""
+    def test_replace_all_drops_episodes_not_given(self) -> None:
+        """replace all は渡した episode だけに置き換え、前からあった episode を残さない。"""
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         being_id = BeingId('being_w1_p7')
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / 'episodes.db')
             store = SqliteSubjectiveEpisodeStore.connect(path)
             store.put_by_being(being_id, _episode(episode_id='old'))
-            new_cue = EpisodicCue(axis='place_spot', value='999', source=EpisodicCueSource.RUNTIME_CONTEXT)
-            new = _episode(episode_id='new', cues=(new_cue,))
-            store.replace_all_by_being(being_id, [new])
+            store.replace_all_by_being(being_id, [_episode(episode_id='new')])
             ids = [e.episode_id for e in store.list_all_by_being(being_id)]
             assert ids == ['new']
-            hits = store.list_by_cue_by_being(being_id, new_cue, limit=5)
-            assert [e.episode_id for e in hits] == ['new']
 
     def test_other_being_does_not_affect(self) -> None:
         """他 being は影響しない。"""

@@ -11,8 +11,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_Bein
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -39,16 +37,6 @@ class TestFifoEviction:
         assert store.get_by_being(being_id, 'e1') is None
         assert store.get_by_being(being_id, 'e2') is not None
         assert store.get_by_being(being_id, 'e4') is not None
-
-    def test_evict_episode_cue_index_removed(self) -> None:
-        """evict された episode の cue も index から消える。"""
-        store = InMemorySubjectiveEpisodeStore(max_episodes_per_player=2)
-        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        store.put_by_being(being_id, _episode(1, 'e1', t0, 'topic_a'))
-        store.put_by_being(being_id, _episode(1, 'e2', t0 + timedelta(minutes=1), 'topic_b'))
-        store.put_by_being(being_id, _episode(1, 'e3', t0 + timedelta(minutes=2), 'topic_c'))
-        results = store.list_by_cue_by_being(being_id, EpisodicCue(axis='topic', value='topic_a', source=EpisodicCueSource.OBSERVATION_FREETEXT), limit=10)
-        assert results == []
 
     def test_other_being_episode_evict(self) -> None:
         """Phase 3 Step 3e-3: cap は Being 単位。別 Being の episode は影響を受けない。"""

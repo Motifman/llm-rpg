@@ -309,38 +309,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 "trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping"
             )
 
-    def get_oldest_entry_datetime(
-        self, player_id: PlayerId
-    ) -> datetime | None:
-        """PR5 (R1): 現在 short-term window に乗っている最古 entry の ``occurred_at``。
-
-        L1 raw queue の最古 entry を返す。L4 mid summary は raw を畳んだ
-        概要であり、構成要素の raw entry そのものは既に retire 済みなので、
-        ここでは含めない (= 「**今 raw として手元にあるもの**」の最古を
-        返す)。
-        """
-        if not isinstance(player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
-        pid = int(player_id.value)
-        raw = self._event_store.get_recent_observations(
-            player_id,
-            self._event_store.count_observations(player_id),
-            newest_equal_first=True,
-        )
-        if not raw:
-            return None
-        # raw queue には naive な datetime (= シナリオファイル由来) と aware な
-        # datetime (= LLM 呼び出し後に dataset から組まれた直近観測) が混在しうる。
-        # そのまま min() で比較すると ``TypeError: can't compare offset-naive
-        # and offset-aware datetimes`` で実験が落ちるため、UTC 相当として
-        # 正規化してから比較する。本体の occurred_at は書き換えない。
-        def _as_utc(dt: datetime) -> datetime:
-            if dt.tzinfo is None:
-                return dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
-
-        return min(_as_utc(entry.occurred_at) for entry in raw)
-
     def get_long_summary_text(self, player_id: PlayerId) -> str:
         """Phase 3: L5 long summary を prompt 用テキストに整形する。
 

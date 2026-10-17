@@ -49,10 +49,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
     EpisodicCueSource,
 )
-from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
-    MemoryLink,
-    MemoryLinkType,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
@@ -124,56 +120,6 @@ def _dict_to_fulfillment(data: dict[str, Any]) -> MemoFulfillmentContext:
         recent_action_summaries=tuple(
             str(x) for x in data.get("recent_action_summaries", ())
         ),
-    )
-
-
-# ---- memory_link --------------------------------------------------------------
-
-def memory_link_to_dict(link: MemoryLink) -> dict[str, Any]:
-    return {
-        "link_id": link.link_id,
-        "player_id": link.player_id,
-        "being_id": link.being_id.value,
-        "episode_id_a": link.episode_id_a,
-        "episode_id_b": link.episode_id_b,
-        "link_type": link.link_type.value,
-        "strength": link.strength,
-        "co_activation_count": link.co_activation_count,
-        "created_at": _dt_to_iso(link.created_at),
-        "last_activated_at": _dt_to_iso(link.last_activated_at),
-        "decay_rate": link.decay_rate,
-    }
-
-
-def dict_to_memory_link(
-    data: dict[str, Any],
-    *,
-    fallback_being_id: BeingId | None = None,
-) -> MemoryLink:
-    raw_being_id = data.get("being_id")
-    if raw_being_id is not None:
-        parsed = BeingId(str(raw_being_id))
-        if fallback_being_id is not None and parsed != fallback_being_id:
-            raise ValueError(
-                "memory link being_id does not match snapshot being"
-            )
-        being_id = parsed
-    elif fallback_being_id is not None:
-        being_id = fallback_being_id
-    else:
-        raise ValueError("being_id is required to decode MemoryLink")
-    return MemoryLink(
-        link_id=str(data["link_id"]),
-        player_id=int(data["player_id"]),
-        being_id=being_id,
-        episode_id_a=str(data["episode_id_a"]),
-        episode_id_b=str(data["episode_id_b"]),
-        link_type=MemoryLinkType(str(data["link_type"])),
-        strength=float(data["strength"]),
-        co_activation_count=int(data["co_activation_count"]),
-        created_at=_iso_to_dt(str(data["created_at"])),
-        last_activated_at=_iso_to_dt(str(data["last_activated_at"])),
-        decay_rate=float(data["decay_rate"]),
     )
 
 

@@ -12,7 +12,6 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
     CaptureBeingSnapshotToFileUseCase,
 )
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import RestoreBeingSnapshotFromFileUseCase
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
@@ -33,13 +32,12 @@ def _make_environment():
     """新規 store 群 + 2 use case + gateway を組んで返す。"""
     repo = InMemoryBeingRepository()
     memo = InMemoryMemoStore()
-    link = InMemoryMemoryLinkStore()
     episode = InMemorySubjectiveEpisodeStore()
-    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    memory_snapshot = BeingMemorySnapshotService(memo_store=memo, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
     restore = RestoreBeingSnapshotFromFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
-    return {'repo': repo, 'memo': memo, 'link': link, 'episode': episode, 'capture': capture, 'restore': restore}
+    return {'repo': repo, 'memo': memo, 'episode': episode, 'capture': capture, 'restore': restore}
 
 def _make_being() -> Being:
     return Being(being_id=BeingId('being_w1_p1'), identity=BeingIdentity(name='アダ', first_person='わたし'), attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)), declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SEMANTIC])

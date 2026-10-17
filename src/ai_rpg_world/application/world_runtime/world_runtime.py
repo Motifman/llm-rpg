@@ -7234,9 +7234,6 @@ def create_world_runtime(
             subjective_completion_scheduler=subjective_scheduler,
             persona_block_provider=persona_provider,
             episode_store=shared_episode_store,
-            # link と意味記憶の store は episodic stack と一緒に組む。昇格と gist
-            # を消すまでは gist の設定で組んでいた (#1631)。
-            semantic_enabled=True,
             # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
             # world_object 名を index できるようにする。SpotNode.interior は
             # 実 runtime では None で保管され、別 repository に格納されている。
