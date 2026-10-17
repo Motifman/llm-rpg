@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
         ToolCallLoopGuardService,
     )
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -23,9 +22,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
-from ai_rpg_world.application.llm.services.active_memos_formatter import (
-    format_active_memos,
-)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
 )
@@ -47,9 +43,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
@@ -128,14 +121,11 @@ class DefaultPromptBuilder(IPromptBuilder):
         episode_index_text_provider = sections.episode_index_text_provider
         being_memo_text_provider = sections.being_memo_text_provider
         inventory_text_provider = sections.inventory_text_provider
-        memo_store = sections.memo_store
 
 
         default_action_instruction = limits.default_action_instruction
         tile_map_view_distance = limits.tile_map_view_distance
         tile_map_enabled = limits.tile_map_enabled
-        memo_stale_age_ticks = limits.memo_stale_age_ticks
-        self._minutes_per_tick = limits.minutes_per_tick
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not isinstance(short_term_memory, IShortTermMemory):
@@ -164,12 +154,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise ValueError("tile_map_view_distance must be 0 or greater")
         if not isinstance(default_action_instruction, str):
             raise TypeError("default_action_instruction must be str")
-        if memo_store is not None and not isinstance(memo_store, MemoRepository):
-            raise TypeError("memo_store must be MemoRepository or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
             raise TypeError("current_tick_provider must be callable or None")
-        if memo_stale_age_ticks < 0:
-            raise ValueError("memo_stale_age_ticks must be 0 or greater")
         if objective_text_provider is not None and not callable(objective_text_provider):
             raise TypeError("objective_text_provider must be callable or None")
         if known_people_text_provider is not None and not callable(known_people_text_provider):
@@ -185,7 +171,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         if trace_recorder_provider is not None and not callable(trace_recorder_provider):
             raise TypeError("trace_recorder_provider must be callable or None")
 
-        self._memo_store = memo_store
         # 直前ターンで同じ tool + 同じ引数を選ぼうとしているとき、その状態を
         # peek して instruction の先頭に専用警告を挟む (= attention 補強)。
         # loop_guard 本体の observation 注入は recent_events に並ぶので
@@ -207,7 +192,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._being_memo_text_provider = being_memo_text_provider
         self._inventory_text_provider = inventory_text_provider
         self._current_tick_provider = current_tick_provider
-        self._memo_stale_age_ticks = memo_stale_age_ticks
 
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
@@ -266,7 +250,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         system_content: str,
         objective_text: str,
         current_state_text: str,
-        active_memos_text: str,
+        memos_text: str,
         recent_events_text: str,
         inventory_text: str,
         instruction: str,
@@ -309,7 +293,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 known_people_chars=len(known_people_text),
                 episode_index_chars=len(episode_index_text),
                 current_state_chars=len(current_state_text),
-                memos_chars=len(active_memos_text),
+                memos_chars=len(memos_text),
                 recent_events_chars=len(recent_events_text),
                 inventory_chars=len(inventory_text),
                 instruction_chars=len(instruction),
@@ -358,7 +342,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         if action_instruction is not None and not isinstance(action_instruction, str):
             raise TypeError("action_instruction must be str or None")
         player_id = acting.player_id
-        being_id = acting.being_id
 
         # 1. プロフィール取得（システムプロンプト用。必須）
         profile = self._profile_repository.find_by_id(player_id)
@@ -414,11 +397,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
 
-        # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
-        # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
-        # メモは review してほしい」を視覚化。
-        active_memos_text = self._build_active_memos_text(being_id)
-
         # Issue #227 chore β: 実行ランタイム固有の固定目的文 + 所持物証テキスト
         # を provider 経由で取得 (world_runtime format への統一)。
         # provider が落ちた場合は ERROR で記録した上で空文字に degrade する。
@@ -471,7 +449,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
-            active_memos_text=active_memos_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
             mid_summary_text=mid_summary_text,
@@ -531,7 +508,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
             current_state_text=current_state_text,
-            active_memos_text=active_memos_text + being_memo_text,
+            memos_text=being_memo_text,
             recent_events_text=recent_events_text,
             inventory_text=inventory_text,
             instruction=instruction,
@@ -539,41 +516,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             user_content=user_content,
         )
         return result
-
-    def _fetch_uncompleted_memos(self, being_id: BeingId) -> list[MemoEntry]:
-        """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
-
-        呼び出し側 (手番入口) が ``ActingBeing.being_id`` を渡す前提。
-        """
-        assert self._memo_store is not None
-        return self._memo_store.list_uncompleted_by_being(being_id)
-
-    def _build_active_memos_text(self, being_id: BeingId) -> str:
-        """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。
-
-        Issue #188 Phase 1a:
-        - memo_store 未注入なら空文字 (section ごと出さない)
-        - 未完了メモがゼロなら空文字
-        - 各 memo に経過 (世界の時計の分) と stale フラグを付与する
-          (詳細は active_memos_formatter.format_active_memos に委譲)
-        """
-        if self._memo_store is None:
-            return ""
-        try:
-            entries = self._fetch_uncompleted_memos(being_id)
-        except Exception:
-            return ""
-        current_tick = (
-            self._current_tick_provider()
-            if self._current_tick_provider is not None
-            else None
-        )
-        return format_active_memos(
-            entries,
-            current_tick=current_tick,
-            stale_age_ticks=self._memo_stale_age_ticks,
-            minutes_per_tick=self._minutes_per_tick,
-        )
 
     def _call_text_provider(
         self,

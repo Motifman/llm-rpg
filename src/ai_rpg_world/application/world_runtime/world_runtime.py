@@ -98,7 +98,6 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
-from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
 from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
@@ -471,40 +470,6 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     )
 
 
-#: `disabled_tools` では落とせないが、**実験設定で落とせる**ツール。
-#:
-#: この分け方には理由がある。ここに並ぶツールは「世界に在るか」ではなく
-#: **「この実験で使うか」**で決まる (同じシナリオを profile 違いで回すときに
-#: 変わるのはこちら)。だから宣言の場所がシナリオではない。
-#:
-#: ただし**止めるだけでは足りない**。「指定できるのは …」だけを返すと、書いた人は
-#: 「この世界では落とせない」と読む。実際は落とせて、場所が違うだけ。
-#: **行き先の無い拒否は、拒否された側に推測を強いる。**
-_TURNED_OFF_BY_EXPERIMENT_CONFIG = {
-    "memo_add": "MEMO_TOOLS_ENABLED",
-    "memo_list": "MEMO_TOOLS_ENABLED",
-    "memo_done": "MEMO_TOOLS_ENABLED",
-}
-
-
-def _where_to_turn_off_instead(unknown: Any) -> str:
-    """実験設定で落とせる名前が混ざっていたら、その行き先を添える。"""
-    elsewhere = {
-        name: _TURNED_OFF_BY_EXPERIMENT_CONFIG[name]
-        for name in unknown
-        if name in _TURNED_OFF_BY_EXPERIMENT_CONFIG
-    }
-    if not elsewhere:
-        return ""
-    where = ", ".join(
-        f"{name} は実験設定の {flag}=0" for name, flag in sorted(elsewhere.items())
-    )
-    return (
-        f" / なお、これらはシナリオではなく実験設定で落とします: {where}"
-        " (profile または EXPERIMENT_CONFIG に書く)"
-    )
-
-
 @dataclass
 class WorldRuntime:
     """LLM エージェントが世界で生きる汎用ランタイム（全てインメモリ）。"""
@@ -631,7 +596,6 @@ class WorldRuntime:
         default_factory=dict, repr=False
     )
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
-    _todo_tool_executor: TodoToolExecutor | None = field(default=None, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -682,7 +646,7 @@ class WorldRuntime:
         default_factory=dict, repr=False
     )
     _cumulative_meeting_ticks: int = field(default=0, repr=False)
-    # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら TODO 系も
+    # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら記憶系の道具も
     # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
     # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
     _include_todo_tools: bool = field(default=True, repr=False)
@@ -1067,8 +1031,7 @@ class WorldRuntime:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
 
         ``create_session`` などで world_runtime を構築した後に
-        外側から trace を有効化する用途。memo executor は lazy 構築なので
-        既に作成済みでもこのフィールドが反映される。
+        外側から trace を有効化する用途。
         """
         self._trace_recorder = recorder
         # 市場の値動きは trace が一次データになる。recorder が差し込まれた
@@ -1079,10 +1042,6 @@ class WorldRuntime:
         player_interaction_service = getattr(self, "_player_interaction_service", None)
         if player_interaction_service is not None:
             player_interaction_service.set_trace_recorder(recorder, self.current_tick)
-        # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
-        if self._todo_tool_executor is not None:
-            self._todo_tool_executor = None
-            self._wire_auxiliary_tool_stack()
         # 短期記憶の構築時点では recorder が未確定なので、L4 / L5 と圧縮発火の
         # trace provider をここで注入する。実装差は getattr で吸収する。
         set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
@@ -1382,8 +1341,6 @@ class WorldRuntime:
         definitions.extend(
             defn
             for defn, _ in get_memory_specs(
-                todo_enabled=True,
-                memo_enabled=True,
                 episode_recall_max_handles=1,
                 episode_index_revision_enabled=True,
             )
@@ -1631,7 +1588,6 @@ class WorldRuntime:
             raise ToolExposureConfigurationError(
                 "disabled_tools に実在しないツール名があります: "
                 f"{', '.join(unknown)} / 指定できるのは: {', '.join(sorted(known))}"
-                + _where_to_turn_off_instead(unknown)
             )
         return tuple(disabled)
 
@@ -1645,10 +1601,9 @@ class WorldRuntime:
     ) -> list[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
-        ``_include_todo_tools=False`` の場合は TODO 系 (todo_add / todo_list /
-        todo_complete) を除外し、spot_graph_* + speech (say / whisper) のみ
-        を返す。LLM が「TODO 操作の連打」に逃げない条件で挙動を比較するため
-        の純スポットグラフモード (B-4 / Issue #155 の判断材料)。
+        ``_include_todo_tools=False`` の場合は記憶系の道具を除外し、
+        spot_graph_* + speech (say / whisper) のみを返す純スポットグラフモード
+        (B-4 / Issue #155 の判断材料)。
         この粗いモードでは個別の記憶ツール露出フラグも評価せず、補助ツール
         全体を隠す。
 
@@ -1767,11 +1722,6 @@ class WorldRuntime:
         false へ縮退すると、比較実験で「有効にしたつもりが無効だった」に
         なる。
         """
-        # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
-        # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
-        # idempotent なので毎回呼んで OK。
-        if self._episodic_stack is not None:
-            self._wire_auxiliary_tool_stack()
         cfg = self._runtime_config
         episode_index_revision_enabled = self._episode_index_enabled()
         episode_recall_max_handles = None
@@ -1790,8 +1740,6 @@ class WorldRuntime:
         return [
             defn
             for defn, _ in get_memory_specs(
-                todo_enabled=True,
-                memo_enabled=bool(getattr(cfg, "memo_tools_enabled", True)),
                 episode_recall_max_handles=episode_recall_max_handles,
                 episode_index_revision_enabled=episode_index_revision_enabled,
             )
@@ -1855,14 +1803,6 @@ class WorldRuntime:
                 self.scenario, player_id
             ).environment_name,
         )
-
-    def _memo_tools_enabled(self) -> bool:
-        """memo ツールを LLM に露出する設定か。
-
-        露出を切る実験腕では、tool 定義だけでなく prompt の未完了 memo section
-        も同時に止める。存在しない memo_done への誘導を残さないため。
-        """
-        return bool(getattr(self._runtime_config, "memo_tools_enabled", True))
 
     def _being_memo_enabled(self) -> bool:
         return bool(getattr(self._runtime_config, "being_memo_enabled", False))
@@ -2040,8 +1980,7 @@ class WorldRuntime:
     def _wire_being_stack(self) -> None:
         """プレイヤーに結びつく Being の保存先・用意・解決を、まだ無ければ組む。
 
-        記憶の部品はどれも Being を単位に持つので、古いメモの実行器
-        (``_wire_auxiliary_tool_stack``) の有無に関わらず組む (#1631)。
+        記憶の部品はどれも Being を単位に持つ (#1631)。
         """
         if hasattr(self, "_aux_being_repository"):
             return
@@ -2064,26 +2003,6 @@ class WorldRuntime:
         )
         self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository)
         self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
-
-    def _wire_auxiliary_tool_stack(self) -> None:
-        """TODO ツール実行器を遅延初期化する。
-
-        executor 自体は Resolver を持たず、``run_llm_auxiliary_tool`` が
-        ``ensure_attached`` のあと ``resolve_being_id`` して ``ActingBeing`` を
-        handler に渡す。
-
-        """
-        self._wire_being_stack()
-        if self._todo_tool_executor is not None:
-            return
-
-        self._todo_tool_executor = TodoToolExecutor(
-            self._todo_store,
-            short_term_memory=self._short_term_memory,
-            action_result_store=self._action_result_store,
-            current_tick_provider=self.current_tick,
-            trace_recorder=self._trace_recorder,
-        )
 
     @property
     def aux_being_resolver(self) -> Any:
@@ -2157,13 +2076,10 @@ class WorldRuntime:
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: dict[str, Any]
     ) -> LlmCommandResultDto:
-        """TODO 系ツールとエピソードの道具を実行する。
+        """エピソードの道具を実行する。
 
-        Phase 3 Step 3a-3: memo handler を起動する前に player_id に Being が
-        attach されていることを保証する (= TodoToolExecutor が being_id 経路を
-        通れるようにする)。
+        handler を起動する前に player_id に Being が attach されていることを保証する。
         """
-        self._wire_auxiliary_tool_stack()
         acting = self._acting_being_for(player_id)
         if acting is None:
             return LlmCommandResultDto(
@@ -2171,11 +2087,7 @@ class WorldRuntime:
                 message="Being is not attached to this player.",
                 error_code="INVALID_STATE",
             )
-        handlers: dict[str, Any] = (
-            dict(self._todo_tool_executor.get_handlers())
-            if self._todo_tool_executor is not None
-            else {}
-        )
+        handlers: dict[str, Any] = {}
 
         def _merge_handlers(next_handlers: dict[str, Any]) -> None:
             # サイレント上書き防止: 将来 executor が増えたとき同名 tool が
@@ -2199,35 +2111,6 @@ class WorldRuntime:
                 error_code="UNSUPPORTED_TOOL",
             )
         return cast(LlmCommandResultDto, handler(acting, arguments))
-
-    def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
-        """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
-
-        本家 PromptBuilder と同じロジックを共有するため、active_memos_formatter
-        に委譲する (Issue #227 後続レビュー HIGH-2: drift 防止)。
-
-        memo は Being 単位で持つ (Issue #470 Phase 3)。player_id から BeingId を
-        解決できない配線では、出す memo が決まらないので空を返す。
-        """
-        from ai_rpg_world.application.llm.services.active_memos_formatter import (
-            format_active_memos,
-        )
-
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return ""
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return ""
-
-        entries = self._todo_store.list_uncompleted_by_being(being_id)
-        return format_active_memos(
-            entries,
-            current_tick=self.current_tick(),
-            stale_age_ticks=stale_age_ticks,
-            minutes_per_tick=_minutes_per_tick(self.scenario),
-        )
 
     # ── 完全プロンプト構築 ──
 
@@ -2389,7 +2272,6 @@ class WorldRuntime:
             objective_text_provider=lambda pid: self._resolve_player_objective_text(
                 pid, resolved_objective_text
             ),
-            memo_store=self._todo_store if self._memo_tools_enabled() else None,
             being_memo_text_provider=(
                 self.being_memo_text if self._being_memo_enabled() else None
             ),
@@ -2405,7 +2287,6 @@ class WorldRuntime:
         limits = PromptLimits(
             tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
-            minutes_per_tick=_minutes_per_tick(self.scenario),
         )
         builder = DefaultPromptBuilder(
             core,
@@ -2434,7 +2315,7 @@ class WorldRuntime:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
         Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
-        section 組み立て・recent_events・active_memos・tile-map field 制御は
+        section 組み立て・recent_events・tile-map field 制御は
         DefaultPromptBuilder 内部で処理される。world_runtime 固有の部分は adapter
         (default_prompt_builder_adapters.py) 経由で注入する:
         - WorldQuery 相当: build_llm_context + _build_minimal_player_state_dto
@@ -2456,7 +2337,7 @@ class WorldRuntime:
         旧 shape を期待する caller は messages[0]["content"] / messages[1]["content"]
         への参照に書き換える必要がある。
         """
-        self._wire_auxiliary_tool_stack()
+        self._wire_being_stack()
         if self._public_sns_command_service is not None:
             try:
                 self._public_sns_command_service.retry_pending_notifications(limit=100)
@@ -4331,8 +4212,8 @@ def create_world_runtime(
         llm_turn_trigger: 省略時は :class:`WorldStandaloneNoopLlmTurnTrigger`。
             スポットグラフのティック後フック用。プレゼン層のセッションでは
             ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
-        include_todo_tools: ``True`` (既定) で TODO 系を含める。``False`` で
-            TODO 系を除外し、speech は残す。
+        include_todo_tools: ``True`` (既定) で記憶系の道具を含める。``False`` で
+            記憶系の道具を除外し、speech は残す。
         config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
             ``ResolvedLlmRuntimeConfig.from_mapping()`` で空設定から既定値を
             resolve。entrypoint (run_scenario_experiment 等) で既に
@@ -7256,7 +7137,7 @@ def create_world_runtime(
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
 
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
     )

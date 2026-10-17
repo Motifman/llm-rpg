@@ -64,9 +64,9 @@ system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前
         → S11【文脈と履歴の限界】 (S12 SSoT は #1631 で消した)
 user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
         → U11【関連する記憶】 (U10【関連する学び】と U12 見出しは #1631 で消した)
-        → U13【進行中のメモ】 → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
+        → (U13【進行中のメモ】は #1631 で消した) → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
         → 繰り返しの警告 (U7) → U21 指示の前の知らせ → U22 行動指示
-tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, memo_add, memo_list, memo_done,
+tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, (memo_* の 3 つは #1631 で消した)
         listen, travel_to, interact, drop_item, pickup_item, give_item, tend_to_player, explore, use_item, attack,
         memory_recall_episodes, memory_recall_by_handle の 17 個
 ```
@@ -112,7 +112,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U10 【関連する学び】 | (#1631 で消した) | - | - | - | - |
 | U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:257`)、空の置き文は 463 行 | episodic store、recall slot (再解釈は #1631 で消した) | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
 | U12 さっき思い出した記憶の見出し | (#1631 で消した) | - | - | - | - |
-| U13 【進行中のメモ】 | 「- [memo_718918…] [tick=11, 経過 13 tick] 狼煙に必要な物: …」 | `_build_active_memos_text` (`prompt_builder.py:971`) → `format_active_memos` (`llm/services/active_memos_formatter.py:19`) | memo store と世界の tick。profile の `memo_tools_enabled` | Being の持ち物 | memo (表示の時計が世界の tick) |
+| U13 【進行中のメモ】 | (#1631 で消した。メモ帳の【メモ】が代わる) | - | - | - | - |
 | U14 現在地の塊 | 「現在地: 高地の泉 (初めて訪れた)」「  山の中腹に湧く泉。…」「雰囲気: …」「天候: 弱い晴れ（屋外）」「現在時刻: Day 1 12:00」「時刻帯: 昼」 | `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`)、注記は `_annotate_current_spot_familiarity` (`llm/services/spot_graph_ui_context_builder.py:628`)。死亡後の【いまの存在状態】は同 529 行 | 世界の snapshot (spot の名前と説明、眺望、天候、時刻、会議の状況、点検の進み具合、残り行動量、自分の状態)。「(初めて訪れた)」は encounter | 混ざっている (環境の描写と、行った場所の記録) | 無 (encounter はシナリオの spot ID と `PlayerId` の鍵) |
 | U15 この場で働きかけられるもの | 「接続先:」「  - "山麓への道" → "山麓"（通行可）」「オブジェクト:」「  - "湧水の口" (今は汲めない・時間を置けば戻る) — …」「      いまできない: 湧水を汲む → "drink_water"（…）」「同じ場所に居るモンスター: (このスポットにモンスターはいない)」 | `SpotGraphUiContextBuilder` の `_build_connection_section` (720 行)、`_build_object_section` (801 行)、`_build_monster_section` (1078 行)、地面のアイテム・商人・市場・所持金・取引の節 | 世界の snapshot とシナリオの物と操作。商人などはシナリオで宣言したときだけ | 環境の材料 | 無 |
 | U16 同じ場所にいるプレイヤー | 「同じ場所にいるプレイヤー: (倒れていない相手には give_item で所持品を直接渡せる)」「  - "エイダ" (初めて会った)」 | `_build_entity_section` (`spot_graph_ui_context_builder.py:927`)、注記は `_player_familiarity_annotation` (687 行) | 世界の snapshot (その場の人、倒れているか、倒れた人の持ち物、人に使える操作)、encounter (「(初めて会った)」) | 混ざっている (環境の在室と、Being が誰を知っているか) | 無 (encounter は `PlayerId` と名前の鍵) |
@@ -135,7 +135,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | T3 発話の引数 `say_inline` | 「この行動をしながら発する一言 (任意、200 字以内)。書き方は【独白と一言の書き方】。」 | `say_inline_property` (`tool_catalog/say_inline.py:47`)、各ツールの定義に直接入っている | 固定の定義 | 環境の材料 (説明が Being 側の節名を参照している。5-3) | 無 |
 | T4 予期の引数 `expectations` | (#1631 で消した) | - | - | - | - |
 | T5 目的の引数 `goal_update` / `goal_outcome` | (#1631 で消した) | - | - | - | - |
-| T6 記憶のツール | `memo_add`「ターンを跨いで覚えておきたい情報…を memo として記録します。」、`memo_list`、`memo_done`、`episode_recall`、`episode_revise_index` (能動想起の 4 つの道具は #1631 で消した) | `get_memory_specs` (`tool_catalog/memory.py`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py`) | 固定の定義。profile の `memo_tools_enabled` と目次つきのエピソードの設定、実行部の有無。`ToolExposure` を通らない | Being の持ち物 | memo / Being のエピソード。実行部はゲームのパッケージにある (#1469) |
+| T6 記憶のツール | `episode_recall`、`episode_revise_index` (能動想起の 4 つの道具と memo_* の 3 つの道具は #1631 で消した) | `get_memory_specs` (`tool_catalog/memory.py`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py`) | 固定の定義。目次つきのエピソードの設定、実行部の有無。`ToolExposure` を通らない | Being の持ち物 | Being のエピソード。実行部はゲームのパッケージにある (#1469) |
 | T7 tool の並びと出し分け | 共通の塊が先、フェーズ固有の塊が後。run では 17 個 (0 章) | `ToolExposure.order_for_payload` と `_PAYLOAD_TOOL_ORDER` (`llm/tool_exposure.py:147`、228 行)、`split_for_phase`、`filter_definitions_for_escape_llm` (`llm/services/world_llm_turn/escape_tools.py:33`) | 固定の並び。会議中か、投票済みか、死亡後か | 組み立ての決まり | 無 |
 
 ### 1-4. 分類の集計
@@ -151,7 +151,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 1 章を作り直して数え直した。部分の数と分類の件数は元のままで、Being の持ち物のうち `PlayerId` か整数の player を鍵にした store にある件数を 7 から 5 に直した。
 
-#1631 で消した部分 (U6、U8、T4、T5) と、goal journal を消して環境の材料になった U1 は、この集計に反映していない。
+#1631 で消した部分 (U6、U8、U13、T4、T5) と、goal journal を消して環境の材料になった U1 は、この集計に反映していない。
 
 ## 2. 環境が公開する情報の型の案
 

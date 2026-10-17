@@ -322,7 +322,7 @@ def _build_chunk_cues(
     #526 後続 C2: ``runtime_context`` が渡されれば、chunk write 時点の
     player の場所 (``current_spot_id``) と視界 object / 同席者 (``targets``)
     を **chunk 全体に行き渡る固定 cue** として episode に貼る。これにより
-    観測 prose も structured も乏しい静かなターン (memo_add / wait のみ等)
+    観測 prose も structured も乏しい静かなターン (wait のみ等)
     でも場所文脈が確実に episode に残る。
 
     chunk 全体の代表 runtime_context として 1 つの context を全観測 /

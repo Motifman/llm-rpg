@@ -88,9 +88,6 @@
 === tools ===
 - wait
 - speak
-- memo_add
-- memo_list
-- memo_done
 - listen
 - travel_to
 - interact

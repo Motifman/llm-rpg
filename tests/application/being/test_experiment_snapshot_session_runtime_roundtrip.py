@@ -53,7 +53,7 @@ def _snapshot_runtime_config() -> Any:
 
 def _create_runtime() -> Any:
     runtime = create_world_runtime(_SCENARIO_PATH, config=_snapshot_runtime_config())
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     for player_id in runtime.get_player_ids():
         runtime._aux_being_provisioning.ensure_attached(player_id)
     return runtime

@@ -31,7 +31,6 @@ _BEING_MEMORY = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 _OLD_MEMORY_PARTS_TURNED_OFF = frozenset({
     "LLM_EPISODIC_ENABLED",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-    "MEMO_TOOLS_ENABLED",
 })
 
 
@@ -75,7 +74,7 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert being["LLM_MAX_OUTPUT_TOKENS"] == 4096
 
     def test_profile_resolves_with_new_memory_on_and_old_memory_off(self) -> None:
-        """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードとメモ帳が入り、古いエピソードと古いメモは止まっている。"""
+        """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードとメモ帳が入り、古いエピソードは止まっている。"""
         being = _load(_BEING_MEMORY)
 
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
@@ -85,5 +84,4 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert cfg.being_episode_index_limit == 10
         assert cfg.being_episode_recall_max_handles == 3
         assert cfg.being_memo_enabled is True
-        assert cfg.memo_tools_enabled is False
         assert cfg.episodic_enabled is False

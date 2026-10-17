@@ -8171,6 +8171,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1628 / #1621 / #1322 / #1616、design_decisions 1 / D1441 / D1616 / D1623 / D1628。
 
+**その後**: 古いメモの道具と【進行中のメモ】は #1631 の段 11-2a で消した (design_decisions D1631-4)。`MEMO_TOOLS_ENABLED` と、メモ帳と並べたときに止める検査も一緒に消えた。メモ帳はほかのメモと並ばないので、`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` はメモ帳を全部入りに入れ、`_DISABLED_PARTS` で止める形に戻した。
+
 ---
 
 ## D1597. 成功した自分の行動のあとは次の tick に手番を回す。休むのは wait を選んだときと移動中だけ
@@ -8337,3 +8339,19 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 既定が `none` のままだと、新しい profile で `LLM_REASONING_EFFORT` を書き忘れた run が、本命と違う条件で走る。その違いは、run_start の設定の記録を読まないと気づけない。
 
 **関連**: Issue #1631、design_decisions 87 (補助 JSON 呼び出しは agent turn の値にかかわらず `none`)。
+
+---
+
+## D1631-4. 古いメモのうち LLM から見える部分を消し、保存先と過去の trace を読む側は残す
+
+**何を**: Issue #1631 の段 11-2a。古いメモの道具 (`memo_add` / `memo_list` / `memo_done`)、その実行器、【進行中のメモ】の節、システムプロンプトの案内、設定のキー `MEMO_TOOLS_ENABLED`、古いメモに対する済んだかの知らせの配線を消した。`MEMO_TOOLS_ENABLED` を profile に書くと、未知のキーとして起動前に止まる。済んだかの知らせはメモ帳のやることにだけ出る。
+
+**残したもの**: 保存先 (`_todo_store`、`MemoRepository`)、Being の snapshot の `memo` キー、知らせのサービスにある古いメモの分岐は段 11-2b / 11-3 で扱う。trace の `memo_add` / `memo_done` の種別は、出す側は無いが、viewer と trace 分析が過去の trace を読むので残す。 `memo_id_display.py` の `memo_handle` と `resolve_memo_id_prefix` は、実行器と【進行中のメモ】が消えて使い手が無くなった。知らせのサービスの古いメモの分岐と一緒に、次の段で消す。
+
+**道具の並び**: 常に出す道具の並び (`ALWAYS_PRESENT_TOOL_ORDER`) は `wait`、`speak` だけになった。memo の道具を出していた profile では、後ろの道具が 3 つ前へ詰まる。1 本の run の中では並びが変わらないのでプレフィックスキャッシュ (design_decisions 1) は壊れないが、memo の道具を出していた過去の run とは、プレフィックスを比べられない。
+
+**なぜ一度に消すか**: 道具だけ消して【進行中のメモ】やシステムプロンプトの案内を残すと、エージェントは無い道具を呼ぶ (CLAUDE.md の「プロンプト本文にツール名を書くときは、必ず露出判断を通す」)。設定のキーだけ残すと、有効にしたつもりの run が古いメモなしで走る。
+
+**どうしないと壊れるか**: 保存先に古いメモが残った snapshot を読み込んでも、プロンプトには出ない。`tests/integration/test_world_runtime_current_runtime_contract.py` の `test_old_memo_left_in_the_store_does_not_reach_the_prompt` が見張る。
+
+**関連**: Issue #1631、design_decisions D1628 / D1628-2。

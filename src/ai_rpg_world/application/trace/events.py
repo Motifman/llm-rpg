@@ -34,6 +34,7 @@ class TraceEventKind:
     OBSERVATION = "observation"
     ACTION = "action"
     ACTION_RESULT = "action_result"
+    # 出す側は #1631 で無くなった。過去の trace を viewer が読むので残す。
     MEMO_ADD = "memo_add"
     MEMO_DONE = "memo_done"
     MEMO_HINT = "memo_hint"

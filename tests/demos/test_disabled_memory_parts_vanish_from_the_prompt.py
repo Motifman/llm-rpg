@@ -42,12 +42,11 @@ _OFFLINE = {
 }
 
 #: 新しい記憶の profile が止めていて、全部入りの run が入れていた古い記憶の部品。
-#: メモ帳は今のメモの道具と並べられないので止める。
+#: 全部入りの run の古いメモの道具は #1631 で消したので、代わりにメモ帳を入れる。
 _OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
     "LLM_EPISODIC_ENABLED": "true",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED": "true",
-    "MEMO_TOOLS_ENABLED": "true",
-    "BEING_MEMO_ENABLED": "false",
+    "BEING_MEMO_ENABLED": "true",
 }
 
 
@@ -100,12 +99,9 @@ _ALL_NAMES = (
 #: **これが正の対照。** 止めたときに「消えること」だけを見ると、もともと出て
 #: いなかった名前でも緑になる。
 #:
-#: メモ帳は今のメモの道具と並べられない (設定で止める) ので、全部入りには入らない。
-#: メモ帳の名前が全部入りに出ないことが、メモ帳を止めたときの見張りになる。正の対照は
-#: ``TestTheMemoBookReplacesTheOldMemo`` が持つ。
-#:
 #: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具、見出しの欄、
-#: 【関連する学び】、受動想起の【関連する記憶】は #1631 で消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
+#: 【関連する学び】、受動想起の【関連する記憶】、古いメモの【進行中のメモ】と memo_* の道具は
+#: #1631 で消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
 #: 戻ってこないことを見張る。
 _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _RELEVANT_MEMORIES,
@@ -118,22 +114,16 @@ _ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
     _EXPLORE_RELATED,
     _SEARCH_SEMANTIC,
     _AFTERGLOW,
-    *_MEMO_BOOK_NAMES,
-    _MEMO_EPISODE_SOURCE,
-}
-
-#: 全部入りの今のメモを、メモ帳に置き換える差分。
-_MEMO_BOOK_INSTEAD = {
-    "MEMO_TOOLS_ENABLED": "false",
-    "BEING_MEMO_ENABLED": "true",
+    _ACTIVE_MEMOS,
+    *_MEMO_TOOLS,
 }
 
 #: (止める部品, 設定の差分, 消えるべき名前)。
 _DISABLED_PARTS = [
     pytest.param(
-        {"MEMO_TOOLS_ENABLED": "false"},
-        (_ACTIVE_MEMOS, *_MEMO_TOOLS, *_MEMO_BOOK_NAMES),
-        id="memo",
+        {"BEING_MEMO_ENABLED": "false"},
+        (*_MEMO_BOOK_NAMES, _MEMO_EPISODE_SOURCE),
+        id="memo_book",
     ),
 ]
 
@@ -197,7 +187,7 @@ class TestNoDisabledMemoryPartIsNamedAnywhere:
     """止めた記憶の部品の名前が、1 ターン目のプロンプト全文に出ない。"""
 
     def test_every_part_is_named_when_all_are_enabled(self) -> None:
-        """全部入りの設定では、中身ができてから出る 2 つの欄を除き、どの部品の名前もプロンプトに出る。"""
+        """全部入りの設定では、#1631 で消した部品を除き、どの部品の名前もプロンプトに出る。"""
         prompt = _full_prompt_with({})
 
         named = {name for name in _ALL_NAMES if name in prompt}
@@ -227,17 +217,3 @@ class TestNoDisabledMemoryPartIsNamedAnywhere:
             *_MEMO_BOOK_NAMES,
             _MEMO_EPISODE_SOURCE,
         }
-
-
-class TestTheMemoBookReplacesTheOldMemo:
-    """全部入りの今のメモをメモ帳に置き換えると、メモ帳の名前だけが出て、今のメモの名前が消えることを保証する (#1628)。"""
-
-    def test_memo_book_names_appear_and_old_memo_names_vanish(self) -> None:
-        """メモ帳に置き換えると、【メモ】・【メモの書き方】・引数 memo が出て、【進行中のメモ】と memo_* のツールが消え、ほかの部品の名前は変わらない。"""
-        prompt = _full_prompt_with(_MEMO_BOOK_INSTEAD)
-
-        named = {name for name in _ALL_NAMES if name in prompt}
-
-        assert named == (
-            _ADVERTISED_WHEN_ALL_ENABLED - {_ACTIVE_MEMOS, *_MEMO_TOOLS}
-        ) | {*_MEMO_BOOK_NAMES, _MEMO_EPISODE_SOURCE}

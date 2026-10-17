@@ -29,9 +29,7 @@ _ME = PlayerId(1)
 
 
 def _game(memo: Any, *, enabled: bool = True) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
-    config = ResolvedLlmRuntimeConfig.for_tests(
-        being_memo_enabled=enabled, memo_tools_enabled=not enabled
-    )
+    config = ResolvedLlmRuntimeConfig.for_tests(being_memo_enabled=enabled)
     runtime = create_world_runtime(_DRILL, config=config)
     recorder = RecordingTraceRecorder()
     runtime.set_trace_recorder(recorder)

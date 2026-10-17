@@ -175,7 +175,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         builder._trace_recorder_provider = None
         builder._current_tick_provider = lambda : 7
         tools = [{'type': 'function', 'function': {'name': 'wait', 'description': '待つ', 'parameters': {}}}, {'type': 'function', 'function': {'name': 'move', 'description': '移動する', 'parameters': {}}}]
-        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(3), system_content='SYSTEM' * 10, objective_text='目的目的目的', current_state_text='現在地表示', active_memos_text='メモ', recent_events_text='出来事' * 20, inventory_text='持ち物', instruction='指示文', tools=tools, user_content='USER_BODY' * 5)
+        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(3), system_content='SYSTEM' * 10, objective_text='目的目的目的', current_state_text='現在地表示', memos_text='メモ', recent_events_text='出来事' * 20, inventory_text='持ち物', instruction='指示文', tools=tools, user_content='USER_BODY' * 5)
         events = [e for e in captured if e.kind == TraceEventKind.PROMPT_SECTION_BREAKDOWN]
         assert len(events) == 1
         p = events[0].payload
@@ -202,7 +202,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         builder._trace_recorder = None
         builder._trace_recorder_provider = None
         builder._current_tick_provider = lambda : 0
-        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(1), system_content='', objective_text='', current_state_text='', active_memos_text='', recent_events_text='', inventory_text='', instruction='', tools=[], user_content='')
+        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(1), system_content='', objective_text='', current_state_text='', memos_text='', recent_events_text='', inventory_text='', instruction='', tools=[], user_content='')
 
 class TestWorldRuntimeEpisodicTraceE2E:
     """env=1 で trace_recorder を runtime に差し込んで実行すると、chunk

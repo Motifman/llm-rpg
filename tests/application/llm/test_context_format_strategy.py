@@ -33,15 +33,15 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "- イベント1" in text
 
     def test_empty_section(self, strategy):
-        """memo / 目的 / 物証 は空なら section ごと省略され、受動想起の【関連する記憶】は出ない。"""
+        """メモ帳 / 目的 / 物証 は空なら section ごと省略され、受動想起の【関連する記憶】は出ない。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
-            active_memos_text="",
+            being_memo_text="",
             objective_text="",
             inventory_text="",
         )
-        assert "【進行中のメモ】" not in text
+        assert "【メモ】" not in text
         assert "【関連する記憶】" not in text
         assert "【現在の目的】" not in text
         assert "【所持・判明した物証】" not in text
@@ -64,12 +64,12 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(
             current_state_text="現在地: x",
             recent_events_text="- 出来事",
-            active_memos_text="メモb",
+            being_memo_text="メモb",
             objective_text="目的c",
             inventory_text="物証d",
         )
         idx_current_state = text.index("【現在地と周囲】")
-        for other in ["【現在の目的】", "【進行中のメモ】", "【直近の出来事】"]:
+        for other in ["【現在の目的】", "【メモ】", "【直近の出来事】"]:
             assert text.index(other) < idx_current_state, (
                 f"{other} は【現在地と周囲】より前に出るべき"
             )
@@ -83,14 +83,14 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(
             current_state_text="現在地",
             recent_events_text="出来事",
-            active_memos_text="メモ",
+            being_memo_text="メモ",
             objective_text="目的",
             inventory_text="物証",
         )
         idx = {
             "obj":      text.index("【現在の目的】"),
             "events":   text.index("【直近の出来事】"),
-            "memos":    text.index("【進行中のメモ】"),
+            "memos":    text.index("【メモ】"),
             "current":  text.index("【現在地と周囲】"),
         }
         assert "【所持・判明した物証】" not in text
@@ -124,7 +124,7 @@ class TestSectionBasedContextFormatStrategyDefault:
             recent_events_text="y",
             objective_text="目的",
             mid_summary_text="[最新] 動き",
-            active_memos_text="メモ",
+            being_memo_text="メモ",
         )
         assert "【最近の流れ】" in text
         assert "[最新] 動き" in text

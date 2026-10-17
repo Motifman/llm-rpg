@@ -79,7 +79,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_TOOL_CHOICE",
     "LLM_TURN_PARALLEL_WORKERS",
     "LLM_WALL_TIME_CAP_SECONDS",
-    "MEMO_TOOLS_ENABLED",
     "OPENAI_API_BASE",
     "OPENROUTER_PROVIDER",
     "OPENROUTER_QUANTIZATION",
@@ -209,8 +208,7 @@ class ResolvedLlmRuntimeConfig:
     # Goal / stagnation 系。
 
     # Prompt / tool 表面。
-    memo_tools_enabled: bool = True
-    # #1628: メモ帳と、環境の tool に付ける引数 memo。今のメモの道具とは並べない。
+    # #1628: メモ帳と、環境の tool に付ける引数 memo。
     being_memo_enabled: bool = False
     scenario_random_seed: int | None = None
     prompt_dataset_capture_failure_policy: str = "fail"
@@ -269,11 +267,6 @@ class ResolvedLlmRuntimeConfig:
                 f"{self.prompt_dataset_capture_failure_policy!r} is not recognized. "
                 "valid: ['fail', 'warn']"
             )
-        if self.being_memo_enabled and self.memo_tools_enabled:
-            raise ValueError(
-                "BEING_MEMO_ENABLED=1 requires MEMO_TOOLS_ENABLED=false "
-                "(メモを書く口と【進行中のメモ】【メモ】が 2 つずつ並ぶ)"
-            )
         # SUBJECTIVE_EPISODE_DB_PATH は episode store が組まれる経路でしか意味を
         # 持たない。episodic OFF では store 自体を作らず、subjective 経路は
         # (scheduler と共有する都合で) 常に in-memory を使うため、どちらの場合も
@@ -315,7 +308,6 @@ class ResolvedLlmRuntimeConfig:
         """
         # 既存 resolver の import は関数内で行い、循環参照を避ける
         from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_memo_tools_enabled,
             resolve_short_term_memory_turn_window,
         )
 
@@ -453,7 +445,6 @@ class ResolvedLlmRuntimeConfig:
             "BEING_EPISODE_RECALL_MAX_HANDLES",
             default=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
         )
-        memo_tools_enabled = resolve_memo_tools_enabled(env=source)
         try:
             being_memo_enabled = _parse_truthy(
                 source.get("BEING_MEMO_ENABLED"), default=False
@@ -519,7 +510,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_subjective_enabled=episodic_subjective_enabled,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
-            memo_tools_enabled=memo_tools_enabled,
             being_memo_enabled=being_memo_enabled,
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
@@ -590,7 +580,6 @@ class ResolvedLlmRuntimeConfig:
             episodic_subjective_enabled=True,
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
-            memo_tools_enabled=True,
             being_memo_enabled=False,
             scenario_random_seed=None,
             prompt_dataset_capture_failure_policy="fail",
@@ -713,7 +702,7 @@ def _strip_or_none(value: str | None) -> str | None:
 
 
 def _parse_truthy(value: str | None, *, default: bool) -> bool:
-    """bool 解釈。``_parse_bool_env`` と同じロジック (PR #434 ポリシー)。
+    """bool 解釈 (PR #434 ポリシー)。
 
     未設定 / 空文字 → ``default``
     truthy / falsy リテラル → True / False
