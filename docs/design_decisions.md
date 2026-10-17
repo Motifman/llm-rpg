@@ -8319,3 +8319,15 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **将来の方針**: `tool_choice="required"` を受け付ける適したモデルが無くなったら、`required` を外す。代わりにプロンプトの末尾に、必ずツールを 1 つ選ぶ指示を足して選ばせる。これは #1053 でやめた形と同じで、その部品 (`force_tool_call_instruction`) は #1677 で消した。戻すときは、#1053 が退けた理由 (行動しない応答を許すこと、比べる run のプロンプトの byte が変わること) を受け入れたうえで判断する。
 
 **関連**: Issue #1631、PR #1053 (熟考の有無にかかわらず `required` を使う)、PR #1677 (末尾の指示の部品を消した)、`docs/llm_provider_selection.md`。
+
+---
+
+## D1631-3. 推論の段階を書かない run は minimal で送る
+
+**何を**: `LLM_REASONING_EFFORT` を書かない設定は `minimal` になる (これまでは `none`)。キーは残し、`none` と書けば熟考なしのまま送る。#1798 で変えた。`LiteLLMClient` を直に組むときの引数の既定 (`none`) は変えていない。プローブ (`scripts/openrouter_ping.py`) と試験が使う。
+
+**なぜ**: 本命の profile をはじめ、実 LLM の run の多くは `minimal` を明示している。`none` で動かす profile も値を明示している。既定の `none` に頼っていたのは、stub の profile と、profile を通らない recall probe だけだった。書き忘れた run だけが熟考なしで走ると、比べたつもりの run と条件がずれる。
+
+**どうしないと壊れるか**: 既定が `none` のままだと、新しい profile で `LLM_REASONING_EFFORT` を書き忘れた run が、本命と違う条件で走る。その違いは、run_start の設定の記録を読まないと気づけない。
+
+**関連**: Issue #1631、design_decisions 87 (補助 JSON 呼び出しは agent turn の値にかかわらず `none`)。
