@@ -37,7 +37,7 @@ class TestFromEnvDefaults:
         assert cfg.memo_tools_enabled is True
         assert cfg.scenario_random_seed is None
         assert cfg.prompt_dataset_capture_failure_policy == 'fail'
-        assert cfg.reason_first_two_step_enabled is False
+        assert cfg.reason_first_two_step_enabled is True
 
 class TestPromptDatasetCaptureConfig:
     """prompt dataset の保存に失敗したときの方針を解決する。"""
@@ -70,26 +70,21 @@ class TestWorldTickFailurePolicyConfig:
             ResolvedLlmRuntimeConfig.for_tests(world_tick_failure_policy='skip')
 
 class TestReasonFirstTwoStepConfig:
-    """reason-first 2段階ターンの有効化 flag を単一窓口で解決する。"""
+    """reason-first 2段階ターンを使うかを、設定のキーではなく tool_choice から決める。"""
 
-    def test_unset_false(self) -> None:
-        """REASON_FIRST_TWO_STEP_ENABLED 未設定なら既存 1段階 turn のまま。"""
+    def test_required_enables_it(self) -> None:
+        """何も書かない (tool_choice は既定の required) と、gated reason-first を使う。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.reason_first_two_step_enabled is False
-
-    def test_truthy_true(self) -> None:
-        """REASON_FIRST_TWO_STEP_ENABLED=1 で gated reason-first を有効化する。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'REASON_FIRST_TWO_STEP_ENABLED': '1'})
         assert cfg.reason_first_two_step_enabled is True
 
-    def test_invalid_value_fail_fast(self) -> None:
-        """typo は silent に OFF へ落とさず ValueError で止める。"""
-        with pytest.raises(ValueError, match='REASON_FIRST_TWO_STEP_ENABLED'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'REASON_FIRST_TWO_STEP_ENABLED': 'maybe'})
+    def test_for_tests_follows_the_tool_choice(self) -> None:
+        """for_tests も本番と同じく、tool_choice が auto なら使わず、required なら使う。"""
+        assert ResolvedLlmRuntimeConfig.for_tests().reason_first_two_step_enabled is True
+        assert ResolvedLlmRuntimeConfig.for_tests(llm_tool_choice='auto').reason_first_two_step_enabled is False
 
     def test_trace_dict_includes_flag(self) -> None:
-        """run_start / manifest から reason-first 有効化条件を後で確認できる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(reason_first_two_step_enabled=True)
+        """run_start / manifest から reason-first を使ったかを後で確認できる。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
 
 class TestShortTermMemoryTurnWindow:
@@ -223,6 +218,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "DISTANT_VIEW_TRACE_ENABLED",
             "END_ON_ALL_DOWN",
             "PROMPT_DATASET_CAPTURE_ENABLED",
+            "REASON_FIRST_TWO_STEP_ENABLED",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
             "SEMANTIC_SEARCH_ENABLED",
