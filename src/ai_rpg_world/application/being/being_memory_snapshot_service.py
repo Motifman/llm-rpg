@@ -22,8 +22,6 @@ Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JS
 {
   "schema_version": 1,
   "memo": [...],
-  "semantic_entries": [...],
-  "semantic_cluster_signatures": [...],
   "memory_links": [...],
   "episodic_episodes": [...]
 }
@@ -69,11 +67,9 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_being_memo,
     dict_to_memo_entry,
     dict_to_memory_link,
-    dict_to_semantic_entry,
     dict_to_subjective_episode,
     memo_entry_to_dict,
     memory_link_to_dict,
-    semantic_entry_to_dict,
     subjective_episode_to_dict,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
@@ -89,9 +85,6 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
     MemoryLinkRepository,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    SemanticMemoryRepository,
-)
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
 SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
@@ -180,8 +173,6 @@ class BeingMemorySnapshotService:
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
-        "semantic_entries",
-        "semantic_cluster_signatures",
         "memory_links",
         "episodic_episodes",
         "memory_turn",
@@ -194,7 +185,6 @@ class BeingMemorySnapshotService:
         self,
         *,
         memo_store: MemoRepository,
-        semantic_store: SemanticMemoryRepository,
         memory_link_store: MemoryLinkRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
         acquaintance_store: AcquaintanceRepository,
@@ -204,8 +194,6 @@ class BeingMemorySnapshotService:
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
-        if not isinstance(semantic_store, SemanticMemoryRepository):
-            raise TypeError("semantic_store must be SemanticMemoryRepository")
         if not isinstance(memory_link_store, MemoryLinkRepository):
             raise TypeError("memory_link_store must be MemoryLinkRepository")
         if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
@@ -221,7 +209,6 @@ class BeingMemorySnapshotService:
         if not isinstance(memory_turn_clock, MemoryTurnClock):
             raise TypeError("memory_turn_clock must be MemoryTurnClock")
         self._memo = memo_store
-        self._semantic = semantic_store
         self._memory_link = memory_link_store
         self._episodic_episode = episodic_episode_store
         self._acquaintance = acquaintance_store
@@ -239,13 +226,6 @@ class BeingMemorySnapshotService:
                 memo_entry_to_dict(e)
                 for e in self._memo.list_all_by_being(being_id)
             ],
-            "semantic_entries": [
-                semantic_entry_to_dict(e)
-                for e in self._semantic.list_for_being(being_id)
-            ],
-            "semantic_cluster_signatures": list(
-                self._semantic.list_cluster_signatures_by_being(being_id)
-            ),
             "memory_links": [
                 memory_link_to_dict(ln)
                 for ln in self._memory_link.list_all_links_for_being(being_id)
@@ -334,12 +314,6 @@ class BeingMemorySnapshotService:
         memo_entries = _decode_list(
             payload["memo"], dict_to_memo_entry, "memo"
         )
-        semantic_entries = _decode_list(
-            payload["semantic_entries"],
-            lambda d: dict_to_semantic_entry(d, fallback_being_id=being_id),
-            "semantic_entries",
-        )
-        cluster_signatures = [str(s) for s in payload["semantic_cluster_signatures"]]
         memory_links = _decode_list(
             payload["memory_links"],
             lambda d: dict_to_memory_link(d, fallback_being_id=being_id),
@@ -386,13 +360,10 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
             ) from exc
-        # 順序は「依存の少ない方から」: memo / semantic は他 store に依存しない。
+        # 順序は「依存の少ない方から」: memo は他 store に依存しない。
         # memory_link は episode を参照するが、本 service は参照整合性まで
         # 保証しない (= 各 store 独立)。
         self._memo.replace_all_by_being(being_id, memo_entries)
-        self._semantic.replace_all_by_being(
-            being_id, semantic_entries, cluster_signatures
-        )
         self._memory_link.replace_all_by_being(being_id, memory_links)
         self._episodic_episode.replace_all_by_being(being_id, episodes)
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)

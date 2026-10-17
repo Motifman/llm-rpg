@@ -156,13 +156,8 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
-    # link / semantic の store (semantic_enabled のときだけ)。full 共有 builder
-    # (build_episodic_memory_stack) で組む。OFF のときは全て None。
-    #
-    #   semantic_memory_store: 意味記憶の store (snapshot / 検証用に公開)
-    #   memory_link_store: memory link graph (snapshot 用に公開)
-    # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
-    semantic_memory_store: Any | None = None
+    # memory link graph の store (semantic_enabled のときだけ、snapshot 用に公開)。
+    # full 共有 builder (build_episodic_memory_stack) で組む。OFF のときは None。
     memory_link_store: Any | None = None
     # 想起→強化 (recall_count 加算 / CO_RECALL リンク) を担う link service。
     # chunk_coordinator (TEMPORAL リンク) と prompt builder の passive recall 経路に
@@ -291,7 +286,7 @@ def build_episodic_stack(
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
       None なら新規作成
     - ``semantic_enabled``: True で本家 ``build_episodic_memory_stack`` を再利用し
-      link / semantic の store を組む (default False = 従来の episodic-only)
+      link の store を組む (default False = 従来の episodic-only)
 
     # 履歴
 
@@ -305,10 +300,9 @@ def build_episodic_stack(
     # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
     # ため (両者が違う store だと、worker が書き込んだ merged episode を
     # passive_recall が読めない)。
-    # semantic_enabled のときは full 共有 builder で link / semantic
-    # の store を組み、chunk_coordinator に link service を渡す。
+    # semantic_enabled のときは full 共有 builder で link の store を組み、
+    # chunk_coordinator に link service を渡す。
     link_service: Any | None = None
-    semantic_memory_store: Any | None = None
     memory_link_store: Any | None = None
     if semantic_enabled:
         # 循環 import 回避のため関数内 import。
@@ -325,8 +319,7 @@ def build_episodic_stack(
         # が同じ store を見る整合性条件)。
         episode_store = mem_stack.shared_episode_store
         link_service = mem_stack.mem_bundle.link_service
-        semantic_memory_store = mem_stack.semantic_memory_store
-        # link graph も snapshot 用に公開する。
+        # link graph を snapshot 用に公開する。
         memory_link_store = mem_stack.mem_bundle.link_store
     elif episode_store is None:
         episode_store = InMemorySubjectiveEpisodeStore()
@@ -368,7 +361,6 @@ def build_episodic_stack(
         noun_matcher=noun_matcher,
         episode_store=episode_store,
         subjective_completion_scheduler=subjective_completion_scheduler,
-        semantic_memory_store=semantic_memory_store,
         memory_link_store=memory_link_store,
         link_service=link_service,
     )

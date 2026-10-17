@@ -1,4 +1,9 @@
-"""MemoryLink / セマンティック記憶用 SQLite スキーマ（主観エピソード DB と同一ファイルに同居）。"""
+"""MemoryLink 用 SQLite スキーマ（主観エピソード DB と同一ファイルに同居）。
+
+意味記憶の store は #1631 で消したが、表を作る版はマイグレーションの履歴なので
+残す。後の版 (v6〜v8) が同じ表を ALTER するため、途中の版だけ外すと古い DB を
+開けなくなる。
+"""
 
 from __future__ import annotations
 

@@ -6,7 +6,6 @@ in-memory + sqlite 両環境で full round-trip テスト。
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
 
 import pytest
 
@@ -14,7 +13,6 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMe
 from ai_rpg_world.application.being.being_persistence_service import BeingPersistenceService
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -25,29 +23,25 @@ from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachm
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import SqliteBeingRepository
 
-_NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dict[str, object]]:
     memo = InMemoryMemoStore()
-    semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
     episode = InMemorySubjectiveEpisodeStore()
-    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     svc = BeingPersistenceService(being_repository=being_repo, memory_snapshot_service=snapshot_svc)
-    return (svc, {'memo': memo, 'semantic': semantic, 'link': link, 'episode': episode})
+    return (svc, {'memo': memo, 'link': link, 'episode': episode})
 
 def _make_being(being_id_value: str='being_w1_p1') -> Being:
     return Being(being_id=BeingId(being_id_value), identity=BeingIdentity(name='アダ', first_person='わたし'), attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)), declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SEMANTIC])
 
 def _populate_memory(stores: dict[str, object], being: BeingId) -> None:
     stores['memo'].add_by_being(being, 'Adventure memo')
-    stores['semantic'].add_by_being(being, SemanticMemoryEntry(entry_id='s1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='森は東にある', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=_NOW))
 
 class TestSaveLoadRoundTripInMemory:
     """InMemoryBeingRepository での save → load round-trip。"""
@@ -80,7 +74,6 @@ class TestSaveLoadRoundTripInMemory:
         assert loaded is not None
         assert loaded.being_id == being.being_id
         assert len(dst_stores['memo'].list_all_by_being(being.being_id)) == 1
-        assert len(dst_stores['semantic'].list_for_being(being.being_id)) == 1
 
     def test_unregistered_being_id_none(self) -> None:
         """未登録 being id は None。"""
@@ -128,10 +121,9 @@ class TestConstructorTypeGuards:
     def test_being_repository_raises_type_error(self) -> None:
         """being repository 型違反。"""
         memo = InMemoryMemoStore()
-        semantic = InMemorySemanticMemoryStore()
         link = InMemoryMemoryLinkStore()
         episode = InMemorySubjectiveEpisodeStore()
-        snap_svc = BeingMemorySnapshotService(memo_store=memo, semantic_store=semantic, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        snap_svc = BeingMemorySnapshotService(memo_store=memo, memory_link_store=link, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         with pytest.raises(TypeError, match='being_repository'):
             BeingPersistenceService(being_repository='bad', memory_snapshot_service=snap_svc)
 
