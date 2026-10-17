@@ -26,7 +26,7 @@ class TestFromEnvDefaults:
         assert cfg.llm_api_key is None
         assert cfg.llm_api_base is None
         assert cfg.llm_request_timeout_seconds == 90.0
-        assert cfg.llm_reasoning_effort == 'none'
+        assert cfg.llm_reasoning_effort == 'minimal'
         assert cfg.llm_wall_time_cap_seconds is None
         assert cfg.llm_rate_limit_retry_attempts == 3
         assert cfg.llm_rate_limit_retry_base_sleep == 2.0
@@ -68,6 +68,19 @@ class TestWorldTickFailurePolicyConfig:
         """from_mapping を通らない構築でも、知らない値は ValueError で止める。"""
         with pytest.raises(ValueError, match='fail_fast'):
             ResolvedLlmRuntimeConfig.for_tests(world_tick_failure_policy='skip')
+
+class TestReasoningEffortDefault:
+    """LLM_REASONING_EFFORT の既定は minimal で、明示した値はそのまま使う。"""
+
+    def test_unset_resolves_to_minimal(self) -> None:
+        """LLM_REASONING_EFFORT を書かないと minimal になる。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+        assert cfg.llm_reasoning_effort == 'minimal'
+
+    def test_explicit_none_stays_none(self) -> None:
+        """LLM_REASONING_EFFORT に none と書けば、既定の minimal ではなく none のまま。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_REASONING_EFFORT': 'none'})
+        assert cfg.llm_reasoning_effort == 'none'
 
 class TestReasonFirstTwoStepConfig:
     """reason-first 2段階ターンを使うかを、設定のキーではなく tool_choice から決める。"""
@@ -111,7 +124,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.llm_client_kind == 'litellm'
@@ -119,7 +132,7 @@ class TestFromEnvExplicit:
         assert cfg.llm_api_key is None
         assert cfg.llm_api_base == 'https://openrouter.ai/api/v1'
         assert cfg.llm_request_timeout_seconds == 60.0
-        assert cfg.llm_reasoning_effort == 'minimal'
+        assert cfg.llm_reasoning_effort == 'low'
         assert cfg.llm_wall_time_cap_seconds == 65.0
         assert cfg.llm_rate_limit_retry_attempts == 2
         assert cfg.llm_rate_limit_retry_base_sleep == 1.5
