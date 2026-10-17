@@ -12,7 +12,6 @@ run 途中再開 (mid-run resume) milestone の UX 層。``BeingPersistenceServi
 ```bash
 uv run python scripts/being_snapshot_cli.py save \
     --being-db var/game/beings.db \
-    --episode-db var/game/episodes.db \
     --being-id being_w1_p1 \
     --output var/snapshots/being_w1_p1.json
 ```
@@ -22,7 +21,6 @@ uv run python scripts/being_snapshot_cli.py save \
 ```bash
 uv run python scripts/being_snapshot_cli.py load \
     --being-db var/restored_beings.db \
-    --episode-db var/restored_episodes.db \
     --input var/snapshots/being_w1_p1.json
 ```
 
@@ -68,9 +66,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E40
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (  # noqa: E402
     SqliteBeingRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (  # noqa: E402
-    SqliteSubjectiveEpisodeStore,
-)
 
 logger = logging.getLogger("being_snapshot_cli")
 
@@ -78,20 +73,17 @@ logger = logging.getLogger("being_snapshot_cli")
 def _build_stack(
     *,
     being_db: Path,
-    episode_db: Path,
 ) -> tuple[
     SqliteBeingRepository,
     BeingMemorySnapshotService,
     BeingSnapshotFileGateway,
 ]:
-    """2 つの sqlite DB + in-memory memo store から本 CLI 用 stack を組む。
+    """Being の sqlite DB + in-memory の memory store から本 CLI 用 stack を組む。
 
     memo store は SQLite 実装がないため in-memory で常に新規。snapshot JSON
     に memo が入っていれば restore で書き戻される。
     """
     being_repo = SqliteBeingRepository.connect(str(being_db))
-
-    episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
 
     from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
         InMemoryAcquaintanceRepository,
@@ -108,7 +100,6 @@ def _build_stack(
 
     memory_snapshot = BeingMemorySnapshotService(
         memo_store=InMemoryMemoStore(),
-        episodic_episode_store=episode_store,
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
@@ -123,12 +114,6 @@ def _add_db_args(parser: argparse.ArgumentParser) -> None:
         type=Path,
         required=True,
         help="SqliteBeingRepository の DB ファイルパス",
-    )
-    parser.add_argument(
-        "--episode-db",
-        type=Path,
-        required=True,
-        help="SqliteSubjectiveEpisodeStore の DB ファイル",
     )
 
 
@@ -146,7 +131,6 @@ def cmd_save(args: argparse.Namespace) -> int:
 
     being_repo, memory_snapshot, gateway = _build_stack(
         being_db=args.being_db,
-        episode_db=args.episode_db,
     )
     # CLI 経由の dump は RAM 上の sidecar に到達できないので、これらは常に
     # 空のまま保存される。取りこぼしていることがユーザに伝わるよう、明示的に
@@ -191,7 +175,6 @@ def cmd_load(args: argparse.Namespace) -> int:
 
     being_repo, memory_snapshot, gateway = _build_stack(
         being_db=args.being_db,
-        episode_db=args.episode_db,
     )
     use_case = RestoreBeingSnapshotFromFileUseCase(
         being_repository=being_repo,

@@ -21,8 +21,7 @@ Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JS
 ```json
 {
   "schema_version": 1,
-  "memo": [...],
-  "episodic_episodes": [...]
+  "memo": [...]
 }
 ```
 
@@ -65,9 +64,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_being_episode,
     dict_to_being_memo,
     dict_to_memo_entry,
-    dict_to_subjective_episode,
     memo_entry_to_dict,
-    subjective_episode_to_dict,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
@@ -75,9 +72,6 @@ from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
 from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationException
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
@@ -167,7 +161,6 @@ class BeingMemorySnapshotService:
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
         "memo",
-        "episodic_episodes",
         "memory_turn",
         "acquaintances",
         "being_episodes",
@@ -178,7 +171,6 @@ class BeingMemorySnapshotService:
         self,
         *,
         memo_store: MemoRepository,
-        episodic_episode_store: EpisodicEpisodeRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
@@ -186,10 +178,6 @@ class BeingMemorySnapshotService:
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
-        if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
-            raise TypeError(
-                "episodic_episode_store must be EpisodicEpisodeRepository"
-            )
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
         if not isinstance(being_episode_store, EpisodeRepository):
@@ -199,7 +187,6 @@ class BeingMemorySnapshotService:
         if not isinstance(memory_turn_clock, MemoryTurnClock):
             raise TypeError("memory_turn_clock must be MemoryTurnClock")
         self._memo = memo_store
-        self._episodic_episode = episodic_episode_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
@@ -214,10 +201,6 @@ class BeingMemorySnapshotService:
             "memo": [
                 memo_entry_to_dict(e)
                 for e in self._memo.list_all_by_being(being_id)
-            ],
-            "episodic_episodes": [
-                subjective_episode_to_dict(ep)
-                for ep in self._episodic_episode.list_all_by_being(being_id)
             ],
         }
         memory_turn = self._memory_turn_clock.current_turn(being_id)
@@ -299,11 +282,6 @@ class BeingMemorySnapshotService:
         memo_entries = _decode_list(
             payload["memo"], dict_to_memo_entry, "memo"
         )
-        episodes = _decode_list(
-            payload["episodic_episodes"],
-            lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
-            "episodic_episodes",
-        )
         memory_turn_raw = payload["memory_turn"]
         if len(memory_turn_raw) > 1 or not all(
             isinstance(v, int) and not isinstance(v, bool) and v > 0
@@ -342,7 +320,6 @@ class BeingMemorySnapshotService:
             ) from exc
         # 順序は「依存の少ない方から」: memo は他 store に依存しない。
         self._memo.replace_all_by_being(being_id, memo_entries)
-        self._episodic_episode.replace_all_by_being(being_id, episodes)
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)

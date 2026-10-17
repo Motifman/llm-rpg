@@ -2,7 +2,7 @@
 
 Phase 4 Step 4-3 (Issue #470): Phase 5 で実装する run 途中再開
 (mid-run resume) の use case が叩く統合層。Being の identity / attachment /
-declared_memory_kinds と、memory store (memo / episodic_episode など) の状態を、
+declared_memory_kinds と、memory store (memo や Being の記憶) の状態を、
 **1 回の API 呼び出し** で save / load できるようにする。
 
 ## 内部の流れ

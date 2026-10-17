@@ -167,14 +167,6 @@ def _empty_memo_store() -> Any:
     return InMemoryMemoStore()
 
 
-def _empty_episode_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-        InMemorySubjectiveEpisodeStore,
-    )
-
-    return InMemorySubjectiveEpisodeStore()
-
-
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -319,13 +311,8 @@ class ExperimentSnapshotSession:
 
         # 任意 store: 「未配線なら空 in-memory store で代用」する (= 空の payload に
         # なるが file の整合性は保たれる)。memo は普段使うので強く期待するが、None でも
-        # fallback できる方が安全。古いエピソードの store は #1631 で runtime が組まなく
-        # なったので、渡されなければ黙って空にする。キーは snapshot から消すまで残す。
+        # fallback できる方が安全。
         memo_store = wiring_result.memo_store or _empty_memo_store()
-        episode_store = (
-            getattr(wiring_result, "episodic_episode_store", None)
-            or _empty_episode_store()
-        )
 
         # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す。
         fallback_used = [
@@ -342,7 +329,6 @@ class ExperimentSnapshotSession:
 
         self._memory_snapshot = BeingMemorySnapshotService(
             memo_store=memo_store,
-            episodic_episode_store=episode_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,

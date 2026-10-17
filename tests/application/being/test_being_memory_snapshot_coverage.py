@@ -51,8 +51,7 @@ def _make_service(memory_turn_clock=None):
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
     from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock())
+    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock())
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -95,7 +94,7 @@ class TestBeingMemorySnapshotServiceCoverage:
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
         service = _make_service()
-        payload_without_new_key = {'schema_version': 1, 'memo': [], 'episodic_episodes': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []}
+        payload_without_new_key = {'schema_version': 1, 'memo': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []}
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId('being-test'), json.dumps(payload_without_new_key))
         assert 'fictional_new_store' in str(exc_info.value)
@@ -116,9 +115,6 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
         from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-            InMemorySubjectiveEpisodeStore,
-        )
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
@@ -126,7 +122,7 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
-        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         provisioning.ensure_attached(PlayerId(1))
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         with pytest.raises(SnapshotCoverageError):

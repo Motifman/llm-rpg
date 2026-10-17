@@ -613,6 +613,8 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 
 記憶リンクも #1799 で消したので、CLI の `--memory-db` を外した。いまは Being の DB とエピソードの DB の 2 つと、in-memory の memo で動く。
 
+古いエピソードの store (`SqliteSubjectiveEpisodeStore`) も #PRNUM で消したので、CLI の `--episode-db` を外した。いまは Being の DB と、in-memory の memory store で動く。
+
 ---
 
 ## 9. 速度より「LLM の判断ミス」を優先して直す
@@ -4443,6 +4445,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 
 区切りの書き起こし・主観補完のサービスと scheduler は #1803 で消した。`SubjectiveEpisode` と store は段 12 の 3 本目で消す。
 
+`SubjectiveEpisode` と store (in-memory / SQLite)、Being の snapshot のキー `episodic_episodes` も #PRNUM で消した。消す前の snapshot も読める。
+
 ## 175. 昇格フロンティアは BeingId で分ける
 
 **何を**: `EpisodicPromotionFrontier` のキーを `player_id: int` から `BeingId`
@@ -4481,6 +4485,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 **残す**: エピソードがまだ無い入口 (`after_action_recorded`、retrieve、
 `MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
 `being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
+
+**その後**: `SubjectiveEpisode` は記憶の部品の撤去 (#1631) の #PRNUM で消した。
 
 ## 177. 記憶リンクに経験の主体 BeingId を載せる
 

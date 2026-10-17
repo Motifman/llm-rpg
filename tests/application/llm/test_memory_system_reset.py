@@ -58,6 +58,8 @@ def test_default_tools_register_memo_without_memory_tools() -> None:
         "ai_rpg_world.application.llm.services.in_memory_long_term_memory_store",
         "ai_rpg_world.application.llm.services.subagent_runner",
         "ai_rpg_world.infrastructure.llm.sqlite_subjective_episode_store",
+        "ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store",
+        "ai_rpg_world.application.llm.services.in_memory_subjective_episode_store",
     ],
 )
 def test_deleted_memory_modules_are_not_importable(module_name: str) -> None:
