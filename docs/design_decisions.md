@@ -611,7 +611,7 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 
 **その後**: 意味記憶の store (`SqliteSemanticMemoryStore`) は記憶の部品の撤去 (#1631) の #1794 で消した。`--memory-db` の SQLite ファイルにはいま memory_link だけが入る。意味記憶の表を作る版はマイグレーションの履歴として残るので、古い DB ファイルも開ける。
 
-記憶リンクも #PRNUM で消したので、CLI の `--memory-db` を外した。いまは Being の DB とエピソードの DB の 2 つと、in-memory の memo で動く。
+記憶リンクも #1799 で消したので、CLI の `--memory-db` を外した。いまは Being の DB とエピソードの DB の 2 つと、in-memory の memo で動く。
 
 ---
 
@@ -3709,7 +3709,7 @@ link / promotion だけが葉で付着を引き直していた。
 
 **その後**: クラスタ昇格 (`EpisodicSemanticClusterPromotionService`) は、記憶の部品の撤去 (#1631) の #1792 で消した。記憶リンクは受動想起と一緒に続く PR で消す。
 
-記憶リンク (`EpisodicMemoryLinkApplicationService` と store) も、読み手の受動想起を #1796 で消したあと、#PRNUM で消した。
+記憶リンク (`EpisodicMemoryLinkApplicationService` と store) も、読み手の受動想起を #1796 で消したあと、#1799 で消した。
 
 ## 147. Unit of Workは永続化に絞り、CommandScopeがcommand完了を統括する
 
@@ -4493,7 +4493,7 @@ VO に復元する (スキーマ変更は不要)。
 `SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
 `being_id` 引数削除、未使用 `player_id` 引数の掃除。
 
-**その後**: 記憶リンク (`MemoryLink`、store、Being の snapshot のキー `memory_links`) は記憶の部品の撤去 (#1631) の #PRNUM で消した。消す前の snapshot も読める (restore は足りないキーだけを拒む。リンクの欄は tick を持たないので replay でも止まらない)。SQLite のリンクの表は、表を作る版ごと使われなくなった。古い DB ファイルに表は残るが、どこも開かない。
+**その後**: 記憶リンク (`MemoryLink`、store、Being の snapshot のキー `memory_links`) は記憶の部品の撤去 (#1631) の #1799 で消した。消す前の snapshot も読める (restore は足りないキーだけを拒む。リンクの欄は tick を持たないので replay でも止まらない)。SQLite のリンクの表は、表を作る版ごと使われなくなった。古い DB ファイルに表は残るが、どこも開かない。
 
 ## 178. monster spawnはslot 1件ごとに確定する
 
