@@ -57,7 +57,6 @@ class TestSurvivalIslandV2EpisodicWiring:
         stack = runtime._episodic_stack
         assert stack is not None
         assert stack.chunk_coordinator is not None
-        assert stack.passive_recall is not None
         assert stack.noun_matcher is not None
         assert stack.episode_store is not None
 

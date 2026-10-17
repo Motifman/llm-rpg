@@ -11,7 +11,7 @@
 
 - ``EpisodicStack``: 組み立てた pipeline をまとめて返す dataclass
 - ``build_episodic_stack(...)``: scenario + 共有 IO ストアを受け取り、
-  chunk_coordinator / passive_recall / noun_matcher を組む本体
+  chunk_coordinator / noun_matcher を組む本体
 - ``build_scenario_noun_matcher(...)``: scenario の spot 名 / キャラクター名から
   ``IWorldNounMatcher`` を構築
 - ``is_episodic_enabled`` / ``is_episodic_subjective_enabled``: 環境変数の
@@ -64,9 +64,6 @@ from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
-)
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallRetrievalService,
 )
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
@@ -143,16 +140,14 @@ class EpisodicStack:
     Attributes:
         chunk_coordinator: ``after_action_recorded(player_id, being_id)`` を呼ぶための
             書き込み側 service
-        passive_recall: prompt builder に渡す読み出し側 service
         noun_matcher: observation prose 中の固有名詞を cue 化するマッチャ
-        episode_store: 共有 episode store (chunk が書き、passive_recall が読む)
+        episode_store: 共有 episode store (chunk と主観補完が書く)
         subjective_completion_scheduler: 非同期 LLM 主観文付与のスケジューラ。
             shutdown 時に in-flight ジョブを drain するために保持する。
             未配線時は None。
     """
 
     chunk_coordinator: EpisodicChunkCoordinator
-    passive_recall: EpisodicPassiveRecallRetrievalService
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
@@ -265,8 +260,8 @@ def build_episodic_stack(
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
-    write 側 (chunk_coordinator) と read 側 (passive_recall + noun_matcher) を
-    1 つの episode_store で共有する。LLM 駆動の reinterpretation や semantic
+    write 側 (chunk_coordinator) と主観補完の scheduler が 1 つの episode_store を
+    共有する。LLM 駆動の reinterpretation や semantic
     promotion は組み込まない (将来必要になったら本家 builders を呼ぶ)。
 
     # 引数
@@ -298,8 +293,8 @@ def build_episodic_stack(
     """
     # episode_store を呼び出し側から渡せるようにしているのは、scheduler 経路
     # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
-    # ため (両者が違う store だと、worker が書き込んだ merged episode を
-    # passive_recall が読めない)。
+    # ため (両者が違う store だと、worker が書き込んだ merged episode が
+    # chunk の書いた episode と食い違う)。
     # semantic_enabled のときは full 共有 builder で link の store を組み、
     # chunk_coordinator に link service を渡す。
     link_service: Any | None = None
@@ -325,8 +320,7 @@ def build_episodic_stack(
         episode_store = InMemorySubjectiveEpisodeStore()
 
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
-    # ChunkEpisodeDraftBuilder と passive_recall の両方に同じ matcher を
-    # 渡すことで write/read 経路の cue 生成を対称化する。
+    # ChunkEpisodeDraftBuilder に渡す。
     # #526 後続 C1: spot_interior_repo が渡されていれば、各 spot の
     # ``interior.objects`` から world_object 名も index される。
     noun_matcher = build_scenario_noun_matcher(
@@ -352,12 +346,9 @@ def build_episodic_stack(
         # link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
     )
-    passive_recall = EpisodicPassiveRecallRetrievalService(episode_store)
-    # noun_matcher は上で chunk_coordinator 用に先に構築済 (Fix A)
 
     return EpisodicStack(
         chunk_coordinator=chunk_coordinator,
-        passive_recall=passive_recall,
         noun_matcher=noun_matcher,
         episode_store=episode_store,
         subjective_completion_scheduler=subjective_completion_scheduler,

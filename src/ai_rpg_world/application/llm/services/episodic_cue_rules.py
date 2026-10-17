@@ -2,7 +2,7 @@
 ツール実行ターン向けの決定論的 EpisodicCue 生成。
 
 LLM・プロンプト文字列・旧 cue_keys に依存しない。runtime / tool メタ /
-canonical_arguments / LlmCommandResultDto / ActionResultEntry / 観測 structured のみを入力とする。
+canonical_arguments / LlmCommandResultDto / 観測 structured のみを入力とする。
 """
 
 from __future__ import annotations
@@ -17,25 +17,16 @@ _logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
-    ActionResultEntry,
     LlmCommandResultDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     # Issue #283 後続: 観測 prose の自由文 cue 抽出に使う。Protocol なので
     # 型チェック時のみ参照。runtime には依存しない (caller が None でも安全)。
-    # PR8 (R5): encounter memory を recall cue 源にする。Protocol 型なので
-    # 型チェック時のみ参照、runtime には依存しない。
-    from ai_rpg_world.application.encounter.contracts.interfaces import (
-        IEncounterMemory,
-    )
     from ai_rpg_world.application.llm.services.world_noun_matcher import (
         IWorldNounMatcher,
     )
@@ -51,10 +42,6 @@ _ACTOR_NAME_UNSAFE_RE = re.compile(r"\W+")
 MAX_EPISODIC_CUES = 32
 # tile_area は冗長になりやすいため個別上限（action/outcome より後ろで列挙し、ここで打ち切る）
 MAX_TILE_AREA_CUES = 24
-# topic は semantic passive recall の relevance 用の検索入力側 cue。episode
-# 保存側の索引には入れず、episodic recall の件数上限にも数えない。
-TOPIC_CUE_AXIS = "topic"
-MAX_TOPIC_CUES = 32
 # value は索引キーとして短く保つ（canonical は axis:value のため value 側のみが対象）
 MAX_CUE_VALUE_CHARS = 96
 # 秘匿対人行為の対象本人向け観測では、structured["actor"] に実 actor が
@@ -126,94 +113,30 @@ def build_situation_episodic_cues(
     *,
     runtime_context: ToolRuntimeContextDto | None,
     observation_structured: Mapping[str, Any] | None = None,
-    latest_action: ActionResultEntry | None = None,
     observation_prose: str | None = None,
     noun_matcher: IWorldNounMatcher | None = None,
-    additional_freetexts: Sequence[str] | None = None,
-    semantic_topic_words: Sequence[str] | None = None,
-    include_topic_cues: bool = False,
-    encounter_memory: IEncounterMemory | None = None,
-    encounter_player_id: PlayerId | None = None,
-    encounter_current_tick: int | None = None,
-    encounter_recent_window_ticks: int = 5,
-    encounter_spot_id_resolver: Callable[[str], int] | None = None,
-    recently_met_names: Sequence[str] = (),
 ) -> tuple[EpisodicCue, ...]:
     """
-    受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
-    同じ軸・語彙・正規化で返す（挿入順も固定）。ただし semantic passive
-    recall 用の ``topic`` 軸は semantic passive recall の検索入力側専用であり、
-    ``include_topic_cues=True`` を明示した呼び出しでだけ追加する。保存側や
-    episodic passive recall の呼び出しでは既定の ``False`` のままにし、
-    episode 索引や temporal fallback を動かさない。
-
-    `ToolRuntimeContextDto` と直近観測 structured に加え、`latest_action` があれば
-    直近ツール名・成否（§0.2）を action / outcome 軸で足し、チャンク保存側の cue と揃えて想起しやすくする。
+    観測 1 件ぶんの「局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
+    同じ軸・語彙・正規化で返す（挿入順も固定）。
 
     Issue #283 後続: ``observation_prose`` + ``noun_matcher`` が両方注入されていれば、
     観測の自由文本を ``WorldNounMatcher`` (Aho-Corasick) で走査し、含まれる固有名詞
     から ``OBSERVATION_FREETEXT`` source で cue を追加する。これにより SNS / speech
     の prose に「書架A」とだけ書かれているケースでも place_spot:3 cue が立つ。
 
-    PR7 (R4): ``additional_freetexts`` が与えられたら、各文字列にも noun_matcher を
-    適用する。caller は直近 N 件の観測 prose / 自分の発話 / 自分の内心などを
-    まとめて渡す想定。これにより「最新観測 1 件にしか matcher が当たらない」
-    狭さが解消される。None / 空 list / matcher 未注入の場合は何もしない。
-
-    PR8 (R5): ``encounter_memory`` + ``encounter_player_id`` + ``encounter_current_tick``
-    が全て与えられたら、直近 ``encounter_recent_window_ticks`` 以内に encounter
-    した spot / event を ``ENCOUNTER`` source の cue として追加する。
-    構造化 spawn / arrival 観測しか無い場面でも spot cue を立てて、
-    過去 episode が recall されるようにするための経路。
-    ``recently_met_names`` (Being の知り合いの記録で直近に会った相手) は
-    ``ENCOUNTER`` source の entity cue になる。
-
-    P2-①: ``include_topic_cues=True`` のときだけ、``semantic_topic_words`` と
-    runtime target の表示名から ``topic`` 軸の日本語 cue を足す。これは
-    semantic passive recall の検索入力専用であり、episode 保存側
-    ``build_episodic_cues_for_tool_turn`` や chunk 保存、episodic passive
-    recall には載せない。既存 episode とマッチさせず、episodic recall の
-    temporal fallback も阻害しないため。
-
     None の入力や未知フィールドは黙って無視する。
     """
-    collected: list[EpisodicCue] = []
-    if latest_action is not None:
-        collected.extend(_cues_from_latest_action_entry(latest_action))
-    collected.extend(
-        _collect_situation_episodic_cues(
-            runtime_context=runtime_context,
-            observation_structured=observation_structured,
-            observation_prose=observation_prose,
-            noun_matcher=noun_matcher,
-            additional_freetexts=additional_freetexts,
-        )
-    )
-    if (
-        encounter_memory is not None
-        and encounter_player_id is not None
-        and encounter_current_tick is not None
-    ):
-        collected.extend(
-            _cues_from_recent_encounters(
-                encounter_memory=encounter_memory,
-                player_id=encounter_player_id,
-                current_tick=encounter_current_tick,
-                recent_window_ticks=encounter_recent_window_ticks,
-                spot_id_resolver=encounter_spot_id_resolver,
+    return tuple(
+        _validate_and_dedupe(
+            _collect_situation_episodic_cues(
+                runtime_context=runtime_context,
+                observation_structured=observation_structured,
+                observation_prose=observation_prose,
+                noun_matcher=noun_matcher,
             )
         )
-    collected.extend(_cues_from_recently_met(recently_met_names))
-    validated = _validate_and_dedupe(collected)
-    if include_topic_cues:
-        topic_words = list(semantic_topic_words or ())
-        if runtime_context is not None:
-            topic_words.extend(_semantic_topic_words_from_runtime_targets(runtime_context.targets))
-        topic_cues = _validate_topic_cues(topic_words)
-        if topic_cues:
-            existing = {c.to_canonical() for c in validated}
-            validated.extend(c for c in topic_cues if c.to_canonical() not in existing)
-    return tuple(validated)
+    )
 
 
 def _collect_situation_episodic_cues(
@@ -222,9 +145,8 @@ def _collect_situation_episodic_cues(
     observation_structured: Mapping[str, Any] | None,
     observation_prose: str | None = None,
     noun_matcher: IWorldNounMatcher | None = None,
-    additional_freetexts: Sequence[str] | None = None,
 ) -> list[EpisodicCue]:
-    """runtime / 観測 structured / 観測 prose / 追加 freetexts から局面 cue を
+    """runtime / 観測 structured / 観測 prose から局面 cue を
     組み立てる (重複除去・件数上限は呼び出し側)。"""
     out: list[EpisodicCue] = []
     rt = runtime_context
@@ -237,12 +159,6 @@ def _collect_situation_episodic_cues(
 
     if observation_prose and noun_matcher is not None:
         out.extend(_cues_from_observation_prose(observation_prose, noun_matcher))
-
-    if additional_freetexts and noun_matcher is not None:
-        for raw in additional_freetexts:
-            if not raw:
-                continue
-            out.extend(_cues_from_observation_prose(raw, noun_matcher))
 
     if rt is not None:
         excluded_player_ids: frozenset[int] = frozenset()
@@ -300,20 +216,6 @@ def _cues_from_observation_prose(
                 source=EpisodicCueSource.OBSERVATION_FREETEXT,
             )
         )
-    return out
-
-
-def _cues_from_latest_action_entry(entry: ActionResultEntry) -> list[EpisodicCue]:
-    """IActionResultStore の最新行動から action / outcome cue を付与（tool ターンと同一正規化）。"""
-    out: list[EpisodicCue] = []
-    tn = _optional_str(entry.tool_name)
-    if tn is not None:
-        seg = _sanitize_tool_segment(tn)
-        if seg is not None:
-            out.append(EpisodicCue(axis="action", value=seg, source=EpisodicCueSource.TOOL))
-    oc = _outcome_cue_from_success_and_error(success=entry.success, error_code=entry.error_code)
-    if oc is not None:
-        out.append(oc)
     return out
 
 
@@ -458,178 +360,6 @@ def _cues_from_runtime_targets(
             val = _sanitize_id_segment("chest_world_object", cid)
             out.append(EpisodicCue(axis="object", value=val, source=src))
     return out
-
-
-def _semantic_topic_words_from_runtime_targets(
-    targets: Mapping[str, ToolRuntimeTargetDto],
-) -> list[str]:
-    """runtime target の表示名を semantic relevance 用 topic 語として取り出す。
-
-    保存側 cue ではなく、現在状況 query 側だけに使う。label / id ではなく
-    prompt に出る表示名を使い、内部識別子が semantic entry の日本語 text/tag と
-    噛み合わない問題を避ける。
-    """
-    out: list[str] = []
-    for label in sorted(targets.keys()):
-        target = targets[label]
-        if not isinstance(target, ToolRuntimeTargetDto):
-            continue
-        display_name = _normalize_topic_word(target.display_name)
-        if display_name is not None:
-            out.append(display_name)
-    return out
-
-
-def _validate_topic_cues(words: Sequence[str]) -> list[EpisodicCue]:
-    """topic cue を別枠で重複除去する。
-
-    ``MAX_EPISODIC_CUES`` は episodic 索引参加 cue の上限なので、topic は
-    その件数枠から外す。ただし無制限増加は避けるため topic 側にも独立上限
-    を置く。
-    """
-    seen: set[str] = set()
-    out: list[EpisodicCue] = []
-    for raw in words:
-        word = _normalize_topic_word(raw)
-        if word is None:
-            continue
-        cue = EpisodicCue(
-            axis=TOPIC_CUE_AXIS,
-            value=word,
-            source=EpisodicCueSource.RUNTIME_CONTEXT,
-        )
-        key = cue.to_canonical()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(cue)
-        if len(out) >= MAX_TOPIC_CUES:
-            break
-    return out
-
-
-def _normalize_topic_word(raw: object | None) -> str | None:
-    """日本語 topic 語を cue value として扱える短い文字列に整える。"""
-    if raw is None or not isinstance(raw, str):
-        return None
-    text = raw.strip()
-    if not text:
-        return None
-    text = text.strip(" \t\r\n\"'「」『』（）()[]【】")
-    if not text:
-        return None
-    return _truncate_value(text)
-
-
-def _cues_from_recent_encounters(
-    *,
-    encounter_memory: IEncounterMemory,
-    player_id: PlayerId,
-    current_tick: int,
-    recent_window_ticks: int,
-    spot_id_resolver: Callable[[str], int] | None = None,
-) -> list[EpisodicCue]:
-    """PR8 (R5): 直近 ``recent_window_ticks`` 以内に encounter した entity /
-    spot / event から recall cue を立てる。
-
-    EncounterKey.kind → EpisodicCue.axis のマッピング:
-      ``spot``   → axis=``place_spot``, value=``{数値 spot_id}``
-        (identifier はシナリオの文字列 ID。``spot_id_resolver`` で数値に
-        直し、``_cues_from_runtime_place`` の ``str(sid)`` と揃える)
-      ``event``  → axis=``action``, value=``{identifier}``
-
-    時間窓判定は ``last_seen_tick`` ベース。``current_tick - last_seen_tick``
-    が ``recent_window_ticks`` 以下のものだけを cue 化する。
-
-    encounter memory の例外は warning にして空 list を返す (recall を止めない
-    silent-safe fallback)。``EncounterRecord.is_first`` 等の状態は cue では
-    区別しない: 「直近で会った」「直近で再会した」のどちらも cue を立てる
-    だけで、その先のスコアリングは PR6 (R3) の cue scoring に任せる。
-    """
-    try:
-        records = encounter_memory.get_records_for(player_id)
-    except Exception:
-        _logger.warning(
-            "encounter_memory.get_records_for failed; recall fallback to empty encounter cues",
-            exc_info=True,
-        )
-        return []
-    out: list[EpisodicCue] = []
-    src = EpisodicCueSource.ENCOUNTER
-    for key, record in records.items():
-        # 時間窓判定: tick の差 (= 経過 tick 数) が window 以下なら含める。
-        # past tick が大きい (= 未来) ケースは記録ミス想定で skip。
-        delta = current_tick - record.last_seen_tick
-        if delta < 0 or delta > recent_window_ticks:
-            continue
-        identifier = key.identifier
-        if not identifier:
-            continue
-        kind = key.kind
-        if kind == "spot":
-            ident_int = _resolve_encounter_spot_id(identifier, spot_id_resolver)
-            if ident_int is None:
-                continue
-            out.append(
-                EpisodicCue(
-                    axis="place_spot",
-                    value=str(ident_int),
-                    source=src,
-                )
-            )
-        elif kind == "event":
-            # ``_sanitize_tool_segment`` を流用: tool 名と同じ [a-z0-9_]
-            # 正規化で event identifier も canonical 化する (action 軸の
-            # cue 値形式と整合)。
-            seg = _sanitize_tool_segment(identifier)
-            if seg is None:
-                continue
-            out.append(EpisodicCue(axis="action", value=seg, source=src))
-        # 未知 kind は (sanitize 経由でも未保証なので) skip
-    return out
-
-
-def _cues_from_recently_met(names: Sequence[str]) -> list[EpisodicCue]:
-    """観測 structured の actor と同じ ``_coerce_actor_entity`` を通し、同じ人物を同じ cue にする。"""
-    out: list[EpisodicCue] = []
-    for name in names:
-        value = _coerce_actor_entity(name)
-        if value is not None:
-            out.append(
-                EpisodicCue(axis="entity", value=value, source=EpisodicCueSource.ENCOUNTER)
-            )
-    return out
-
-
-def _resolve_encounter_spot_id(
-    identifier: str,
-    spot_id_resolver: Callable[[str], int] | None,
-) -> int | None:
-    if spot_id_resolver is None:
-        return _strict_int_str(identifier)
-    try:
-        resolved = spot_id_resolver(identifier)
-    except Exception:
-        _logger.warning(
-            "encounter spot_id_resolver failed (spot=%s); skipping place_spot cue",
-            identifier,
-            exc_info=True,
-        )
-        return None
-    return _strict_int(resolved)
-
-
-def _strict_int_str(raw: str) -> int | None:
-    """``str(int)`` 形式の identifier を int に戻す。整数以外は None。
-
-    NOTE: 兄弟の ``_strict_int`` (上記) とは用途が違う:
-      - ``_strict_int``: ``Any`` を受け取り「型が真に int」かをチェック (bool 排除)
-      - ``_strict_int_str``: ``str`` を受け取り int に parse する (canonical 化用途)
-    """
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
 
 
 def _cues_from_canonical_arguments(args: Mapping[str, Any]) -> list[EpisodicCue]:

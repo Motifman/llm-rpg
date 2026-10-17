@@ -125,7 +125,7 @@ class TestSmokePromptBuilds:
     """env=1 で prompt 構築が完走する。"""
 
     def test_build_full_prompt_completes_with_env_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """passive_recall + noun_matcher が wire された状態で prompt を組んでも
+        """episodic stack が wire された状態で prompt を組んでも
         例外が出ないこと。messages 配列が空でない。"""
         runtime = _build_runtime(enabled=True)
         kaito_id = runtime.get_player_ids()[0]
@@ -135,52 +135,6 @@ class TestSmokePromptBuilds:
         assert len(prompt['messages']) >= 2
         for msg in prompt['messages']:
             assert msg.get('content'), 'messages の content が空'
-
-class TestSmokeRecallSide:
-    """過去 episode を store に注入し、prose に「書架A」を含む観測を流すと、
-    その episode が prompt の user content に現れる (recall 側が alive)。"""
-
-    def test_episode_cue_via_prompt_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """end-to-end recall smoke:
-
-        1. env=1 で runtime を作成
-        2. リン (player_b) の過去 episode (書架A 訪問) を store に直接注入
-        3. 観測 buffer に「書架A」を含む prose の観測を流す
-        4. リンの prompt を組むと、user message に過去 episode の recall_text が
-           現れる
-        """
-        from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
-        from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
-        from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
-        from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-        from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-        runtime = _build_runtime(enabled=True)
-        stack = runtime._episodic_stack
-        assert stack is not None
-        rin_id = None
-        for spawn in runtime.scenario.player_spawns:
-            if spawn.name == 'リン':
-                from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-                rin_id = PlayerId(spawn.player_id)
-                break
-        assert rin_id is not None, 'リンが scenario に存在しない'
-        graph = runtime._spot_graph_repo.find_graph()
-        shelf_a_spot_id = None
-        for node in graph._spots.values():
-            if node.name == '書架 A':
-                shelf_a_spot_id = int(node.spot_id.value)
-                break
-        assert shelf_a_spot_id is not None, '書架 A が scenario に存在しない'
-        rin_being = runtime.aux_being_resolver.resolve_being_id(runtime.aux_being_default_world_id, rin_id)
-        assert rin_being is not None, 'リンの Being が provision されていない'
-        past_episode = SubjectiveEpisode(episode_id='smoke-past-shelf-a', player_id=int(rin_id.value), being_id=rin_being, occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-smoke',)), location=EpisodeLocation(spot_id=shelf_a_spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what='書架 A で『水』の断片語を見つけた', why=None, observed='書架 A', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(EpisodicCue(axis='place_spot', value=str(shelf_a_spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='SMOKE_RECALL_MARKER: 書架Aで水の断片語を見つけた')
-        stack.episode_store.put_by_being(rin_being, past_episode)
-        runtime._obs_buffer.append(rin_id, ObservationEntry(occurred_at=datetime.now(), output=ObservationOutput(prose='カイトの声が聞こえる: 「リン、書架Aで待ってる！」', structured={'type': 'speech_message', 'speaker': 'カイト', 'content': 'リン、書架Aで待ってる！'}, observation_category='social', schedules_turn=True), game_time_label=None))
-        prompt = runtime.build_full_prompt(rin_id)
-        full_text = '\n'.join(m.get('content', '') for m in prompt['messages'])
-        assert 'SMOKE_RECALL_MARKER' in full_text, '観測 prose に「書架A」が含まれているのに、過去の書架A 訪問 episode の recall_text が prompt に現れていない。自由文 cue 抽出 → passive recall → prompt 注入のどこかが切れている。'
 
 class TestSmokeSubjectiveServiceWiring:
     """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` の配線挙動 (Issue #295 後続)。

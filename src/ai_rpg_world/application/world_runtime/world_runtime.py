@@ -1797,13 +1797,6 @@ class WorldRuntime:
             )
         ]
 
-    def _relevant_memories_named_in_system_prompt(self) -> bool:
-        """システムプロンプトが【関連する記憶】を指してよいかを返す (#1616)。"""
-        return (
-            self._episodic_stack is not None
-            and self._episodic_stack.passive_recall is not None
-        )
-
     def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
         """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
 
@@ -2361,7 +2354,6 @@ class WorldRuntime:
             DefaultPromptBuilder,
         )
         from ai_rpg_world.application.llm.services.prompt_builder_config import (
-            EpisodicRecallConfig,
             PromptBuilderCoreServices,
             PromptLimits,
             PromptSectionProviders,
@@ -2376,7 +2368,6 @@ class WorldRuntime:
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
             short_term_memory=self._short_term_memory,
-            action_result_store=self._action_result_store,
             recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
@@ -2416,34 +2407,13 @@ class WorldRuntime:
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
             minutes_per_tick=_minutes_per_tick(self.scenario),
         )
-        # Issue #283 後続: episodic stack が注入されていれば、prompt builder の
-        # passive_recall + noun_matcher を有効化する。未注入なら従来挙動
-        # (recall section が出ない)。
-        episodic_config = EpisodicRecallConfig()
-        if self._episodic_stack is not None:
-            episodic_config = EpisodicRecallConfig(
-                passive_recall=self._episodic_stack.passive_recall,
-                noun_matcher=self._episodic_stack.noun_matcher,
-                # 想起→強化 (recall_count 加算 / CO_RECALL / ヘブ則) の配線。
-                # これが無いと想起されても recall_count が 0 のままで、semantic
-                # 昇格ゲート (recall_count>=3) を永遠に超えられない
-                # (memory_full_002 実験で発覚)。
-                memory_link_service=self._episodic_stack.link_service,
-                encounter_memory=self._encounter_memory,
-                encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
-                    "spot", spot_str_id
-                ),
-                acquaintances=self._player_acquaintances,
-            )
         builder = DefaultPromptBuilder(
             core,
             sections=sections,
             limits=limits,
-            episodic=episodic_config,
             ui_context_builder=self._ui_context_builder,
             current_tick_provider=lambda: self.current_tick(),
-            # Issue #283 後続: recall trace を可視化するため、trace_recorder を
-            # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
+            # trace_recorder は provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
             trace_recorder_provider=lambda: self._trace_recorder,
             # presentation 層で先に組まれている loop_guard (record_and_check の
             # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
@@ -4455,7 +4425,6 @@ def create_world_runtime(
     def _world_system_prompt(
         persona: str,
         *,
-        relevant_memories_shown: bool,
         episode_index_shown: bool,
         episode_recall_offered: bool,
     ) -> str:
@@ -4463,7 +4432,6 @@ def create_world_runtime(
             world_title=scenario.metadata.title,
             persona_block=persona,
             safe_intro=safe_intro,
-            relevant_memories_shown=relevant_memories_shown,
             being_memo_enabled=config.being_memo_enabled,
             has_goal=_has_goal,
             limits_actions=scenario.metadata.limits_actions,
@@ -7157,7 +7125,7 @@ def create_world_runtime(
                 PlayerId(int(s.player_id))
             )
     if config.episodic_enabled:
-        # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
+        # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler は
         # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線
         # を早期に確立し、各 player_spawn 分の Being を provision しておく。
         if not config.prompt_dataset_capture_enabled:
@@ -7224,7 +7192,7 @@ def create_world_runtime(
                 )
                 # scheduler と chunk_coordinator (= stack) が同じ store を
                 # 共有することで、worker が書き込んだ merged episode を
-                # passive_recall が読める ( = Pattern A の整合性条件)。
+                # chunk の書き込みと同じ store で扱える ( = Pattern A の整合性条件)。
                 # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
                 # 触る。being_id は chunk_coordinator から submit 引数で渡される。
                 subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
@@ -7372,20 +7340,17 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
-    relevant_memories_shown = runtime._relevant_memories_named_in_system_prompt()
     episode_index_shown, episode_recall_offered = (
         runtime._episode_index_parts_named_in_system_prompt()
     )
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
-        relevant_memories_shown=relevant_memories_shown,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
     )
     runtime._world_llm_system_prompts_by_player_id = {
         player_id: _world_system_prompt(
             persona,
-            relevant_memories_shown=relevant_memories_shown,
             episode_index_shown=episode_index_shown,
             episode_recall_offered=episode_recall_offered,
         )

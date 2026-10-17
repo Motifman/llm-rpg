@@ -2,7 +2,7 @@
 (Issue #283 後続)。
 
 - chunk 書き込み時に ``TraceEventKind.EPISODIC_CHUNK_WRITTEN`` を emit
-- passive recall 実行時に ``TraceEventKind.EPISODIC_RECALL`` を emit
+- prompt 組み立てごとに ``TraceEventKind.PROMPT_SECTION_BREAKDOWN`` を emit
 - trace_recorder 未注入なら no-op
 - recorder 例外は本来の処理を止めない
 """
@@ -161,136 +161,6 @@ class TestChunkCoordinatorTraceEmission:
         self._trigger_chunk_close(coord, buffer, action_store, pid, being_id)
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
-class TestPromptBuilderRecallTraceEmission:
-    """passive recall 実行ごとに EPISODIC_RECALL が記録される。"""
-
-    def test_recall_candidate_situation_cues_event_included(self) -> None:
-        """builder._emit_episodic_recall_trace を直接駆動して payload を検証
-        (full prompt build を経由しない最小ユニットテスト)。"""
-        from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        builder = object.__new__(DefaultPromptBuilder)
-        builder._trace_recorder = recorder
-        builder._trace_recorder_provider = None
-        builder._current_tick_provider = lambda : 42
-        ep = _make_episode(episode_id='recall-ep-1', recall_text='長いリコール本文...' * 10)
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-            EpisodicPassiveRecallCandidate,
-        )
-        cand = EpisodicPassiveRecallCandidate(episode=ep, source_axes=('place_spot', 'temporal'))
-        cue = EpisodicCue(axis='place_spot', value='3', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        builder._emit_episodic_recall_trace(player_id=PlayerId(7), situation_cues=(cue,), candidates=[cand])
-        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
-        assert len(events) == 1
-        ev = events[0]
-        assert ev.player_id == 7
-        assert ev.tick == 42
-        assert ev.payload['situation_cues'] == ['place_spot:3']
-        assert ev.payload['candidate_count'] == 1
-        cand0 = ev.payload['candidates'][0]
-        assert cand0['episode_id'] == 'recall-ep-1'
-        assert 'place_spot' in cand0['source_axes']
-        assert len(cand0['recall_text_snippet']) <= 120
-        assert cand0['recall_text_snippet'].startswith('長いリコール本文')
-        assert ev.payload['recall_text_chars_total'] == 0
-
-    def test_recall_text_chars_total_included(self) -> None:
-        """relevant_memories_text を渡すと、その文字数が payload に出る
-        (post-hoc に prompt_tokens 比へ換算するための計測点)。"""
-        from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        builder = object.__new__(DefaultPromptBuilder)
-        builder._trace_recorder = recorder
-        builder._trace_recorder_provider = None
-        builder._current_tick_provider = lambda : 1
-        joined = 'おれは昨日この場所で罠を仕掛けた。\n仲間が崖から落ちるのを見た。'
-        builder._emit_episodic_recall_trace(player_id=PlayerId(1), situation_cues=(), candidates=[], relevant_memories_text=joined)
-        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
-        assert len(events) == 1
-        assert events[0].payload['recall_text_chars_total'] == len(joined)
-
-    def test_recorder_uninjected_emit_op(self) -> None:
-        """trace_recorder=None なら例外なく no-op。"""
-        from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        builder = object.__new__(DefaultPromptBuilder)
-        builder._trace_recorder = None
-        builder._trace_recorder_provider = None
-        builder._current_tick_provider = lambda : 0
-        cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        builder._emit_episodic_recall_trace(player_id=PlayerId(1), situation_cues=(cue,), candidates=[])
-
-    def test_retrieval_debug_payload_included(self) -> None:
-        """``retrieval_debug`` を渡すと axis 別 raw 件数 / union 件数 /
-        最終 source_axes 別件数 / candidate ごとの source_axes が payload に
-        乗る (#526 後続: cue 設計の post-hoc 解析のため)。"""
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-            EpisodicPassiveRecallCandidate,
-            EpisodicPassiveRecallRetrievalDebug,
-        )
-        from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        builder = object.__new__(DefaultPromptBuilder)
-        builder._trace_recorder = recorder
-        builder._trace_recorder_provider = None
-        builder._current_tick_provider = lambda : 5
-        ep_a = _make_episode(episode_id='ep-a', recall_text='A')
-        ep_b = _make_episode(episode_id='ep-b', recall_text='B')
-        cand_a = EpisodicPassiveRecallCandidate(episode=ep_a, source_axes=('place_spot', 'object'))
-        cand_b = EpisodicPassiveRecallCandidate(episode=ep_b, source_axes=('action',))
-        debug = EpisodicPassiveRecallRetrievalDebug(raw_row_count_by_axis=(('place_spot', 5), ('object', 3), ('action', 2)), union_episode_count_before_max_cap=4, candidate_episode_sources=(('ep-a', ('place_spot', 'object')), ('ep-b', ('action',))), final_episode_count_by_source_axis=(('action', 1), ('object', 1), ('place_spot', 1)))
-        builder._emit_episodic_recall_trace(player_id=PlayerId(1), situation_cues=(), candidates=[cand_a, cand_b], retrieval_debug=debug)
-        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
-        assert len(events) == 1
-        p = events[0].payload
-        assert p['raw_row_count_by_axis'] == {'place_spot': 5, 'object': 3, 'action': 2}
-        assert p['union_episode_count_before_max_cap'] == 4
-        assert p['final_episode_count_by_source_axis'] == {'action': 1, 'object': 1, 'place_spot': 1}
-        assert p['candidates'][0]['episode_id'] == 'ep-a'
-        assert p['candidates'][0]['source_axes'] == ['place_spot', 'object']
-        assert 'habituation_penalty_by_episode' not in p
-        assert 'habituation_penalty' not in p['candidates'][0]
-
-    def test_retrieval_debug_unspecified_existing_payload_compatible(self) -> None:
-        """``retrieval_debug`` を渡さない呼び出しは既存形式 (追加キー無し) を
-        維持する (= 後方互換)。"""
-        from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        builder = object.__new__(DefaultPromptBuilder)
-        builder._trace_recorder = recorder
-        builder._trace_recorder_provider = None
-        builder._current_tick_provider = lambda : 1
-        builder._emit_episodic_recall_trace(player_id=PlayerId(1), situation_cues=(), candidates=[])
-        events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
-        assert len(events) == 1
-        p = events[0].payload
-        assert 'situation_cues' in p
-        assert 'candidate_count' in p
-        assert 'raw_row_count_by_axis' not in p
-        assert 'union_episode_count_before_max_cap' not in p
-        assert 'final_episode_count_by_source_axis' not in p
-
-    def test_provider_via_recorder(self) -> None:
-        """trace_recorder_provider が後から非 None を返せばその recorder に
-        emit される。"""
-        from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        recorder = NullTraceRecorder()
-        captured = _capture_trace(recorder)
-        holder = {'r': None}
-        builder = object.__new__(DefaultPromptBuilder)
-        builder._trace_recorder = None
-        builder._trace_recorder_provider = lambda : holder['r']
-        builder._current_tick_provider = lambda : 0
-        cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
-        builder._emit_episodic_recall_trace(player_id=PlayerId(1), situation_cues=(cue,), candidates=[])
-        assert captured == []
-        holder['r'] = recorder
-        builder._emit_episodic_recall_trace(player_id=PlayerId(1), situation_cues=(cue,), candidates=[])
-        assert len(captured) == 1
-
 class TestPromptBuilderSectionBreakdownTraceEmission:
     """``_emit_prompt_section_breakdown_trace`` が section 別 char 数を払い出す
     (実験 #356 後続: prefix cache 分析用)。"""
@@ -305,7 +175,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         builder._trace_recorder_provider = None
         builder._current_tick_provider = lambda : 7
         tools = [{'type': 'function', 'function': {'name': 'wait', 'description': '待つ', 'parameters': {}}}, {'type': 'function', 'function': {'name': 'move', 'description': '移動する', 'parameters': {}}}]
-        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(3), system_content='SYSTEM' * 10, objective_text='目的目的目的', current_state_text='現在地表示', active_memos_text='メモ', recent_events_text='出来事' * 20, relevant_memories_text='記憶' * 5, inventory_text='持ち物', instruction='指示文', tools=tools, user_content='USER_BODY' * 5)
+        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(3), system_content='SYSTEM' * 10, objective_text='目的目的目的', current_state_text='現在地表示', active_memos_text='メモ', recent_events_text='出来事' * 20, inventory_text='持ち物', instruction='指示文', tools=tools, user_content='USER_BODY' * 5)
         events = [e for e in captured if e.kind == TraceEventKind.PROMPT_SECTION_BREAKDOWN]
         assert len(events) == 1
         p = events[0].payload
@@ -317,7 +187,7 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         assert p['memos_chars'] == 2
         assert 'prediction_feedback_chars' not in p
         assert p['recent_events_chars'] == 60
-        assert p['recall_chars'] == 10
+        assert 'recall_chars' not in p
         assert p['inventory_chars'] == 3
         assert p['instruction_chars'] == 3
         assert p['user_content_chars'] == 45
@@ -332,14 +202,14 @@ class TestPromptBuilderSectionBreakdownTraceEmission:
         builder._trace_recorder = None
         builder._trace_recorder_provider = None
         builder._current_tick_provider = lambda : 0
-        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(1), system_content='', objective_text='', current_state_text='', active_memos_text='', recent_events_text='', relevant_memories_text='', inventory_text='', instruction='', tools=[], user_content='')
+        builder._emit_prompt_section_breakdown_trace(player_id=PlayerId(1), system_content='', objective_text='', current_state_text='', active_memos_text='', recent_events_text='', inventory_text='', instruction='', tools=[], user_content='')
 
 class TestWorldRuntimeEpisodicTraceE2E:
     """env=1 で trace_recorder を runtime に差し込んで実行すると、chunk
-    write と recall の両方が trace event として記録される。"""
+    write が trace event として記録される。"""
 
-    def test_smoke_run_chunk_written_recall_event_emit(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """smoke run で chunk written と recall イベントが 両方 emit。"""
+    def test_smoke_run_emits_chunk_written(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """smoke run で chunk written イベントが emit され、受動想起のイベントは出ない。"""
         from pathlib import Path
 
         from tests.runtime_config_helpers import episodic_config
@@ -359,6 +229,5 @@ class TestWorldRuntimeEpisodicTraceE2E:
         runtime.do_move(kaito_id, 'reading_room')
         runtime.build_full_prompt(kaito_id)
         chunk_events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_CHUNK_WRITTEN]
-        recall_events = [e for e in captured if e.kind == TraceEventKind.EPISODIC_RECALL]
         assert len(chunk_events) > 0, 'chunk_written 未発火 — write 経路の trace が動いていない'
-        assert len(recall_events) > 0, 'recall 未発火 — recall 経路の trace が動いていない'
+        assert not [e for e in captured if e.kind == 'episodic_recall']

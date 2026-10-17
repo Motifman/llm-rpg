@@ -1,4 +1,4 @@
-"""エピソードリンクストアと共想起のユニット検証。"""
+"""エピソードリンクストアと時間的近接リンクのユニット検証。"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -8,10 +8,6 @@ from tests.application.llm._memory_link_being_test_helpers import make_memory_li
 
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
-)
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallCandidate,
-    EpisodicPassiveRecallRetrievalService,
 )
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -42,21 +38,6 @@ def test_temporal_link_created_between_recent_pair() -> None:
     assert store.list_recent_by_being(being_id, 2)[0].episode_id == 'e2'
     assert setup.link_store.get_link_by_being(being_id, 'e1', 'e2', MemoryLinkType.TEMPORAL) is not None
 
-def test_passive_recall_triggers_co_recall_links() -> None:
-    store = InMemorySubjectiveEpisodeStore()
-    setup = make_memory_link_being_setup()
-    being_id = setup.provision(1)
-    link_svc = EpisodicMemoryLinkApplicationService(store, setup.link_store)
-    pr = EpisodicPassiveRecallRetrievalService(store, link_store=setup.link_store)
-    e1 = _ep(episode_id='a', player_id=1)
-    e2 = _ep(episode_id='b', player_id=1)
-    store.put_by_being(being_id, e1)
-    store.put_by_being(being_id, e2)
-    cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
-    res = pr.retrieve(being_id=being_id, situation_cues=(cue,), limit_per_axis=5, max_candidates=5)
-    link_svc.on_passive_recall_candidates(1, being_id, res.candidates)
-    assert setup.link_store.get_link_by_being(being_id, 'a', 'b', MemoryLinkType.CO_RECALL) is not None
-
 def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9, being_id: BeingId | None=None) -> MemoryLink:
     now = datetime.now(timezone.utc)
     (na, nb) = (a, b) if a < b else (b, a)
@@ -68,16 +49,3 @@ def test_link_store_lists_all_for_being() -> None:
     being_id = setup.provision(3)
     setup.link_store.upsert_link_by_being(being_id, _strong_link(3, 'a', 'b'))
     assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
-
-def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
-    store = InMemorySubjectiveEpisodeStore()
-    setup = make_memory_link_being_setup()
-    being_id = setup.provision(2)
-    link_svc = EpisodicMemoryLinkApplicationService(store, setup.link_store)
-    e1 = _ep(episode_id='p', player_id=2)
-    e2 = _ep(episode_id='q', player_id=2)
-    store.put_by_being(being_id, e1)
-    store.put_by_being(being_id, e2)
-    cands = (EpisodicPassiveRecallCandidate(episode=e1, source_axes=('temporal',)), EpisodicPassiveRecallCandidate(episode=e2, source_axes=('temporal',)))
-    link_svc.on_passive_recall_candidates(2, being_id, cands)
-    assert setup.link_store.get_link_by_being(being_id, 'p', 'q', MemoryLinkType.CO_RECALL) is not None

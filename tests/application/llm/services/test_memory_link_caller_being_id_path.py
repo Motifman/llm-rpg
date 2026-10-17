@@ -12,16 +12,11 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_Bein
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timezone
 
-import pytest
 from tests.application.llm._memory_link_being_test_helpers import make_memory_link_being_setup
 
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallRetrievalService,
-)
-from ai_rpg_world.application.llm.services.episodic_spreading_activation import neighbor_priming_scores
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -75,52 +70,3 @@ class TestEpisodicMemoryLinkApplicationServiceCallerBeingId:
         svc.on_episode_committed(newest, now=_NOW)
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
         assert len(setup.link_store.list_all_links_for_being(other_being_id)) == 0
-
-class TestEpisodicPassiveRecallRetrievalServiceDualPath:
-    """``EpisodicPassiveRecallRetrievalService`` の spreading activation が
-    being_id 経路で link を引く。"""
-
-    def test_resolver_uninjected_all_skip_completes(self) -> None:
-        """Phase 3 Step 3e-3: episode_store も legacy 撤去後、Resolver 未注入時は
-        temporal/cue/spreading すべての軸が空になる graceful fallback。turn は
-        止まらず、prompt 強化が完全に痩せるだけ。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_memory_link_being_setup()
-        being_id = setup.provision(1)
-        svc = EpisodicPassiveRecallRetrievalService(episodes, link_store=setup.link_store)
-        result = svc.retrieve(being_id=being_id, situation_cues=(), limit_per_axis=5, max_candidates=10, now=_NOW)
-        ids = {c.episode.episode_id for c in result.candidates}
-        assert ids == set()
-
-    def test_being_id_spreading_being_id_works(self) -> None:
-        """being id 注入時は spreading が being id 経路で 動く。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_memory_link_being_setup()
-        being_id = setup.provision(1)
-        seed_ep = _ep(episode_id='seed')
-        far_ep = _ep(episode_id='far')
-        episodes.put_by_being(being_id, seed_ep)
-        episodes.put_by_being(being_id, far_ep)
-        setup.link_store.upsert_link_by_being(being_id, _link(a='seed', b='far', strength=0.9))
-        svc = EpisodicPassiveRecallRetrievalService(episodes, link_store=setup.link_store)
-        result = svc.retrieve(being_id=being_id, situation_cues=(), limit_per_axis=5, max_candidates=10, now=_NOW)
-        ids = {c.episode.episode_id for c in result.candidates}
-        assert 'seed' in ids
-        assert 'far' in ids
-
-class TestSpreadingActivationBeingIdParam:
-    """``neighbor_priming_scores`` は being_id 必須 (Phase 3 Step 3c-3)。"""
-
-    def test_being_id_being_id_link(self) -> None:
-        """beingid を渡すと beingid 経路で link をたどる。"""
-        setup = make_memory_link_being_setup()
-        being_id = setup.provision(1)
-        setup.link_store.upsert_link_by_being(being_id, _link(a='seed', b='other', strength=0.9))
-        result = neighbor_priming_scores(being_id=being_id, seed_episode_ids=frozenset({'seed'}), link_store=setup.link_store, now=_NOW, max_hops=2)
-        assert 'other' in result
-
-    def test_being_id_raises_type_error(self) -> None:
-        """Phase 3 Step 3c-3: being_id は BeingId 型必須。"""
-        setup = make_memory_link_being_setup()
-        with pytest.raises(TypeError, match='being_id'):
-            neighbor_priming_scores(being_id='not-a-being-id', seed_episode_ids=frozenset({'seed'}), link_store=setup.link_store, now=_NOW, max_hops=2)

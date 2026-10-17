@@ -1,4 +1,4 @@
-"""エピソードリンクストア・サービス・受動想起をまとめて生成する。"""
+"""エピソードリンクストアとサービスをまとめて生成する。"""
 
 from __future__ import annotations
 
@@ -6,9 +6,6 @@ from dataclasses import dataclass
 
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
-)
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallRetrievalService,
 )
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
@@ -23,7 +20,7 @@ from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository impor
 
 @dataclass(frozen=True)
 class EpisodicMemoryLinkBundle:
-    """共有リンクストア・リンクサービス・拡散活性化付き受動想起。
+    """共有リンクストアとリンクサービス。
 
     本 bundle は ``build_episodic_memory_link_bundle`` factory 経由でのみ
     生成される想定なので、引数バリデーションはせず factory 側に委ねる
@@ -34,7 +31,7 @@ class EpisodicMemoryLinkBundle:
     episode_store: EpisodicEpisodeRepository
     link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
-    passive_recall: EpisodicPassiveRecallRetrievalService
+
 
 def default_link_store_for_episode_store(
     episode_store: EpisodicEpisodeRepository,
@@ -61,16 +58,11 @@ def build_episodic_memory_link_bundle(
     *,
     link_store: MemoryLinkRepository | None = None,
 ) -> EpisodicMemoryLinkBundle:
-    """link_service / passive_recall を組み立てる。"""
+    """link_service を組み立てる。"""
     ls = link_store if link_store is not None else InMemoryMemoryLinkStore()
     link_service = EpisodicMemoryLinkApplicationService(episode_store, ls)
-    passive_recall = EpisodicPassiveRecallRetrievalService(
-        episode_store,
-        link_store=ls,
-    )
     return EpisodicMemoryLinkBundle(
         episode_store=episode_store,
         link_store=ls,
         link_service=link_service,
-        passive_recall=passive_recall,
     )

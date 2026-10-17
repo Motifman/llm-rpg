@@ -1713,7 +1713,9 @@ def _event_timeline_category(e: TraceEvent) -> str:
         return "memo"
     if kind in {
         TraceEventKind.EPISODIC_CHUNK_WRITTEN,
-        TraceEventKind.EPISODIC_RECALL,
+        # 受動想起【関連する記憶】と【関連する学び】は #1631 で消した。
+        # 過去の run の trace を読むために残す。
+        "episodic_recall",
         "semantic_passive_recall",
         # 状況の項目から引く想起 (#1414) は #1631 で消した。過去の run の trace を読むために残す。
         "situation_belief_recall",
@@ -2016,8 +2018,8 @@ def _format_event_body(e: TraceEvent) -> str:
             f"✎ chunk written id={esc(ep_short)}… "
             f"reason={esc(reason)}{snippet_part}"
         )
-    if e.kind == TraceEventKind.EPISODIC_RECALL:
-        # read 経路: 想起 candidate と発火 cue の 1 行サマリ
+    if e.kind == "episodic_recall":
+        # 受動想起 (#1631 で消した) の 1 行サマリ。過去の run の trace を読むために残す。
         cand_count = int(payload.get("candidate_count") or 0)
         candidates = payload.get("candidates") or []
         first_ep = ""

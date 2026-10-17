@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
@@ -27,42 +26,13 @@ from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForProm
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
 )
-from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
-    EpisodicMemoryLinkApplicationService,
-)
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallRetrievalDebug,
-    EpisodicPassiveRecallRetrievalService,
-)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
 )
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
-)
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
-)
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_RECENT_ACTIONS_LIMIT as _CFG_DEFAULT_RECENT_ACTIONS_LIMIT,
-)
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_RECENT_OBSERVATIONS_LIMIT as _CFG_DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-)
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    EpisodicRecallConfig,
     PromptBuilderCoreServices,
     PromptLimits,
     PromptSectionProviders,
-)
-from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
-    _R4_PER_TEXT_CHAR_CAP,
-    _R4_RECENT_FREETEXT_LIMIT,
-    _gather_additional_freetexts_for_recall,
-    _join_passive_recall_texts,
-    _module_logger,
-    emit_episodic_recall_trace,
-    run_episodic_passive_recall,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -86,10 +56,6 @@ from ai_rpg_world.domain.player.repository.player_profile_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
-DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
-DEFAULT_RECENT_ACTIONS_LIMIT = 20
-DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS = 10
-DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加するまで待機しています。"
 
 
@@ -104,7 +70,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         core: PromptBuilderCoreServices,
         *,
         sections: PromptSectionProviders | None = None,
-        episodic: EpisodicRecallConfig | None = None,
         limits: PromptLimits | None = None,
         ui_context_builder: ILlmUiContextBuilder | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
@@ -116,14 +81,12 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         - ``core``: 必須インフラ群 (observation_buffer / world_query_service 等)
         - ``sections``: 任意 provider 群 (persona / objective / inventory / memo)
-        - ``episodic``: 受動想起・記憶リンク・再解釈
         - ``limits``: 数値設定 + action_instruction + tile_map フラグ
 
-        sections / episodic / limits は省略可能で、それぞれ「全フィールドが
+        sections / limits は省略可能で、それぞれ「全フィールドが
         default」のインスタンスが使われる (= optional 機能はすべて無効)。
         """
         sections = sections or PromptSectionProviders()
-        episodic = episodic or EpisodicRecallConfig()
         limits = limits or PromptLimits()
 
         # core は dataclass 自体が型 + non-Optional で表現するため、
@@ -132,8 +95,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("core must be PromptBuilderCoreServices")
         if not isinstance(sections, PromptSectionProviders):
             raise TypeError("sections must be PromptSectionProviders")
-        if not isinstance(episodic, EpisodicRecallConfig):
-            raise TypeError("episodic must be EpisodicRecallConfig")
         if not isinstance(limits, PromptLimits):
             raise TypeError("limits must be PromptLimits")
 
@@ -152,7 +113,6 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         observation_buffer = core.observation_buffer
         short_term_memory = core.short_term_memory
-        action_result_store = core.action_result_store
         recent_event_store = core.recent_event_store
         world_query_service = core.world_query_service
         player_profile_repository = core.player_profile_repository
@@ -170,21 +130,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         inventory_text_provider = sections.inventory_text_provider
         memo_store = sections.memo_store
 
-        episodic_passive_recall = episodic.passive_recall
-        episodic_passive_recall_limit_per_axis = episodic.passive_recall_limit_per_axis
-        episodic_passive_recall_max_candidates = episodic.passive_recall_max_candidates
-        episodic_memory_link_service = episodic.memory_link_service
-        # Issue #283 後続: 観測 prose 経由の自由文 cue 抽出マッチャ (任意)。
-        noun_matcher = episodic.noun_matcher
-        # PR8 (R5): encounter memory を recall cue 源にする。注入時のみ動く。
-        encounter_memory_for_recall = episodic.encounter_memory
-        encounter_recent_window_ticks = episodic.encounter_recent_window_ticks
-        encounter_spot_id_resolver = episodic.encounter_spot_id_resolver
-        acquaintances_for_recall = episodic.acquaintances
-        acquaintance_recent_window_turns = episodic.acquaintance_recent_window_turns
 
-        recent_observations_limit = limits.recent_observations_limit
-        recent_actions_limit = limits.recent_actions_limit
         default_action_instruction = limits.default_action_instruction
         tile_map_view_distance = limits.tile_map_view_distance
         tile_map_enabled = limits.tile_map_enabled
@@ -194,8 +140,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
         if not isinstance(short_term_memory, IShortTermMemory):
             raise TypeError("short_term_memory must be IShortTermMemory")
-        if not isinstance(action_result_store, IActionResultStore):
-            raise TypeError("action_result_store must be IActionResultStore")
         if not isinstance(recent_event_store, UnifiedRecentEventStore):
             raise TypeError("recent_event_store must be UnifiedRecentEventStore")
         # world_query_service / player_profile_repository は __init__ 冒頭で
@@ -216,30 +160,10 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("ui_context_builder must be ILlmUiContextBuilder or None")
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
-        if recent_observations_limit < 0:
-            raise ValueError("recent_observations_limit must be 0 or greater")
-        if recent_actions_limit < 0:
-            raise ValueError("recent_actions_limit must be 0 or greater")
         if tile_map_view_distance < 0:
             raise ValueError("tile_map_view_distance must be 0 or greater")
         if not isinstance(default_action_instruction, str):
             raise TypeError("default_action_instruction must be str")
-        if episodic_passive_recall is not None and not isinstance(
-            episodic_passive_recall, EpisodicPassiveRecallRetrievalService
-        ):
-            raise TypeError(
-                "episodic_passive_recall must be EpisodicPassiveRecallRetrievalService or None"
-            )
-        if episodic_passive_recall_limit_per_axis < 0:
-            raise ValueError("episodic_passive_recall_limit_per_axis must be 0 or greater")
-        if episodic_passive_recall_max_candidates < 0:
-            raise ValueError("episodic_passive_recall_max_candidates must be 0 or greater")
-        if episodic_memory_link_service is not None and not isinstance(
-            episodic_memory_link_service, EpisodicMemoryLinkApplicationService
-        ):
-            raise TypeError(
-                "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
-            )
         if memo_store is not None and not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository or None")
         if current_tick_provider is not None and not callable(current_tick_provider):
@@ -287,7 +211,6 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
-        self._action_result_store = action_result_store
         self._recent_event_store = recent_event_store
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
@@ -305,73 +228,22 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
             self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
         self._persona_block_provider = persona_block_provider
-        self._recent_observations_limit = recent_observations_limit
-        self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
         self._tile_map_view_distance = tile_map_view_distance
         # Issue #227 PR-4 (tile-map 除去): spot_graph 専用ランタイムでは
         # include_tile_map=False でクエリを発行し、visible_tile_map と
         # current_terrain_type が常に None になるよう構造的に保証する。
         self._tile_map_enabled = tile_map_enabled
-        self._episodic_passive_recall = episodic_passive_recall
-        self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
-        self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
-        self._episodic_memory_link_service = episodic_memory_link_service
-        self._noun_matcher = noun_matcher
-        # PR8 (R5)
-        self._encounter_memory_for_recall = encounter_memory_for_recall
-        self._encounter_recent_window_ticks = encounter_recent_window_ticks
-        self._encounter_spot_id_resolver = encounter_spot_id_resolver
-        self._acquaintances_for_recall = acquaintances_for_recall
-        self._acquaintance_recent_window_turns = acquaintance_recent_window_turns
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _recently_met_names(self, player_id: PlayerId) -> tuple[str, ...]:
-        if self._acquaintances_for_recall is None:
-            return ()
-        try:
-            return self._acquaintances_for_recall.recently_met_names(
-                player_id, within_turns=self._acquaintance_recent_window_turns
-            )
-        except Exception:
-            self._logger.warning(
-                "acquaintances.recently_met_names raised; skipping acquaintance cue",
-                exc_info=True,
-            )
-            return ()
-
-    def _resolve_encounter_tick(self) -> int | None:
-        """PR8 (R5): encounter cue 抽出のための現在 tick を返す。
-
-        - ``current_tick_provider`` 未注入なら None (= encounter cue は skip)
-        - provider 例外時は None フォールバック (recall を止めない)
-        - provider が int 以外を返したら None フォールバック (silent な
-          recall 停止より「encounter cue が立たないだけ」に倒す)
-        """
-        if self._current_tick_provider is None:
-            return None
-        try:
-            tick = self._current_tick_provider()
-        except Exception:
-            # encounter cue が立たなくなるため、provider 例外は warning で
-            # 残す (`encounter_memory.get_records_for` 側と粒度を揃える)。
-            self._logger.warning(
-                "current_tick_provider raised; skipping encounter cue",
-                exc_info=True,
-            )
-            return None
-        if not isinstance(tick, int) or isinstance(tick, bool):
-            return None
-        return tick
-
     def _resolve_trace_recorder(self) -> ITraceRecorder | None:
-        """recall trace 用の recorder を runtime 時点で取得する。
+        """trace の recorder を runtime 時点で取得する。
 
         ``trace_recorder_provider`` があれば毎回 lookup (= 後付け差し込み
         対応)、なければ構築時固定値。provider 例外は None フォールバック
-        (= recall は普段通り走り、trace 行だけ落ちる)。
+        (= prompt は普段通り組まれ、trace 行だけ落ちる)。
         """
         if self._trace_recorder_provider is not None:
             try:
@@ -381,7 +253,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 # 動的解決を加えたときに silent に消えるのを防ぐため DEBUG
                 # 級で痕跡を残す。
                 self._logger.debug(
-                    "trace_recorder_provider raised; skipping recall trace",
+                    "trace_recorder_provider raised; skipping trace",
                     exc_info=True,
                 )
                 return None
@@ -396,7 +268,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text: str,
         active_memos_text: str,
         recent_events_text: str,
-        relevant_memories_text: str,
         inventory_text: str,
         instruction: str,
         tools: list[dict[str, Any]],
@@ -440,7 +311,6 @@ class DefaultPromptBuilder(IPromptBuilder):
                 current_state_chars=len(current_state_text),
                 memos_chars=len(active_memos_text),
                 recent_events_chars=len(recent_events_text),
-                recall_chars=len(relevant_memories_text),
                 inventory_chars=len(inventory_text),
                 instruction_chars=len(instruction),
                 tools_chars=tools_chars,
@@ -453,23 +323,6 @@ class DefaultPromptBuilder(IPromptBuilder):
                 "trace recorder.record raised for PROMPT_SECTION_BREAKDOWN; skipping",
                 exc_info=True,
             )
-
-    def _emit_episodic_recall_trace(
-        self,
-        player_id: PlayerId,
-        situation_cues: tuple[Any, ...],
-        candidates: list[Any],
-        relevant_memories_text: str = "",
-        retrieval_debug: Optional["EpisodicPassiveRecallRetrievalDebug"] = None,
-    ) -> None:
-        emit_episodic_recall_trace(
-            self,
-            player_id=player_id,
-            situation_cues=situation_cues,
-            candidates=candidates,
-            relevant_memories_text=relevant_memories_text,
-            retrieval_debug=retrieval_debug,
-        )
 
     def _build_loop_warning_prefix(self, player_id: PlayerId) -> str:
         """instruction の前に挟む「同じ手の繰り返し」警告 prefix を返す。
@@ -549,12 +402,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text = ui_context.current_state_text
 
         # 4. 直近の出来事（観測＋行動結果をマージ）
-        observations = self._short_term_memory.get_recent(
-            player_id, self._recent_observations_limit
-        )
-        action_results = self._action_result_store.get_recent(
-            player_id, self._recent_actions_limit
-        )
         recent_entries = self._recent_event_store.get_active_timeline(player_id)
         projected_entries = recent_entries
         shown_notification_ids: tuple[str, ...] = ()
@@ -566,21 +413,6 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
-
-        # 6. 受動想起（任意注入）: runtime + 直近観測 structured から situation_cues → recall_text を連結
-        relevant_memories_text, _passive_candidate_count = (
-            self._run_passive_recall(
-                player_id=player_id,
-                being_id=being_id,
-                observations=observations,
-                action_results=action_results,
-                ui_context=ui_context,
-                current_state_text=current_state_text,
-                recent_events_text=recent_events_text,
-                player_info=player_info,
-                current_state_dto=current_state_dto,
-            )
-        )
 
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
         # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
@@ -639,7 +471,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
-            relevant_memories_text=relevant_memories_text,
             active_memos_text=active_memos_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
@@ -689,7 +520,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         # この指示の直前へ安全に差し込むための境界を明示する。
         result["action_instruction"] = instruction
         result["current_state_snapshot"] = current_state_text
-        result["current_beliefs_snapshot"] = relevant_memories_text
         result["persona_snapshot"] = player_info.persona_block
 
         # 実験 #356 後続: prefix cache 分析用の section 別 char 内訳を trace に
@@ -703,39 +533,12 @@ class DefaultPromptBuilder(IPromptBuilder):
             current_state_text=current_state_text,
             active_memos_text=active_memos_text + being_memo_text,
             recent_events_text=recent_events_text,
-            relevant_memories_text=relevant_memories_text,
             inventory_text=inventory_text,
             instruction=instruction,
             tools=tools,
             user_content=user_content,
         )
         return result
-
-    def _run_passive_recall(
-        self,
-        *,
-        player_id: PlayerId,
-        being_id: BeingId,
-        observations: list[ObservationEntry],
-        action_results: list[Any],
-        ui_context: Any,
-        current_state_text: str,
-        recent_events_text: str,
-        player_info: SystemPromptPlayerInfoDto,
-        current_state_dto: Any | None = None,
-    ) -> tuple[str, int | None]:
-        return run_episodic_passive_recall(
-            self,
-            player_id=player_id,
-            being_id=being_id,
-            observations=observations,
-            action_results=action_results,
-            ui_context=ui_context,
-            current_state_text=current_state_text,
-            recent_events_text=recent_events_text,
-            player_info=player_info,
-            current_state_dto=current_state_dto,
-        )
 
     def _fetch_uncompleted_memos(self, being_id: BeingId) -> list[MemoEntry]:
         """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
