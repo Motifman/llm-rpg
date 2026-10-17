@@ -386,7 +386,7 @@ class TestRestoreValidation:
         """episodic_episodes の要素が別の Being のものなら、ValueError ではなく FormatError に wrap される。"""
         (svc, _) = _make_service()
         bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memo': [], 'episodic_episodes': [{'being_id': 'other'}], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
-        with pytest.raises(BeingMemoryPayloadFormatError, match='episodic_episodes'):
+        with pytest.raises(BeingMemoryPayloadFormatError, match=r"episodic_episodes.*does not match snapshot being"):
             svc.restore(BeingId('ada'), bad)
 
     def test_required_key_list_raises_format_error(self) -> None:
