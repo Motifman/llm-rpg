@@ -154,9 +154,7 @@ class EpisodicStack:
     # memory link graph の store (semantic_enabled のときだけ、snapshot 用に公開)。
     # full 共有 builder (build_episodic_memory_stack) で組む。OFF のときは None。
     memory_link_store: Any | None = None
-    # 想起→強化 (recall_count 加算 / CO_RECALL リンク) を担う link service。
-    # chunk_coordinator (TEMPORAL リンク) と prompt builder の passive recall 経路に
-    # 同一インスタンスを配線する。
+    # chunk_coordinator が TEMPORAL リンクを書くための link service。
     link_service: Any | None = None
 
 

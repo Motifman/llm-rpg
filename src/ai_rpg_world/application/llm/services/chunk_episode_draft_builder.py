@@ -392,8 +392,7 @@ class ChunkEpisodeDraftBuilder:
     """チャンク境界の ChunkEncodingInput から SubjectiveEpisode 草案を組み立てる。
 
     #526 後続 Fix A: ``noun_matcher`` を任意で注入できる。注入時は観測 prose
-    中の固有名詞から place_spot / entity / object cue を episode に貼り、
-    read 側 (passive_recall) が立てる cue と対称化する。未注入時は従来挙動
+    中の固有名詞から place_spot / entity / object cue を episode に貼る。未注入時は従来挙動
     (structured / action / outcome cue のみ) で完全互換。
     """
 

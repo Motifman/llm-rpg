@@ -17,7 +17,7 @@ system prompt / toolset の参照を戻せば、確率的要素を除いて同�
   - `system_content` は `system_prompt_builder.build(player_info)` で生成される。
   - `user_content` は現在状態、記憶、直近の出来事、指示などを結合して生成される。
   - 返り値には `messages`、`tools`、`tool_choice`、`current_state_snapshot`、
-    `current_beliefs_snapshot`、`persona_snapshot` が入る。
+    `persona_snapshot` が入る (`current_beliefs_snapshot` は #1631 で受動想起と一緒に消した)。
   - 参照: `src/ai_rpg_world/application/llm/services/prompt_builder.py:1155`
     から `:1179`。
 - 現在 trace に残るのは prompt 全文ではなく、section ごとの文字数だけである。
