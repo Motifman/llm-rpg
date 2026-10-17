@@ -556,7 +556,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """``WorldRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
 
     Phase 6 (Issue #470): world_runtime runtime には ``LlmAgentWiringResult`` の
-    全 store ハンドルが揃わない (memory_link は world_runtime の
+    全 store ハンドルが揃わない (episode store は world_runtime の
     通常経路では作られないことがある) ため、runtime の
     内部 field から **拾える分だけ** 集めて wiring 風オブジェクトを返す。
     足りない store は ``ExperimentSnapshotSession`` 側で空 in-memory に
@@ -577,16 +577,8 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
-    # #526 後続: episodic stack を組むと memory link store を持つ。
-    # あれば snapshot に拾う (無ければ None = 空 in-memory fallback)。
-    memory_link_store = (
-        getattr(episodic_stack, "memory_link_store", None)
-        if episodic_stack is not None
-        else None
-    )
     return SimpleNamespace(
         memo_store=getattr(runtime, "_todo_store", None),
-        memory_link_store=memory_link_store,
         episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,

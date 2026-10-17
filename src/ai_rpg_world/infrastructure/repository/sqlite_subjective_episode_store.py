@@ -1,8 +1,10 @@
 """SubjectiveEpisode の SQLite 永続化（MVP エピソード記憶ストア）。
 
 Phase 3 Step 3e-1 (Issue #470): being_id 版 API を並走追加。書き込み先は
-``subjective_episodes_by_being`` / ``subjective_episode_cues_by_being``
-(= schema v2)。legacy テーブルは Step 3e-3 で DROP 予定。
+``subjective_episodes_by_being`` (= schema v2)。legacy テーブルは Step 3e-3 で DROP した。
+
+cue の逆引き表 ``subjective_episode_cues_by_being`` は、読み手の受動想起を #1631 で
+消したので書かなくなった。表を作る版はマイグレーションの履歴なので残す。
 """
 
 from __future__ import annotations
@@ -37,20 +39,6 @@ def _occurred_at_sort_key(ep: SubjectiveEpisode) -> float:
     else:
         dt = dt.astimezone(timezone.utc)
     return dt.timestamp()
-
-
-def _datetime_to_occurred_at_key(dt: datetime) -> float:
-    """``datetime`` を ``occurred_at_key`` の表現 (UTC 秒) に揃える (PR5)。
-
-    返り値は 64-bit float (IEEE 754) で、現在世代 (2026 年付近) では
-    マイクロ秒精度を保てる。``.timestamp()`` の戻りは ``occurred_at_key``
-    column と同じスケールなので、SQL の ``WHERE occurred_at_key < ?`` 比較は
-    insert 時の格納値とビット同一の精度になる。境界 episode 自身は ``<``
-    で除外されるので、float 端数によって境界判定がブレるリスクは無視できる。
-    """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc).timestamp()
-    return dt.astimezone(timezone.utc).timestamp()
 
 
 def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
@@ -284,7 +272,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
 
     @property
     def connection(self) -> sqlite3.Connection:
-        """MemoryLink / セマンティック等の同じ SQLite ファイルに同居するストア用の接続。"""
+        """この store が開いている SQLite の接続。"""
         return self._conn
 
     @classmethod
@@ -304,15 +292,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         payload = json.dumps(_episode_to_payload_dict(episode), ensure_ascii=False)
         key = _occurred_at_sort_key(episode)
         eid = episode.episode_id
-        canonicals = [c.to_canonical() for c in episode.cues]
         cur = self._conn.cursor()
-        cur.execute(
-            """
-            DELETE FROM subjective_episode_cues_by_being
-            WHERE being_id_value = ? AND episode_id = ?
-            """,
-            (being_id.value, eid),
-        )
         cur.execute(
             """
             INSERT OR REPLACE INTO subjective_episodes_by_being
@@ -321,15 +301,6 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
             """,
             (being_id.value, eid, key, payload, episode.player_id),
         )
-        for ck in canonicals:
-            cur.execute(
-                """
-                INSERT OR IGNORE INTO subjective_episode_cues_by_being
-                    (being_id_value, episode_id, cue_canonical)
-                VALUES (?, ?, ?)
-                """,
-                (being_id.value, eid, ck),
-            )
         self._conn.commit()
 
     def get_by_being(
@@ -353,76 +324,20 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         self,
         being_id: BeingId,
         limit: int,
-        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         if limit <= 0:
             return []
-        if min_occurred_at is None:
-            cur = self._conn.execute(
-                """
-                SELECT payload_json FROM subjective_episodes_by_being
-                WHERE being_id_value = ?
-                ORDER BY occurred_at_key DESC, episode_id DESC
-                LIMIT ?
-                """,
-                (being_id.value, limit),
-            )
-        else:
-            border_key = _datetime_to_occurred_at_key(min_occurred_at)
-            cur = self._conn.execute(
-                """
-                SELECT payload_json FROM subjective_episodes_by_being
-                WHERE being_id_value = ?
-                  AND occurred_at_key < ?
-                ORDER BY occurred_at_key DESC, episode_id DESC
-                LIMIT ?
-                """,
-                (being_id.value, border_key, limit),
-            )
-        return [_payload_dict_to_episode(json.loads(str(r[0])), being_id=being_id) for r in cur.fetchall()]
-
-    def list_by_cue_by_being(
-        self,
-        being_id: BeingId,
-        cue: EpisodicCue,
-        limit: int,
-        min_occurred_at: datetime | None = None,
-    ) -> list[SubjectiveEpisode]:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if limit <= 0:
-            return []
-        canonical = cue.to_canonical()
-        if min_occurred_at is None:
-            cur = self._conn.execute(
-                """
-                SELECT e.payload_json
-                FROM subjective_episode_cues_by_being c
-                JOIN subjective_episodes_by_being e
-                  ON e.being_id_value = c.being_id_value AND e.episode_id = c.episode_id
-                WHERE c.being_id_value = ? AND c.cue_canonical = ?
-                ORDER BY e.occurred_at_key DESC, e.episode_id DESC
-                LIMIT ?
-                """,
-                (being_id.value, canonical, limit),
-            )
-        else:
-            border_key = _datetime_to_occurred_at_key(min_occurred_at)
-            cur = self._conn.execute(
-                """
-                SELECT e.payload_json
-                FROM subjective_episode_cues_by_being c
-                JOIN subjective_episodes_by_being e
-                  ON e.being_id_value = c.being_id_value AND e.episode_id = c.episode_id
-                WHERE c.being_id_value = ? AND c.cue_canonical = ?
-                  AND e.occurred_at_key < ?
-                ORDER BY e.occurred_at_key DESC, e.episode_id DESC
-                LIMIT ?
-                """,
-                (being_id.value, canonical, border_key, limit),
-            )
+        cur = self._conn.execute(
+            """
+            SELECT payload_json FROM subjective_episodes_by_being
+            WHERE being_id_value = ?
+            ORDER BY occurred_at_key DESC, episode_id DESC
+            LIMIT ?
+            """,
+            (being_id.value, limit),
+        )
         return [_payload_dict_to_episode(json.loads(str(r[0])), being_id=being_id) for r in cur.fetchall()]
 
     def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:
@@ -446,8 +361,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
     ) -> None:
         """being_id 配下を ``episodes`` で完全置換する (single transaction)。
 
-        Phase 4 Step 4-2a: snapshot restore primitive。cue index も整合する
-        形で再構築する。
+        Phase 4 Step 4-2a: snapshot restore primitive。
         """
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
@@ -465,10 +379,6 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         try:
             cur = self._conn.cursor()
             cur.execute(
-                "DELETE FROM subjective_episode_cues_by_being WHERE being_id_value = ?",
-                (being_id.value,),
-            )
-            cur.execute(
                 "DELETE FROM subjective_episodes_by_being WHERE being_id_value = ?",
                 (being_id.value,),
             )
@@ -485,15 +395,6 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
                     """,
                     (being_id.value, ep.episode_id, key, payload, ep.player_id),
                 )
-                for ck in (c.to_canonical() for c in ep.cues):
-                    cur.execute(
-                        """
-                        INSERT OR IGNORE INTO subjective_episode_cues_by_being
-                            (being_id_value, episode_id, cue_canonical)
-                        VALUES (?, ?, ?)
-                        """,
-                        (being_id.value, ep.episode_id, ck),
-                    )
             self._conn.commit()
         except Exception:
             self._conn.rollback()

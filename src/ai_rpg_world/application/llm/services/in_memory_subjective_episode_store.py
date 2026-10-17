@@ -1,10 +1,9 @@
-"""MVP 用 SubjectiveEpisode のインメモリストア（SQLite・Passive Recall なし）。
+"""MVP 用 SubjectiveEpisode のインメモリストア（SQLite なし）。
 
 PR #309 で thread-safe 化: 非同期スケジューラ
 (``ThreadPoolEpisodicSubjectiveScheduler``) のワーカー thread が
 ``put_by_being`` で上書きする一方、メイン thread は ``list_recent_by_being`` /
-``list_by_cue_by_being`` / ``get_by_being`` で読み続けるため、内部の
-dict / set を ``threading.RLock`` で保護する。
+``get_by_being`` で読み続けるため、内部の dict を ``threading.RLock`` で保護する。
 
 Phase 3 Step 3e-3 (Issue #470): legacy player_id 版を撤去し、being_id 版
 のみを残した。
@@ -17,7 +16,6 @@ from datetime import datetime, timezone
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 
@@ -35,36 +33,13 @@ def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
     return (dt, ep.episode_id)
 
 
-def _normalize_to_utc(dt: datetime) -> datetime:
-    """naive を UTC として解釈し、aware を UTC に寄せる (比較用に正規化)。"""
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
-def _is_strictly_older(
-    episode_occurred_at: datetime, threshold: datetime
-) -> bool:
-    """PR5 (R1): episode が ``threshold`` より厳密に古いかを判定する。
-
-    境界 (``episode.occurred_at == threshold``) は **より新しい側に含める** ため
-    False を返す (= sliding window の最古 entry そのものを recall から
-    排除する側に倒す)。両 datetime は UTC に正規化してから比較する。
-    """
-    return _normalize_to_utc(episode_occurred_at) < _normalize_to_utc(threshold)
-
-
 class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
-    """
-    Being ごとにエピソード本体と cue 逆引き索引を保持する。
-    cue 照合は canonical（axis:value）のみ。EpisodicCue.source は索引に含めない。
-    """
+    """Being ごとにエピソード本体を保持する。"""
 
     # 長走 (140+ tick × 複数 agent) で _episodes が膨らみ、list_recent の
     # O(n log n) ソートが後半 tick で二次関数的に遅くなる地雷を防ぐ。
     # 1 Being あたりの保有 episode 上限。超過時は最古から FIFO eviction
-    # する (occurred_at で並べて古い方を削る)。recent recall は最新数件を
-    # 見るだけなので、過去の episode を捨ててもプロンプト品質への影響は限定的。
+    # する (occurred_at で並べて古い方を削る)。
     # 長期 (14 日 = 140 tick) を想定し、tick 1 回 1 episode でも余裕がある
     # 数として 500 件に設定する。実験で「もっと持ちたい」となった場合は
     # 引き上げる。
@@ -76,15 +51,8 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
         # 変えていないため、3 引数の改名は別 PR で。
         self._max_episodes_per_being = max(1, int(max_episodes_per_player))
         self._episodes_by_being: dict[BeingId, dict[str, SubjectiveEpisode]] = {}
-        self._cue_index_by_being: dict[BeingId, dict[str, set[str]]] = {}
-        self._episode_canonicals_by_being: dict[
-            BeingId, dict[str, frozenset[str]]
-        ] = {}
         # 非同期スケジューラ (PR #309) のワーカー thread と本体 thread が
         # 同時に触るため、全 mutator / reader を 1 つの RLock で保護する。
-        # RLock にしているのは _remove_from_cue_index_by_being を put 内から
-        # 呼ぶため (再入を許す)。コンテンション無しでは RLock の overhead は
-        # 無視できる。
         self._lock = threading.RLock()
 
     def put_by_being(self, being_id: BeingId, episode: SubjectiveEpisode) -> None:
@@ -94,31 +62,16 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             raise TypeError("episode must be SubjectiveEpisode")
         if episode.being_id != being_id:
             raise ValueError("episode.being_id must match store being_id")
-        eid = episode.episode_id
         with self._lock:
-            self._episodes_by_being.setdefault(being_id, {})
-            if eid in self._episodes_by_being[being_id]:
-                self._remove_from_cue_index_by_being(being_id, eid)
-            self._episodes_by_being[being_id][eid] = episode
-            keys = frozenset(c.to_canonical() for c in episode.cues)
-            self._episode_canonicals_by_being.setdefault(being_id, {})
-            self._episode_canonicals_by_being[being_id][eid] = keys
-            self._cue_index_by_being.setdefault(being_id, {})
-            for ck in keys:
-                self._cue_index_by_being[being_id].setdefault(ck, set()).add(eid)
+            bucket = self._episodes_by_being.setdefault(being_id, {})
+            bucket[episode.episode_id] = episode
             # 上限超過分を最古から evict する (long-run でのメモリ / sort 遅延対策)
             # NOTE: 端境のケースとして、被 put episode の ``occurred_at`` が既存
             # 最古より過去の場合、その episode 自体が即 evict される。これは
             # legacy ``put`` と同じ「occurred_at 単純比較」の意図的な挙動で、
             # 「過去時刻の補完 put は long-run 容量を圧迫しない」ことを優先
             # している (= 実運用では put は常に最新時刻なので影響ゼロ)。
-            bucket = self._episodes_by_being[being_id]
-            if len(bucket) > self._max_episodes_per_being:
-                ordered = sorted(bucket.values(), key=_occurrence_sort_key)
-                excess = len(bucket) - self._max_episodes_per_being
-                for old in ordered[:excess]:
-                    self._remove_from_cue_index_by_being(being_id, old.episode_id)
-                    bucket.pop(old.episode_id, None)
+            self._evict_oldest_over_cap(bucket)
 
     def get_by_being(
         self, being_id: BeingId, episode_id: str
@@ -132,7 +85,6 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
         self,
         being_id: BeingId,
         limit: int,
-        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
@@ -142,41 +94,7 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             bucket = self._episodes_by_being.get(being_id)
             if not bucket:
                 return []
-            episodes: list[SubjectiveEpisode] = list(bucket.values())
-            if min_occurred_at is not None:
-                episodes = [
-                    ep
-                    for ep in episodes
-                    if _is_strictly_older(ep.occurred_at, min_occurred_at)
-                ]
-            ordered = sorted(episodes, key=_occurrence_sort_key, reverse=True)
-            return ordered[:limit]
-
-    def list_by_cue_by_being(
-        self,
-        being_id: BeingId,
-        cue: EpisodicCue,
-        limit: int,
-        min_occurred_at: datetime | None = None,
-    ) -> list[SubjectiveEpisode]:
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
-        if limit <= 0:
-            return []
-        canonical = cue.to_canonical()
-        with self._lock:
-            ids = self._cue_index_by_being.get(being_id, {}).get(canonical)
-            if not ids:
-                return []
-            bucket = self._episodes_by_being.get(being_id, {})
-            eps = [bucket[i] for i in ids if i in bucket]
-            if min_occurred_at is not None:
-                eps = [
-                    ep
-                    for ep in eps
-                    if _is_strictly_older(ep.occurred_at, min_occurred_at)
-                ]
-            ordered = sorted(eps, key=_occurrence_sort_key, reverse=True)
+            ordered = sorted(bucket.values(), key=_occurrence_sort_key, reverse=True)
             return ordered[:limit]
 
     def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:
@@ -199,42 +117,15 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             if ep.being_id != being_id:
                 raise ValueError("episode.being_id must match store being_id")
         with self._lock:
-            # 当該 being 関連 index を全 drop して再構築。max cap は再適用する
-            # (= snapshot に大量 episode が入っていた場合の安全策)。
-            self._episodes_by_being[being_id] = {}
-            self._cue_index_by_being[being_id] = {}
-            self._episode_canonicals_by_being[being_id] = {}
-            for ep in episodes:
-                eid = ep.episode_id
-                self._episodes_by_being[being_id][eid] = ep
-                keys = frozenset(c.to_canonical() for c in ep.cues)
-                self._episode_canonicals_by_being[being_id][eid] = keys
-                for ck in keys:
-                    self._cue_index_by_being[being_id].setdefault(ck, set()).add(eid)
-            # cap 超過なら最古から evict (= put_by_being と同じ方針)。
-            bucket = self._episodes_by_being[being_id]
-            if len(bucket) > self._max_episodes_per_being:
-                ordered = sorted(bucket.values(), key=_occurrence_sort_key)
-                excess = len(bucket) - self._max_episodes_per_being
-                for old in ordered[:excess]:
-                    self._remove_from_cue_index_by_being(being_id, old.episode_id)
-                    bucket.pop(old.episode_id, None)
+            # max cap は再適用する (= snapshot に大量 episode が入っていた場合の安全策)。
+            bucket = {ep.episode_id: ep for ep in episodes}
+            self._episodes_by_being[being_id] = bucket
+            self._evict_oldest_over_cap(bucket)
 
-    def _remove_from_cue_index_by_being(
-        self, being_id: BeingId, episode_id: str
-    ) -> None:
-        # _lock 保持中の private helper — put_by_being 内の upsert (= 同 episode_id
-        # 上書き) と eviction (= 上限超過の最古削除) の両パスから呼ばれる。
-        keys = self._episode_canonicals_by_being.get(being_id, {}).pop(
-            episode_id, frozenset()
-        )
-        cidx = self._cue_index_by_being.get(being_id)
-        if not cidx:
+    def _evict_oldest_over_cap(self, bucket: dict[str, SubjectiveEpisode]) -> None:
+        if len(bucket) <= self._max_episodes_per_being:
             return
-        for ck in keys:
-            s = cidx.get(ck)
-            if not s:
-                continue
-            s.discard(episode_id)
-            if not s:
-                del cidx[ck]
+        ordered = sorted(bucket.values(), key=_occurrence_sort_key)
+        excess = len(bucket) - self._max_episodes_per_being
+        for old in ordered[:excess]:
+            bucket.pop(old.episode_id, None)

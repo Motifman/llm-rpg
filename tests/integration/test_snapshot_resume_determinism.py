@@ -35,7 +35,6 @@ import pytest
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
@@ -48,7 +47,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_location import Ep
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
@@ -61,7 +59,7 @@ def _make_stack():
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     return (wiring, provisioning)
 
 def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
@@ -73,7 +71,6 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     m1 = wiring.memo_store.add_by_being(being_id, 'active task')
     m2 = wiring.memo_store.add_by_being(being_id, 'done task')
     wiring.memo_store.complete_by_being(being_id, m2)
-    wiring.memory_link_store.upsert_link_by_being(being_id, MemoryLink(link_id='mlk-1', player_id=1, being_id=being_id, episode_id_a='ep-1', episode_id_b='ep-2', link_type=MemoryLinkType.CO_RECALL, strength=0.7, co_activation_count=3, created_at=_FIXED_TIME, last_activated_at=_FIXED_TIME, decay_rate=0.001))
     wiring.episodic_episode_store.put_by_being(being_id, SubjectiveEpisode(episode_id='ep-1', player_id=1, being_id=being_id, occurred_at=_FIXED_TIME, game_time_label='day 1', source=EpisodeSource(event_ids=('e1', 'e2')), location=EpisodeLocation(spot_id=42, tile_area_ids=(1, 2)), action=EpisodeAction(tool_name='walk'), who=('ada', 'ben'), what='explored forest', why='curious', observed='trees and birds', expected='silence', outcome='encountered wolf', prediction_error='surprise', felt='afraid', interpreted='dangerous area', cues=(EpisodicCue(axis='place_spot', value='42', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='recall body', recall_count=2, last_recalled_at=_FIXED_TIME))
 
 def _strip_volatile_metadata(payload_dict: dict) -> dict:

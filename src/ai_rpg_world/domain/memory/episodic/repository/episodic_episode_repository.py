@@ -8,18 +8,15 @@ Phase 3 Step 3e-3 (Issue #470): legacy player_id 版 API (4 method) を撤去し
 being_id 版のみを残した。caller は全て ``*_by_being`` 経路で読み書きする
 (Step 3e-2 で caller 切替済)。
 
-これで Phase 3 で扱う store (memo / semantic / memory_link /
-episodic_episode。再解釈の store は #1631 で消した) すべての
-Being keyed 化が完了する。
+これで Phase 3 で扱う store (memo / episodic_episode。意味記憶・リンク・再解釈の
+store は #1631 で消した) すべての Being keyed 化が完了する。
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
@@ -53,34 +50,12 @@ class EpisodicEpisodeRepository(ABC):
         self,
         being_id: BeingId,
         limit: int,
-        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         """being_id keyed で occurred_at 降順に最大 limit 件返す。
 
         同一タイムスタンプでは episode_id の降順で安定化。
         limit が 0 以下のときは空リスト。
         naive datetime はソート比較のみ UTC 固定オフセットとして扱う。
-
-        PR5 (R1) 後: ``min_occurred_at`` を渡すと **その時刻より古い episode のみ**
-        を返す (= sliding window にまだ生きている直近 episode を recall から
-        排除する用途)。None なら従来通り全件から最近を取る。
-        """
-
-    @abstractmethod
-    def list_by_cue_by_being(
-        self,
-        being_id: BeingId,
-        cue: EpisodicCue,
-        limit: int,
-        min_occurred_at: datetime | None = None,
-    ) -> list[SubjectiveEpisode]:
-        """being_id keyed で cue 一致する episode を返す。
-
-        並びは list_recent_by_being と同じ。
-        cue 一致は cue.to_canonical() で比較する。
-
-        PR5 (R1) 後: ``min_occurred_at`` 引数は ``list_recent_by_being`` と
-        同じ意味で機能する。
         """
 
     @abstractmethod

@@ -5,7 +5,6 @@ restore_all_from_dir の集計動作を担保する。
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,7 +17,6 @@ from ai_rpg_world.application.being.experiment_snapshot_session import (
     ExperimentSnapshotSession,
     _default_world_subsystem_codecs,
 )
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
@@ -40,7 +38,7 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     return (wiring, provisioning)
 
 class TestConstructorGuards:

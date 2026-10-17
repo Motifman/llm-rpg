@@ -12,7 +12,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1313,11 +1313,11 @@ def test_episodic_stack_gate_follows_config_not_env(
     assert off._episodic_stack is None
 
 
-def test_episodic_on_builds_link_store_with_episode_recall(
+def test_episodic_on_builds_the_chunk_pipeline(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """episodic stack を立てると、リンクの store も一緒に組まれ、行動の道具は出る。"""
+    """episodic stack を立てると、区切りの書き込みが組まれ、行動の道具は出る。"""
     monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
 
@@ -1325,7 +1325,6 @@ def test_episodic_on_builds_link_store_with_episode_recall(
     assert stack is not None
     assert stack.chunk_coordinator is not None
     assert stack.noun_matcher is not None
-    assert stack.memory_link_store is not None
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
@@ -2191,30 +2190,8 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
 
     assert stub.memo_store is runtime._todo_store
     assert stub.episodic_episode_store is runtime._episodic_stack.episode_store
-    assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository
-
-
-def test_experiment_wiring_stub_exposes_link_store_when_enabled(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """experiment snapshot surface includes the link store after #547."""
-    from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
-
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True
-        )
-    )
-
-    stub = _wiring_stub_from_world_runtime(runtime)
-
-    assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
-    assert stub.memory_link_store is not None
 
 
 # ── R2a: escape run_phase_b の trace 発火カバレッジ ──

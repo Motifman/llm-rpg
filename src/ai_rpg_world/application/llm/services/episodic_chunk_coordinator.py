@@ -37,9 +37,6 @@ from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
-from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
-    EpisodicMemoryLinkApplicationService,
-)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -93,7 +90,6 @@ class EpisodicChunkCoordinator:
         recent_actions_limit: int = 20,
         chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
         persona_block_provider: Callable[[PlayerId], str] | None = None,
-        episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
         trace_recorder: ITraceRecorder | None = None,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
@@ -117,12 +113,6 @@ class EpisodicChunkCoordinator:
             )
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
-        if episodic_memory_link_service is not None and not isinstance(
-            episodic_memory_link_service, EpisodicMemoryLinkApplicationService
-        ):
-            raise TypeError(
-                "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
-            )
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -170,7 +160,6 @@ class EpisodicChunkCoordinator:
         # close することで、bucket は必ず最大このサイズで止まる。
         # 50 は recent_actions_limit (=20) の 2.5 倍を目安に余裕を見た値。
         self._chunk_actions_hard_cap = 50
-        self._episodic_memory_link_service = episodic_memory_link_service
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
@@ -380,8 +369,6 @@ class EpisodicChunkCoordinator:
                     "episode draft is kept as-is",
                     exc_info=True,
                 )
-        if self._episodic_memory_link_service is not None:
-            self._episodic_memory_link_service.on_episode_committed(episode)
         # Issue #283 後続: chunk 書き込みを trace に残す
         self._emit_chunk_written_trace(
             player_id=player_id,

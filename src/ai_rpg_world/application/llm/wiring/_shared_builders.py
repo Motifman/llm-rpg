@@ -3,29 +3,15 @@
 Issue #227 後続: wiring factory 間で完全重複していたブロックを抽出した:
 
 1. effective_view_distance の argument 解決
-2. memory_link_bundle の構築
-3. game_time_label_provider クロージャ生成 (action_result の時刻ラベル用)
+2. game_time_label_provider クロージャ生成 (action_result の時刻ラベル用)
 
-呼び出し側のロジックを薄くし、episodic/link 構築の挙動が drift しないことを保証する。
+呼び出し側のロジックを薄くし、構築の挙動が drift しないことを保証する。
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
-
-from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
-    resolve_default_episodic_episode_store,
-)
-from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
-    EpisodicMemoryLinkBundle,
-    build_episodic_memory_link_bundle,
-    default_link_store_for_episode_store,
-)
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
 
 _DEFAULT_LLM_VIEW_DISTANCE = 5
 
@@ -38,38 +24,6 @@ def resolve_effective_view_distance(llm_view_distance: int | None) -> int:
     if llm_view_distance is not None:
         return llm_view_distance
     return _DEFAULT_LLM_VIEW_DISTANCE
-
-
-@dataclass(frozen=True)
-class EpisodicMemoryStack:
-    """episodic memory の中核コンポーネント束。
-
-    shared_episode_store: 全 coordinator が共有する episode store
-    mem_bundle: link store と link service のバンドル
-    """
-
-    shared_episode_store: EpisodicEpisodeRepository
-    mem_bundle: EpisodicMemoryLinkBundle
-
-
-def build_episodic_memory_stack(
-    episodic_episode_store: EpisodicEpisodeRepository | None,
-    *,
-    subjective_episode_db_path: str | None = None,
-) -> EpisodicMemoryStack:
-    """共有 episode store と link の store を組み立てる。"""
-    shared_episode_store = resolve_default_episodic_episode_store(
-        episodic_episode_store, db_path=subjective_episode_db_path
-    )
-    link_store = default_link_store_for_episode_store(shared_episode_store)
-    mem_bundle = build_episodic_memory_link_bundle(
-        shared_episode_store,
-        link_store=link_store,
-    )
-    return EpisodicMemoryStack(
-        shared_episode_store=shared_episode_store,
-        mem_bundle=mem_bundle,
-    )
 
 
 def build_game_time_label_provider(

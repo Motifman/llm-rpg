@@ -23,6 +23,6 @@ R2c-2 で ``create_llm_agent_wiring`` / ``LlmAgentOrchestrator`` /
 - ``feature_flags`` — short-term memory / semantic 等の env flag resolver
 - ``_llm_client_factory`` — LLM クライアント生成
 - ``episodic_stack`` — escape も使うエピソード記憶 stack builder
-- ``_shared_builders`` — エピソード/リンク/セマンティック構築の共有 builder
-- ``episodic_memory_link_bundle`` / ``_default_episodic_episode_store`` 等
+- ``_shared_builders`` — view distance と時刻ラベルの共有 builder
+- ``_default_episodic_episode_store`` 等
 """

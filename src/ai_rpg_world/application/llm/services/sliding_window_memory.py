@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
@@ -141,22 +140,3 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
             )
         except Exception:
             _logger.exception("短期記憶の圧縮 trace を記録できませんでした")
-
-    def get_oldest_entry_datetime(
-        self, player_id: PlayerId
-    ) -> datetime | None:
-        """PR5 (R1): 現在 window に乗っている最古 entry の ``occurred_at``。
-
-        episodic recall の時間下限フィルタに使う。entry が無ければ None。
-        sliding window は max_entries で打ち切られるので、最古 = 「直近 N 件
-        の中の最古」を返す。"""
-        if not isinstance(player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
-        entries = self._event_store.get_recent_observations(
-            player_id, self._max_entries
-        )
-        if not entries:
-            return None
-        # naive / aware が混在しても直接比較で TypeError にしない。
-        # get_recent と同じく timestamp() を比較キーにする
-        return min(entries, key=lambda e: e.occurred_at.timestamp()).occurred_at

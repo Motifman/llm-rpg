@@ -38,8 +38,8 @@ def test_experiment_and_server_entrypoints_use_world_runtime() -> None:
     assert "create_spot_graph_wiring" not in experiment
 
 
-def test_world_runtime_memory_stack_has_flag_gated_link_extension() -> None:
-    """world_runtime's episodic builder exposes the link handle behind a flag."""
+def test_world_runtime_memory_stack_exposes_only_the_chunk_pipeline() -> None:
+    """world_runtime's episodic builder exposes the chunk pipeline and no memory link handle."""
     from ai_rpg_world.application.llm.wiring.episodic_stack import (
         EpisodicStack,
         build_episodic_stack,
@@ -52,9 +52,9 @@ def test_world_runtime_memory_stack_has_flag_gated_link_extension() -> None:
         "chunk_coordinator",
         "noun_matcher",
         "episode_store",
-        "memory_link_store",
     } <= stack_fields
-    assert build_params["semantic_enabled"].default is False
+    assert "memory_link_store" not in stack_fields
+    assert "semantic_enabled" not in build_params
 
 
 def test_full_wiring_is_retired() -> None:

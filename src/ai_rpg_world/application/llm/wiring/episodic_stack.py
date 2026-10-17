@@ -22,12 +22,8 @@
 - **シナリオは duck-type で受ける**: ``scenario.player_spawns`` /
   ``graph._spots`` 等の getattr で取れる属性だけを要求。具体型
   (``ScenarioLoadResult`` 等) には依存しない
-- **本家 ``_shared_builders.py`` の重い builder には頼らない**:
-  ``EpisodicMemoryLinkApplicationService`` 等の高度機能 (LLM 駆動の
-  reinterpretation / semantic cluster promotion) は world_runtime の MVP では
-  over-engineering。後で必要になったら本家経路に乗り換える
 - **In-memory store がデフォルト**: SQLite store に差し替えるときは
-  ``episode_store`` 引数で外側から渡す
+  ``episode_store`` 引数で外側から渡すか、``subjective_episode_db_path`` を渡す
 - **scenario 構造から固有名詞を抽出**: spot 名は graph から、character 名は
   player_spawns から取る。world_object / item は将来拡張で追加
 
@@ -65,12 +61,12 @@ from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-    InMemorySubjectiveEpisodeStore,
-)
 from ai_rpg_world.application.llm.services.world_noun_matcher import (
     IWorldNounMatcher,
     WorldNounMatcherBuilder,
+)
+from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
+    resolve_default_episodic_episode_store,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -151,11 +147,6 @@ class EpisodicStack:
     noun_matcher: IWorldNounMatcher
     episode_store: EpisodicEpisodeRepository
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
-    # memory link graph の store (semantic_enabled のときだけ、snapshot 用に公開)。
-    # full 共有 builder (build_episodic_memory_stack) で組む。OFF のときは None。
-    memory_link_store: Any | None = None
-    # chunk_coordinator が TEMPORAL リンクを書くための link service。
-    link_service: Any | None = None
 
 
 def build_scenario_noun_matcher(
@@ -242,7 +233,6 @@ def build_episodic_stack(
     persona_block_provider: Callable[[PlayerId], str] | None = None,
     subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
     episode_store: EpisodicEpisodeRepository | None = None,
-    semantic_enabled: bool = False,
     # #526 後続 C1: world_object 名を index するために spot_interior_repo を
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
@@ -252,8 +242,7 @@ def build_episodic_stack(
     # provider。注入時のみ動く (= default None で挙動不変)。
     runtime_context_provider: Callable[..., Any] | None = None,
     # episode store の永続化先 (ResolvedLlmRuntimeConfig.subjective_episode_db_path)。
-    # None なら in-memory。semantic 有効時に build_episodic_memory_stack が store を
-    # 解決する経路 (episode_store 未指定) でだけ効く。
+    # None なら in-memory。episode_store が未指定のときだけ効く。
     subjective_episode_db_path: str | None = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
@@ -277,13 +266,11 @@ def build_episodic_stack(
     - ``subjective_completion_scheduler``: 非同期 LLM 補完経路 (#310 推奨)。
       scheduler と stack で同じ ``episode_store`` を共有することが整合性条件
     - ``episode_store``: 呼び出し側が事前に scheduler と共有する store を渡せる。
-      None なら新規作成
-    - ``semantic_enabled``: True で本家 ``build_episodic_memory_stack`` を再利用し
-      link の store を組む (default False = 従来の episodic-only)
+      None なら ``subjective_episode_db_path`` から SQLite か in-memory を選ぶ
 
     # 履歴
 
-    - Issue #283 後続: chunk write / passive recall を ``TraceEventKind`` で
+    - Issue #283 後続: chunk write を ``TraceEventKind`` で
       可視化
     - Issue #295 後続: ``chunk_subjective_fields_service`` (+ persona_provider)
       が両方与えられたときだけ LLM 主観文付与経路を有効化
@@ -293,29 +280,9 @@ def build_episodic_stack(
     # で「スケジューラと chunk_coordinator が同じ store を共有する必要がある」
     # ため (両者が違う store だと、worker が書き込んだ merged episode が
     # chunk の書いた episode と食い違う)。
-    # semantic_enabled のときは full 共有 builder で link の store を組み、
-    # chunk_coordinator に link service を渡す。
-    link_service: Any | None = None
-    memory_link_store: Any | None = None
-    if semantic_enabled:
-        # 循環 import 回避のため関数内 import。
-        from ai_rpg_world.application.llm.wiring._shared_builders import (
-            build_episodic_memory_stack,
-        )
-
-        mem_stack = build_episodic_memory_stack(
-            episode_store,
-            subjective_episode_db_path=subjective_episode_db_path,
-        )
-        # build_episodic_memory_stack が episode_store を解決して返す。以降は
-        # 全コンポーネントがこの shared store を共有する (chunk write / recall
-        # が同じ store を見る整合性条件)。
-        episode_store = mem_stack.shared_episode_store
-        link_service = mem_stack.mem_bundle.link_service
-        # link graph を snapshot 用に公開する。
-        memory_link_store = mem_stack.mem_bundle.link_store
-    elif episode_store is None:
-        episode_store = InMemorySubjectiveEpisodeStore()
+    episode_store = resolve_default_episodic_episode_store(
+        episode_store, db_path=subjective_episode_db_path
+    )
 
     # #526 後続 Fix A: noun_matcher を chunk_coordinator より先に作り、
     # ChunkEpisodeDraftBuilder に渡す。
@@ -340,9 +307,6 @@ def build_episodic_stack(
         chunk_subjective_fields_service=chunk_subjective_fields_service,
         subjective_completion_scheduler=subjective_completion_scheduler,
         persona_block_provider=persona_block_provider,
-        # semantic OFF なら link service なし (= MVP の従来動作)。ON なら memory
-        # link を chunk write 経路に通す。
-        episodic_memory_link_service=link_service,
     )
 
     return EpisodicStack(
@@ -350,8 +314,6 @@ def build_episodic_stack(
         noun_matcher=noun_matcher,
         episode_store=episode_store,
         subjective_completion_scheduler=subjective_completion_scheduler,
-        memory_link_store=memory_link_store,
-        link_service=link_service,
     )
 
 
