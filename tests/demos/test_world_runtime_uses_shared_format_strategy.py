@@ -141,7 +141,6 @@ class TestWorldRuntimeUsesSharedFormatStrategy:
             recent_events_text="Y",
             objective_text=scenario_objective,
             inventory_text="Z",
-            active_memos_text="",
         )
         assert skeleton.startswith("【現在の目的】")
         assert "【現在地と周囲】" in skeleton

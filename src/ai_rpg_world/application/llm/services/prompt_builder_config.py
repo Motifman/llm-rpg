@@ -2,7 +2,7 @@
 
 Issue #227 後続レビュー (HIGH-1) 改善: __init__ の 22 引数を 4 つの dataclass に
 グループ化し、テスト fixture や wiring 側の組み立てを楽にする。各 dataclass は
-「機能の塊」として独立しており、Optional な機能 (memo など) は丸ごと省略できる。
+「機能の塊」として独立しており、Optional な機能 (メモ帳など) は丸ごと省略できる。
 
 API:
     DefaultPromptBuilder(
@@ -39,7 +39,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.world.services.world_query_service import (
     WorldQueryService,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
@@ -53,7 +52,6 @@ if TYPE_CHECKING:
 
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
 DEFAULT_TILE_MAP_VIEW_DISTANCE = 5
-DEFAULT_MEMO_STALE_AGE_TICKS = 20
 
 
 class _PlayerCurrentStateSource(Protocol):
@@ -108,7 +106,6 @@ class PromptSectionProviders:
     known_people_text_provider: Callable[[PlayerId], str] | None = None
     # #1623: エピソードの目次【思い出せる出来事】。目次を出す設定では空でも文を返す。
     episode_index_text_provider: Callable[[PlayerId], str] | None = None
-    memo_store: MemoRepository | None = None
     # #1628: Being のメモ帳。毎ターン同じ位置に、空の分類の見出しも含めて出す。
     being_memo_text_provider: Callable[[PlayerId], str] | None = None
 
@@ -120,6 +117,3 @@ class PromptLimits:
     default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION
     tile_map_view_distance: int = DEFAULT_TILE_MAP_VIEW_DISTANCE
     tile_map_enabled: bool = True
-    memo_stale_age_ticks: int = DEFAULT_MEMO_STALE_AGE_TICKS
-    #: メモの経過を世界の時計の分で書くための換算。None なら手番の回数で書く (#1562)。
-    minutes_per_tick: int | None = None

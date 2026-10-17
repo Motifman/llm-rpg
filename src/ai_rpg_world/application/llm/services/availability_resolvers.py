@@ -742,26 +742,3 @@ class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
         if k == "my_trades" and app.trade_my_trades_tab == "selling":
             return True
         return False
-
-
-class TodoAddAvailabilityResolver(IAvailabilityResolver):
-    """TODO 追加は常に利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return True
-
-
-class TodoListAvailabilityResolver(IAvailabilityResolver):
-    """TODO 一覧は常に利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return True
-
-
-class TodoCompleteAvailabilityResolver(IAvailabilityResolver):
-    """TODO 完了は常に利用可能。"""
-
-    def is_available(self, context: PlayerCurrentStateDto | None) -> bool:
-        return True
-
-

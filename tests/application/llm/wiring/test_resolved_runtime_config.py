@@ -32,7 +32,6 @@ class TestFromEnvDefaults:
         assert cfg.llm_rate_limit_retry_base_sleep == 2.0
         assert cfg.openrouter_provider is None
         assert cfg.openrouter_quantization is None
-        assert cfg.memo_tools_enabled is True
         assert cfg.scenario_random_seed is None
         assert cfg.prompt_dataset_capture_failure_policy == 'fail'
         assert cfg.reason_first_two_step_enabled is True
@@ -122,7 +121,7 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'MEMO_TOOLS_ENABLED': '0', 'SCENARIO_RANDOM_SEED': '42'})
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.llm_client_kind == 'litellm'
@@ -136,7 +135,6 @@ class TestFromEnvExplicit:
         assert cfg.llm_rate_limit_retry_base_sleep == 1.5
         assert cfg.openrouter_provider == 'Parasail'
         assert cfg.openrouter_quantization == 'fp8'
-        assert cfg.memo_tools_enabled is False
         assert cfg.scenario_random_seed == 42
 
     def test_empty_string_env_default(self) -> None:
@@ -248,6 +246,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "BELIEF_CANDIDATE_TOP_K",
             "BELIEF_CONSOLIDATION_ENABLED",
             "BELIEF_ATTRIBUTION_ENABLED",
+            "MEMO_TOOLS_ENABLED",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
@@ -309,7 +308,7 @@ class TestToTraceDict:
         assert d['short_term_memory_turn_cap'] == 20
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
-        assert 'memo_tools_enabled' in d
+        assert 'being_memo_enabled' in d
 
     def test_api_key(self) -> None:
         """API key の生値は絶対に trace に出さない (漏洩防止)。"""

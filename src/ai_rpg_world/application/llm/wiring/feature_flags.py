@@ -10,60 +10,11 @@
   ``docs/memory_system/semantic_memory_activation_plan.md`` §9
 - **「配線 (wire)」と「有効化 (enable)」を分離**: コードパスは常に通って
   いるが env 未設定なら不活性
-- 値は ``"1" / "true" / "yes" / "on"`` (case-insensitive) を ON とみなす
 """
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
-
-_logger = logging.getLogger(__name__)
-
-
-_TRUTHY = frozenset({"1", "true", "yes", "on"})
-_FALSY = frozenset({"0", "false", "no", "off"})
-
-
-def _parse_bool_env(
-    var_name: str,
-    env: Mapping[str, str] | None = None,
-    *,
-    default: bool = False,
-) -> bool:
-    """設定値を bool として解釈する。値が未設定なら ``default``。
-
-    - truthy: ``"1" / "true" / "yes" / "on"`` (case-insensitive) → True
-    - falsy:  ``"0" / "false" / "no" / "off"`` (case-insensitive) → False
-    - 上記以外の文字列 → ``ValueError`` (silent fallback 防止: 過去に
-      ``MEMORY_KIND=rolling`` のような typo が黙って default に縮退して
-      実験前提を壊した事例があった / PR #433 で発覚)
-
-    Args:
-        var_name: 設定名 (エラーメッセージに含める)
-        env: 設定 mapping。None は許可しない
-        default: 未設定時の戻り値
-
-    Raises:
-        ValueError: 値が truthy / falsy のいずれにも該当しないとき
-    """
-    if env is None:
-        raise TypeError(
-            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
-        )
-    source = env
-    raw = (source.get(var_name) or "").strip().lower()
-    if not raw:
-        return default
-    if raw in _TRUTHY:
-        return True
-    if raw in _FALSY:
-        return False
-    raise ValueError(
-        f"{var_name}={raw!r} is not a recognized boolean. "
-        f"truthy: {sorted(_TRUTHY)}, falsy: {sorted(_FALSY)}"
-    )
-
 
 # ──────────────────────────────────────────────────────────────────
 # Short-term memory: rolling summary (Phase 2)
@@ -109,34 +60,3 @@ def resolve_short_term_memory_turn_window(
             f"{ENV_SHORT_TERM_MEMORY_TURN_CAP}: {compact_count} >= {cap}"
         )
     return cap, compact_count
-
-
-# ──────────────────────────────────────────────────────────────────
-# Memo tool exposure
-# ──────────────────────────────────────────────────────────────────
-
-
-ENV_MEMO_TOOLS_ENABLED = "MEMO_TOOLS_ENABLED"
-
-
-def resolve_memo_tools_enabled(
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    """memo_add / memo_list / memo_done を LLM に露出するか。
-
-    未設定なら ON。``MEMO_TOOLS_ENABLED=0`` で明示的に OFF。
-
-    memo は既存 run で長く使われてきた手帳 tool なので、既定は互換性を優先
-    して ON にする。OFF は memo 廃止 A/B 実験の腕として使い、memo section
-    と memo 完了 hint も同時に止める。
-    """
-    return _parse_bool_env(ENV_MEMO_TOOLS_ENABLED, env=env, default=True)
-
-
-def log_memo_tools_enabled_state(enabled: bool) -> None:
-    """wiring 構築時に解決結果を 1 度ログる。"""
-    _logger.info(
-        "%s resolved to %s",
-        ENV_MEMO_TOOLS_ENABLED,
-        "ENABLED" if enabled else "DISABLED",
-    )

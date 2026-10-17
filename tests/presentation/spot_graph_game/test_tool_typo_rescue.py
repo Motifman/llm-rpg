@@ -129,9 +129,9 @@ class TestBuildUnsupportedToolMessage:
         正しい tool を選び直せるようにする。"""
         msg = build_unsupported_tool_message(
             requested="spot_graph_gather",
-            valid_tools=["explore", "wait", "memo_add"],
+            valid_tools=["explore", "wait", "speak"],
         )
-        for valid_name in ("explore", "wait", "memo_add"):
+        for valid_name in ("explore", "wait", "speak"):
             assert valid_name in msg
 
 
@@ -190,7 +190,7 @@ class TestExecuteToolReturnsReschedulableDto:
         wiring = state.llm_wiring
         pid = state.runtime.get_player_ids()[0]
         offered = offered_tools_from_payload(wiring._build_tools_payload(pid))
-        assert "pickup_item" in offered and "memo_add" in offered
+        assert "pickup_item" in offered and "speak" in offered
 
         # 旧 prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
         # ケース (LLM の旧習慣) をシミュレートする。
@@ -203,7 +203,7 @@ class TestExecuteToolReturnsReschedulableDto:
         )
         assert "spot_graph_pickup" in result.message
         assert "もしかして 'pickup_item' ですか?" in result.message
-        assert "memo_add" in result.message
+        assert "speak" in result.message
 
 
 class TestInvalidDestinationLabelIsReschedulable:
