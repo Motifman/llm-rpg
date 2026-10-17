@@ -1,5 +1,5 @@
 .PHONY: test test-cov test-html lint lint-fix typecheck clean install dev-install help \
-	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
+	experiment experiment-publish experiment-survival experiment-survival-coop \
 	check-no-internal-hostnames build-trace-viewer fuzz-scenario
 
 PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
@@ -25,8 +25,6 @@ help:
 	@echo "                                - survival_island_v2 専用 (140 tick / publish 既定)"
 	@echo "  make experiment-survival-coop OUT=..."
 	@echo "                                - survival_island_v3_coop 専用 (stranded_at_tick=240 / publish 既定)"
-	@echo "  make experiment-recall-probe OUT=... [DRY_RUN=1]"
-	@echo "                                - Issue #526 不在 2 検証用 (recall_probe_v1 / 15 tick / 1 player)"
 	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
 
 # 依存関係のインストール
@@ -190,30 +188,6 @@ experiment-survival-coop:
 		MAX_WORLD_TICKS=$(COOP_MAX_WORLD_TICKS) \
 		OUT=$(OUT) \
 		PUBLISH=$(COOP_PUBLISH)
-
-# Issue #526 後続: 能動 recall (memory_recall_episodes) 検証用の小規模実験。
-# 1 player + 15 tick + 過去 episode 強制注入 + scripted NPC「シキ」の質問 3 つ。
-#
-# 使い方:
-#   make experiment-recall-probe OUT=var/runs/recall_probe_001
-#   make experiment-recall-probe DRY_RUN=1 OUT=/tmp/dryrun   # LLM 呼ばずに構造確認
-#
-# 既定: K run 設定 (rolling_summary) +
-#       DeepInfra fp4 / deepseek-v4-flash。OPENAI_API_KEY が要る。
-#
-# 引数:
-#   RECALL_PROBE_SCENARIO 既定 data/scenarios/recall_probe_v1.json
-#                         v2 (中立 objective + passive 痩せ) を使うときは
-#                         data/scenarios/recall_probe_v2.json
-RECALL_PROBE_SCENARIO ?= data/scenarios/recall_probe_v1.json
-experiment-recall-probe:
-	@mkdir -p var/runs
-	uv run python scripts/run_recall_probe_experiment.py \
-		--scenario $(RECALL_PROBE_SCENARIO) \
-		$(if $(RECALL_PROBE_MODE),--mode $(RECALL_PROBE_MODE),) \
-		$(if $(RECALL_PROBE_MAX_TICKS),--max-world-ticks $(RECALL_PROBE_MAX_TICKS),) \
-		$(if $(DRY_RUN),--no-llm,) \
-		$(if $(OUT),--out $(OUT),)
 
 # 内部ホスト名 / 組織 FQDN の混入チェック (docs/security_hosts_policy.md)
 check-no-internal-hostnames:
