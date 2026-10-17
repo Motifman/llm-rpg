@@ -3882,15 +3882,16 @@ class WorldRuntime:
     # ── ゲーム終了判定 ──
 
     def check_game_end(self) -> GameEndResult:
-        # END_ON_ALL_DOWN はシナリオ内の勝敗規則ではなく、実験を行動不能状態で
-        # 回し続けないための外的停止。個人結果規則や end 条件の有無に関係なく、
-        # 宣言された世界の判定より先に一つの入口で評価する。
+        # 全員が行動不能なときの停止はシナリオ内の勝敗規則ではなく、実験を行動不能
+        # 状態で回し続けないための外的停止。世界の判定が成立した tick では世界の
+        # 終了理由を残すため、外的停止は世界の判定が続行のときだけ見る
+        # (design_decisions 43)。終了理由の文字列は、設定で切り替えていた頃の
+        # run と同じ grep で拾えるように変えない。
+        world_end = self._check_game_end_collective_mode()
+        if world_end.is_ended:
+            return world_end
         registry = self._player_outcome_registry
-        if (
-            self._should_end_on_all_down()
-            and registry is not None
-            and self._all_players_unable_to_act(registry)
-        ):
+        if registry is not None and self._all_players_unable_to_act(registry):
             return GameEndResult(
                 is_ended=True,
                 result=None,
@@ -3903,7 +3904,7 @@ class WorldRuntime:
                     self._decide_team_results() if self.scenario.teams else None
                 ),
             )
-        return self._check_game_end_collective_mode()
+        return world_end
 
     def _decide_team_results(self) -> Mapping[str, GameResultEnum]:
         """いまの世界で各チームの勝利条件を評価し、チームの勝敗を決める。"""
@@ -3991,11 +3992,6 @@ class WorldRuntime:
             "teams": teams_payload,
             "players": players_payload,
         }
-
-    def _should_end_on_all_down(self) -> bool:
-        """END_ON_ALL_DOWN による外的停止が有効かを返す。"""
-        cfg = getattr(self, "_runtime_config", None)
-        return bool(getattr(cfg, "end_on_all_down", False))
 
     def _all_players_unable_to_act(self, registry: Any) -> bool:
         """全 player が outcome 確定済み、または unresolved でも down 済みかを返す。"""
