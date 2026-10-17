@@ -162,6 +162,30 @@ class TestBuildEpisodicStack:
         stack = build_episodic_stack(scenario=scenario, graph=graph, observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, episode_store=shared)
         assert stack.episode_store is shared
 
+    def test_db_path_without_episode_store_builds_sqlite_store(self, tmp_path) -> None:
+        """episode_store を渡さず subjective_episode_db_path を渡すと、その場所の SQLite store を組む。"""
+        from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
+        graph = _stub_graph(spots={1: 'x'})
+        scenario = _stub_scenario(players=[(1, 'y')])
+        (obs_buf, sliding, action_store) = self._minimal_io()
+
+        stack = build_episodic_stack(scenario=scenario, graph=graph, observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, subjective_episode_db_path=str(tmp_path / 'episodes.db'))
+
+        assert isinstance(stack.episode_store, SqliteSubjectiveEpisodeStore)
+        assert (tmp_path / 'episodes.db').exists()
+
+    def test_episode_store_wins_over_db_path(self, tmp_path) -> None:
+        """episode_store を渡したときは subjective_episode_db_path を見ず、渡した store を使う。"""
+        graph = _stub_graph(spots={1: 'x'})
+        scenario = _stub_scenario(players=[(1, 'y')])
+        (obs_buf, sliding, action_store) = self._minimal_io()
+        shared = InMemorySubjectiveEpisodeStore()
+
+        stack = build_episodic_stack(scenario=scenario, graph=graph, observation_buffer=obs_buf, short_term_memory=sliding, action_result_store=action_store, episode_store=shared, subjective_episode_db_path=str(tmp_path / 'episodes.db'))
+
+        assert stack.episode_store is shared
+        assert not (tmp_path / 'episodes.db').exists()
+
 class TestBackwardCompatAlias:
     """``world_episodic_wiring`` の旧名 alias が引き続き動く。
 
