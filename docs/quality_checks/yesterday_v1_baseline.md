@@ -5,7 +5,7 @@
 「カイトに『昨日何してた?』と聞かれたリンが自然に答えられるか」を、prompt
 構造の側から見るシナリオ。LLM は呼ばず、prompt の中身そのものを点検する。
 
-古いエピソードの store を runtime が組まなくなったとき (Issue #1631 の #PRNUM)、テストと dump
+古いエピソードの store を runtime が組まなくなったとき (Issue #1631 の #1801)、テストと dump
 (`yesterday_v1_in_window.prompt.txt` / `yesterday_v1_out_of_window.prompt.txt`) を外した。
 過去を引く受動想起も同じ Issue の #1796 で消している。この文書は記録として残す。
 
