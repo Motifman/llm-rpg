@@ -196,7 +196,7 @@ class WorldLlmWiring:
             )
         )
         self.memo_completion_hint_service: MemoCompletionHintService | None = None
-        if bool(getattr(runtime_config, "being_memo_enabled", False)):
+        if runtime_config is not None:
             # #1628: メモ帳のやることが済んだかを問う。自動では消さない。
             self.memo_completion_hint_service = MemoCompletionHintService(
                 pending_todos=self._pending_todos,

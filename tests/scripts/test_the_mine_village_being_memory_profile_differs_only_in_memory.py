@@ -48,18 +48,16 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert not_off == set()
 
     def test_new_memory_is_on_with_the_compared_settings(self) -> None:
-        """メモ帳が入り、常に入る目次は比べた設定 (10 件、一度に 3 件) で出る。"""
+        """常に入る目次は、比べた設定 (10 件、一度に 3 件) で出る。"""
         being = _load(_BEING_MEMORY)["runtime_config"]
 
         assert {
             key: being[key]
             for key in (
-                "BEING_MEMO_ENABLED",
                 "BEING_EPISODE_INDEX_LIMIT",
                 "BEING_EPISODE_RECALL_MAX_HANDLES",
             )
         } == {
-            "BEING_MEMO_ENABLED": True,
             "BEING_EPISODE_INDEX_LIMIT": 10,
             "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
         }
@@ -72,7 +70,7 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert being["LLM_MAX_OUTPUT_TOKENS"] == 4096
 
     def test_profile_resolves_with_new_memory_on_and_old_memory_off(self) -> None:
-        """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードとメモ帳が入り、古いエピソードは止まっている。"""
+        """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードが入り、古いエピソードは止まっている。"""
         being = _load(_BEING_MEMORY)
 
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
@@ -81,4 +79,3 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
 
         assert cfg.being_episode_index_limit == 10
         assert cfg.being_episode_recall_max_handles == 3
-        assert cfg.being_memo_enabled is True

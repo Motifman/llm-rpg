@@ -1776,7 +1776,8 @@ class WorldRuntime:
         )
 
     def _being_memo_enabled(self) -> bool:
-        return bool(getattr(self._runtime_config, "being_memo_enabled", False))
+        # create_world_runtime で組んだ runtime には、メモ帳が常に入る (#1631)。
+        return self._runtime_config is not None
 
     def memo_episode_source_offered(self) -> bool:
         """メモの出どころにエピソードの呼び名を選ばせるか (#1628)。
@@ -4276,7 +4277,6 @@ def create_world_runtime(
             world_title=scenario.metadata.title,
             persona_block=persona,
             safe_intro=safe_intro,
-            being_memo_enabled=config.being_memo_enabled,
             has_goal=_has_goal,
             limits_actions=scenario.metadata.limits_actions,
             episode_index_shown=episode_index_shown,
