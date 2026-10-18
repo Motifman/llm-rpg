@@ -1066,14 +1066,14 @@ class LiteLLMClient(
                 )
             )
         except Exception as e:
-            self._logger.exception("LiteLLM subjective completion failed: %s", e)
+            self._logger.exception("LiteLLM aux JSON completion failed: %s", e)
             error_code = "LLM_API_CALL_FAILED"
             if isinstance(e, LitellmAuthenticationError):
                 error_code = "LLM_AUTHENTICATION_ERROR"
             elif isinstance(e, LitellmRateLimitError):
                 error_code = "LLM_RATE_LIMIT"
             raise LlmApiCallException(
-                f"LLM subjective completion failed: {e}",
+                f"LLM aux JSON completion failed: {e}",
                 error_code=error_code,
                 cause=e,
             ) from e
@@ -1082,29 +1082,29 @@ class LiteLLMClient(
     def _parse_json_object(response: Any) -> dict[str, Any]:
         if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
             raise LlmApiCallException(
-                "Empty response from subjective completion",
-                error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_RESPONSE",
+                "Empty response from aux JSON completion",
+                error_code="LLM_AUX_JSON_EMPTY_RESPONSE",
             )
         message = response.choices[0].message
         content = getattr(message, "content", None) if message else None
         if not isinstance(content, str) or not content.strip():
             raise LlmApiCallException(
-                "Missing message content from subjective completion",
-                error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_CONTENT",
+                "Missing message content from aux JSON completion",
+                error_code="LLM_AUX_JSON_EMPTY_CONTENT",
             )
         extracted_content = _extract_first_json_object(content)
         try:
             parsed = json.loads(extracted_content)
         except (json.JSONDecodeError, TypeError) as e:
             raise LlmApiCallException(
-                f"Subjective completion content is not valid JSON: {e}",
-                error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
+                f"Aux JSON completion content is not valid JSON: {e}",
+                error_code="LLM_AUX_JSON_INVALID_JSON",
                 cause=e,
             ) from e
         if not isinstance(parsed, dict):
             raise LlmApiCallException(
-                "Subjective completion JSON root must be an object",
-                error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
+                "Aux JSON completion JSON root must be an object",
+                error_code="LLM_AUX_JSON_INVALID_JSON",
             )
         return parsed
 
