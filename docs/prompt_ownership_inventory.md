@@ -24,8 +24,6 @@
 2. できた文字列は `_world_llm_system_prompts_by_player_id` に入れ、run 中は変えない
 3. 毎ターン、`DefaultPromptBuilder.build` が `WorldSystemPromptBuilder.build` (`world_runtime/default_prompt_builder_adapters.py:103`) を呼び、名前から player を引いて `WorldRuntime.build_system_prompt` (1196 行) で保持済みの文字列を返す
 
-`llm/services/system_prompt_builder.py` の `DefaultSystemPromptBuilder` はデモ用で、run では使わない。
-
 ### 毎ターンの user メッセージ
 
 `run_phase_a` → `WorldRuntime.build_full_prompt` (`world_runtime/world_runtime.py:2994`) → `DefaultPromptBuilder.build` (`llm/services/prompt_builder.py:583`) の順に呼ぶ。

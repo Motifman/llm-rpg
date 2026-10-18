@@ -52,9 +52,6 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import (
     RestoreBeingSnapshotFromFileUseCase,
 )
-from ai_rpg_world.application.being.world_clock_restart import (
-    WorldClockRestartReport,
-)
 from ai_rpg_world.application.being.world_state_snapshot import (
     WorldStateSnapshot,
 )
@@ -195,11 +192,6 @@ class RestoreAllReport:
     cross_scenario_transfers: list[tuple[BeingId, str, str]] = field(
         default_factory=list
     )  # (being_id, source_scenario, current_scenario)
-    # #1514: 回をやり直す読み込みで、世界の tick を書き換えた件数。続きからの
-    # 読み込みでは空。
-    world_clock_restarts: dict[BeingId, WorldClockRestartReport] = field(
-        default_factory=dict
-    )
     # 消した部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない。
     removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(
         default_factory=dict
@@ -525,7 +517,6 @@ class ExperimentSnapshotSession:
         input_dir: Path,
         *,
         current_scenario: str | None = None,
-        restart_world_clock: bool = False,
     ) -> RestoreAllReport:
         """``input_dir`` 配下の ``*.json`` を全て restore する。
 
@@ -537,9 +528,6 @@ class ExperimentSnapshotSession:
         ``cross_scenario_transfers`` に記録 + warning ログを出す。
         **mismatch はエラーにしない** (= 同じキャラクターを別シナリオに
         転送する use case を許容)。
-
-        ``restart_world_clock`` は、世界を初期状態からやり直す回 (#1514) で
-        使う。記憶に残る前の回の世界の tick を、書き戻す前に 0 にする。
         """
         if not input_dir.exists():
             raise FileNotFoundError(
@@ -559,7 +547,6 @@ class ExperimentSnapshotSession:
         restored: list[BeingId] = []
         metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
         cross_transfers: list[tuple[BeingId, str, str]] = []
-        world_clock_restarts: dict[BeingId, WorldClockRestartReport] = {}
         removed_memory_key_counts: dict[BeingId, dict[str, int]] = {}
         for path in files:
             # metadata は restore_use_case の中では読まないので、別途 gateway
@@ -575,12 +562,8 @@ class ExperimentSnapshotSession:
                 )
                 metadata = None
 
-            result = self._restore_use_case.execute(
-                path, restart_world_clock=restart_world_clock
-            )
+            result = self._restore_use_case.execute(path)
             restored.append(result.being_id)
-            if result.world_clock_restart is not None:
-                world_clock_restarts[result.being_id] = result.world_clock_restart
             if result.removed_memory_key_counts:
                 removed_memory_key_counts[result.being_id] = (
                     result.removed_memory_key_counts
@@ -619,7 +602,6 @@ class ExperimentSnapshotSession:
             restored=restored,
             metadata_by_being=metadata_by_being,
             cross_scenario_transfers=cross_transfers,
-            world_clock_restarts=world_clock_restarts,
             removed_memory_key_counts=removed_memory_key_counts,
         )
 

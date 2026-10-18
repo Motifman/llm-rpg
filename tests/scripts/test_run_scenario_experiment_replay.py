@@ -131,8 +131,6 @@ class TestReplayStartsTheWorldOver:
         assert loaded["payload"]["restored_being_ids"]
         assert loaded["payload"]["load_mode"] == "replay"
         assert loaded["payload"]["world_snapshot_ignored"] is True
-        assert [r["being_id"] for r in loaded["payload"]["world_clock_restarts"]] == loaded["payload"]["restored_being_ids"]
-        assert all(set(r) == {"being_id", "reset_tick_fields"} for r in loaded["payload"]["world_clock_restarts"])
         assert loaded["payload"]["removed_memory_keys"] == []
         (saved,) = _events(tmp_path / "r1", "snapshot_save")
         saved_turns = {c["being_id"]: c["memory_turn"] for c in saved["payload"]["memory_turns"]}
@@ -153,7 +151,6 @@ class TestReplayStartsTheWorldOver:
         (loaded,) = _events(tmp_path / "r2", "snapshot_load")
         assert loaded["payload"]["load_mode"] == "continue"
         assert loaded["payload"]["world_snapshot_ignored"] is False
-        assert loaded["payload"]["world_clock_restarts"] == []
         assert loaded["payload"]["removed_memory_keys"] == []
         assert _events(tmp_path / "r2", "tick_start")[0]["tick"] > _events(tmp_path / "r1", "tick_start")[0]["tick"]
         assert world_loaded["payload"]["world_tick"] > 0
