@@ -83,7 +83,6 @@ def _create_runtime(
     config: ResolvedLlmRuntimeConfig | None = None,
     *,
     scenario_path: Path = _SCENARIO_PATH,
-    include_todo_tools: bool = True,
 ):
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
@@ -92,7 +91,6 @@ def _create_runtime(
     return create_world_runtime(
         scenario_path,
         config=config or ResolvedLlmRuntimeConfig.for_tests(),
-        include_todo_tools=include_todo_tools,
     )
 
 
