@@ -56,8 +56,8 @@ class BeingRepository(ABC):
     def find_snapshot_by_id(self, being_id: BeingId) -> BeingSnapshot | None:
         """指定 ID の ``BeingSnapshot`` を返す (codec decode を経由しない経路)。
 
-        payload を読み出して memory restore に回すための入口。``find_by_id`` は codec.decode が
-        払い落とした Being aggregate しか返さないので、payload を残した
+        payload を読み出して memory restore に回すための入口。``find_by_id`` は
+        codec.decode が払い落とした Being aggregate しか返さないので、payload を残した
         snapshot 取得の経路を別に持つ必要がある。
         """
 
