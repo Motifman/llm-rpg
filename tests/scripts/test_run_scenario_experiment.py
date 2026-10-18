@@ -369,7 +369,7 @@ class TestBuildReport:
         assert "position_change: 0" in report
         assert "legacy HTML viewer" in report
         assert "map trace viewer" in report
-        assert "episodic memory viewer" in report
+        assert "episodic memory viewer" not in report
         assert "timeline viewer" in report
         # プレイヤー別集計に 2 行 (新列 moves あり)
         assert "| 1 | 1 | 1 | 0 | 0 |" in report
@@ -479,14 +479,14 @@ class TestBuildReport:
 class TestEmitHtmlArtifacts:
     """run 完了時に生成する HTML 成果物の挙動を保証する。"""
 
-    def test_emits_legacy_and_four_viewers(
+    def test_emits_legacy_and_three_viewers(
         self,
         tmp_path: Path,
         monkeypatch,
         capsys,
     ) -> None:
-        """trace.html / viewer.html / episodic.html / timeline.html / prompt.html を
-        同じ段で生成する。"""
+        """trace.html / viewer.html / timeline.html / prompt.html を同じ段で生成し、
+        古いエピソードの episodic.html は作らない。"""
         import scripts.run_scenario_experiment as runner
 
         trace_path = tmp_path / "trace.jsonl"
@@ -501,11 +501,6 @@ class TestEmitHtmlArtifacts:
             runner,
             "_render_map_viewer_html",
             lambda run_dir, trace_path, *, title: "<html>map</html>",
-        )
-        monkeypatch.setattr(
-            runner,
-            "_render_episodic_viewer_html",
-            lambda trace_path, *, title: "<html>episodic</html>",
         )
         monkeypatch.setattr(
             runner,
@@ -528,7 +523,6 @@ class TestEmitHtmlArtifacts:
         assert [r.name for r in results] == [
             "trace.html",
             "viewer.html",
-            "episodic.html",
             "timeline.html",
             "prompt.html",
         ]
@@ -538,10 +532,7 @@ class TestEmitHtmlArtifacts:
             == "<html>legacy</html>"
         )
         assert (tmp_path / "viewer.html").read_text(encoding="utf-8") == "<html>map</html>"
-        assert (
-            (tmp_path / "episodic.html").read_text(encoding="utf-8")
-            == "<html>episodic</html>"
-        )
+        assert not (tmp_path / "episodic.html").exists()
         assert (
             (tmp_path / "timeline.html").read_text(encoding="utf-8")
             == "<html>timeline</html>"
@@ -553,7 +544,6 @@ class TestEmitHtmlArtifacts:
         out = capsys.readouterr().out
         assert "[html] trace.html:" in out
         assert "[html] viewer.html:" in out
-        assert "[html] episodic.html:" in out
         assert "[html] timeline.html:" in out
         assert "[html] prompt.html:" in out
 
@@ -581,11 +571,6 @@ class TestEmitHtmlArtifacts:
         monkeypatch.setattr(runner, "_render_map_viewer_html", _raise_map)
         monkeypatch.setattr(
             runner,
-            "_render_episodic_viewer_html",
-            lambda trace_path, *, title: "<html>episodic</html>",
-        )
-        monkeypatch.setattr(
-            runner,
             "_render_timeline_viewer_html",
             lambda trace_path, *, title: "<html>timeline</html>",
         )
@@ -601,10 +586,8 @@ class TestEmitHtmlArtifacts:
         assert by_name["viewer.html"].generated is False
         assert by_name["viewer.html"].error == "cytoscape unavailable"
         assert by_name["trace.html"].generated is True
-        assert by_name["episodic.html"].generated is True
         assert by_name["timeline.html"].generated is True
         assert not (tmp_path / "viewer.html").exists()
-        assert (tmp_path / "episodic.html").exists()
         assert (tmp_path / "timeline.html").exists()
         out = capsys.readouterr().out
         assert "[html-error] viewer.html: cytoscape unavailable" in out

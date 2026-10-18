@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """prompt_dataset/calls.jsonl から「実際に LLM へ送った prompt」の閲覧 HTML を生成する。
 
-既存 viewer (build_trace_viewer / build_episodic_viewer / build_timeline_viewer) は
+既存 viewer (build_trace_viewer / build_timeline_viewer) は
 trace event を見せるもので、**実際に送信した messages そのもの**を読む経路が無かった。
 「停滞の表出は本当に prompt に届いていたのか」「遠景に山影が出ていたのか」のような
 問いは trace の集計ではなく prompt 本文を読まないと確かめられない。
