@@ -145,13 +145,12 @@ def _capture_old_snapshot(tmp_path: Path, old_keys: dict[str, object]) -> Path:
 class TestRestoreUseCaseDropsRemovedMemoryKeys:
     """消した部品の欄を持つ古い snapshot を、拒まずに捨てて読み込み、捨てた件数を報告する挙動を保証する。"""
 
-    @pytest.mark.parametrize('restart_world_clock', [False, True])
-    def test_old_snapshot_is_restored_and_dropped_keys_are_counted(self, tmp_path: Path, restart_world_clock: bool) -> None:
-        """古いメモ・約束・余韻の欄を持つ snapshot は、続きからでも回のやり直しでも止まらずに読み込まれ、欄ごとの件数が報告され、ほかの記憶は戻る。"""
+    def test_old_snapshot_is_restored_and_dropped_keys_are_counted(self, tmp_path: Path) -> None:
+        """古いメモ・約束・余韻の欄を持つ snapshot は、止まらずに読み込まれ、欄ごとの件数が報告され、ほかの記憶は戻る。"""
         path = _capture_old_snapshot(tmp_path, _OLD_MEMORY_KEYS)
         dst = _make_environment()
 
-        result = dst['restore'].execute(path, restart_world_clock=restart_world_clock)
+        result = dst['restore'].execute(path)
 
         assert result.removed_memory_key_counts == {'memo': 3, 'pending_predictions': 1, 'afterglow_entries': 1}
         assert [a.name for a in dst['acquaintances'].list_by_being(BeingId('being_w1_p1'))] == ['カイト']
@@ -164,26 +163,3 @@ class TestRestoreUseCaseDropsRemovedMemoryKeys:
         result = dst['restore'].execute(path)
 
         assert result.removed_memory_key_counts == {}
-
-
-class TestRestoreUseCaseRestartsWorldClock:
-    """restore use case が、回をやり直すときだけ世界の tick の書き換えを報告する挙動を保証する。"""
-
-    def test_restart_world_clock_reports_the_rewrite(self, tmp_path: Path) -> None:
-        """restart_world_clock=True で復元すると、書き換えの報告を持つ。いまの記憶の欄は世界の tick を持たないので、書き換えは 0 件。"""
-        path = _capture_old_snapshot(tmp_path, {})
-        dst = _make_environment()
-
-        result = dst['restore'].execute(path, restart_world_clock=True)
-
-        assert result.world_clock_restart is not None
-        assert result.world_clock_restart.reset_tick_fields == 0
-
-    def test_without_restart_there_is_no_report(self, tmp_path: Path) -> None:
-        """restart_world_clock を渡さない続きからの復元は、書き換えの報告を持たない。"""
-        path = _capture_old_snapshot(tmp_path, {})
-        dst = _make_environment()
-
-        result = dst['restore'].execute(path)
-
-        assert result.world_clock_restart is None

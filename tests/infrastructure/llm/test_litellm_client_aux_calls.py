@@ -157,9 +157,22 @@ class TestFailedCallsAreRecordedToo:
 
         call = sink.calls[0]
         assert call.success is False
-        assert call.error_code == "LLM_EPISODE_SUBJECTIVE_INVALID_JSON"
+        assert call.error_code == "LLM_AUX_JSON_INVALID_JSON"
         assert (call.prompt_tokens, call.completion_tokens) == (200, 40)
         assert call.cost_usd == pytest.approx(0.001)
+
+    def test_blank_content_records_empty_content_code_on_episode_writing(self) -> None:
+        """エピソードの書き起こしで応答の本文が空白だけのとき、error_code は記憶の部品の名前を含まない LLM_AUX_JSON_EMPTY_CONTENT になる。"""
+        sink = _Sink()
+        client = _client(sink)
+        with patch(_LITELLM) as m_litellm:
+            m_litellm.completion.return_value = _response(
+                "  ", usage=_usage(prompt=10, completion=0, cached=0, cost=None)
+            )
+            with pytest.raises(LlmApiCallException):
+                client.complete_episode_writing_json([{"role": "user", "content": "x"}])
+
+        assert sink.calls[0].error_code == "LLM_AUX_JSON_EMPTY_CONTENT"
 
 
 class TestRecordingFailureDoesNotStopTheCall:
