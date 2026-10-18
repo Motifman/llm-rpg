@@ -247,12 +247,12 @@ def test_missing_world_file_fails_closed_in_actual_snapshot_session(make_runtime
 
     from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
     runtime = make_runtime()
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     session = ExperimentSnapshotSession(wiring_result=_wiring_stub_from_world_runtime(runtime), snapshot_dir=tmp_path / 'snapshot')
     with pytest.raises(WorldStateSnapshotCoverageError):
         session.restore_world_from_dir(runtime, tmp_path / 'missing', current_scenario='world')
     disabled = make_runtime(enabled=False)
-    disabled._wire_auxiliary_tool_stack()
+    disabled._wire_being_stack()
     legacy = ExperimentSnapshotSession(wiring_result=_wiring_stub_from_world_runtime(disabled), snapshot_dir=tmp_path / 'legacy')
     assert legacy.restore_world_from_dir(disabled, tmp_path / 'missing', current_scenario='world') is None
 

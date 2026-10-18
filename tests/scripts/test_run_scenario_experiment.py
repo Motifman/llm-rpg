@@ -321,7 +321,7 @@ class TestBuildReport:
     """trace.jsonl からの汎用レポート生成。"""
 
     def test_includes_outcome_event_count(self, tmp_path: Path) -> None:
-        """生成 Markdown に outcome / action 数 / memo 数 / プレイヤー別集計が出る。"""
+        """生成 Markdown に outcome / action 数 / プレイヤー別集計が出て、過去の trace の memo_add は数えない。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
         trace_path = tmp_path / "trace.jsonl"
@@ -364,7 +364,7 @@ class TestBuildReport:
         )
         assert "outcome: **WIN**" in report
         assert "action: 2" in report
-        assert "memo_add: 1" in report
+        assert "memo_add" not in report
         # position_change カウント (今回 0 件)
         assert "position_change: 0" in report
         assert "legacy HTML viewer" in report
@@ -372,8 +372,8 @@ class TestBuildReport:
         assert "episodic memory viewer" in report
         assert "timeline viewer" in report
         # プレイヤー別集計に 2 行 (新列 moves あり)
-        assert "| 1 | 1 | 1 | 0 | 0 | 0 | 0 |" in report
-        assert "| 2 | 1 | 0 | 1 | 1 | 0 | 0 |" in report
+        assert "| 1 | 1 | 1 | 0 | 0 |" in report
+        assert "| 2 | 1 | 0 | 1 | 0 |" in report
 
     def test_includes_distinct_end_reason(self, tmp_path: Path) -> None:
         """世界内終了と外的停止を区別できるよう、終了理由をreportへ残す。"""
@@ -450,8 +450,8 @@ class TestBuildReport:
             },
         )
         assert "position_change: 3" in report
-        # player 1: actions=0 successes=0 failures=0 memo_adds=0 memo_dones=0 moves=2
-        assert "| 1 | 0 | 0 | 0 | 0 | 0 | 2 |" in report
+        # player 1: actions=0 successes=0 failures=0 moves=2
+        assert "| 1 | 0 | 0 | 0 | 2 |" in report
 
     def test_event_observation_table_min_rendered(
         self, tmp_path: Path
@@ -474,7 +474,6 @@ class TestBuildReport:
             },
         )
         assert "action: 0" in report
-        assert "memo_add: 0" in report
 
 
 class TestEmitHtmlArtifacts:

@@ -206,16 +206,16 @@ class TestPromptSectionsE2E:
     def test_all_stable_volatile_order(self) -> None:
         """全部入り stable to volatile 順序。"""
         strategy = SectionBasedContextFormatStrategy()
-        text = strategy.format(current_state_text='現在地: 海岸', recent_events_text='- 直近の出来事', active_memos_text='- メモ', objective_text='生き延びる', inventory_text='- 流木 x3', mid_summary_text='[最新] 北東を探索', long_summary_text='私について: 慎重な漁師')
+        text = strategy.format(current_state_text='現在地: 海岸', recent_events_text='- 直近の出来事', being_memo_text='- メモ', objective_text='生き延びる', inventory_text='- 流木 x3', mid_summary_text='[最新] 北東を探索', long_summary_text='私について: 慎重な漁師')
         assert '【現在の目的】' in text
         assert '【自己像と世界観】' in text
         assert '【最近の流れ】' in text
-        assert '【進行中のメモ】' in text
+        assert '【メモ】' in text
         assert '【所持・判明した物証】' not in text
         assert '【関連する記憶】' not in text
         assert '【直近の出来事】' in text
         assert '【現在地と周囲】' in text
-        idx = {'obj': text.index('【現在の目的】'), 'l5': text.index('【自己像と世界観】'), 'l4': text.index('【最近の流れ】'), 'events': text.index('【直近の出来事】'), 'memos': text.index('【進行中のメモ】'), 'current': text.index('【現在地と周囲】')}
+        idx = {'obj': text.index('【現在の目的】'), 'l5': text.index('【自己像と世界観】'), 'l4': text.index('【最近の流れ】'), 'events': text.index('【直近の出来事】'), 'memos': text.index('【メモ】'), 'current': text.index('【現在地と周囲】')}
         assert idx['obj'] < idx['l5'] < idx['l4'] < idx['events'] < idx['memos'] < idx['current']
 
     def test_l5_l4_section(self) -> None:
