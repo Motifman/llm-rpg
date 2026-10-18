@@ -30,13 +30,13 @@ PYTHONPATH=. python .claude/skills/trace-analysis/extract_metrics.py <run_dir> [
 - 時系列 cache hit 推移 (20 tick 毎)
 - 時系列 per-tick wall time
 - observation category 内訳
-- summary 生成回数 (L4/L5/episodic_chunk)
+- summary 生成回数 (L4/L5/episode_writing)
 - loop_guard_warning 詳細
 - baseline 比較 (baseline_dir 指定時)
 - 協調指標 (PR-A, survival_island_v3_coop 系向け): ペア別 / 全員同スポット
   共在 tick 数、hearsay (伝聞) evidence の話者別件数、pending_prediction の
   kind 別件数 (created/resolved/expired + 未知 suffix) と resolved の
-  verdict 内訳、give_item 実行件数
+  verdict 内訳 (伝聞と約束は #1631 前の trace のみ)、give_item 実行件数
 
 `extract_metrics.py --help` で詳細。
 
@@ -113,6 +113,7 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 - D-30 short / long summary クオリティ
 - D-31 メモ帳の重複と消し忘れ
 - D-32 失敗の記憶化
+- D-32b 目次つきのエピソードの書き起こし・呼び出し・目次の直し
 
 **E. 失敗・loop_guard・異常** (Agent 2 担当)
 - E-33 error_code 分布
