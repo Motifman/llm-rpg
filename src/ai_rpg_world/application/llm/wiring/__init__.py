@@ -22,5 +22,4 @@ R2c-2 で ``create_llm_agent_wiring`` / ``LlmAgentOrchestrator`` /
 - ``resolved_runtime_config`` — env から解決した LLM runtime 設定の単一窓口
 - ``feature_flags`` — short-term memory / semantic 等の env flag resolver
 - ``_llm_client_factory`` — LLM クライアント生成
-- ``_shared_builders`` — view distance と時刻ラベルの共有 builder
 """

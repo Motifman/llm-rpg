@@ -64,7 +64,6 @@ class TraceEventKind:
     # 警告観測を注入したタイミング。trace で wait spam の抑制動作を可視化する。
     # payload: tool_name / argument_fingerprint / consecutive_count
     LOOP_GUARD_WARNING = "loop_guard_warning"
-    SCENE = "scene"
     NOTE = "note"
     # Phase 1d viewer: プレイヤーがスポット間を移動した瞬間。空間アニメーション
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /

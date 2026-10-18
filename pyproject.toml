@@ -29,7 +29,6 @@ dependencies = [
     "anyio>=4.0",
     "uvicorn[standard]==0.30.6",
     "semantic-resolver",
-    "numpy>=2.0",
 ]
 
 [project.optional-dependencies]
