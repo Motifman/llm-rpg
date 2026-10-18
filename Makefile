@@ -25,7 +25,7 @@ help:
 	@echo "                                - survival_island_v2 専用 (140 tick / publish 既定)"
 	@echo "  make experiment-survival-coop OUT=..."
 	@echo "                                - survival_island_v3_coop 専用 (stranded_at_tick=240 / publish 既定)"
-	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
+	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + timeline + prompt) を build"
 
 # 依存関係のインストール
 install:
@@ -194,8 +194,8 @@ check-no-internal-hostnames:
 	@./scripts/check_no_internal_hostnames.sh
 
 # Trace viewer の生成 (Issue #188 Phase 1d β + #389 で Phase 3 追加)
-# main viewer (viewer.html) に加えて、エピソード記憶 (episodic.html) と
-# プレイヤー × tick (timeline.html) の追加 viewer も併せて build する。
+# main viewer (viewer.html) に加えて、プレイヤー × tick (timeline.html) と
+# prompt の追加 viewer も併せて build する。
 # 使い方: make build-trace-viewer RUN_DIR=var/runs/foo
 build-trace-viewer:
 	@if [ -z "$(RUN_DIR)" ]; then \
@@ -203,7 +203,6 @@ build-trace-viewer:
 		exit 2; \
 	fi
 	$(PYTHON) scripts/build_trace_viewer.py $(RUN_DIR)
-	@$(PYTHON) scripts/build_episodic_viewer.py $(RUN_DIR) || true
 	@$(PYTHON) scripts/build_timeline_viewer.py $(RUN_DIR) || true
 	@$(PYTHON) scripts/build_prompt_viewer.py $(RUN_DIR) || true
 

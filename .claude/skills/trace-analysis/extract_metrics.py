@@ -142,6 +142,7 @@ def _extract_summary(events: list[dict]) -> dict[str, Any]:
         "action_fail_rate": (fail / total_action) if total_action else 0.0,
         "episodic_chunk_written": counts_by_kind.get("episodic_chunk_written", 0),
         "episodic_subjective_filled": counts_by_kind.get("episodic_subjective_filled", 0),
+        "episode_writing": counts_by_kind.get("episode_writing", 0),
         "short_term_summary": counts_by_kind.get("short_term_summary_generated", 0),
         "short_term_long_summary": counts_by_kind.get("short_term_long_summary_generated", 0),
         "loop_guard_warning": counts_by_kind.get("loop_guard_warning", 0),
@@ -614,6 +615,9 @@ def _extract_give_item(events: list[dict]) -> dict[str, Any]:
 ACTION_BUDGET_CATEGORIES: dict[str, tuple[str, ...]] = {
     "conversation": ("speak", "listen"),
     "recall": (
+        "episode_recall",
+        "episode_revise_index",
+        # 以下は #1631 で消した道具。消す前の trace を読むために残す。
         "memory_recall_episodes",
         "memory_recall_by_handle",
         "memo_recall_by_handle",
@@ -998,7 +1002,7 @@ def _make_comparison(current: dict, baseline: dict) -> list[dict]:
         ("cost (USD)", "cost_usd_total", "f4"),
         ("action 総数", "action_total", "int"),
         ("失敗率", "action_fail_rate", "pct"),
-        ("episodic_chunk_written", "episodic_chunk_written", "int"),
+        ("episode_writing", "episode_writing", "int"),
         ("short_term_summary", "short_term_summary", "int"),
         ("short_term_long_summary", "short_term_long_summary", "int"),
         ("loop_guard_warning", "loop_guard_warning", "int"),
