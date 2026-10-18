@@ -31,10 +31,6 @@ from ai_rpg_world.application.being.being_snapshot_file_gateway import (
 from ai_rpg_world.application.being.removed_memory_payload_keys import (
     drop_removed_memory_payload_keys,
 )
-from ai_rpg_world.application.being.world_clock_restart import (
-    WorldClockRestartReport,
-    restart_world_clock_in_payload,
-)
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotVersionException,
 )
@@ -53,7 +49,6 @@ class RestoreBeingSnapshotResult:
     input_path: Path
     snapshot_version: int
     memory_restored: bool
-    world_clock_restart: WorldClockRestartReport | None = None
     removed_memory_key_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -89,8 +84,6 @@ class RestoreBeingSnapshotFromFileUseCase:
     def execute(
         self,
         input_path: Path,
-        *,
-        restart_world_clock: bool = False,
     ) -> RestoreBeingSnapshotResult:
         if not isinstance(input_path, Path):
             raise TypeError(
@@ -111,7 +104,6 @@ class RestoreBeingSnapshotFromFileUseCase:
         being_id = BeingId(snapshot.being_id_value)
 
         payload: str | None = None
-        world_clock_restart: WorldClockRestartReport | None = None
         removed_memory_key_counts: dict[str, int] = {}
         if snapshot.has_memory_payload:
             # defensive: ``BeingSnapshot.__post_init__`` の不変条件で
@@ -125,10 +117,6 @@ class RestoreBeingSnapshotFromFileUseCase:
                     f"being_id={being_id.value!r} (BeingSnapshot 不変条件違反)"
                 )
             payload, removed_memory_key_counts = drop_removed_memory_payload_keys(payload)
-            # repo に書く前に書き換える。表の漏れで止まったとき、Being だけが
-            # repo に残る状態を作らない。
-            if restart_world_clock:
-                payload, world_clock_restart = restart_world_clock_in_payload(payload)
 
         # 順序: snapshot を repo に書く先に、memory restore を行うと「Being が
         # まだ repo に居ない状態で memory が復元される」逆転が起きる。逆に
@@ -146,7 +134,6 @@ class RestoreBeingSnapshotFromFileUseCase:
             input_path=input_path,
             snapshot_version=snapshot.snapshot_version,
             memory_restored=memory_restored,
-            world_clock_restart=world_clock_restart,
             removed_memory_key_counts=removed_memory_key_counts,
         )
 
