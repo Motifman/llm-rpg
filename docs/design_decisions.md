@@ -613,7 +613,7 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 
 記憶リンクも #1799 で消したので、CLI の `--memory-db` を外した。いまは Being の DB とエピソードの DB の 2 つと、in-memory の memo で動く。
 
-古いエピソードの store (`SqliteSubjectiveEpisodeStore`) も #PRNUM で消したので、CLI の `--episode-db` を外した。いまは Being の DB と、in-memory の memory store で動く。
+古いエピソードの store (`SqliteSubjectiveEpisodeStore`) も #1805 で消したので、CLI の `--episode-db` を外した。いまは Being の DB と、in-memory の memory store で動く。
 
 ---
 
@@ -4447,7 +4447,7 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 
 区切りの書き起こし・主観補完のサービスと scheduler は #1803 で消した。`SubjectiveEpisode` と store は段 12 の 3 本目で消す。
 
-`SubjectiveEpisode` と store (in-memory / SQLite)、Being の snapshot のキー `episodic_episodes` も #PRNUM で消した。消す前の snapshot も読める。
+`SubjectiveEpisode` と store (in-memory / SQLite)、Being の snapshot のキー `episodic_episodes` も #1805 で消した。消す前の snapshot も読める。
 
 ## 175. 昇格フロンティアは BeingId で分ける
 
@@ -4488,7 +4488,7 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 `MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
 `being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
 
-**その後**: `SubjectiveEpisode` は記憶の部品の撤去 (#1631) の #PRNUM で消した。
+**その後**: `SubjectiveEpisode` は記憶の部品の撤去 (#1631) の #1805 で消した。
 
 ## 177. 記憶リンクに経験の主体 BeingId を載せる
 
@@ -8394,4 +8394,4 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1631、design_decisions D1631-4、design_decisions 27。
 
-**その後**: 段 12 で `episodic_episodes` を表に足し、`EXPECTED_PAYLOAD_KEYS` と `BeingMemorySnapshotService` の古いエピソードの処理、`ExperimentSnapshotSession` の空の代用を消した (#PRNUM)。
+**その後**: 段 12 で `episodic_episodes` を表に足し、`EXPECTED_PAYLOAD_KEYS` と `BeingMemorySnapshotService` の古いエピソードの処理、`ExperimentSnapshotSession` の空の代用を消した (#1805)。
