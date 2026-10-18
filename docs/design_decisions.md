@@ -826,7 +826,7 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 
 残る想起の枠と慣れの store も、Issue #1631 の #1777 で snapshot のキー (`recall_slot_entries` / `recall_slot_cooldown` / `recall_habituation_last_recalled`) ごと消した。この項が生まれた PR-G の 3 store は、すべて無くなった。replay では、この 3 キーも読まずに捨てる。
 
-消したキーを捨てる処理は、#1804 で `removed_memory_payload_keys.py` の表に移り、replay かどうかに関わらず同じ表を通るようになった。`world_clock_restart.py` は段 13 で消した (#PRNUM)。
+消したキーを捨てる処理は、#1804 で `removed_memory_payload_keys.py` の表に移り、replay かどうかに関わらず同じ表を通るようになった。`world_clock_restart.py` は段 13 で消した (#1810)。
 
 古いメモの store を外した段 11-2b (design_decisions D1631-5) からは、消したキーを `removed_memory_payload_keys.py` の表に足す。読み込みは replay かどうかに関わらず表のキーを捨て、件数を trace に残す。`fallback_used` のログは対象が無くなったので消した。新しい store は `ExperimentSnapshotSession` の必須の一覧に足す。
 
@@ -7358,7 +7358,7 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 保留中の予測 (約束、`PENDING_PREDICTION_ENABLED`) は Issue #1631 で消した。Being の snapshot も `pending_predictions` を書かなくなった。消す前に保存した snapshot に残る約束は前の回の tick を持つので、replay では読み込む前に捨てる処理を残した。捨てた件数はいまも `world_clock_restarts` に残る。
 
-世界の tick を 0 に置き換える仕組み (`world_clock_restart.py`) は、記憶の部品の撤去 (#1631) の段 13 で消した (#PRNUM)。
+世界の tick を 0 に置き換える仕組み (`world_clock_restart.py`) は、記憶の部品の撤去 (#1631) の段 13 で消した (#1810)。
 - 置き換える欄は、上の 2 つが消えた時点で無くなっていた。
 - 残っていたのは、名前に tick を含む欄が 0 でなければ止める番人だけだった。今の codec は Being のターン数 (`*_turn`) しか書かないので、番人は発火しなかった。
 - `snapshot_load` の `world_clock_restarts` 欄も無くなった。
@@ -8408,4 +8408,4 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **その後**: 段 12 で `episodic_episodes` を表に足し、`EXPECTED_PAYLOAD_KEYS` と `BeingMemorySnapshotService` の古いエピソードの処理、`ExperimentSnapshotSession` の空の代用を消した (#1805)。
 
-段 13 で `world_clock_restart.py` を消した (#PRNUM)。読み込みは表のキーを捨てたあと、replay かどうかで分かれない。`snapshot_load` の `world_clock_restarts` 欄も無くなった。
+段 13 で `world_clock_restart.py` を消した (#1810)。読み込みは表のキーを捨てたあと、replay かどうかで分かれない。`snapshot_load` の `world_clock_restarts` 欄も無くなった。
