@@ -32,9 +32,6 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
 )
-from ai_rpg_world.application.llm.services.system_prompt_builder import (
-    DefaultSystemPromptBuilder,
-)
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
 )
@@ -60,7 +57,6 @@ __all__ = [
     "ProfileBasedLlmPlayerResolver",
     "SetBasedLlmPlayerResolver",
     "DefaultSlidingWindowMemory",
-    "DefaultSystemPromptBuilder",
     "NoOpAvailabilityResolver",
     "SectionBasedContextFormatStrategy",
     "SetDestinationAvailabilityResolver",

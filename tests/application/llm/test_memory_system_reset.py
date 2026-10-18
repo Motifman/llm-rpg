@@ -1,26 +1,21 @@
 """SlidingWindow 以外の記憶システム削除を固定する回帰テスト。"""
 
 import importlib
+from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
-from ai_rpg_world.application.llm.services.system_prompt_builder import DefaultSystemPromptBuilder
 from ai_rpg_world.application.llm.services.tool_catalog import register_default_tools
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+_SCENARIO = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "forbidden_library_demo.json"
 
 
 def test_system_prompt_does_not_advertise_memory_tools() -> None:
-    """system prompt に想起・長期記憶・作業メモ・古いメモの道具の案内を戻さない。"""
-    prompt = DefaultSystemPromptBuilder().build(
-        SystemPromptPlayerInfoDto(
-            player_name="Alice",
-            role="冒険者",
-            race="人間",
-            element="火",
-            game_description="",
-        )
-    )
+    """run で使う system prompt に、想起・長期記憶・作業メモ・古いメモの道具の案内を戻さない。"""
+    runtime = create_world_runtime(_SCENARIO)
+    prompt = runtime.build_system_prompt(runtime.get_player_ids()[0])
 
     assert "memory_query" not in prompt
     assert "working_memory" not in prompt
@@ -28,7 +23,7 @@ def test_system_prompt_does_not_advertise_memory_tools() -> None:
     assert "facts" not in prompt
     assert "laws" not in prompt
     assert "memo_add" not in prompt
-    assert "【世界とのやり取りの規約】" in prompt
+    assert "【行動ルール】" in prompt
 
 
 def test_default_tools_register_no_memory_tools() -> None:
