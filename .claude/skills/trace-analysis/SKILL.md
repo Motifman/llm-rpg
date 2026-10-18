@@ -45,7 +45,7 @@ PYTHONPATH=. python .claude/skills/trace-analysis/extract_metrics.py <run_dir> [
 両方同時に launch (= 1 メッセージで Agent を 2 つ叩く)。**プロンプトはこの SKILL の `prompts/` 配下のテンプレートを読み込んで作る** (中身は run_dir の trace path に置換)。
 
 - **Agent 1 (narrative + per-agent)**: `prompts/narrative_per_agent.md` をベースに、対象 trace へのパスを差し込む。B-09〜B-16 と C-17〜C-24 を担当。
-- **Agent 2 (memory + failures)**: `prompts/memory_failures.md` をベースに、対象 trace へのパスを差し込む。D-25〜D-32 と E-33〜E-36 を担当。
+- **Agent 2 (memory + failures)**: `prompts/memory_failures.md` をベースに、対象 trace へのパスを差し込む。D-25〜D-32b と E-33〜E-36 を担当。
 
 両 Agent ともに 5000 字程度の Markdown レポートを返す契約。
 
