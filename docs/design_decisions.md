@@ -8185,6 +8185,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **その後**: 古いメモの道具と【進行中のメモ】は #1631 の段 11-2a で消した (design_decisions D1631-4)。`MEMO_TOOLS_ENABLED` と、メモ帳と並べたときに止める検査も一緒に消えた。メモ帳はほかのメモと並ばないので、`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` はメモ帳を全部入りに入れ、`_DISABLED_PARTS` で止める形に戻した。
 
+**その後 (2)**: #1631 の段 11-3 (#PRNUM) で `BEING_MEMO_ENABLED` を消し、メモ帳を `create_world_runtime` で組んだ runtime にいつも入れる形にした。上の「既定は off で、既存の profile の tool 定義とプロンプトはバイト単位で変わらない」はもう成り立たない。それまで off だった profile では、環境の tool の 1 つ 1 つに引数 `memo` の定義が付き、システムプロンプトに【メモの書き方】が足され、tool 定義とプロンプトが大きく増える (smoke_stub の 1 ターン目で 16,837 → 34,288 バイト)。済んだかの知らせのサービスも、いつも組む。そのため、型付き判断の port がある profile では、残りのやることが 1 件以上あると、行動の結果を返すたびに型付き判断を 1 回呼ぶ。純スポットグラフ (`include_todo_tools=False`) でもメモ帳は出る。目次は止めているので扱いが食い違うが、どちらに寄せるかは `include_todo_tools` を整理するときに決める。
+
 ---
 
 ## D1597. 成功した自分の行動のあとは次の tick に手番を回す。休むのは wait を選んだときと移動中だけ

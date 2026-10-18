@@ -79,7 +79,6 @@ def _build_with_memo() -> str:
         world_title="テスト世界",
         persona_block="【ペルソナ】名前: エイダ",
         safe_intro="周囲を観察しながら暮らす世界。",
-        being_memo_enabled=True,
     )
 
 
@@ -91,7 +90,7 @@ class TestMemoRulesAskWhoToldYou:
     """
 
     def test_heard_fact_rule_names_who_told_you(self) -> None:
-        """メモ帳を有効にすると、【メモの書き方】の分かったことの行が、人から聞いたなら誰から聞いたかも書くよう指示する。"""
+        """【メモの書き方】の分かったことの行が、人から聞いたなら誰から聞いたかも書くよう指示する。"""
         prompt = _build_with_memo()
 
         assert "人から聞いたなら誰から聞いたかも書く" in prompt

@@ -63,7 +63,6 @@ _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES = 3
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BEING_EPISODE_INDEX_LIMIT",
     "BEING_EPISODE_RECALL_MAX_HANDLES",
-    "BEING_MEMO_ENABLED",
     "LLM_CLIENT",
     "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
@@ -198,8 +197,6 @@ class ResolvedLlmRuntimeConfig:
     # Goal / stagnation 系。
 
     # Prompt / tool 表面。
-    # #1628: メモ帳と、環境の tool に付ける引数 memo。
-    being_memo_enabled: bool = False
     scenario_random_seed: int | None = None
     prompt_dataset_capture_failure_policy: str = "fail"
     # reason-first 2段階ターン。True でも常時発火ではなく、Phase A 入口で
@@ -402,12 +399,6 @@ class ResolvedLlmRuntimeConfig:
             "BEING_EPISODE_RECALL_MAX_HANDLES",
             default=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
         )
-        try:
-            being_memo_enabled = _parse_truthy(
-                source.get("BEING_MEMO_ENABLED"), default=False
-            )
-        except ValueError as exc:
-            raise ValueError(f"BEING_MEMO_ENABLED: {exc}") from exc
         scenario_random_seed = _resolve_optional_int(source, "SCENARIO_RANDOM_SEED")
         prompt_dataset_capture_failure_policy = (
             source.get("PROMPT_DATASET_CAPTURE_FAILURE_POLICY") or "fail"
@@ -462,7 +453,6 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_semantic_repeat_window=typed_judgment_semantic_repeat_window,
             being_episode_index_limit=being_episode_index_limit,
             being_episode_recall_max_handles=being_episode_recall_max_handles,
-            being_memo_enabled=being_memo_enabled,
             scenario_random_seed=scenario_random_seed,
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
@@ -482,7 +472,7 @@ class ResolvedLlmRuntimeConfig:
 
         Usage:
             cfg = ResolvedLlmRuntimeConfig.for_tests(
-                being_memo_enabled=True,
+                typed_judgment_provider="jev",
             )
         """
         defaults: dict[str, Any] = dict(
@@ -529,7 +519,6 @@ class ResolvedLlmRuntimeConfig:
             ),
             being_episode_index_limit=_DEFAULT_BEING_EPISODE_INDEX_LIMIT,
             being_episode_recall_max_handles=_DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES,
-            being_memo_enabled=False,
             scenario_random_seed=None,
             prompt_dataset_capture_failure_policy="fail",
             reason_first_two_step_enabled=True,

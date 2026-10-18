@@ -6,12 +6,9 @@
 【関連する記憶】と「能動想起の手段を試す」を指示し続けた。どちらも出ていない。
 サヨ T20 は「The instructions mention 能動想起 but no tool」と探し回った。
 
-`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` と同じ形で見張る。
-記憶の部品を全部有効にした設定から 1 つずつ止め、システムプロンプト・
-1 ターン目の user 文面・ツール定義のどこにも、その部品の名前が出ないことを確かめる。
-
-全部入りの設定は、新しい記憶の profile に、比べた全部入りの run (mine_v1_006、
-profile は #1631 で退役) が入れていた古い部品を戻して作る。
+記憶の部品を止める設定は #1631 で無くなった。いまは、消した部品の名前がシステムプロンプト・
+1 ターン目の user 文面・ツール定義のどこにも戻らず、いつも入る部品 (目次つきのエピソードと
+メモ帳) の名前だけが出ることを確かめる。
 """
 
 from __future__ import annotations
@@ -19,7 +16,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from tests.judgment_helpers import ScriptedJudgmentPort
 
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
@@ -40,13 +36,6 @@ _OFFLINE = {
     "TYPED_JUDGMENT_PROVIDER": "stub",
     "TYPED_JUDGMENT_LOOP_DIAGNOSIS_ENABLED": "false",
 }
-
-#: 新しい記憶の profile が止めていて、全部入りの run が入れていた古い記憶の部品。
-#: 全部入りの run の古いメモの道具は #1631 で消したので、代わりにメモ帳を入れる。
-_OLD_MEMORY_PARTS_OF_THE_FULL_RUN = {
-    "BEING_MEMO_ENABLED": "true",
-}
-
 
 #: 記憶の部品ごとの、本文に出てはいけない名前。
 _RELEVANT_MEMORIES = "関連する記憶"
@@ -92,40 +81,6 @@ _ALL_NAMES = (
     _MEMO_EPISODE_SOURCE,
 )
 
-#: 全部入りのとき、1 ターン目のプロンプトに出る名前。
-#:
-#: **これが正の対照。** 止めたときに「消えること」だけを見ると、もともと出て
-#: いなかった名前でも緑になる。
-#:
-#: 予期の引数 ``expectations``、【保留中の予測】、能動想起の道具、見出しの欄、
-#: 【関連する学び】、受動想起の【関連する記憶】、古いメモの【進行中のメモ】と memo_* の道具は
-#: #1631 で消したので、全部入りでも出ない。名前の表に残し、どの組み合わせでもプロンプトに
-#: 戻ってこないことを見張る。
-_ADVERTISED_WHEN_ALL_ENABLED = frozenset(_ALL_NAMES) - {
-    _RELEVANT_MEMORIES,
-    _LEARNED,
-    _PENDING_PREDICTIONS,
-    _EXPECTATIONS,
-    _ACTIVE_RECALL,
-    _RECALL_EPISODES,
-    _RECALL_BY_HANDLE,
-    _EXPLORE_RELATED,
-    _SEARCH_SEMANTIC,
-    _AFTERGLOW,
-    _ACTIVE_MEMOS,
-    *_MEMO_TOOLS,
-}
-
-#: (止める部品, 設定の差分, 消えるべき名前)。
-_DISABLED_PARTS = [
-    pytest.param(
-        {"BEING_MEMO_ENABLED": "false"},
-        (*_MEMO_BOOK_NAMES, _MEMO_EPISODE_SOURCE),
-        id="memo_book",
-    ),
-]
-
-
 class _PromptCaptureClient:
     def __init__(self) -> None:
         self.messages: list[dict] = []
@@ -168,38 +123,8 @@ def _first_turn_prompt(scenario: str, mapping: dict[str, str]) -> str:
     return messages + "\n" + json.dumps(client.tools, ensure_ascii=False)
 
 
-def _full_prompt_with(overrides: dict[str, str]) -> str:
-    scenario, mapping = _profile_mapping(_BEING_MEMORY_PROFILE)
-    return _first_turn_prompt(
-        scenario,
-        {
-            **mapping,
-            **_OFFLINE,
-            **_OLD_MEMORY_PARTS_OF_THE_FULL_RUN,
-            **overrides,
-        },
-    )
-
-
 class TestNoDisabledMemoryPartIsNamedAnywhere:
     """止めた記憶の部品の名前が、1 ターン目のプロンプト全文に出ない。"""
-
-    def test_every_part_is_named_when_all_are_enabled(self) -> None:
-        """全部入りの設定では、#1631 で消した部品を除き、どの部品の名前もプロンプトに出る。"""
-        prompt = _full_prompt_with({})
-
-        named = {name for name in _ALL_NAMES if name in prompt}
-
-        assert named == _ADVERTISED_WHEN_ALL_ENABLED
-
-    @pytest.mark.parametrize(("overrides", "vanished"), _DISABLED_PARTS)
-    def test_the_disabled_part_is_absent(
-        self, overrides: dict[str, str], vanished: tuple[str, ...]
-    ) -> None:
-        """全部入りから 1 つの部品を止めると、その部品の名前がプロンプト全文から消える。"""
-        prompt = _full_prompt_with(overrides)
-
-        assert [name for name in vanished if name in prompt] == []
 
     def test_the_being_memory_profile_names_only_the_memo_book_and_the_index(self) -> None:
         """新しい記憶の profile では、メモ帳と目次つきのエピソードの名前だけが出て、古い記憶の部品の名前はどこにも出ない。"""

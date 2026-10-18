@@ -7,7 +7,6 @@
   "runtime_config": {
     "BEING_EPISODE_INDEX_LIMIT": 10,
     "BEING_EPISODE_RECALL_MAX_HANDLES": 3,
-    "BEING_MEMO_ENABLED": true,
     "LLM_CLIENT": "litellm",
     "LLM_IDLE_TIMEOUT_TICKS": 6,
     "LLM_MAX_OUTPUT_TOKENS": 4096,

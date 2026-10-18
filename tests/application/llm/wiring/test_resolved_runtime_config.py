@@ -223,6 +223,7 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "DISTANT_VIEW_TRACE_ENABLED",
             "END_ON_ALL_DOWN",
             "PROMPT_DATASET_CAPTURE_ENABLED",
+            "BEING_MEMO_ENABLED",
             "REASON_FIRST_TWO_STEP_ENABLED",
             "EPISODIC_RECALL_ENABLED",
             "EPISODIC_EXPLORE_RELATED_ENABLED",
@@ -308,7 +309,7 @@ class TestToTraceDict:
         assert d['short_term_memory_turn_cap'] == 20
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
-        assert 'being_memo_enabled' in d
+        assert 'typed_judgment_provider' in d
 
     def test_api_key(self) -> None:
         """API key の生値は絶対に trace に出さない (漏洩防止)。"""

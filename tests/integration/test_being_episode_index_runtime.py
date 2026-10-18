@@ -302,15 +302,12 @@ class TestRevisingTheIndexInATurn:
         assert [p["before"]["about"] for p in revisions] == ["火を起こした"]
 
 
-_MEMO_BOOK = {"BEING_MEMO_ENABLED": "1"}
-
-
 class TestMemoFromAnEpisode:
     """目次を出す設定では、メモの「分かったこと」の出どころにエピソードの呼び名を選べることを保証する。"""
 
     def test_the_memo_argument_offers_the_episode_source_with_the_index(self) -> None:
         """目次とメモ帳の両方を出す設定では、引数 memo の出どころの選択肢に episode が入る。"""
-        runtime, _ = _runtime(**_MEMO_BOOK)
+        runtime, _ = _runtime()
         pid = runtime.get_player_ids()[0]
 
         _, _, tools = _first_turn(runtime, pid)
@@ -319,7 +316,7 @@ class TestMemoFromAnEpisode:
 
     def test_a_fact_from_an_episode_is_written_with_its_handle(self) -> None:
         """行動に添えた memo で、出どころをエピソードにして呼び名を書くと、その呼び名つきの「分かったこと」が入る。"""
-        runtime, _ = _runtime(**_MEMO_BOOK)
+        runtime, _ = _runtime()
         pid = runtime.get_player_ids()[0]
         episode = _write(runtime, pid, 1, summary="火を起こした")
 
@@ -347,7 +344,7 @@ class TestMemoFromAnEpisode:
 
     def test_an_episode_that_sank_out_of_the_index_is_still_accepted(self) -> None:
         """目次の件数から外れた (沈んだ) エピソードの呼び名でも、その Being の記録にあれば出どころとして受け付ける。"""
-        runtime, _ = _runtime(BEING_EPISODE_INDEX_LIMIT="1", **_MEMO_BOOK)
+        runtime, _ = _runtime(BEING_EPISODE_INDEX_LIMIT="1")
         pid = runtime.get_player_ids()[0]
         sunk = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
         _write(runtime, pid, 2, summary="火を起こした", written_turn=1)

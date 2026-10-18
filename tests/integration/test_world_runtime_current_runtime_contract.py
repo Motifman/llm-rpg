@@ -1281,19 +1281,11 @@ def test_old_memo_tools_are_not_offered(
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
 
 
-@pytest.mark.parametrize(
-    ("being_memo_enabled", "built"),
-    [(False, False), (True, True)],
-)
-def test_memo_completion_hint_service_is_built_only_with_the_memo_book(
+def test_memo_completion_hint_service_is_built_with_the_memo_book(
     clean_runtime_env: None,
-    being_memo_enabled: bool,
-    built: bool,
 ) -> None:
-    """済んだかの知らせはメモ帳のやることにだけ使う。メモ帳を有効にしたときだけ組み、無効なら組まない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(being_memo_enabled=being_memo_enabled)
-    )
+    """メモ帳はいつも入るので、そのやることが済んだかの知らせのサービスも、設定を書かずに組んだ runtime でいつも組まれる。"""
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     wiring = _WorldLlmWiring(
         runtime=runtime,
@@ -1302,7 +1294,7 @@ def test_memo_completion_hint_service_is_built_only_with_the_memo_book(
         llm_client=StubLlmClient(None),
     )
 
-    assert (wiring.memo_completion_hint_service is not None) is built
+    assert wiring.memo_completion_hint_service is not None
 
 
 def test_phase_b_runs_loop_guard_after_escape_recording_hooks(

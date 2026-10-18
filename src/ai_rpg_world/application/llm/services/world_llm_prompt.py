@@ -190,14 +190,9 @@ def _episode_index_rule(*, shown: bool, recall_offered: bool) -> str:
     )
 
 
-def _memo_rules(enabled: bool) -> str:
-    """メモ帳の分類の意味と書き方 (#1628)。無効なら空文字で、prompt は変わらない。
-
-    件数の上限と引数の形は tool の説明に書く。ここには、何をどの分類に書くかだけを置く。
-    """
-    if not enabled:
-        return ""
-    return """
+#: メモ帳の分類の意味と書き方 (#1628)。件数の上限と引数の形は tool の説明に書く。
+#: ここには、何をどの分類に書くかだけを置く。
+_MEMO_RULES = """
 【メモの書き方】
 - 行動の tool の `memo` に、あとで使いたいことを書ける。書いても手番は使わない。書いたメモは毎ターン【メモ】に全部出る。
 - やること (todo): これからすること。済んだら消す。
@@ -224,7 +219,6 @@ def build_world_system_prompt(
     limits_actions: bool = True,
     episode_index_shown: bool = False,
     episode_recall_offered: bool = False,
-    being_memo_enabled: bool = False,
 ) -> str:
     """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
 
@@ -241,8 +235,6 @@ def build_world_system_prompt(
     episode_index_shown / episode_recall_offered:
         【思い出せる出来事】の欄と ``episode_recall`` を出しているか (#1623)。
         どちらも ``False`` (既定) なら prompt は変わらない。
-    being_memo_enabled:
-        ``True`` のとき【メモの書き方】を足す (#1628)。``False`` (既定) なら prompt は変わらない。
 
     limits_actions:
         ``False`` なら「行動の制限」の行を出さない。締め切りを置かない世界で、無い制限を
@@ -321,5 +313,5 @@ def build_world_system_prompt(
 
 【文脈と履歴の限界】
 - 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る（全履歴の写しではない）。{_episode_index_rule(shown=episode_index_shown, recall_offered=episode_recall_offered)}
-{_memo_rules(being_memo_enabled)}"""
+{_MEMO_RULES}"""
     return body
