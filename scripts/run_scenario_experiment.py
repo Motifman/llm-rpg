@@ -717,7 +717,6 @@ def _drive_scenario(
                 restore_report = snapshot_session.restore_all_from_dir(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
-                    restart_world_clock=replay,
                 )
                 logger.info(
                     "restored %d being snapshot(s)", len(restore_report.restored)
@@ -742,10 +741,6 @@ def _drive_scenario(
                     world_snapshot_ignored=(
                         replay and (snapshot_load_dir / "world.json").exists()
                     ),
-                    world_clock_restarts=[
-                        {"being_id": b.value, **r.to_trace_dict()}
-                        for b, r in restore_report.world_clock_restarts.items()
-                    ],
                     removed_memory_keys=[
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()

@@ -151,8 +151,7 @@ class TestRestoreAll:
         assert len(report.restored) == 1
         assert [a.name for a in dst_wiring.acquaintance_store.list_by_being(being_1)] == ['カイト']
 
-    @pytest.mark.parametrize('restart_world_clock', [False, True])
-    def test_report_lists_removed_memory_keys_only_for_beings_that_had_them(self, tmp_path: Path, restart_world_clock: bool) -> None:
+    def test_report_lists_removed_memory_keys_only_for_beings_that_had_them(self, tmp_path: Path) -> None:
         """古いメモの欄を持つ snapshot だけが、Being ごとの捨てた件数として報告に載る。持たない Being は載らない。"""
         (src_wiring, src_prov) = _make_wiring_stub()
         src_prov.ensure_attached(PlayerId(1))
@@ -167,7 +166,7 @@ class TestRestoreAll:
         gateway.write(dataclasses.replace(snapshot, memory_payload_json=json.dumps(payload)), old_path)
         (dst_wiring, _) = _make_wiring_stub()
 
-        report = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'dst').restore_all_from_dir(tmp_path / 'snap', restart_world_clock=restart_world_clock)
+        report = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'dst').restore_all_from_dir(tmp_path / 'snap')
 
         assert len(report.restored) == 2
         assert report.removed_memory_key_counts == {being_1: {'memo': 2}}
