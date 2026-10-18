@@ -473,11 +473,11 @@ class TestActionBudget:
     """_extract_action_budget が行動を用途別に束ね、世界を変える行動の割合を出す挙動を保証する。"""
 
     def test_categorises_tools_and_computes_shares(self, em) -> None:
-        """speak/memo_add/travel_to/explore/interact を 1 件ずつ渡すと、各カテゴリ 1 件・
+        """speak/memory_recall_episodes/travel_to/explore/interact を 1 件ずつ渡すと、各カテゴリ 1 件・
         世界を変える行動 (移動 + 探索 + 世界操作) が 5 件中 3 件で 60.0% になる。"""
         events = [
             _action(0, 1, "speak"),
-            _action(1, 1, "memo_add"),
+            _action(1, 1, "memory_recall_episodes"),
             _action(2, 1, "travel_to"),
             _action(3, 1, "explore"),
             _action(4, 1, "interact"),
@@ -486,7 +486,7 @@ class TestActionBudget:
         assert out["total_actions"] == 5
         assert out["per_category"] == {
             "conversation": 1,
-            "memo": 1,
+            "recall": 1,
             "movement": 1,
             "exploration": 1,
             "world_change": 1,

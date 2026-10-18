@@ -824,6 +824,8 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 
 残る想起の枠と慣れの store も、Issue #1631 の #1777 で snapshot のキー (`recall_slot_entries` / `recall_slot_cooldown` / `recall_habituation_last_recalled`) ごと消した。この項が生まれた PR-G の 3 store は、すべて無くなった。replay では、この 3 キーも読まずに捨てる。
 
+古いメモの store を外した段 11-2b (design_decisions D1631-5) からは、消したキーを `removed_memory_payload_keys.py` の表に足す。読み込みは replay かどうかに関わらず表のキーを捨て、件数を trace に残す。`fallback_used` のログは対象が無くなったので消した。新しい store は `ExperimentSnapshotSession` の必須の一覧に足す。
+
 ## 28. 実験に意味を持つ設定は profile/config だけから入れる
 
 **何を**: LLM 実験の挙動を変える設定は、`data/experiment_profiles/*.json`
@@ -8367,3 +8369,21 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 保存先に古いメモが残った snapshot を読み込んでも、プロンプトには出ない。`tests/integration/test_world_runtime_current_runtime_contract.py` の `test_old_memo_left_in_the_store_does_not_reach_the_prompt` が見張る。
 
 **関連**: Issue #1631、design_decisions D1628 / D1628-2。
+
+**その後**: 保存先、snapshot の `memo` キー、知らせのサービスの古いメモの分岐、trace の `memo_add` / `memo_done` の種別は、段 11-2b で消した (design_decisions D1631-5)。上の `test_old_memo_left_in_the_store_does_not_reach_the_prompt` は、保存先が無くなったので消した。
+
+## D1631-5. 消した部品の snapshot のキーは、拒まずに捨てて件数を trace に残す
+
+**何を**: Issue #1631 の段 11-2b。古いメモの保存先 (`_todo_store`、`InMemoryMemoStore`、`MemoRepository`、`MemoEntry`、`MemoFulfillmentContext`)、Being の snapshot の `memo` キーと codec、知らせのサービスの古いメモの分岐、`memo_id_display.py`、trace の `memo_add` / `memo_done` の種別と viewer・trace 分析での扱いを消した。済んだかの知らせは、メモ帳のやることだけを見る。
+
+**消したキーの表**: Being の snapshot の memory payload から消したキーは、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の `REMOVED_MEMORY_PAYLOAD_KEYS` に 1 か所で並べる。いまは想起の階層と証拠のバッファの 6 キー、`pending_predictions`、`memo`。読み込み (`RestoreBeingSnapshotFromFileUseCase.execute`) は、replay かどうかに関わらず、まず `drop_removed_memory_payload_keys` で表のキーを取り除き、そのあとで replay なら世界の時計を巻き戻す。取り除いたキーごとの件数 (値が list なら要素数) は `snapshot_load` の trace の `removed_memory_keys` に、Being ごとに残る。取り除くキーが無かった Being は載せない。
+
+**なぜ拒まないか**: 消した部品の欄を持つ古い snapshot から、replay も続きからの再開もできるようにするため。黙って捨てると、古い snapshot を読んだことが run の記録から分からなくなるので、件数を残す。それまでは `world_clock_restart.py` が replay のときだけ欄を捨て、続きからの読み込みでは restore が知らないキーを読み飛ばしていた。どちらの読み込みでも同じ表を通す形にそろえた。trace を持たない `BeingPersistenceService.load` も同じ表を通し、件数はログに残す。空の欄は捨てても失うものが無いので、件数に載せない。
+
+**次に消すとき**: 古いエピソードの store を消す段 12 は、`EXPECTED_PAYLOAD_KEYS` から `episodic_episodes` を外し、表に 1 行足す。あわせて、`BeingMemorySnapshotService` の `episodic_episode_store` 引数、`capture` / `restore` の `episodic_episodes` の処理、`ExperimentSnapshotSession` の `_empty_episode_store` を消す。表のキーが `EXPECTED_PAYLOAD_KEYS` に残っていると、表が捨てたあとで restore が欠けとして拒むので、`tests/application/being/test_removed_memory_payload_keys.py` が重なりを見張る。
+
+**trace の欄の変化**: `snapshot_load` の `world_clock_restarts` の要素から `dropped_pending_predictions` が無くなり、`{being_id, reset_tick_fields}` になった。捨てた約束の件数は、新しい欄 `removed_memory_keys` の `counts` に `pending_predictions` として出る。いまの記憶の欄は世界の tick を持たないので、`reset_tick_fields` は 0 になる。
+
+**snapshot session の空の代用**: `ExperimentSnapshotSession` が未配線の store を空で代用してログに残す仕組みは、対象が古いメモの保存先だけだったので一緒に消した。いまの Being の記憶の store は、古いエピソードの store を除き、渡らなければ起動時に止まる。古いエピソードの store は `_empty_episode_store` で空に代用するが、段 12 で store ごと消す。design_decisions 27 の「`fallback_used` ログ対象に新 store の属性名を追加する」は、新しい store を必須の一覧に足すことに読み替える。
+
+**関連**: Issue #1631、design_decisions D1631-4、design_decisions 27。

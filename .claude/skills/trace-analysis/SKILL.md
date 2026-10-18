@@ -91,13 +91,13 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 - B-12 協力 / 対立 events
 - B-13 感情・トーン推移
 - B-14 ペルソナ忠実度
-- B-15 memo の内省内容
+- B-15 メモ帳の内容
 - B-16 outcome の物語的意味
 
 **C. エージェント別深掘り** (Agent 1 担当)
 - C-17 tool 使用 top 5 / 時系列
 - C-18 error_code 分布
-- C-19 memo lifecycle
+- C-19 メモ帳の移り変わり
 - C-20 主な滞在 spot
 - C-21 inner_thought の質
 - C-22 encounter pattern
@@ -111,7 +111,7 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 - D-28 afterglow / score 構造 (afterglow は #1631 前の trace のみ)
 - D-29 episodic_chunk_written と subjective_filled の整合 (#1631 で古いエピソードを消す前の trace のみ)
 - D-30 short / long summary クオリティ
-- D-31 memo 重複と done balance
+- D-31 メモ帳の重複と消し忘れ
 - D-32 失敗の記憶化
 
 **E. 失敗・loop_guard・異常** (Agent 2 担当)

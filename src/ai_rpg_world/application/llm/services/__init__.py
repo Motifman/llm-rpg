@@ -20,9 +20,6 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
-from ai_rpg_world.application.llm.services.in_memory_todo_store import (
-    InMemoryTodoStore,
-)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.llm_player_resolver import (
     ProfileBasedLlmPlayerResolver,
@@ -53,7 +50,6 @@ from ai_rpg_world.application.llm.services.ui_context_builder import (
 
 __all__ = [
     "DefaultActionResultStore",
-    "InMemoryTodoStore",
     "DefaultAvailableToolsProvider",
     "DefaultCurrentStateFormatter",
     "DefaultLlmUiContextBuilder",

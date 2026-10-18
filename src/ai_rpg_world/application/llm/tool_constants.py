@@ -19,7 +19,6 @@ TOOL_NAME_PREFIX_GUILD = "guild_"
 TOOL_NAME_PREFIX_SHOP = "shop_"
 TOOL_NAME_PREFIX_TRADE = "trade_"
 TOOL_NAME_PREFIX_SNS = "sns_"
-TOOL_NAME_PREFIX_TODO = "todo_"
 TOOL_NAME_PREFIX_MEMO = "memo_"
 # PR-CC (Y_after_pr639_640 後続): spot_graph_ prefix を廃止し、bare 名で
 # 露出する。理由:

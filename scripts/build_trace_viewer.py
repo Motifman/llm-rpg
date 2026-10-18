@@ -11,7 +11,6 @@ PR α (#214) で trace に ``position_change`` event が乗るようになった
     - tick scrub bar
     - tick 別 event log
     - category filter 付き Event timeline
-    - 折りたたみ式 memo state パネル
 
 使い方::
 
@@ -347,43 +346,6 @@ def build_position_timeline(
     return timeline
 
 
-def build_memo_state_timeline(
-    events: list[TraceEvent],
-) -> dict[int, list[dict[str, Any]]]:
-    """tick → 各 memo の状態 list (PR γ memo panel 用)。
-
-    Returns:
-        ``{tick: [{memo_id, content, player_id, added_tick, status, done_tick?}]}``
-        status は ``"active"`` / ``"done"``。
-    """
-    timeline: dict[int, list[dict[str, Any]]] = {}
-    memos: dict[str, dict[str, Any]] = {}
-    sorted_events = sorted(events, key=lambda e: e.seq)
-    for e in sorted_events:
-        if not isinstance(e.payload, dict):
-            continue
-        tick = e.tick if e.tick is not None else 0
-        if e.kind == TraceEventKind.MEMO_ADD:
-            memo_id = str(e.payload.get("memo_id") or "")
-            if memo_id:
-                memos[memo_id] = {
-                    "memo_id": memo_id,
-                    "content": str(e.payload.get("content") or ""),
-                    "player_id": e.player_id,
-                    "added_tick": tick,
-                    "status": "active",
-                }
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            memo_id = str(e.payload.get("memo_id") or "")
-            if memo_id in memos:
-                memos[memo_id] = dict(memos[memo_id])
-                memos[memo_id]["status"] = "done"
-                memos[memo_id]["done_tick"] = tick
-        # snapshot at this tick
-        timeline[tick] = [dict(m) for m in memos.values()]
-    return timeline
-
-
 def compute_event_heatmap(
     events: list[TraceEvent],
 ) -> dict[str, list[int]]:
@@ -391,7 +353,7 @@ def compute_event_heatmap(
 
     Returns:
         ``{"ticks": [0, 1, ...], "action": [n0, n1, ...], "observation": [...], "memo": [...]}``
-        memo は memo_add/done/hint をまとめてカウント。
+        memo は memo_hint を数える。
     """
     max_tick = max((e.tick for e in events if e.tick is not None), default=0)
     ticks = list(range(0, max_tick + 1))
@@ -409,11 +371,7 @@ def compute_event_heatmap(
             series["action"][e.tick] += 1
         elif e.kind == TraceEventKind.OBSERVATION:
             series["observation"][e.tick] += 1
-        elif e.kind in (
-            TraceEventKind.MEMO_ADD,
-            TraceEventKind.MEMO_DONE,
-            TraceEventKind.MEMO_HINT,
-        ):
+        elif e.kind == TraceEventKind.MEMO_HINT:
             series["memo"][e.tick] += 1
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             series["position_change"][e.tick] += 1
@@ -536,8 +494,6 @@ def compute_trace_moments(
     kind 区分 (CSS で枠色が異なる):
         - ``start``: trace 開始 (常に t=0 で 1 件)
         - ``end``: WIN/LOSE 確定 (RUN_END で 1 件)
-        - ``memo``: memo_add (戦略の決定)
-        - ``memo_done``: memo_done (達成 / 撤回)
         - ``hint``: memo_hint (fuzzy match 発火)
         - ``failed``: action_result.success=false (失敗、要分析)
         - ``move``: position_change (spot 跨ぎ。初期配置は除外)
@@ -573,28 +529,6 @@ def compute_trace_moments(
                     "detail": "trace finished",
                     "score": 100,
                     "player_id": None,
-                }
-            )
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            moments.append(
-                {
-                    "tick": int(e.tick or 0),
-                    "kind": "memo",
-                    "label": "memo added",
-                    "detail": str(payload.get("content") or ""),
-                    "score": 65,
-                    "player_id": e.player_id,
-                }
-            )
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            moments.append(
-                {
-                    "tick": int(e.tick or 0),
-                    "kind": "memo_done",
-                    "label": "memo done",
-                    "detail": str(payload.get("memo_id") or ""),
-                    "score": 78,
-                    "player_id": e.player_id,
                 }
             )
         elif e.kind == TraceEventKind.MEMO_HINT:
@@ -708,16 +642,6 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       <h2>Event timeline</h2>
       {event_filter_html}
       <div id="event-log">{event_log_html}</div>
-    </div>
-    <div id="memo-panel-section">
-      <h2>Objectives / Active memo
-        <label class="toggle-label" title="memo パネルの表示・非表示を切り替え"
-               style="font-size: 0.65rem; font-weight: normal; margin-left: 0.5rem;">
-          <input type="checkbox" id="toggle-memo-panel">
-          show
-        </label>
-      </h2>
-      <div id="memo-panel" style="display:none"><div class="placeholder">(no memo)</div></div>
     </div>
   </section>
 
@@ -967,7 +891,7 @@ section h2, #timeline-section > div > h2 {
   border: 0;
   box-shadow: none;
   display: grid;
-  grid-template-rows: minmax(180px, 1fr) auto;
+  grid-template-rows: minmax(180px, 1fr);
   gap: 0.85rem;
   overflow: visible;
 }
@@ -983,35 +907,6 @@ section h2, #timeline-section > div > h2 {
     #071318;
   background-size: auto, 34px 34px, 34px 34px, auto;
 }
-#memo-panel-section { min-height: 0; }
-#memo-panel { padding: 0.55rem 0.75rem; overflow-y: auto; line-height: 1.5; }
-#memo-panel .memo-item {
-  font-size: 0.82rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--line-soft);
-  border-left: 4px solid var(--blue);
-  border-radius: 5px;
-  background: rgba(11, 25, 32, 0.85);
-  display: grid;
-  grid-template-columns: minmax(56px, auto) 1fr auto;
-  gap: 0.65rem;
-  align-items: center;
-  line-height: 1.45;
-  margin-bottom: 0.45rem;
-}
-#memo-panel .memo-item:last-child { margin-bottom: 0; }
-#memo-panel .memo-owner {
-  font-size: 0.8rem;
-  color: var(--cyan);
-  min-width: 0;
-  font-weight: 600;
-}
-#memo-panel .memo-content { flex: 1; word-break: break-word; line-height: 1.45; }
-#memo-panel .memo-content.done { color: #80908e; text-decoration: line-through; }
-#memo-panel .memo-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
-#memo-panel .memo-meta.stale { color: #ffba67; font-weight: bold; }
-#memo-panel .placeholder { color: var(--muted); font-size: 0.85rem; padding: 0.5rem 0; }
-
 #event-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1086,8 +981,6 @@ section h2, #timeline-section > div > h2 {
   padding: 0 0.24rem;
 }
 .event-row.kind-action_result.failed .event-body { color: #ff8f7b; }
-.event-row.kind-memo_add .event-body { color: #9bea91; }
-.event-row.kind-memo_done .event-body { color: #9bea91; }
 .event-row.kind-memo_hint .event-body { color: #ffd07a; }
 .event-row.kind-position_change .event-body { color: #65dce8; }
 /* Issue #276: 観測 prose は LLM が読んでいる「世界からの情報」なので、
@@ -1142,10 +1035,8 @@ _VIEWER_JS_TEMPLATE = """
   const scenarioData = {scenario_data_json};
   const players = {players_json};
   const positionTimeline = {position_timeline_json};  // {{tick: {{player_id: spot_id}}}}
-  const memoTimeline = {memo_timeline_json};          // {{tick: [memo records]}}
   const speechTimeline = {speech_timeline_json};      // {{tick: [{{player_id, kind, text, source_tick}}]}}
   const maxTick = {max_tick};
-  const STALE_AGE = 20;
 
   const playerColors = ['#2e7dd7', '#e07a26', '#5fa14a', '#a155bf'];
   const playerNameById = {{}};
@@ -1403,48 +1294,6 @@ _VIEWER_JS_TEMPLATE = """
     }});
   }}
 
-  // ---------- memo panel toggle (実験 #26 user feedback) ----------
-  const memoPanelSection = document.getElementById('memo-panel-section');
-  const memoToggle = document.getElementById('toggle-memo-panel');
-  if (memoToggle && memoPanelSection) {{
-    memoToggle.addEventListener('change', () => {{
-      const panel = document.getElementById('memo-panel');
-      if (panel) {{
-        panel.style.display = memoToggle.checked ? '' : 'none';
-      }}
-    }});
-  }}
-
-  // ---------- memo panel ----------
-  const memoPanel = document.getElementById('memo-panel');
-  function renderMemoPanel(tick) {{
-    // 最も近い t <= tick のスナップショット
-    let snap = null;
-    for (let t = tick; t >= 0; t--) {{
-      if (memoTimeline[t]) {{ snap = memoTimeline[t]; break; }}
-    }}
-    if (!snap || snap.length === 0) {{
-      memoPanel.innerHTML = '<div class="placeholder">(no memo at tick ' + tick + ')</div>';
-      return;
-    }}
-    const parts = [];
-    for (const m of snap) {{
-      const owner = playerNameById[m.player_id] || ('#' + m.player_id);
-      const age = tick - m.added_tick;
-      const isStale = m.status === 'active' && age >= STALE_AGE;
-      const ageLabel = m.status === 'done'
-        ? ('completed t=' + m.done_tick)
-        : (age + ' tick' + (isStale ? ' [STALE]' : ''));
-      parts.push(
-        '<div class="memo-item">' +
-          '<span class="memo-owner">' + escapeHtml(owner) + '</span>' +
-          '<span class="memo-content ' + (m.status === 'done' ? 'done' : '') + '">' + escapeHtml(m.content) + '</span>' +
-          '<span class="memo-meta ' + (isStale ? 'stale' : '') + '">' + ageLabel + '</span>' +
-        '</div>'
-      );
-    }}
-    memoPanel.innerHTML = parts.join('');
-  }}
   function escapeHtml(s) {{
     return String(s).replace(/[&<>"']/g, ch => ({{
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -1492,7 +1341,6 @@ _VIEWER_JS_TEMPLATE = """
     document.getElementById('scrubber').value = String(tick);
     document.getElementById('tick-display').textContent = 'tick ' + tick + ' / ' + maxTick;
     animatePlayersToTick(tick, animate !== false);
-    renderMemoPanel(tick);
     updateEventLogHighlight(tick);
     // bubble は player marker のアニメーション後に位置を取りたいので
     // 短い delay で配置 (animate duration ~ 240ms に追従)
@@ -1595,7 +1443,6 @@ def render_viewer_html(
     player_summary = ", ".join(f"{p['name']} (#{p['id']})" for p in players) or "(none)"
 
     position_timeline = build_position_timeline(events, spot_name_to_id=spot_name_to_id)
-    memo_timeline = build_memo_state_timeline(events)
     speech_timeline = build_speech_timeline(events)
 
     return _HTML_TEMPLATE.format(
@@ -1612,7 +1459,6 @@ def render_viewer_html(
             scenario_data_json=json.dumps(scenario_topology, ensure_ascii=False),
             players_json=json.dumps(players, ensure_ascii=False),
             position_timeline_json=json.dumps(position_timeline, ensure_ascii=False),
-            memo_timeline_json=json.dumps(memo_timeline, ensure_ascii=False),
             speech_timeline_json=json.dumps(speech_timeline, ensure_ascii=False),
             max_tick=max_tick,
         ),
@@ -1709,7 +1555,7 @@ def _event_timeline_category(e: TraceEvent) -> str:
         return "action_result"
     if kind == TraceEventKind.OBSERVATION:
         return "observation"
-    if kind in {TraceEventKind.MEMO_ADD, TraceEventKind.MEMO_DONE, TraceEventKind.MEMO_HINT}:
+    if kind == TraceEventKind.MEMO_HINT:
         return "memo"
     if kind in {
         # 古いエピソードの区切りの書き込みと、受動想起【関連する記憶】【関連する学び】は
@@ -1991,10 +1837,6 @@ def _format_event_body(e: TraceEvent) -> str:
         mark = "OK" if success else "NG"
         summary = payload.get("result_summary") or ""
         return f"[{esc(mark)}] {esc(summary)}"
-    if e.kind == TraceEventKind.MEMO_ADD:
-        return f"+ {esc(payload.get('content', ''))} (id={esc(payload.get('memo_id', ''))})"
-    if e.kind == TraceEventKind.MEMO_DONE:
-        return f"✓ done (id={esc(payload.get('memo_id', ''))})"
     if e.kind == TraceEventKind.MEMO_HINT:
         sim = payload.get("similarity")
         return f"hint memo {esc(payload.get('memo_id', ''))} sim={esc(round(float(sim), 2)) if sim is not None else '?'}"

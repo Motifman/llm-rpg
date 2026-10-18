@@ -344,7 +344,7 @@ class TestBuildReport:
                 success=False,
             )
             rec.record(
-                TraceEventKind.MEMO_ADD,
+                "memo_add",
                 tick=2,
                 player_id=2,
                 memo_id="m1",

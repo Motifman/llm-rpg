@@ -1,7 +1,4 @@
-"""hint を出した後、当人が本当に memo_done を呼んだかを数える。
-
-hint の件数だけでは、当たっていたのか外していたのかが分からない。hint の後に
-当人が memo_done を呼んだ割合が、hint の適合率の代理になる。
+"""memo 完了 hint の発火と、それを決めた判断の内訳を数える。
 
 重なり由来の hint と判断由来の hint は別に数える。混ぜると、意味判定に替えた
 効果が薄まって見えない。
@@ -35,15 +32,6 @@ def _hint(tick: int, memo_id: str, source: str = "judgment") -> dict[str, Any]:
     }
 
 
-def _done(tick: int, memo_id: str) -> dict[str, Any]:
-    return {
-        "kind": "memo_done",
-        "tick": tick,
-        "player_id": 1,
-        "payload": {"memo_id": memo_id},
-    }
-
-
 def _judgment(**payload: Any) -> dict[str, Any]:
     base = {
         "question": "memo_completed",
@@ -61,48 +49,22 @@ def _metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
     return extract_metrics._extract_memo_completion_hint(events)
 
 
-class TestTheHintFollowThroughIsMeasured:
-    """hint の後に memo_done が来た割合が出ることを保証する。"""
-
-    def test_a_hint_followed_by_its_memo_done_counts_as_followed(self) -> None:
-        """同じ memo が後で完了されたら、追従した 1 件になる。"""
-        metrics = _metrics([_hint(3, "m1"), _done(5, "m1")])
-
-        assert metrics["hints"] == 1
-        assert metrics["followed_through"] == 1
-        assert metrics["follow_through_rate"] == 1.0
-
-    def test_a_memo_done_before_the_hint_does_not_count(self) -> None:
-        """hint より前の完了は追従ではない。因果の向きを守る。"""
-        metrics = _metrics([_done(2, "m1"), _hint(3, "m1")])
-
-        assert metrics["followed_through"] == 0
-
-    def test_a_memo_done_for_another_memo_does_not_count(self) -> None:
-        """別の memo の完了は数えない (**正の対照**)。"""
-        metrics = _metrics([_hint(3, "m1"), _done(5, "m2")])
-
-        assert metrics["followed_through"] == 0
+class TestHintsAreCounted:
+    """hint の件数が、出どころごとに分けて出ることを保証する。"""
 
     def test_hints_are_counted_apart_by_their_source(self) -> None:
         """重なり由来と判断由来を別に数える。混ぜると効果が見えない。"""
-        metrics = _metrics(
-            [
-                _hint(1, "m1", source="judgment"),
-                _done(2, "m1"),
-                _hint(3, "m2", source="overlap"),
-            ]
-        )
+        metrics = _metrics([_hint(1, "m1", source="judgment"), _hint(3, "m2", source="overlap")])
 
+        assert metrics["hints"] == 2
         assert metrics["hints_by_source"] == {"judgment": 1, "overlap": 1}
-        assert metrics["followed_through_by_source"] == {"judgment": 1, "overlap": 0}
 
-    def test_a_run_without_hints_reports_no_rate(self) -> None:
-        """hint が 0 件の run では率を出さない。0 除算で 0% と嘘をつかない。"""
+    def test_a_run_without_hints_reports_zero(self) -> None:
+        """hint が 0 件の run では、件数 0 と空の内訳を出す。"""
         metrics = _metrics([_judgment()])
 
         assert metrics["hints"] == 0
-        assert metrics["follow_through_rate"] is None
+        assert metrics["hints_by_source"] == {}
 
 
 class TestTheJudgmentBreakdownIsReported:

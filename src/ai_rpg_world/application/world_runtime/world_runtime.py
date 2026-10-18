@@ -98,7 +98,6 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
-from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
@@ -595,7 +594,6 @@ class WorldRuntime:
     _world_llm_system_prompts_by_player_id: dict[int, str] = field(
         default_factory=dict, repr=False
     )
-    _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
