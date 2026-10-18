@@ -9,8 +9,8 @@ from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -106,7 +106,7 @@ def test_recent_events_rendering_is_byte_identical_to_the_legacy_two_list_path()
 def test_turn_buckets_keep_the_existing_head_until_compaction() -> None:
     """cap 手前ではターンを追加しても、既存の出来事本文は先頭から変わらない。"""
     store = UnifiedRecentEventStore()
-    memory = DefaultSlidingWindowMemory(
+    memory = SummarizingShortTermMemory(
         event_store=store,
         turn_cap=4,
         compact_turn_count=2,
@@ -127,7 +127,7 @@ def test_turn_buckets_keep_the_existing_head_until_compaction() -> None:
 def test_reaching_cap_compacts_oldest_turns_and_keeps_the_rest() -> None:
     """cap 到達時は古い K ターンだけを外し、残る N-K ターンを空にしない。"""
     store = UnifiedRecentEventStore()
-    memory = DefaultSlidingWindowMemory(
+    memory = SummarizingShortTermMemory(
         event_store=store,
         turn_cap=4,
         compact_turn_count=2,
@@ -144,10 +144,9 @@ def test_reaching_cap_compacts_oldest_turns_and_keeps_the_rest() -> None:
 
 
 def test_many_observations_do_not_evict_actions_from_recent_turns() -> None:
-    """観測が大量に流入しても、同じターン窓にある自分の行動は押し出されない。"""
+    """観測が大量に流入しても、畳む前のターン窓にある自分の行動も観測も押し出されない。"""
     store = UnifiedRecentEventStore()
-    memory = DefaultSlidingWindowMemory(
-        max_entries_per_player=100,
+    memory = SummarizingShortTermMemory(
         event_store=store,
         turn_cap=5,
         compact_turn_count=2,
@@ -166,7 +165,7 @@ def test_many_observations_do_not_evict_actions_from_recent_turns() -> None:
         entry.action_summary
         for entry in store.action_results_in_storage_order(_PLAYER)
     ] == ["行動0", "行動1", "行動2", "行動3"]
-    assert len(store.observations_in_storage_order(_PLAYER)) == 100
+    assert len(store.observations_in_storage_order(_PLAYER)) == 160
 
 
 def test_short_term_memory_implementation_must_accept_turn_completion() -> None:

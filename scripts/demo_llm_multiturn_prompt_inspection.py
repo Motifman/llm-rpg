@@ -42,8 +42,8 @@ from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBu
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
@@ -153,7 +153,7 @@ def _setup_components(
         connected_spots_provider=connected,
     )
     buffer = DefaultObservationContextBuffer()
-    sliding = DefaultSlidingWindowMemory()
+    sliding = SummarizingShortTermMemory()
     action_store = DefaultActionResultStore()
     formatter = DefaultCurrentStateFormatter()
     recent_formatter = DefaultRecentEventsFormatter()

@@ -4,8 +4,8 @@ from hashlib import sha256
 from types import SimpleNamespace
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.player.services.player_life_query import (
     PlayerLifeQuery,
@@ -61,7 +61,7 @@ class _WiringStub:
             workers,
             meeting=meeting,
         )
-        self.short_term_memory = DefaultSlidingWindowMemory(
+        self.short_term_memory = SummarizingShortTermMemory(
             turn_cap=10,
             compact_turn_count=5,
         )

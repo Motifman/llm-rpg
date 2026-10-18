@@ -9,8 +9,8 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 - ``run_scenario_experiment.py`` が env を読んで run_start trace に書く
 - ``wiring/_build_short_term_memory`` が env を読んで kind を解決する
 - ``demos/world_runtime/world_runtime.py`` が **別経路で** env を読んで
-  ``DefaultSlidingWindowMemory`` を直接作る (PR #439 で fix した silent failure
-  の原因)
+  ``DefaultSlidingWindowMemory`` (Issue #1631 で削除) を直接作る
+  (PR #439 で fix した silent failure の原因)
 - ``demos/world_runtime/world_runtime.py`` が **また別経路で** env を読み
   忘れて ``SectionBasedContextFormatStrategy()`` を ClassVar で作る (PR #446
   で fix した silent failure)

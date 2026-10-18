@@ -1,7 +1,6 @@
 """``SummarizingShortTermMemory``: ターン窓 + L4 要約の階層型短期記憶。
 
-Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替として
-``IShortTermMemory`` を満たす別実装。
+Phase 2 (#356 後続) で導入。``IShortTermMemory`` の唯一の実装。
 
 挙動概要:
 - ``append`` / ``append_all`` で現在の自分のターンへ観測を積む
@@ -213,8 +212,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
     ) -> list[ObservationEntry]:
         """observations を順に append する。
 
-        ``DefaultSlidingWindowMemory`` と違って evict は無い (代わりに L4 に
-        畳む)。本 implementation では戻り値は常に空 list (overflow 0)。
+        evict は無い (古いターンは L4 に畳む) ので、戻り値は常に空 list。
         """
         for e in entries:
             self.append(player_id, e)

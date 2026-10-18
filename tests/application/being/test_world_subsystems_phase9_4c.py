@@ -17,9 +17,6 @@ from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
-)
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
@@ -62,24 +59,6 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
 
 
 class TestSlidingWindowCodec:
-    def test_capture_restore_round_trip(self) -> None:
-        src = DefaultSlidingWindowMemory()
-        src.append(PlayerId(1), _obs_entry("first"))
-        src.append(PlayerId(1), _obs_entry("second"))
-        src.append(PlayerId(2), _obs_entry("p2 only"))
-        src_runtime = SimpleNamespace(_short_term_memory=src)
-        captured = ShortTermMemorySubsystemCodec().capture(src_runtime)
-        assert len(captured["entries"]) == 2
-
-        dst = DefaultSlidingWindowMemory()
-        dst.append(PlayerId(99), _obs_entry("stale"))  # 復元で消える
-        dst_runtime = SimpleNamespace(_short_term_memory=dst)
-        ShortTermMemorySubsystemCodec().restore(dst_runtime, captured)
-
-        assert dst.get_recent(PlayerId(99), limit=10) == []
-        p1 = dst.get_recent(PlayerId(1), limit=10)
-        assert [e.output.prose for e in p1] == ["first", "second"]
-
     def test_sliding_window_none_op(self) -> None:
         """sliding window が None でも no op。"""
         runtime = SimpleNamespace(_short_term_memory=None)
@@ -272,18 +251,68 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         assert [e.output.prose for e in recent] == ["migrated"]
         assert dst._long_summary(1) is None  # v1 には L5 が無い
 
-    def test_rolling_snapshot_sliding_backend_load_raw(self) -> None:
-        """cross-backend (rolling → sliding): L4 / L5 は捨てて raw だけ復元。"""
-        src = self._make_rolling()
-        src.append(PlayerId(1), _obs_entry("raw-only"))
-        captured = ShortTermMemorySubsystemCodec().capture(
-            SimpleNamespace(_short_term_memory=src)
+    def test_sliding_v2_snapshot_replaces_observations_and_clears_summaries(self) -> None:
+        """固定容量の短期記憶で保存した v2 の mode: sliding_window を読むと、観測は保存されたものに置き換わり、L4 / L5 は空になる。"""
+        from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
+            L5LongSummary,
         )
-        dst = DefaultSlidingWindowMemory()
-        runtime = SimpleNamespace(_short_term_memory=dst)
-        ShortTermMemorySubsystemCodec().restore(runtime, captured)
+
+        v2_data = {
+            "schema_version": 2,
+            "mode": "sliding_window",
+            "entries": [
+                {
+                    "player_id": 1,
+                    "entries": [
+                        {
+                            "occurred_at": _NOW.isoformat(),
+                            "game_time_label": "Day 1",
+                            "output": {
+                                "prose": "sliding で保存した観測",
+                                "structured": {},
+                                "observation_category": "self_only",
+                                "schedules_turn": False,
+                                "breaks_movement": False,
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        dst = self._make_rolling()
+        dst.append(PlayerId(99), _obs_entry("stale"))
+        with dst._long_lock:
+            dst._long[1] = L5LongSummary(
+                summary_id="l5-stale",
+                player_id=1,
+                generation_index=1,
+                generated_at=_NOW,
+                self_image="復元前の自己像",
+                world_view="復元前の世界観",
+                is_fallback=False,
+            )
+            dst._long_gen_index[1] = 1
+
+        ShortTermMemorySubsystemCodec().restore(
+            SimpleNamespace(_short_term_memory=dst), v2_data
+        )
+
+        assert dst.get_recent(PlayerId(99), limit=10) == []
         recent = dst.get_recent(PlayerId(1), limit=5)
-        assert [e.output.prose for e in recent] == ["raw-only"]
+        assert [e.output.prose for e in recent] == ["sliding で保存した観測"]
+        assert dst._mid_generations(1) == []
+        assert dst._long_summary(1) is None
+        assert dst._long_gen_index == {}
+
+    def test_unknown_mode_raises_exception(self) -> None:
+        """mode が rolling_summary でも sliding_window でもない payload は ValueError で拒む。"""
+        dst = self._make_rolling()
+
+        with pytest.raises(ValueError, match="mode"):
+            ShortTermMemorySubsystemCodec().restore(
+                SimpleNamespace(_short_term_memory=dst),
+                {"schema_version": 2, "mode": "unknown", "entries": []},
+            )
 
 
 class TestUnsupportedSchemaVersion:

@@ -16,8 +16,8 @@ from ai_rpg_world.application.llm.services.observation_short_term_memory_sync im
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import (
@@ -418,22 +418,22 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         assert stamps == tuple(sorted(stamps))
 
 
-class TestDrainObservationBufferIntoSlidingWindow:
+class TestDrainObservationBufferIntoShortTermMemory:
     """観測 drain → append_all が PromptBuilder と同順序であること"""
 
     def test_empty_buffer_returns_empty_overflow(self) -> None:
         """drain が空なら append せず空リスト"""
         buf = DefaultObservationContextBuffer()
-        win: DefaultSlidingWindowMemory = DefaultSlidingWindowMemory(max_entries_per_player=10)
+        win = SummarizingShortTermMemory(summary_service=None)
         pid = PlayerId(1)
         overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
         assert overflow == []
         assert win.get_recent(pid, 10) == []
 
-    def test_drain_appends_and_returns_overflow(self) -> None:
-        """複数件 drain しウィンドウ上限を超えた分が overflow になる"""
+    def test_drain_appends_every_observation_and_returns_no_overflow(self) -> None:
+        """複数件 drain すると全件が短期記憶に入り、短期記憶は観測を捨てないので溢れは空、バッファは空になる"""
         buf = DefaultObservationContextBuffer()
-        win = DefaultSlidingWindowMemory(max_entries_per_player=2)
+        win = SummarizingShortTermMemory(summary_service=None)
         pid = PlayerId(1)
         t0 = datetime(2025, 1, 1, 0, 0, 0)
         entries = [
@@ -448,17 +448,15 @@ class TestDrainObservationBufferIntoSlidingWindow:
         for e in entries:
             buf.append(pid, e)
         overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert len(overflow) == 1
-        assert overflow[0].output.prose == "e0"
-        recent = win.get_recent(pid, 10)
-        assert len(recent) == 2
-        texts = {r.output.prose for r in recent}
-        assert texts == {"e1", "e2"}
+        assert overflow == []
+        texts = {r.output.prose for r in win.get_recent(pid, 10)}
+        assert texts == {"e0", "e1", "e2"}
+        assert buf.get_observations(pid) == []
 
     def test_matches_prompt_builder_sequence(self) -> None:
         """DefaultPromptBuilder の drain→append_all 節と同一の観測列・溢れになる"""
         buf = DefaultObservationContextBuffer()
-        win = DefaultSlidingWindowMemory(max_entries_per_player=3)
+        win = SummarizingShortTermMemory(summary_service=None)
         pid = PlayerId(1)
         for i in range(5):
             buf.append(
@@ -472,7 +470,7 @@ class TestDrainObservationBufferIntoSlidingWindow:
             )
         overflow_helper = drain_observation_buffer_into_short_term_memory(buf, win, pid)
         buf2 = DefaultObservationContextBuffer()
-        win2 = DefaultSlidingWindowMemory(max_entries_per_player=3)
+        win2 = SummarizingShortTermMemory(summary_service=None)
         for i in range(5):
             buf2.append(
                 pid,

@@ -30,8 +30,8 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCaptureSink,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -157,7 +157,7 @@ class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
         recent_event_store = UnifiedRecentEventStore()
-        self._short_term_memory = DefaultSlidingWindowMemory(
+        self._short_term_memory = SummarizingShortTermMemory(
             event_store=recent_event_store
         )
         self._action_result_store = DefaultActionResultStore(
