@@ -609,7 +609,6 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <span>events <strong>{total_events}</strong></span>
     <span>players <strong>{player_summary}</strong></span>
     <span class="viewer-links">
-      <a href="episodic.html" data-sibling="episodic.html" title="episodic memory viewer" class="vlink">📖 episodic</a>
       <a href="timeline.html" data-sibling="timeline.html" title="player × tick timeline" class="vlink">📊 timeline</a>
     </span>
   </div>
@@ -1014,7 +1013,7 @@ body.show-inner-thoughts .event-inner-thought { display: inline; }
 
 _VIEWER_JS_TEMPLATE = """
 (function() {{
-  // 兄弟ファイル (episodic.html / timeline.html) への遷移リンク補正。
+  // 兄弟ファイル (timeline.html) への遷移リンク補正。
   // 相対 href のままだと htmlpreview.github.io 経由で開いたとき raw gist URL
   // (text/plain) に解決され、HTML がソースコードとして表示されてしまう。
   // viewer 自身が htmlpreview 経由で配信されている場合は、兄弟リンクも

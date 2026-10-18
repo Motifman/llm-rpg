@@ -1252,9 +1252,9 @@ class TestRenderViewerHtmlSpeech:
 
 
 class TestRenderViewerHtmlSiblingLinks:
-    """episodic / timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
+    """timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
 
-    def test_episodic_timeline_data_sibling_attribute_file(self) -> None:
+    def test_timeline_link_has_data_sibling_attribute(self) -> None:
         """相対 href だけだと htmlpreview 経由で raw gist (text/plain) に解決され
         ソース表示になるため、JS 書き換えの起点として data-sibling を持たせる。"""
         out = render_viewer_html(
@@ -1263,7 +1263,7 @@ class TestRenderViewerHtmlSiblingLinks:
             scenario_topology={"spots": [], "connections": []},
             cytoscape_js_src="/* fake */",
         )
-        assert 'data-sibling="episodic.html"' in out
+        assert 'data-sibling="episodic.html"' not in out
         assert 'data-sibling="timeline.html"' in out
 
     def test_htmlpreview_via_htmlpreview_url_js(self) -> None:
