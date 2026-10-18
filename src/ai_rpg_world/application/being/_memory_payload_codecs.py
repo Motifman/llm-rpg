@@ -1,23 +1,12 @@
-"""5 memory store の VO ↔ JSON dict 変換ヘルパ。
+"""Being の memory store の VO ↔ JSON dict 変換ヘルパ。
 
 Phase 4 Step 4-2b (Issue #470): ``BeingMemorySnapshotService`` が `BeingSnapshot`
 の ``memory_payload_json`` に詰める JSON の **内部 schema を版管理する** ための
 serializer 群。
 
 各 ``_<vo>_to_dict`` / ``_dict_to_<vo>`` は 1:1 の VO ↔ dict 変換を提供する。
-**datetime は ISO 8601 文字列、Enum は ``.value``** で表現する (= JSON 標準型のみ)。
+**Enum は ``.value``** で表現する (= JSON 標準型のみ)。
 これにより snapshot JSON は他言語 / 外部ツールでも読みやすい。
-
-NOTE: sqlite store にも類似の serializer (``_episode_to_payload_dict`` 等) が
-存在するが、本 PR ではあえて重複させている。理由:
-
-- 本 codec は **snapshot schema の版管理を行う** (= 内部 schema を凍結したい)
-- sqlite store の serializer は **その store の永続化形式に縛られる** (= 行
-  carve up の都合で形が変わりうる)
-
-将来両者を統合するなら sqlite 側を本 module に寄せる方向 (application 層に
-serializer を集約) になるが、本 PR の scope 外 (= 4-2b の責務は snapshot
-service の構築のみ)。
 """
 
 from __future__ import annotations

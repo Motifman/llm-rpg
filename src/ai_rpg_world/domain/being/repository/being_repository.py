@@ -9,8 +9,7 @@ PR #462 §2.1 (R1): ``save/load = ビーイング丸ごとの snapshot/restore``
 
 NOTE: ``domain/common/repository.py::Repository[T, ID]`` 基底を継承せず ABC 直継承
 にしているのは、本 PR 段階では Being 集約自体が最小構成であり、汎用基底が要求する
-``find_by_ids`` / ``find_all`` は YAGNI (= 必要になった時点で追加)。Phase 1 の
-memory Repository 群 (例: ``EpisodicEpisodeRepository``) と同じ方針。
+``find_by_ids`` / ``find_all`` は YAGNI (= 必要になった時点で追加)。
 """
 
 from __future__ import annotations
