@@ -302,7 +302,7 @@ class TestRevisingTheIndexInATurn:
         assert [p["before"]["about"] for p in revisions] == ["火を起こした"]
 
 
-_MEMO_BOOK = {"BEING_MEMO_ENABLED": "1", "MEMO_TOOLS_ENABLED": "false"}
+_MEMO_BOOK = {"BEING_MEMO_ENABLED": "1"}
 
 
 class TestMemoFromAnEpisode:

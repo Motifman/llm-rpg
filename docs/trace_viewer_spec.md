@@ -119,7 +119,7 @@ emit 元: `EscapeGameRuntime` の `advance_tick` 後フック (各プレイヤ�
 ### F3. Event Log
 
 - 現在 tick で発生した event を時系列で表示
-- kind 別アイコン: 👁 obs / ⚡ action / 📝 memo_add / ✅ memo_done / 💡 memo_hint / ❌ action_failed
+- kind 別アイコン: 👁 obs / ⚡ action / 💡 memo_hint / ❌ action_failed (memo_add / memo_done は #1631 で消した)
 - action_result は対応する action にネストして表示 (`└ result_summary`)
 - 表示件数が多い時は折りたたみ
 

@@ -11,7 +11,7 @@ from ai_rpg_world.application.llm.services.tool_catalog import register_default_
 
 
 def test_system_prompt_does_not_advertise_memory_tools() -> None:
-    """system prompt に想起・長期記憶・作業メモの案内を戻さない。"""
+    """system prompt に想起・長期記憶・作業メモ・古いメモの道具の案内を戻さない。"""
     prompt = DefaultSystemPromptBuilder().build(
         SystemPromptPlayerInfoDto(
             player_name="Alice",
@@ -27,21 +27,19 @@ def test_system_prompt_does_not_advertise_memory_tools() -> None:
     assert "episodic" not in prompt
     assert "facts" not in prompt
     assert "laws" not in prompt
-    assert "memo_add" in prompt
+    assert "memo_add" not in prompt
+    assert "【世界とのやり取りの規約】" in prompt
 
 
-def test_default_tools_register_memo_without_memory_tools() -> None:
-    """ツールカタログは memo を残し、記憶検索・想起ツールを登録しない。"""
+def test_default_tools_register_no_memory_tools() -> None:
+    """ツールカタログは古いメモ・記憶検索・想起ツールを登録せず、環境の道具は登録する。"""
     registry = DefaultGameToolRegistry()
 
-    register_default_tools(registry, todo_enabled=True, include_movement_tools=False)
-    names = {
-        definition.name
-        for definition, resolver in registry.get_definitions_with_resolvers()
-        if resolver.is_available(None)
-    }
+    register_default_tools(registry, speech_enabled=True, include_movement_tools=False)
+    names = {definition.name for definition, _ in registry.get_definitions_with_resolvers()}
 
-    assert {"memo_add", "memo_list", "memo_done"} <= names
+    assert {"memo_add", "memo_list", "memo_done"} & names == set()
+    assert "speak" in names
     assert "memory_query" not in names
     assert "memory_recall_subjective" not in names
     assert "memory_working_memory_append" not in names

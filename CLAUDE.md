@@ -79,6 +79,7 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 - 保存・読み込みは `TraceEventKind.SNAPSHOT_SAVE` / `SNAPSHOT_LOAD` に必ず 1 件残る
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
 - 記憶だけを持ち越して世界を最初からやり直すときは、実験設定に `"snapshot_load_mode": "replay"` を書く。同じ profile で 1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は前の回の `snapshots` を渡す。回の番号は前の回の resolved から数えて `run_start` に残る (`docs/design_decisions.md` の D1514)
+- 記憶の部品を消して snapshot のキーが無くなったら、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の表に足す。古い snapshot に残るそのキーは読み込みで捨て、件数が `snapshot_load` の `removed_memory_keys` に残る (`docs/design_decisions.md` の D1631-5)
 - 詳細は `docs/design_decisions.md` の #15-#18
 
 ### LLM に出すツールを増やす / 出し分けるとき

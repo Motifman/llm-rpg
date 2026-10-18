@@ -38,9 +38,6 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
-    TOOL_NAME_MEMO_LIST,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -78,7 +75,6 @@ _FIXTURE_SCENARIOS_DIR = (
 def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep these contract tests independent from the caller's shell env."""
     for key in (
-        "MEMO_TOOLS_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -1273,70 +1269,30 @@ def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
     assert builder is runtime._get_or_build_default_prompt_builder()
 
 
-def test_memo_tools_default_visible_in_get_tool_definitions(
+def test_old_memo_tools_are_not_offered(
     clean_runtime_env: None,
 ) -> None:
-    """既定では既存 run 互換で memo_add / memo_list / memo_done を LLM に露出する。"""
+    """既定の設定で、古いメモの道具 memo_add / memo_list / memo_done は LLM に出ず、環境の道具は出る。"""
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
-    assert {TOOL_NAME_MEMO_ADD, TOOL_NAME_MEMO_LIST, TOOL_NAME_MEMO_DONE} <= tool_names
+    assert {"memo_add", "memo_list", "memo_done"} & tool_names == set()
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
 
 
-def test_memo_tools_flag_false_hides_only_memo_tools(
+@pytest.mark.parametrize(
+    ("being_memo_enabled", "built"),
+    [(False, False), (True, True)],
+)
+def test_memo_completion_hint_service_is_built_only_with_the_memo_book(
     clean_runtime_env: None,
+    being_memo_enabled: bool,
+    built: bool,
 ) -> None:
-    """MEMO_TOOLS_ENABLED=false は memo tool だけを隠し、記憶本体と他 tool は残す。"""
+    """済んだかの知らせはメモ帳のやることにだけ使う。メモ帳を有効にしたときだけ組み、無効なら組まない。"""
     runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            memo_tools_enabled=False,
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMO_ADD not in tool_names
-    assert TOOL_NAME_MEMO_LIST not in tool_names
-    assert TOOL_NAME_MEMO_DONE not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-
-
-def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
-    clean_runtime_env: None,
-) -> None:
-    """memo tool 非露出時は未完了 memo section も消し、使えない memo_done へ誘導しない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            memo_tools_enabled=False,
-        )
-    )
-    runtime._wire_auxiliary_tool_stack()
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        runtime.aux_being_default_world_id,
-        PlayerId(1),
-    )
-    assert being_id is not None
-    runtime._todo_store.add_by_being(being_id, "山頂で狼煙を上げる")
-
-    prompt = runtime.build_full_prompt(PlayerId(1))
-    system_text = _system_prompt_text(prompt)
-    user_text = _user_prompt_text(prompt)
-
-    assert TOOL_NAME_MEMO_ADD not in system_text
-    assert TOOL_NAME_MEMO_LIST not in system_text
-    assert TOOL_NAME_MEMO_DONE not in system_text
-    assert "【進行中のメモ】" not in user_text
-    assert "山頂で狼煙を上げる" not in user_text
-
-
-def test_memo_tools_flag_false_disables_memo_completion_hint_service(
-    clean_runtime_env: None,
-) -> None:
-    """memo tool 非露出時は memo 完了 hint も作らず、存在しない memo_done を促さない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(memo_tools_enabled=False)
+        ResolvedLlmRuntimeConfig.for_tests(being_memo_enabled=being_memo_enabled)
     )
 
     wiring = _WorldLlmWiring(
@@ -1346,7 +1302,7 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
         llm_client=StubLlmClient(None),
     )
 
-    assert wiring.memo_completion_hint_service is None
+    assert (wiring.memo_completion_hint_service is not None) is built
 
 
 def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
@@ -2019,7 +1975,7 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
 
     stub = _wiring_stub_from_world_runtime(runtime)
 
-    assert stub.memo_store is runtime._todo_store
+    assert not hasattr(stub, "memo_store")
     assert not hasattr(stub, "episodic_episode_store")
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository

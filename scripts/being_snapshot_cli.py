@@ -23,14 +23,6 @@ uv run python scripts/being_snapshot_cli.py load \
     --being-db var/restored_beings.db \
     --input var/snapshots/being_w1_p1.json
 ```
-
-## DB 配線の方針
-
-memo store は in-memory のみで永続化されていないため、本 CLI は **memo は
-in-memory で初期化** する。実用上は「LLM ターン中の memo が JSON snapshot
-には残る → 復元時に in-memory に書き戻される」という流れで動く。
-
-将来 memo に SQLite 実装が入ったら本 CLI に ``--memo-db`` 引数を追加する。
 """
 
 from __future__ import annotations
@@ -59,9 +51,6 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import (  # noqa: E402
     RestoreBeingSnapshotFromFileUseCase,
 )
-from ai_rpg_world.application.llm.services.in_memory_memo_store import (  # noqa: E402
-    InMemoryMemoStore,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (  # noqa: E402
     SqliteBeingRepository,
@@ -78,11 +67,7 @@ def _build_stack(
     BeingMemorySnapshotService,
     BeingSnapshotFileGateway,
 ]:
-    """Being の sqlite DB + in-memory の memory store から本 CLI 用 stack を組む。
-
-    memo store は SQLite 実装がないため in-memory で常に新規。snapshot JSON
-    に memo が入っていれば restore で書き戻される。
-    """
+    """Being の sqlite DB と in-memory の store から本 CLI 用 stack を組む。"""
     being_repo = SqliteBeingRepository.connect(str(being_db))
 
     from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
@@ -99,7 +84,6 @@ def _build_stack(
     )
 
     memory_snapshot = BeingMemorySnapshotService(
-        memo_store=InMemoryMemoStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
@@ -195,11 +179,13 @@ def cmd_load(args: argparse.Namespace) -> int:
         )
         return 1
     logger.info(
-        "snapshot restored: being_id=%s input=%s version=%d memory_restored=%s",
+        "snapshot restored: being_id=%s input=%s version=%d memory_restored=%s "
+        "removed_memory_keys=%s",
         result.being_id.value,
         result.input_path,
         result.snapshot_version,
         result.memory_restored,
+        result.removed_memory_key_counts,
     )
     return 0
 

@@ -1,4 +1,4 @@
-"""memory store の VO ↔ JSON dict 変換ヘルパ。
+"""5 memory store の VO ↔ JSON dict 変換ヘルパ。
 
 Phase 4 Step 4-2b (Issue #470): ``BeingMemorySnapshotService`` が `BeingSnapshot`
 の ``memory_payload_json`` に詰める JSON の **内部 schema を版管理する** ための
@@ -8,11 +8,20 @@ serializer 群。
 **datetime は ISO 8601 文字列、Enum は ``.value``** で表現する (= JSON 標準型のみ)。
 これにより snapshot JSON は他言語 / 外部ツールでも読みやすい。
 
+NOTE: sqlite store にも類似の serializer (``_episode_to_payload_dict`` 等) が
+存在するが、本 PR ではあえて重複させている。理由:
+
+- 本 codec は **snapshot schema の版管理を行う** (= 内部 schema を凍結したい)
+- sqlite store の serializer は **その store の永続化形式に縛られる** (= 行
+  carve up の都合で形が変わりうる)
+
+将来両者を統合するなら sqlite 側を本 module に寄せる方向 (application 層に
+serializer を集約) になるが、本 PR の scope 外 (= 4-2b の責務は snapshot
+service の構築のみ)。
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from ai_rpg_world.being.domain.acquaintance import Acquaintance, HowKnown
@@ -25,75 +34,6 @@ from ai_rpg_world.being.domain.memo_book import (
     MemoSource,
 )
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
-    MemoFulfillmentContext,
-)
-
-# ---- datetime helpers ---------------------------------------------------------
-
-def _dt_to_iso(dt: datetime) -> str:
-    """tz-aware は UTC に寄せて isoformat。naive は UTC とみなす。"""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
-    return dt.isoformat()
-
-
-def _iso_to_dt(raw: str) -> datetime:
-    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-
-
-# ---- memo ---------------------------------------------------------------------
-
-def memo_entry_to_dict(entry: MemoEntry) -> dict[str, Any]:
-    ctx = entry.fulfillment_context
-    return {
-        "id": entry.id,
-        "content": entry.content,
-        "added_at": _dt_to_iso(entry.added_at),
-        "completed": entry.completed,
-        "added_at_tick": entry.added_at_tick,
-        "completed_at": _dt_to_iso(entry.completed_at) if entry.completed_at else None,
-        "fulfillment_context": _fulfillment_to_dict(ctx) if ctx else None,
-    }
-
-
-def dict_to_memo_entry(data: dict[str, Any]) -> MemoEntry:
-    ctx_raw = data.get("fulfillment_context")
-    completed_at = data.get("completed_at")
-    return MemoEntry(
-        id=str(data["id"]),
-        content=str(data["content"]),
-        added_at=_iso_to_dt(str(data["added_at"])),
-        completed=bool(data.get("completed", False)),
-        added_at_tick=data.get("added_at_tick"),
-        completed_at=_iso_to_dt(str(completed_at)) if completed_at else None,
-        fulfillment_context=_dict_to_fulfillment(ctx_raw) if ctx_raw else None,
-    )
-
-
-def _fulfillment_to_dict(ctx: MemoFulfillmentContext) -> dict[str, Any]:
-    return {
-        "completed_at": _dt_to_iso(ctx.completed_at),
-        "completed_at_tick": ctx.completed_at_tick,
-        "recent_observation_proses": list(ctx.recent_observation_proses),
-        "recent_action_summaries": list(ctx.recent_action_summaries),
-    }
-
-
-def _dict_to_fulfillment(data: dict[str, Any]) -> MemoFulfillmentContext:
-    return MemoFulfillmentContext(
-        completed_at=_iso_to_dt(str(data["completed_at"])),
-        completed_at_tick=data.get("completed_at_tick"),
-        recent_observation_proses=tuple(
-            str(x) for x in data.get("recent_observation_proses", ())
-        ),
-        recent_action_summaries=tuple(
-            str(x) for x in data.get("recent_action_summaries", ())
-        ),
-    )
 
 
 def acquaintance_to_dict(acquaintance: Acquaintance) -> dict[str, Any]:

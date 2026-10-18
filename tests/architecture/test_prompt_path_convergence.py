@@ -3,7 +3,7 @@
 Issue #227 経路統一プロジェクトの後続レビュー (HIGH-3):
     world_runtime runtime は独自経路で prompt を組み立てているが、shareable な
     部品 (SectionBasedContextFormatStrategy, DefaultRecentEventsFormatter,
-    format_active_memos, tile-map field の None 固定) はすべて本家と共有して
+    tile-map field の None 固定) はすべて本家と共有して
     いる。完全な経路統一は別 PR で行うが、現在の収束状態が後退しないことを
     本ファイルが構造的に固定する。
 
@@ -41,22 +41,6 @@ def test_both_paths_use_default_recent_events_formatter() -> None:
     """両経路が DefaultRecentEventsFormatter を recent events 整形に使う。"""
     world_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py")
     assert "DefaultRecentEventsFormatter" in world_runtime
-
-
-def test_world_runtime_uses_shared_active_memos_formatter() -> None:
-    """world_runtime が共通の format_active_memos を import/委譲する。"""
-    world_runtime = _read(_REPO_ROOT / "src/ai_rpg_world/application/world_runtime/world_runtime.py")
-    assert "active_memos_formatter" in world_runtime
-    assert "format_active_memos" in world_runtime
-
-
-def test_prompt_builder_uses_shared_active_memos_formatter() -> None:
-    """DefaultPromptBuilder も共通の format_active_memos を使う。"""
-    prompt_builder = _read(
-        _REPO_ROOT / "src/ai_rpg_world/application/llm/services/prompt_builder.py"
-    )
-    assert "from ai_rpg_world.application.llm.services.active_memos_formatter" in prompt_builder
-    assert "format_active_memos" in prompt_builder
 
 
 def test_world_runtime_holds_formatter_instances_as_class_vars() -> None:

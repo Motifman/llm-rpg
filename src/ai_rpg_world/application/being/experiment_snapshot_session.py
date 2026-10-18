@@ -22,7 +22,7 @@ snapshot を取れるようにする統合層。
 - snapshot file のレイアウト: ``<dir>/<being_id>.json`` (1 Being = 1 file)。
   CLI と互換 (= ``scripts/being_snapshot_cli.py`` で個別に処理可能)
 - ``capture_all`` は **全 player を順に処理し、各失敗は単独 warning** とする。
-  「ある player の memo が壊れている → 他の player の snapshot を諦める」
+  「ある player の記憶が壊れている → 他の player の snapshot を諦める」
   を避けるため (= 実験データの最大救済)
 - ``restore_all`` は逆に **1 つでも失敗したら例外** にする (= 中途半端な
   状態で experiment を始めない fail-fast)
@@ -159,14 +159,6 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
 )
 
 
-def _empty_memo_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_memo_store import (
-        InMemoryMemoStore,
-    )
-
-    return InMemoryMemoStore()
-
-
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -206,6 +198,10 @@ class RestoreAllReport:
     # #1514: 回をやり直す読み込みで、世界の tick を書き換えた件数。続きからの
     # 読み込みでは空。
     world_clock_restarts: dict[BeingId, WorldClockRestartReport] = field(
+        default_factory=dict
+    )
+    # 消した部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない。
+    removed_memory_key_counts: dict[BeingId, dict[str, int]] = field(
         default_factory=dict
     )
 
@@ -309,26 +305,7 @@ class ExperimentSnapshotSession:
                 f"{missing_required}."
             )
 
-        # 任意 store: 「未配線なら空 in-memory store で代用」する (= 空の payload に
-        # なるが file の整合性は保たれる)。memo は普段使うので強く期待するが、None でも
-        # fallback できる方が安全。
-        memo_store = wiring_result.memo_store or _empty_memo_store()
-
-        # どの store が空 fallback で稼働しているかを 1 度だけ info ログに残す。
-        fallback_used = [
-            name
-            for name in ("memo_store",)
-            if getattr(wiring_result, name, None) is None
-        ]
-        if fallback_used:
-            logger.info(
-                "snapshot session: using empty in-memory fallback for stores: %s "
-                "(wiring did not expose these; payload entries will be empty)",
-                fallback_used,
-            )
-
         self._memory_snapshot = BeingMemorySnapshotService(
-            memo_store=memo_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,
@@ -583,6 +560,7 @@ class ExperimentSnapshotSession:
         metadata_by_being: dict[BeingId, BeingSnapshotFileMetadata | None] = {}
         cross_transfers: list[tuple[BeingId, str, str]] = []
         world_clock_restarts: dict[BeingId, WorldClockRestartReport] = {}
+        removed_memory_key_counts: dict[BeingId, dict[str, int]] = {}
         for path in files:
             # metadata は restore_use_case の中では読まないので、別途 gateway
             # から読む (= 失敗しても restore 本体は続行 = silent failure 防止
@@ -603,6 +581,10 @@ class ExperimentSnapshotSession:
             restored.append(result.being_id)
             if result.world_clock_restart is not None:
                 world_clock_restarts[result.being_id] = result.world_clock_restart
+            if result.removed_memory_key_counts:
+                removed_memory_key_counts[result.being_id] = (
+                    result.removed_memory_key_counts
+                )
             metadata_by_being[result.being_id] = metadata
             logger.info(
                 "snapshot restored: being_id=%s file=%s memory_restored=%s",
@@ -638,6 +620,7 @@ class ExperimentSnapshotSession:
             metadata_by_being=metadata_by_being,
             cross_scenario_transfers=cross_transfers,
             world_clock_restarts=world_clock_restarts,
+            removed_memory_key_counts=removed_memory_key_counts,
         )
 
 

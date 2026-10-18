@@ -21,8 +21,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -118,13 +116,6 @@ class IActionResultStore(ABC):
         pass
 
 
-# NOTE (Issue #470 Phase 1):
-# 旧 IMemoStore / ITodoStore / MemoEntry は domain/memory/memo/ に昇格・改名された:
-#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-#     from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-# 旧名 alias は Phase 1 cleanup で削除済。
-
-
 class ICurrentStateFormatter(ABC):
     """現在状態 DTO を LLM 向けテキストに整形する。"""
 
@@ -168,14 +159,13 @@ class IRecentEventsFormatter(ABC):
 
 
 class IContextFormatStrategy(ABC):
-    """現在状態・直近出来事・LLM が固定した memo を user prompt 用コンテキストへ整形する。"""
+    """現在状態・直近出来事・メモ帳などを user prompt 用コンテキストへ整形する。"""
 
     @abstractmethod
     def format(
         self,
         current_state_text: str,
         recent_events_text: str,
-        active_memos_text: str = "",
         objective_text: str = "",
         inventory_text: str = "",
         mid_summary_text: str = "",
@@ -194,10 +184,6 @@ class IContextFormatStrategy(ABC):
 
         ``episode_index_text`` はエピソードの目次【思い出せる出来事】の本体。空なら
         section を出さない (#1623)。目次を出す設定では、空の目次も「まだ無い」と渡る。
-
-        ``active_memos_text`` は LLM が ``memo_add`` で固定した「進行中のメモ」
-        section に表示するテキスト (Issue #188 Phase 1a)。空文字なら section を
-        出さない。
 
         ``objective_text`` は実行ランタイムが固定の目的文を渡したい場合に使う
         (例: world_runtime の「【現在の目的】この廃墟から外へ脱出する」)。空なら

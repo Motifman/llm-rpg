@@ -35,7 +35,6 @@ import pytest
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
-from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
@@ -52,7 +51,7 @@ def _make_stack():
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     return (wiring, provisioning)
 
 def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
@@ -61,9 +60,7 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     決定論性のため、すべての datetime は ``_FIXED_TIME`` 固定。これにより
     capture → restore → recapture で payload が bit-identical になる。
     """
-    m1 = wiring.memo_store.add_by_being(being_id, 'active task')
-    m2 = wiring.memo_store.add_by_being(being_id, 'done task')
-    wiring.memo_store.complete_by_being(being_id, m2)
+    wiring.acquaintance_store.record_meeting(being_id, environment_name='island', name='kaito', turn=3)
 
 def _strip_volatile_metadata(payload_dict: dict) -> dict:
     """``captured_at`` は capture 時刻なので毎回変わる。比較前に取り除く。
@@ -159,7 +156,7 @@ class TestSchemaStrictness:
     def test_memory_payload_unknown_schema_version_raises_exception(self, tmp_path: Path) -> None:
         """payload JSON の ``schema_version`` が SUPPORTED_PAYLOAD_SCHEMA_VERSIONS 外なら例外。"""
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadSchemaError
-        bad_payload = json.dumps({'schema_version': 999, 'memo': []}, ensure_ascii=False)
+        bad_payload = json.dumps({'schema_version': 999, 'being_memo_book': []}, ensure_ascii=False)
         bad_dir = tmp_path / 'bad'
         bad_dir.mkdir()
         (bad_dir / 'being_w1_p1.json').write_text(json.dumps({'being_id_value': 'being_w1_p1', 'identity_name': 'agent', 'identity_first_person': 'わたし', 'attachment_world_id': 1, 'attachment_player_id': 1, 'declared_memory_kinds': [], 'snapshot_version': 2, 'memory_payload_json': bad_payload}), encoding='utf-8')

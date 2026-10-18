@@ -5,7 +5,7 @@
     - シナリオ非依存: ``data/scenarios/*.json`` を ``--scenario`` で指定
     - trace 自動記録: ``JsonlTraceRecorder`` を内部で生成して runtime に inject
     - HTML 自動生成: 実行後に trace.html / viewer.html / episodic.html / timeline.html を出力
-    - 汎用レポート: WIN/LOSE/tick/action 数/memo 数の最小集計を Markdown で
+    - 汎用レポート: WIN/LOSE/tick/action 数などの最小集計を Markdown で
 
 使い方::
 
@@ -571,7 +571,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
     return SimpleNamespace(
-        memo_store=getattr(runtime, "_todo_store", None),
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
@@ -641,7 +640,7 @@ def _drive_scenario(
         state.llm_wiring.prompt_dataset_sink = prompt_dataset_sink
         # API session の UUID ではなく実験 run 名を使い、run を跨ぐ衝突を避ける。
         state.llm_wiring.llm_session_run_id = run_id
-        # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
+        # Phase 1d: trace recorder を runtime に注入 (LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
 
         round_assignment = runtime.round_assignment_trace()
@@ -694,8 +693,8 @@ def _drive_scenario(
             )
 
             # aux Being stack を確実に初期化 (= _aux_being_repository を作る)
-            if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-                runtime._wire_auxiliary_tool_stack()
+            if hasattr(runtime, "_wire_being_stack"):
+                runtime._wire_being_stack()
             for pid in runtime.get_player_ids():
                 provisioning = getattr(runtime, "_aux_being_provisioning", None)
                 if provisioning is not None:
@@ -746,6 +745,10 @@ def _drive_scenario(
                     world_clock_restarts=[
                         {"being_id": b.value, **r.to_trace_dict()}
                         for b, r in restore_report.world_clock_restarts.items()
+                    ],
+                    removed_memory_keys=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_memory_key_counts.items()
                     ],
                 )
 
@@ -1236,8 +1239,6 @@ def _build_report(
     events = list(load_trace_events(trace_path))
     actions: list[Any] = []
     action_results: list[Any] = []
-    memo_adds: list[Any] = []
-    memo_dones: list[Any] = []
     memo_hints: list[Any] = []
     position_changes: list[Any] = []
     llm_calls: list[Any] = []
@@ -1249,10 +1250,6 @@ def _build_report(
             actions.append(e)
         elif e.kind == TraceEventKind.ACTION_RESULT:
             action_results.append(e)
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            memo_adds.append(e)
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            memo_dones.append(e)
         elif e.kind == TraceEventKind.MEMO_HINT:
             memo_hints.append(e)
         elif e.kind == TraceEventKind.POSITION_CHANGE:
@@ -1272,8 +1269,6 @@ def _build_report(
                 "actions": 0,
                 "successes": 0,
                 "failures": 0,
-                "memo_adds": 0,
-                "memo_dones": 0,
                 "moves": 0,
             },
         )
@@ -1284,10 +1279,6 @@ def _build_report(
                 bucket["successes"] += 1
             else:
                 bucket["failures"] += 1
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            bucket["memo_adds"] += 1
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            bucket["memo_dones"] += 1
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             # 初期配置 (from_spot_id=None) は move カウントに含めない
             from_spot = e.payload.get("from_spot_id") if isinstance(e.payload, dict) else None
@@ -1334,21 +1325,19 @@ def _build_report(
     lines.append("")
     lines.append(f"- action: {len(actions)}")
     lines.append(f"- action_result: {len(action_results)}")
-    lines.append(f"- memo_add: {len(memo_adds)}")
-    lines.append(f"- memo_done: {len(memo_dones)}")
     lines.append(f"- memo_hint: {len(memo_hints)}")
     lines.append(f"- position_change: {len(position_changes)}")
     lines.append("")
     if by_player:
         lines.append("## プレイヤー別集計")
         lines.append("")
-        lines.append("| player_id | actions | successes | failures | memo_adds | memo_dones | moves |")
-        lines.append("|-----------|---------|-----------|----------|-----------|------------|-------|")
+        lines.append("| player_id | actions | successes | failures | moves |")
+        lines.append("|-----------|---------|-----------|----------|-------|")
         for pid in sorted(by_player):
             b = by_player[pid]
             lines.append(
                 f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | "
-                f"{b['memo_adds']} | {b['memo_dones']} | {b.get('moves', 0)} |"
+                f"{b.get('moves', 0)} |"
             )
         lines.append("")
     lines.append("## 成果物")

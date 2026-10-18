@@ -21,7 +21,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     3. **【最近の流れ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
     5b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
-    6. **【進行中のメモ】** — active_memos_text
+    6. **【メモ】** — being_memo_text (Being のメモ帳、#1628)
     7. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
     意図:
@@ -34,7 +34,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         self,
         current_state_text: str,
         recent_events_text: str,
-        active_memos_text: str = "",
         objective_text: str = "",
         inventory_text: str = "",
         mid_summary_text: str = "",
@@ -46,7 +45,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         for name, value in (
             ("current_state_text", current_state_text),
             ("recent_events_text", recent_events_text),
-            ("active_memos_text", active_memos_text),
             ("objective_text", objective_text),
             ("inventory_text", inventory_text),
             ("mid_summary_text", mid_summary_text),
@@ -61,7 +59,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         return _format_stable_to_volatile(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
-            active_memos_text=active_memos_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
             mid_summary_text=mid_summary_text,
@@ -113,15 +110,6 @@ def _emit_being_memo(sections: list[str], being_memo_text: str) -> None:
         sections.extend(["", "【メモ】", being_memo_text.rstrip()])
 
 
-def _emit_active_memos(sections: list[str], active_memos_text: str) -> None:
-    if active_memos_text.strip():
-        sections.extend([
-            "",
-            "【進行中のメモ】",
-            active_memos_text.strip(),
-        ])
-
-
 def _emit_recent_events(sections: list[str], recent_events_text: str) -> None:
     sections.extend([
         "",
@@ -155,7 +143,6 @@ def _format_stable_to_volatile(
     *,
     current_state_text: str,
     recent_events_text: str,
-    active_memos_text: str,
     objective_text: str,
     inventory_text: str,
     mid_summary_text: str,
@@ -235,14 +222,7 @@ def _format_stable_to_volatile(
     if episode_index_text.strip():
         sections.extend([EPISODE_INDEX_HEADING, episode_index_text.rstrip(), ""])
 
-    # 6. 進行中のメモ (high-volatile、空なら省略)
-    if active_memos_text.strip():
-        sections.extend([
-            "【進行中のメモ】",
-            active_memos_text.strip(),
-            "",
-        ])
-    # 6b. メモ帳 (#1628)。進行中のメモと同じ位置。両方を出す設定は起動前に止めている。
+    # 6. メモ帳 (#1628、high-volatile、空なら省略)
     if being_memo_text.strip():
         sections.extend([
             "【メモ】",

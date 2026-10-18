@@ -460,11 +460,9 @@ def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
     voted: bool,
     include_todo_tools: bool,
 ) -> None:
-    """run 035 の五状態で、設定上の常在ツールは実 payload の先頭で同順になる。
+    """run 035 の五状態で、記憶の道具の有無にかかわらず実 payload の先頭が ``wait`` / ``speak`` / ``listen`` の順になる。
 
-    記憶ツールを無効にした比較構成では ``wait`` / ``speak`` に続く
-    ``listen`` までを実 payload で縛る。死亡時に ``listen`` が落ちる退行は、
-    長い記憶ツール定義が間に無い構成で初めて接頭辞の差として表れるためである。
+    死亡時に ``listen`` が落ちる退行は、この接頭辞の差として表れる。
     """
     if not include_todo_tools:
         runtime = create_world_runtime(_SCENARIO, include_todo_tools=False)
@@ -484,11 +482,7 @@ def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
         for tool in _wiring(runtime)._build_tools_payload(player_id)
     ]
 
-    expected_prefix = ["wait", "speak"]
-    if include_todo_tools:
-        expected_prefix += ["memo_add", "memo_list", "memo_done"]
-    else:
-        expected_prefix += ["listen"]
+    expected_prefix = ["wait", "speak", "listen"]
     assert names[: len(expected_prefix)] == expected_prefix
 
 

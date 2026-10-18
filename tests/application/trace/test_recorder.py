@@ -51,7 +51,7 @@ class TestJsonlTraceRecorder:
         with JsonlTraceRecorder(path) as rec:
             rec.record(TraceEventKind.RUN_START, run_id='exp-01')
             rec.record(TraceEventKind.OBSERVATION, tick=3, player_id=1, prose='扉が軋む')
-            rec.record(TraceEventKind.MEMO_ADD, tick=3, player_id=1, memo_id='m1')
+            rec.record(TraceEventKind.MEMO_HINT, tick=3, player_id=1, memo_id='m1')
         lines = path.read_text(encoding='utf-8').splitlines()
         assert len(lines) == 3
         first = json.loads(lines[0])

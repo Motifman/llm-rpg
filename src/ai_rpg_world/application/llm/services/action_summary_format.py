@@ -31,9 +31,6 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
-    TOOL_NAME_MEMO_LIST,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
@@ -65,7 +62,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 
 # action_summary の JSON fallback から落とす主観入力・冗長入力フィールド。
 # - inner_thought: ActionResultEntry.inner_thought から「心の声: ...」として出す
-# - content: speak / memo_add では自然文または別 section に出るため JSON から落とす
+# - content: speak では自然文で出るため JSON から落とす
 # - reason / intention / emotion_hint: recent-events の生 JSON には不要
 # - memo: メモは【メモ】に出るもので、行動の要約ではない
 ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
@@ -199,26 +196,6 @@ def _format_speak(args: Mapping[str, Any]) -> str:
     if channel == "shout":
         return f"あなたは叫んだ: {_quote(content)}"
     return f"あなたは言った: {_quote(content)}"
-
-
-def _format_memo_add(args: Mapping[str, Any]) -> str:
-    return "メモを書いた"
-
-
-def _format_memo_done(args: Mapping[str, Any]) -> str:
-    raw_ids = args.get("memo_ids")
-    if isinstance(raw_ids, list):
-        ids = [str(v).strip() for v in raw_ids if str(v).strip()]
-    else:
-        ids = []
-    if not ids:
-        return "メモを完了にした"
-    joined = ", ".join(ids)
-    return f"メモ {len(ids)} 件を完了にした ({joined})"
-
-
-def _format_memo_list(args: Mapping[str, Any]) -> str:
-    return "メモ一覧を確認した"
 
 
 def _format_interact(args: Mapping[str, Any]) -> str:
@@ -400,9 +377,6 @@ def _format_report_body(args: Mapping[str, Any]) -> str:
 
 
 ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
-    TOOL_NAME_MEMO_ADD: _format_memo_add,
-    TOOL_NAME_MEMO_DONE: _format_memo_done,
-    TOOL_NAME_MEMO_LIST: _format_memo_list,
     TOOL_NAME_SPEECH: _format_speak,
     TOOL_NAME_SPOT_GRAPH_ATTACK: _format_attack,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM: _format_buy_item,

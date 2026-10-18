@@ -1,8 +1,8 @@
-"""BeingPersistenceService — Being aggregate + 5 memory store を 1 つの save/load に束ねる。
+"""BeingPersistenceService — Being aggregate と memory store を 1 つの save/load に束ねる。
 
 Phase 4 Step 4-3 (Issue #470): Phase 5 で実装する run 途中再開
 (mid-run resume) の use case が叩く統合層。Being の identity / attachment /
-declared_memory_kinds と、memory store (memo や Being の記憶) の状態を、
+declared_memory_kinds と、memory store (知り合い・エピソード・メモ帳など) の状態を、
 **1 回の API 呼び出し** で save / load できるようにする。
 
 ## 内部の流れ
@@ -20,9 +20,9 @@ declared_memory_kinds と、memory store (memo や Being の記憶) の状態を
 1. ``BeingRepository.find_snapshot_by_id(being_id)`` で snapshot を取得
    (見つからなければ ``None`` を返す)
 2. ``BeingSnapshotCodec.decode(snapshot)`` で Being aggregate を復元
-3. ``snapshot.memory_payload_json`` があれば
-   ``BeingMemorySnapshotService.restore(being_id, payload)`` で 5 store に
-   書き戻す
+3. ``snapshot.memory_payload_json`` があれば、消した部品の欄を
+   ``drop_removed_memory_payload_keys`` で捨ててから
+   ``BeingMemorySnapshotService.restore(being_id, payload)`` で書き戻す
 
 ## 設計判断
 
@@ -39,13 +39,20 @@ declared_memory_kinds と、memory store (memo や Being の記憶) の状態を
 
 from __future__ import annotations
 
+import logging
+
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemorySnapshotService,
+)
+from ai_rpg_world.application.being.removed_memory_payload_keys import (
+    drop_removed_memory_payload_keys,
 )
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
 from ai_rpg_world.domain.being.service.being_snapshot_codec import BeingSnapshotCodec
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+logger = logging.getLogger(__name__)
 
 
 class BeingPersistenceService:
@@ -109,6 +116,13 @@ class BeingPersistenceService:
                 raise RuntimeError(
                     f"has_memory_payload=True なのに memory_payload_json が None: "
                     f"being_id={being_id.value!r} (BeingSnapshot 不変条件違反)"
+                )
+            payload, removed = drop_removed_memory_payload_keys(payload)
+            if removed:
+                logger.info(
+                    "dropped removed memory payload keys: being_id=%s counts=%s",
+                    being_id.value,
+                    removed,
                 )
             self._memory.restore(being_id, payload)
         return being

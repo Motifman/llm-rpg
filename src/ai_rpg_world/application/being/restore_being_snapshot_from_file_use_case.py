@@ -8,8 +8,8 @@ Phase 5 (Issue #470): run 途中再開 (mid-run resume) milestone のもう片�
 
 1. ``BeingSnapshotFileGateway.read(input_path)`` で ``BeingSnapshot`` を再構築
 2. ``BeingRepository.save_snapshot(snapshot)`` で Being を repo に登録
-3. ``snapshot.has_memory_payload`` なら ``BeingMemorySnapshotService.restore``
-   で 5 store を書き戻す
+3. ``snapshot.has_memory_payload`` なら、消した部品の欄を捨ててから
+   ``BeingMemorySnapshotService.restore`` で store に書き戻す
 
 atomicity 制約は ``BeingPersistenceService.load`` と同じ:
 - snapshot 自体の保存は ``BeingRepository.save_snapshot`` の atomic
@@ -19,7 +19,7 @@ atomicity 制約は ``BeingPersistenceService.load`` と同じ:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
@@ -27,6 +27,9 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
 )
 from ai_rpg_world.application.being.being_snapshot_file_gateway import (
     BeingSnapshotFileGateway,
+)
+from ai_rpg_world.application.being.removed_memory_payload_keys import (
+    drop_removed_memory_payload_keys,
 )
 from ai_rpg_world.application.being.world_clock_restart import (
     WorldClockRestartReport,
@@ -51,6 +54,7 @@ class RestoreBeingSnapshotResult:
     snapshot_version: int
     memory_restored: bool
     world_clock_restart: WorldClockRestartReport | None = None
+    removed_memory_key_counts: dict[str, int] = field(default_factory=dict)
 
 
 class RestoreBeingSnapshotFromFileUseCase:
@@ -108,6 +112,7 @@ class RestoreBeingSnapshotFromFileUseCase:
 
         payload: str | None = None
         world_clock_restart: WorldClockRestartReport | None = None
+        removed_memory_key_counts: dict[str, int] = {}
         if snapshot.has_memory_payload:
             # defensive: ``BeingSnapshot.__post_init__`` の不変条件で
             # has_memory_payload=True かつ memory_payload_json=None の状態は
@@ -119,6 +124,7 @@ class RestoreBeingSnapshotFromFileUseCase:
                     "has_memory_payload=True なのに memory_payload_json が None: "
                     f"being_id={being_id.value!r} (BeingSnapshot 不変条件違反)"
                 )
+            payload, removed_memory_key_counts = drop_removed_memory_payload_keys(payload)
             # repo に書く前に書き換える。表の漏れで止まったとき、Being だけが
             # repo に残る状態を作らない。
             if restart_world_clock:
@@ -141,6 +147,7 @@ class RestoreBeingSnapshotFromFileUseCase:
             snapshot_version=snapshot.snapshot_version,
             memory_restored=memory_restored,
             world_clock_restart=world_clock_restart,
+            removed_memory_key_counts=removed_memory_key_counts,
         )
 
 
