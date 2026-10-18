@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from scripts.build_timeline_viewer import build_cells, extract_players
 from scripts.build_timeline_viewer import render_html as render_timeline
 

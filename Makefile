@@ -25,7 +25,7 @@ help:
 	@echo "                                - survival_island_v2 専用 (140 tick / publish 既定)"
 	@echo "  make experiment-survival-coop OUT=..."
 	@echo "                                - survival_island_v3_coop 専用 (stranded_at_tick=240 / publish 既定)"
-	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
+	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + timeline + prompt) を build"
 
 # 依存関係のインストール
 install:
