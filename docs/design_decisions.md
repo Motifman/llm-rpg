@@ -8393,3 +8393,5 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **snapshot session の空の代用**: `ExperimentSnapshotSession` が未配線の store を空で代用してログに残す仕組みは、対象が古いメモの保存先だけだったので一緒に消した。いまの Being の記憶の store は、古いエピソードの store を除き、渡らなければ起動時に止まる。古いエピソードの store は `_empty_episode_store` で空に代用するが、段 12 で store ごと消す。design_decisions 27 の「`fallback_used` ログ対象に新 store の属性名を追加する」は、新しい store を必須の一覧に足すことに読み替える。
 
 **関連**: Issue #1631、design_decisions D1631-4、design_decisions 27。
+
+**その後**: 段 12 で `episodic_episodes` を表に足し、`EXPECTED_PAYLOAD_KEYS` と `BeingMemorySnapshotService` の古いエピソードの処理、`ExperimentSnapshotSession` の空の代用を消した (#PRNUM)。
