@@ -67,8 +67,8 @@ _include_todo_tools: bool = field(default=True, repr=False)
 ```
 
 - デフォルト有効
-- 環境変数 `LLM_TOOL_MODE=pure_spot_graph` で除外 (line 793-818)。この設定は #1631 の #1762 で消し、いまは `create_world_runtime(include_todo_tools=False)` だけで外せる
-- pure_spot_graph モードは **B-4 比較実験用** (Issue #155): 「LLM が TODO
+- 環境変数 `LLM_TOOL_MODE=pure_spot_graph` で除外 (line 793-818)。この設定は #1631 の #1762 で消した。残った `create_world_runtime(include_todo_tools=False)` も、呼ぶ経路が無くなったので #PRNUM で消し、純スポットグラフのモードは無くなった
+- pure_spot_graph モードは **B-4 比較実験用** (Issue #155) だった: 「LLM が TODO
   連打に逃げる」挙動を観察するため、TODO 系を強制的に外したモード
 
 ## 2. 実験から見える挙動

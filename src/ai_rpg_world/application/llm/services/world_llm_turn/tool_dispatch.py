@@ -1302,11 +1302,7 @@ def execute_tool(
 def make_auxiliary_tool_handler(
     wiring: WorldLlmWiring, tool_name: str
 ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
-    """記憶のツール (episode_recall / episode_revise_index) 用のハンドラを tool_name 固定で返す。
-
-    ``include_todo_tools=False`` で組んだ runtime では記憶のツールが LLM の
-    tools リストに含まれないため、通常到達しない。
-    """
+    """記憶のツール (episode_recall / episode_revise_index) 用のハンドラを tool_name 固定で返す。"""
 
     def handler(
         player_id: PlayerId,

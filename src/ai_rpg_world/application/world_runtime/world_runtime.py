@@ -644,10 +644,6 @@ class WorldRuntime:
         default_factory=dict, repr=False
     )
     _cumulative_meeting_ticks: int = field(default=0, repr=False)
-    # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら記憶系の道具も
-    # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
-    # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
-    _include_todo_tools: bool = field(default=True, repr=False)
     # 実験設定の解決済み DTO。遅延構築される component も env を読み直さず、
     # runtime 作成時と同じ設定を見るために保持する。
     _runtime_config: Any | None = field(default=None, repr=False)
@@ -1572,12 +1568,6 @@ class WorldRuntime:
     ) -> list[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
-        ``_include_todo_tools=False`` の場合は記憶系の道具を除外し、
-        spot_graph_* + speech (say / whisper) のみを返す純スポットグラフモード
-        (B-4 / Issue #155 の判断材料)。
-        この粗いモードでは個別の記憶ツール露出フラグも評価せず、補助ツール
-        全体を隠す。
-
         ツール露出の強制点はこのメソッドに集約する。シナリオ由来の
         ツール露出 (会議・商人・市場の宣言) と、設定由来の記憶系ツール露出を同じ
         場所で決めることで、「なぜ tool が LLM に出ないか」の追跡点を分散させない。
@@ -1627,9 +1617,9 @@ class WorldRuntime:
             if tool_schema_mode == "reason_first"
             else []
         )
-        definitions = common_spot + phase_spot
-        if self._include_todo_tools:
-            definitions += self._build_memory_tool_definitions()
+        definitions = (
+            common_spot + phase_spot + self._build_memory_tool_definitions()
+        )
         by_name = {definition.name: definition for definition in definitions}
         ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
         return [by_name[name] for name in ordered_names] + assessment
@@ -1684,14 +1674,13 @@ class WorldRuntime:
         return spot
 
     def _build_memory_tool_definitions(self) -> list[ToolDefinitionDto]:
-        """実験設定が要求する記憶系ツールを返す。
+        """記憶系ツール (episode_recall / episode_revise_index) を返す。
 
-        **世界ではなく実験の設定**で決まるので `ToolExposure` には置かない。
-        同じシナリオを profile 違いで回すときに変わるのがこちら。
+        世界ではなく記憶の部品で決まるので `ToolExposure` には置かない。
+        create_world_runtime で組んだ runtime には常に出す (#1631)。
 
-        設定が true なのに実行器が組めていなければ fail-fast する。黙って
-        false へ縮退すると、比較実験で「有効にしたつもりが無効だった」に
-        なる。
+        実行器が組めていなければ fail-fast する。黙って出さないと、
+        常に出すはずの道具が run から消えたことに気づけない。
         """
         cfg = self._runtime_config
         episode_index_revision_enabled = self._episode_index_enabled()
@@ -1729,8 +1718,7 @@ class WorldRuntime:
 
     def _episode_index_enabled(self) -> bool:
         # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
-        # 記憶のツールを隠す純スポットグラフでは、呼び出せない目次を出さない。
-        return self._runtime_config is not None and self._include_todo_tools
+        return self._runtime_config is not None
 
     def episode_index_text(self, player_id: PlayerId) -> str:
         """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
@@ -4166,7 +4154,6 @@ def create_world_runtime(
     *,
     world_character: CharacterPromptInput | None = None,
     llm_turn_trigger: ILlmTurnTrigger | None = None,
-    include_todo_tools: bool = True,
     config: ResolvedLlmRuntimeConfig | None = None,
     round_number: int = 1,
 ) -> WorldRuntime:
@@ -4176,8 +4163,6 @@ def create_world_runtime(
         llm_turn_trigger: 省略時は :class:`WorldStandaloneNoopLlmTurnTrigger`。
             スポットグラフのティック後フック用。プレゼン層のセッションでは
             ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
-        include_todo_tools: ``True`` (既定) で記憶系の道具を含める。``False`` で
-            記憶系の道具を除外し、speech は残す。
         config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
             ``ResolvedLlmRuntimeConfig.from_mapping()`` で空設定から既定値を
             resolve。entrypoint (run_scenario_experiment 等) で既に
@@ -5985,7 +5970,6 @@ def create_world_runtime(
         # monster placements の無いシナリオでは両方とも None のまま。
         _monster_repo=monster_repo if scenario.monster_placements else None,
         _attack_orchestrator=monster_attack_orchestrator,
-        _include_todo_tools=include_todo_tools,
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
