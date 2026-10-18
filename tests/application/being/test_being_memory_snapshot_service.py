@@ -16,7 +16,6 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemoryPayloadSchemaError,
     BeingMemorySnapshotService,
 )
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoCertainty, MemoKind, MemoProvenance, MemoSource
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
@@ -24,28 +23,20 @@ from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMem
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
-from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
-from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     """新しい in-memory store 群を構築し、service と store ハンドルを返す。"""
-    episode = InMemorySubjectiveEpisodeStore()
     acquaintances = InMemoryAcquaintanceRepository()
     being_episodes = InMemoryEpisodeRepository()
     being_memo = InMemoryMemoBookRepository()
-    svc = BeingMemorySnapshotService(episodic_episode_store=episode, acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock())
-    return (svc, {'episode': episode, 'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo})
+    svc = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock())
+    return (svc, {'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo})
 
 def _populate(stores: dict[str, object], being_id: BeingId) -> None:
-    """知り合い / episode に最小サンプルデータを書き込む。"""
+    """知り合いに最小サンプルデータを書き込む。"""
     stores['acquaintances'].record_meeting(being_id, environment_name='島', name='カイト', turn=3)
-    stores['episode'].put_by_being(being_id, SubjectiveEpisode(episode_id='ep-1', player_id=1, being_id=being_id, occurred_at=_NOW, game_time_label='12:00', source=EpisodeSource(event_ids=('e1',)), location=EpisodeLocation(spot_id=42, tile_area_ids=(1, 2)), action=EpisodeAction(tool_name='walk'), who=('ada',), what='what', why='why', observed='observed', expected='expected', outcome='ok', prediction_error=None, felt='felt', interpreted='interpreted', cues=(EpisodicCue(axis='place_spot', value='42', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='recall', recall_count=0, last_recalled_at=None))
 
 class TestCapture:
     """capture の挙動。"""
@@ -56,17 +47,16 @@ class TestCapture:
         being = BeingId('ada')
         payload = json.loads(svc.capture(being))
         assert payload['schema_version'] == CURRENT_PAYLOAD_SCHEMA_VERSION
-        for k in ('episodic_episodes', 'acquaintances', 'being_episodes', 'being_memo_book'):
+        for k in ('acquaintances', 'being_episodes', 'being_memo_book'):
             assert payload[k] == []
 
-    def test_includes_acquaintance_and_episode_stores(self) -> None:
-        """知り合い / episode の store の状態を載せる。"""
+    def test_includes_acquaintance_store(self) -> None:
+        """知り合いの store の状態を載せる。"""
         (svc, stores) = _make_service()
         being = BeingId('ada')
         _populate(stores, being)
         payload = json.loads(svc.capture(being))
         assert len(payload['acquaintances']) == 1
-        assert len(payload['episodic_episodes']) == 1
 
     def test_being_id_raises_type_error(self) -> None:
         """being id 型違反は TypeError。"""
@@ -92,7 +82,7 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         _populate(src_stores, being)
         payload = json.loads(src_svc.capture(being))
-        old_payload = {**payload, 'memo': [{'id': 'm1', 'content': '古いメモ', 'added_at_tick': 4}], 'pending_predictions': [{'pending_id': 'p1', 'text': '夕方にカイトと会う'}], 'recall_buffer_received_event_ids': ['exp-3@6'], 'recall_buffer_pending': [{'recall_id': 'r-1'}], 'reinterpretation_journal': [{'entry_id': 'je-1'}], 'afterglow_entries': [{'episode_id': 'e3', 'heading': 'h', 'entered_tick': 85, 'source': 'weak_recall'}], 'recall_success_hit_count': [{'episode_id': 'ep-1', 'hit_count': 2}], 'recall_success_received_event_ids': ['exp-2@4'], 'recall_slot_entries': [{'episode_id': 'e1', 'entered_tick': 80}], 'recall_slot_cooldown': [{'episode_id': 'e2', 'tick': 120}], 'recall_habituation_last_recalled': [{'episode_id': 'e4', 'tick': 88}], 'belief_evidence_buffer': [{'evidence_id': 'ev-1', 'tick': 9}], 'belief_evidence_received_event_ids': ['exp-1@3'], 'memory_links': [{'link_id': 'mlk-1'}], 'semantic_entries': [{'entry_id': 'se-1', 'text': '一般化要約'}], 'semantic_cluster_signatures': ['sig-1']}
+        old_payload = {**payload, 'memo': [{'id': 'm1', 'content': '古いメモ', 'added_at_tick': 4}], 'pending_predictions': [{'pending_id': 'p1', 'text': '夕方にカイトと会う'}], 'recall_buffer_received_event_ids': ['exp-3@6'], 'recall_buffer_pending': [{'recall_id': 'r-1'}], 'reinterpretation_journal': [{'entry_id': 'je-1'}], 'afterglow_entries': [{'episode_id': 'e3', 'heading': 'h', 'entered_tick': 85, 'source': 'weak_recall'}], 'recall_success_hit_count': [{'episode_id': 'ep-1', 'hit_count': 2}], 'recall_success_received_event_ids': ['exp-2@4'], 'recall_slot_entries': [{'episode_id': 'e1', 'entered_tick': 80}], 'recall_slot_cooldown': [{'episode_id': 'e2', 'tick': 120}], 'recall_habituation_last_recalled': [{'episode_id': 'e4', 'tick': 88}], 'belief_evidence_buffer': [{'evidence_id': 'ev-1', 'tick': 9}], 'belief_evidence_received_event_ids': ['exp-1@3'], 'memory_links': [{'link_id': 'mlk-1'}], 'semantic_entries': [{'entry_id': 'se-1', 'text': '一般化要約'}], 'semantic_cluster_signatures': ['sig-1'], 'episodic_episodes': [{'episode_id': 'ep-1'}]}
         (dst_svc, _) = _make_service()
 
         dst_svc.restore(being, json.dumps(old_payload))
@@ -150,7 +140,6 @@ class TestRestoreRoundTrip:
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError):
             dst_svc.restore(being, json.dumps(payload))
-        assert dst_stores['episode'].list_all_by_being(being) == []
         assert dst_stores['acquaintances'].list_by_being(being) == ()
 
     def test_acquaintance_without_how_known_is_rejected(self) -> None:
@@ -235,7 +224,6 @@ class TestRestoreRoundTrip:
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match='being_episodes'):
             dst_svc.restore(being, json.dumps(payload))
-        assert dst_stores['episode'].list_all_by_being(being) == []
         assert dst_stores['being_episodes'].list_by_being(being) == ()
 
     def _memo_book(self) -> MemoBook:
@@ -282,7 +270,6 @@ class TestRestoreRoundTrip:
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
             dst_svc.restore(being, json.dumps(payload))
-        assert dst_stores['episode'].list_all_by_being(being) == []
         assert dst_stores['being_memo'].get(being) == MemoBook.empty()
 
     def test_memo_book_with_the_same_handle_twice_is_rejected(self) -> None:
@@ -346,42 +333,41 @@ class TestRestoreValidation:
     def test_unsupported_schema_version_raises_schema_error(self) -> None:
         """未サポート schema version は SchemaError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': 999, 'episodic_episodes': []})
+        bad = json.dumps({'schema_version': 999, 'memory_turn': []})
         with pytest.raises(BeingMemoryPayloadSchemaError, match='999'):
             svc.restore(BeingId('ada'), bad)
 
     def test_required_key_missing_raises_format_error(self) -> None:
         """required key 欠落は FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'episodic_episodes': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memory_turn': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='missing required key'):
             svc.restore(BeingId('ada'), bad)
 
     def test_memo_book_element_id_missing_raises_format_error(self) -> None:
         """list 要素内の dict key 欠落は KeyError ではなく FormatError に wrap される。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'episodic_episodes': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': [{'text': 'no id'}]})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': [{'text': 'no id'}]})
         with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
             svc.restore(BeingId('ada'), bad)
 
-    def test_episode_of_another_being_raises_format_error(self) -> None:
-        """episodic_episodes の要素が別の Being のものなら、ValueError ではなく FormatError に wrap される。"""
+    def test_invalid_being_episode_raises_format_error(self) -> None:
+        """being_episodes の要素がドメインの検証で弾かれると、ValueError ではなく FormatError に wrap される。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
+        payload = json.loads(src_svc.capture(being))
+        payload['being_episodes'][0]['written_turn'] = -1
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'episodic_episodes': [{'being_id': 'other'}], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []})
-        with pytest.raises(BeingMemoryPayloadFormatError, match=r"episodic_episodes.*does not match snapshot being"):
-            svc.restore(BeingId('ada'), bad)
+        with pytest.raises(BeingMemoryPayloadFormatError, match=r"being_episodes.*invalid being episode payload"):
+            svc.restore(being, json.dumps(payload))
 
     def test_required_key_list_raises_format_error(self) -> None:
         """required key の値が list でないと FormatError。"""
         (svc, _) = _make_service()
-        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'episodic_episodes': [], 'memory_turn': [], 'acquaintances': 'not-list', 'being_episodes': [], 'being_memo_book': []})
+        bad = json.dumps({'schema_version': CURRENT_PAYLOAD_SCHEMA_VERSION, 'memory_turn': [], 'acquaintances': 'not-list', 'being_episodes': [], 'being_memo_book': []})
         with pytest.raises(BeingMemoryPayloadFormatError, match='must be list'):
             svc.restore(BeingId('ada'), bad)
 
 class TestConstructor:
     """constructor の型ガード。"""
-
-    def test_episodic_episode_store_raises_type_error(self) -> None:
-        """episodic episode store 型違反。"""
-        with pytest.raises(TypeError, match='episodic_episode_store'):
-            BeingMemorySnapshotService(episodic_episode_store='bad', acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())

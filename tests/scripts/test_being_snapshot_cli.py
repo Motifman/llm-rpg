@@ -1,15 +1,14 @@
 """``scripts/being_snapshot_cli.py`` の end-to-end smoke test (Phase 5)。
 
-実 sqlite ファイルに対して save → load を回し、CLI 経由でも memory が
-復元されることを確認する。memo store は in-memory なので CLI 起動ごとに
-新規になるが、snapshot JSON から書き戻されることを担保する。
+実 sqlite ファイルに対して save → load を回し、CLI 経由でも Being が
+復元されることを確認する。memory store はどれも in-memory なので、snapshot
+JSON の memory payload は空の欄を持つ。
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ai_rpg_world.domain.being.aggregate.being import Being
@@ -17,17 +16,10 @@ from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachm
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_identity import BeingIdentity
 from ai_rpg_world.domain.being.value_object.memory_kind import MemoryKind
-from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
-from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
-from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (
     SqliteBeingRepository,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
-    SqliteSubjectiveEpisodeStore,
 )
 
 
@@ -45,15 +37,13 @@ def _load_cli_module():
     return module
 
 
-_NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 
 def _populate_source_dbs(
     *,
     being_db: Path,
-    episode_db: Path,
 ) -> BeingId:
-    """source 側 sqlite DB 群に Being + エピソードを書き込み、その being_id を返す。"""
+    """source 側 sqlite DB に Being を書き込み、その being_id を返す。"""
     repo = SqliteBeingRepository.connect(str(being_db))
     being = Being(
         being_id=BeingId("being_w1_p1"),
@@ -63,30 +53,6 @@ def _populate_source_dbs(
     )
     repo.save(being)
 
-    SqliteSubjectiveEpisodeStore.connect(str(episode_db)).put_by_being(
-        being.being_id,
-        SubjectiveEpisode(
-            episode_id="ep-cli",
-            player_id=1,
-            being_id=being.being_id,
-            occurred_at=_NOW,
-            game_time_label="12:00",
-            source=EpisodeSource(event_ids=("e1",)),
-            location=EpisodeLocation(spot_id=42),
-            action=EpisodeAction(tool_name="walk"),
-            who=("ada",),
-            what="CLI 経由でも生き残る",
-            why=None,
-            observed="o",
-            expected=None,
-            outcome="ok",
-            prediction_error=None,
-            felt=None,
-            interpreted=None,
-            cues=(),
-            recall_text="recall",
-        ),
-    )
     return being.being_id
 
 
@@ -97,10 +63,7 @@ class TestBeingSnapshotCliEndToEnd:
         cli = _load_cli_module()
 
         src_being_db = tmp_path / "src_beings.db"
-        src_episode_db = tmp_path / "src_episodes.db"
-        being_id = _populate_source_dbs(
-            being_db=src_being_db, episode_db=src_episode_db
-        )
+        being_id = _populate_source_dbs(being_db=src_being_db)
 
         snapshot_json = tmp_path / "snapshot.json"
         rc = cli.main(
@@ -108,8 +71,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "save",
                 "--being-db",
                 str(src_being_db),
-                "--episode-db",
-                str(src_episode_db),
                 "--being-id",
                 being_id.value,
                 "--output",
@@ -122,32 +83,27 @@ class TestBeingSnapshotCliEndToEnd:
         data = json.loads(snapshot_json.read_text(encoding="utf-8"))
         assert data["snapshot_version"] == 2
         assert data["memory_payload_json"] is not None
-        assert "ep-cli" in data["memory_payload_json"]
+        assert json.loads(data["memory_payload_json"])["schema_version"] == 1
 
         # 別 DB ファイルに load。
         dst_being_db = tmp_path / "dst_beings.db"
-        dst_episode_db = tmp_path / "dst_episodes.db"
         rc = cli.main(
             [
                 "load",
                 "--being-db",
                 str(dst_being_db),
-                "--episode-db",
-                str(dst_episode_db),
                 "--input",
                 str(snapshot_json),
             ]
         )
         assert rc == 0
 
-        # dst 側 DB に Being とエピソードが復元されている。
+        # dst 側 DB に Being が復元されている。
         dst_repo = SqliteBeingRepository.connect(str(dst_being_db))
         loaded = dst_repo.find_by_id(being_id)
         assert loaded is not None
         assert loaded.identity.name == "アダ"
 
-        episodes = SqliteSubjectiveEpisodeStore.connect(str(dst_episode_db)).list_all_by_being(being_id)
-        assert [ep.episode_id for ep in episodes] == ["ep-cli"]
 
     def test_save_missing_source_db_exits_one(self, tmp_path: Path) -> None:
         """source DB が無い save は sqlite が自動生成する前に弾かれる。"""
@@ -157,8 +113,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "save",
                 "--being-db",
                 str(tmp_path / "nonexistent.db"),  # 存在しない
-                "--episode-db",
-                str(tmp_path / "x_episodes.db"),
                 "--being-id",
                 "being_w1_p1",
                 "--output",
@@ -175,8 +129,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "load",
                 "--being-db",
                 str(tmp_path / "dst_b.db"),
-                "--episode-db",
-                str(tmp_path / "dst_e.db"),
                 "--input",
                 str(tmp_path / "no-such-file.json"),
             ]
@@ -191,8 +143,6 @@ class TestBeingSnapshotCliEndToEnd:
                 "save",
                 "--being-db",
                 str(tmp_path / "x_beings.db"),
-                "--episode-db",
-                str(tmp_path / "x_episodes.db"),
                 "--being-id",
                 "being_w1_p99",
                 "--output",

@@ -16,6 +16,7 @@ REMOVED_MEMORY_PAYLOAD_KEYS: tuple[str, ...] = (
     "belief_evidence_received_event_ids",
     "pending_predictions",
     "memo",
+    "episodic_episodes",
 )
 
 

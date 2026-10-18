@@ -1,4 +1,4 @@
-"""BeingPersistenceService — Being aggregate + 5 memory store を 1 つの save/load に束ねる。
+"""BeingPersistenceService — Being aggregate と memory store を 1 つの save/load に束ねる。
 
 Phase 4 Step 4-3 (Issue #470): Phase 5 で実装する run 途中再開
 (mid-run resume) の use case が叩く統合層。Being の identity / attachment /

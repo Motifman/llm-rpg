@@ -11,7 +11,6 @@ import pytest
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_persistence_service import BeingPersistenceService
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
@@ -29,7 +28,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_being_repository import Sqlit
 
 def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dict[str, object]]:
     acquaintances = InMemoryAcquaintanceRepository()
-    snapshot_svc = BeingMemorySnapshotService(episodic_episode_store=InMemorySubjectiveEpisodeStore(), acquaintance_store=acquaintances, being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    snapshot_svc = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     svc = BeingPersistenceService(being_repository=being_repo, memory_snapshot_service=snapshot_svc)
     return (svc, {'acquaintances': acquaintances})
 
@@ -115,7 +114,7 @@ class TestConstructorTypeGuards:
 
     def test_being_repository_raises_type_error(self) -> None:
         """being repository 型違反。"""
-        snap_svc = BeingMemorySnapshotService(episodic_episode_store=InMemorySubjectiveEpisodeStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        snap_svc = BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         with pytest.raises(TypeError, match='being_repository'):
             BeingPersistenceService(being_repository='bad', memory_snapshot_service=snap_svc)
 

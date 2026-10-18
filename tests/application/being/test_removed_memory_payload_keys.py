@@ -29,6 +29,19 @@ class TestDropRemovedMemoryPayloadKeys:
         assert json.loads(out_json) == {"schema_version": 1, "acquaintances": [{"name": "カイト"}]}
         assert counts == {"memo": 2}
 
+    def test_old_episodes_are_dropped_and_counted(self) -> None:
+        """古いエピソード (SubjectiveEpisode) の欄 episodic_episodes も取り除かれ、要素数が件数になる。"""
+        payload = json.dumps({
+            "schema_version": 1,
+            "episodic_episodes": [{"episode_id": "ep-1"}, {"episode_id": "ep-2"}, {"episode_id": "ep-3"}],
+            "being_episodes": [],
+        })
+
+        out_json, counts = drop_removed_memory_payload_keys(payload)
+
+        assert json.loads(out_json) == {"schema_version": 1, "being_episodes": []}
+        assert counts == {"episodic_episodes": 3}
+
     def test_non_list_value_counts_as_one(self) -> None:
         """値が list でない表のキーは 1 件と数える。"""
         _, counts = drop_removed_memory_payload_keys(json.dumps({"memo": {"id": "m1"}}))

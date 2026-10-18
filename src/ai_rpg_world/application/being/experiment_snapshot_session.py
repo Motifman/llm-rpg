@@ -159,14 +159,6 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
 )
 
 
-def _empty_episode_store() -> Any:
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-        InMemorySubjectiveEpisodeStore,
-    )
-
-    return InMemorySubjectiveEpisodeStore()
-
-
 @dataclass(frozen=True)
 class _PlayerSnapshotMapping:
     """1 player ↔ 1 file のマッピング。"""
@@ -313,15 +305,7 @@ class ExperimentSnapshotSession:
                 f"{missing_required}."
             )
 
-        # 古いエピソードの store は #1631 で runtime が組まなくなったので、渡されなければ
-        # 黙って空にする。キーは snapshot から消すまで残す。
-        episode_store = (
-            getattr(wiring_result, "episodic_episode_store", None)
-            or _empty_episode_store()
-        )
-
         self._memory_snapshot = BeingMemorySnapshotService(
-            episodic_episode_store=episode_store,
             acquaintance_store=wiring_result.acquaintance_store,
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,
