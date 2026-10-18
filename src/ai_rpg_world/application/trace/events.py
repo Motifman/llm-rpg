@@ -167,8 +167,6 @@ class TraceEventKind:
     #     現 scenario と異なる場合は cross-scenario transfer)
     #   - load_mode: "continue" | "replay" (#1514。replay は記憶だけを持ち越す)
     #   - world_snapshot_ignored: bool (= replay で world.json を読まなかった)
-    #   - world_clock_restarts: list[{being_id, reset_tick_fields}] (= replay で
-    #     世界の tick を書き換えた件数)
     #   - removed_memory_keys: list[{being_id, counts: {キー: 件数}}] (= 消した
     #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
     # SNAPSHOT_SAVE payload:

@@ -4,7 +4,7 @@
 特徴:
     - シナリオ非依存: ``data/scenarios/*.json`` を ``--scenario`` で指定
     - trace 自動記録: ``JsonlTraceRecorder`` を内部で生成して runtime に inject
-    - HTML 自動生成: 実行後に trace.html / viewer.html / episodic.html / timeline.html を出力
+    - HTML 自動生成: 実行後に trace.html / viewer.html / timeline.html を出力
     - 汎用レポート: WIN/LOSE/tick/action 数などの最小集計を Markdown で
 
 使い方::
@@ -19,7 +19,6 @@
     #   var/runs/library-foo/report.md
     #   var/runs/library-foo/trace.html
     #   var/runs/library-foo/viewer.html
-    #   var/runs/library-foo/episodic.html
     #   var/runs/library-foo/timeline.html
 """
 
@@ -717,7 +716,6 @@ def _drive_scenario(
                 restore_report = snapshot_session.restore_all_from_dir(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
-                    restart_world_clock=replay,
                 )
                 logger.info(
                     "restored %d being snapshot(s)", len(restore_report.restored)
@@ -742,10 +740,6 @@ def _drive_scenario(
                     world_snapshot_ignored=(
                         replay and (snapshot_load_dir / "world.json").exists()
                     ),
-                    world_clock_restarts=[
-                        {"being_id": b.value, **r.to_trace_dict()}
-                        for b, r in restore_report.world_clock_restarts.items()
-                    ],
                     removed_memory_keys=[
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()
@@ -1345,7 +1339,6 @@ def _build_report(
     lines.append(f"- trace: `{trace_path}`")
     lines.append(f"- legacy HTML viewer: `{trace_path.with_suffix('.html')}`")
     lines.append(f"- map trace viewer: `{trace_path.parent / 'viewer.html'}`")
-    lines.append(f"- episodic memory viewer: `{trace_path.parent / 'episodic.html'}`")
     lines.append(f"- timeline viewer: `{trace_path.parent / 'timeline.html'}`")
     lines.append("")
     return "\n".join(lines)
@@ -1394,19 +1387,6 @@ def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> s
         scenario_topology=topology,
         cytoscape_js_src=asset.content,
     )
-
-
-def _render_episodic_viewer_html(trace_path: Path, *, title: str) -> str:
-    """episodic.html の HTML 文字列を返す。"""
-    from scripts.build_episodic_viewer import (
-        aggregate_episodes,
-        load_events,
-    )
-    from scripts.build_episodic_viewer import render_html as render_episodic_html
-
-    events = load_events(trace_path)
-    episodes = aggregate_episodes(events)
-    return render_episodic_html(episodes, title)
 
 
 def _render_timeline_viewer_html(trace_path: Path, *, title: str) -> str:
@@ -1487,13 +1467,6 @@ def _emit_html_artifacts(
             name="viewer.html",
             path=run_dir / "viewer.html",
             render=lambda: _render_map_viewer_html(run_dir, trace_path, title=title),
-        )
-    )
-    artifacts.append(
-        _write_html_artifact(
-            name="episodic.html",
-            path=run_dir / "episodic.html",
-            render=lambda: _render_episodic_viewer_html(trace_path, title=title),
         )
     )
     artifacts.append(
