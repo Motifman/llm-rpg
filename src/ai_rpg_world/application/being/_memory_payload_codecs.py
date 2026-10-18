@@ -52,10 +52,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
-    MemoFulfillmentContext,
-)
 
 # ---- datetime helpers ---------------------------------------------------------
 
@@ -70,57 +66,6 @@ def _dt_to_iso(dt: datetime) -> str:
 
 def _iso_to_dt(raw: str) -> datetime:
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-
-
-# ---- memo ---------------------------------------------------------------------
-
-def memo_entry_to_dict(entry: MemoEntry) -> dict[str, Any]:
-    ctx = entry.fulfillment_context
-    return {
-        "id": entry.id,
-        "content": entry.content,
-        "added_at": _dt_to_iso(entry.added_at),
-        "completed": entry.completed,
-        "added_at_tick": entry.added_at_tick,
-        "completed_at": _dt_to_iso(entry.completed_at) if entry.completed_at else None,
-        "fulfillment_context": _fulfillment_to_dict(ctx) if ctx else None,
-    }
-
-
-def dict_to_memo_entry(data: dict[str, Any]) -> MemoEntry:
-    ctx_raw = data.get("fulfillment_context")
-    completed_at = data.get("completed_at")
-    return MemoEntry(
-        id=str(data["id"]),
-        content=str(data["content"]),
-        added_at=_iso_to_dt(str(data["added_at"])),
-        completed=bool(data.get("completed", False)),
-        added_at_tick=data.get("added_at_tick"),
-        completed_at=_iso_to_dt(str(completed_at)) if completed_at else None,
-        fulfillment_context=_dict_to_fulfillment(ctx_raw) if ctx_raw else None,
-    )
-
-
-def _fulfillment_to_dict(ctx: MemoFulfillmentContext) -> dict[str, Any]:
-    return {
-        "completed_at": _dt_to_iso(ctx.completed_at),
-        "completed_at_tick": ctx.completed_at_tick,
-        "recent_observation_proses": list(ctx.recent_observation_proses),
-        "recent_action_summaries": list(ctx.recent_action_summaries),
-    }
-
-
-def _dict_to_fulfillment(data: dict[str, Any]) -> MemoFulfillmentContext:
-    return MemoFulfillmentContext(
-        completed_at=_iso_to_dt(str(data["completed_at"])),
-        completed_at_tick=data.get("completed_at_tick"),
-        recent_observation_proses=tuple(
-            str(x) for x in data.get("recent_observation_proses", ())
-        ),
-        recent_action_summaries=tuple(
-            str(x) for x in data.get("recent_action_summaries", ())
-        ),
-    )
 
 
 # ---- episodic_episode ---------------------------------------------------------

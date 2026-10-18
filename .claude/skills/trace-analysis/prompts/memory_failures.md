@@ -13,7 +13,7 @@
 - `episodic_subjective_filled`: subjective field (= chunk の意味付け) の埋め込み。同じく #1631 前の trace のみ
 - `short_term_summary_generated`: L4 short-term summary 更新
 - `short_term_long_summary_generated`: L5 long summary 生成
-- `memo_add` / `memo_done`: agent 起点 memo
+- `being_memo`: メモ帳への書き込み。`payload.applied` / `payload.rejected`
 - `action_result` の `success=false` + `error_code`: 失敗分析
 - `loop_guard_warning`: 同 intent loop 検出
 - `prompt_section_breakdown`: prompt 各 section のサイズ (cache 観測の補助)
@@ -27,7 +27,7 @@
 - **D-28 afterglow / score 構造** (afterglow は #1631 前の trace のみ): 採用候補・非採用候補のスコア構造が観測できるか
 - **D-29 episodic_chunk_written と subjective_filled の 1:1 整合** (#1631 前の trace のみ): episode_id ベースで diff
 - **D-30 short / long summary クオリティ**: 1-2 件の中身評価
-- **D-31 memo 重複と done balance**: 同じ memo を何度も add してないか
+- **D-31 メモ帳の重複と消し忘れ**: 同じやることを何度も書いていないか、済んだやることを消しているか
 - **D-32 失敗の記憶化** (#1631 前の trace のみ): recall に失敗エピソードが出ているか (= 学習する記憶か)
 
 ### E. 失敗・loop_guard・異常

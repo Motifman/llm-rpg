@@ -34,9 +34,6 @@ class TraceEventKind:
     OBSERVATION = "observation"
     ACTION = "action"
     ACTION_RESULT = "action_result"
-    # 出す側は #1631 で無くなった。過去の trace を viewer が読むので残す。
-    MEMO_ADD = "memo_add"
-    MEMO_DONE = "memo_done"
     MEMO_HINT = "memo_hint"
     # #1628: 環境の tool の引数 memo を読んだ 1 回。引数を書かなかった呼び出しでは出さない。
     # payload: being_id / turn / tool / environment_name /
@@ -170,8 +167,10 @@ class TraceEventKind:
     #     現 scenario と異なる場合は cross-scenario transfer)
     #   - load_mode: "continue" | "replay" (#1514。replay は記憶だけを持ち越す)
     #   - world_snapshot_ignored: bool (= replay で world.json を読まなかった)
-    #   - world_clock_restarts: list[{being_id, reset_tick_fields,
-    #     dropped_pending_predictions}] (= replay で世界の tick を書き換えた件数)
+    #   - world_clock_restarts: list[{being_id, reset_tick_fields}] (= replay で
+    #     世界の tick を書き換えた件数)
+    #   - removed_memory_keys: list[{being_id, counts: {キー: 件数}}] (= 消した
+    #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
     # SNAPSHOT_SAVE payload:
     #   - directory: str (= --snapshot-save-dir)
     #   - succeeded_count: int

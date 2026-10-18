@@ -21,8 +21,8 @@ Phase 4-1 で導入した ``BeingSnapshot.memory_payload_json`` (オペーク JS
 ```json
 {
   "schema_version": 1,
-  "memo": [...],
-  "episodic_episodes": [...]
+  "episodic_episodes": [...],
+  ...
 }
 ```
 
@@ -64,9 +64,7 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_acquaintance,
     dict_to_being_episode,
     dict_to_being_memo,
-    dict_to_memo_entry,
     dict_to_subjective_episode,
-    memo_entry_to_dict,
     subjective_episode_to_dict,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
@@ -78,7 +76,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 
 CURRENT_PAYLOAD_SCHEMA_VERSION: int = 1
 SUPPORTED_PAYLOAD_SCHEMA_VERSIONS: frozenset[int] = frozenset({1})
@@ -166,7 +163,6 @@ class BeingMemorySnapshotService:
     # PR-F: 本 service が emit / accept する payload key の SSOT。
     # 新 store を足す PR は、ここに 1 行追加 + capture/restore 更新で揃える。
     EXPECTED_PAYLOAD_KEYS: frozenset[str] = frozenset({
-        "memo",
         "episodic_episodes",
         "memory_turn",
         "acquaintances",
@@ -177,15 +173,12 @@ class BeingMemorySnapshotService:
     def __init__(
         self,
         *,
-        memo_store: MemoRepository,
         episodic_episode_store: EpisodicEpisodeRepository,
         acquaintance_store: AcquaintanceRepository,
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
         memory_turn_clock: MemoryTurnClock,
     ) -> None:
-        if not isinstance(memo_store, MemoRepository):
-            raise TypeError("memo_store must be MemoRepository")
         if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
             raise TypeError(
                 "episodic_episode_store must be EpisodicEpisodeRepository"
@@ -198,7 +191,6 @@ class BeingMemorySnapshotService:
             raise TypeError("being_memo_store must be MemoBookRepository")
         if not isinstance(memory_turn_clock, MemoryTurnClock):
             raise TypeError("memory_turn_clock must be MemoryTurnClock")
-        self._memo = memo_store
         self._episodic_episode = episodic_episode_store
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
@@ -211,10 +203,6 @@ class BeingMemorySnapshotService:
             raise TypeError("being_id must be BeingId")
         payload: dict[str, Any] = {
             "schema_version": CURRENT_PAYLOAD_SCHEMA_VERSION,
-            "memo": [
-                memo_entry_to_dict(e)
-                for e in self._memo.list_all_by_being(being_id)
-            ],
             "episodic_episodes": [
                 subjective_episode_to_dict(ep)
                 for ep in self._episodic_episode.list_all_by_being(being_id)
@@ -296,9 +284,6 @@ class BeingMemorySnapshotService:
         # 例外型に wrap する (= 呼出側が一律 BeingMemoryPayloadFormatError で
         # catch できる)。store 書き戻し中の I/O 例外は素通しさせる
         # (= silent failure を作らない、呼出側に伝播する)。
-        memo_entries = _decode_list(
-            payload["memo"], dict_to_memo_entry, "memo"
-        )
         episodes = _decode_list(
             payload["episodic_episodes"],
             lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
@@ -340,8 +325,6 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
             ) from exc
-        # 順序は「依存の少ない方から」: memo は他 store に依存しない。
-        self._memo.replace_all_by_being(being_id, memo_entries)
         self._episodic_episode.replace_all_by_being(being_id, episodes)
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)

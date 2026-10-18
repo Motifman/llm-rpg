@@ -21,8 +21,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -116,13 +114,6 @@ class IActionResultStore(ABC):
     def get_recent(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
         """指定プレイヤーの直近 limit 件の行動結果を新しい順で返す。"""
         pass
-
-
-# NOTE (Issue #470 Phase 1):
-# 旧 IMemoStore / ITodoStore / MemoEntry は domain/memory/memo/ に昇格・改名された:
-#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-#     from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-# 旧名 alias は Phase 1 cleanup で削除済。
 
 
 class ICurrentStateFormatter(ABC):

@@ -1281,29 +1281,6 @@ def test_old_memo_tools_are_not_offered(
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
 
 
-def test_old_memo_left_in_the_store_does_not_reach_the_prompt(
-    clean_runtime_env: None,
-) -> None:
-    """古いメモの保存先に未完了のメモが残っていても、【進行中のメモ】もその本文も、memo_* の名前もプロンプトに出ない。"""
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
-    runtime._wire_being_stack()
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        runtime.aux_being_default_world_id,
-        PlayerId(1),
-    )
-    assert being_id is not None
-    runtime._todo_store.add_by_being(being_id, "山頂で狼煙を上げる")
-
-    prompt = runtime.build_full_prompt(PlayerId(1))
-    system_text = _system_prompt_text(prompt)
-    user_text = _user_prompt_text(prompt)
-
-    assert [name for name in ("memo_add", "memo_list", "memo_done") if name in system_text] == []
-    assert "【進行中のメモ】" not in user_text
-    assert "山頂で狼煙を上げる" not in user_text
-    assert "【現在地と周囲】" in user_text
-
-
 @pytest.mark.parametrize(
     ("being_memo_enabled", "built"),
     [(False, False), (True, True)],
@@ -1998,7 +1975,7 @@ def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
 
     stub = _wiring_stub_from_world_runtime(runtime)
 
-    assert stub.memo_store is runtime._todo_store
+    assert not hasattr(stub, "memo_store")
     assert not hasattr(stub, "episodic_episode_store")
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository

@@ -2,9 +2,9 @@
 
 新しい回の世界の tick は 0 から始まる。snapshot に世界の tick の絶対値が
 残ったまま書き戻すと、前の回の tick 90 の記録が新しい回の tick 5 より新しく
-見え、想起の枠や余韻が tick 90 を過ぎるまで居座る。負の値にずらす案は、
-``PendingPrediction`` が負の tick を拒むので採らない。
-#1464 で記憶が世界の tick を持たなくなれば、このモジュールは要らなくなる。
+見える。いまの記憶の欄は世界の tick を持たないので、書き換える欄は無い。
+codec が tick の欄を書き始めたら表に足す。表に無い欄に tick が残っていれば止める。
+消した部品の欄は、この前に ``removed_memory_payload_keys`` が捨てている。
 """
 
 from __future__ import annotations
@@ -14,30 +14,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-WORLD_TICK_FIELDS_BY_CODEC: dict[str, frozenset[str]] = {
-    "memo_entry_to_dict": frozenset({"added_at_tick"}),
-    "_fulfillment_to_dict": frozenset({"completed_at_tick"}),
-}
+WORLD_TICK_FIELDS_BY_CODEC: dict[str, frozenset[str]] = {}
 
-_RESET_TO_ROUND_START: dict[str, tuple[tuple[str, ...], ...]] = {
-    "memo": (("added_at_tick",), ("fulfillment_context", "completed_at_tick")),
-}
-
-# 約束 (pending prediction) は #1631 で消した。古い snapshot に残る約束は、窓が
-# 前の回の世界の時計を指していて tick の欄を持つので、読まずに捨てる。
-_DROPPED_AT_ROUND_START = "pending_predictions"
-
-# 想起の階層 (見出しの欄・想起の枠・慣れ) と証拠のバッファは #1631 で消した。古い
-# snapshot に残る欄は tick を持つので、読まずに捨てる。restore は足りないキーだけを
-# 拒むので、消しても読める。
-_REMOVED_AT_ROUND_START = (
-    "afterglow_entries",
-    "recall_slot_entries",
-    "recall_slot_cooldown",
-    "recall_habituation_last_recalled",
-    "belief_evidence_buffer",
-    "belief_evidence_received_event_ids",
-)
+_RESET_TO_ROUND_START: dict[str, tuple[tuple[str, ...], ...]] = {}
 
 
 class WorldClockRestartCoverageError(RuntimeError):
@@ -47,27 +26,18 @@ class WorldClockRestartCoverageError(RuntimeError):
 @dataclass(frozen=True)
 class WorldClockRestartReport:
     reset_tick_fields: int
-    dropped_pending_predictions: int
 
     def to_trace_dict(self) -> dict[str, int]:
-        return {
-            "reset_tick_fields": self.reset_tick_fields,
-            "dropped_pending_predictions": self.dropped_pending_predictions,
-        }
+        return {"reset_tick_fields": self.reset_tick_fields}
 
 
 def restart_world_clock_in_payload(payload_json: str) -> tuple[str, WorldClockRestartReport]:
     payload = json.loads(payload_json)
-    for removed_key in _REMOVED_AT_ROUND_START:
-        payload.pop(removed_key, None)
     reset = 0
     for store_key, paths in _RESET_TO_ROUND_START.items():
         for element in payload.get(store_key, []):
             for path in paths:
                 reset += _reset_to_zero(element, path)
-    dropped = len(payload.get(_DROPPED_AT_ROUND_START, []))
-    if _DROPPED_AT_ROUND_START in payload:
-        payload[_DROPPED_AT_ROUND_START] = []
     leftovers = sorted(set(_nonzero_tick_keys(payload)))
     if leftovers:
         raise WorldClockRestartCoverageError(
@@ -76,7 +46,6 @@ def restart_world_clock_in_payload(payload_json: str) -> tuple[str, WorldClockRe
         )
     return json.dumps(payload, ensure_ascii=False), WorldClockRestartReport(
         reset_tick_fields=reset,
-        dropped_pending_predictions=dropped,
     )
 
 

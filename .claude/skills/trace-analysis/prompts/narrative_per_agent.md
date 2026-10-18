@@ -14,7 +14,7 @@
 - `llm_call`: LLM 呼び出しメトリクス
 - `prompt_section_breakdown`: prompt の各 section サイズ
 - `episodic_recall`: passive recall 結果 (#1631 で受動想起を消す前の trace のみ)
-- `memo_add` / `memo_done`: memo 操作
+- `being_memo`: メモ帳への書き込み
 - `short_term_summary_generated` / `short_term_long_summary_generated`: L4/L5 要約
 - `loop_guard_warning`: 同 tool 連発の警告
 - `tick_start` / `tick_end`
@@ -33,13 +33,13 @@ action の payload:
 - **B-12 協力 / 対立 events**: give_item / attack / interact 連鎖
 - **B-13 感情・トーン推移**: inner_thought の語彙から大まかな弧
 - **B-14 ペルソナ忠実度**: 各キャラの口調が persona に沿っているか 5-10 件サンプリング
-- **B-15 memo の内省内容**: memo_add の content を 5-10 件抜粋
+- **B-15 メモ帳の内容**: being_memo の `payload.applied` の text を 5-10 件抜粋
 - **B-16 outcome の物語的意味**: 救助達成？目的を見失った？間に合わなかった？
 
 ### C. エージェント別深掘り
 - **C-17 各人の tool 使用 top 5**: 前半 50 tick / 後半 90 tick の変化も
 - **C-18 各人の error_code 分布**: 失敗率トップ player の原因特定
-- **C-19 memo lifecycle**: 各人が何を add して何を done したか 1-2 件ずつ
+- **C-19 メモ帳の移り変わり**: 各人が何を書いて何を消したか 1-2 件ずつ
 - **C-20 主な滞在 spot**: 移動パターン
 - **C-21 inner_thought の質**: 短い相槌？深い計画？
 - **C-22 encounter pattern**: 同地点集合トップ 3

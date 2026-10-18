@@ -571,7 +571,6 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
     return SimpleNamespace(
-        memo_store=getattr(runtime, "_todo_store", None),
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
@@ -746,6 +745,10 @@ def _drive_scenario(
                     world_clock_restarts=[
                         {"being_id": b.value, **r.to_trace_dict()}
                         for b, r in restore_report.world_clock_restarts.items()
+                    ],
+                    removed_memory_keys=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_memory_key_counts.items()
                     ],
                 )
 

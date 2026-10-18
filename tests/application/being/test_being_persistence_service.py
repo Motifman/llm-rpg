@@ -11,7 +11,6 @@ import pytest
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_persistence_service import BeingPersistenceService
-from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
@@ -29,17 +28,16 @@ from ai_rpg_world.infrastructure.repository.sqlite_being_repository import Sqlit
 
 
 def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dict[str, object]]:
-    memo = InMemoryMemoStore()
-    episode = InMemorySubjectiveEpisodeStore()
-    snapshot_svc = BeingMemorySnapshotService(memo_store=memo, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    acquaintances = InMemoryAcquaintanceRepository()
+    snapshot_svc = BeingMemorySnapshotService(episodic_episode_store=InMemorySubjectiveEpisodeStore(), acquaintance_store=acquaintances, being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     svc = BeingPersistenceService(being_repository=being_repo, memory_snapshot_service=snapshot_svc)
-    return (svc, {'memo': memo, 'episode': episode})
+    return (svc, {'acquaintances': acquaintances})
 
 def _make_being(being_id_value: str='being_w1_p1') -> Being:
     return Being(being_id=BeingId(being_id_value), identity=BeingIdentity(name='アダ', first_person='わたし'), attachment=BeingAttachment(world_id=WorldId(1), player_id=PlayerId(1)), declared_memory_kinds=[MemoryKind.MEMO, MemoryKind.SEMANTIC])
 
 def _populate_memory(stores: dict[str, object], being: BeingId) -> None:
-    stores['memo'].add_by_being(being, 'Adventure memo')
+    stores['acquaintances'].record_meeting(being, environment_name='島', name='カイト', turn=3)
 
 class TestSaveLoadRoundTripInMemory:
     """InMemoryBeingRepository での save → load round-trip。"""
@@ -71,7 +69,7 @@ class TestSaveLoadRoundTripInMemory:
         loaded = dst_svc.load(being.being_id)
         assert loaded is not None
         assert loaded.being_id == being.being_id
-        assert len(dst_stores['memo'].list_all_by_being(being.being_id)) == 1
+        assert len(dst_stores['acquaintances'].list_by_being(being.being_id)) == 1
 
     def test_unregistered_being_id_none(self) -> None:
         """未登録 being id は None。"""
@@ -86,11 +84,11 @@ class TestSaveLoadRoundTripInMemory:
         (svc, stores) = _build_persistence_service(repo)
         being = _make_being()
         repo.save(being)
-        stores['memo'].add_by_being(being.being_id, 'should-survive')
+        stores['acquaintances'].record_meeting(being.being_id, environment_name='島', name='残るはず', turn=1)
         loaded = svc.load(being.being_id)
         assert loaded is not None
-        contents = [e.content for e in stores['memo'].list_all_by_being(being.being_id)]
-        assert 'should-survive' in contents
+        names = [a.name for a in stores['acquaintances'].list_by_being(being.being_id)]
+        assert '残るはず' in names
 
 class TestSaveLoadRoundTripSqlite:
     """SqliteBeingRepository でも同じ round-trip が成立すること。"""
@@ -111,16 +109,13 @@ class TestSaveLoadRoundTripSqlite:
         (dst_svc, dst_stores) = _build_persistence_service(dst_repo)
         loaded = dst_svc.load(being.being_id)
         assert loaded is not None
-        memos = dst_stores['memo'].list_all_by_being(being.being_id)
-        assert [m.content for m in memos] == ['Adventure memo']
+        assert [a.name for a in dst_stores['acquaintances'].list_by_being(being.being_id)] == ['カイト']
 
 class TestConstructorTypeGuards:
 
     def test_being_repository_raises_type_error(self) -> None:
         """being repository 型違反。"""
-        memo = InMemoryMemoStore()
-        episode = InMemorySubjectiveEpisodeStore()
-        snap_svc = BeingMemorySnapshotService(memo_store=memo, episodic_episode_store=episode, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        snap_svc = BeingMemorySnapshotService(episodic_episode_store=InMemorySubjectiveEpisodeStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         with pytest.raises(TypeError, match='being_repository'):
             BeingPersistenceService(being_repository='bad', memory_snapshot_service=snap_svc)
 
