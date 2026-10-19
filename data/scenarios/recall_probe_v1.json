@@ -3,7 +3,7 @@
   "metadata": {
     "id": "recall_probe_v1",
     "title": "能動 recall vs 受動 recall — 漂着島の対話 probe (Issue #526)",
-    "description": "Issue #526 不在 2 (agent-driven 想起) の検証用専用シナリオ。LLM agent ハル 1 人 + scripted NPC シキ。run 開始前に runner script で過去 episode 2 件 (浜辺で釣り / 森で薬草) を episode_store に強制注入する。tick 進行中、scripted NPC シキの speech 観測を 3 回注入し、ハルが各々にどう反応するかを trace で観察する。質問パターンは: (a) 固有名詞無しの時間質問 (= passive recall が痩せる、tool 出番) / (b) 場所名入り (= passive で十分なはず) / (d) 時系列推論。",
+    "description": "(退役: 過去 episode とシキの発話を注入していた scripts/run_recall_probe_experiment.py は #1631 で消した。このシナリオだけでは入力が無く、当時の観察は再現できない。)\nIssue #526 不在 2 (agent-driven 想起) の検証用専用シナリオ。LLM agent ハル 1 人 + scripted NPC シキ。run 開始前に runner script で過去 episode 2 件 (浜辺で釣り / 森で薬草) を episode_store に強制注入する。tick 進行中、scripted NPC シキの speech 観測を 3 回注入し、ハルが各々にどう反応するかを trace で観察する。質問パターンは: (a) 固有名詞無しの時間質問 (= passive recall が痩せる、tool 出番) / (b) 場所名入り (= passive で十分なはず) / (d) 時系列推論。",
     "theme": "memory_probe",
     "difficulty": "easy",
     "estimated_ticks": 15,

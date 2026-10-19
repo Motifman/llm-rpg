@@ -131,10 +131,10 @@ class TestReplayStartsTheWorldOver:
         assert loaded["payload"]["restored_being_ids"]
         assert loaded["payload"]["load_mode"] == "replay"
         assert loaded["payload"]["world_snapshot_ignored"] is True
-        assert [r["being_id"] for r in loaded["payload"]["world_clock_restarts"]] == loaded["payload"]["restored_being_ids"]
+        assert loaded["payload"]["removed_memory_keys"] == []
         (saved,) = _events(tmp_path / "r1", "snapshot_save")
-        saved_turns = {c["being_id"]: c["memory_turn"] for c in saved["payload"]["expectation_counts"]}
-        loaded_turns = {c["being_id"]: c["memory_turn"] for c in loaded["payload"]["expectation_counts"]}
+        saved_turns = {c["being_id"]: c["memory_turn"] for c in saved["payload"]["memory_turns"]}
+        loaded_turns = {c["being_id"]: c["memory_turn"] for c in loaded["payload"]["memory_turns"]}
         assert loaded_turns == saved_turns
         assert any(turn > 0 for turn in loaded_turns.values())
         first_tick = _events(tmp_path / "r2", "tick_start")[0]["tick"]
@@ -151,9 +151,39 @@ class TestReplayStartsTheWorldOver:
         (loaded,) = _events(tmp_path / "r2", "snapshot_load")
         assert loaded["payload"]["load_mode"] == "continue"
         assert loaded["payload"]["world_snapshot_ignored"] is False
-        assert loaded["payload"]["world_clock_restarts"] == []
+        assert loaded["payload"]["removed_memory_keys"] == []
         assert _events(tmp_path / "r2", "tick_start")[0]["tick"] > _events(tmp_path / "r1", "tick_start")[0]["tick"]
         assert world_loaded["payload"]["world_tick"] > 0
+
+
+def _add_old_memo_to_one_snapshot(snapshot_dir: Path) -> str:
+    """snapshot の 1 本に、古いメモの欄を書き足す。書き足した Being の ID を返す。"""
+    path = sorted(p for p in snapshot_dir.glob("*.json") if p.name != "world.json")[0]
+    snapshot = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(snapshot["memory_payload_json"])
+    payload["memo"] = [
+        {"id": "m1", "content": "井戸は北", "added_at_tick": 90},
+        {"id": "m2", "content": "鍵を探す", "added_at_tick": 91},
+    ]
+    snapshot["memory_payload_json"] = json.dumps(payload, ensure_ascii=False)
+    path.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+    return snapshot["being_id_value"]
+
+
+class TestOldSnapshotWithRemovedMemoryKeys:
+    """消した部品の欄を持つ古い snapshot も読み込め、捨てた件数が trace に残ることを保証する。"""
+
+    @pytest.mark.parametrize("load_mode", ["replay", "continue"])
+    def test_old_memo_is_dropped_and_counted_in_the_trace(self, tmp_path: Path, load_mode: str) -> None:
+        """古いメモを持つ snapshot を読むと、run は止まらず、snapshot_load の removed_memory_keys にその Being の件数だけが載る。"""
+        config = _config(tmp_path, snapshot_load_mode=load_mode)
+        assert _run(config, tmp_path / "r1") == 0
+        being_id = _add_old_memo_to_one_snapshot(tmp_path / "r1" / "snapshots")
+
+        assert _run(config, tmp_path / "r2", load_from=tmp_path / "r1") == 0
+
+        (loaded,) = _events(tmp_path / "r2", "snapshot_load")
+        assert loaded["payload"]["removed_memory_keys"] == [{"being_id": being_id, "counts": {"memo": 2}}]
 
 
 def _scenario_with_round_assignment(tmp_path: Path) -> Path:
