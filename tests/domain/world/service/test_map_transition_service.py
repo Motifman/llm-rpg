@@ -15,6 +15,7 @@ from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalM
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -61,6 +62,7 @@ class TestMapTransitionService:
         return PhysicalMapAggregate.create(SpotId(spot_id), tiles)
 
     def test_transition_player_updates_everything(self, service):
+        """遷移後は元地図で未発見になり、着地先と状態が一致して既存経路が消える。"""
         player_id = 1
         spot1_id = 1
         spot2_id = 2
@@ -81,7 +83,7 @@ class TestMapTransitionService:
         
         # Then
         # 1. Map 1 should not have the player
-        with pytest.raises(Exception):
+        with pytest.raises(ObjectNotFoundException):
             phys_map1.get_object(obj_id)
             
         # 2. Map 2 should have the player at landing coord
