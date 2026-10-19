@@ -1,8 +1,7 @@
 """``ai_rpg_world.being`` がゲームのパッケージを import しないことを見張る。
 
-移し替え (#1469) が終わるまでは、``ai_rpg_world.domain.being`` と
-``ai_rpg_world.domain.memory`` だけを一時的な例外として許す。例外は移し替えの
-PR ごとに減らし、最後に消す。契約 (``being.contract``) には例外を適用しない。
+移し替え (#1469) が終わるまでは、``ai_rpg_world.domain.being`` だけを
+一時的な例外として許す。例外は移し替えの PR ごとに減らし、最後に消す。契約 (``being.contract``) には例外を適用しない。
 """
 
 from __future__ import annotations
@@ -24,7 +23,6 @@ _GAME_PACKAGES = (
 )
 _TEMPORARY_EXCEPTIONS = (
     "ai_rpg_world.domain.being",
-    "ai_rpg_world.domain.memory",
 )
 
 
@@ -107,6 +105,7 @@ def test_contract_imports_nothing_outside_the_contract() -> None:
         "import ai_rpg_world.application.observation.contracts.dtos\n",
         "from ai_rpg_world.infrastructure import scenario\n",
         "from ai_rpg_world import presentation\n",
+        "import ai_rpg_world.domain.memory.short_term\n",
         "from typing import TYPE_CHECKING\n"
         "if TYPE_CHECKING:\n"
         "    from ai_rpg_world.domain.world_graph.value_object.spot_id import SpotId\n",
@@ -124,12 +123,11 @@ def test_game_package_import_is_reported(tmp_path: Path, source: str) -> None:
     "source",
     [
         "from ai_rpg_world.domain.being.value_object.being_id import BeingId\n",
-        "import ai_rpg_world.domain.memory.expectation\n",
         "from ai_rpg_world.being.contract import Observation\n",
     ],
 )
 def test_temporary_exceptions_and_being_itself_pass(tmp_path: Path, source: str) -> None:
-    """一時的な例外の 2 つと being 自身の import は違反にならない。"""
+    """一時的な例外と being 自身の import は違反にならない。"""
     (tmp_path / "module.py").write_text(source, encoding="utf-8")
 
     assert _game_package_violations(tmp_path) == []

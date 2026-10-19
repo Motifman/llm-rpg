@@ -32,11 +32,9 @@ def _trigger(
     policy: WorldTickFailurePolicy, recorder: CollectingTraceRecorder, *, workers: int
 ) -> WorldLlmTurnTrigger:
     wiring = MagicMock()
-    wiring.turn_gate = None
     wiring.runtime.check_game_end.return_value.is_ended = False
     wiring.runtime.current_tick.return_value = 5
     wiring.runtime._runtime_config.llm_turn_parallel_workers = workers
-    wiring.runtime._runtime_config.llm_meeting_serial_turns = False
     wiring.runtime.world_tick_failure_isolator = WorldTickFailureIsolator(
         policy=policy, trace_recorder_provider=lambda: recorder
     )

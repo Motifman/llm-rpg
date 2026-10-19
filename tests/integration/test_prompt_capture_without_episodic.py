@@ -26,10 +26,8 @@ _SCENARIO_PATH = (
 )
 
 
-def _config(*, capture_enabled: bool) -> ResolvedLlmRuntimeConfig:
+def _config() -> ResolvedLlmRuntimeConfig:
     return ResolvedLlmRuntimeConfig.for_tests(
-        episodic_enabled=False,
-        prompt_dataset_capture_enabled=capture_enabled,
         prompt_dataset_capture_failure_policy="warn",
     )
 
@@ -38,8 +36,8 @@ class TestPromptCaptureWithoutEpisodicMemory:
     """記憶機能ではなく記録機能の要件として Being 配線を確立する。"""
 
     def test_runtime_provisions_beings_when_capture_is_enabled(self) -> None:
-        """capture 有効なら episodic 無効でも全参加者の being_id を起動時に解決できる。"""
-        runtime = create_world_runtime(_SCENARIO_PATH, config=_config(capture_enabled=True))
+        """episodic 無効でも、全参加者の being_id を起動時に解決できる。"""
+        runtime = create_world_runtime(_SCENARIO_PATH, config=_config())
 
         assert runtime.aux_being_resolver is not None
         assert runtime.aux_being_default_world_id is not None
@@ -61,7 +59,6 @@ class TestPromptCaptureWithoutEpisodicMemory:
                 "name": "wait",
                 "arguments": {
                     "inner_thought": "まず周囲の動きを見る。",
-                    "expected_result": "少し待って状況が変わる。",
                 },
             }
         )
@@ -70,7 +67,7 @@ class TestPromptCaptureWithoutEpisodicMemory:
             tmp_path,
             stub,
             world_id="station_drill",
-            runtime_config=_config(capture_enabled=True),
+            runtime_config=_config(),
         )
         sink = PromptDatasetCaptureSink(
             run_dir=tmp_path,
@@ -94,39 +91,3 @@ class TestPromptCaptureWithoutEpisodicMemory:
         )
         assert expected is not None
         assert row["being_id"] == str(expected.value)
-
-    def test_capture_disabled_still_wires_beings_at_startup(self) -> None:
-        """capture と episodic がともに無効でも、会った相手を Being が覚えるために、起動時に全参加者の Being を用意する。"""
-        runtime = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_config(capture_enabled=False),
-        )
-
-        world_id = runtime.aux_being_default_world_id
-        assert all(
-            runtime.aux_being_resolver.resolve_being_id(world_id, pid) is not None
-            for pid in runtime.get_player_ids()
-        )
-
-    def test_capture_does_not_change_exposed_tools(self) -> None:
-        """記録の有効化は同じ player に提示する tool 名を増減させない。"""
-        without_capture = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_config(capture_enabled=False),
-        )
-        with_capture = create_world_runtime(
-            _SCENARIO_PATH,
-            config=_config(capture_enabled=True),
-        )
-        player_id = PlayerId(int(with_capture.scenario.player_spawns[0].player_id))
-
-        names_without = {
-            definition.name
-            for definition in without_capture.get_tool_definitions(player_id=player_id)
-        }
-        names_with = {
-            definition.name
-            for definition in with_capture.get_tool_definitions(player_id=player_id)
-        }
-
-        assert names_with == names_without

@@ -129,6 +129,8 @@
 
 ### P4 — reflect (前進評価) + 内省観測 【本計画のレーン A 本体】
 
+> P4 は、目的の振り返り (`GOAL_REFLECT_ENABLED`) として、記憶の部品の撤去 (#1631) の #1679 で消した。
+
 - `belief_consolidation_coordinator.py` に decision 種別 `reflect` を追加:
   「この期間の evidence 群と現在の目的を読み、目的への前進があったか
   判断せよ。停滞と判断したら 1 文で宣言せよ」。監査対象はこの時点では
@@ -151,6 +153,8 @@
   実測で出たら prompt の反例列挙で調整
 
 ### P5 — goal store + provider 差し替え (挙動不変 PR)
+
+> P5 は、目的の保存先 (`GOAL_STORE_ENABLED`) として、記憶の部品の撤去 (#1631) の #1686 で消した。
 
 - 新規 `domain/memory/goal/`: `GoalEntry` VO
   { `goal_id` / `text` / `status` (active | achieved | abandoned |
@@ -175,6 +179,8 @@
   (`docs/quality_checks/`) の再生成で確認できる
 
 ### P6 — `goal_update` の常時露出と目的改訂 (2026-07-12 全面改訂)
+
+> P6 は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #1664 で消した。
 
 > **初版 (トリガターンのみ schema 露出) は撤回**。`docs/design_decisions.md`
 > 設計判断 #1「system prompt と tool list は tick 間で byte 不変」に反する
@@ -226,6 +232,8 @@
 
 ### P7 — 監査を goal store に接続 (P4 + P5 の合流)
 
+> P7 の監査の接続も、P4 と一緒に #1679 で消した。
+
 - P4 の reflect の監査対象を `objective_text` から goal store の
   active 目的に差し替え。停滞・矛盾 (目的と行動の乖離)・達成の 3 種を
   判定させる
@@ -237,6 +245,8 @@
 - 不確実性 (中): P4 と同根 (判定の質)。追加分は小さい
 
 ### P8 — 目的の清算 (2026-07-12 改訂: `goal_outcome` 自己申告方式)
+
+> P8 (`goal_outcome` と清算の信念の証拠) は、P6 と一緒に #1664 で消した。
 
 > 初版の引き金 (reflect の達成判定 → **見直しターン**で本人が achieved に
 > する) は、P6 再設計で見直しターンが消えたため宙に浮いた (実装からの

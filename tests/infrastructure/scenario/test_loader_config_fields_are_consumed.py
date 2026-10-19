@@ -88,6 +88,10 @@ _ALLOWED_UNCONSUMED: dict[tuple[str, str], str] = {
     ("ScenarioMetadata", "difficulty"): "人間向けの分類。実行時の挙動には効かせない",
     ("ScenarioMetadata", "estimated_ticks"): "人間向けの目安。tick 上限は実験設定側で決める",
     ("ScenarioMetadata", "author"): "人間向けの出典表記",
+    ("ScenarioMetadata", "tags"): (
+        "人間向けの分類。実行時の挙動には効かせない。意味記憶エントリの tags を"
+        "消すまでは、同名の属性に一致して読まれていると数えられていた (#1631)"
+    ),
     ("AreaDef", "position_source"): (
         "宣言座標か重心算出かの由来を示す派生値。シナリオ作者が書くもので"
         "はないので、読まれなくても宣言が無視されることはない"

@@ -532,11 +532,9 @@ def _with_inner_thought(
     に格上げする。base 側で明示指定されていれば上書きしない (give_item 経路と
     互換)。
 
-    Note: subjective fields (expected_result / intention / emotion_hint) は
-    現状 tool catalog schema に露出していないので raw args にも含まれない。
-    露出 ON になっても executor 側で ``extract_subjective_action_fields(args)``
-    が raw args から読む契約なので、resolver 通過後の args にも透過する必要が
-    ある。今回同時に passthrough する。
+    Note: subjective fields (intention / emotion_hint) は、executor 側で
+    ``extract_subjective_action_fields(args)`` が読む契約なので、resolver 通過後の
+    args にも透過する。
     """
     out = dict(base)
     out["inner_thought"] = _inner_thought_value(args)
@@ -550,7 +548,6 @@ def _with_inner_thought(
         out[ACTION_DISPLAY_PHRASE_KEY] = action_display_phrase
     for passthrough_key in (
         "say_inline",
-        "expected_result",
         "intention",
         "emotion_hint",
         # interact の自由入力 (看板の本文 / パズルの暗証番号)。

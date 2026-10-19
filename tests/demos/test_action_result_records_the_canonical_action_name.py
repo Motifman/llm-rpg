@@ -79,7 +79,6 @@ def test_llm_handler_keeps_the_labels_sent_before_resolver_conversion(
                 "target_label": "当番表",
                 "action_name": "read_board",
                 "inner_thought": "当番を確かめる。",
-                "expected_result": "担当が分かる。",
             },
         }
     )
@@ -128,7 +127,6 @@ def test_failed_interaction_does_not_expose_rejected_call_as_a_prompt_example(
                 "target_label": "配膳用の裏口",
                 "action_name": "進む",
                 "inner_thought": "ここから物資庫へ進む。",
-                "expected_result": "物資庫へ着く。",
             },
         }
     )
