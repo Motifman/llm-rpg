@@ -24,25 +24,20 @@ class TestNotificationType:
         assert str(NotificationType.SUBSCRIBE) == "subscribe"
         assert str(NotificationType.POST) == "post"
 
-    def test_notification_type_enum_properties(self):
-        """Enumの基本プロパティテスト"""
-        # すべてのメンバーがNotificationTypeのインスタンスであること
-        for notification_type in NotificationType:
-            assert isinstance(notification_type, NotificationType)
-            assert hasattr(notification_type, 'value')
-            assert hasattr(notification_type, 'name')
-
-    def test_notification_type_uniqueness(self):
-        """値の一意性確認"""
-        values = [nt.value for nt in NotificationType]
-        assert len(values) == len(set(values))  # 重複なし
-
     def test_notification_type_membership(self):
-        """メンバーシップテスト"""
-        assert NotificationType.FOLLOW in NotificationType
-        # 文字列値はEnumメンバーの.valueとして存在することを確認
-        assert any(nt.value == "follow" for nt in NotificationType)
-        assert not any(nt.value == "nonexistent" for nt in NotificationType)
+        """保存された6種の文字列から正しい通知種別を復元し、未知の文字列を拒む。"""
+        for value, expected in [
+            ("follow", NotificationType.FOLLOW),
+            ("mention", NotificationType.MENTION),
+            ("like", NotificationType.LIKE),
+            ("reply", NotificationType.REPLY),
+            ("subscribe", NotificationType.SUBSCRIBE),
+            ("post", NotificationType.POST),
+        ]:
+            assert NotificationType(value) == expected
+
+        with pytest.raises(ValueError):
+            NotificationType("nonexistent")
 
     def test_notification_type_iteration(self):
         """イテレーション可能"""
