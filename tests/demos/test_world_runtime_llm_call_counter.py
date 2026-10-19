@@ -28,7 +28,6 @@ _SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.jso
 
 @pytest.fixture
 def runtime(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     return create_world_runtime(_SCENARIO_PATH)
 

@@ -28,10 +28,8 @@ _DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_d
 _ME = PlayerId(1)
 
 
-def _game(memo: Any, *, enabled: bool = True) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
-    config = ResolvedLlmRuntimeConfig.for_tests(
-        being_memo_enabled=enabled, memo_tools_enabled=not enabled
-    )
+def _game(memo: Any) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
+    config = ResolvedLlmRuntimeConfig.for_tests()
     runtime = create_world_runtime(_DRILL, config=config)
     recorder = RecordingTraceRecorder()
     runtime.set_trace_recorder(recorder)
@@ -134,17 +132,8 @@ class TestMemoArgumentInATurn:
             "index": 0, "do": "remove", "handle": "m_3f2a7b", "kind": "todo", "text": "鍵を取る", "provenance": None
         }
 
-    def test_memo_is_not_read_when_the_book_is_disabled(self) -> None:
-        """メモ帳を無効にした設定では、引数 memo を書いても読まず、メモ帳にも trace にも何も残さない。"""
-        runtime, wiring, recorder = _game([{"do": "add", "kind": "todo", "text": "鍵"}], enabled=False)
-
-        _turn(wiring)
-
-        assert _book(runtime) == MemoBook.empty()
-        assert recorder.payloads(TraceEventKind.BEING_MEMO) == []
-
     def test_memo_book_is_shown_every_turn_with_all_headings(self) -> None:
-        """メモ帳を有効にした設定では、メモが無くても 1 ターン目のプロンプトに【メモ】と 3 つの分類の見出しが出る。"""
+        """設定を書かなくても、メモが無くても 1 ターン目のプロンプトに【メモ】と 3 つの分類の見出しが出る。"""
         _, wiring, _ = _game(None)
 
         phase_a = wiring.run_phase_a(_ME)
@@ -153,7 +142,7 @@ class TestMemoArgumentInATurn:
         assert "【メモ】\nやること:\n  (なし)\n分かったこと:\n  (なし)\n人について:\n  (なし)" in user
 
     def test_completion_hint_reads_todos_from_the_book(self) -> None:
-        """メモ帳を有効にした設定では、済んだかの知らせがメモ帳のやることを見て、行動と重なるやることを知らせる。"""
+        """設定を書かなくても、済んだかの知らせがメモ帳のやることを見て、行動と重なるやることを知らせる。"""
         runtime, wiring, _ = _game(None)
         acting = runtime._acting_being_for(_ME)
         runtime._being_memo_store.save(

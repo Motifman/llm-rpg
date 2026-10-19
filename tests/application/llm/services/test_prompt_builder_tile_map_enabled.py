@@ -9,10 +9,7 @@ Issue #227 chore (tile-map 依存除去) PR-4:
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
@@ -42,14 +39,12 @@ from ai_rpg_world.application.world.services.world_query_service import (
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _make_core() -> PromptBuilderCoreServices:
     return PromptBuilderCoreServices(
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
         short_term_memory=MagicMock(spec=IShortTermMemory),
-        action_result_store=MagicMock(spec=IActionResultStore),
         recent_event_store=UnifiedRecentEventStore(),
         world_query_service=MagicMock(spec=WorldQueryService),
         player_profile_repository=MagicMock(spec=PlayerProfileRepository),

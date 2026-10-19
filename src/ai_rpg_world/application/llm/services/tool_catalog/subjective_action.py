@@ -13,7 +13,6 @@ from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_PREFIX_TODO,
 )
 
 SUBJECTIVE_ACTION_FIELDS = (
@@ -88,8 +87,6 @@ def is_subjective_action_tool(tool_name: str) -> bool:
     if not isinstance(tool_name, str):
         return False
     if tool_name == TOOL_NAME_NO_OP:
-        return False
-    if tool_name.startswith(TOOL_NAME_PREFIX_TODO):
         return False
     return bool(tool_name)
 
