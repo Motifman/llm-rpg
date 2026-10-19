@@ -53,10 +53,10 @@ def _sample_events() -> list[TraceEvent]:
         TraceEvent(
             seq=5,
             timestamp="2026-05-24T00:00:04+00:00",
-            kind=TraceEventKind.MEMO_ADD,
+            kind=TraceEventKind.MEMO_HINT,
             tick=1,
             player_id=1,
-            payload={"memo_id": "m1", "content": "扉を固定する"},
+            payload={"memo_id": "m1", "similarity": 0.8},
         ),
     ]
 
