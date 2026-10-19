@@ -420,9 +420,7 @@ def parse_players(
         objective = parse_player_objective(
             p.get("objective"), owner_id=p["id"],
         )
-        goal_locked = parse_player_goal_locked(
-            p.get("goal_locked"), owner_id=p["id"],
-        )
+        reject_removed_player_goal_locked(p, owner_id=p["id"])
         initial_gold = parse_player_initial_gold(
             p.get("initial_gold"), owner_id=p["id"],
         )
@@ -439,7 +437,6 @@ def parse_players(
             initial_state=initial_state,
             persona_prompt=persona_prompt,
             objective=objective,
-            goal_locked=goal_locked,
             initial_gold=initial_gold,
             knows_at_start=knows_at_start,
             appearance=appearance,
@@ -568,8 +565,7 @@ def parse_player_objective(raw: Any, *, owner_id: str) -> str | None:
 
     persona_prompt と同じ規約: 前後の whitespace は削るが内側の改行は
     保持する (箇条書きの目的文を許容するため)。空文字・空白のみは None に
-    畳んで「未指定」と同じ扱いにする — 空文字で seed すると GoalEntry の
-    VO 不変条件に弾かれて静かに目的が消えるため、入口で潰す。
+    畳んで「未指定」と同じ扱いにする。
     """
     if raw is None:
         return None
@@ -581,7 +577,7 @@ def parse_player_objective(raw: Any, *, owner_id: str) -> str | None:
     stripped = raw.strip()
     if not stripped:
         # 空白のみを黙って None に畳むと「個別目的を書いたつもりが共通目的で
-        # seed される」静かな失敗になる。共通目的文が非空の通常シナリオでは
+        # 使われる」静かな失敗になる。共通目的文が非空の通常シナリオでは
         # fail-fast にも掛からないので、ここで痕跡を残すしかない。
         logging.getLogger(__name__).warning(
             "player '%s': objective is whitespace-only; treating it as unset "
@@ -591,21 +587,20 @@ def parse_player_objective(raw: Any, *, owner_id: str) -> str | None:
         return None
     return stripped
 
-def parse_player_goal_locked(raw: Any, *, owner_id: str) -> bool | None:
-    """``players[].goal_locked`` を検証する (目的層 G6)。
+def reject_removed_player_goal_locked(
+    raw_player: dict[str, Any], *, owner_id: str,
+) -> None:
+    """``players[].goal_locked`` を書いたシナリオを止める。
 
-    None (未指定) はシナリオ全体の性質から導出する意味なので、False とは
-    区別して保持する。bool 以外は誤記として弾く — 0 / 1 / "true" を暗黙に
-    受けると「locked のつもりが unlocked」の取り違えが静かに通るため。
+    目的の保存先と一緒に消した項目 (#1631)。``players[]`` は未知のキーを
+    弾かないので、ここで止めないと書いた意図が黙って捨てられる。
     """
-    if raw is None:
-        return None
-    if not isinstance(raw, bool):
+    if "goal_locked" in raw_player:
         raise ValueError(
-            f"player '{owner_id}': goal_locked must be a boolean, "
-            f"got {type(raw).__name__}"
+            f"player '{owner_id}': goal_locked は目的の保存先と一緒に消した "
+            "(#1631)。この項目は読まれないので削除してください。目的は "
+            "objective に書く"
         )
-    return raw
 
 def parse_player_initial_state(
     raw: Any, *, owner_id: str,

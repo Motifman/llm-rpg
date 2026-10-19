@@ -286,6 +286,8 @@
 
 ### U7 — 無意識コンテキスト → chunk 補完 (最優先の適用先)
 
+> U7 (`UNCONSCIOUS_CONTEXT_ENABLED`、chunk 主観補完に信念の上位 5 件と自己像を渡す provider) は #1690 で消した (#1631)。
+
 **できるようになること**: `prediction_error` / `salience` の判定が
 「誰にとっても同じ驚き」から「このキャラにとっての驚き」になる。
 
@@ -350,7 +352,7 @@
     (旧 PR-D)。generic 再解釈と混ぜず、「これらから X を予測したが Y
     だった」を明示する専用 batch item 種別として同じ周期に相乗り
   - 的中: episode の想起価値 boost。実装は
-    [recall_ranking_failure_boost_design.md](./recall_ranking_failure_boost_design.md)
+    `recall_ranking_failure_boost_design.md` (#1631 で削除)
     の路線と統合 — `multi_cue_score` (`episodic_passive_recall_retrieval.py:389-456`)
     への加点項として入れる
 - テスト: 外れ時に専用 batch item が積まれる / 的中 boost の加点 /

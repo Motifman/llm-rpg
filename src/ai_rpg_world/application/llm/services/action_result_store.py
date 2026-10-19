@@ -51,8 +51,6 @@ class DefaultActionResultStore(IActionResultStore):
         scene_boundary: bool = False,
         occurred_tick: int | None = None,
         execution_provenance: ExecutionProvenance | None = None,
-        prediction_context_id: str | None = None,
-        in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -96,12 +94,6 @@ class DefaultActionResultStore(IActionResultStore):
             not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
         ):
             raise TypeError("occurred_tick must be int or None")
-        if prediction_context_id is not None and not isinstance(
-            prediction_context_id, str
-        ):
-            raise TypeError("prediction_context_id must be str or None")
-        if not isinstance(in_context_belief_ids, tuple):
-            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # world_runtime は明示的に渡すが、それ以外の caller の取りこぼし防止。
         at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
@@ -124,8 +116,6 @@ class DefaultActionResultStore(IActionResultStore):
             scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
             execution_provenance=execution_provenance,
-            prediction_context_id=prediction_context_id,
-            in_context_belief_ids=in_context_belief_ids,
         )
         self._event_store.append_action_result(
             player_id, entry, max_entries=self._max_entries
