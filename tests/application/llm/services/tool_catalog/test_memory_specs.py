@@ -1,12 +1,11 @@
-"""``get_memory_specs`` の有効化フラグ別の expose 挙動 (Phase 1a, 1d)。"""
+"""``get_memory_specs`` が引数ごとに出す道具を保証する。"""
 
 from __future__ import annotations
 
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
 )
 
 
@@ -15,123 +14,20 @@ def _names(specs):
 
 
 class TestGetMemorySpecsFlags:
-    """flag が False のときは tool が出ない / True のときだけ出る。"""
+    """引数で有効にした道具だけが出て、既定ではどれも出ないことを保証する。"""
 
-    def test_default_all_off(self) -> None:
-        """default は全部 OFF。"""
-        names = _names(get_memory_specs())
-        assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in names
-        assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in names
+    def test_default_returns_no_tools(self) -> None:
+        """引数を渡さないとき、道具を 1 つも返さない。"""
+        assert get_memory_specs() == []
 
-    def test_episodic_explore_related_enabled_true_rendered(self) -> None:
-        """episodicexplorerelatedenabledTrue でだけ出る。"""
-        names = _names(get_memory_specs(episodic_explore_related_enabled=True))
-        assert TOOL_NAME_MEMORY_EXPLORE_RELATED in names
-        assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in names
+    def test_episode_recall_max_handles_exposes_episode_recall(self) -> None:
+        """episode_recall_max_handles を渡すと episode_recall を出す。"""
+        names = _names(get_memory_specs(episode_recall_max_handles=3))
 
-    def test_semantic_search_enabled_true_rendered(self) -> None:
-        """semanticsearchenabledTrue でだけ出る。"""
-        names = _names(get_memory_specs(semantic_search_enabled=True))
-        assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
-        assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in names
+        assert names == [TOOL_NAME_EPISODE_RECALL]
 
-    def test_true_rendered(self) -> None:
-        """両方 True なら 両方 出る。"""
-        names = _names(
-            get_memory_specs(
-                episodic_explore_related_enabled=True,
-                semantic_search_enabled=True,
-            )
-        )
-        assert TOOL_NAME_MEMORY_EXPLORE_RELATED in names
-        assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
+    def test_episode_index_revision_enabled_exposes_revise_index(self) -> None:
+        """episode_index_revision_enabled=True のとき episode_revise_index を出す。"""
+        names = _names(get_memory_specs(episode_index_revision_enabled=True))
 
-    def test_memo_enabled_combinable(self) -> None:
-        """memo 系と semantic search は同時に有効化できる。"""
-        specs = get_memory_specs(memo_enabled=True, semantic_search_enabled=True)
-        names = _names(specs)
-        assert "memo_add" in names
-        assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in names
-
-
-class TestExploreRelatedSpec:
-    """関連記憶探索ツールが prompt に出る handle だけを入口にすることを保証する。"""
-
-    def test_tool_parameters_require_handle_not_episode_id(self) -> None:
-        """LLM に見えない内部 episode_id ではなく、見出し欄の handle を必須引数にする。"""
-        from ai_rpg_world.application.llm.services.tool_catalog.memory import (
-            MEMORY_EXPLORE_RELATED_DEFINITION,
-        )
-
-        params = MEMORY_EXPLORE_RELATED_DEFINITION.parameters
-
-        assert params["required"] == ["handle"]
-        assert "handle" in params["properties"]
-        assert "episode_id" not in params["properties"]
-
-    def test_tool_description_mentions_prompt_handle(self) -> None:
-        """description は「主観エピソード ID」ではなく prompt 上の handle を指す。"""
-        from ai_rpg_world.application.llm.services.tool_catalog.memory import (
-            MEMORY_EXPLORE_RELATED_DEFINITION,
-        )
-
-        assert "handle" in MEMORY_EXPLORE_RELATED_DEFINITION.description
-        assert "ep_" in MEMORY_EXPLORE_RELATED_DEFINITION.description
-        assert "主観エピソード ID" not in MEMORY_EXPLORE_RELATED_DEFINITION.description
-
-
-class TestRecallByHandleSpec:
-    """afterglow 用の能動想起ツールが flag で expose されることを保証する。"""
-
-    def test_disabled_by_default(self) -> None:
-        """flag 未指定なら memory_recall_by_handle は spec に出ない (= default off)。"""
-        from ai_rpg_world.application.llm.tool_constants import (
-            TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-        )
-
-        names = _names(get_memory_specs())
-        assert TOOL_NAME_MEMORY_RECALL_BY_HANDLE not in names
-
-    def test_recall_by_handle_enabled_exposes_the_tool(self) -> None:
-        """``recall_by_handle_enabled=True`` で expose される。
-        afterglow の見出しから本文を引き戻す経路を LLM に見せる前提。"""
-        from ai_rpg_world.application.llm.tool_constants import (
-            TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-        )
-
-        names = _names(get_memory_specs(recall_by_handle_enabled=True))
-        assert TOOL_NAME_MEMORY_RECALL_BY_HANDLE in names
-
-    def test_tool_description_mentions_afterglow_section(self) -> None:
-        """LLM が prompt の「【さっき思い出した記憶の見出し】」と本ツールを
-        繋げて理解できるよう、description にその section 名と handle 形式
-        (``ep_``) が明示されていること。"""
-        from ai_rpg_world.application.llm.services.tool_catalog.memory import (
-            MEMORY_RECALL_BY_HANDLE_DEFINITION,
-        )
-
-        desc = MEMORY_RECALL_BY_HANDLE_DEFINITION.description
-        assert "さっき思い出した記憶の見出し" in desc
-        assert "ep_" in desc
-
-    def test_description_recommends_free_text_recall_only_when_it_is_offered(
-        self,
-    ) -> None:
-        """memory_recall_episodes も出すときだけ、説明が自由文の検索にそれを勧める。出さないときは名前が説明に出ない (#1616)。"""
-        def by_handle_description(*, episodic_recall_enabled: bool) -> str:
-            specs = get_memory_specs(
-                recall_by_handle_enabled=True,
-                episodic_recall_enabled=episodic_recall_enabled,
-            )
-            return next(
-                d.description
-                for d, _ in specs
-                if d.name == TOOL_NAME_MEMORY_RECALL_BY_HANDLE
-            )
-
-        assert "memory_recall_episodes" in by_handle_description(
-            episodic_recall_enabled=True
-        )
-        assert "memory_recall_episodes" not in by_handle_description(
-            episodic_recall_enabled=False
-        )
+        assert names == [TOOL_NAME_EPISODE_REVISE_INDEX]

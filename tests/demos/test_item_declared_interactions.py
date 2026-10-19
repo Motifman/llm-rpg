@@ -132,7 +132,6 @@ def test_llm_handler_resolves_and_executes_the_held_item_target(
                 "target_label": "携帯無線機",
                 "action_name": "hail_the_mainland",
                 "inner_thought": "遠くへ呼びかける。",
-                "expected_result": "応答が返る。",
             },
         }
     )

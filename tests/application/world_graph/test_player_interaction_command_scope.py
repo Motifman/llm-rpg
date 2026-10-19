@@ -27,11 +27,11 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
     InMemoryPlayerInventoryRepository,
 )
 
-_RELAY = (
+_FORBIDDEN_LIBRARY = (
     Path(__file__).resolve().parents[3]
     / "data"
     / "scenarios"
-    / "relay_puzzle_demo.json"
+    / "forbidden_library_demo.json"
 )
 _ACTOR = PlayerId(1)
 _TARGET = PlayerId(2)
@@ -76,7 +76,7 @@ _LOOT_DEF = {
 
 
 def _runtime(tmp_path: Path, interaction: dict):
-    scenario = json.loads(_RELAY.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     scenario["player_interactions"] = [interaction]
     path = tmp_path / "player_interaction_scope.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
