@@ -151,7 +151,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationEntry,
     ObservationOutput,
     SubjectUnknownView,
     WithheldFromStrangers,
@@ -1906,13 +1905,6 @@ class WorldRuntime:
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
         )
-
-    def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> list[ObservationEntry]:
-        """観測バッファを短期記憶へ移し、溢れた観測を返す。"""
-        drained = self._obs_buffer.drain(player_id)
-        if not drained:
-            return []
-        return self._short_term_memory.append_all(player_id, drained)
 
     def _wire_being_stack(self) -> None:
         """プレイヤーに結びつく Being の保存先・用意・解決を、まだ無ければ組む。

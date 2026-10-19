@@ -25,7 +25,6 @@ L1 raw + L4 mid summary (3 generations) + L5 long summary (1 per player) を
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -153,35 +152,6 @@ def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
         raise ValueError(
             f"{key} schema_version={version!r} unsupported (expected {expected})"
         )
-
-
-def _capture_dict_store(
-    store_dict: dict[int, list[Any]],
-    entry_to_dict: Callable[[Any], dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """共通 capture: ``{player_id: [Entry, ...]}`` を JSON-serializable に。"""
-    return sorted(
-        (
-            {
-                "player_id": int(pid),
-                "entries": [entry_to_dict(e) for e in entries],
-            }
-            for pid, entries in store_dict.items()
-        ),
-        key=lambda d: d["player_id"],
-    )
-
-
-def _restore_dict_store(
-    store_dict: dict[int, list[Any]],
-    entries_data: list[dict[str, Any]],
-    dict_to_entry: Callable[[dict[str, Any]], Any],
-) -> None:
-    """共通 restore: store_dict を clear + repopulate。"""
-    store_dict.clear()
-    for entry in entries_data:
-        pid = int(entry["player_id"])
-        store_dict[pid] = [dict_to_entry(d) for d in entry.get("entries", [])]
 
 
 # ----------------------------------------------------------------------------

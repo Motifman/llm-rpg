@@ -39,11 +39,8 @@ class IShortTermMemory(ABC):
     @abstractmethod
     def append_all(
         self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> list[ObservationEntry]:
-        """
-        指定プレイヤーに観測を複数件追加する。
-        戻り値は今回の追加によりウィンドウから溢れた（捨てられた）観測のリスト。
-        """
+    ) -> None:
+        """指定プレイヤーに観測を複数件追加する。"""
         pass
 
     @abstractmethod
