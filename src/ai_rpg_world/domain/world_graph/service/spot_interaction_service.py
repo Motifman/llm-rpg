@@ -436,7 +436,7 @@ class SpotInteractionService:
                 )
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST:
-            if spot_object is None:
+            if condition_object is None:
                 return False, (
                     cond.failure_message
                     or "この行為には対象オブジェクトが必要な条件が書かれています"
@@ -446,7 +446,7 @@ class SpotInteractionService:
             # stock_refill_interval)。current_tick 未提供時は再生なし (記録済み
             # stock をそのまま) にフォールバックする。
             required = max(1, int(cond.required_quantity))
-            state = spot_object.state
+            state = condition_object.state
             now = int(current_tick.value) if current_tick is not None else int(
                 state.get("stock_tick", 0)
             )

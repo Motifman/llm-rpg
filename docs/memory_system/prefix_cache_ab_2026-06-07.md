@@ -124,7 +124,7 @@ Run B の mean latency が上がった原因は **player_2 で 19.4s の外れ�
 - [ ] 30 tick × A/B を再実行して latency 分布の安定性を見る (cost ~$0.10)
 - [ ] semantic 系 (gist / passive recall) ON-OFF の A/B (記憶機能の cost 影響を切り分け)
 - [ ] DeepInfra fp8 と Parasail fp8 で同条件 run → latency / cost / 応答品質の trade-off を可視化
-- [ ] survival_island_v2 以外のシナリオ (relay_puzzle_demo 等) で再現性確認
+- [ ] survival_island_v2 以外のシナリオ (relay_puzzle_demo 等) で再現性確認 (relay_puzzle_demo は #1631 で退役させたので、確かめるなら別のシナリオで)
 
 ## 副次的な発見: silent fallback の落とし穴
 
