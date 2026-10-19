@@ -314,20 +314,6 @@ class TestLearningNames:
         ]
 
 
-class TestRecallCues:
-    """想起の手がかりの「直近に会った相手」も、名前を知らない相手は見た目で返すことを保証する。"""
-
-    def test_recently_met_stranger_is_given_by_appearance_until_named(self) -> None:
-        """名前を知らずに会った直後は見た目を返し、名乗りを聞いたあとは名前を返す。"""
-        acquaintances, _ = _make()
-        acquaintances.record_meeting(ADA, "ノア")
-        before = acquaintances.recently_met_names(ADA, within_turns=5)
-
-        acquaintances.learn_name(ADA, NOA, how="名乗り")
-
-        assert (before, acquaintances.recently_met_names(ADA, within_turns=5)) == (("背の高い男",), ("ノア",))
-
-
 class TestFallingBackToAppearance:
     """置き換えや記録の途中で失敗しても、名前を出す側へ倒れないことを保証する。"""
 

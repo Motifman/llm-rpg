@@ -20,23 +20,13 @@ def _down_players(runtime, player_ids: list[PlayerId]) -> None:
 
 
 class TestWorldRuntimeEndOnAllDown:
-    """END_ON_ALL_DOWN が共通の外的停止として働く挙動を固定する。"""
+    """全員が行動不能なときの停止が、共通の外的停止として働く挙動を固定する。"""
 
-    def test_flag_off_keeps_existing_death_grace_behavior(self) -> None:
-        """既定 off では全員 down でも DEAD 猶予を待ち、即終了しない。"""
-        runtime = create_world_runtime(_SCENARIO_PATH, config=runtime_config())
-        _down_players(runtime, runtime.get_player_ids())
-
-        result = runtime.check_game_end()
-
-        assert result.is_ended is False
-        assert result.reason == "ゲーム続行中"
-
-    def test_flag_on_ends_when_every_unresolved_player_is_down(self) -> None:
-        """ON なら全員 down の時点で grace_ticks 経過を待たずに終了する。"""
+    def test_ends_when_every_unresolved_player_is_down(self) -> None:
+        """全員 down の時点で、grace_ticks 経過を待たずに終了する。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
-            config=runtime_config(end_on_all_down=True),
+            config=runtime_config(),
         )
         _down_players(runtime, runtime.get_player_ids())
 
@@ -51,11 +41,11 @@ class TestWorldRuntimeEndOnAllDown:
             for outcome in result.player_outcomes.values()
         )
 
-    def test_flag_on_treats_resolved_players_as_unable_to_act(self) -> None:
-        """ON では outcome 確定済み player と down player だけなら終了する。"""
+    def test_treats_resolved_players_as_unable_to_act(self) -> None:
+        """outcome 確定済み player と down player だけなら終了する。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
-            config=runtime_config(end_on_all_down=True),
+            config=runtime_config(),
         )
         player_ids = runtime.get_player_ids()
         runtime._player_outcome_registry.set_outcome(
@@ -69,11 +59,25 @@ class TestWorldRuntimeEndOnAllDown:
         assert result.is_ended is True
         assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
 
-    def test_flag_on_does_not_end_while_any_unresolved_player_can_act(self) -> None:
-        """ON でも未確定かつ down していない player が残るなら終了しない。"""
+    def test_world_end_wins_when_it_holds_in_the_same_tick(self) -> None:
+        """全員の outcome が確定して世界の終了条件と外的停止が同じ tick に成り立つと、世界の終了理由を返す。"""
+        runtime = create_world_runtime(_SCENARIO_PATH, config=runtime_config())
+        for player_id in runtime.get_player_ids():
+            runtime._player_outcome_registry.set_outcome(
+                player_id,
+                PlayerOutcomeEnum.RESCUED,
+            )
+
+        result = runtime.check_game_end()
+
+        assert result.is_ended is True
+        assert not result.reason.startswith("外的停止")
+
+    def test_does_not_end_while_any_unresolved_player_can_act(self) -> None:
+        """未確定かつ down していない player が残るなら終了しない。"""
         runtime = create_world_runtime(
             _SCENARIO_PATH,
-            config=runtime_config(end_on_all_down=True),
+            config=runtime_config(),
         )
         _down_players(runtime, runtime.get_player_ids()[:-1])
 
@@ -82,11 +86,11 @@ class TestWorldRuntimeEndOnAllDown:
         assert result.is_ended is False
         assert result.reason == "ゲーム続行中"
 
-    def test_flag_on_also_stops_world_without_outcome_rules(self) -> None:
-        """終了規則のない永続世界でも、明示した外的停止は同じ入口で働く。"""
+    def test_also_stops_world_without_outcome_rules(self) -> None:
+        """終了規則のない永続世界でも、外的停止は同じ入口で働く。"""
         runtime = create_world_runtime(
             _PERSISTENT_SCENARIO_PATH,
-            config=runtime_config(end_on_all_down=True),
+            config=runtime_config(),
         )
         assert runtime.scenario.player_outcome_rules == ()
         assert runtime.scenario.end_conditions == ()
@@ -97,11 +101,11 @@ class TestWorldRuntimeEndOnAllDown:
         assert result.is_ended is True
         assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
 
-    def test_flag_on_does_not_stop_empty_player_set(self, monkeypatch) -> None:
+    def test_does_not_stop_empty_player_set(self, monkeypatch) -> None:
         """対象者0人を空集合の論理で「全員行動不能」とみなして終了しない。"""
         runtime = create_world_runtime(
             _PERSISTENT_SCENARIO_PATH,
-            config=runtime_config(end_on_all_down=True),
+            config=runtime_config(),
         )
         monkeypatch.setattr(runtime, "get_player_ids", lambda: [])
 
