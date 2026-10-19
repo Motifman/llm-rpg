@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 import yaml
@@ -63,6 +64,18 @@ def test_test_and_quality_jobs_use_python_lower_bound_and_frozen_uv_lock() -> No
         assert any(command.startswith("uv run --frozen pytest") for command in commands)
 
 
+def _test_job_pytest_arguments() -> list[str]:
+    commands = _run_commands(_workflow()["jobs"]["test"])
+    pytest_commands = [c for c in commands if c.startswith("uv run --frozen pytest")]
+    assert len(pytest_commands) == 1, pytest_commands
+    return shlex.split(pytest_commands[0])
+
+
+def _option_value(arguments: list[str], option: str) -> str:
+    assert arguments.count(option) == 1, f"{option} が 1 回だけ指定されていない"
+    return arguments[arguments.index(option) + 1]
+
+
 def test_the_test_job_spreads_pytest_across_the_runner_cores() -> None:
     """通常試験は ``-n auto`` で走らせ、runner の実コア数へ並列度を委ねる。
 
@@ -70,9 +83,28 @@ def test_the_test_job_spreads_pytest_across_the_runner_cores() -> None:
     遅くなる。実測では並列 1 で 129 秒、2 で 47 秒、4 で 32 秒、8 で 26 秒と
     4 で頭打ちになり、どの並列度でも 1 件も落ちなかった。
     """
-    commands = _run_commands(_workflow()["jobs"]["test"])
+    arguments = _test_job_pytest_arguments()
 
-    assert "uv run --frozen pytest -n auto" in commands
+    assert _option_value(arguments, "-n") == "auto"
+    assert "--dist=worksteal" in arguments
+
+
+def test_every_split_group_has_its_own_matrix_job() -> None:
+    """``--splits`` の組の数と matrix の組が 1 から N まで一致し、どの試験も
+    どれか 1 台で 1 回だけ走る。
+
+    組が matrix から抜けると、その組の試験は CI のどこでも走らないまま緑になる。
+    """
+    job = _workflow()["jobs"]["test"]
+    arguments = _test_job_pytest_arguments()
+
+    splits = int(_option_value(arguments, "--splits"))
+    assert _option_value(arguments, "--group") == "${{ matrix.group }}"
+    assert job["strategy"]["matrix"]["group"] == [
+        str(group) for group in range(1, splits + 1)
+    ]
+    assert job["strategy"]["fail-fast"] == "false"
+    assert (_REPO_ROOT / ".test_durations").is_file()
 
 
 def test_the_quality_job_regenerates_goldens_without_parallel_workers() -> None:
@@ -86,4 +118,12 @@ def test_the_quality_job_regenerates_goldens_without_parallel_workers() -> None:
     pytest_commands = [c for c in commands if c.startswith("uv run --frozen pytest")]
 
     assert pytest_commands, "品質検査が pytest を実行していない"
-    assert all("-n" not in command.split() for command in pytest_commands)
+    assert all(
+        not any(
+            argument.startswith("-n")
+            or argument == "--numprocesses"
+            or argument.startswith("--numprocesses=")
+            for argument in shlex.split(command)
+        )
+        for command in pytest_commands
+    )

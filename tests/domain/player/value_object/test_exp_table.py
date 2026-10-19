@@ -23,25 +23,24 @@ class TestExpTable:
         assert exp_table.exponent == 2.0
         assert exp_table.level_offset == 1.0
 
-    def test_create_with_negative_base_exp_raises_error(self):
-        """base_expが負の値の場合エラーが発生すること"""
-        with pytest.raises(ExpTableValidationException, match="base_exp must be greater than 0"):
-            ExpTable(base_exp=-1.0, exponent=1.5)
-
-    def test_create_with_zero_base_exp_raises_error(self):
-        """base_expが0の場合エラーが発生すること"""
-        with pytest.raises(ExpTableValidationException, match="base_exp must be greater than 0"):
-            ExpTable(base_exp=0.0, exponent=1.5)
-
-    def test_create_with_negative_exponent_raises_error(self):
-        """exponentが負の値の場合エラーが発生すること"""
-        with pytest.raises(ExpTableValidationException, match="exponent must be greater than 0"):
-            ExpTable(base_exp=100.0, exponent=-1.0)
-
-    def test_create_with_zero_exponent_raises_error(self):
-        """exponentが0の場合エラーが発生すること"""
-        with pytest.raises(ExpTableValidationException, match="exponent must be greater than 0"):
-            ExpTable(base_exp=100.0, exponent=0.0)
+    @pytest.mark.parametrize(
+        "field, invalid_value, message",
+        [
+            pytest.param('base_exp', -1.0, 'base_exp must be greater than 0', id='test_create_with_negative_base_exp_raises_error'),
+            pytest.param('base_exp', 0.0, 'base_exp must be greater than 0', id='test_create_with_zero_base_exp_raises_error'),
+            pytest.param('exponent', -1.0, 'exponent must be greater than 0', id='test_create_with_negative_exponent_raises_error'),
+            pytest.param('exponent', 0.0, 'exponent must be greater than 0', id='test_create_with_zero_exponent_raises_error'),
+        ],
+    )
+    def test_rejects_nonpositive_curve_parameters(self, field, invalid_value, message):
+        """他項目が正常な入力で、指定項目の不正値を固有例外と文言で拒否する。"""
+        values = {
+            'base_exp': 100.0,
+            'exponent': 1.5,
+        }
+        values[field] = invalid_value
+        with pytest.raises(ExpTableValidationException, match=message):
+            ExpTable(**values)
 
     def test_get_required_exp_for_level_one(self):
         """レベル1に必要な経験値は0であること"""
@@ -57,7 +56,7 @@ class TestExpTable:
     def test_get_required_exp_for_level_three(self):
         """レベル3に必要な経験値が正しく計算されること"""
         exp_table = ExpTable(base_exp=100.0, exponent=1.5)
-        # レベル3の場合はレベル2までの累積 + レベル3に必要な追加経験値
+        # レベル3に到達するための累積経験値は282
         expected = int(100.0 * math.pow(2 + 0.0, 1.5))  # 100 * (2^1.5) = 100 * 2.828 = 282
         assert exp_table.get_required_exp_for_level(3) == expected
 
@@ -103,15 +102,17 @@ class TestExpTable:
         assert exp_table.get_level_from_exp(level_3_exp) == 3
 
     def test_get_level_from_exp_high_value(self):
-        """非常に高い経験値の場合も正しいレベルが計算されること"""
+        """累積経験値10000では到達可能な最大レベル22を返す。"""
         exp_table = ExpTable(base_exp=100.0, exponent=1.5)
         high_exp = 10000
         level = exp_table.get_level_from_exp(high_exp)
+        assert level == 22
         required_exp = exp_table.get_required_exp_for_level(level)
         assert high_exp >= required_exp
         # 次のレベルに必要な経験値は現在のレベルより多いはず
         next_level_exp = exp_table.get_required_exp_for_level(level + 1)
         assert next_level_exp > required_exp
+        assert high_exp < next_level_exp
 
     def test_equality(self):
         """等価性比較が正しく動作すること"""

@@ -72,27 +72,49 @@ class TestPredicateResultFactories:
 class TestPredicateResultInvariants:
     """直接構築でも成功と失敗の情報が矛盾する状態を拒否する。"""
 
-    def test_satisfied_result_rejects_failure_details(self) -> None:
-        """成立なのに失敗理由を持つ矛盾した結果は生成できない。"""
+    @pytest.mark.parametrize(
+        "failure_details",
+        [
+            {
+                "reason_code": PredicateReasonCode.NOT_SATISFIED,
+                "failed_predicate": object(),
+                "failed_path": (),
+            },
+            {"reason_code": PredicateReasonCode.NOT_SATISFIED},
+            {"failure_message": "条件を満たしていない。"},
+            {"failed_predicate": object()},
+            {"failed_path": (1,)},
+            {"missing_context": frozenset({"current_weather"})},
+        ],
+        ids=["combined", "reason", "message", "predicate", "path", "context"],
+    )
+    def test_satisfied_result_rejects_failure_details(
+        self, failure_details: dict[str, object],
+    ) -> None:
+        """成立結果は、各失敗詳細が単独でも複数でも混じると拒否する。"""
         with pytest.raises(PredicateResultValidationException):
-            PredicateResult(
-                is_satisfied=True,
-                reason_code=PredicateReasonCode.NOT_SATISFIED,
-                failed_predicate=object(),
-                failed_path=(),
-            )
+            PredicateResult(is_satisfied=True, **failure_details)  # type: ignore[arg-type]
 
     def test_satisfied_result_rejects_even_an_empty_failure_path(self) -> None:
         """空tupleも根を指す経路なので、成立結果へ混入できない。"""
         with pytest.raises(PredicateResultValidationException):
             PredicateResult(is_satisfied=True, failed_path=())
 
-    def test_failed_result_requires_predicate_and_path(self) -> None:
-        """未成立結果は、どこで落ちたかを必ず機械的に特定できる。"""
+    @pytest.mark.parametrize(
+        ("failed_predicate", "failed_path"),
+        [(None, None), (None, ()), (object(), None)],
+        ids=["both-missing", "predicate-missing", "path-missing"],
+    )
+    def test_failed_result_requires_predicate_and_path(
+        self, failed_predicate: object, failed_path: tuple[int, ...] | None,
+    ) -> None:
+        """未成立結果は、失敗述語と経路の片方だけでも欠けると拒否する。"""
         with pytest.raises(PredicateResultValidationException):
             PredicateResult(
                 is_satisfied=False,
                 reason_code=PredicateReasonCode.NOT_SATISFIED,
+                failed_predicate=failed_predicate,
+                failed_path=failed_path,
             )
 
     def test_missing_context_requires_at_least_one_input_name(self) -> None:

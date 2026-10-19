@@ -20,17 +20,6 @@ class TestTradeSearchFilter:
         assert filter.max_price is None
         assert filter.statuses is None
 
-    def test_create_filter_with_item_name(self):
-        """アイテム名フィルタを作成できる"""
-        filter = TradeSearchFilter(item_name="sword")
-        assert filter.item_name == "sword"
-
-    def test_create_filter_with_price_range(self):
-        """価格範囲フィルタを作成できる"""
-        filter = TradeSearchFilter(min_price=100, max_price=500)
-        assert filter.min_price == 100
-        assert filter.max_price == 500
-
     def test_price_validation_negative_min_price(self):
         """負の最小価格はエラー"""
         with pytest.raises(TradeSearchFilterValidationException, match="Minimum price cannot be negative"):

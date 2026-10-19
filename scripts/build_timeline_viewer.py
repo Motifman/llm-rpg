@@ -30,20 +30,16 @@ from typing import Any
 EVENT_STYLES: dict[str, dict[str, str]] = {
     "action": {"color": "#35d4e6", "label": "ACT"},
     "observation": {"color": "#b89dff", "label": "OBS"},
-    "memo_add": {"color": "#a3e063", "label": "M+"},
-    "memo_done": {"color": "#7fc24a", "label": "M✓"},
     "position_change": {"color": "#65dce8", "label": "MV"},
     "episodic_chunk_written": {"color": "#ffce63", "label": "EW"},
     "episodic_recall": {"color": "#ff9f64", "label": "ER"},
 }
 
 # event kind ごとの表示順 (同 tick 内で並べる順序)。
-# 行動 → 観測 → memo → 位置変化 → episodic の順が読みやすい。
+# 行動 → 観測 → 位置変化 → episodic の順が読みやすい。
 KIND_ORDER = {
     "action": 0,
     "observation": 1,
-    "memo_add": 2,
-    "memo_done": 2,
     "position_change": 3,
     "episodic_chunk_written": 4,
     "episodic_recall": 4,
@@ -129,10 +125,6 @@ def _summarize(kind: str, payload: dict[str, Any]) -> str:
             if target:
                 head += f"→{target}"
             return f"{head}: 「{content[:160]}」" if content else head
-        # memo 系
-        if tool in ("memo_add",):
-            text = (args.get("content") or args.get("text") or "").strip()
-            return f"memo_add: {text[:160]}"
         # 汎用 action: tool 名 + 主要引数 + inner_thought 先頭
         main_args = []
         for key in (
@@ -161,12 +153,6 @@ def _summarize(kind: str, payload: dict[str, Any]) -> str:
         cat = payload.get("observation_category") or ""
         head = f"[{cat}] " if cat else ""
         return f"{head}{prose[:200]}"
-    if kind == "memo_add":
-        text = (payload.get("content") or "").strip()
-        return f"+ {text[:160]}"
-    if kind == "memo_done":
-        memo_id = str(payload.get("memo_id") or "")[:12]
-        return f"done id={memo_id}"
     if kind == "position_change":
         from_spot = payload.get("from_spot_id") or "spawn"
         to_spot = payload.get("spot_name") or payload.get("to_spot_id") or "?"
@@ -395,7 +381,6 @@ header h1 {{
 /* kind 別の細かい強調 */
 .cell.kind-action .text {{ color: #d8f6ff; }}
 .cell.kind-observation .text {{ color: #d8c8ff; }}
-.cell.kind-memo_add .text, .cell.kind-memo_done .text {{ color: #cee8a8; }}
 .cell.kind-position_change .text {{ color: #c8effd; }}
 .cell.kind-episodic_chunk_written .text,
 .cell.kind-episodic_recall .text {{ color: #ffd9a3; }}

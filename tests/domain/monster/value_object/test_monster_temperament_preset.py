@@ -50,6 +50,23 @@ def _base_template() -> MonsterTemplate:
     )
 
 
+@pytest.fixture(params=[False, True], ids=["defaults", "explicit_settings"])
+def preset_base(request: pytest.FixtureRequest) -> MonsterTemplate:
+    """既定の入力と、気質の適用前に反応・追跡値を明示した入力を用意する。"""
+    base = _base_template()
+    if request.param:
+        return replace(
+            base,
+            reaction_to_attack=ReactionPolicyEnum.FLEE_WHEN_LOW_HP,
+            flee_grace_ticks=77,
+            flee_threshold=0.77,
+            chase_max_distance=88,
+            chase_max_ticks=99,
+            chase_search_ticks=66,
+        )
+    return base
+
+
 class TestPresetCoverage:
     """全 TemperamentEnum に対して preset が定義され、apply_temperament で
     `MonsterTemplate.__post_init__` のバリデーションを通過する。"""
@@ -78,11 +95,12 @@ class TestPresetCoverage:
 class TestPassiveBeast:
     """PASSIVE_BEAST: 攻撃しない平和な動物。"""
 
-    def test_passive_beast_all_zero(self) -> None:
-        """PASSIVEBEAST は反応無し全パラメータ 0。"""
-        result = apply_temperament(_base_template(), TemperamentEnum.PASSIVE_BEAST)
+    def test_passive_beast_all_zero(self, preset_base: MonsterTemplate) -> None:
+        """既定値でも明示済み設定でも、PASSIVE_BEAST は無反応と全数値0へ変える。"""
+        result = apply_temperament(preset_base, TemperamentEnum.PASSIVE_BEAST)
         assert result.reaction_to_attack == ReactionPolicyEnum.PASSIVE
         assert result.flee_grace_ticks == 0
+        assert result.flee_threshold == 0.0
         assert result.chase_max_distance == 0
         assert result.chase_max_ticks == 0
         assert result.chase_search_ticks == 0
@@ -91,22 +109,25 @@ class TestPassiveBeast:
 class TestCoward:
     """COWARD: 弱気、被弾即逃走、追跡しない。"""
 
-    def test_coward_always_flee(self) -> None:
-        """COWARD は ALWAYS FLEE 追跡無し。"""
-        result = apply_temperament(_base_template(), TemperamentEnum.COWARD)
+    def test_coward_always_flee(self, preset_base: MonsterTemplate) -> None:
+        """既定値でも明示済み設定でも、COWARD は常時逃走・猶予5・追跡値0へ変える。"""
+        result = apply_temperament(preset_base, TemperamentEnum.COWARD)
         assert result.reaction_to_attack == ReactionPolicyEnum.ALWAYS_FLEE
         assert result.flee_grace_ticks == 5
+        assert result.flee_threshold == 0.0
         assert result.chase_max_distance == 0
+        assert result.chase_max_ticks == 0
         assert result.chase_search_ticks == 0
 
 
 class TestWary:
     """WARY: HP 低いと逃げ、HP 余裕なら短距離追跡。"""
 
-    def test_wary_flee_when_low_hp(self) -> None:
-        """WARY は FLEE WHEN LOW HP 短距離追跡。"""
-        result = apply_temperament(_base_template(), TemperamentEnum.WARY)
+    def test_wary_flee_when_low_hp(self, preset_base: MonsterTemplate) -> None:
+        """既定値でも明示済み設定でも、WARY はHP閾値0.3・猶予3と短距離追跡へ変える。"""
+        result = apply_temperament(preset_base, TemperamentEnum.WARY)
         assert result.reaction_to_attack == ReactionPolicyEnum.FLEE_WHEN_LOW_HP
+        assert result.flee_grace_ticks == 3
         assert result.flee_threshold == 0.3
         assert result.chase_max_distance == 2
         assert result.chase_max_ticks == 10
@@ -116,11 +137,12 @@ class TestWary:
 class TestAggressive:
     """AGGRESSIVE: 普通の敵、中距離追跡。"""
 
-    def test_aggressive_always_retaliate(self) -> None:
-        """AGGRESSIVE は ALWAYS RETALIATE 中距離追跡。"""
-        result = apply_temperament(_base_template(), TemperamentEnum.AGGRESSIVE)
+    def test_aggressive_always_retaliate(self, preset_base: MonsterTemplate) -> None:
+        """既定値でも明示済み設定でも、AGGRESSIVE は常時反撃と距離5・時間20へ変える。"""
+        result = apply_temperament(preset_base, TemperamentEnum.AGGRESSIVE)
         assert result.reaction_to_attack == ReactionPolicyEnum.ALWAYS_RETALIATE
         assert result.flee_grace_ticks == 5
+        assert result.flee_threshold == 0.0
         assert result.chase_max_distance == 5
         assert result.chase_max_ticks == 20
         assert result.chase_search_ticks == 3
@@ -129,11 +151,12 @@ class TestAggressive:
 class TestFerocious:
     """FEROCIOUS: 執念深い長距離追跡。"""
 
-    def test_ferocious(self) -> None:
-        """FEROCIOUS は長距離長時間追跡。"""
-        result = apply_temperament(_base_template(), TemperamentEnum.FEROCIOUS)
+    def test_ferocious(self, preset_base: MonsterTemplate) -> None:
+        """既定値でも明示済み設定でも、FEROCIOUS は常時反撃と距離15・時間60へ変える。"""
+        result = apply_temperament(preset_base, TemperamentEnum.FEROCIOUS)
         assert result.reaction_to_attack == ReactionPolicyEnum.ALWAYS_RETALIATE
         assert result.flee_grace_ticks == 10
+        assert result.flee_threshold == 0.0
         assert result.chase_max_distance == 15
         assert result.chase_max_ticks == 60
         assert result.chase_search_ticks == 8
@@ -143,11 +166,12 @@ class TestBerserker:
     """BERSERKER: 距離 / tick 無制限。"""
 
     def test_berserker_chase_max_distance_max_ticks_zero(
-        self,
+        self, preset_base: MonsterTemplate,
     ) -> None:
-        """0 は無制限を意味するため、BERSERKER は事実上どこまでも追ってくる。"""
-        result = apply_temperament(_base_template(), TemperamentEnum.BERSERKER)
+        """既定値でも明示済み設定でも、BERSERKER は無制限追跡を表す距離・時間0へ変える。"""
+        result = apply_temperament(preset_base, TemperamentEnum.BERSERKER)
         assert result.reaction_to_attack == ReactionPolicyEnum.ALWAYS_RETALIATE
+        assert result.flee_threshold == 0.0
         assert result.chase_max_distance == 0  # 無制限
         assert result.chase_max_ticks == 0     # 無制限
         assert result.chase_search_ticks == 15

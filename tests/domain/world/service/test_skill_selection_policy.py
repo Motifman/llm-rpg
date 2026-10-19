@@ -110,8 +110,13 @@ class TestFirstInRangeSkillPolicy:
         result = policy.select_slot(actor, target_in_range, skills)
         assert result == 2
 
-    def test_select_slot_z_axis_in_distance(self, policy):
-        """Z軸を含む距離で射程判定すること"""
+    @pytest.mark.parametrize(
+        ("skill_range", "expected_slot"),
+        [(1, 0), (0, None)],
+        ids=["original_at_range", "outside_zero_range"],
+    )
+    def test_select_slot_z_axis_in_distance(self, policy, skill_range, expected_slot):
+        """Z軸で1離れる相手は射程1で選び、射程0では選ばないこと。"""
         actor = WorldObject(
             object_id=WorldObjectId(100),
             coordinate=Coordinate(0, 0, 0),
@@ -126,9 +131,12 @@ class TestFirstInRangeSkillPolicy:
             is_blocking=False,
             component=ActorComponent(race="human"),
         )
-        skills = [MonsterSkillInfo(slot_index=0, range=1, mp_cost=10)]
+        skills = [MonsterSkillInfo(slot_index=0, range=skill_range, mp_cost=10)]
         result = policy.select_slot(actor, target, skills)
-        assert result == 0
+        if expected_slot is None:
+            assert result is None
+        else:
+            assert result == expected_slot
 
     def test_select_slot_with_usable_slot_indices_restricts_to_slot(self, policy, actor, target_in_range):
         """context.usable_slot_indices で指定したスロットのみから選ぶこと"""

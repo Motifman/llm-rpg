@@ -51,6 +51,7 @@ class TestIntentQueueDraining:
     def test_phase_order_is_respected(self) -> None:
         """フェーズ昇順 (MOVEMENT → INTERACTION → ATTACK → SOCIAL → OTHER) で並ぶ。"""
         queue = IntentQueue()
+        queue.submit(_make_intent(5, 14, phase=IntentPhase.OTHER))
         queue.submit(_make_intent(1, 10, phase=IntentPhase.SOCIAL))
         queue.submit(_make_intent(2, 11, phase=IntentPhase.MOVEMENT))
         queue.submit(_make_intent(3, 12, phase=IntentPhase.ATTACK))
@@ -63,6 +64,7 @@ class TestIntentQueueDraining:
             IntentPhase.INTERACTION,
             IntentPhase.ATTACK,
             IntentPhase.SOCIAL,
+            IntentPhase.OTHER,
         ]
 
     def test_within_phase_higher_priority_wins(self) -> None:
@@ -75,18 +77,32 @@ class TestIntentQueueDraining:
         drained = queue.drain_ready_for_tick(WorldTick(1))
         assert [i.intent_id.value for i in drained] == [2, 3, 1]
 
-    def test_id_breaks_tie_for_same_phase_and_priority(self) -> None:
-        """phase + priority が同じなら intent_id 昇順 (早く番号が振られた方が先)。"""
+    @pytest.mark.parametrize(
+        ("submitted_ticks", "complete_tick", "current_tick", "expected_ids"),
+        [
+            pytest.param((1, 1, 1), 1, 1, [2, 5, 7], id="same_tick_uses_id"),
+            pytest.param((1, 2, 3), 5, 5, [7, 2, 5], id="earlier_submission_before_id"),
+        ],
+    )
+    def test_submission_tick_then_id_breaks_tie(
+        self,
+        submitted_ticks: tuple[int, int, int],
+        complete_tick: int,
+        current_tick: int,
+        expected_ids: list[int],
+    ) -> None:
+        """同フェーズ・同優先度では投稿時刻順、投稿時刻も同じなら ID 順になる。"""
         queue = IntentQueue()
-        queue.submit(_make_intent(7, 10))
-        queue.submit(_make_intent(2, 11))
-        queue.submit(_make_intent(5, 12))
+        for intent_id, player_id, submitted in zip((7, 2, 5), (10, 11, 12), submitted_ticks):
+            queue.submit(_make_intent(
+                intent_id, player_id, submitted=submitted, complete=complete_tick
+            ))
 
-        drained = queue.drain_ready_for_tick(WorldTick(1))
-        assert [i.intent_id.value for i in drained] == [2, 5, 7]
+        drained = queue.drain_ready_for_tick(WorldTick(current_tick))
+        assert [i.intent_id.value for i in drained] == expected_ids
 
     def test_future_intents_stay_in_queue(self) -> None:
-        """complete_at_tick が未来の intent は drain で取り出されない。"""
+        """未来の予約は期限まで残り、期限に一度取り出した後は空になる。"""
         queue = IntentQueue()
         queue.submit(_make_intent(1, 10, submitted=1, complete=1))
         queue.submit(_make_intent(2, 11, submitted=1, complete=3))
@@ -95,13 +111,12 @@ class TestIntentQueueDraining:
         assert [i.intent_id.value for i in drained] == [1]
         assert queue.size() == 1
         assert queue.pending_for(PlayerId(11))[0].intent_id.value == 2
+        assert queue.drain_ready_for_tick(WorldTick(1)) == []
 
-    def test_drained_intents_are_removed(self) -> None:
-        """drain で取り出された intent は queue から消える。"""
-        queue = IntentQueue()
-        queue.submit(_make_intent(1, 10))
-        queue.drain_ready_for_tick(WorldTick(1))
+        drained = queue.drain_ready_for_tick(WorldTick(3))
+        assert [i.intent_id.value for i in drained] == [2]
         assert queue.size() == 0
+        assert queue.drain_ready_for_tick(WorldTick(3)) == []
 
     def test_drain_invalid_tick_type_rejected(self) -> None:
         """current_tick が WorldTick でなければ弾く。"""

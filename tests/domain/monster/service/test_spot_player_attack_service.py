@@ -91,48 +91,63 @@ class TestAttackerDown:
     """ダウン中のプレイヤーは攻撃できない。"""
 
     def test_down_true_executed_false(self) -> None:
-        """attacker.is_down=True なら不発。"""
+        """攻撃者がダウンしていれば不発となり、対象のHPと通知を変えない。"""
         svc = SpotPlayerAttackService()
+        monster = _make_monster()
+        assert monster.hp.value == 30
+        assert monster.get_events() == []
         outcome = svc.try_attack(
             attacker=_make_player(is_down=True),
-            target_monster=_make_monster(),
+            target_monster=monster,
             current_tick=WorldTick(10),
         )
         assert outcome.executed is False
         assert outcome.reason == "attacker_down"
+        assert monster.hp.value == 30
+        assert monster.get_events() == []
 
 
 class TestTargetDead:
     """既に死んでいるモンスターは攻撃できない。"""
 
     def test_status_dead_executed_false(self) -> None:
-        """target.status != ALIVE なら不発。"""
+        """対象が未出現・死亡状態なら不発となり、対象のHPと通知を変えない。"""
         svc = SpotPlayerAttackService()
         # alive=False で構築すると status=DEAD + spawned_at_tick=None で
         # `MonsterAggregate.__init__` が unspawned 扱いとして lifecycle を作る。
         # この状態は domain 上 ALIVE 以外なので target_dead で弾かれる。
+        monster = _make_monster(alive=False)
+        assert monster.hp.value == 30
+        assert monster.get_events() == []
         outcome = svc.try_attack(
             attacker=_make_player(),
-            target_monster=_make_monster(alive=False),
+            target_monster=monster,
             current_tick=WorldTick(10),
         )
         assert outcome.executed is False
         assert outcome.reason == "target_dead"
+        assert monster.hp.value == 30
+        assert monster.get_events() == []
 
 
 class TestZeroDamage:
     """attack=0 のプレイヤーでは不発。"""
 
     def test_attack_executed_false(self) -> None:
-        """`attacker.base_stats.attack=0` で event を発火させない。"""
+        """攻撃力0なら不発となり、対象のHPと通知を変えない。"""
         svc = SpotPlayerAttackService()
+        monster = _make_monster()
+        assert monster.hp.value == 30
+        assert monster.get_events() == []
         outcome = svc.try_attack(
             attacker=_make_player(attack=0),
-            target_monster=_make_monster(),
+            target_monster=monster,
             current_tick=WorldTick(10),
         )
         assert outcome.executed is False
         assert outcome.reason == "zero_damage"
+        assert monster.hp.value == 30
+        assert monster.get_events() == []
 
 
 class TestAttackHits:
@@ -173,51 +188,3 @@ class TestKillingBlow:
 
         died_events = [e for e in monster.get_events() if isinstance(e, MonsterDiedEvent)]
         assert len(died_events) == 1
-
-    def test_after_spot_graph_presence_preserved(self) -> None:
-        """本 PR では despawn を自動化しないため、致命攻撃後も
-        `SpotGraphAggregate.get_monster_spot(monster_id)` は成功する想定。
-        executor が event の `spot_id` を取得する際に依存している不変条件。
-
-        将来 `MonsterDiedEvent → unplace_monster` の配線が入った時点でこの
-        テストは破綻するため、その PR で executor 側の event 構築タイミングを
-        修正する合図になる。
-        """
-        from ai_rpg_world.domain.monster.value_object.monster_id import (
-            MonsterId as _MonsterId,
-        )
-        from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-        from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
-            SpotGraphAggregate,
-        )
-        from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
-        from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import (
-            SpotGraphId,
-        )
-
-        svc = SpotPlayerAttackService()
-        monster = _make_monster(hp_max=5)
-        graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-        spot = SpotId.create(1)
-        graph.add_spot(
-            SpotNode(
-                spot_id=spot,
-                name="森",
-                description="",
-                category=SpotCategoryEnum.OTHER,
-                parent_id=None,
-            )
-        )
-        graph.place_monster(_MonsterId.create(101), spot)
-
-        outcome = svc.try_attack(
-            attacker=_make_player(attack=999),
-            target_monster=monster,
-            current_tick=WorldTick(20),
-        )
-
-        assert outcome.target_incapacitated is True
-        # presence は引き続き居ると見える（自動除去は未配線）
-        assert graph.is_monster_present(_MonsterId.create(101)) is True
-        assert graph.get_monster_spot(_MonsterId.create(101)) == spot

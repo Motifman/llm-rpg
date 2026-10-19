@@ -22,7 +22,10 @@ from ai_rpg_world.domain.player.enum.player_enum import Element, Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
-from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillNotFoundInSlotException
+from ai_rpg_world.domain.skill.exception.skill_exceptions import (
+    SkillCastLockActiveException,
+    SkillNotFoundInSlotException,
+)
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
@@ -191,8 +194,8 @@ class TestMonsterSkillExecutionDomainService:
                 current_tick=WorldTick(10),
             )
 
-    def test_execute_cooldown_active_raises_domain_exception(self, domain_service, base_setup):
-        """クールダウン中に使用するとドメイン例外"""
+    def test_execute_cast_lock_active_raises_cast_lock_exception(self, domain_service, base_setup):
+        """同じtickの再使用は、再使用待ちではなく詠唱停止の専用例外で拒否する。"""
         monster, loadout, pmap, _, _ = base_setup
         current_tick = WorldTick(10)
         domain_service.execute(
@@ -202,8 +205,8 @@ class TestMonsterSkillExecutionDomainService:
             slot_index=0,
             current_tick=current_tick,
         )
-        # 同一ティックで再使用は不可（cast_lock）
-        with pytest.raises(DomainException) as excinfo:
+        # 同一ティックの詠唱停止を、後段の再使用待ちによる拒否と区別する。
+        with pytest.raises(SkillCastLockActiveException) as excinfo:
             domain_service.execute(
                 monster=monster,
                 loadout=loadout,
@@ -211,7 +214,7 @@ class TestMonsterSkillExecutionDomainService:
                 slot_index=0,
                 current_tick=current_tick,
             )
-        assert "cast" in str(excinfo.value).lower() or "cooldown" in str(excinfo.value).lower()
+        assert "cast" in str(excinfo.value).lower()
 
     def test_execute_monster_dead_raises_domain_exception(self, domain_service, base_setup):
         """モンスターが死亡状態の場合 use_mp でドメイン例外"""

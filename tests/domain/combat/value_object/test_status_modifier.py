@@ -21,30 +21,43 @@ class TestStatusModifier:
         assert new_stats.attack == 60
         assert new_stats.max_hp == 100 # 他は変わらない
 
-    def test_apply_modifiers_keeps_amounts_int_and_rates_in_range(self):
-        """補正の適用後も、量は int のまま、割合は 0.0-1.0 に収まる。
-
-        補正の計算は float で行う。量 (max_hp など) は int へ丸め、割合
-        (critical_rate / evasion_rate) は 0.0-1.0 に切り詰めるという 2 種類の
-        扱いが 1 つの関数に真偽値引数で同居しており、戻り値の型が呼び出しに
-        よって変わっていた。
-        """
-        stats = BaseStats(
-            max_hp=100, max_mp=50, attack=50, defense=30, speed=10,
-            critical_rate=0.1, evasion_rate=0.05
-        )
-        mods = [
-            StatusModifier(target=StatTarget.ATTACK, modifier_type=ModifierType.MULTIPLICATIVE, value=1.5),
-            StatusModifier(target=StatTarget.CRITICAL_RATE, modifier_type=ModifierType.ADDITIVE, value=5.0),
-            StatusModifier(target=StatTarget.EVASION_RATE, modifier_type=ModifierType.ADDITIVE, value=-1.0),
-        ]
-
+    @pytest.mark.parametrize(
+        ("stats", "mods", "expected"),
+        [
+            pytest.param(
+                BaseStats(100, 50, 50, 30, 10, 0.1, 0.05),
+                [
+                    StatusModifier(StatTarget.ATTACK, ModifierType.MULTIPLICATIVE, 1.5),
+                    StatusModifier(StatTarget.CRITICAL_RATE, ModifierType.ADDITIVE, 5.0),
+                    StatusModifier(StatTarget.EVASION_RATE, ModifierType.ADDITIVE, -1.0),
+                ],
+                BaseStats(100, 50, 75, 30, 10, 1.0, 0.0),
+                id="original_amount_types_and_rate_bounds",
+            ),
+            pytest.param(
+                BaseStats(101, 51, 51, 31, 11, 0.1, 0.05),
+                [
+                    StatusModifier(StatTarget.MAX_HP, ModifierType.MULTIPLICATIVE, 1.5),
+                    StatusModifier(StatTarget.MAX_MP, ModifierType.MULTIPLICATIVE, 1.5),
+                    StatusModifier(StatTarget.ATTACK, ModifierType.MULTIPLICATIVE, 1.5),
+                    StatusModifier(StatTarget.DEFENSE, ModifierType.MULTIPLICATIVE, 1.5),
+                    StatusModifier(StatTarget.SPEED, ModifierType.MULTIPLICATIVE, 1.5),
+                ],
+                BaseStats(151, 76, 76, 46, 16, 0.1, 0.05),
+                id="fractional_amounts_are_truncated",
+            ),
+        ],
+    )
+    def test_apply_modifiers_keeps_amounts_int_and_rates_in_range(self, stats, mods, expected):
+        """補正後の量5種類は端数を切り捨てたintとなり、割合は0.0-1.0に収まる。"""
         new_stats = stats.apply_modifiers(mods)
 
         assert isinstance(new_stats.attack, int)
         assert isinstance(new_stats.max_hp, int)
-        assert new_stats.critical_rate == 1.0
-        assert new_stats.evasion_rate == 0.0
+        assert isinstance(new_stats.max_mp, int)
+        assert isinstance(new_stats.defense, int)
+        assert isinstance(new_stats.speed, int)
+        assert new_stats == expected
 
     def test_apply_multiplicative_modifier(self):
         # Given

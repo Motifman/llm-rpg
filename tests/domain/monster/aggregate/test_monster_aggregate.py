@@ -43,7 +43,6 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     SpotTargetParams,
     StateTransitionResult,
 )
-from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
@@ -74,8 +73,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
-class TestMonsterAggregate:
-    """MonsterAggregateのテスト"""
+class MonsterAggregateFixtures:
+    """試験を継承せず、モンスター集約の準備だけを共有する。"""
 
     @pytest.fixture
     def base_stats(self) -> BaseStats:
@@ -131,6 +130,10 @@ class TestMonsterAggregate:
             world_object_id=WorldObjectId.create(1001),
             skill_loadout=skill_loadout,
         )
+
+
+class TestMonsterAggregate(MonsterAggregateFixtures):
+    """MonsterAggregateのテスト"""
 
     class TestCreate:
         def test_create_success(self, monster: MonsterAggregate, monster_template: MonsterTemplate):
@@ -216,14 +219,17 @@ class TestMonsterAggregate:
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.get_respawn_coordinate() == initial
 
-        def test_respawn_preserves_pack_id_and_leader(self, monster: MonsterAggregate, spot_id: SpotId):
-            """リスポーン後も pack_id / is_pack_leader が維持されること"""
+        @pytest.mark.parametrize("is_pack_leader", [False, True], ids=["member", "leader"])
+        def test_respawn_preserves_pack_id_and_leader(
+            self, monster: MonsterAggregate, spot_id: SpotId, is_pack_leader: bool
+        ):
+            """群れの一般個体とリーダーは、死亡後に復活しても群れIDと役割を保持する。"""
             pack_id = PackId.create("pack_a")
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), pack_id=pack_id, is_pack_leader=False)
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), pack_id=pack_id, is_pack_leader=is_pack_leader)
             monster.apply_damage(100, WorldTick(100))
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.pack_id == pack_id
-            assert monster.is_pack_leader is False
+            assert monster.is_pack_leader is is_pack_leader
 
         def test_respawn_sets_spawned_at_tick(self, monster: MonsterAggregate, spot_id: SpotId):
             """リスポーン時に spawned_at_tick が current_tick で更新されること"""
@@ -343,25 +349,32 @@ class TestMonsterAggregate:
             assert monster.pursuit_state.last_known is not None
             assert monster.pursuit_state.last_known.coordinate == last_seen
 
+        @pytest.mark.parametrize(
+            "attacker_id, attacker_coordinate, current_tick",
+            [
+                (WorldObjectId(3001), Coordinate(1, 2, 0), WorldTick(7)),
+                (WorldObjectId(200), Coordinate(5, 5, 0), WorldTick(1)),
+            ],
+            ids=["pursuit_alignment", "behavior_target_assignment"],
+        )
         def test_record_attacked_by_starts_pursuit_when_monster_chases(
-            self, monster: MonsterAggregate, spot_id: SpotId
+            self, monster: MonsterAggregate, spot_id: SpotId,
+            attacker_id, attacker_coordinate, current_tick,
         ):
+            """被弾で行動の標的・位置と共通追跡の最終観測を揃える。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-
-            monster.record_attacked_by(
-                attacker_id=WorldObjectId.create(3001),
-                attacker_coordinate=Coordinate(1, 2, 0),
-                current_tick=WorldTick(7),
-            )
+            monster.record_attacked_by(attacker_id, attacker_coordinate, current_tick)
 
             assert monster.behavior_state == BehaviorStateEnum.CHASE
+            assert monster.behavior_target_id == attacker_id
+            assert monster.behavior_last_known_position == attacker_coordinate
             assert monster.has_active_pursuit is True
-            assert monster.pursuit_target_id == WorldObjectId.create(3001)
+            assert monster.pursuit_target_id == attacker_id
             assert monster.pursuit_last_known == PursuitLastKnownState(
-                target_id=WorldObjectId.create(3001),
+                target_id=attacker_id,
                 spot_id=spot_id,
-                coordinate=Coordinate(1, 2, 0),
-                observed_at_tick=WorldTick(7),
+                coordinate=attacker_coordinate,
+                observed_at_tick=current_tick,
             )
 
         def test_apply_behavior_transition_reacquires_same_target_from_search(
@@ -418,9 +431,19 @@ class TestMonsterAggregate:
                 observed_at_tick=WorldTick(4),
             )
 
+        @pytest.mark.parametrize(
+            "lose_before_failure, expected_coordinate, expected_observed_tick, failure_tick",
+            [
+                (False, Coordinate(3, 0, 0), WorldTick(2), WorldTick(3)),
+                (True, Coordinate(4, 0, 0), WorldTick(3), WorldTick(4)),
+            ],
+            ids=["chase", "search_with_distinct_last_known"],
+        )
         def test_fail_pursuit_clears_monster_target_and_last_known_state(
-            self, monster: MonsterAggregate, spot_id: SpotId
+            self, monster: MonsterAggregate, spot_id: SpotId,
+            lose_before_failure, expected_coordinate, expected_observed_tick, failure_tick,
         ):
+            """失敗前の追跡情報を1件の通知へ残し、集約の追跡を解除する。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             target_id = WorldObjectId.create(2011)
             monster.apply_behavior_transition(
@@ -434,30 +457,66 @@ class TestMonsterAggregate:
                 ),
                 WorldTick(2),
             )
+            if lose_before_failure:
+                monster.apply_behavior_transition(
+                    StateTransitionResult(
+                        do_lose_target=True,
+                        lost_target_id=target_id,
+                        last_known_coordinate=Coordinate(4, 0, 0),
+                    ),
+                    WorldTick(3),
+                )
+                assert monster.behavior_state == BehaviorStateEnum.SEARCH
+            else:
+                assert monster.behavior_state == BehaviorStateEnum.CHASE
+            events_before = monster.get_events()
 
             monster.fail_pursuit(
                 PursuitFailureReason.TARGET_MISSING,
-                current_tick=WorldTick(3),
+                current_tick=failure_tick,
             )
 
             assert monster.pursuit_state is None
             assert monster.behavior_target_id is None
             assert monster.behavior_last_known_position is None
-            failed = next(
-                event for event in monster.get_events() if isinstance(event, PursuitFailedEvent)
-            )
+            events = monster.get_events()
+            assert events[:len(events_before)] == events_before
+            added_events = events[len(events_before):]
+            assert len(added_events) == 1
+            failed = added_events[0]
+            assert isinstance(failed, PursuitFailedEvent)
             assert failed.failure_reason == PursuitFailureReason.TARGET_MISSING
+            assert failed.actor_id == WorldObjectId(1001)
+            assert failed.target_id == WorldObjectId(2011)
+            assert failed.aggregate_id == WorldObjectId(1001)
+            assert failed.aggregate_type == "MonsterAggregate"
+            assert failed.last_known == PursuitLastKnownState(
+                target_id=WorldObjectId(2011),
+                spot_id=spot_id,
+                coordinate=expected_coordinate,
+                observed_at_tick=expected_observed_tick,
+            )
+            assert failed.target_snapshot == PursuitTargetSnapshot(
+                target_id=WorldObjectId(2011),
+                spot_id=spot_id,
+                coordinate=Coordinate(3, 0, 0),
+            )
 
         def test_fail_pursuit_when_no_active_pursuit_raises(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
             """追跡なしで fail_pursuit すると MonsterPursuitException"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            state_before = (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state)
+            events_before = monster.get_events()
+            assert events_before
             with pytest.raises(MonsterPursuitException, match="no active pursuit"):
                 monster.fail_pursuit(
                     PursuitFailureReason.TARGET_MISSING,
                     current_tick=WorldTick(0),
                 )
+            assert (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state) == state_before
+            assert monster.get_events() == events_before
 
         def test_fail_pursuit_when_no_last_known_state_raises(
             self,
@@ -494,11 +553,19 @@ class TestMonsterAggregate:
                     )
                 ),
             )
+            state_before = (agg.behavior_state, agg.behavior_target_id, agg.behavior_last_known_position, agg.pursuit_state)
+            events_before = agg.get_events()
+            assert agg.has_active_pursuit is True
+            assert agg.pursuit_target_snapshot is not None
+            assert agg.pursuit_last_known is None
+            assert agg.behavior_last_known_position is None
             with pytest.raises(MonsterPursuitException, match="last-known state"):
                 agg.fail_pursuit(
                     PursuitFailureReason.TARGET_MISSING,
                     current_tick=WorldTick(0),
                 )
+            assert (agg.behavior_state, agg.behavior_target_id, agg.behavior_last_known_position, agg.pursuit_state) == state_before
+            assert agg.get_events() == events_before
 
         def test_non_pursuit_exit_clears_aligned_pursuit_state(
             self, monster: MonsterAggregate, spot_id: SpotId
@@ -786,8 +853,22 @@ class TestMonsterAggregate:
     class TestTickHunger:
         """tick_hunger のテスト"""
 
-        def test_tick_hunger_returns_false_when_disabled(self, monster: MonsterAggregate, spot_id: SpotId):
-            """飢餓無効（starvation_ticks=0）のとき False"""
+        @pytest.mark.parametrize(
+            ("starvation_ticks", "increase"),
+            [(None, None), (0, 0.5), (2, 0.0)],
+            ids=["defaults", "starvation_disabled", "increase_disabled"],
+        )
+        def test_tick_hunger_returns_false_when_disabled(
+            self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId, starvation_ticks: int | None, increase: float | None,
+        ):
+            """既定設定または片方だけ無効な飢餓設定では、飢餓値を増やさずFalseを返す。"""
+            template = monster_template if starvation_ticks is None else replace(
+                monster_template, starvation_ticks=starvation_ticks, hunger_increase_per_tick=increase,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+            )
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             result = monster.tick_hunger(WorldTick(1))
             assert result is False
@@ -823,9 +904,18 @@ class TestMonsterAggregate:
             monster.starve(WorldTick(3))
             assert monster.status == MonsterStatusEnum.DEAD
 
-        def test_tick_hunger_returns_false_when_not_spawned(self, monster: MonsterAggregate):
-            """未スポーンでは False"""
+        @pytest.mark.parametrize("hunger_enabled", [False, True], ids=["defaults", "enabled"])
+        def test_tick_hunger_returns_false_when_not_spawned(
+            self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate,
+            hunger_enabled: bool,
+        ):
+            """未出現では飢餓が有効でも無効でも、飢餓値を増やさずFalseを返す。"""
+            template = replace(monster_template, starvation_ticks=2, hunger_increase_per_tick=0.5) if hunger_enabled else monster_template
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+            )
             assert monster.tick_hunger(WorldTick(1)) is False
+            assert monster.hunger == 0.0
 
     class TestRecordPreyKill:
         """record_prey_kill のテスト"""
@@ -896,47 +986,25 @@ class TestMonsterAggregate:
             monster.record_feed(0.3)
             assert monster.hunger == pytest.approx(0.5)
 
-        def test_record_feed_when_dead_raises(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
-            """死亡時は record_feed で MonsterAlreadyDeadException"""
-            template = MonsterTemplate(
-                template_id=monster_template.template_id,
-                name=monster_template.name,
-                base_stats=monster_template.base_stats,
-                reward_info=monster_template.reward_info,
-                respawn_info=respawn_info,
-                race=monster_template.race,
-                faction=monster_template.faction,
-                description=monster_template.description,
-                starvation_ticks=10,
-                hunger_decrease_on_feed=0.3,
+        @pytest.mark.parametrize("spawned_then_killed", [True, False], ids=["dead", "unspawned"])
+        def test_record_feed_when_dead_raises(
+            self, monster_template: MonsterTemplate, respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate, spot_id: SpotId, spawned_then_killed: bool,
+        ):
+            """死亡済みと未出現の個体は、採食0.2をMonsterAlreadyDeadExceptionで拒否する。"""
+            template = replace(
+                monster_template, respawn_info=respawn_info,
+                starvation_ticks=10, hunger_decrease_on_feed=0.3,
             )
             monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
             )
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(10))
+            if spawned_then_killed:
+                monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+                monster.apply_damage(999, WorldTick(10))
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.record_feed(0.2)
 
-        def test_record_feed_when_not_spawned_raises(self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate):
-            """未スポーン（DEAD 状態）では record_feed で MonsterAlreadyDeadException"""
-            template = MonsterTemplate(
-                template_id=monster_template.template_id,
-                name=monster_template.name,
-                base_stats=monster_template.base_stats,
-                reward_info=monster_template.reward_info,
-                respawn_info=monster_template.respawn_info,
-                race=monster_template.race,
-                faction=monster_template.faction,
-                description=monster_template.description,
-                starvation_ticks=10,
-                hunger_decrease_on_feed=0.3,
-            )
-            monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
-            )
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_feed(0.2)
 
     class TestRememberFeed:
         """餌場記憶（remember_feed / behavior_last_known_feed）のテスト"""
@@ -951,20 +1019,15 @@ class TestMonsterAggregate:
             assert monster.behavior_last_known_feed[0].coordinate == Coordinate(1, 2, 0)
 
         def test_remember_feed_lru_evicts_oldest(self, monster: MonsterAggregate, spot_id: SpotId):
-            """MAX_FEED_MEMORIES を超えると古い記憶が追い出される"""
+            """異なる餌場を4件記憶すると最初の1件を外し、残り3件を古い順に公開する。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            for i in range(MAX_FEED_MEMORIES + 1):
-                monster.remember_feed(
-                    WorldObjectId.create(100 + i),
-                    Coordinate(i, i, 0),
-                )
-            assert len(monster.behavior_last_known_feed) == MAX_FEED_MEMORIES
-            # 最初の 1 件（object_id=100）が追い出され、100+1, 100+2, 100+3 が残る
-            ids = [e.object_id for e in monster.behavior_last_known_feed]
-            assert WorldObjectId.create(100) not in ids
-            assert WorldObjectId.create(101) in ids
-            assert WorldObjectId.create(102) in ids
-            assert WorldObjectId.create(103) in ids
+            for i in range(4):
+                monster.remember_feed(WorldObjectId.create(100 + i), Coordinate(i, i, 0))
+            assert monster.behavior_last_known_feed == [
+                FeedMemoryEntry(WorldObjectId.create(101), Coordinate(1, 1, 0)),
+                FeedMemoryEntry(WorldObjectId.create(102), Coordinate(2, 2, 0)),
+                FeedMemoryEntry(WorldObjectId.create(103), Coordinate(3, 3, 0)),
+            ]
 
         def test_remember_feed_same_object_id_moves_to_end(self, monster: MonsterAggregate, spot_id: SpotId):
             """同じ object_id で remember_feed すると末尾に移動（更新）"""
@@ -977,12 +1040,24 @@ class TestMonsterAggregate:
             assert monster.behavior_last_known_feed[1].object_id == WorldObjectId.create(100)
             assert monster.behavior_last_known_feed[1].coordinate == Coordinate(1, 1, 0)
 
-        def test_remember_feed_when_dead_does_nothing(self, monster: MonsterAggregate, spot_id: SpotId):
-            """死亡時は remember_feed で何も追加されない（例外なし）"""
+        @pytest.mark.parametrize("has_memory", [False, True], ids=["empty", "remembered"])
+        def test_remember_feed_when_dead_does_nothing(
+            self, monster: MonsterAggregate, spot_id: SpotId, has_memory: bool,
+        ):
+            """死亡個体への記憶要求は、空または既存の餌場記憶をそのまま保つ。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            if has_memory:
+                monster.remember_feed(WorldObjectId.create(99), Coordinate(4, 5, 0))
             monster.apply_damage(999, WorldTick(10))
+            before = monster.behavior_last_known_feed
+            if has_memory:
+                assert before == [FeedMemoryEntry(WorldObjectId.create(99), Coordinate(4, 5, 0))]
+            else:
+                assert before == []
+
             monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 0, 0))
-            assert monster.behavior_last_known_feed == []
+
+            assert monster.behavior_last_known_feed == before
 
         def test_behavior_last_known_feed_cleared_on_spawn(self, monster: MonsterAggregate, spot_id: SpotId, respawn_info: RespawnInfo):
             """spawn 時 _initialize_status で餌場記憶がクリアされる"""
@@ -998,15 +1073,6 @@ class TestMonsterAggregate:
     class TestRecordAttackedBy:
         """record_attacked_by のテスト"""
 
-        def test_record_attacked_by_sets_chase(self, monster: MonsterAggregate, spot_id: SpotId):
-            """攻撃者を記録すると CHASE に遷移（NORMAL・HP十分）"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            attacker_id = WorldObjectId.create(200)
-            attacker_coord = Coordinate(5, 5, 0)
-            monster.record_attacked_by(attacker_id, attacker_coord, WorldTick(1))
-            assert monster.behavior_target_id == attacker_id
-            assert monster.behavior_last_known_position == attacker_coord
-            assert monster.behavior_state == BehaviorStateEnum.CHASE
 
         def test_record_attacked_by_flee_only_sets_flee(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
             """FLEE_ONLY のとき FLEE に遷移"""
@@ -1029,21 +1095,20 @@ class TestMonsterAggregate:
             assert monster.behavior_state == BehaviorStateEnum.FLEE
             assert monster.behavior_target_id == WorldObjectId.create(99)
 
-        def test_record_attacked_by_when_not_spawned_raises(self, monster: MonsterAggregate):
-            """未スポーン（DEAD 状態）では MonsterAlreadyDeadException"""
+        @pytest.mark.parametrize("after_death, current_tick", [(False, WorldTick(1)), (True, WorldTick(20))], ids=["unspawned", "dead"])
+        def test_record_attacked_by_rejects_unavailable_actor(self, monster, spot_id, after_death, current_tick):
+            """被弾要求を拒否しても、直前の行動・追跡・未配信イベントを保つ。"""
+            if after_death:
+                monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+                monster.apply_damage(999, WorldTick(10))
+            state_before = (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state)
+            events_before = monster.get_events()
+            assert events_before
             with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_attacked_by(
-                    WorldObjectId.create(99), Coordinate(1, 1, 0), WorldTick(1)
-                )
+                monster.record_attacked_by(WorldObjectId(99), Coordinate(1, 1, 0), current_tick)
+            assert (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state) == state_before
+            assert monster.get_events() == events_before
 
-        def test_record_attacked_by_when_dead_raises(self, monster: MonsterAggregate, spot_id: SpotId):
-            """死亡時は MonsterAlreadyDeadException"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(10))
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_attacked_by(
-                    WorldObjectId.create(99), Coordinate(1, 1, 0), WorldTick(20)
-                )
 
     class TestDieFromOldAge:
         """die_from_old_age のテスト"""
@@ -1189,9 +1254,13 @@ class TestMonsterAggregate:
             assert monster.status == MonsterStatusEnum.ALIVE
 
     class TestRespawn:
-        def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
+        @pytest.mark.parametrize("spent_mp", [0, 20], ids=["full_mp", "spent_mp"])
+        def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId, spent_mp: int):
+            """死亡前のMP消費にかかわらず、復活でHP/MPと生存状態が戻り、新座標の通知が出る。"""
             # Given
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            if spent_mp:
+                monster.use_mp(spent_mp)
             monster.apply_damage(100, WorldTick(100))
             monster.clear_events()
 
@@ -1299,40 +1368,49 @@ class TestMonsterAggregate:
             assert event.amount == 20
             assert event.current_mp == 30
 
-        def test_on_tick_regeneration(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
+        @pytest.mark.parametrize(
+            ("regen_max_hp", "regen_max_mp", "regen_rate", "spent_mp", "expected_hp", "expected_mp", "healed", "recovered"),
+            [
+                (100, 50, 0.01, 40, 51, 11, 1, 1),
+                (100, 50, 0.1, 0, 60, 50, 10, 0),
+                (300, 700, 0.01, 40, 53, 17, 3, 7),
+            ],
+            ids=["one_percent_minimum", "custom_rate_full_mp", "distinct_supplied_stats"],
+        )
+        def test_on_tick_regeneration(
+            self, monster: MonsterAggregate, spot_id: SpotId,
+            regen_max_hp: int, regen_max_mp: int, regen_rate: float, spent_mp: int,
+            expected_hp: int, expected_mp: int, healed: int, recovered: int,
+        ):
+            """値で渡した回復率と最大値に従いHP/MPを回復し、実増分だけの未配信通知を1件ずつ積む。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             monster.apply_damage(50, WorldTick(10))
-            monster.use_mp(40)
+            if spent_mp:
+                monster.use_mp(spent_mp)
             monster.clear_events()
-
-            # When（実効ステータスはアプリ層で算出して渡す）
-            tick_11 = WorldTick(11)
-            regen_stats = compute_effective_stats(
-                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
+            regen_stats = replace(
+                monster.template.base_stats, max_hp=regen_max_hp, max_mp=regen_max_mp,
             )
-            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=0.01)
 
-            # Then（1% で回復。100 * 0.01 = 1）
-            assert monster.hp.value == 51
-            assert monster.mp.value == 11
+            monster.on_tick(WorldTick(11), regen_stats=regen_stats, regen_rate=regen_rate)
+
+            assert monster.hp.value == expected_hp
+            assert monster.mp.value == expected_mp
             events = monster.get_events()
-            assert any(isinstance(e, MonsterHealedEvent) for e in events)
-            assert any(isinstance(e, MonsterMpRecoveredEvent) for e in events)
+            assert len(events) == (2 if recovered else 1)
+            hp_events = [event for event in events if isinstance(event, MonsterHealedEvent)]
+            assert len(hp_events) == 1
+            assert hp_events[0].amount == healed
+            assert hp_events[0].current_hp == expected_hp
+            mp_events = [event for event in events if isinstance(event, MonsterMpRecoveredEvent)]
+            assert len(mp_events) == (1 if recovered else 0)
+            if recovered:
+                assert mp_events[0].amount == recovered
+                assert mp_events[0].current_mp == expected_mp
+            for event in events:
+                assert event.aggregate_id == monster.monster_id
+                assert event.aggregate_type == "MonsterAggregate"
 
-        def test_on_tick_custom_regen_rate(self, monster: MonsterAggregate, spot_id: SpotId):
-            """回復率を値で渡した場合にその率で回復すること"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(50, WorldTick(10))
-            monster.clear_events()
-
-            tick_11 = WorldTick(11)
-            regen_stats = compute_effective_stats(
-                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
-            )
-            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=0.1)
-
-            assert monster.hp.value == 60  # 50 + 100 * 0.1
 
         def test_on_tick_no_regen_when_rate_none(self, monster: MonsterAggregate, spot_id: SpotId):
             """regen_rate を渡さない場合は回復しないこと"""
@@ -1387,11 +1465,14 @@ class TestMonsterAggregate:
         def test_effective_stats_filters_expired_effects_via_domain_service(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
+            """期限切れを計算から除き、整理後の公開一覧には期限内の効果だけを残す。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
-            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
+            expired_effect = StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5))
+            active_effect = StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20))
+            monster.add_status_effect(expired_effect)
+            monster.add_status_effect(active_effect)
 
             tick = WorldTick(10)
             effective_stats = compute_effective_stats(
@@ -1400,6 +1481,7 @@ class TestMonsterAggregate:
             assert effective_stats.attack == 30  # 20 * 1.5 のみ
             monster.cleanup_expired_effects(tick)
             assert len(monster.active_effects) == 1
+            assert monster.active_effects == [active_effect]
 
         def test_buff_and_debuff_stacking_via_domain_service(
             self, monster: MonsterAggregate, spot_id: SpotId
@@ -1557,11 +1639,14 @@ class TestMonsterAggregate:
             assert monster_with_growth.hp.max_hp == 80
             assert monster_with_growth.mp.max_mp == 40
 
+        @pytest.mark.parametrize("spent_mp", [0, 20], ids=["full_mp", "spent_mp"])
         def test_respawn_initializes_hp_mp_with_effective_stats(
-            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId, spent_mp: int
         ):
-            """成長段階ありのテンプレートでリスポーン時も、HP/MP は実効 max_hp/max_mp で満タンに初期化されること"""
+            """死亡前のMP消費にかかわらず、復活時は幼体段階のHP80/MP40まで回復する。"""
             monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            if spent_mp:
+                monster_with_growth.use_mp(spent_mp)
             monster_with_growth.apply_damage(80, WorldTick(10))
             monster_with_growth.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             # リスポーン時 spawned_at_tick=200 なので経過 0 → 幼体段階（0.8）→ 80, 40
@@ -1607,8 +1692,8 @@ class TestMonsterAggregate:
             assert agg.get_allow_chase(WorldTick(150)) is True
 
 
-class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
-    """Monster の行動状態スナップショットと decide のテスト（TestMonsterAggregate の fixture を利用）"""
+class TestMonsterAggregateBehaviorState(MonsterAggregateFixtures):
+    """共通の準備を使い、行動状態のスナップショット・遷移・意図通知を検証する。"""
 
     @pytest.fixture
     def spawned_monster(
@@ -1624,7 +1709,7 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
         return agg
 
     def test_to_behavior_state_snapshot_after_spawn(self, spawned_monster):
-        """スポーン直後の to_behavior_state_snapshot が IDLE と初期位置を返すこと"""
+        """スポーン直後は IDLE・標的なし・HP 比1・既定の逃走閾値を返すこと"""
         from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
         from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 
@@ -1667,38 +1752,67 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
     class TestApplyBehaviorTransition:
         """apply_behavior_transition のテスト"""
 
-        def test_apply_behavior_transition_success_empty_result(
-            self, spawned_monster
-        ):
-            """空の StateTransitionResult で呼んでも状態が変わらず例外が出ないこと"""
+        @pytest.mark.parametrize("with_pursuit", [False, True], ids=["idle_empty", "chase_with_pending_events"])
+        def test_apply_behavior_transition_success_empty_result(self, spawned_monster, with_pursuit):
+            """空の適用は現在の行動・追跡と既存通知を維持する。"""
             result = StateTransitionResult()
             spawned_monster.clear_events()
-            spawned_monster.apply_behavior_transition(result, WorldTick(10))
-            assert spawned_monster.behavior_state == BehaviorStateEnum.IDLE
-            events = spawned_monster.get_events()
-            assert len(events) == 0
+            if with_pursuit:
+                spawned_monster.apply_behavior_transition(
+                    StateTransitionResult(
+                        spot_target_params=SpotTargetParams(
+                            target_id=WorldObjectId(321),
+                            coordinate=Coordinate(7, 8, 0),
+                            effective_flee_threshold=0.0,
+                            allow_chase=True,
+                        )
+                    ),
+                    WorldTick(11),
+                )
+                assert spawned_monster.behavior_state == BehaviorStateEnum.CHASE
+                assert spawned_monster.behavior_target_id == WorldObjectId(321)
+                assert spawned_monster.behavior_last_known_position == Coordinate(7, 8, 0)
+                assert spawned_monster.has_active_pursuit is True
+            state_before = (spawned_monster.behavior_state, spawned_monster.behavior_target_id, spawned_monster.behavior_last_known_position, spawned_monster.pursuit_state)
+            events_before = spawned_monster.get_events()
+            spawned_monster.apply_behavior_transition(result, WorldTick(12 if with_pursuit else 10))
+            assert (spawned_monster.behavior_state, spawned_monster.behavior_target_id, spawned_monster.behavior_last_known_position, spawned_monster.pursuit_state) == state_before
+            assert spawned_monster.get_events() == events_before
+            if not with_pursuit:
+                assert spawned_monster.behavior_state == BehaviorStateEnum.IDLE
+                assert len(spawned_monster.get_events()) == 0
+            else:
+                assert events_before
 
-        def test_apply_behavior_transition_when_not_spawned_raises(self, monster):
-            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+        @pytest.mark.parametrize("after_death, current_tick", [(False, WorldTick(0)), (True, WorldTick(2))], ids=["unspawned", "dead"])
+        def test_apply_behavior_transition_rejects_unavailable_actor(self, monster, spot_id, after_death, current_tick):
+            """未出現・死亡後の適用は直前の状態と未配信通知を変えず拒否する。"""
+            if after_death:
+                monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+                monster.apply_damage(999, WorldTick(1))
+                assert monster.status == MonsterStatusEnum.DEAD
             result = StateTransitionResult()
+            state_before = (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state)
+            events_before = monster.get_events()
+            assert events_before
             with pytest.raises(MonsterAlreadyDeadException):
-                monster.apply_behavior_transition(result, WorldTick(0))
+                monster.apply_behavior_transition(result, current_tick)
+            assert (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state) == state_before
+            assert monster.get_events() == events_before
 
-        def test_apply_behavior_transition_when_dead_raises(
-            self, monster, spot_id
-        ):
-            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(1))
-            assert monster.status == MonsterStatusEnum.DEAD
-            result = StateTransitionResult()
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.apply_behavior_transition(result, WorldTick(2))
 
+        @pytest.mark.parametrize("actor_id", [WorldObjectId(1), WorldObjectId(1001)], ids=["original_actor", "distinct_actor"])
         def test_apply_behavior_transition_flee_result_updates_state(
-            self, spawned_monster
+            self, monster_template, skill_loadout, spot_id, actor_id,
         ):
-            """FLEE の StateTransitionResult で呼ぶと状態が FLEE になりイベントが発行されること"""
+            """FLEEの状態と、集約に追加する実イベントの値・件数を揃える。"""
+            spawned_monster = MonsterAggregate.create(
+                monster_id=MonsterId(1),
+                template=monster_template,
+                world_object_id=actor_id,
+                skill_loadout=skill_loadout,
+            )
+            spawned_monster.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(10))
             spawned_monster.clear_events()
             result = StateTransitionResult(
                 flee_from_threat_id=WorldObjectId(999),
@@ -1708,8 +1822,19 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             assert spawned_monster.behavior_state == BehaviorStateEnum.FLEE
             assert spawned_monster.behavior_target_id == WorldObjectId(999)
             events = spawned_monster.get_events()
-            assert any(isinstance(e, TargetSpottedEvent) for e in events)
-            assert any(isinstance(e, ActorStateChangedEvent) for e in events)
+            spotted = [e for e in events if isinstance(e, TargetSpottedEvent)]
+            changed = [e for e in events if isinstance(e, ActorStateChangedEvent)]
+            assert len(events) == 2
+            assert len(spotted) == 1
+            assert len(changed) == 1
+            assert spotted[0].target_id == WorldObjectId(999)
+            assert spotted[0].coordinate == Coordinate(10, 10, 0)
+            assert changed[0].old_state == BehaviorStateEnum.IDLE
+            assert changed[0].new_state == BehaviorStateEnum.FLEE
+            for event in (spotted[0], changed[0]):
+                assert event.actor_id == actor_id
+                assert event.aggregate_id == actor_id
+                assert event.aggregate_type == "Actor"
 
         def test_apply_behavior_transition_lost_target_moves_chase_to_search(
             self, base_stats, reward_info, respawn_info, skill_loadout, spot_id
@@ -1857,9 +1982,42 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             )
 
         def test_apply_territory_return_when_not_spawned_raises(self, monster):
-            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+            """未出現時の縄張り要求は状態と未配信通知を保って拒否する。"""
+            state_before = (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state)
+            events_before = monster.get_events()
+            assert events_before
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.apply_territory_return_if_needed(Coordinate(0, 0, 0))
+            assert (monster.behavior_state, monster.behavior_target_id, monster.behavior_last_known_position, monster.pursuit_state) == state_before
+            assert monster.get_events() == events_before
+
+    class TestBehaviorActionsRejected:
+        """意図記録の公開3入口は未出現・死亡後の要求を受け付けない。"""
+
+        @pytest.mark.parametrize(
+            "operation, arguments, after_death, current_tick",
+            [
+                ("record_move", (Coordinate(1, 1, 0),), False, WorldTick(0)),
+                ("record_move", (Coordinate(1, 1, 0),), True, WorldTick(2)),
+                ("record_use_skill", (0, None), False, WorldTick(0)),
+                ("record_use_skill", (0, None), True, WorldTick(2)),
+                ("record_interact", (WorldObjectId(1),), False, WorldTick(0)),
+                ("record_interact", (WorldObjectId(1),), True, WorldTick(2)),
+            ],
+            ids=["move_unspawned", "move_dead", "skill_unspawned", "skill_dead", "interact_unspawned", "interact_dead"],
+        )
+        def test_unavailable_actor_rejects_action_without_events(
+            self, monster, spot_id, operation, arguments, after_death, current_tick,
+        ):
+            """元の例外型を保ち、拒否直前の非空イベントを消費・追加しない。"""
+            if after_death:
+                monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+                monster.apply_damage(999, WorldTick(1))
+            events_before = monster.get_events()
+            assert events_before
+            with pytest.raises(MonsterAlreadyDeadException):
+                getattr(monster, operation)(*arguments, current_tick)
+            assert monster.get_events() == events_before
 
     class TestRecordMove:
         """record_move のテスト"""
@@ -1880,25 +2038,20 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             assert move_events[0].spot_id == spawned_monster.spot_id
             assert move_events[0].current_tick == WorldTick(10)
 
-        def test_record_move_when_not_spawned_raises(self, monster):
-            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_move(Coordinate(1, 1, 0), WorldTick(0))
 
-        def test_record_move_when_dead_raises(self, monster, spot_id):
-            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(1))
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_move(Coordinate(1, 1, 0), WorldTick(2))
 
     class TestRecordUseSkill:
         """record_use_skill のテスト"""
 
-        def test_record_use_skill_success(self, spawned_monster):
-            """record_use_skill で MonsterDecidedToUseSkillEvent が 1 件発行されること"""
+        @pytest.mark.parametrize(
+            "skill_slot_index, target_id",
+            [(0, None), (2, WorldObjectId(99))],
+            ids=["default_slot_without_target", "nondefault_slot_with_target"],
+        )
+        def test_record_use_skill_success(self, spawned_monster, skill_slot_index, target_id):
+            """技能選択の通知は、指定されたスロットと標的を行為者・地点・時刻とともに1件伝える。"""
             spawned_monster.clear_events()
-            spawned_monster.record_use_skill(0, None, WorldTick(10))
+            spawned_monster.record_use_skill(skill_slot_index, target_id, WorldTick(10))
             events = spawned_monster.get_events()
             skill_events = [
                 e
@@ -1907,22 +2060,15 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             ]
             assert len(skill_events) == 1
             assert skill_events[0].actor_id == spawned_monster.world_object_id
-            assert skill_events[0].skill_slot_index == 0
-            assert skill_events[0].target_id is None
+            assert skill_events[0].skill_slot_index == skill_slot_index
+            if target_id is None:
+                assert skill_events[0].target_id is None
+            else:
+                assert skill_events[0].target_id == target_id
             assert skill_events[0].spot_id == spawned_monster.spot_id
             assert skill_events[0].current_tick == WorldTick(10)
 
-        def test_record_use_skill_when_not_spawned_raises(self, monster):
-            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_use_skill(0, None, WorldTick(0))
 
-        def test_record_use_skill_when_dead_raises(self, monster, spot_id):
-            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(1))
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_use_skill(0, None, WorldTick(2))
 
     class TestRecordInteract:
         """record_interact のテスト"""
@@ -1944,17 +2090,7 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             assert interact_events[0].spot_id == spawned_monster.spot_id
             assert interact_events[0].current_tick == WorldTick(10)
 
-        def test_record_interact_when_not_spawned_raises(self, monster):
-            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_interact(WorldObjectId(1), WorldTick(0))
 
-        def test_record_interact_when_dead_raises(self, monster, spot_id):
-            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(1))
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_interact(WorldObjectId(1), WorldTick(2))
 
     def test_advance_patrol_index(self, spawned_monster):
         """advance_patrol_index がインデックスを進めること"""

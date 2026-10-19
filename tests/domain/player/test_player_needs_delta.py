@@ -14,8 +14,6 @@ LLM が発話し続けた」現象は、実は数値は下がっていたが LLM
 
 from __future__ import annotations
 
-import pytest
-
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -59,8 +57,7 @@ class TestComputeNeedDeltas:
         """snapshot が無い初期状態では全 need の delta は 0。"""
         player = _make_player(hunger=20, fatigue=30)
         deltas = player.compute_need_deltas()
-        assert deltas.get(NeedType.HUNGER, 0) == 0
-        assert deltas.get(NeedType.FATIGUE, 0) == 0
+        assert deltas == {NeedType.HUNGER: 0, NeedType.FATIGUE: 0}
 
     def test_snapshot_then_change_then_delta(self):
         """snapshot 後に need が変化すると、その変化が delta として返る。"""
@@ -85,22 +82,33 @@ class TestComputeNeedDeltas:
     def test_snapshot_overwrites_previous_baseline(self):
         """2 回目の snapshot 後の delta は新しい baseline からの差分。"""
         player = _make_player(fatigue=50)
-        player.snapshot_needs_for_delta()      # baseline = 50
+        player.snapshot_needs_for_delta()  # baseline = 50
         player.increase_need(NeedType.FATIGUE, 10)  # 現在 = 60
-        player.snapshot_needs_for_delta()      # baseline 更新 = 60
-        player.increase_need(NeedType.FATIGUE, 5)   # 現在 = 65
+        player.snapshot_needs_for_delta()  # baseline 更新 = 60
+        player.increase_need(NeedType.FATIGUE, 5)  # 現在 = 65
         deltas = player.compute_need_deltas()
         # baseline 60 → 現在 65 なので +5、+15 ではない
         assert deltas[NeedType.FATIGUE] == 5
 
     def test_compute_does_not_modify_state(self):
-        """compute_need_deltas は副作用を持たない (= 何度呼んでも同じ結果)。"""
+        """差分を繰り返し参照しても欲求値・上限・基準値は変わらない。"""
         player = _make_player(fatigue=50)
         player.snapshot_needs_for_delta()
         player.increase_need(NeedType.FATIGUE, 5)
         d1 = player.compute_need_deltas()
         d2 = player.compute_need_deltas()
         assert d1 == d2
+        assert d1 == {NeedType.HUNGER: 0, NeedType.FATIGUE: 5}
+        assert {need.need_type: (need.value, need.max_value) for need in player.needs} == {
+            NeedType.HUNGER: (0, 100),
+            NeedType.FATIGUE: (55, 100),
+        }
+
+        player.increase_need(NeedType.FATIGUE, 1)
+        assert player.compute_need_deltas() == {
+            NeedType.HUNGER: 0,
+            NeedType.FATIGUE: 6,
+        }
 
 
 class TestDescribeAllWithDeltas:
