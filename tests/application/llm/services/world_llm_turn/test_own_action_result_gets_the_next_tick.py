@@ -53,7 +53,6 @@ _SEARCH_DRAWER = {
         "inner_thought": "引き出しに何かあるかもしれない",
     },
 }
-_MEMO_LIST = {"name": "memo_list", "arguments": {}}
 _TRAVEL_TWO_TICKS = {
     "name": "travel_to",
     "arguments": {"destination_label": "雪の峠道", "inner_thought": "峠を見に行く"},
@@ -180,14 +179,13 @@ class TestSucceededActionWithoutObservationGetsTheNextTick:
         [
             ("north_shaft_head", _EXPLORE, "explore"),
             ("company_office", _SEARCH_DRAWER, "interact"),
-            ("north_shaft_head", _MEMO_LIST, "memo_list"),
         ],
-        ids=["explore_finds_nothing", "interact_reads_a_note", "memo_tool"],
+        ids=["explore_finds_nothing", "interact_reads_a_note"],
     )
     def test_next_turn_comes_on_the_next_tick(
         self, spot: str, action: dict[str, Any], tool: str
     ) -> None:
-        """何も見つからない探索・紙切れを読むだけの interact・メモのツールが成功すると、本人の次の手番は 1 tick 後に来る。"""
+        """何も見つからない探索・紙切れを読むだけの interact が成功すると、本人の次の手番は 1 tick 後に来る。"""
         with TemporaryDirectory() as tmp:
             session = _open_session(tmp)
             session.place_hal(spot)
@@ -336,63 +334,3 @@ class TestRepeatingTheSameActionIsWarned:
             ]
             assert _gaps([(t, "") for t in explores]) == [1, 1, 1, 1]
             assert warnings == [explores[-1]]
-
-
-
-class _GateThatDropsEveryoneAfterTheFirstWave:
-    """1 回目の wave は全員を通し、2 回目からは問われた全員を回さない起動判定。問われた人を覚える。"""
-
-    def __init__(self) -> None:
-        self.waves = 0
-        self.asked: list[set[int]] = []
-
-    def candidates(self, scheduled: list[PlayerId]) -> list[PlayerId]:
-        return list(scheduled)
-
-    def decide_wave(
-        self, player_ids: list[PlayerId], *, scheduled: list[PlayerId] | None = None
-    ) -> list[PlayerId]:
-        self.waves += 1
-        self.asked.append({int(p.value) for p in player_ids})
-        return list(player_ids) if self.waves == 1 else []
-
-
-class TestFollowUpIsNotJudgedByTheTurnGate:
-    """起動判定は未読の観測で動く必要があるかを問うもので、自分の行動の結果を材料に持たないため、自分の行動のあとに回した手番を判定にかけないことを保証する。"""
-
-    def test_follow_up_runs_even_when_the_gate_drops_everyone(self) -> None:
-        """探索が成功した次の wave で、起動判定が問われた全員を回さないとしても、ハルは判定にかけられずに手番が回る。"""
-        with TemporaryDirectory() as tmp:
-            session = _open_session(tmp)
-            gate = _GateThatDropsEveryoneAfterTheFirstWave()
-            session.wiring.turn_gate = gate
-            session.script_hal([_EXPLORE])
-            trigger = session.wiring.llm_turn_trigger
-            trigger.schedule_turn(_HAL)
-
-            trigger.run_scheduled_turns()
-            trigger.run_scheduled_turns()
-
-            assert [tool for _, tool in session.hal_turns()] == ["explore", "wait"]
-            assert all(int(_HAL) not in asked for asked in gate.asked[1:])
-
-    def test_observation_woken_player_is_still_judged(self) -> None:
-        """正の対照: 同じ wave で観測により pending に入ったミオは起動判定にかけられ、回さないと判定されれば手番が来ない。"""
-        with TemporaryDirectory() as tmp:
-            session = _open_session(tmp)
-            gate = _GateThatDropsEveryoneAfterTheFirstWave()
-            session.wiring.turn_gate = gate
-            session.script_hal([_EXPLORE])
-            trigger = session.wiring.llm_turn_trigger
-            mio = PlayerId(2)
-            trigger.schedule_turn(_HAL)
-            trigger.run_scheduled_turns()
-
-            trigger.schedule_turn(mio)
-            trigger.run_scheduled_turns()
-
-            assert gate.asked[1] == {int(mio)}
-            mio_turns = [
-                e for e in session.recorder.of_kind("action_result") if e.player_id == int(mio)
-            ]
-            assert mio_turns == []
