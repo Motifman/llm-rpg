@@ -1,21 +1,18 @@
-"""拒否が「駄目だ」で終わらず、行き先まで言うことを保証する。
+"""拒否が「駄目だ」で終わらず、正解の一覧まで言うことを保証する。
 
 ## なぜこの試験が要るか
 
-`disabled_tools` に `memo_add` と書くと、起動時にこう止まる。
+`disabled_tools` に実在しない名前を書くと、起動時にこう止まる。
 
-    disabled_tools に実在しないツール名があります: memo_add
+    disabled_tools に実在しないツール名があります: market_lst_item
     指定できるのは: attack, buy_item, ...
 
-止めてくれるのは正しい。しかし**書いた人は「この世界では memo を落とせない」と
-読む**。実際は落とせて、**場所がシナリオではなく実験設定**なだけである
-(`MEMO_TOOLS_ENABLED`)。**行き先の無い拒否は、拒否された側に推測を強いる。**
+名前を間違えた人が次に要るのは正解の一覧で、「不正な名前です」だけでは
+同じ間違いを繰り返す。`INVALID_DESTINATION_LABEL` が「有効な destination_label:
+"市場の広場"」と正解を列挙するのと同じ形にする。
 
-実際にこれで止まり、「落とせない」と報告した (私が)。エラーを読んで止まり、
-その先を調べなかった。文面が行き先を書いていれば、そこで終わっていた。
-
-最良の形は既にこの世界にある。`INVALID_DESTINATION_LABEL` は
-「有効な destination_label: "市場の広場"」と**正解を列挙している**。
+古いメモの道具 (`memo_add` など) は #1631 で消した。以前は実験設定で落とせると
+案内していたが、今はどこにも無いので、ほかの実在しない名前と同じに扱う。
 """
 
 from __future__ import annotations
@@ -49,43 +46,20 @@ def _refusal(tmp_path: Path, disabled: list) -> str:
 
 
 class TestARefusalPointsSomewhere:
-    """落とせる場所があるなら、その場所を言う。"""
+    """実在しない名前を拒むとき、拒んだ名前と、シナリオで落とせる名前の一覧を言う。"""
 
-    def test_it_names_the_experiment_flag(self, tmp_path: Path) -> None:
-        """memo を書いた人に、実験設定で落とすことと、その名前を伝える。"""
-        message = _refusal(tmp_path, ["memo_add"])
+    def test_it_lists_what_the_scenario_can_disable(self, tmp_path: Path) -> None:
+        """綴り間違いの名前を書くと、その名前と、シナリオで落とせる名前の一覧を出す。"""
+        message = _refusal(tmp_path, ["market_lst_item"])
 
-        assert "MEMO_TOOLS_ENABLED" in message
-        assert "実験設定" in message
-
-    def test_it_still_lists_what_the_scenario_can_disable(
-        self, tmp_path: Path,
-    ) -> None:
-        """従来どおり、シナリオで落とせる名前の一覧も出す (**正の対照**)。
-
-        行き先を足したぶんで元の案内が消えると、**別の推測を強いる**ことに
-        なる。
-        """
-        message = _refusal(tmp_path, ["memo_add"])
-
+        assert "market_lst_item" in message
         assert "指定できるのは" in message
         assert "market_list_item" in message
 
-    def test_a_plain_typo_gets_no_false_signpost(self, tmp_path: Path) -> None:
-        """ただの綴り間違いには、行き先を書かない (**正の対照**)。
+    def test_an_old_memo_tool_is_refused_without_a_signpost(self, tmp_path: Path) -> None:
+        """消した古いメモの道具の名前は、実在しない名前として拒み、実験設定へ案内しない。"""
+        message = _refusal(tmp_path, ["memo_add"])
 
-        存在しない名前に「実験設定で落とせます」と言うと、**無い道を
-        指す**ことになる。今度は行き先そのものが嘘になる。
-        """
-        message = _refusal(tmp_path, ["market_lst_item"])
-
+        assert "memo_add" in message
+        assert "指定できるのは" in message
         assert "実験設定" not in message
-
-    def test_a_mixed_list_signposts_only_the_ones_that_have_a_home(
-        self, tmp_path: Path,
-    ) -> None:
-        """行き先のある名前と無い名前が混ざっても、あるものだけを案内する。"""
-        message = _refusal(tmp_path, ["memo_add", "market_lst_item"])
-
-        assert "memo_add は実験設定" in message
-        assert "market_lst_item は実験設定" not in message
