@@ -24,14 +24,14 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 
 class TestWorldRuntimeInteractionEventPublisher:
     """interaction 経由で fire する graph event が ObservationPipeline に届く。"""
 
     def test_interaction_emits_event_to_other_player_at_same_spot(self) -> None:
-        """relay_puzzle: カイトが制御室の操作盤を power_on すると、同スポットに
+        """control_panel_toggle: カイトが制御室の操作盤を power_on すると、同スポットに
         いるオブザーバー (player_id=2 リン) の observation buffer にも
         SpotPublicEffectObservedEvent / SpotObjectInteractedEvent 経由の
         観測が届くはず。
@@ -40,9 +40,9 @@ class TestWorldRuntimeInteractionEventPublisher:
         本 PR で接続後、何らかの観測 entry が buffer に積まれていることを
         確認する。
         """
-        runtime = create_world_runtime(_RELAY_PUZZLE)
+        runtime = create_world_runtime(_CONTROL_PANEL_TOGGLE)
 
-        # relay_puzzle_demo: カイト (1) は制御室 (spot 1) spawn、リン (2) は
+        # control_panel_toggle: カイト (1) は制御室 (spot 1) spawn、リン (2) は
         # 廊下 (spot 2) spawn。同スポットに移して観測対象にする。
         graph = runtime._spot_graph_repo.find_graph()
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -81,7 +81,7 @@ class TestWorldRuntimeInteractionEventPublisher:
 
     def test_interaction_does_not_leak_to_player_at_different_spot(self) -> None:
         """別スポットのプレイヤーには interaction 観測が届かない (gating 確認)。"""
-        runtime = create_world_runtime(_RELAY_PUZZLE)
+        runtime = create_world_runtime(_CONTROL_PANEL_TOGGLE)
 
         # 既定 spawn: カイト=制御室, リン=廊下 — 別スポット
         result = runtime.do_interact(
