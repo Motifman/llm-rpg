@@ -1,32 +1,8 @@
-"""survival_island_v2 シナリオの「ゴールまで完走」E2E。
+"""実シナリオのセッション起動から点火、救助、漂流確定までを連続して通す。
 
-実験 #25 で気付いた gap: 既存テストは subsystem 単位 (game_end 判定だけ /
-monster combat だけ / episodic wiring だけ) で、**シナリオ全体を end-to-end
-で通すテスト** が無い。実験 #25 で発覚した item resolver 配線抜け
-(#356 / #369) も「LLM → tool catalog → resolver → executor → 状態変化」の
-1 経路を通せば検知できたが、その shape のテストが存在しなかったため
-本番実験まで気付けなかった。
-
-# このテストの位置付け
-
-完全な playthrough (14 日 / 4 人 / LLM 駆動) はコスト的に CI で回せない
-ので、**最短経路を scripted な tool call で通す smoke** に絞る:
-
-1. survival_island_v2 セッション起動 (4 人 spawn @ shipwreck_beach)
-2. ada (PlayerId=1) を test infra で summit へ teleport
-3. ada のインベントリに driftwood / dry_leaves / flint を直接付与
-4. **LLM stub** に `spot_graph_interact(signal_fire_pit, light_signal)`
-   を返させて `wiring.run_turn(ada)` を呼ぶ
-   = ここで通る経路: build_full_prompt → tool_call dispatch →
-   `_handle_interact` → resolver → spot_interaction_service →
-   precondition (HAS_ITEM driftwood/dry_leaves/flint) → effect
-   (REMOVE_ITEM, SET_FLAG signal_fire_lit) → trace recording
-5. world_flag `signal_fire_lit` が立っていることを確認
-6. tick を 168 (1 回目の救助船到来) まで進める
-   = scenario_event `rescue_ship_first_arrive` が発火、outcome 評価が回る
-7. ada の outcome が `RESCUED`、`check_game_end().is_ended` が True
-
-E2E 失敗時に切り分けやすいよう、各 step ごとに別 test に切る。
+実験 #25 / PR #370 で必要になった、LLM → 対象解決 → 相互作用 →
+世界状態の接続を守る。準備の4検査も同じ起動内に置き、失敗した段階を示す。
+救助192・漂流384はPR #435の改定値。時計や救助条件を試験用に短縮しない。
 """
 
 from __future__ import annotations
@@ -60,8 +36,8 @@ SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 def _create_v2_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """survival_island_v2 セッションを 4 人 spawn のまま立ち上げる。
 
-    character_ids は空で起動 (= scenario 既定の 4 spawn を使う)。
-    LLM 呼び出しがあると本物のクライアントに飛ぶので、後で stub を差し込む。
+    APIに必要なキャラクタを1件渡し、世界の登場人物はシナリオの4人を使う。
+    時間を進める前にLLMクライアントをスタブへ差し替える。
     """
     monkeypatch.setenv("SPOT_GRAPH_TICK_LOOP_ENABLED", "false")
     mgr = GameRuntimeManager(
@@ -137,108 +113,57 @@ def _signal_fire_target_label(runtime, player_id: PlayerId) -> str:
     )
 
 
+def _advance_to_tick(state, target_tick: int) -> None:
+    """待機手番も処理し、途中終了や時計の飛越を見逃さず指定時刻まで進める。"""
+    runtime = state.runtime
+    start = runtime.current_tick()
+    assert start <= target_tick
+    for expected_tick in range(start + 1, target_tick + 1):
+        assert not runtime.check_game_end().is_ended, (
+            f"tick {runtime.current_tick()} で目標 {target_tick} より早く終了した"
+        )
+        runtime.advance_tick()
+        trigger = state.llm_wiring.llm_turn_trigger
+        if trigger.pending_player_ids:
+            trigger.run_scheduled_turns()
+        assert runtime.current_tick() == expected_tick, "1反復で1tickだけ進む"
+    assert runtime.current_tick() == target_tick
+
+
 class TestSurvivalIslandV2RescueE2E:
-    """ada が summit で狼煙を上げ → tick 168 で RESCUED まで通る最短 path。"""
+    """山頂のAdaは192で救助され、残る3人は384で漂流が確定する。"""
 
-    def test_step1_ada_shipwreck_beach_spawn(
+    def test_signal_rescues_ada_at_192_and_ends_at_384(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
-        """v2 シナリオを GameRuntimeManager 経由で立ち上げ、4 人が
-        shipwreck_beach に居ることを確認する。"""
+        """初期配置・実所持・点火の接続を通し、救助と終了の前後を検査する。"""
         state = _create_v2_session(monkeypatch, tmp_path)
         runtime = state.runtime
-        beach_int = _id_int(runtime, "spot", "shipwreck_beach")
+        ada = _ada_player_id(runtime)
         graph = runtime._spot_graph_repo.find_graph()
-        present = graph.presence_at(SpotId.create(beach_int)).present_entity_ids
-        assert len(present) == 4
+        beach = SpotId.create(_id_int(runtime, "spot", "shipwreck_beach"))
+        assert len(graph.presence_at(beach).present_entity_ids) == 4
+        others = tuple(pid for pid in runtime.get_player_ids() if pid != ada)
+        assert len(others) == 3
 
-    def test_step2_ada_summit_teleport(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-    ) -> None:
-        """step2 ada を summit に teleport できる。"""
-        state = _create_v2_session(monkeypatch, tmp_path)
-        runtime = state.runtime
-        ada = _ada_player_id(runtime)
         _teleport(runtime, int(ada), "summit")
-        summit_int = _id_int(runtime, "spot", "summit")
         graph = runtime._spot_graph_repo.find_graph()
-        assert EntityId.create(int(ada)) in graph.presence_at(
-            SpotId.create(summit_int)
-        ).present_entity_ids
+        summit = SpotId.create(_id_int(runtime, "spot", "summit"))
+        assert EntityId.create(int(ada)) in graph.presence_at(summit).present_entity_ids
 
-    def test_step3_item_three_ada(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-    ) -> None:
-        """step3 必要アイテム 3 種を ada に付与できる。"""
-        state = _create_v2_session(monkeypatch, tmp_path)
-        runtime = state.runtime
-        ada = _ada_player_id(runtime)
         _grant_items(runtime, ada, ("driftwood", "dry_leaves", "flint"))
-        inv = runtime._player_inventory_repo.find_by_id(ada)
-        assert inv is not None
-        # _inventory_slots は SlotId → ItemInstanceId | None。occupied だけ拾う。
-        owned_spec_ids = set()
-        for slot_id, iid in inv._inventory_slots.items():
-            if iid is None:
-                continue
-            agg = runtime._item_repo.find_by_id(iid)
-            if agg is not None:
-                owned_spec_ids.add(agg.item_spec.item_spec_id.value)
-        expected = {
-            _id_int(runtime, "item_spec", n)
-            for n in ("driftwood", "dry_leaves", "flint")
-        }
-        assert expected.issubset(owned_spec_ids)
+        inventory = runtime._player_inventory_repo.find_by_id(ada)
+        assert inventory is not None
+        owned_specs = set()
+        for _, item_id in inventory.iter_occupied_slots():
+            item = runtime._item_repo.find_by_id(item_id)
+            assert item is not None
+            owned_specs.add(item.item_spec.item_spec_id)
+        assert {
+            ItemSpecId.create(_id_int(runtime, "item_spec", name))
+            for name in ("driftwood", "dry_leaves", "flint")
+        }.issubset(owned_specs)
 
-    def test_step4_llm_stub_via_light_signal_line(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-    ) -> None:
-        """LLM stub に light_signal の tool call を返させ、
-        wiring.run_turn 経由で interaction service まで貫通させる。"""
-        state = _create_v2_session(monkeypatch, tmp_path)
-        runtime = state.runtime
-        ada = _ada_player_id(runtime)
-        _teleport(runtime, int(ada), "summit")
-        _grant_items(runtime, ada, ("driftwood", "dry_leaves", "flint"))
-
-        signal_label = _signal_fire_target_label(runtime, ada)
-        stub = StubLlmClient(tool_call_to_return={
-            "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
-            "arguments": {
-                "target_label": signal_label,
-                "action_name": "light_signal",
-                "inner_thought": "救助を呼ぶ。",
-            },
-        })
-        state.llm_wiring.llm_client = stub
-
-        result = state.llm_wiring.run_turn(ada)
-        assert result.success is True, (
-            f"light_signal が失敗: code={result.error_code} msg={result.message}"
-        )
-
-        # signal_fire_lit flag が立っていること
-        flag_set = "signal_fire_lit" in runtime._world_flag_state.as_frozen_set()
-        assert flag_set, (
-            "interaction effect SET_FLAG が反映されていない。"
-            f"current flags={runtime._world_flag_state.as_frozen_set()}"
-        )
-
-    def test_step5_tick_168_ada_rescued_outcome(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-    ) -> None:
-        """狼煙点火 → tick 168 (rescue_ship_first_arrive) → 個人結果規則
-        が ada (summit に居る) を RESCUED 確定する。"""
-        state = _create_v2_session(monkeypatch, tmp_path)
-        runtime = state.runtime
-        ada = _ada_player_id(runtime)
-        _teleport(runtime, int(ada), "summit")
-        _grant_items(runtime, ada, ("driftwood", "dry_leaves", "flint"))
-
-        # まず stub を light_signal に設定して ada のターンだけ実行。
-        # stub の invoke 呼び出し回数を spy して、light_signal が **正確に**
-        # 必要なだけ叩かれたことを確認する (code-review HIGH 対応)。
-        # 余分な呼び出しが入った場合に検知する。
         signal_label = _signal_fire_target_label(runtime, ada)
         stub = StubLlmClient(tool_call_to_return={
             "name": TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -248,66 +173,40 @@ class TestSurvivalIslandV2RescueE2E:
                 "inner_thought": "助けを呼ぶ",
             },
         })
-        light_signal_calls = {"n": 0}
-        orig_invoke = stub.invoke
-
-        def spy_invoke(*args, **kwargs):
-            tc = orig_invoke(*args, **kwargs)
-            if tc and tc.get("name") == TOOL_NAME_SPOT_GRAPH_INTERACT:
-                light_signal_calls["n"] += 1
-            return tc
-
-        stub.invoke = spy_invoke  # type: ignore[method-assign]
         state.llm_wiring.llm_client = stub
-        state.llm_wiring.run_turn(ada)
+        result = state.llm_wiring.run_turn(ada)
+        assert result.success is True, (
+            f"light_signal が失敗: code={result.error_code} msg={result.message}"
+        )
         assert "signal_fire_lit" in runtime._world_flag_state.as_frozen_set()
-        # ada の light_signal は self-reschedule chain (= 旧 max_turns) の影響で
-        # 1 回以上呼ばれる可能性がある (success=True なら次 tick への reschedule
-        # あり)。重要なのは「呼ばれた」ことと、信号が点いた後は別 action に
-        # 切り替わることなので、最低 1 回呼ばれたことを assert する。
-        assert light_signal_calls["n"] >= 1
 
-        # 以降は全 player を spot_graph_wait に切り替えて tick を進める。
-        # advance_tick が他 player の heartbeat ターンを schedule することがあるため、
-        # 安全な no-op を返す stub に差し替えて crash しないようにする。
+        # 本番の待機手番も残す。#471の入れ子tick再発も進行中に検知する。
         stub.set_tool_call_to_return({
             "name": "wait",
             "arguments": {"reason": "待機", "inner_thought": "待つ"},
         })
-
-        # rescue が成立する tick まで進める。途中で game_end したら break。
-        # #471 以前: do_wait の nested advance_tick による再帰カスケードで
-        # 1 test loop 反復内に数百 tick がジャンプしていたため、170 iteration で
-        # rescue tick (384) に到達できていた。#471 で nested advance_tick を
-        # 除去した結果、1 iteration = 1 tick の自然な進行になり、rescue 成立
-        # までに 400 iteration 弱が必要になった。テスト本来の意図 (rescue 経路
-        # の貫通検証) は変わらないので iteration 上限を素直に引き上げる。
-        # 飢餓と HUNGER decay は本テストの関心外なので無効化する。
+        # 飢餓と欲求減衰は既存試験と同じく関心外とする。
         decay_stage = runtime._simulation_service._needs_decay_stage
         decay_stage._starvation_damage_per_tick = 0
         decay_stage._rates = {}
 
-        MAX_ITERATIONS = 500
-        for _ in range(MAX_ITERATIONS):
-            if runtime.check_game_end().is_ended:
-                break
-            runtime.advance_tick()
-            # advance_tick の副作用で他 player のターンが scheduled された場合
-            # も流す (= scenario_event が tick 内に発火する経路を貫通させる)。
-            trigger = state.llm_wiring.llm_turn_trigger
-            if trigger.pending_player_ids:
-                trigger.run_scheduled_turns()
+        registry = runtime._player_outcome_registry
+        assert registry is not None
+        _advance_to_tick(state, 191)
+        assert registry.get_outcome(ada) == PlayerOutcomeEnum.UNRESOLVED
+        assert not runtime.check_game_end().is_ended
 
-        result = runtime.check_game_end()
-        assert result.is_ended is True, (
-            f"{MAX_ITERATIONS} iteration 過ぎても game_end が立たない: "
-            f"reason={result.reason} tick={runtime.current_tick()}"
-        )
-        # ada は summit に残っているので RESCUED
-        outcome_registry = runtime._player_outcome_registry
-        assert outcome_registry is not None
-        ada_outcome = outcome_registry.get_outcome(ada)
-        assert ada_outcome == PlayerOutcomeEnum.RESCUED, (
-            f"ada が RESCUED にならず {ada_outcome} で終わった。"
-            "summit に残っているのに rescue 経路が動いていない疑い。"
-        )
+        _advance_to_tick(state, 192)
+        assert registry.get_outcome(ada) == PlayerOutcomeEnum.RESCUED
+        assert all(registry.get_outcome(pid) == PlayerOutcomeEnum.UNRESOLVED for pid in others)
+        assert not runtime.check_game_end().is_ended
+
+        _advance_to_tick(state, 383)
+        assert registry.get_outcome(ada) == PlayerOutcomeEnum.RESCUED
+        assert all(registry.get_outcome(pid) == PlayerOutcomeEnum.UNRESOLVED for pid in others)
+        assert not runtime.check_game_end().is_ended
+
+        _advance_to_tick(state, 384)
+        assert registry.get_outcome(ada) == PlayerOutcomeEnum.RESCUED
+        assert all(registry.get_outcome(pid) == PlayerOutcomeEnum.STRANDED for pid in others)
+        assert runtime.check_game_end().is_ended is True
