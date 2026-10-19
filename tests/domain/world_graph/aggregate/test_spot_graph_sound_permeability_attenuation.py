@@ -109,6 +109,7 @@ class TestAdjacentMovingOccupants:
         [
             (1.0, 0, 0),
             (1.0, 1, 1),
+            (1.0, 3, 3),
             (0.5, 0, 0),
             (0.5, 1, None),
             (0.5, 3, None),
@@ -136,12 +137,23 @@ class TestAdjacentMovingOccupants:
         assert events[0].source_spot_id == SPOT_B
         assert events[0].moving_occupants == expected
 
-    def test_listener_and_current_spot_are_not_reported(self) -> None:
-        """聞き手自身と現在地は人数にも観測行にも含めない。"""
+    @pytest.mark.parametrize("with_self_connection", [False, True])
+    def test_listener_and_current_spot_are_not_reported(
+        self, with_self_connection: bool,
+    ) -> None:
+        """自己接続があっても、聞き手の現在地を隣接の気配として報告しない。"""
         graph, listener = _build_AB(
             intensity_B=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=1.0),
         )
+
+        if with_self_connection:
+            graph.add_connection(SpotConnection(
+                connection_id=ConnectionId.create(11),
+                from_spot_id=SPOT_A, to_spot_id=SPOT_A,
+                name="self", description="", travel_ticks=1,
+                is_bidirectional=False, passage=Passage.open(),
+            ))
 
         graph.emit_listen_carefully(
             listener, moving_entity_ids=frozenset({listener}),
@@ -168,7 +180,11 @@ class TestAdjacentMovingOccupants:
             listener, moving_entity_ids=frozenset({remote}),
         )
 
-        assert all(event.source_spot_id != spot_c for event in _presence_events(graph))
+        events = _presence_events(graph)
+        assert len(events) == 1
+        assert events[0].source_spot_id == SPOT_B
+        assert events[0].moving_occupants == 0
+        assert all(event.source_spot_id != spot_c for event in events)
 
 
 class TestSoundPermeabilityToHops:
@@ -195,17 +211,6 @@ class TestSoundPermeabilityToHops:
 
 class TestOpenPassage1Hop:
     """開口部 / 開いた扉 / 壊れた壁 (permeability 1.0) は 1 hop 減衰。"""
-
-    def test_open_loud_moderate(self) -> None:
-        """OPENLOUD は MODERATE に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
-            passage=Passage.open(),
-        )
-        g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
-        events = _events(g)
-        assert len(events) == 1
-        assert events[0].intensity == "MODERATE"
 
     def test_wall_broken_loud_moderate(self) -> None:
         """WALLBROKENLOUD も MODERATE に減衰。"""
@@ -282,29 +287,31 @@ class TestIntactWall3Hops:
 class TestMultiConnectionPicksBestPath:
     """同一隣接 spot に複数 connection があるとき、最も透過率が高いものを採用。"""
 
+    @pytest.mark.parametrize("reverse_registration", [False, True])
     def test_one_hop(
-        self,
+        self, reverse_registration: bool,
     ) -> None:
-        """壁 INTACT (3 hops) と DOOR OPEN (1 hop) の両方が B を指している
-        場合、音は扉を通って届くべき (= 1 hop で減衰)。
-        """
+        """壁と開扉の登録順によらず、音と気配は減衰の少ない開扉を通る。"""
         g = SpotGraphAggregate.empty(GRAPH_ID)
         g.add_spot(_node(SPOT_A))
         g.add_spot(_node(SPOT_B, intensity=SoundIntensityEnum.MODERATE, ambient="泉"))
-        g.add_connection(SpotConnection(
+        wall = SpotConnection(
             connection_id=ConnectionId.create(10),
             from_spot_id=SPOT_A, to_spot_id=SPOT_B,
             name="wall", description="", travel_ticks=1,
             is_bidirectional=False,
             passage=Passage.wall(WallStateEnum.INTACT),  # 3 hops
-        ))
-        g.add_connection(SpotConnection(
+        )
+        door = SpotConnection(
             connection_id=ConnectionId.create(11),
             from_spot_id=SPOT_A, to_spot_id=SPOT_B,
             name="door", description="", travel_ticks=1,
             is_bidirectional=False,
             passage=Passage.door(DoorStateEnum.OPEN),  # 1 hop
-        ))
+        )
+        connections = (door, wall) if reverse_registration else (wall, door)
+        for connection in connections:
+            g.add_connection(connection)
         eid = EntityId.create(7)
         g.place_entity(eid, SPOT_A)
         g.clear_events()

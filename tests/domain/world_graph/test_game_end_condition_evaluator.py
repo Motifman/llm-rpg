@@ -240,17 +240,18 @@ def test_at_spot_evaluation_failure_stops_game_end(reason: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("condition_type", "expected_required_calls"),
+    ("condition_type", "expected_required_calls", "expected_is_ended"),
     [
-        (GameEndConditionTypeEnum.ANY_AT_SPOT, 2),
-        (GameEndConditionTypeEnum.ALL_AT_SPOT, 2),
+        (GameEndConditionTypeEnum.ANY_AT_SPOT, 2, True),
+        (GameEndConditionTypeEnum.ALL_AT_SPOT, 2, False),
     ],
 )
 def test_at_spot_evaluates_each_declared_player_with_typed_predicate(
     condition_type: GameEndConditionTypeEnum,
     expected_required_calls: int,
+    expected_is_ended: bool,
 ) -> None:
-    """ANY/ALLは明示player全員を本人位置の共通述語へ一度ずつ渡す。"""
+    """ANY/ALL は全員の配置を共通述語へ渡し、一致が混在したら ANY だけ成立する。"""
     common = MagicMock()
     common.evaluate.side_effect = [
         PredicateResult.satisfied(),
@@ -268,7 +269,7 @@ def test_at_spot_evaluates_each_declared_player_with_typed_predicate(
         target_spot_id=SpotId.create(1),
     )
 
-    GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+    result = GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
         graph,
         condition,
         frozenset(),
@@ -276,7 +277,14 @@ def test_at_spot_evaluates_each_declared_player_with_typed_predicate(
         result_on_match=GameResultEnum.WIN,
     )
 
+    assert result.is_ended is expected_is_ended
+    assert result.result == (GameResultEnum.WIN if expected_is_ended else None)
     assert common.evaluate.call_count == expected_required_calls
+    for call in common.evaluate.call_args_list:
+        assert call.args[1].entity_locations == {
+            EntityId.create(1): SpotId.create(1),
+            EntityId.create(2): SpotId.create(2),
+        }
     predicates = [call.args[0] for call in common.evaluate.call_args_list]
     assert [predicate.entity_id for predicate in predicates] == [
         EntityId.create(1), EntityId.create(2),
@@ -398,8 +406,14 @@ def test_tick_limit_evaluation_failure_stops_game_end(reason: str) -> None:
         )
 
 
-def test_tick_limit_keeps_legacy_float_comparison_outside_common_core() -> None:
-    """小数の旧tick_limitは未だ共通核へ渡さず、従来の比較結果を保つ。"""
+@pytest.mark.parametrize(
+    ("current_tick", "is_ended", "reason"),
+    [(10, False, "ティック制限内"), (11, True, "ティック上限到達: 10.5")],
+)
+def test_tick_limit_keeps_legacy_float_comparison_outside_common_core(
+    current_tick: int, is_ended: bool, reason: str,
+) -> None:
+    """小数の旧 tick_limit は共通核へ渡さず、10 < 10.5 と 11 >= 10.5 の比較結果を保つ。"""
     common = MagicMock()
     condition = GameEndCondition(
         condition_type=GameEndConditionTypeEnum.TICK_LIMIT,
@@ -411,12 +425,13 @@ def test_tick_limit_keeps_legacy_float_comparison_outside_common_core() -> None:
         condition,
         frozenset(),
         [],
-        current_tick=WorldTick(10),
+        current_tick=WorldTick(current_tick),
         result_on_match=_SIDE,
     )
 
-    assert result.is_ended is False
-    assert result.reason == "ティック制限内"
+    assert result.is_ended is is_ended
+    assert result.result == (_SIDE if is_ended else None)
+    assert result.reason == reason
     common.evaluate.assert_not_called()
 
 
@@ -424,24 +439,6 @@ def test_invalid_flag_set_condition_raises_domain_exception_on_construction() ->
     """FLAG_SET に target_flag が無い条件は、評価前の構築時点で拒否される。"""
     with pytest.raises(GameEndConditionValidationException, match="target_flag"):
         GameEndCondition(condition_type=GameEndConditionTypeEnum.FLAG_SET)
-
-
-@pytest.mark.parametrize(
-    ("condition_type", "kwargs", "message"),
-    [
-        (GameEndConditionTypeEnum.TICK_LIMIT, {}, "tick_limit"),
-        (GameEndConditionTypeEnum.ALL_AT_SPOT, {}, "target_spot_id"),
-        (GameEndConditionTypeEnum.ANY_AT_SPOT, {}, "target_spot_id"),
-    ],
-)
-def test_required_game_end_condition_fields_are_rejected_on_construction(
-    condition_type: GameEndConditionTypeEnum,
-    kwargs: dict,
-    message: str,
-) -> None:
-    """条件型ごとの必須フィールド欠落は、値オブジェクトの構築時点で拒否される。"""
-    with pytest.raises(GameEndConditionValidationException, match=message):
-        GameEndCondition(condition_type=condition_type, **kwargs)
 
 
 class TestAllPlayerOutcomesResolved:

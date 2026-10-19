@@ -46,14 +46,8 @@ class DefaultActionResultStore(IActionResultStore):
         game_time_label: str | None = None,
         omit_result_in_prompt: bool = False,
         inner_thought: str | None = None,
-        expected_result: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
-        scene_boundary: bool = False,
         occurred_tick: int | None = None,
         execution_provenance: ExecutionProvenance | None = None,
-        prediction_context_id: str | None = None,
-        in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -87,24 +81,10 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("omit_result_in_prompt must be bool")
         if inner_thought is not None and not isinstance(inner_thought, str):
             raise TypeError("inner_thought must be str or None")
-        if expected_result is not None and not isinstance(expected_result, str):
-            raise TypeError("expected_result must be str or None")
-        if intention is not None and not isinstance(intention, str):
-            raise TypeError("intention must be str or None")
-        if emotion_hint is not None and not isinstance(emotion_hint, str):
-            raise TypeError("emotion_hint must be str or None")
-        if not isinstance(scene_boundary, bool):
-            raise TypeError("scene_boundary must be bool")
         if occurred_tick is not None and (
             not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
         ):
             raise TypeError("occurred_tick must be int or None")
-        if prediction_context_id is not None and not isinstance(
-            prediction_context_id, str
-        ):
-            raise TypeError("prediction_context_id must be str or None")
-        if not isinstance(in_context_belief_ids, tuple):
-            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
         # Issue #311 後続: フォールバックを tz-aware UTC に統一。
         # world_runtime は明示的に渡すが、それ以外の caller の取りこぼし防止。
         at = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
@@ -122,14 +102,8 @@ class DefaultActionResultStore(IActionResultStore):
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
             inner_thought=inner_thought,
-            expected_result=expected_result,
-            intention=intention,
-            emotion_hint=emotion_hint,
-            scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
             execution_provenance=execution_provenance,
-            prediction_context_id=prediction_context_id,
-            in_context_belief_ids=in_context_belief_ids,
         )
         self._event_store.append_action_result(
             player_id, entry, max_entries=self._max_entries

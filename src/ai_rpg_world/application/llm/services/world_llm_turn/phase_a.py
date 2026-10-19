@@ -439,7 +439,6 @@ def run_reason_first_phase_a(
                 player_id,
                 reason_first_turn_id=reason_first_turn_id,
                 attempt_index=attempt_index,
-                has_expected_result=bool(parsed.get("expected_result")),
             )
             break
         final = attempt_index == 1
@@ -555,11 +554,7 @@ def parse_assessment_tool_call(
     inner_thought = str(arguments.get("inner_thought") or "").strip()
     if not inner_thought:
         return None, "missing_inner_thought"
-    assessment = {"inner_thought": inner_thought}
-    expected_result = str(arguments.get("expected_result") or "").strip()
-    if expected_result:
-        assessment["expected_result"] = expected_result
-    return assessment, ""
+    return {"inner_thought": inner_thought}, ""
 
 def append_reason_first_assessment(
     messages: list[dict[str, Any]],
@@ -570,9 +565,6 @@ def append_reason_first_assessment(
         "【行動前の状況評価】",
         f"- 考え: {assessment['inner_thought']}",
     ]
-    expected_result = assessment.get("expected_result")
-    if expected_result:
-        lines.append(f"- 期待する結果: {expected_result}")
     lines.append(_REASON_FIRST_ACTION_INSTRUCTION)
     suffix = "\n\n" + "\n".join(lines)
     if copied and copied[-1].get("role") == "user":

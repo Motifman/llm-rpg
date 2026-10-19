@@ -21,7 +21,6 @@ from scripts._viewer_vendor import VendorAsset  # noqa: E402
 from scripts.build_trace_viewer import (  # noqa: E402
     _event_timeline_category,
     _format_event_body,
-    build_memo_state_timeline,
     build_position_timeline,
     build_speech_timeline,
     collect_players,
@@ -758,7 +757,7 @@ class TestFormatEventBody:
             TraceEvent(
                 seq=3,
                 timestamp="t",
-                kind="goal_reflect",
+                kind="custom_summary_event",
                 tick=1,
                 player_id=1,
                 payload={"goal_id": "g1", "summary": "水を探す"},
@@ -923,8 +922,8 @@ class TestRenderViewerHtml:
         )
         assert '<div class="tick-block all-filtered" data-tick="1">' in out
 
-    def test_trace_navigator_removed_and_memo_collapsed_by_default(self) -> None:
-        """下部 trace navigator は出力せず、memo は既定で畳む。"""
+    def test_trace_navigator_and_old_memo_panel_are_not_rendered(self) -> None:
+        """下部 trace navigator も、古いメモのパネルも出力しない。"""
         out = render_viewer_html(
             title="x",
             events=_sample_events(),
@@ -934,8 +933,7 @@ class TestRenderViewerHtml:
         assert 'id="trace-nav-section"' not in out
         assert 'id="moment-rail"' not in out
         assert 'id="heatmap"' not in out
-        assert 'id="toggle-memo-panel"' in out
-        assert 'id="toggle-memo-panel" checked' not in out
+        assert 'memo-panel' not in out
 
 
 class TestMainCli:
@@ -1016,57 +1014,6 @@ class TestPositionTimeline:
         assert 1 not in timeline
 
 
-class TestMemoStateTimeline:
-    """build_memo_state_timeline の挙動 (PR γ memo panel 用)。"""
-
-    def test_memo_add_active_memo_recorded(self) -> None:
-        """memo_add 発生 tick のスナップショットに該当 memo が active で含まれる。"""
-        events = [
-            TraceEvent(
-                seq=1,
-                timestamp="t",
-                kind=TraceEventKind.MEMO_ADD,
-                tick=3,
-                player_id=1,
-                payload={"memo_id": "m1", "content": "扉を固定"},
-            ),
-        ]
-        timeline = build_memo_state_timeline(events)
-        snap = timeline[3]
-        assert len(snap) == 1
-        assert snap[0]["memo_id"] == "m1"
-        assert snap[0]["status"] == "active"
-        assert snap[0]["added_tick"] == 3
-
-    def test_memo_done_status_done(self) -> None:
-        """memo_done 後のスナップショットで該当 memo の status=done。"""
-        events = [
-            TraceEvent(
-                seq=1,
-                timestamp="t",
-                kind=TraceEventKind.MEMO_ADD,
-                tick=3,
-                player_id=1,
-                payload={"memo_id": "m1", "content": "x"},
-            ),
-            TraceEvent(
-                seq=2,
-                timestamp="t",
-                kind=TraceEventKind.MEMO_DONE,
-                tick=10,
-                player_id=1,
-                payload={"memo_id": "m1"},
-            ),
-        ]
-        timeline = build_memo_state_timeline(events)
-        # tick 3 の時点では active
-        assert timeline[3][0]["status"] == "active"
-        # tick 10 で done
-        done = timeline[10][0]
-        assert done["status"] == "done"
-        assert done["done_tick"] == 10
-
-
 class TestEventHeatmap:
     """compute_event_heatmap の出力。"""
 
@@ -1095,23 +1042,22 @@ class TestComputeTraceMoments:
         end_m = next(m for m in moments if m["kind"] == "end")
         assert end_m["label"] == "WIN"
 
-    def test_memo_add_has_medium_score_from_memo_kind(self) -> None:
-        """memo_add は kind="memo", score≈65, content が detail に入る。"""
+    def test_memo_hint_is_a_hint_moment(self) -> None:
+        """memo_hint は kind="hint", score=58 の moment になる。"""
         events = [
             TraceEvent(
                 seq=1,
                 timestamp="t",
-                kind=TraceEventKind.MEMO_ADD,
+                kind=TraceEventKind.MEMO_HINT,
                 tick=3,
                 player_id=1,
-                payload={"memo_id": "m1", "content": "power_on を維持"},
+                payload={"memo_id": "m1", "similarity": 0.8},
             ),
         ]
         moments = compute_trace_moments(events)
         assert len(moments) == 1
-        assert moments[0]["kind"] == "memo"
-        assert moments[0]["detail"] == "power_on を維持"
-        assert moments[0]["score"] == 65
+        assert moments[0]["kind"] == "hint"
+        assert moments[0]["score"] == 58
 
     def test_failed_action_result_has_high_score_from_failed_kind(self) -> None:
         """action_result.success=False は kind="failed" (score=85)。"""
@@ -1197,7 +1143,6 @@ class TestTacticalThemeMarkers:
         assert "--gold:" in out
         # 新ラベル
         assert "Tactical map" in out
-        assert "Objectives / Active memo" in out
         # badge outcome chip
         assert "badge outcome" in out
         assert "Trace navigator" not in out
@@ -1307,9 +1252,9 @@ class TestRenderViewerHtmlSpeech:
 
 
 class TestRenderViewerHtmlSiblingLinks:
-    """episodic / timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
+    """timeline への遷移リンクが htmlpreview 経由でも壊れない仕掛けを確認する。"""
 
-    def test_episodic_timeline_data_sibling_attribute_file(self) -> None:
+    def test_timeline_link_has_data_sibling_attribute(self) -> None:
         """相対 href だけだと htmlpreview 経由で raw gist (text/plain) に解決され
         ソース表示になるため、JS 書き換えの起点として data-sibling を持たせる。"""
         out = render_viewer_html(
@@ -1318,7 +1263,7 @@ class TestRenderViewerHtmlSiblingLinks:
             scenario_topology={"spots": [], "connections": []},
             cytoscape_js_src="/* fake */",
         )
-        assert 'data-sibling="episodic.html"' in out
+        assert 'data-sibling="episodic.html"' not in out
         assert 'data-sibling="timeline.html"' in out
 
     def test_htmlpreview_via_htmlpreview_url_js(self) -> None:

@@ -149,7 +149,7 @@ class TestMonsterSpawnedMapPlacementHandler:
 
     class TestHandleMonsterSpawnedEvent:
         def test_places_object_on_map_with_component(self, setup):
-            """MonsterSpawnedEvent でマップに WorldObject が配置され、テンプレートの vision_range / flee_threshold が反映されること"""
+            """MonsterSpawnedEvent でマップに WorldObject が配置され、視野と装備中の技能情報が反映されること"""
             handler, monster_repo, map_repo = setup
             monster_id = MonsterId(1)
             spot_id = SpotId(1)

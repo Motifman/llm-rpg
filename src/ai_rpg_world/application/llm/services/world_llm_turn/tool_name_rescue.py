@@ -53,7 +53,7 @@ NO_MATCH_OPTION = "__no_match__"
 QUESTION_NAME = "tool_name_rescue"
 
 #: state では引数から外し、別の欄に置く。意図を示す材料として名前を付けて渡す。
-_INTENT_FIELDS: tuple[str, ...] = ("inner_thought", "expected_result")
+_INTENT_FIELDS: tuple[str, ...] = ("inner_thought",)
 
 _SUFFIX_RATIO_CUTOFF: float = 0.5
 _SHORTENED_NAME_SCORE: float = 0.95

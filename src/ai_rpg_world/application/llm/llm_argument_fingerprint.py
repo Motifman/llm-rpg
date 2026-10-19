@@ -25,10 +25,7 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 NARRATIVE_ARG_FIELDS: frozenset[str] = frozenset({
     "inner_thought",      # 全 world-action tool 共通の subjective narrative
     "reason",             # spot_graph_wait など
-    "intention",          # world-action tool の主観入力 (目的)
-    "expected_result",    # world-action tool の主観入力 (行動前の予測)
     "memo",               # 環境の tool に添えるメモ帳への書き込み (#1628)
-    "emotion_hint",       # world-action tool の主観入力 (主要感情)
 })
 
 # 行動に添える発言。周りに届くので主観ではないが、同じ操作を言葉を変えて試すと

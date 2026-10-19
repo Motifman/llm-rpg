@@ -34,8 +34,8 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 | `observation` | プレイヤーが受け取った観測 | `prose`, `player_name`, `source_event_id` |
 | `action` | プレイヤーが選んだツール呼び出し | `tool`, `arguments`, `inner_thought` |
 | `action_result` | ツール実行結果 | `success`, `result_summary`, `error_code`、所持金が動いたときは `gold_delta` / `gold_after` / `gold_change_source` |
-| `memo_add` | memo 追加 | `memo_id`, `content` |
-| `memo_done` | memo 完了 | `memo_id`, `fulfillment_context_summary` |
+| `memo_add` | memo 追加 (#1631 で消した。過去の trace にだけある) | `memo_id`, `content` |
+| `memo_done` | memo 完了 (#1631 で消した。過去の trace にだけある) | `memo_id`, `fulfillment_context_summary` |
 | `memo_hint` | fuzzy match による完了示唆 (Phase 1c) | `memo_id`, `similarity` |
 | `scene` | シーン (場所) 変化 | `spot_id`, `spot_name` |
 | `position_change` | プレイヤーがスポット間を移動した瞬間 (viewer のアニメーション用) | `from_spot_id` (初期配置は null), `to_spot_id`, `spot_name`, `player_name` |
@@ -96,8 +96,8 @@ escape runtime / legacy `LlmAgentOrchestrator` と `MemoToolExecutor` は trace 
 |---|---|
 | `action` | LLM がツール呼び出しを決めた直後 (実行前) |
 | `action_result` | ツール実行完了直後 (success / error_code / result_summary 付き) |
-| `memo_add` | `memo_add` ツール成功時 |
-| `memo_done` | `memo_done` ツール成功時 (失敗時は出さない) |
+| `memo_add` | (#1631 で消した) |
+| `memo_done` | (#1631 で消した) |
 
 legacy full wiring では `create_llm_agent_wiring(..., trace_recorder=...)` に渡します。escape runtime では runtime 作成後に `runtime.set_trace_recorder(rec)` を呼ぶと、phase B と memo executor に自動で配線されます。**呼び出し側は `run_start` / `run_end` を自分で記録するだけ**。
 
@@ -111,7 +111,7 @@ with JsonlTraceRecorder(Path("var/runs/exp-10.jsonl")) as rec:
     runtime.set_trace_recorder(rec)
     while not game_ended:
         runtime.advance_tick()
-        # action / action_result / memo_add / memo_done は runtime 側で自動記録
+        # action / action_result は runtime 側で自動記録
     rec.record(TraceEventKind.RUN_END, outcome="WIN", total_ticks=tick)
 ```
 
