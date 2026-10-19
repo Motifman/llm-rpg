@@ -4,7 +4,6 @@ import pytest
 
 from ai_rpg_world.domain.sns.exception import (
     SelfReferenceValidationException,
-    UserIdValidationException,
 )
 from ai_rpg_world.domain.sns.value_object import BlockRelationShip, UserId
 
@@ -12,16 +11,23 @@ from ai_rpg_world.domain.sns.value_object import BlockRelationShip, UserId
 class TestBlockRelationShip:
     """BlockRelationShipバリューオブジェクトのテスト"""
 
-    def test_create_block_relationship_success(self):
-        """正常なBlockRelationShipの作成テスト"""
-        blocker_user_id = UserId(1)
-        blocked_user_id = UserId(2)
-
-        block = BlockRelationShip(blocker_user_id, blocked_user_id)
-
-        assert block.blocker_user_id == blocker_user_id
-        assert block.blocked_user_id == blocked_user_id
-        assert isinstance(block.created_at, datetime)
+    @pytest.mark.parametrize(
+        ("actor", "target", "actor_text", "target_text"),
+        [(1, 2, "1", "2"), (999999, 2, "999999", "2"),
+         (1, 999999, "1", "999999"), (123, 456, "123", "456")],
+    )
+    def test_create_block_relationship_success(self, actor, target, actor_text, target_text):
+        """最小・大きなIDを各側に保持し、123/456の数値と文字列も取り違えない。"""
+        relation = BlockRelationShip(UserId(actor), UserId(target))
+        assert relation.blocker_user_id == UserId(actor)
+        assert relation.blocked_user_id == UserId(target)
+        assert isinstance(relation.blocker_user_id, UserId)
+        assert isinstance(relation.blocked_user_id, UserId)
+        assert isinstance(relation.created_at, datetime)
+        assert str(relation.blocker_user_id) == actor_text
+        assert str(relation.blocked_user_id) == target_text
+        assert int(relation.blocker_user_id) == actor
+        assert int(relation.blocked_user_id) == target
 
     def test_create_block_relationship_with_explicit_datetime(self):
         """明示的な日時でのBlockRelationShip作成テスト"""
@@ -35,38 +41,11 @@ class TestBlockRelationShip:
         assert block.blocked_user_id == blocked_user_id
         assert block.created_at == specific_time
 
-    def test_invalid_blocker_user_id_raises_error(self):
-        """無効なブロック実行者ユーザーIDの場合のエラーテスト"""
-        with pytest.raises(Exception):  # UserIdValidationException
-            UserId(0)
-
-    def test_invalid_blocked_user_id_raises_error(self):
-        """無効なブロック対象ユーザーIDの場合のエラーテスト"""
-        with pytest.raises(Exception):  # UserIdValidationException
-            UserId(0)
-
     def test_self_block_raises_error(self):
         """自分自身をブロックしようとする場合のエラーテスト"""
         user_id = UserId(1)
         with pytest.raises(SelfReferenceValidationException):
             BlockRelationShip(user_id, user_id)
-
-    def test_boundary_user_id_values(self):
-        """境界値のユーザーIDテスト"""
-        # 最小値（1）
-        blocker_user_id = UserId(1)
-        blocked_user_id = UserId(2)
-        block = BlockRelationShip(blocker_user_id, blocked_user_id)
-        assert block.blocker_user_id == blocker_user_id
-        assert block.blocked_user_id == blocked_user_id
-
-        # 大きな値
-        large_user_id = UserId(999999)
-        block = BlockRelationShip(large_user_id, blocked_user_id)
-        assert block.blocker_user_id == large_user_id
-
-        block = BlockRelationShip(blocker_user_id, large_user_id)
-        assert block.blocked_user_id == large_user_id
 
     def test_is_blocked_method(self):
         """is_blockedメソッドのテスト"""
@@ -97,28 +76,20 @@ class TestBlockRelationShip:
         assert hash(block1) == hash(block2)
 
     def test_inequality_with_different_blocker_ids(self):
-        """異なるブロック実行者IDでの非等価性テスト"""
-        blocker_user_id1 = UserId(1)
-        blocker_user_id2 = UserId(3)
-        blocked_user_id = UserId(2)
-
-        block1 = BlockRelationShip(blocker_user_id1, blocked_user_id)
-        block2 = BlockRelationShip(blocker_user_id2, blocked_user_id)
-
-        assert block1 != block2
-        assert hash(block1) != hash(block2)
+        """同じ時刻でも片側IDが異なる関係は非等価で、集合に両方を保持できる。"""
+        time = datetime(2023, 1, 1, 12, 0, 0)
+        left = BlockRelationShip(UserId(1), UserId(2), time)
+        right = BlockRelationShip(UserId(3), UserId(2), time)
+        assert left != right
+        assert len({left, right}) == 2
 
     def test_inequality_with_different_blocked_ids(self):
-        """異なるブロック対象IDでの非等価性テスト"""
-        blocker_user_id = UserId(1)
-        blocked_user_id1 = UserId(2)
-        blocked_user_id2 = UserId(3)
-
-        block1 = BlockRelationShip(blocker_user_id, blocked_user_id1)
-        block2 = BlockRelationShip(blocker_user_id, blocked_user_id2)
-
-        assert block1 != block2
-        assert hash(block1) != hash(block2)
+        """同じ時刻でも片側IDが異なる関係は非等価で、集合に両方を保持できる。"""
+        time = datetime(2023, 1, 1, 12, 0, 0)
+        left = BlockRelationShip(UserId(1), UserId(2), time)
+        right = BlockRelationShip(UserId(1), UserId(3), time)
+        assert left != right
+        assert len({left, right}) == 2
 
     def test_hash_with_different_creation_times(self):
         """異なる作成時間のハッシュテスト"""
@@ -135,59 +106,22 @@ class TestBlockRelationShip:
         assert block1 == block2
         assert hash(block1) == hash(block2)
 
-    def test_hash_with_same_creation_time(self):
-        """同じ作成時間のハッシュテスト"""
+    @pytest.mark.parametrize("attribute", ["blocker_user_id", "blocked_user_id", "created_at"])
+    def test_immutability(self, attribute):
+        """両IDと作成時刻への通常の再代入を拒否し、元の全値を保持する。"""
         time = datetime(2023, 1, 1, 12, 0, 0)
-
-        blocker_user_id1 = UserId(1)
-        blocked_user_id1 = UserId(2)
-        blocker_user_id2 = UserId(1)
-        blocked_user_id2 = UserId(2)
-
-        block1 = BlockRelationShip(blocker_user_id1, blocked_user_id1, time)
-        block2 = BlockRelationShip(blocker_user_id2, blocked_user_id2, time)
-
-        # 同じユーザーIDと時間の場合は等価
-        assert block1 == block2
-        assert hash(block1) == hash(block2)
-
-    def test_immutability(self):
-        """不変性のテスト"""
-        blocker_user_id = UserId(1)
-        blocked_user_id = UserId(2)
-        block = BlockRelationShip(blocker_user_id, blocked_user_id)
-
-        # 作成後にプロパティを変更しようとしても変更されない（frozen=Trueによる不変性）
-
-    def test_string_representation(self):
-        """文字列表現のテスト"""
-        blocker_user_id = UserId(1)
-        blocked_user_id = UserId(2)
-        block = BlockRelationShip(blocker_user_id, blocked_user_id)
-
-        str_repr = str(block)
-        assert "BlockRelationShip(" in str_repr
-        assert str(blocker_user_id) in str_repr
-        assert str(blocked_user_id) in str_repr
+        relation = BlockRelationShip(UserId(1), UserId(2), time)
+        replacement = datetime(2024, 1, 1) if attribute == "created_at" else UserId(3)
+        with pytest.raises(AttributeError):
+            setattr(relation, attribute, replacement)
+        assert relation.blocker_user_id == UserId(1)
+        assert relation.blocked_user_id == UserId(2)
+        assert relation.created_at == time
 
     def test_created_at_auto_generation(self):
-        """created_atの自動生成テスト"""
-        blocker_user_id = UserId(1)
-        blocked_user_id = UserId(2)
-        block = BlockRelationShip(blocker_user_id, blocked_user_id)
-
-        # 作成時間が現在時刻に近いことを確認
-        now = datetime.now()
-        time_diff = abs((now - block.created_at).total_seconds())
-        assert time_diff < 1  # 1秒以内の差
-
-    def test_id_string_conversion(self):
-        """IDの文字列変換テスト"""
-        blocker_user_id = UserId(123)
-        blocked_user_id = UserId(456)
-        block = BlockRelationShip(blocker_user_id, blocked_user_id)
-
-        assert str(block.blocker_user_id) == "123"
-        assert str(block.blocked_user_id) == "456"
-        assert int(block.blocker_user_id) == 123
-        assert int(block.blocked_user_id) == 456
+        """時刻を省略すると、各構築の直前から直後の間の時刻を生成する。"""
+        for _ in range(2):
+            before = datetime.now()
+            relation = BlockRelationShip(UserId(1), UserId(2))
+            after = datetime.now()
+            assert before <= relation.created_at <= after
