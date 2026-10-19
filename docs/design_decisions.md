@@ -8344,7 +8344,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。
 
-**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。キー、解決、`DefaultSlidingWindowMemory` を組む分岐は #1785 で消した。`DefaultSlidingWindowMemory` は試験の代役として残る。
+**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。キー、解決、`DefaultSlidingWindowMemory` を組む分岐は #1785 で消した。`DefaultSlidingWindowMemory` は試験の代役として残る。#1631 の段 11-4 (#1811) で `DefaultSlidingWindowMemory` を消し、試験の代役は `SummarizingShortTermMemory` (要約の LLM を渡さず、テンプレートで畳む) に付け替えた。snapshot の codec からは、短期記憶が固定容量のときに保存・復元する経路と、要約された snapshot を固定容量の短期記憶へ書き戻す経路を消した。保存は常に `mode: "rolling_summary"` になる。保存形式の subsystem のキー `"sliding_window"` は要約する短期記憶でも使っているので名前を変えず、固定容量の短期記憶で保存した古い snapshot (v1 の mode 無しと v2 の `mode: "sliding_window"`) を要約する短期記憶へ読む経路は残した。これを消すと、過去の snapshot から再開できなくなる。
 
 ---
 

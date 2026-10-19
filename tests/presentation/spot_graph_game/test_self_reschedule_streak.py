@@ -19,8 +19,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -50,7 +50,7 @@ def _make_trigger(max_streak: int = 5) -> _WorldLlmTurnTrigger:
 
     class _DummyWiring:
         runtime = _DummyRuntime()
-        short_term_memory = DefaultSlidingWindowMemory()
+        short_term_memory = SummarizingShortTermMemory()
 
     return _WorldLlmTurnTrigger(
         wiring=_DummyWiring(),
