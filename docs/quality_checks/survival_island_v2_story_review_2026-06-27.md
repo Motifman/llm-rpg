@@ -153,7 +153,7 @@ PR-K で死亡通知 (`PlayerDownedEvent` → broadcast) は直したが、**死
 
 ### 改善 6: recall ranking の failure boost (本丸の本丸)
 
-別 docs (`docs/memory_system/recall_ranking_failure_boost_design.md`) に詳細。
+別 docs (`docs/memory_system/recall_ranking_failure_boost_design.md` (#1631 で削除)) に詳細。
 
 要点:
 - 現状: failure episode は「現在 失敗中の tick」だけ recall に上がる
@@ -187,5 +187,5 @@ A (= 案 3 と 6) は実装コストが小さく、効果検証が trace の差�
 ## 関連
 
 - subagent 物語観察 (= 本 doc)
-- recall ranking 改善設計: `docs/memory_system/recall_ranking_failure_boost_design.md`
+- recall ranking 改善設計: `docs/memory_system/recall_ranking_failure_boost_design.md` (#1631 で削除)
 - 旧 subagent review (#596): 「想起階層は behavior change を起こしていない」

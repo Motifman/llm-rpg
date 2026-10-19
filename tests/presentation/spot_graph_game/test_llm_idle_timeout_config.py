@@ -69,7 +69,6 @@ class TestResolveLlmToolChoice:
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
             values={
                 "LLM_TOOL_CHOICE": "auto",
-                "REASON_FIRST_TWO_STEP_ENABLED": "true",
             }
         )
 
