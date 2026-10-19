@@ -2,7 +2,7 @@
 
 本書は、複数のエージェント／チャット／ブランチで作業するときの **手続き・ルール・ブランチの見方**を集約した参照用ドキュメントである。対象が記憶システムに限られなくても、並列実装・PR 分割・レビューを行う作業では毎回ここを確認する。
 
-対象機能に個別の計画ファイルがある場合は、その計画も必ず読む。例: エピソード記憶では [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md)。
+対象機能に個別の計画ファイルがある場合は、その計画も必ず読む。例: 目次つきのエピソードでは [design_decisions.md](../design_decisions.md) の D1623 / D1626。
 
 ## 0. 結論: 必須手順
 
@@ -162,5 +162,5 @@ PR 前レビューは、次を **標準手順**とする。
 
 ## 7. 参照
 
-- エピソード記憶の実装計画: [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md)
-- エピソード記憶の仕様: [episodic_memory_system_spec.md](./episodic_memory_system_spec.md)
+- 目次つきのエピソードの設計判断: [design_decisions.md](../design_decisions.md) の D1623 / D1626
+- 古いエピソード記憶の計画と仕様は、部品と一緒に Issue #1631 で撤去した

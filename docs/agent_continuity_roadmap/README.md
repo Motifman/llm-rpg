@@ -213,9 +213,9 @@
 これらは本ロードマップとは半独立に進むが、最終的に統合される。
 
 ### Memory システム
-- `docs/memory_system/` 配下で別管理
-- エピソード → 意味記憶への昇格
-- リフレクション (recall on cue)
+- 記憶の本体は `src/ai_rpg_world/being/` (知り合い・目次つきのエピソード・メモ帳) と短期記憶
+- 古いエピソード・意味記憶・想起の階層などは Issue #1631 で撤去した
+- いまの形は design_decisions の D1623 (目次つきのエピソード)、D1626 (エピソードの書き起こし)、D1628 (メモ帳)
 - 連続性の本丸
 
 ### MCP Bridge (cross-instance interaction)
@@ -247,10 +247,8 @@
 - 本ロードマップ: 全体俯瞰
 - `survival_v2_design.md`: 現行の漂流島設計
 - `docs/memory_system/`: 記憶系の別線
-  - `episodic_memory_system_spec.md`: エピソード記憶仕様
-  - `../episodic_memory_overview.md`: 現行パイプライン総括 (#20–#23 実験)
   - `short_term_memory_design.md`: 短期記憶 (rolling summary) 設計 + prefix cache 順序
-  - `semantic_memory_activation_plan.md`: semantic LLM 化 + passive top-K + active 検索の配線計画
+  - 目次つきのエピソードとメモ帳は、design_decisions の D1623 / D1626 / D1628
 
 新しい未着手 TODO が発見されたら本ファイルに追記。完了したら「完了済み」に
 昇格 + PR 番号を残す。
