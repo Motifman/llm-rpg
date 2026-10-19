@@ -197,11 +197,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
     # IShortTermMemory contract
     # ──────────────────────────────────────────────────────────
 
-    @property
-    def recent_equal_timestamp_newest_first(self) -> bool:
-        """同時刻の観測は従来の deque 反転と同じく後から積んだ順に返す。"""
-        return True
-
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
         pid = int(player_id.value)
         self._ensure_player(pid)
@@ -209,14 +204,10 @@ class SummarizingShortTermMemory(IShortTermMemory):
 
     def append_all(
         self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> list[ObservationEntry]:
-        """observations を順に append する。
-
-        evict は無い (古いターンは L4 に畳む) ので、戻り値は常に空 list。
-        """
+    ) -> None:
+        """observations を順に append する。古いターンは捨てずに L4 に畳む。"""
         for e in entries:
             self.append(player_id, e)
-        return []
 
     def get_recent(
         self, player_id: PlayerId, limit: int

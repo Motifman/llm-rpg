@@ -176,7 +176,7 @@ def test_short_term_memory_implementation_must_accept_turn_completion() -> None:
             pass
 
         def append_all(self, player_id, entries):  # type: ignore[no-untyped-def]
-            return []
+            pass
 
         def get_recent(self, player_id, limit):  # type: ignore[no-untyped-def]
             return []
