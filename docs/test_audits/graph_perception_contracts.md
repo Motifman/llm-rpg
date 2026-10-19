@@ -20,7 +20,7 @@
 
 JSON宣言から効果を適用し、同室・別室へ通知する保証は `tests/demos/test_world_runtime_change_atmosphere_effect.py` に残す。痕跡の実表示は `test_vents_move_the_impostor_unseen.py::TestRecentVentTrace`、燃料圧計の分数表示と解除は `test_station_drill_fuel_freeze_emergency.py::test_pressure_gauge_shows_world_minutes_only_during_the_emergency` に残す。SQLiteの符号化・復号と世界snapshotの復元も別契約であり、この監査へ移管・加算しない。
 
-今回退役するファイルや製品の試験専用入口はない。既存の配置・通路・音・移動の主試験も移さない。#1735が追加する `tests/domain/world_graph/AGENTS.md` と所有者を共有するため、その未統合ファイルを複製せず、統合後にこの責任分担をまとめる。
+今回退役するファイルや製品の試験専用入口はない。既存の配置・通路・音・移動の主試験も移さない。
 
 ## 統合した2宣言
 
