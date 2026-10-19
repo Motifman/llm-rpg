@@ -24,7 +24,7 @@
 - [unique_attached_being](../../src/ai_rpg_world/domain/being/service/unique_attached_being.py) は取り出した列の件数規則を所有する。[BeingAttachmentResolver](../../src/ai_rpg_world/application/being/being_attachment_resolver.py) の実取得・世界差・プレイヤー差・未接続除外と混ぜない
 - 各値オブジェクトの検証・正規化・等価性はその値の試験が主所有者。BeingIdは実際にインメモリ保存の辞書キーに使う。保存・再構築試験だけでは、正規化されていない入力や誤った等価性のすべてを代替しない
 - `declares` と `with_declared_memory_kinds` に試験以外の直接呼出しは見つからなかった。ただし導入時に意図した公開APIと明記されているため、試験だけの迂回口と断定して廃止しない
-- 退役ファイルと削除する製品側の補助入口は無い。記憶機能・SNS・保存形式は変更していない。近接する所有規則は [AGENTS.md](../../tests/domain/being/AGENTS.md) に限定して残す
+- 退役ファイルと削除する製品側の補助入口は無い。記憶機能・SNS・保存形式は変更していない
 
 ### 導入履歴
 
