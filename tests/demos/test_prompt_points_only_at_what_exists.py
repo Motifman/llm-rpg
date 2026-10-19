@@ -33,10 +33,10 @@
 
 「」で囲んだ欄の名前 (「所持アイテム」など) は見ていない。「」は台詞や例の
 引用にも使うので、節を指しているかを機械では分けられない。旧ワールド用の
-ツールの説明と system prompt の雛形 (system_prompt_builder) は、spot graph の
-run では渡らないので見ていない。そこには「現在の状況」がまだ残っている。また、この
+ツールの説明は、spot graph の run では渡らないので見ていない。そこには
+「現在の状況」がまだ残っている。また、この
 fixture が作る 1 ターン目の状態でしか見ていないので、条件付きで出る見出し
-(【関連する学び】など) を指す文を足すと、ここでは落ちる。そのときは状態を
+(【関連する記憶】など) を指す文を足すと、ここでは落ちる。そのときは状態を
 増やすか、指すのをやめる。
 """
 
@@ -140,9 +140,7 @@ def _argument_names_the_code_knows() -> set[str]:
 @pytest.fixture(scope="module", params=_SCENARIO_FILES)
 def captured(request) -> dict[str, Any]:
     """1 ターン目に渡す文面とツールを取る。"""
-    config = ResolvedLlmRuntimeConfig.for_tests(
-        episodic_enabled=True,
-    )
+    config = ResolvedLlmRuntimeConfig.for_tests()
     runtime = create_world_runtime(_SCENARIOS / request.param, config=config)
     client = _PromptCaptureClient()
     wiring = _WorldLlmWiring(

@@ -77,7 +77,9 @@ class TestHitBoxAggregate:
             assert hasattr(event, "event_id")
             assert hasattr(event, "occurred_at")
 
-        def test_create_invalid_duration_raises_exception(self, hit_box_id, spot_id, owner_id, shape):
+        @pytest.mark.parametrize("start_tick", [0, 10])
+        def test_create_invalid_duration_raises_exception(self, hit_box_id, spot_id, owner_id, shape, start_tick):
+            """開始時刻が0でも10でも、持続時間0の生成を拒否する。"""
             from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
             with pytest.raises(HitBoxValidationException, match="duration must be greater than 0"):
                 HitBoxAggregate.create(
@@ -86,7 +88,7 @@ class TestHitBoxAggregate:
                     owner_id=owner_id,
                     shape=shape,
                     initial_coordinate=Coordinate(0, 0, 0),
-                    start_tick=WorldTick(0),
+                    start_tick=WorldTick(start_tick),
                     duration=0
                 )
 

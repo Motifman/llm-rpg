@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
@@ -53,7 +52,6 @@ def _make_core() -> PromptBuilderCoreServices:
     return PromptBuilderCoreServices(
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
         short_term_memory=MagicMock(spec=IShortTermMemory),
-        action_result_store=MagicMock(spec=IActionResultStore),
         recent_event_store=UnifiedRecentEventStore(),
         world_query_service=MagicMock(spec=WorldQueryService),
         player_profile_repository=MagicMock(spec=PlayerProfileRepository),
