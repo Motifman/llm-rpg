@@ -68,8 +68,6 @@
 
 C2は移管元を原文のまま残す段階で28行を成功させ、その後に旧宣言を除去して26行を確認した。拒否時の全状態や通知列の原子性は追加しない。短いMP正常消費・専用例外の試験は独立した公開契約として保持する。
 
-集約試験で繰り返さないための所有ルールを `tests/domain/monster/aggregate/AGENTS.md` に残した。
-
 ## 履歴
 
 - [220bc4b](https://github.com/Motifman/llm-rpg/commit/220bc4bd2fe2b06b45c2be1134ede7782474cec3): 飢餓の所有をComponentからMonster集約へ移した
