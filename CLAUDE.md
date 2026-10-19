@@ -79,6 +79,7 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 - 保存・読み込みは `TraceEventKind.SNAPSHOT_SAVE` / `SNAPSHOT_LOAD` に必ず 1 件残る
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
 - 記憶だけを持ち越して世界を最初からやり直すときは、実験設定に `"snapshot_load_mode": "replay"` を書く。同じ profile で 1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は前の回の `snapshots` を渡す。回の番号は前の回の resolved から数えて `run_start` に残る (`docs/design_decisions.md` の D1514)
+- 記憶の部品を消して snapshot のキーが無くなったら、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の表に足す。古い snapshot に残るそのキーは読み込みで捨て、件数が `snapshot_load` の `removed_memory_keys` に残る (`docs/design_decisions.md` の D1631-5)
 - 詳細は `docs/design_decisions.md` の #15-#18
 
 ### LLM に出すツールを増やす / 出し分けるとき
@@ -180,10 +181,12 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 - `being`: 「経験を持つ AI 主体」の識別と継続性 (世界・実験を跨いで永続化される ID)
 - `persona`: エージェントの人格、固有名詞、口調
 - `intent`: エージェントが今やろうとしていること
-- `memory`: エピソード記憶、意味記憶、再解釈、想起
+- `memory`: 出会いの記録 (`encounter`) と短期記憶の要約の値 (`short_term`)
 - `common`: 横断的な値オブジェクトやイベント基盤
 
-エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換されエピソード記憶へ流入 → WebSocket で観戦者に配信。詳細は `application/llm/llm_agent_turn_runner.py` と `application/llm/prompt_builder.py`。
+経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳を持ち、環境 (ゲーム) とは `being/contract` の型だけで結びます。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
+
+エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換され短期記憶へ入る (短期記憶を畳むときと環境を離れるときに、本人がエピソードを書き起こす) → WebSocket で観戦者に配信。詳細は `application/llm/services/world_llm_turn/` (Phase A / B とツールの実行) と `application/llm/services/prompt_builder.py`。
 
 ## コーディング規約
 
@@ -229,7 +232,7 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 
 - メソッド: 入力条件と期待される結果が分かる形で具体的に書く
   - 例: `"""ticks_per_day に 0 以下を渡すと ValidationException を投げ、設定値は更新されない。"""`
-  - 例: `"""recall_buffer が空のとき、想起セクションは prompt から完全に省略される。"""`
+  - 例: `"""エピソードが 1 件も無いとき、【思い出せる出来事】は見出しを残したまま「(まだ無い)」と prompt に出る。"""`
 - クラス: 対象クラスのうち、このクラスでテストする観点を 1 文で書く
   - 例: `"""SpotDarknessQueryService.is_dark が時刻・天候・室内補正を合成して暗さを決める挙動を保証する。"""`
 
@@ -287,7 +290,7 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 - 目安: 200〜400 行、10 ファイル前後。レビュアーが 30 分で読み切れるサイズ
 - リファクタリングと機能追加、DB スキーマ変更とアプリコード変更は分けて積む
 - 本文にはテストの実施根拠 (通ったテスト名や件数) を載せる
-- エピソード記憶系は `docs/memory_system/memory_feature_workflow.md` の手順に従う (git worktree で並行作業)
+- 記憶まわりを並行して作るときは `docs/memory_system/memory_feature_workflow.md` の手順に従う (git worktree で並行作業)
 
 ### タイトル・本文の書き方
 
