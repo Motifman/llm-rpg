@@ -22,6 +22,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.market_board import MarketBoard
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
@@ -174,16 +176,22 @@ class TestYourOwnOrdersAreListedOneByOne:
     組み立てられない**。自分の注文は品目と値が見える形で個別に出す。
     """
 
-    def test_your_orders_are_returned_individually(self) -> None:
-        """自分の出している注文が、1 件ずつ返る。"""
+    @pytest.mark.parametrize("include_own_bid", [False, True], ids=["one_order", "both_sides"])
+    def test_your_orders_are_returned_individually(self, include_own_bid: bool) -> None:
+        """本人の注文だけを返し、同じ品目の売りと買いも別々の注文として残す。"""
         board = _board(
             _order(1, owner=_LENA, unit_price_gold=20),
             _order(2, owner=_TOM, unit_price_gold=18),
         )
+        expected = {(MarketOrderId(1), MarketOrderSide.SELL)}
+        if include_own_bid:
+            board = board.with_order(_order(3, owner=_LENA, side=MarketOrderSide.BUY, unit_price_gold=12))
+            expected.add((MarketOrderId(3), MarketOrderSide.BUY))
 
         own = board.rows_for(_LENA).own_orders
 
-        assert [o.order_id for o in own] == [MarketOrderId(1)]
+        assert len(own) == len(expected)
+        assert {(o.order_id, o.side) for o in own} == expected
 
     def test_other_peoples_orders_are_not_yours(self) -> None:
         """他人の注文は自分の欄に出ない (正の対照)。"""

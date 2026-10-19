@@ -199,17 +199,21 @@ class TestMaxDistance:
 class TestDeterminism:
     """同じグラフ・同じ起点・終点に対して結果が決定的。"""
 
-    def test_multiple_id(self) -> None:
+    @pytest.mark.parametrize("reverse_registration", [False, True])
+    def test_multiple_id(self, reverse_registration: bool) -> None:
         """1 から 4 までの 2 hop 経路が複数 (1→2→4 / 1→3→4) あるとき、
-        接続 ID 昇順で展開するため結果が決定的。"""
+        登録順を逆にしても接続 ID の小さい経路を選び、反復しても変わらない。"""
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         for i in range(1, 5):
             g.add_spot(_node(i))
-        # 接続 ID 20 (1→2) と 30 (1→3) → 20 が先に展開される
-        g.add_connection(_conn(20, 1, 2))
-        g.add_connection(_conn(30, 1, 3))
-        g.add_connection(_conn(40, 2, 4))
-        g.add_connection(_conn(50, 3, 4))
+        connections = [
+            _conn(20, 1, 2),
+            _conn(30, 1, 3),
+            _conn(40, 2, 4),
+            _conn(50, 3, 4),
+        ]
+        for connection in reversed(connections) if reverse_registration else connections:
+            g.add_connection(connection)
 
         for _ in range(5):
             result = find_next_hop(

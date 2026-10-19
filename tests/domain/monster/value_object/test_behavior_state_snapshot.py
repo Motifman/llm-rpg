@@ -11,57 +11,74 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 class TestBehaviorStateSnapshotCreation:
     """BehaviorStateSnapshot の生成テスト（正常・境界）"""
 
-    def test_create_with_required_only(self):
-        """必須の state のみで作成できること"""
-        snapshot = BehaviorStateSnapshot(state=BehaviorStateEnum.IDLE)
-        assert snapshot.state == BehaviorStateEnum.IDLE
+    @pytest.mark.parametrize(
+        ("kwargs", "expected_state"),
+        [
+            ({"state": BehaviorStateEnum.IDLE}, BehaviorStateEnum.IDLE),
+            (
+                {
+                    "state": BehaviorStateEnum.CHASE,
+                    "target_id": None,
+                    "last_known_target_position": None,
+                    "hp_percentage": 1.0,
+                    "phase_thresholds": (),
+                    "flee_threshold": 0.0,
+                },
+                BehaviorStateEnum.CHASE,
+            ),
+        ],
+        ids=["required_only", "explicit_defaults"],
+    )
+    def test_create_with_default_values(self, kwargs, expected_state):
+        """省略した既定値と明示した既定値を、指定した状態とともに保持する。"""
+        snapshot = BehaviorStateSnapshot(**kwargs)
+        assert snapshot.state == expected_state
         assert snapshot.target_id is None
         assert snapshot.last_known_target_position is None
         assert snapshot.hp_percentage == 1.0
         assert snapshot.phase_thresholds == ()
         assert snapshot.flee_threshold == 0.0
 
-    def test_create_with_defaults_explicit(self):
-        """デフォルト値を明示して作成できること"""
-        snapshot = BehaviorStateSnapshot(
-            state=BehaviorStateEnum.CHASE,
-            target_id=None,
-            last_known_target_position=None,
-            hp_percentage=1.0,
-            phase_thresholds=(),
-            flee_threshold=0.0,
-        )
-        assert snapshot.state == BehaviorStateEnum.CHASE
-        assert snapshot.target_id is None
-        assert snapshot.phase_thresholds == ()
 
-    def test_create_with_all_fields(self):
-        """全フィールドを指定して作成できること"""
-        oid = WorldObjectId(1)
-        coord = Coordinate(10, 20)
-        snapshot = BehaviorStateSnapshot(
-            state=BehaviorStateEnum.FLEE,
-            target_id=oid,
-            last_known_target_position=coord,
-            hp_percentage=0.25,
-            phase_thresholds=(0.5, 0.25),
-            flee_threshold=0.3,
-        )
-        assert snapshot.state == BehaviorStateEnum.FLEE
-        assert snapshot.target_id == oid
-        assert snapshot.last_known_target_position == coord
-        assert snapshot.hp_percentage == 0.25
-        assert snapshot.phase_thresholds == (0.5, 0.25)
-        assert snapshot.flee_threshold == 0.3
-
-    def test_create_with_tuple_phase_thresholds(self):
-        """phase_thresholds は tuple で保持されること"""
-        snapshot = BehaviorStateSnapshot(
-            state=BehaviorStateEnum.IDLE,
-            phase_thresholds=(0.5,),
-        )
-        assert snapshot.phase_thresholds == (0.5,)
+    @pytest.mark.parametrize(
+        ("kwargs", "expected_values"),
+        [
+            (
+                {
+                    "state": BehaviorStateEnum.FLEE,
+                    "target_id": WorldObjectId(1),
+                    "last_known_target_position": Coordinate(10, 20),
+                    "hp_percentage": 0.25,
+                    "phase_thresholds": (0.5, 0.25),
+                    "flee_threshold": 0.3,
+                },
+                (BehaviorStateEnum.FLEE, WorldObjectId(1), Coordinate(10, 20),
+                 0.25, (0.5, 0.25), 0.3),
+            ),
+            (
+                {"state": BehaviorStateEnum.IDLE, "phase_thresholds": (0.5,)},
+                (BehaviorStateEnum.IDLE, None, None, 1.0, (0.5,), 0.0),
+            ),
+            (
+                {"state": BehaviorStateEnum.IDLE, "phase_thresholds": (0.5, 0.25)},
+                (BehaviorStateEnum.IDLE, None, None, 1.0, (0.5, 0.25), 0.0),
+            ),
+        ],
+        ids=["all_fields", "single_threshold_tuple", "former_append_input"],
+    )
+    def test_create_preserves_values_and_immutable_thresholds(self, kwargs, expected_values):
+        """指定値を保持し、tupleで渡した閾値はtupleのままでappendを拒否する。"""
+        snapshot = BehaviorStateSnapshot(**kwargs)
+        state, target, position, hp, phases, flee = expected_values
+        assert snapshot.state == state
+        assert snapshot.target_id == target
+        assert snapshot.last_known_target_position == position
+        assert snapshot.hp_percentage == hp
+        assert snapshot.phase_thresholds == phases
+        assert snapshot.flee_threshold == flee
         assert isinstance(snapshot.phase_thresholds, tuple)
+        with pytest.raises(AttributeError):
+            snapshot.phase_thresholds.append(0.1)  # type: ignore[union-attr]
 
 
 class TestBehaviorStateSnapshotImmutability:
@@ -76,13 +93,3 @@ class TestBehaviorStateSnapshotImmutability:
             snapshot.target_id = WorldObjectId(1)  # type: ignore[misc]
         with pytest.raises(AttributeError):
             snapshot.hp_percentage = 0.5  # type: ignore[misc]
-
-    def test_phase_thresholds_is_immutable_tuple(self):
-        """phase_thresholds は tuple のため呼び出し元がリストで渡しても不変に保たれること"""
-        snapshot = BehaviorStateSnapshot(
-            state=BehaviorStateEnum.IDLE,
-            phase_thresholds=(0.5, 0.25),
-        )
-        # tuple は変更不可
-        with pytest.raises(AttributeError):
-            snapshot.phase_thresholds.append(0.1)  # type: ignore[union-attr]

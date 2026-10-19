@@ -4,10 +4,15 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
+from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import UnknownSpotObjectException
+from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
+from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
 from ai_rpg_world.domain.world_graph.value_object.ground_item import GroundItem
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 
 
 def _ground(instance_id: int, spec_id: int) -> GroundItem:
@@ -18,7 +23,9 @@ def _ground(instance_id: int, spec_id: int) -> GroundItem:
 
 
 class TestSpotInterior:
-    def test_replace_object(self):
+    @pytest.mark.parametrize("with_other_contents", [False, True])
+    def test_replace_object(self, with_other_contents: bool):
+        """指定物体だけを差し替え、別の物体・他の集合と元の内部構造を保つ。"""
         o = SpotObject(
             object_id=SpotObjectId.create(1),
             name="A",
@@ -27,10 +34,32 @@ class TestSpotInterior:
             state={},
             interactions=(),
         )
-        interior = SpotInterior((), (o,), (), ())
+        other = SpotObject(
+            object_id=SpotObjectId.create(2), name="B", description="別の物体",
+            object_type=SpotObjectTypeEnum.OTHER, state={"untouched": True}, interactions=(),
+        )
+        sub = SubLocation(SubLocationId.create(1), "隅", "部屋の隅", (), False)
+        ground = _ground(5, 100)
+        discoverable = DiscoverableItem(
+            ItemSpecId.create(200),
+            DiscoveryCondition(DiscoveryConditionTypeEnum.ALWAYS),
+        )
+        interior = (
+            SpotInterior((sub,), (other, o), (ground,), (discoverable,))
+            if with_other_contents else SpotInterior((), (o,), (), ())
+        )
         o2 = o.with_state({"x": 1})
         ni = interior.replace_object(o2)
         assert ni.get_object(SpotObjectId.create(1)).state["x"] == 1
+        assert interior.get_object(SpotObjectId.create(1)).state == {}
+        if with_other_contents:
+            assert ni.objects == (other, o2)
+            assert ni.sub_locations == (sub,)
+            assert ni.ground_items == (ground,)
+            assert ni.discoverable_items == (discoverable,)
+            assert interior.objects == (other, o)
+        else:
+            assert ni.objects == (o2,)
 
     def test_replace_unknown_raises(self):
         o = SpotObject(
@@ -73,6 +102,14 @@ class TestSpotInteriorGroundItems:
         interior = SpotInterior((), (), (g,), ())
         ni = interior.with_ground_item(g)
         assert len(ni.ground_items) == 1
+        assert ni.ground_items == (g,)
+
+        other = _ground(2, 200)
+        populated = SpotInterior((), (), (g, other), ())
+        duplicate_id = _ground(1, 999)
+        retried = populated.with_ground_item(duplicate_id)
+        assert retried.ground_items == (g, other)
+        assert populated.ground_items == (g, other)
 
     def test_excludes_ground_item_instance(self):
         """既存メソッド without_ground_item の回帰テスト。"""
@@ -88,8 +125,13 @@ class TestSpotInteriorGroundItems:
         g = _ground(1, 100)
         interior = SpotInterior((), (), (g,), ())
         assert interior.find_ground_item(g.item_instance_id) == g
+        other = _ground(2, 200)
+        populated = SpotInterior((), (), (other, g), ())
+        assert populated.find_ground_item(g.item_instance_id) == g
 
     def test_find_ground_item_none(self):
         """find_ground_item は地面にない instance に対しては None を返す。"""
         interior = SpotInterior((), (), (), ())
         assert interior.find_ground_item(ItemInstanceId.create(99)) is None
+        populated = SpotInterior((), (), (_ground(1, 100),), ())
+        assert populated.find_ground_item(ItemInstanceId.create(99)) is None

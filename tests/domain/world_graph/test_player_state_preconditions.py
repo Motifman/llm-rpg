@@ -96,13 +96,17 @@ def _interaction_with(cond: InteractionCondition) -> InteractionDef:
 class TestPlayerNeedAtLeast:
     """PLAYER_NEED_AT_LEAST: 欲求が閾値以上で成立。"""
 
-    def test_passes_when_need_at_or_above_threshold(self) -> None:
-        """HUNGER=70 / threshold=60 → 成立。"""
+    @pytest.mark.parametrize(
+        ("need_type", "hunger", "fatigue"),
+        [("HUNGER", 70, 0), ("FATIGUE", 0, 70)],
+    )
+    def test_passes_when_need_at_or_above_threshold(self, need_type, hunger, fatigue) -> None:
+        """宣言した欲求が70なら閾値60を満たし、もう一方の欲求が0でも成立する。"""
         svc = SpotInteractionService()
-        status = _player_status(hunger=70)
+        status = _player_status(hunger=hunger, fatigue=fatigue)
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.PLAYER_NEED_AT_LEAST,
-            need_type="HUNGER",
+            need_type=need_type,
             need_threshold=60,
         )
         ok, _ = svc.can_interact(
@@ -215,13 +219,14 @@ class TestPlayerNeedAtLeast:
 class TestPlayerHpRatioBelow:
     """PLAYER_HP_RATIO_BELOW: HP 充足率が閾値未満で成立。"""
 
-    def test_passes_when_hp_low(self) -> None:
-        """HP 30/100 (=0.3), hp_ratio=0.5 → 0.3 < 0.5 で成立。"""
+    @pytest.mark.parametrize(("hp_value", "hp_ratio"), [(30, 0.5), (60, 0.75)])
+    def test_passes_when_hp_low(self, hp_value, hp_ratio) -> None:
+        """HPが30/100なら閾値0.5を、60/100なら閾値0.75を下回り、どちらも成立する。"""
         svc = SpotInteractionService()
-        status = _player_status(hp_value=30, hp_max=100)
+        status = _player_status(hp_value=hp_value, hp_max=100)
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW,
-            hp_ratio=0.5,
+            hp_ratio=hp_ratio,
         )
         ok, _ = svc.can_interact(
             _interaction_with(cond), _switch_object(),
@@ -281,13 +286,14 @@ class TestPlayerHpRatioBelow:
 class TestPlayerHpRatioAtLeast:
     """PLAYER_HP_RATIO_AT_LEAST: HP 充足率が閾値以上で成立。"""
 
-    def test_passes_when_hp_high(self) -> None:
-        """HP 80/100, hp_ratio=0.5 → 0.8 >= 0.5 で成立。"""
+    @pytest.mark.parametrize(("hp_value", "hp_ratio"), [(80, 0.5), (30, 0.25)])
+    def test_passes_when_hp_high(self, hp_value, hp_ratio) -> None:
+        """HPが80/100なら閾値0.5を、30/100なら閾値0.25を満たし、どちらも成立する。"""
         svc = SpotInteractionService()
-        status = _player_status(hp_value=80, hp_max=100)
+        status = _player_status(hp_value=hp_value, hp_max=100)
         cond = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.PLAYER_HP_RATIO_AT_LEAST,
-            hp_ratio=0.5,
+            hp_ratio=hp_ratio,
         )
         ok, _ = svc.can_interact(
             _interaction_with(cond), _switch_object(),

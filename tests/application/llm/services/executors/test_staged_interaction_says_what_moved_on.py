@@ -43,6 +43,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 _SCENARIOS = Path(__file__).resolve().parents[5] / "data" / "scenarios"
+_FIXTURES = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "scenarios"
 _DRILL = _SCENARIOS / "station_drill.json"
 _MORI, _AOI = PlayerId(1), PlayerId(4)
 _CHART = "cable_label_chart"
@@ -248,7 +249,7 @@ class TestOnlyAForwardStepCountsAsMovedOn:
 
     def test_a_toggle_does_not_suggest_undoing_what_someone_did(self) -> None:
         """仲間が操作盤の電源を入れた直後に電源を入れようとしても、電源を切る操作は案内されず恒久的な失敗になる。"""
-        runtime = create_world_runtime(_SCENARIOS / "relay_puzzle_demo.json")
+        runtime = create_world_runtime(_FIXTURES / "control_panel_toggle.json")
         a, b = PlayerId(1), PlayerId(2)
         for player_id in (a, b):
             _move(runtime, player_id, "control_room")

@@ -42,6 +42,7 @@ from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
@@ -97,6 +98,15 @@ class TestSpotLightingIs:
             current_effective_lighting=LightingEnum.DARK,
         )
         assert (ok, msg) == (True, None)
+
+        interaction = InteractionDef(
+            action_name="check_place", display_label="場所を確かめる",
+            preconditions=(cond,), effects=(),
+        )
+        assert svc.can_interact(
+            interaction, obj, frozenset(), frozenset(),
+            current_effective_lighting=LightingEnum.DARK,
+        ) == (True, None)
 
     def test_brighter_spot_is_rejected_with_the_authored_message(self, svc, obj) -> None:
         """明るい場所では拒否し、シナリオが書いた失敗文をそのまま返す。
@@ -192,6 +202,15 @@ class TestAtSpotIs:
             current_spot_id=SpotId.create(7),
         )
         assert (ok, msg) == (True, None)
+
+        interaction = InteractionDef(
+            action_name="check_place", display_label="場所を確かめる",
+            preconditions=(cond,), effects=(),
+        )
+        assert svc.can_interact(
+            interaction, obj, frozenset(), frozenset(),
+            current_spot_id=SpotId.create(7),
+        ) == (True, None)
 
     def test_other_spot_is_rejected(self, svc, obj) -> None:
         """別のスポットに居れば拒否する。"""
