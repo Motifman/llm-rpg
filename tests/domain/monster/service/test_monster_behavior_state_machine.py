@@ -15,45 +15,10 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     StateTransitionResult,
 )
 from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
-    EventSpec,
     MonsterBehaviorStateMachine,
-    TransitionApplicationOutput,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-
-class TestEventSpec:
-    """EventSpec の生成"""
-
-    def test_create_target_spotted(self):
-        spec = EventSpec(
-            kind="target_spotted",
-            target_id=WorldObjectId(1),
-            coordinate=Coordinate(2, 3, 0),
-        )
-        assert spec.kind == "target_spotted"
-        assert spec.target_id == WorldObjectId(1)
-        assert spec.coordinate == Coordinate(2, 3, 0)
-
-    def test_create_target_lost(self):
-        spec = EventSpec(
-            kind="target_lost",
-            target_id=WorldObjectId(2),
-            last_known_coordinate=Coordinate(4, 5, 0),
-        )
-        assert spec.kind == "target_lost"
-        assert spec.last_known_coordinate == Coordinate(4, 5, 0)
-
-    def test_create_actor_state_changed(self):
-        spec = EventSpec(
-            kind="actor_state_changed",
-            old_state=BehaviorStateEnum.CHASE,
-            new_state=BehaviorStateEnum.SEARCH,
-        )
-        assert spec.kind == "actor_state_changed"
-        assert spec.old_state == BehaviorStateEnum.CHASE
-        assert spec.new_state == BehaviorStateEnum.SEARCH
 
 
 class TestMonsterBehaviorStateMachineComputeAttackedTransition:
@@ -311,21 +276,37 @@ class TestMonsterBehaviorStateMachineApplyTransition:
     class TestEmptyResult:
         """空の StateTransitionResult"""
 
-        def test_empty_result_returns_unchanged_state(self, sm):
-            """空の result で状態は変わらない"""
+        @pytest.mark.parametrize(
+            ("current_state", "target_id", "position"),
+            [
+                (BehaviorStateEnum.IDLE, None, None),
+                (BehaviorStateEnum.CHASE, WorldObjectId(4001), Coordinate(4, 6, 0)),
+            ],
+            ids=["original_idle_empty", "chase_with_target"],
+        )
+        def test_empty_result_preserves_current_state_and_target(
+            self, sm, current_state, target_id, position
+        ):
+            """空の指示は状態・対象・位置を保持し、追跡の操作と通知を生成しない。"""
             result = StateTransitionResult()
             output = sm.apply_transition(
                 result=result,
-                current_state=BehaviorStateEnum.IDLE,
-                current_target_id=None,
-                current_last_known_position=None,
+                current_state=current_state,
+                current_target_id=target_id,
+                current_last_known_position=position,
                 hp_percentage=1.0,
                 effective_flee_threshold=0.2,
                 allow_chase=True,
             )
-            assert output.final_state == BehaviorStateEnum.IDLE
-            assert output.final_target_id is None
-            assert output.final_last_known_position is None
+            assert output.final_state == current_state
+            if target_id is None:
+                assert output.final_target_id is None
+            else:
+                assert output.final_target_id == target_id
+            if position is None:
+                assert output.final_last_known_position is None
+            else:
+                assert output.final_last_known_position == position
             assert output.clear_pursuit is False
             assert output.sync_pursuit is None
             assert output.preserve_pursuit_last_known is None
@@ -356,6 +337,7 @@ class TestMonsterBehaviorStateMachineApplyTransition:
         """flee_from_threat の適用"""
 
         def test_flee_from_threat_updates_state_clears_pursuit(self, sm):
+            """単独の脅威逃走は対象と解除命令を返し、発見とIDLE→FLEEを各1件出力する。"""
             flee_id = WorldObjectId(999)
             flee_coord = Coordinate(10, 10, 0)
             result = StateTransitionResult(
@@ -376,14 +358,15 @@ class TestMonsterBehaviorStateMachineApplyTransition:
             assert output.final_last_known_position == flee_coord
             assert output.clear_pursuit is True
             assert output.sync_pursuit is None
-            assert any(
-                e.kind == "target_spotted" and e.target_id == flee_id
-                for e in output.events
-            )
-            assert any(
-                e.kind == "actor_state_changed" and e.new_state == BehaviorStateEnum.FLEE
-                for e in output.events
-            )
+            assert len(output.events) == 2
+            spotted = [e for e in output.events if e.kind == "target_spotted"]
+            assert len(spotted) == 1
+            assert spotted[0].target_id == flee_id
+            assert spotted[0].coordinate == flee_coord
+            changed = [e for e in output.events if e.kind == "actor_state_changed"]
+            assert len(changed) == 1
+            assert changed[0].old_state == BehaviorStateEnum.IDLE
+            assert changed[0].new_state == BehaviorStateEnum.FLEE
 
         def test_flee_with_apply_enrage_emits_both(self, sm):
             """apply_enrage と flee 両方のとき適切なイベント"""
@@ -408,15 +391,40 @@ class TestMonsterBehaviorStateMachineApplyTransition:
     class TestSpotTargetParams:
         """spot_target_params の適用"""
 
-        def test_spot_target_chase_sync_pursuit(self, sm):
-            target_id = WorldObjectId(2001)
-            coord = Coordinate(2, 1, 0)
+        @pytest.mark.parametrize(
+            ("target_id", "coord", "hp_percentage", "param_flee", "param_allow",
+             "default_flee", "default_allow", "expected_state"),
+            [
+                (WorldObjectId(2001), Coordinate(2, 1, 0), 1.0, 0.0, True,
+                 0.2, True, BehaviorStateEnum.CHASE),
+                (WorldObjectId(1), Coordinate(2, 3, 0), 1.0, 0.0, True,
+                 0.2, True, BehaviorStateEnum.CHASE),
+                (WorldObjectId(2001), Coordinate(2, 1, 0), 0.1, 0.0, True,
+                 0.2, True, BehaviorStateEnum.CHASE),
+                (WorldObjectId(2001), Coordinate(2, 1, 0), 1.0, 0.0, True,
+                 0.2, False, BehaviorStateEnum.CHASE),
+                (WorldObjectId(2001), Coordinate(2, 1, 0), 1.0, 0.0, False,
+                 0.2, True, BehaviorStateEnum.IDLE),
+                (WorldObjectId(2001), Coordinate(2, 1, 0), 1.0, None, None,
+                 0.2, True, BehaviorStateEnum.CHASE),
+            ],
+            ids=[
+                "original_chase", "former_spotted_spec", "explicit_zero_threshold",
+                "explicit_true_chase_override", "explicit_false_chase_override",
+                "unspecified_uses_defaults",
+            ],
+        )
+        def test_spot_target_parameters_select_state_and_pursuit(
+            self, sm, target_id, coord, hp_percentage, param_flee, param_allow,
+            default_flee, default_allow, expected_state
+        ):
+            """明示した0/True/Falseを優先し、未指定だけ既定値を使って発見と追跡命令を返す。"""
             result = StateTransitionResult(
                 spot_target_params=SpotTargetParams(
                     target_id=target_id,
                     coordinate=coord,
-                    effective_flee_threshold=0.0,
-                    allow_chase=True,
+                    effective_flee_threshold=param_flee,
+                    allow_chase=param_allow,
                 )
             )
             output = sm.apply_transition(
@@ -424,28 +432,54 @@ class TestMonsterBehaviorStateMachineApplyTransition:
                 current_state=BehaviorStateEnum.IDLE,
                 current_target_id=None,
                 current_last_known_position=None,
-                hp_percentage=1.0,
-                effective_flee_threshold=0.2,
-                allow_chase=True,
+                hp_percentage=hp_percentage,
+                effective_flee_threshold=default_flee,
+                allow_chase=default_allow,
             )
-            assert output.final_state == BehaviorStateEnum.CHASE
+            assert output.final_state == expected_state
             assert output.final_target_id == target_id
             assert output.final_last_known_position == coord
-            assert output.sync_pursuit == (target_id, coord)
+            if expected_state == BehaviorStateEnum.CHASE:
+                assert output.sync_pursuit == (target_id, coord)
+            else:
+                assert output.sync_pursuit is None
             assert output.clear_pursuit is False
-            assert any(
-                e.kind == "target_spotted" and e.target_id == target_id
-                for e in output.events
-            )
+            assert output.preserve_pursuit_last_known is None
+            spotted = [e for e in output.events if e.kind == "target_spotted"]
+            assert len(spotted) == 1
+            assert spotted[0].target_id == target_id
+            assert spotted[0].coordinate == coord
+            changed = [e for e in output.events if e.kind == "actor_state_changed"]
+            if expected_state == BehaviorStateEnum.CHASE:
+                assert len(output.events) == 2
+                assert len(changed) == 1
+                assert changed[0].old_state == BehaviorStateEnum.IDLE
+                assert changed[0].new_state == BehaviorStateEnum.CHASE
+            else:
+                assert len(output.events) == 1
+                assert len(changed) == 0
 
-        def test_spot_target_hp_low_goes_flee_clear_pursuit(self, sm):
+        @pytest.mark.parametrize(
+            ("hp_percentage", "param_flee", "default_flee", "expected_state", "expected_clear"),
+            [
+                (0.3, 0.5, 0.2, BehaviorStateEnum.FLEE, True),
+                (0.5, 0.5, 0.2, BehaviorStateEnum.FLEE, True),
+                (0.51, 0.5, 0.2, BehaviorStateEnum.CHASE, False),
+                (0.3, None, 0.5, BehaviorStateEnum.FLEE, True),
+            ],
+            ids=["original_below", "equal_threshold", "above_threshold", "unspecified_flee_uses_default"],
+        )
+        def test_spot_target_hp_boundary_selects_flee_or_chase(
+            self, sm, hp_percentage, param_flee, default_flee, expected_state, expected_clear
+        ):
+            """HPが有効閾値以下なら逃走と解除、直上なら追跡を指示し、通知仕様を各1件返す。"""
             target_id = WorldObjectId(2001)
             coord = Coordinate(2, 1, 0)
             result = StateTransitionResult(
                 spot_target_params=SpotTargetParams(
                     target_id=target_id,
                     coordinate=coord,
-                    effective_flee_threshold=0.5,
+                    effective_flee_threshold=param_flee,
                     allow_chase=True,
                 )
             )
@@ -454,21 +488,42 @@ class TestMonsterBehaviorStateMachineApplyTransition:
                 current_state=BehaviorStateEnum.IDLE,
                 current_target_id=None,
                 current_last_known_position=None,
-                hp_percentage=0.3,
-                effective_flee_threshold=0.2,
+                hp_percentage=hp_percentage,
+                effective_flee_threshold=default_flee,
                 allow_chase=True,
             )
-            assert output.final_state == BehaviorStateEnum.FLEE
+            assert output.final_state == expected_state
             assert output.final_target_id == target_id
-            assert output.clear_pursuit is True
-            assert output.sync_pursuit is None
+            assert output.final_last_known_position == coord
+            assert output.clear_pursuit is expected_clear
+            if expected_clear:
+                assert output.sync_pursuit is None
+            else:
+                assert output.sync_pursuit == (target_id, coord)
+            assert output.preserve_pursuit_last_known is None
+            assert len(output.events) == 2
+            spotted = [e for e in output.events if e.kind == "target_spotted"]
+            assert len(spotted) == 1
+            assert spotted[0].target_id == target_id
+            assert spotted[0].coordinate == coord
+            changed = [e for e in output.events if e.kind == "actor_state_changed"]
+            assert len(changed) == 1
+            assert changed[0].old_state == BehaviorStateEnum.IDLE
+            assert changed[0].new_state == expected_state
 
     class TestDoLoseTarget:
         """do_lose_target の適用"""
 
-        def test_lose_target_chase_to_search_preserve_pursuit(self, sm):
-            lost_id = WorldObjectId(321)
-            last_known = Coordinate(7, 8, 0)
+        @pytest.mark.parametrize(
+            ("lost_id", "last_known"),
+            [
+                (WorldObjectId(321), Coordinate(7, 8, 0)),
+                (WorldObjectId(2), Coordinate(4, 5, 0)),
+            ],
+            ids=["original_lost", "former_lost_spec"],
+        )
+        def test_lose_target_chase_to_search_preserve_pursuit(self, sm, lost_id, last_known):
+            """CHASEの対象喪失は対象情報を保ってSEARCHへ移り、喪失と状態変更を各1件返す。"""
             result = StateTransitionResult(
                 do_lose_target=True,
                 lost_target_id=lost_id,
@@ -488,16 +543,15 @@ class TestMonsterBehaviorStateMachineApplyTransition:
             assert output.final_last_known_position == last_known
             assert output.preserve_pursuit_last_known == (lost_id, last_known)
             assert output.clear_pursuit is False
-            assert any(
-                e.kind == "target_lost" and e.target_id == lost_id
-                for e in output.events
-            )
-            assert any(
-                e.kind == "actor_state_changed"
-                and e.old_state == BehaviorStateEnum.CHASE
-                and e.new_state == BehaviorStateEnum.SEARCH
-                for e in output.events
-            )
+            assert len(output.events) == 2
+            lost = [e for e in output.events if e.kind == "target_lost"]
+            assert len(lost) == 1
+            assert lost[0].target_id == lost_id
+            assert lost[0].last_known_coordinate == last_known
+            changed = [e for e in output.events if e.kind == "actor_state_changed"]
+            assert len(changed) == 1
+            assert changed[0].old_state == BehaviorStateEnum.CHASE
+            assert changed[0].new_state == BehaviorStateEnum.SEARCH
 
         def test_lose_target_flee_to_return_clear_pursuit(self, sm):
             lost_id = WorldObjectId(321)
