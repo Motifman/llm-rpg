@@ -27,8 +27,7 @@ if TYPE_CHECKING:
 
 def _coerce_item_spec_id_entry_value(raw: Any) -> int | None:
     """
-    obtained_items 内 dict の item_spec_id を int に正規化する。
-    `episodic_cue_rules._coerce_non_bool_int` と同じ規則（bool は int とみなさない）。
+    obtained_items 内 dict の item_spec_id を int に正規化する。bool は int とみなさない。
     """
     if type(raw) is int:
         return raw

@@ -6,8 +6,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -30,7 +30,7 @@ class _FakeRuntime:
     def __init__(self) -> None:
         event_store = UnifiedRecentEventStore()
         self._obs_buffer = DefaultObservationContextBuffer(event_store=event_store)
-        self._short_term_memory = DefaultSlidingWindowMemory(
+        self._short_term_memory = SummarizingShortTermMemory(
             event_store=event_store
         )
         self.explore_calls: list[int] = []
