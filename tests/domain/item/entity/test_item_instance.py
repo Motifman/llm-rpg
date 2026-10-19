@@ -314,19 +314,22 @@ class TestItemInstance:
             )
 
     def test_add_quantity_zero(self, sample_item_instance):
-        """0数量追加のテスト"""
+        """加算0は数量例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(QuantityValidationException):
             sample_item_instance.add_quantity(0)
+        assert sample_item_instance.quantity == 1
 
     def test_add_quantity_negative(self, sample_item_instance):
-        """負の数量追加のテスト"""
+        """加算-1は数量例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(QuantityValidationException):
             sample_item_instance.add_quantity(-1)
+        assert sample_item_instance.quantity == 1
 
     def test_add_quantity_over_max(self, sample_item_instance):
-        """最大数量超過のテスト"""
+        """数量1への加算64は上限超過で拒否し、現在数量1を保持する。"""
         with pytest.raises(StackSizeExceededException):
             sample_item_instance.add_quantity(64)  # 既に1あるので65になる
+        assert sample_item_instance.quantity == 1
 
     def test_remove_quantity_success(self, sample_item_instance):
         """数量削除成功のテスト"""
@@ -335,17 +338,19 @@ class TestItemInstance:
         assert sample_item_instance.quantity == 3
 
     def test_remove_quantity_zero(self, sample_item_instance):
-        """0数量削除のテスト"""
+        """減算0は数量例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(QuantityValidationException):
             sample_item_instance.remove_quantity(0)
+        assert sample_item_instance.quantity == 1
 
     def test_remove_quantity_insufficient(self, sample_item_instance):
-        """数量不足のテスト"""
+        """数量1から2の減算は不足例外で拒否し、現在数量1を保持する。"""
         with pytest.raises(InsufficientQuantityException):
             sample_item_instance.remove_quantity(2)
+        assert sample_item_instance.quantity == 1
 
     def test_equality(self, sample_item_instance, sample_item_spec):
-        """等価性テスト"""
+        """同じ実体IDなら仕様や数量が違っても等しく、異なる実体IDは等しくない。"""
         same_id = ItemInstance(
             item_instance_id=ItemInstanceId(1),
             item_spec=sample_item_spec  # 同じスペックでもIDが同じなら等価
@@ -358,8 +363,15 @@ class TestItemInstance:
         assert sample_item_instance == same_id
         assert sample_item_instance != different_id
 
+        different_attributes = ItemInstance(
+            item_instance_id=ItemInstanceId(1),
+            item_spec=replace(sample_item_spec, item_spec_id=ItemSpecId(3)),
+            quantity=2,
+        )
+        assert sample_item_instance == different_attributes
+
     def test_hash(self, sample_item_instance, sample_item_spec):
-        """ハッシュテスト"""
+        """同じ実体IDは数量が異なっても同じハッシュとなり、集合では1件にまとまる。"""
         same_id = ItemInstance(
             item_instance_id=ItemInstanceId(1),
             item_spec=sample_item_spec
@@ -369,6 +381,15 @@ class TestItemInstance:
 
         # setで重複を除去できる
         items = {sample_item_instance, same_id}
+        assert len(items) == 1
+
+        different_quantity = ItemInstance(
+            item_instance_id=ItemInstanceId(1),
+            item_spec=sample_item_spec,
+            quantity=2,
+        )
+        assert hash(sample_item_instance) == hash(different_quantity)
+        items.add(different_quantity)
         assert len(items) == 1
 
     def test_repr(self, sample_item_instance):
