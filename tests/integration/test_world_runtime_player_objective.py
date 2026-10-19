@@ -1,18 +1,16 @@
-"""目的層 G6: プレイヤーごとの初期目的と改訂可否が world_runtime に効くことを固定。
+"""目的層 G6: プレイヤーごとの初期目的が world_runtime の【現在の目的】に効くことを固定。
 
-- players[].objective を書いたプレイヤーはその文で goal store に seed される
-- 書いていないプレイヤーはシナリオ共通の llm_objective_text で seed される
+- players[].objective を書いたプレイヤーには、その文が【現在の目的】に載る
+- 書いていないプレイヤーには、シナリオ共通の llm_objective_text が載る
   (= 既存シナリオの挙動不変)
-- players[].goal_locked はシナリオ全体から導出した locked を上書きする
 - 共通目的文が空でも全員に objective があれば起動でき、1 人でも欠けると
   fail-fast する
 
-LLM は呼ばない。goal store は既定 OFF なので明示的に ON にする。
+LLM は呼ばない。
 """
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
@@ -20,7 +18,7 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.runtime_config_helpers import episodic_config
+from tests.runtime_config_helpers import runtime_config
 
 _BASE_SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -40,7 +38,7 @@ def _write_scenario(tmp_path: Path, mutate) -> Path:
 
 
 def _runtime(path: Path):
-    return create_world_runtime(path, config=episodic_config(goal_store_enabled=True))
+    return create_world_runtime(path, config=runtime_config())
 
 
 def _player_id_of(runtime, string_id: str) -> PlayerId:
@@ -50,40 +48,35 @@ def _player_id_of(runtime, string_id: str) -> PlayerId:
     raise AssertionError(f"player {string_id!r} not found in scenario")
 
 
-def _seeded_goal_text(runtime, player_id: PlayerId) -> str:
-    """【現在の目的】の描画を 1 度走らせ、seed された目的文を返す。"""
-    scenario_text = runtime._resolve_scenario_llm_objective_text()
-    fallback = runtime._resolve_player_objective_text(player_id, scenario_text)
-    return runtime._resolve_objective_via_goal_store(player_id, fallback)
+def _current_objective_section(text: str) -> str:
+    return f"【現在の目的】\n{text}\n\n"
 
 
-def _seeded_goal_entry(runtime, player_id: PlayerId):
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        runtime.aux_being_default_world_id, player_id
-    )
-    return runtime._goal_journal_store.get_active_by_being(being_id)
+def _user_content(runtime, player_id: PlayerId) -> str:
+    return runtime.build_full_prompt(player_id)["messages"][1]["content"]
 
 
-class TestPerPlayerObjectiveSeeding:
-    """players[].objective がプレイヤーごとの初期目的として goal store に届く挙動を保証する。"""
+class TestPerPlayerObjective:
+    """players[].objective がプレイヤーごとの【現在の目的】に載る挙動を保証する。"""
 
-    def test_player_with_objective_is_seeded_with_own_text(
+    def test_player_with_objective_sees_own_text(
         self, tmp_path: Path
     ) -> None:
-        """objective を書いたプレイヤーは、その文で goal store に seed される。"""
+        """objective を書いたプレイヤーの【現在の目的】には、その文が載る。"""
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
 
         runtime = _runtime(_write_scenario(tmp_path, mutate))
         player_id = _player_id_of(runtime, "player_a")
 
-        assert _seeded_goal_text(runtime, player_id) == "禁書を持ち出して 1 人で逃げる"
-        assert _seeded_goal_entry(runtime, player_id).text == "禁書を持ち出して 1 人で逃げる"
+        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in _user_content(
+            runtime, player_id
+        )
 
     def test_player_without_objective_falls_back_to_scenario_text(
         self, tmp_path: Path
     ) -> None:
-        """objective を書かないプレイヤーはシナリオ共通の目的文で seed される。"""
+        """objective を書かないプレイヤーの【現在の目的】には、シナリオ共通の目的文が載る。"""
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
 
@@ -91,66 +84,41 @@ class TestPerPlayerObjectiveSeeding:
         player_id = _player_id_of(runtime, "player_b")
         scenario_text = runtime._resolve_scenario_llm_objective_text()
 
-        assert _seeded_goal_text(runtime, player_id) == scenario_text
+        assert _current_objective_section(scenario_text) in _user_content(runtime, player_id)
 
     def test_two_players_can_hold_different_objectives(self, tmp_path: Path) -> None:
-        """同じ run の 2 人が別々の目的文で seed され、互いに混ざらない。"""
+        """同じ run の 2 人に別々の目的文が載り、互いに混ざらない。"""
         def mutate(scenario: dict) -> None:
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
             scenario["players"][1]["objective"] = "禁書を書架に戻して封印する"
 
         runtime = _runtime(_write_scenario(tmp_path, mutate))
 
-        text_a = _seeded_goal_text(runtime, _player_id_of(runtime, "player_a"))
-        text_b = _seeded_goal_text(runtime, _player_id_of(runtime, "player_b"))
-        assert text_a == "禁書を持ち出して 1 人で逃げる"
-        assert text_b == "禁書を書架に戻して封印する"
+        user_a = _user_content(runtime, _player_id_of(runtime, "player_a"))
+        user_b = _user_content(runtime, _player_id_of(runtime, "player_b"))
+        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in user_a
+        assert _current_objective_section("禁書を書架に戻して封印する") in user_b
+        assert "禁書を書架に戻して封印する" not in user_a
+        assert "禁書を持ち出して 1 人で逃げる" not in user_b
 
-    def test_unmodified_scenario_seeds_scenario_text_for_everyone(
+    def test_unmodified_scenario_shows_scenario_text_to_everyone(
         self, tmp_path: Path
     ) -> None:
-        """objective を 1 つも書かない既存シナリオでは全員が共通目的文で seed される (挙動不変)。"""
+        """objective を 1 つも書かない既存シナリオでは、全員の【現在の目的】に共通目的文が載る (挙動不変)。"""
         runtime = _runtime(_write_scenario(tmp_path, lambda scenario: None))
         scenario_text = runtime._resolve_scenario_llm_objective_text()
 
         for string_id in ("player_a", "player_b"):
             player_id = _player_id_of(runtime, string_id)
-            assert _seeded_goal_text(runtime, player_id) == scenario_text
-
-
-class TestPerPlayerGoalLocked:
-    """players[].goal_locked がシナリオ由来の locked を上書きする挙動を保証する。"""
-
-    def test_locked_defaults_to_scenario_derived_value(self, tmp_path: Path) -> None:
-        """goal_locked 未指定なら、勝敗条件を持つシナリオでは locked=True で seed される。"""
-        runtime = _runtime(_write_scenario(tmp_path, lambda scenario: None))
-        player_id = _player_id_of(runtime, "player_a")
-        _seeded_goal_text(runtime, player_id)
-
-        assert _seeded_goal_entry(runtime, player_id).locked is True
-
-    def test_goal_locked_false_unlocks_a_single_player(self, tmp_path: Path) -> None:
-        """勝敗条件つきシナリオでも goal_locked=false のプレイヤーだけ locked=False で seed される。"""
-        def mutate(scenario: dict) -> None:
-            scenario["players"][0]["goal_locked"] = False
-
-        runtime = _runtime(_write_scenario(tmp_path, mutate))
-
-        unlocked = _player_id_of(runtime, "player_a")
-        still_locked = _player_id_of(runtime, "player_b")
-        _seeded_goal_text(runtime, unlocked)
-        _seeded_goal_text(runtime, still_locked)
-
-        assert _seeded_goal_entry(runtime, unlocked).locked is False
-        assert _seeded_goal_entry(runtime, still_locked).locked is True
+            assert _current_objective_section(scenario_text) in _user_content(runtime, player_id)
 
 
 class TestUnknownPlayerFallback:
     """player_spawns に無い player_id で目的解決が呼ばれたときの縮退挙動を保証する。
 
     現行の呼び出し元はすべて player_spawns 由来なので通常は到達しないが、
-    将来 spawn と独立した player_id 生成経路が増えたときに「黙って他人の目的で
-    seed される」回帰を検知するために固定する。
+    将来 spawn と独立した player_id 生成経路が増えたときに「黙って他人の目的が
+    渡る」回帰を検知するために固定する。
     """
 
     def test_unknown_player_falls_back_to_scenario_text_with_warning(
@@ -171,18 +139,6 @@ class TestUnknownPlayerFallback:
         assert resolved == scenario_text
         assert "9999" in caplog.text
 
-    def test_unknown_player_goal_locked_falls_back_with_warning(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """未知の player_id では locked がシナリオ由来の値へ縮退し、warning が残る。"""
-        runtime = _runtime(_write_scenario(tmp_path, lambda scenario: None))
-
-        with caplog.at_level("WARNING"):
-            locked = runtime._resolve_player_goal_locked(PlayerId(9999))
-
-        assert locked is True  # 勝敗条件を持つシナリオなので従来どおり locked
-        assert "9999" in caplog.text
-
 
 class TestObjectiveFailFast:
     """共通目的文が空のときの fail-fast が、個別目的の有無で切り替わる挙動を保証する。"""
@@ -190,7 +146,7 @@ class TestObjectiveFailFast:
     def test_empty_scenario_text_is_allowed_when_every_player_has_objective(
         self, tmp_path: Path
     ) -> None:
-        """共通目的文が空でも全員に objective があれば起動でき、各自の目的で seed される。"""
+        """共通目的文が空でも全員に objective があれば起動でき、各自の目的が載る。"""
         def mutate(scenario: dict) -> None:
             scenario["metadata"]["llm_objective_text"] = ""
             scenario["players"][0]["objective"] = "禁書を持ち出して 1 人で逃げる"
@@ -199,8 +155,8 @@ class TestObjectiveFailFast:
         runtime = _runtime(_write_scenario(tmp_path, mutate))
 
         assert runtime._resolve_scenario_llm_objective_text() == ""
-        text_a = _seeded_goal_text(runtime, _player_id_of(runtime, "player_a"))
-        assert text_a == "禁書を持ち出して 1 人で逃げる"
+        user_a = _user_content(runtime, _player_id_of(runtime, "player_a"))
+        assert _current_objective_section("禁書を持ち出して 1 人で逃げる") in user_a
 
     def test_empty_scenario_text_raises_when_one_player_lacks_objective(
         self, tmp_path: Path
