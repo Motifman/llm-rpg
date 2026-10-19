@@ -25,6 +25,7 @@ provider の対応状況・単価・量子化は、予告なく変わる。2026-
 補足:
 
 - `supported_parameters` に `tool_choice` があっても、`required` が通るとは限らない。provider の宣言であって、値ごとの動作保証ではない。条件 1 は必ず実呼び出しで見る
+- provider を固定した run は、いつも `require_parameters=true` を送る。`supported_parameters` に送る引数が無い provider には、送る前に OpenRouter がエラーで止める (design_decisions D1631-2)
 - DeepSeek の思考 (thinking) と `required` は両立しないことがある。思考を入れる run では、条件 1 を思考ありの設定で確かめる (#96)
 - 思考トークンは出力トークンの上限に数えられる。上限を小さくしたプローブでは、思考で上限に達してツールが返らないことがある。プローブの `--max-tokens` は 200 以上にする
 - 思考の長さで条件 4 を超えるときは、runtime_config の `LLM_MAX_OUTPUT_TOKENS` で出力の上限を送る。`LLM_REASONING_EFFORT` は上限の何割を思考に回すかの指定なので、上限を送らないと抑えにならない (design_decisions D1595)
