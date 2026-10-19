@@ -23,7 +23,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 _ACTOR = PlayerId(1)
 _WITNESS = PlayerId(2)
@@ -32,11 +32,11 @@ _WITNESS = PlayerId(2)
 def _scenario_with_control_panel_witness_policy(
     tmp_path: Path, witness_policy: str | None
 ) -> Path:
-    """relay_puzzle の control_panel/power_on に witness_policy を差し込んで書き出す。
+    """control_panel_toggle の control_panel/power_on に witness_policy を差し込んで書き出す。
 
     ``None`` なら witness_policy を書かない (= 既定の SAME_SPOT)。
     """
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     patched = False
     for spot in scenario["spots"]:
         interior = spot.get("interior") or {}
@@ -52,7 +52,7 @@ def _scenario_with_control_panel_witness_policy(
                     interaction["witness_policy"] = witness_policy
                 patched = True
     assert patched, "control_panel/power_on が見つからない (シナリオ構造が変わった)"
-    path = tmp_path / f"relay_{witness_policy or 'default'}.json"
+    path = tmp_path / f"panel_{witness_policy or 'default'}.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     return path
 

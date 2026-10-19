@@ -5,7 +5,8 @@ restore_all_from_dir の集計動作を担保する。
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import dataclasses
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,19 +14,12 @@ import pytest
 
 from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
+from ai_rpg_world.application.being.being_snapshot_file_gateway import BeingSnapshotFileGateway
 from ai_rpg_world.application.being.experiment_snapshot_session import (
     EXPECTED_WORLD_SUBSYSTEM_KEYS,
     ExperimentSnapshotSession,
     _default_world_subsystem_codecs,
 )
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
-    InMemoryEpisodicRecallBufferStore,
-    InMemoryEpisodicReinterpretationJournalStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
@@ -45,7 +39,7 @@ def _make_wiring_stub() -> tuple[SimpleNamespace, BeingProvisioningService]:
     repo = InMemoryBeingRepository()
     resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
-    wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_recall_buffer_store=InMemoryEpisodicRecallBufferStore(), episodic_reinterpretation_journal_store=InMemoryEpisodicReinterpretationJournalStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
     return (wiring, provisioning)
 
 class TestConstructorGuards:
@@ -79,17 +73,6 @@ class TestConstructorGuards:
         with pytest.raises(RuntimeError, match='memory_turn_clock'):
             ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
 
-    def test_memo_store_missing_empty_fallback_works(self, tmp_path: Path) -> None:
-        """memo_store が None でも構築は成功し、capture は空 memo の snapshot を出す。"""
-        from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-        (wiring, _) = _make_wiring_stub()
-        wiring.memo_store = None
-        prov = BeingProvisioningService(wiring.being_repository)
-        prov.ensure_attached(PlayerId(1))
-        session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
-        report = session.capture_all([PlayerId(1)])
-        assert report.is_clean
-
 class TestWorldSubsystemCoverage:
     """world snapshot の既定 subsystem 一覧を構造で固定する。"""
 
@@ -108,7 +91,7 @@ class TestCaptureAll:
         provisioning.ensure_attached(PlayerId(2))
         being_1 = wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        wiring.memo_store.add_by_being(being_1, 'P1 memo')
+        wiring.acquaintance_store.record_meeting(being_1, environment_name='島', name='カイト', turn=1)
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert report.is_clean
@@ -128,20 +111,20 @@ class TestCaptureAll:
         assert any('player_id=2' in r.message for r in caplog.records)
 
     def test_one_player_capture_failure_other_player_does_not_stop(self, tmp_path: Path) -> None:
-        """memo_store の add_by_being が 1 being だけで例外を投げるよう細工し、
+        """知り合いの store の読み出しが 1 being だけで例外を投げるよう細工し、
         他 player の capture は続行されることを担保する。"""
         (wiring, provisioning) = _make_wiring_stub()
         provisioning.ensure_attached(PlayerId(1))
         provisioning.ensure_attached(PlayerId(2))
         being_2 = wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(2))
         assert being_2 is not None
-        original = wiring.memo_store.list_all_by_being
+        original = wiring.acquaintance_store.list_by_being
 
         def _raising(being_id):
             if being_id == being_2:
                 raise RuntimeError('synthetic failure')
             return original(being_id)
-        wiring.memo_store.list_all_by_being = _raising
+        wiring.acquaintance_store.list_by_being = _raising
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert len(report.succeeded) == 1
@@ -159,15 +142,34 @@ class TestRestoreAll:
         src_prov.ensure_attached(PlayerId(1))
         being_1 = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
         assert being_1 is not None
-        src_wiring.memo_store.add_by_being(being_1, 'from-source')
+        src_wiring.acquaintance_store.record_meeting(being_1, environment_name='島', name='カイト', turn=1)
         src_session = ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'snap')
         src_session.capture_all([PlayerId(1)])
         (dst_wiring, _) = _make_wiring_stub()
         dst_session = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'snap')
         report = dst_session.restore_all_from_dir(tmp_path / 'snap')
         assert len(report.restored) == 1
-        memos = dst_wiring.memo_store.list_all_by_being(being_1)
-        assert [m.content for m in memos] == ['from-source']
+        assert [a.name for a in dst_wiring.acquaintance_store.list_by_being(being_1)] == ['カイト']
+
+    def test_report_lists_removed_memory_keys_only_for_beings_that_had_them(self, tmp_path: Path) -> None:
+        """古いメモの欄を持つ snapshot だけが、Being ごとの捨てた件数として報告に載る。持たない Being は載らない。"""
+        (src_wiring, src_prov) = _make_wiring_stub()
+        src_prov.ensure_attached(PlayerId(1))
+        src_prov.ensure_attached(PlayerId(2))
+        being_1 = src_wiring.being_attachment_resolver.resolve_being_id(DEFAULT_SINGLE_WORLD_ID, PlayerId(1))
+        assert being_1 is not None
+        ExperimentSnapshotSession(wiring_result=src_wiring, snapshot_dir=tmp_path / 'snap').capture_all([PlayerId(1), PlayerId(2)])
+        gateway = BeingSnapshotFileGateway()
+        old_path = tmp_path / 'snap' / f'{being_1.value}.json'
+        snapshot = gateway.read(old_path)
+        payload = {**json.loads(snapshot.memory_payload_json), 'memo': [{'id': 'm1', 'added_at_tick': 90}, {'id': 'm2', 'added_at_tick': 91}]}
+        gateway.write(dataclasses.replace(snapshot, memory_payload_json=json.dumps(payload)), old_path)
+        (dst_wiring, _) = _make_wiring_stub()
+
+        report = ExperimentSnapshotSession(wiring_result=dst_wiring, snapshot_dir=tmp_path / 'dst').restore_all_from_dir(tmp_path / 'snap')
+
+        assert len(report.restored) == 2
+        assert report.removed_memory_key_counts == {being_1: {'memo': 2}}
 
     def test_missing_raises_file_not_found_error(self, tmp_path: Path) -> None:
         """存在しない ディレクトリは FileNotFoundError。"""

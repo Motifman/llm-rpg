@@ -128,9 +128,9 @@ class TestTeamResults:
             "south": GameResultEnum.DRAW,
         }
 
-    def test_external_stop_also_decides_team_results(self) -> None:
-        """END_ON_ALL_DOWN で止まったときも、北の 2 人が RESCUED なら北が WIN、南が LOSE になる。"""
-        runtime = create_world_runtime(_SCENARIO, config=runtime_config(end_on_all_down=True))
+    def test_team_win_beats_external_stop_in_the_same_tick(self) -> None:
+        """北の 2 人が RESCUED、南の 2 人が DEAD で全員の結果が確定すると、外的停止ではなく北の勝利の理由を残し、北が WIN、南が LOSE になる。"""
+        runtime = create_world_runtime(_SCENARIO, config=runtime_config())
         ids = _ids(runtime)
         registry = runtime._player_outcome_registry
         registry.set_outcome(ids["north_1"], PlayerOutcomeEnum.RESCUED)
@@ -140,15 +140,15 @@ class TestTeamResults:
 
         result = runtime.check_game_end()
 
-        assert result.reason.startswith("外的停止 END_ON_ALL_DOWN")
+        assert result.reason.startswith("北の班")
         assert result.team_results == {
             "north": GameResultEnum.WIN,
             "south": GameResultEnum.LOSE,
         }
 
     def test_external_stop_without_a_winner_makes_every_team_lose(self) -> None:
-        """END_ON_ALL_DOWN で止まったとき、どのチームも全員 RESCUED でなければ全チーム LOSE になる。"""
-        runtime = create_world_runtime(_SCENARIO, config=runtime_config(end_on_all_down=True))
+        """全員が行動不能で外的停止したとき、どのチームも全員 RESCUED でなければ全チーム LOSE になる。"""
+        runtime = create_world_runtime(_SCENARIO, config=runtime_config())
         ids = _ids(runtime)
         registry = runtime._player_outcome_registry
         for string_id in ("north_1", "south_1"):

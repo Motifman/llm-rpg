@@ -12,7 +12,7 @@ warning するようになった。しかし **warning は構造ではない。*
 - つまり `docs/trace_observability_review.md` の手順で run 後に確認しても検出でき
   ない。見落とせば、状態だけ静かに変わるシナリオがそのまま実験に乗る
 
-#383 の作業では `relay_puzzle_demo.json` を直して `data/scenarios` の警告を 0 件に
+#383 の作業では `relay_puzzle_demo.json` (#1631 で退役) を直して `data/scenarios` の警告を 0 件に
 した。**しかしその状態を守る仕組みが無かった** (レビュー指摘)。次に誰かが無音の
 binding を持つシナリオを足しても、標準出力に 1 行流れるだけで CI は緑になる。
 

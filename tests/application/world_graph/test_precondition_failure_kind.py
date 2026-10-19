@@ -224,7 +224,7 @@ class TestNonTimeRecoveringFailures:
         """時間ではない述語が戻すなら CONDITION_RECOVERING。
 
         「待て」ではなく「条件を変えろ」が正しい助言になる。実 run では 2 件と
-        少ないが、`relay_puzzle` の操作盤のように**他人の行動で戻る**形がある。
+        少ないが、`relay_puzzle` (#1631 で退役) の操作盤のように**他人の行動で戻る**形がある。
         """
         kind = classify_precondition_failure(
             _object_state_condition(_LEAVES, "available", True),
