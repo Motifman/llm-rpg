@@ -21,7 +21,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmW
 
 _ROOT = Path(__file__).resolve().parents[2]
 _STATION_DRILL = _ROOT / "data" / "scenarios" / "station_drill.json"
-_RELAY_PUZZLE = _ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 
@@ -261,7 +261,7 @@ class TestEveryGateUsesTheSharedQuery:
         self, tmp_path: Path
     ) -> None:
         """対人行為も status を再導出せず、query の身体判定を event に載せる。"""
-        raw = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        raw = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
         raw["player_interactions"] = [
             {
                 "action_name": "inspect_player",

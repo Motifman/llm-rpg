@@ -9,8 +9,7 @@ PR #462 §2.1 (R1): ``save/load = ビーイング丸ごとの snapshot/restore``
 
 NOTE: ``domain/common/repository.py::Repository[T, ID]`` 基底を継承せず ABC 直継承
 にしているのは、本 PR 段階では Being 集約自体が最小構成であり、汎用基底が要求する
-``find_by_ids`` / ``find_all`` は YAGNI (= 必要になった時点で追加)。Phase 1 の
-memory Repository 群 (例: ``EpisodicEpisodeRepository``) と同じ方針。
+``find_by_ids`` / ``find_all`` は YAGNI (= 必要になった時点で追加)。
 """
 
 from __future__ import annotations
@@ -47,8 +46,8 @@ class BeingRepository(ABC):
     def save_snapshot(self, snapshot: BeingSnapshot) -> None:
         """payload を載せた ``BeingSnapshot`` を直接受け取って保存する入口。
 
-        Phase 4 Step 4-3 (Issue #470): ``BeingPersistenceService`` が memory
-        payload 込みの v2 snapshot を保存するためにこちらを呼ぶ。``save(being)``
+        memory payload 込みの v2 snapshot を保存するときはこちらを呼ぶ
+        (``RestoreBeingSnapshotFromFileUseCase`` など)。``save(being)``
         は codec で payload=None の snapshot を encode した上で本メソッドに
         delegate する形に整理されている。同一 ``BeingId`` は upsert。
         """
@@ -57,9 +56,8 @@ class BeingRepository(ABC):
     def find_snapshot_by_id(self, being_id: BeingId) -> BeingSnapshot | None:
         """指定 ID の ``BeingSnapshot`` を返す (codec decode を経由しない経路)。
 
-        Phase 4 Step 4-3: ``BeingPersistenceService`` が payload を読み出し
-        memory restore に回すための入口。``find_by_id`` は codec.decode が
-        払い落とした Being aggregate しか返さないので、payload を残した
+        payload を読み出して memory restore に回すための入口。``find_by_id`` は
+        codec.decode が払い落とした Being aggregate しか返さないので、payload を残した
         snapshot 取得の経路を別に持つ必要がある。
         """
 
