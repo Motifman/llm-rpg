@@ -352,7 +352,7 @@
     (旧 PR-D)。generic 再解釈と混ぜず、「これらから X を予測したが Y
     だった」を明示する専用 batch item 種別として同じ周期に相乗り
   - 的中: episode の想起価値 boost。実装は
-    [recall_ranking_failure_boost_design.md](./recall_ranking_failure_boost_design.md)
+    `recall_ranking_failure_boost_design.md` (#1631 で削除)
     の路線と統合 — `multi_cue_score` (`episodic_passive_recall_retrieval.py:389-456`)
     への加点項として入れる
 - テスト: 外れ時に専用 batch item が積まれる / 的中 boost の加点 /

@@ -33,20 +33,15 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "- イベント1" in text
 
     def test_empty_section(self, strategy):
-        """memo / 記憶 / 目的 / 物証 は空なら section ごと省略される。
-
-        Issue #526 後続: 「受動想起では何も浮かばなかった」の sentinel text 注入は
-        prompt_builder._run_passive_recall 側の責務。formatter は受け取った
-        relevant_memories_text を信じて、空なら従来通り section を省略する。"""
+        """メモ帳 / 目的 / 物証 は空なら section ごと省略され、受動想起の【関連する記憶】は出ない。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
-            relevant_memories_text="",
-            active_memos_text="",
+            being_memo_text="",
             objective_text="",
             inventory_text="",
         )
-        assert "【進行中のメモ】" not in text
+        assert "【メモ】" not in text
         assert "【関連する記憶】" not in text
         assert "【現在の目的】" not in text
         assert "【所持・判明した物証】" not in text
@@ -69,20 +64,18 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(
             current_state_text="現在地: x",
             recent_events_text="- 出来事",
-            relevant_memories_text="記憶a",
-            active_memos_text="メモb",
+            being_memo_text="メモb",
             objective_text="目的c",
             inventory_text="物証d",
         )
         idx_current_state = text.index("【現在地と周囲】")
-        for other in ["【現在の目的】", "【進行中のメモ】",
-                       "【関連する記憶】", "【直近の出来事】"]:
+        for other in ["【現在の目的】", "【メモ】", "【直近の出来事】"]:
             assert text.index(other) < idx_current_state, (
                 f"{other} は【現在地と周囲】より前に出るべき"
             )
 
     def test_stable_volatile_order(self, strategy):
-        """objective → recent_events → memories → memos → current_state。
+        """objective → recent_events → memos → current_state。
 
         recent_events は head 安定 (= append-only) なので静的群の直後に置く。
         所持品は current_state に一本化され、この独立sectionには出さない。
@@ -90,20 +83,18 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(
             current_state_text="現在地",
             recent_events_text="出来事",
-            relevant_memories_text="記憶",
-            active_memos_text="メモ",
+            being_memo_text="メモ",
             objective_text="目的",
             inventory_text="物証",
         )
         idx = {
             "obj":      text.index("【現在の目的】"),
             "events":   text.index("【直近の出来事】"),
-            "memos":    text.index("【進行中のメモ】"),
-            "mem":      text.index("【関連する記憶】"),
+            "memos":    text.index("【メモ】"),
             "current":  text.index("【現在地と周囲】"),
         }
         assert "【所持・判明した物証】" not in text
-        assert idx["obj"] < idx["events"] < idx["mem"] < idx["memos"] < idx["current"]
+        assert idx["obj"] < idx["events"] < idx["memos"] < idx["current"]
 
     def test_duplicate_inventory_section_is_omitted(self, strategy):
         """旧 inventory section は省略し、現在地と周囲にある所持品だけを残す。"""
@@ -111,7 +102,6 @@ class TestSectionBasedContextFormatStrategyDefault:
             current_state_text='所持アイテム:\n  - "鍵" x2 (道具)',
             recent_events_text="y",
             inventory_text="- 鍵\n- 鍵",
-            relevant_memories_text="思い出",
         )
         assert "【所持・判明した物証】" not in text
         assert '  - "鍵" x2 (道具)' in text
@@ -127,49 +117,20 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(current_state_text="a", recent_events_text="")
         assert "（なし）" in text
 
-    def test_learned_text_joins_recall_sections_after_recent_events(self, strategy):
-        """【関連する学び】は直近の出来事の後、関連する記憶とメモの前に置かれる。"""
+    def test_mid_summary_precedes_recent_events(self, strategy):
+        """【最近の流れ】は直近の出来事より前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
-            learned_text="- タカシは信頼できる",
-            active_memos_text="メモ",
-            relevant_memories_text="- 思い出",
-        )
-        assert "【関連する学び】" in text
-        assert "- タカシは信頼できる" in text
-        idx_prediction = text.index("【直近の出来事】")
-        idx_learned = text.index("【関連する学び】")
-        idx_memory = text.index("【関連する記憶】")
-        idx_memos = text.index("【進行中のメモ】")
-        assert idx_prediction < idx_learned < idx_memory < idx_memos
-
-    def test_returns_empty_when_learned_text_section(self, strategy):
-        """空文字なら section ヘッダも出ない。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            learned_text="",
-        )
-        assert "【関連する学び】" not in text
-
-    def test_mid_summary_precedes_learned_recall_section(self, strategy):
-        """【最近の流れ】は直近の出来事より前、学びは出来事より後に置かれる。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            objective_text="目的",
-            learned_text="- 学び",
             mid_summary_text="[最新] 動き",
-            active_memos_text="メモ",
+            being_memo_text="メモ",
         )
         assert "【最近の流れ】" in text
         assert "[最新] 動き" in text
         idx_mid = text.index("【最近の流れ】")
         idx_events = text.index("【直近の出来事】")
-        idx_learned = text.index("【関連する学び】")
-        assert idx_mid < idx_events < idx_learned
+        assert idx_mid < idx_events
 
     def test_returns_empty_when_mid_summary_text_section(self, strategy):
         """midsummarytext が空なら section ごと省略。"""
@@ -180,24 +141,22 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" not in text
 
-    def test_long_summary_text_precedes_mid_summary_and_learned(self, strategy):
-        """【自己像と世界観】は最近の流れより前、学びは出来事より後に置かれる。"""
+    def test_long_summary_text_precedes_mid_summary(self, strategy):
+        """【自己像と世界観】は目的の後、最近の流れより前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
             long_summary_text="私について: 寡黙な漁師",
-            learned_text="- タカシは信頼できる",
             mid_summary_text="[最新] 動き",
         )
         assert "【自己像と世界観】" in text
         assert "私について: 寡黙な漁師" in text
         idx_obj = text.index("【現在の目的】")
         idx_long = text.index("【自己像と世界観】")
-        idx_learned = text.index("【関連する学び】")
         idx_mid = text.index("【最近の流れ】")
         idx_events = text.index("【直近の出来事】")
-        assert idx_obj < idx_long < idx_mid < idx_events < idx_learned
+        assert idx_obj < idx_long < idx_mid < idx_events
 
     def test_known_people_follow_objective_and_precede_self_image(self, strategy):
         """【知っている人】は【現在の目的】の直後、【自己像と世界観】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
@@ -265,16 +224,6 @@ class TestSectionBasedContextFormatStrategyValidation:
                 recent_events_text=None,  # type: ignore[arg-type]
             )
 
-    def test_non_string_relevant_memories_text_raises_type_error(self):
-        """relevant_memories_text が str でないとき TypeError を投げる。"""
-        strategy = SectionBasedContextFormatStrategy()
-        with pytest.raises(TypeError, match="relevant_memories_text must be str"):
-            strategy.format(
-                current_state_text="",
-                recent_events_text="",
-                relevant_memories_text=[],  # type: ignore[arg-type]
-            )
-
     def test_non_string_objective_text_raises_type_error(self):
         """objective_text が str でないとき TypeError を投げる。"""
         strategy = SectionBasedContextFormatStrategy()
@@ -293,14 +242,4 @@ class TestSectionBasedContextFormatStrategyValidation:
                 current_state_text="",
                 recent_events_text="",
                 inventory_text=None,  # type: ignore[arg-type]
-            )
-
-    def test_non_string_learned_text_raises_type_error(self):
-        """learned_text が str でないとき TypeError を投げる (Phase 1c)。"""
-        strategy = SectionBasedContextFormatStrategy()
-        with pytest.raises(TypeError, match="learned_text must be str"):
-            strategy.format(
-                current_state_text="",
-                recent_events_text="",
-                learned_text=[],  # type: ignore[arg-type]
             )

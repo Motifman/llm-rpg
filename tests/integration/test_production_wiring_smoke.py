@@ -15,9 +15,8 @@ PR #443 の実機 run で連続発覚した silent failure 系 bug (PR #439 / #4
 
 本 test 群はそのギャップを埋める「**配線契約テスト**」:
 
-- ``SHORT_TERM_MEMORY_KIND=rolling_summary`` を env で指定したら、実体も
-  ``SummarizingShortTermMemory`` であること (PR #439 silent failure 再発防止)
-- 上記 + ``LLM_CLIENT=litellm`` を組み合わせると、sliding_window 内部の
+- 短期記憶の実体が ``SummarizingShortTermMemory`` であること (PR #439 silent failure 再発防止)
+- 上記 + ``LLM_CLIENT=litellm`` を組み合わせると、短期記憶の
   ``_service`` (= 短期記憶要約 LLM 経路) が **None ではなく** 注入されていること
   (PR #444 silent failure 再発防止)
 - ``LiteLLMClient`` の ``_timeout_seconds`` が **必ず有限値** で、litellm
@@ -59,21 +58,13 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     で関連 env を全て delete し、各 test が明示的に setenv する形にする。
     """
     for key in (
-        "SHORT_TERM_MEMORY_KIND",
-        "SHORT_TERM_MEMORY_SCHEDULER_MODE",
         "LLM_CLIENT",
         "LLM_MODEL",
         "LLM_REQUEST_TIMEOUT_SECONDS",
-        "LLM_EPISODIC_ENABLED",
-        "EPISODIC_EXPLORE_RELATED_ENABLED",
-        "SEMANTIC_LLM_GIST_ENABLED",
-        "SEMANTIC_PASSIVE_TOP_K",
-        "SEMANTIC_SEARCH_ENABLED",
         "OPENAI_API_BASE",
         "OPENAI_API_KEY",
         "OPENROUTER_PROVIDER",
         "OPENROUTER_QUANTIZATION",
-        "OPENROUTER_REQUIRE_PARAMS",
     ):
         monkeypatch.delenv(key, raising=False)
     # litellm の dotenv 自動読込を抑える (.env 内の OPENAI_API_KEY 等が混入する)
@@ -96,7 +87,7 @@ def _build_runtime(config: Any = None) -> Any:
 
 
 class TestShortTermMemoryConfigVsRuntime:
-    """short_term_memory_kind 設定と実体の type が一致するか。
+    """設定から組んだ短期記憶の実体が、畳んで要約する短期記憶になるか。
 
     PR #439 で silent failure (env=rolling_summary でも DefaultSlidingWindowMemory
     が使われていた) が発覚し fix された。本 test 群は再発防止。
@@ -109,24 +100,6 @@ class TestShortTermMemoryConfigVsRuntime:
         )
 
         runtime = _build_runtime()
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
-
-    def test_sliding_window_is_rejected_before_the_runtime_is_built(self) -> None:
-        """sliding window を明示すると、エピソードの書き起こしを呼べないので設定の時点で止まる (#1631)。"""
-        with pytest.raises(ValueError, match="SHORT_TERM_MEMORY_KIND must be rolling_summary"):
-            ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind="sliding_window")
-
-    def test_rolling_summary_builds_summarizing_short_term_memory(self) -> None:
-        """PR #439 silent failure 再発防止の核心 assert。"""
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
-
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary"
-            )
-        )
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
     def test_turn_window_settings_reach_the_memory(self) -> None:
@@ -165,7 +138,6 @@ class TestShortTermMemoryLlmServicesWired:
 
         runtime = _build_runtime(
             ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary",
                 llm_client_kind="stub",
             )
         )
@@ -196,7 +168,6 @@ class TestShortTermMemoryLlmServicesWired:
 
         runtime = _build_runtime(
             ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_kind="rolling_summary",
                 llm_client_kind="litellm",
                 llm_model="openai/gpt-4o-mini",
                 llm_api_key="sk-test-dummy",
@@ -266,7 +237,7 @@ class TestLiteLLMClientTimeout:
 
 
 # ──────────────────────────────────────────────────────────────────
-# run_start trace payload <-> 実体一致 (= config-init split 検出)
+# 設定の注入経路
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -289,50 +260,17 @@ class TestConfigInjection:
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         cfg = ResolvedLlmRuntimeConfig.for_tests(
-            short_term_memory_kind="rolling_summary",
+            short_term_memory_turn_cap=12,
+            short_term_memory_turn_compact_count=4,
         )
         runtime = create_world_runtime(_SCENARIO, config=cfg)
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
+        assert runtime._short_term_memory._turn_cap == 12
 
     def test_cfg_empty_config_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """cfg 引数省略時は環境変数の SHORT_TERM_MEMORY_KIND=sliding_window を読まず、空設定の既定の rolling_summary になる。"""
-        from ai_rpg_world.application.llm.services.sliding_window_memory import (
-            DefaultSlidingWindowMemory,
-        )
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
+        """cfg 引数省略時は環境変数の SHORT_TERM_MEMORY_TURN_CAP=99 を読まず、空設定の既定の 20 ターンになる。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_KIND", "sliding_window")
+        monkeypatch.setenv("SHORT_TERM_MEMORY_TURN_CAP", "99")
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert not isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
-
-
-class TestRunStartTraceVsRuntime:
-    """run_scenario_experiment.py が run_start trace に書く設定と、実体の
-    runtime 内部の type が一致するか。
-
-    PR #439 silent failure はまさにこのズレ (trace は rolling_summary と書くが
-    実体は DefaultSlidingWindowMemory) だった。本 test で「trace に出る値」と
-    「runtime の実体」が同じ config から派生していることを構造的に保証する。
-    """
-
-    def test_rolling_summary_config_rolling_summary_matches(self) -> None:
-        """trace に出す config と runtime の sliding_window type が同一 cfg から決まる。"""
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
-
-        cfg = ResolvedLlmRuntimeConfig.for_tests(
-            short_term_memory_kind="rolling_summary"
-        )
-        assert cfg.to_trace_dict()["short_term_memory_kind"] == "rolling_summary"
-
-        runtime = _build_runtime(cfg)
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory), (
-            "config で rolling_summary を指定したのに、実体は "
-            f"{type(runtime._short_term_memory).__name__}。"
-            "PR #439 silent failure (config-init split) が再発している"
-        )
+        assert runtime._short_term_memory._turn_cap == 20

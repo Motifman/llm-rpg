@@ -331,16 +331,6 @@ class TestLift:
         _fuel_and_start_generator(runtime)
         _board(runtime, _HARU)
 
-    def test_lift_refuses_before_the_generator_warms_up(self, runtime) -> None:
-        """鍵と燃料 2 があっても、発電機を動かしてから `_WARM_TICKS` - 1 tick 後は、昇降機は動かない。断る文は、温める必要があることを漏らさない。"""
-        self._ready(runtime)
-        _ticks(runtime, _WARM_TICKS - 1)
-
-        outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
-
-        assert outcome == "refused"
-        assert "温" not in message
-
     def test_lift_starts_once_the_generator_is_warm(self, runtime) -> None:
         """発電機を動かしてからちょうど `_WARM_TICKS` tick 後に、昇降機は動く。"""
         self._ready(runtime)
@@ -373,7 +363,7 @@ class TestLift:
         assert outcome == "done"
 
     def test_lift_refuses_once_the_generator_has_stopped(self, runtime) -> None:
-        """温まったあとにポンプで燃料を使い切って発電機が止まると、燃料を足しても温め直すまで昇降機は動かない。"""
+        """温まった発電機が燃料切れで止まると、給油だけでは昇降機は動かない。再始動から 5 tick では荒い唸りで断られ、6 tick で動く。"""
         self._ready(runtime)
         _ticks(runtime, _WARM_TICKS)
         for _ in range(_CAN_FUEL // _PUMP_FUEL):
@@ -387,6 +377,20 @@ class TestLift:
         outcome, _message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
 
         assert outcome == "refused"
+
+        _act(runtime, _HARU, "machine_room", "generator", "start_generator")
+        _ticks(runtime, _WARM_TICKS - 1)
+
+        outcome, message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
+
+        assert outcome == "refused"
+        assert message == _LIFT_REFUSAL["not_warm"]
+
+        _ticks(runtime, 1)
+
+        outcome, _message = _try(runtime, _HARU, "lift_landing", "lift", "start_lift")
+
+        assert outcome == "done"
 
     def test_lift_refuses_with_too_little_fuel(self, runtime) -> None:
         """缶 1 つ分の燃料からポンプで燃料が 2 を下回るまで使うと、温まっていても昇降機は動かず、力が抜けたという燃料の文が返る。"""
@@ -584,9 +588,12 @@ class TestGeneratorWarmthIsHeard:
         _ticks(runtime, _WARM_TICKS - 1)
         before = _warm_notices(runtime, _GEN)
         _ticks(runtime, 1)
-        _ticks(runtime, _TICKS_AFTER_WARM)
 
         assert before == []
+        assert len(_warm_notices(runtime, _GEN)) == 1
+
+        _ticks(runtime, _TICKS_AFTER_WARM)
+
         assert len(_warm_notices(runtime, _GEN)) == 1
 
     @pytest.mark.parametrize("spot", ["north_tunnel", "gas_chamber", "village_square", "timber_passage"])

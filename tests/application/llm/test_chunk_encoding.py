@@ -4,35 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    ChunkEncodingInput,
-    build_chunk_encoding_input,
-    chunk_encoding_episode_generation_allowed,
     format_action_result_line_for_recent_events,
     format_unified_timeline_as_recent_events_bullets,
     merge_observations_and_action_results_to_unified_timeline,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.services.observation_short_term_memory_sync import (
-    drain_observation_buffer_into_short_term_memory,
-)
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
-)
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
-from ai_rpg_world.application.observation.services.observation_context_buffer import (
-    DefaultObservationContextBuffer,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestMergeObservationsAndActionResultsToUnifiedTimeline:
@@ -421,113 +406,3 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         assert len(timeline) == 2
         stamps = tuple(line.occurred_at.timestamp() for line in timeline)
         assert stamps == tuple(sorted(stamps))
-
-
-class TestChunkEncodingInput:
-    """ChunkEncodingInput の検証とエピソード起動ゲート"""
-
-    def test_build_chunk_encoding_input_mismatch_timeline_raises(self) -> None:
-        """unified_timeline がマージ結果と一致しない ChunkEncodingInput は拒否される"""
-        obs = ObservationEntry(
-            occurred_at=datetime(2025, 1, 1, 0, 0, 0),
-            output=ObservationOutput(
-                prose="a", structured={}, observation_category="self_only"
-            ),
-        )
-        with pytest.raises(ValueError, match="unified_timeline"):
-            ChunkEncodingInput(
-                player_id=PlayerId(1),
-                observations=(obs,),
-                action_results=(),
-                unified_timeline=(),
-            )
-
-    def test_episode_generation_requires_action(self) -> None:
-        """行動結果が 0 件ならエピソード生成不可"""
-        inp = build_chunk_encoding_input(
-            PlayerId(1),
-            (),
-            (),
-        )
-        assert chunk_encoding_episode_generation_allowed(inp) is False
-
-    def test_episode_generation_allowed_with_action(self) -> None:
-        """行動結果が 1 件以上なら起動可"""
-        act = ActionResultEntry(
-            occurred_at=datetime(2025, 1, 1, 0, 0, 0),
-            action_summary="m",
-            result_summary="r",
-        )
-        inp = build_chunk_encoding_input(PlayerId(1), (), (act,))
-        assert chunk_encoding_episode_generation_allowed(inp) is True
-
-
-class TestDrainObservationBufferIntoSlidingWindow:
-    """観測 drain → append_all が PromptBuilder と同順序であること"""
-
-    def test_empty_buffer_returns_empty_overflow(self) -> None:
-        """drain が空なら append せず空リスト"""
-        buf = DefaultObservationContextBuffer()
-        win: DefaultSlidingWindowMemory = DefaultSlidingWindowMemory(max_entries_per_player=10)
-        pid = PlayerId(1)
-        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert overflow == []
-        assert win.get_recent(pid, 10) == []
-
-    def test_drain_appends_and_returns_overflow(self) -> None:
-        """複数件 drain しウィンドウ上限を超えた分が overflow になる"""
-        buf = DefaultObservationContextBuffer()
-        win = DefaultSlidingWindowMemory(max_entries_per_player=2)
-        pid = PlayerId(1)
-        t0 = datetime(2025, 1, 1, 0, 0, 0)
-        entries = [
-            ObservationEntry(
-                occurred_at=t0,
-                output=ObservationOutput(
-                    prose=f"e{i}", structured={}, observation_category="self_only"
-                ),
-            )
-            for i in range(3)
-        ]
-        for e in entries:
-            buf.append(pid, e)
-        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert len(overflow) == 1
-        assert overflow[0].output.prose == "e0"
-        recent = win.get_recent(pid, 10)
-        assert len(recent) == 2
-        texts = {r.output.prose for r in recent}
-        assert texts == {"e1", "e2"}
-
-    def test_matches_prompt_builder_sequence(self) -> None:
-        """DefaultPromptBuilder の drain→append_all 節と同一の観測列・溢れになる"""
-        buf = DefaultObservationContextBuffer()
-        win = DefaultSlidingWindowMemory(max_entries_per_player=3)
-        pid = PlayerId(1)
-        for i in range(5):
-            buf.append(
-                pid,
-                ObservationEntry(
-                    occurred_at=datetime(2025, 1, 1, 0, 0, i),
-                    output=ObservationOutput(
-                        prose=f"p{i}", structured={}, observation_category="self_only"
-                    ),
-                ),
-            )
-        overflow_helper = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        buf2 = DefaultObservationContextBuffer()
-        win2 = DefaultSlidingWindowMemory(max_entries_per_player=3)
-        for i in range(5):
-            buf2.append(
-                pid,
-                ObservationEntry(
-                    occurred_at=datetime(2025, 1, 1, 0, 0, i),
-                    output=ObservationOutput(
-                        prose=f"p{i}", structured={}, observation_category="self_only"
-                    ),
-                ),
-            )
-        drained = buf2.drain(pid)
-        overflow_pb = win2.append_all(pid, drained) if drained else []
-        assert overflow_helper == overflow_pb
-        assert win.get_recent(pid, 10) == win2.get_recent(pid, 10)
