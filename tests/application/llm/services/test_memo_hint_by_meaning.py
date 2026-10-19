@@ -25,7 +25,6 @@ Noul なら意味で判定できる。
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
 from typing import Any, Union
 
 import pytest
@@ -40,55 +39,18 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
 )
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
+    PendingTodo,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 
 _BEING = BeingId("being_w1_p1")
 
 
-class _MemoStore(MemoRepository):
-    """未完了 memo を返すだけの store。書き込みは記録して見張る。"""
-
-    def __init__(self, contents: Sequence[str]) -> None:
-        self._memos = [
-            MemoEntry(
-                id=f"memo-{i}",
-                content=content,
-                added_at=datetime(2026, 9, 20, tzinfo=timezone.utc),
-                added_at_tick=1,
-            )
-            for i, content in enumerate(contents)
-        ]
-        self.completed: list[str] = []
-
-    def list_uncompleted_by_being(self, being_id: BeingId) -> list[MemoEntry]:
-        return list(self._memos)
-
-    def list_all_by_being(self, being_id: BeingId) -> list[MemoEntry]:
-        return list(self._memos)
-
-    def add_by_being(
-        self, being_id: BeingId, content: str, *, added_at_tick: int | None = None
-    ) -> MemoEntry:  # pragma: no cover
-        raise AssertionError("hint の検出で memo を追加してはいけない")
-
-    def complete_by_being(
-        self, being_id: BeingId, memo_id: str, **kwargs: Any
-    ) -> bool:
-        self.completed.append(memo_id)
-        return True
-
-    def remove_by_being(
-        self, being_id: BeingId, memo_id: str
-    ) -> bool:  # pragma: no cover
-        raise AssertionError("hint の検出で memo を消してはいけない")
-
-    def replace_all_by_being(
-        self, being_id: BeingId, memos: Sequence[MemoEntry]
-    ) -> None:  # pragma: no cover
-        raise AssertionError("hint の検出で memo を書き換えてはいけない")
+def _todos(contents: Sequence[str]) -> list[PendingTodo]:
+    return [
+        PendingTodo(id=f"memo-{i}", content=content, handle=f"m_{i}")
+        for i, content in enumerate(contents)
+    ]
 
 
 class _RecordingPort(ITypedJudgmentPort):
@@ -137,14 +99,14 @@ def _service(
     port: ITypedJudgmentPort | None,
     *,
     min_probability: float = 0.7,
-) -> tuple[MemoCompletionHintService, _MemoStore]:
-    store = _MemoStore(contents)
+) -> tuple[MemoCompletionHintService, list[PendingTodo]]:
+    todos = _todos(contents)
     service = MemoCompletionHintService(
-        memo_store=store,
+        pending_todos=lambda being_id: todos,
         judgment_port=port,
         min_probability=min_probability,
     )
-    return service, store
+    return service, todos
 
 
 class TestMeaningCatchesWhatCharacterOverlapMisses:
@@ -296,16 +258,6 @@ class TestOnlyAConfidentJudgmentBecomesAHint:
         assert verdicts == {"memo-0": False, "memo-1": True}
         assert all(j.min_probability == 0.7 for j in detection.judgments)
 
-    def test_the_hint_does_not_complete_the_memo(self) -> None:
-        """hint を出しても memo を完了させない。完了は当人が記録する。"""
-        service, store = _service(
-            ["小麦を集める"], _RecordingPort({"小麦を集める": 0.93})
-        )
-
-        service.detect(_BEING, "麦を刈った", "小麦を得た")
-
-        assert store.completed == []
-
 
 class _PartialAnswerPort(ITypedJudgmentPort):
     """先頭の質問にだけ答え、残りを返さないポート (契約違反)。"""
@@ -396,9 +348,9 @@ class TestTheHintTextKeepsItsShape:
 
         assert detection.hint is not None
         text = detection.hint.to_hint_text()
-        assert "[hint] memo「水を汲む」" in text
+        assert "[hint] やること「水を汲む」" in text
         assert "類似度" in text
-        assert "memo_done で記録してください" in text
+        assert "memo の remove で消してください" in text
 
     def test_the_judged_hint_text_says_it_is_a_probability(self) -> None:
         """判断由来の数は「類似度」と呼ばない。意味が違うものを同じ語で呼ばない。"""
@@ -410,6 +362,6 @@ class TestTheHintTextKeepsItsShape:
 
         assert detection.hint is not None
         text = detection.hint.to_hint_text()
-        assert "[hint] memo「小麦を集める」" in text
+        assert "[hint] やること「小麦を集める」" in text
         assert "類似度" not in text
         assert "0.93" in text

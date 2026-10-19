@@ -215,7 +215,7 @@ epistemic_gap が低頻度の自己モデル更新、という役割分担で両
 
 ## 関連
 
-- `docs/memory_system/episodic_memory_system_spec.md` — 既存 episodic 仕様
+- `docs/memory_system/episodic_memory_system_spec.md` (#1631 で削除) — 既存 episodic 仕様
 - `docs/memory_system/short_term_memory_design.md` — L1 / L4 / L5 設計
 - `docs/design_decisions.md` #4 — travel / wait は tool 内で tick を進めない (engine
   不変条件)

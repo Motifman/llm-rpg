@@ -35,16 +35,11 @@ Phase「自走 tick + heartbeat + intent キュー + ActionFailed 観測」が�
    echo "LLM_CLIENT=litellm" >> .env
    echo "SPOT_GRAPH_TICK_INTERVAL_SEC=2.0" >> .env  # 余裕を持って 2 秒/tick
    echo "SPOT_GRAPH_TICK_LOOP_ENABLED=true" >> .env
-
-   # (任意) ツール mode。Issue #155 (TODO 設計再評価) の比較実験用。
-   # 既定 (未設定 / "default"): TODO 系ツールを含む従来構成
-   # "pure_spot_graph": TODO 系を除外、spot_graph_* + speech のみで実行
-   # echo "LLM_TOOL_MODE=pure_spot_graph" >> .env
    ```
 
 3. キャラクター・シナリオの確認:
-   - シナリオ: `data/scenarios/relay_puzzle_demo.json` (2 プレイヤー対応:
-     `player_a` オペレーター、`player_b` 侵入者)
+   - シナリオ: `data/scenarios/forbidden_library_demo.json` (2 プレイヤー対応:
+     `player_a` カイト、`player_b` リン)
    - キャラクター登録: 初回はサーバ経由で 2 体作成する (下記「実行手順」参照)
 
 ## 実行手順
@@ -93,7 +88,7 @@ curl -X POST http://127.0.0.1:8080/api/characters \
 curl -X POST http://127.0.0.1:8080/api/sessions \
   -H "Content-Type: application/json" \
   -d '{
-    "world_id": "relay_puzzle_demo",
+    "world_id": "forbidden_library_demo",
     "character_ids": ["<アリスのid>", "<ボブのid>"]
   }'
 ```
@@ -191,7 +186,7 @@ tick_loop.stop()` され graceful に落ちる。
 |------|----------|------|
 | `LLM_API_KEY_MISSING` | `.env` の `OPENAI_API_KEY` が空 | export または `.env` を再読み込み |
 | tick が進まない | `SPOT_GRAPH_TICK_LOOP_ENABLED=false` | env を `true` に |
-| LLM が tool を返さない | プロンプトのモード不一致 | `LLM_VIEW_DISTANCE=5` を設定、`relay_puzzle_demo` 以外のシナリオを試す |
+| LLM が tool を返さない | プロンプトのモード不一致 | `LLM_VIEW_DISTANCE=5` を設定、別のシナリオを試す |
 | 同じ tool を繰り返す | LLM が文脈を読み切れていない | gpt-4o などに切り替え、`SPOT_GRAPH_TICK_INTERVAL_SEC=3.0` に伸ばす |
 | `INTENT_RESOLVE_INTERNAL` が頻発 | 内部矛盾 (バグ) | ログを Issue に貼り付けて報告 |
 

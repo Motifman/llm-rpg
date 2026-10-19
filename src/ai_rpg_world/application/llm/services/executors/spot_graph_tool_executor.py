@@ -390,7 +390,7 @@ class SpotGraphToolExecutor:
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
         # _process_graph_events + 同一 spot 短絡 + _record_action_result
-        # の scene_boundary + subjective 記録) が実装されている do_move
+        # の subjective 記録) が実装されている do_move
         # を単一の真実源として再利用する。
         #
         # 別レイヤーへの依存ではなく application 層内 (WorldRuntime も
@@ -623,7 +623,7 @@ class SpotGraphToolExecutor:
 
         統合方針 (Option B): 既に正しい副作用を全部持っている ``runtime.do_move``
         (start_travel_to_spot + _process_graph_events + 同一 spot 短絡 +
-        _record_action_result の scene_boundary + subjective 記録) を単一の
+        _record_action_result の subjective 記録) を単一の
         真実源として再利用し、新経路が付加した価値 (疲労) だけを
         上乗せする。
 
@@ -667,7 +667,7 @@ class SpotGraphToolExecutor:
             destination_str_id = self._runtime.id_mapper.get_str("spot", dest)
             subjective = extract_subjective_action_fields(args)
             # do_move が: start_travel_to_spot + _process_graph_events +
-            # 同一 spot 短絡 + _record_action_result (scene_boundary=True) を
+            # 同一 spot 短絡 + _record_action_result を
             # 面倒見る。失敗は例外で返り exception_result で LLM 向け error に。
             self._runtime.do_move(
                 PlayerId(player_id),

@@ -295,59 +295,6 @@ class TestItemAggregate:
         # 破損状態になっていることを確認
         assert aggregate.is_broken
 
-    def test_can_stack_with_same_spec_different_instances(self, sample_item_spec_no_durability):
-        """同じ仕様の異なるインスタンスとのスタック可能テスト"""
-        item1 = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(11),
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
-        )
-        item2 = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(12),
-            item_spec=sample_item_spec_no_durability,
-            quantity=3
-        )
-
-        assert item1.can_stack_with(item2)
-        assert item2.can_stack_with(item1)
-
-    def test_can_stack_with_different_specs(self, sample_item_spec_no_durability, sample_item_spec_with_durability):
-        """異なる仕様のアイテムとのスタック不可テスト"""
-        item1 = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(13),
-            item_spec=sample_item_spec_no_durability,
-            quantity=5
-        )
-        item2 = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(14),
-            item_spec=sample_item_spec_with_durability,
-            quantity=1
-        )
-
-        assert not item1.can_stack_with(item2)
-        assert not item2.can_stack_with(item1)
-
-    def test_can_stack_with_same_spec_different_durability(self, sample_item_spec_with_durability):
-        """同じ仕様でも耐久度が異なる場合はスタック不可"""
-        durability1 = Durability(current=50, max_value=100)
-        durability2 = Durability(current=30, max_value=100)
-
-        item1 = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(15),
-            item_spec=sample_item_spec_with_durability,
-            durability=durability1,
-            quantity=1
-        )
-        item2 = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(16),
-            item_spec=sample_item_spec_with_durability,
-            durability=durability2,
-            quantity=1
-        )
-
-        # 耐久度が異なる場合はスタック不可
-        assert not item1.can_stack_with(item2)
-
     def test_add_quantity(self, sample_item_spec_no_durability):
         """数量追加のテスト"""
         aggregate = ItemAggregate.create(

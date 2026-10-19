@@ -74,8 +74,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
-class TestMonsterAggregate:
-    """MonsterAggregateのテスト"""
+class MonsterAggregateFixtures:
+    """試験を継承せず、モンスター集約の準備だけを共有する。"""
 
     @pytest.fixture
     def base_stats(self) -> BaseStats:
@@ -131,6 +131,10 @@ class TestMonsterAggregate:
             world_object_id=WorldObjectId.create(1001),
             skill_loadout=skill_loadout,
         )
+
+
+class TestMonsterAggregate(MonsterAggregateFixtures):
+    """MonsterAggregateのテスト"""
 
     class TestCreate:
         def test_create_success(self, monster: MonsterAggregate, monster_template: MonsterTemplate):
@@ -216,14 +220,17 @@ class TestMonsterAggregate:
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.get_respawn_coordinate() == initial
 
-        def test_respawn_preserves_pack_id_and_leader(self, monster: MonsterAggregate, spot_id: SpotId):
-            """リスポーン後も pack_id / is_pack_leader が維持されること"""
+        @pytest.mark.parametrize("is_pack_leader", [False, True], ids=["member", "leader"])
+        def test_respawn_preserves_pack_id_and_leader(
+            self, monster: MonsterAggregate, spot_id: SpotId, is_pack_leader: bool
+        ):
+            """群れの一般個体とリーダーは、死亡後に復活しても群れIDと役割を保持する。"""
             pack_id = PackId.create("pack_a")
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), pack_id=pack_id, is_pack_leader=False)
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), pack_id=pack_id, is_pack_leader=is_pack_leader)
             monster.apply_damage(100, WorldTick(100))
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.pack_id == pack_id
-            assert monster.is_pack_leader is False
+            assert monster.is_pack_leader is is_pack_leader
 
         def test_respawn_sets_spawned_at_tick(self, monster: MonsterAggregate, spot_id: SpotId):
             """リスポーン時に spawned_at_tick が current_tick で更新されること"""
@@ -1204,9 +1211,13 @@ class TestMonsterAggregate:
             assert monster.status == MonsterStatusEnum.ALIVE
 
     class TestRespawn:
-        def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
+        @pytest.mark.parametrize("spent_mp", [0, 20], ids=["full_mp", "spent_mp"])
+        def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId, spent_mp: int):
+            """死亡前のMP消費にかかわらず、復活でHP/MPと生存状態が戻り、新座標の通知が出る。"""
             # Given
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            if spent_mp:
+                monster.use_mp(spent_mp)
             monster.apply_damage(100, WorldTick(100))
             monster.clear_events()
 
@@ -1402,11 +1413,14 @@ class TestMonsterAggregate:
         def test_effective_stats_filters_expired_effects_via_domain_service(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
+            """期限切れを計算から除き、整理後の公開一覧には期限内の効果だけを残す。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
-            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
+            expired_effect = StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5))
+            active_effect = StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20))
+            monster.add_status_effect(expired_effect)
+            monster.add_status_effect(active_effect)
 
             tick = WorldTick(10)
             effective_stats = compute_effective_stats(
@@ -1415,6 +1429,7 @@ class TestMonsterAggregate:
             assert effective_stats.attack == 30  # 20 * 1.5 のみ
             monster.cleanup_expired_effects(tick)
             assert len(monster.active_effects) == 1
+            assert monster.active_effects == [active_effect]
 
         def test_buff_and_debuff_stacking_via_domain_service(
             self, monster: MonsterAggregate, spot_id: SpotId
@@ -1572,11 +1587,14 @@ class TestMonsterAggregate:
             assert monster_with_growth.hp.max_hp == 80
             assert monster_with_growth.mp.max_mp == 40
 
+        @pytest.mark.parametrize("spent_mp", [0, 20], ids=["full_mp", "spent_mp"])
         def test_respawn_initializes_hp_mp_with_effective_stats(
-            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId, spent_mp: int
         ):
-            """成長段階ありのテンプレートでリスポーン時も、HP/MP は実効 max_hp/max_mp で満タンに初期化されること"""
+            """死亡前のMP消費にかかわらず、復活時は幼体段階のHP80/MP40まで回復する。"""
             monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            if spent_mp:
+                monster_with_growth.use_mp(spent_mp)
             monster_with_growth.apply_damage(80, WorldTick(10))
             monster_with_growth.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             # リスポーン時 spawned_at_tick=200 なので経過 0 → 幼体段階（0.8）→ 80, 40
@@ -1622,8 +1640,8 @@ class TestMonsterAggregate:
             assert agg.get_allow_chase(WorldTick(150)) is True
 
 
-class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
-    """Monster の行動状態スナップショットと decide のテスト（TestMonsterAggregate の fixture を利用）"""
+class TestMonsterAggregateBehaviorState(MonsterAggregateFixtures):
+    """共通の準備を使い、行動状態のスナップショット・遷移・意図通知を検証する。"""
 
     @pytest.fixture
     def spawned_monster(
@@ -1910,10 +1928,15 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
     class TestRecordUseSkill:
         """record_use_skill のテスト"""
 
-        def test_record_use_skill_success(self, spawned_monster):
-            """record_use_skill で MonsterDecidedToUseSkillEvent が 1 件発行されること"""
+        @pytest.mark.parametrize(
+            "skill_slot_index, target_id",
+            [(0, None), (2, WorldObjectId(99))],
+            ids=["default_slot_without_target", "nondefault_slot_with_target"],
+        )
+        def test_record_use_skill_success(self, spawned_monster, skill_slot_index, target_id):
+            """技能選択の通知は、指定されたスロットと標的を行為者・地点・時刻とともに1件伝える。"""
             spawned_monster.clear_events()
-            spawned_monster.record_use_skill(0, None, WorldTick(10))
+            spawned_monster.record_use_skill(skill_slot_index, target_id, WorldTick(10))
             events = spawned_monster.get_events()
             skill_events = [
                 e
@@ -1922,8 +1945,11 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             ]
             assert len(skill_events) == 1
             assert skill_events[0].actor_id == spawned_monster.world_object_id
-            assert skill_events[0].skill_slot_index == 0
-            assert skill_events[0].target_id is None
+            assert skill_events[0].skill_slot_index == skill_slot_index
+            if target_id is None:
+                assert skill_events[0].target_id is None
+            else:
+                assert skill_events[0].target_id == target_id
             assert skill_events[0].spot_id == spawned_monster.spot_id
             assert skill_events[0].current_tick == WorldTick(10)
 

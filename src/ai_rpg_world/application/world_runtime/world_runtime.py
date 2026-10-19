@@ -98,15 +98,12 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
-from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
-from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
 from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
     find_prompt_argument_contract_violations,
 )
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
 )
@@ -117,7 +114,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
     with_memo_schema,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.memory import (
-    ACTIVE_RECALL_TOOL_NAMES,
     get_memory_specs,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.public_sns import get_public_sns_definitions
@@ -147,9 +143,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_mon
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -158,7 +151,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationEntry,
     ObservationOutput,
     SubjectUnknownView,
     WithheldFromStrangers,
@@ -476,44 +468,6 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     )
 
 
-#: `disabled_tools` では落とせないが、**実験設定で落とせる**ツール。
-#:
-#: この分け方には理由がある。ここに並ぶツールは「世界に在るか」ではなく
-#: **「この実験で使うか」**で決まる (同じシナリオを profile 違いで回すときに
-#: 変わるのはこちら)。だから宣言の場所がシナリオではない。
-#:
-#: ただし**止めるだけでは足りない**。「指定できるのは …」だけを返すと、書いた人は
-#: 「この世界では落とせない」と読む。実際は落とせて、場所が違うだけ。
-#: **行き先の無い拒否は、拒否された側に推測を強いる。**
-_TURNED_OFF_BY_EXPERIMENT_CONFIG = {
-    "memo_add": "MEMO_TOOLS_ENABLED",
-    "memo_list": "MEMO_TOOLS_ENABLED",
-    "memo_done": "MEMO_TOOLS_ENABLED",
-    "memory_recall_episodes": "EPISODIC_RECALL_ENABLED",
-    "memory_recall_by_handle": "EPISODIC_RECALL_ENABLED",
-    "memory_explore_related": "EPISODIC_EXPLORE_RELATED_ENABLED",
-    "memory_search_semantic": "SEMANTIC_SEARCH_ENABLED",
-}
-
-
-def _where_to_turn_off_instead(unknown: Any) -> str:
-    """実験設定で落とせる名前が混ざっていたら、その行き先を添える。"""
-    elsewhere = {
-        name: _TURNED_OFF_BY_EXPERIMENT_CONFIG[name]
-        for name in unknown
-        if name in _TURNED_OFF_BY_EXPERIMENT_CONFIG
-    }
-    if not elsewhere:
-        return ""
-    where = ", ".join(
-        f"{name} は実験設定の {flag}=0" for name, flag in sorted(elsewhere.items())
-    )
-    return (
-        f" / なお、これらはシナリオではなく実験設定で落とします: {where}"
-        " (profile または EXPERIMENT_CONFIG に書く)"
-    )
-
-
 @dataclass
 class WorldRuntime:
     """LLM エージェントが世界で生きる汎用ランタイム（全てインメモリ）。"""
@@ -639,8 +593,6 @@ class WorldRuntime:
     _world_llm_system_prompts_by_player_id: dict[int, str] = field(
         default_factory=dict, repr=False
     )
-    _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
-    _todo_tool_executor: TodoToolExecutor | None = field(default=None, repr=False)
     # create_world_runtime が構築後に差し込む配線。型は circular import 回避で
     # Any。宣言が無いと、代入側の typo を静かに受け入れてしまう。
     _use_item_command_scope_factory: Any | None = field(default=None, repr=False)
@@ -679,31 +631,6 @@ class WorldRuntime:
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
     reason_first_two_step_enabled: bool = field(default=False, repr=False)
-    # Issue #526 後続: LLM が「思い出そう」と意志して過去 episode を呼び戻す
-    # ``memory_recall_episodes`` tool の executor。``_wire_auxiliary_tool_stack``
-    # 時に episodic_stack が wire されていれば構築。OFF (= 構築されない) なら
-    # tool 定義もリストに出さず、run_llm_auxiliary_tool でも未対応扱い。
-    # 型は ``Optional["EpisodicMemoryRecallToolExecutor"]`` だが circular import
-    # 回避のため lazy import + ``Any`` 注釈にしている (= 既存の lazy executor
-    # 配線と同じパターン)。
-    _memory_recall_tool_executor: Any | None = field(default=None, repr=False)
-    # 能動的にリンク済みエピソードを辿る ``memory_explore_related`` tool の
-    # executor。``EPISODIC_EXPLORE_RELATED_ENABLED`` が true かつ link store
-    # 一式が組めるときだけ LLM に露出する。
-    _memory_explore_related_tool_executor: Any | None = field(
-        default=None, repr=False
-    )
-    # semantic 記憶を能動検索する ``memory_search_semantic`` tool の executor。
-    # ``SEMANTIC_SEARCH_ENABLED`` が true かつ semantic store が組めるときだけ
-    # LLM に露出する。
-    _semantic_memory_search_tool_executor: Any | None = field(
-        default=None, repr=False
-    )
-    # PR-D: afterglow handle から本文を引き戻す ``memory_recall_by_handle``
-    # tool の executor。slot / afterglow / episode_store + 現 tick provider を
-    # 統合する必要があるため、``_wire_auxiliary_tool_stack`` で構築。
-    # 構築されなければ tool 定義もリストに出さず、handler も未対応扱い。
-    _memory_recall_by_handle_tool_executor: Any | None = field(default=None, repr=False)
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
@@ -716,10 +643,6 @@ class WorldRuntime:
         default_factory=dict, repr=False
     )
     _cumulative_meeting_ticks: int = field(default=0, repr=False)
-    # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら TODO 系も
-    # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
-    # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
-    _include_todo_tools: bool = field(default=True, repr=False)
     # 実験設定の解決済み DTO。遅延構築される component も env を読み直さず、
     # runtime 作成時と同じ設定を見るために保持する。
     _runtime_config: Any | None = field(default=None, repr=False)
@@ -738,11 +661,6 @@ class WorldRuntime:
     _observation_turn_scheduler: ObservationTurnScheduler | None = field(
         default=None, repr=False
     )
-    # Issue #283 後続: episodic memory pipeline (on/off)。
-    # - ``_episodic_stack`` が None なら従来動作 (memory なし)
-    # - 注入されていれば ``_record_action_result`` で chunk が積まれ、
-    #   prompt builder の recall section に過去エピソードが現れる
-    _episodic_stack: Any | None = field(default=None, repr=False)
     # #404 fix: travel_stage を runtime に保持する。create_session 経路から
     # 「到着時の schedule_turn コールバック」を後付けで注入するため、参照を
     # 露出させる必要がある (simulation_service の中に隠れたままだと外から
@@ -1101,8 +1019,7 @@ class WorldRuntime:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
 
         ``create_session`` などで world_runtime を構築した後に
-        外側から trace を有効化する用途。memo executor は lazy 構築なので
-        既に作成済みでもこのフィールドが反映される。
+        外側から trace を有効化する用途。
         """
         self._trace_recorder = recorder
         # 市場の値動きは trace が一次データになる。recorder が差し込まれた
@@ -1113,10 +1030,6 @@ class WorldRuntime:
         player_interaction_service = getattr(self, "_player_interaction_service", None)
         if player_interaction_service is not None:
             player_interaction_service.set_trace_recorder(recorder, self.current_tick)
-        # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
-        if self._todo_tool_executor is not None:
-            self._todo_tool_executor = None
-            self._wire_auxiliary_tool_stack()
         # 短期記憶の構築時点では recorder が未確定なので、L4 / L5 と圧縮発火の
         # trace provider をここで注入する。実装差は getattr で吸収する。
         set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
@@ -1139,28 +1052,6 @@ class WorldRuntime:
         if self._world_tick_failure_isolator is None:
             return {}
         return self._world_tick_failure_isolator.failure_counts()
-
-    def shutdown(self, timeout: float | None = None) -> None:
-        """非同期スケジューラ等の in-flight ジョブを drain して資源を解放する。
-
-        PR #309: ``ThreadPoolEpisodicSubjectiveScheduler`` が裏で走っている
-        LLM 補完を、ゲーム終了時に終わらせるための hook。``timeout`` 秒経っても
-        終わらないジョブは諦めて cancel する (= テンプレ既定値が store に
-        残るだけで損失は限定的)。
-
-        本メソッドは複数回呼ばれても安全 (scheduler 側でも is_shutdown flag を
-        持つ)。``timeout=None`` (既定) は完了まで無期限待機。
-        """
-        stack = self._episodic_stack
-        if stack is None:
-            return
-        scheduler = stack.subjective_completion_scheduler
-        if scheduler is None:
-            return
-        try:
-            scheduler.shutdown(timeout=timeout)
-        except Exception:
-            logger.exception("episodic subjective scheduler shutdown failed")
 
     def set_tool_call_loop_guard(self, guard: Any) -> None:
         """``ToolCallLoopGuardService`` を後から注入する。
@@ -1416,12 +1307,6 @@ class WorldRuntime:
         definitions.extend(
             defn
             for defn, _ in get_memory_specs(
-                todo_enabled=True,
-                memo_enabled=True,
-                episodic_explore_related_enabled=True,
-                semantic_search_enabled=True,
-                episodic_recall_enabled=True,
-                recall_by_handle_enabled=True,
                 episode_recall_max_handles=1,
                 episode_index_revision_enabled=True,
             )
@@ -1669,7 +1554,6 @@ class WorldRuntime:
             raise ToolExposureConfigurationError(
                 "disabled_tools に実在しないツール名があります: "
                 f"{', '.join(unknown)} / 指定できるのは: {', '.join(sorted(known))}"
-                + _where_to_turn_off_instead(unknown)
             )
         return tuple(disabled)
 
@@ -1682,13 +1566,6 @@ class WorldRuntime:
         for_every_player: bool = False,
     ) -> list[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
-
-        ``_include_todo_tools=False`` の場合は TODO 系 (todo_add / todo_list /
-        todo_complete) を除外し、spot_graph_* + speech (say / whisper) のみ
-        を返す。LLM が「TODO 操作の連打」に逃げない条件で挙動を比較するため
-        の純スポットグラフモード (B-4 / Issue #155 の判断材料)。
-        この粗いモードでは個別の記憶ツール露出フラグも評価せず、補助ツール
-        全体を隠す。
 
         ツール露出の強制点はこのメソッドに集約する。シナリオ由来の
         ツール露出 (会議・商人・市場の宣言) と、設定由来の記憶系ツール露出を同じ
@@ -1739,9 +1616,9 @@ class WorldRuntime:
             if tool_schema_mode == "reason_first"
             else []
         )
-        definitions = common_spot + phase_spot
-        if self._include_todo_tools:
-            definitions += self._build_memory_tool_definitions()
+        definitions = (
+            common_spot + phase_spot + self._build_memory_tool_definitions()
+        )
         by_name = {definition.name: definition for definition in definitions}
         ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
         return [by_name[name] for name in ordered_names] + assessment
@@ -1796,43 +1673,15 @@ class WorldRuntime:
         return spot
 
     def _build_memory_tool_definitions(self) -> list[ToolDefinitionDto]:
-        """実験設定が要求する記憶系ツールを返す。
+        """記憶系ツール (episode_recall / episode_revise_index) を返す。
 
-        **世界ではなく実験の設定**で決まるので `ToolExposure` には置かない。
-        同じシナリオを profile 違いで回すときに変わるのがこちら。
+        世界ではなく記憶の部品で決まるので `ToolExposure` には置かない。
+        create_world_runtime で組んだ runtime には常に出す (#1631)。
 
-        設定が true なのに実行器が組めていなければ fail-fast する。黙って
-        false へ縮退すると、比較実験で「有効にしたつもりが無効だった」に
-        なる。
+        実行器が組めていなければ fail-fast する。黙って出さないと、
+        常に出すはずの道具が run から消えたことに気づけない。
         """
-        # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
-        # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
-        # idempotent なので毎回呼んで OK。
-        if self._episodic_stack is not None:
-            self._wire_auxiliary_tool_stack()
         cfg = self._runtime_config
-        episodic_recall_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=bool(getattr(cfg, "episodic_recall_enabled", False)),
-            executor=self._memory_recall_tool_executor,
-            tool_name=TOOL_NAME_MEMORY_RECALL_EPISODES,
-            flag_name="EPISODIC_RECALL_ENABLED",
-        )
-        episodic_explore_related_enabled = (
-            self._resolve_requested_memory_tool_enabled(
-                requested=bool(
-                    getattr(cfg, "episodic_explore_related_enabled", False)
-                ),
-                executor=self._memory_explore_related_tool_executor,
-                tool_name=TOOL_NAME_MEMORY_EXPLORE_RELATED,
-                flag_name="EPISODIC_EXPLORE_RELATED_ENABLED",
-            )
-        )
-        semantic_search_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=bool(getattr(cfg, "semantic_search_enabled", False)),
-            executor=self._semantic_memory_search_tool_executor,
-            tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-            flag_name="SEMANTIC_SEARCH_ENABLED",
-        )
         episode_index_revision_enabled = self._episode_index_enabled()
         episode_recall_max_handles = None
         if episode_index_revision_enabled:
@@ -1850,62 +1699,10 @@ class WorldRuntime:
         return [
             defn
             for defn, _ in get_memory_specs(
-                todo_enabled=True,
-                memo_enabled=bool(getattr(cfg, "memo_tools_enabled", True)),
-                episodic_explore_related_enabled=episodic_explore_related_enabled,
-                semantic_search_enabled=semantic_search_enabled,
-                episodic_recall_enabled=episodic_recall_enabled,
-                recall_by_handle_enabled=(
-                    self._memory_recall_by_handle_tool_executor is not None
-                ),
                 episode_recall_max_handles=episode_recall_max_handles,
                 episode_index_revision_enabled=episode_index_revision_enabled,
             )
         ]
-
-
-
-
-    @staticmethod
-    def _resolve_requested_memory_tool_enabled(
-        *,
-        requested: bool,
-        executor: Any | None,
-        tool_name: str,
-        flag_name: str,
-    ) -> bool:
-        """設定 true の記憶ツールに実行器が無ければ起動時に落とす。
-
-        false のときは実行器があっても expose しない。true のときに実行器が
-        無いまま黙って false へ縮退すると、比較実験で「条件を変えたつもりが
-        変わっていない」静かな失敗になる。
-        """
-        if not requested:
-            return False
-        if executor is None:
-            raise ToolExposureConfigurationError(
-                f"{flag_name}=true requires an executor for {tool_name}, "
-                "but the runtime memory stack is not wired. Enable the required "
-                "episodic/semantic prerequisites or turn the flag off."
-        )
-        return True
-
-    def _memory_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
-        """システムプロンプトが指してよい (【関連する記憶】, 能動想起) を返す (#1616)。
-
-        能動想起は設定値からではなく、実際に LLM へ出すツールの一覧から決める。
-        設定から推すと、純スポットグラフで記憶ツールを隠した経路や、実行器の有無で
-        出し分ける ``memory_recall_by_handle`` で、本文と一覧がずれる。
-        """
-        relevant_memories_shown = (
-            self._episodic_stack is not None
-            and self._episodic_stack.passive_recall is not None
-        )
-        offered = {
-            definition.name
-            for definition in self.get_tool_definitions(for_every_player=True)
-        }
-        return relevant_memories_shown, bool(offered & ACTIVE_RECALL_TOOL_NAMES)
 
     def _episode_index_parts_named_in_system_prompt(self) -> tuple[bool, bool]:
         """システムプロンプトが指してよい (【思い出せる出来事】, ``episode_recall``) を返す (#1623)。
@@ -1920,8 +1717,7 @@ class WorldRuntime:
 
     def _episode_index_enabled(self) -> bool:
         # create_world_runtime で組んだ runtime には、目次と書き起こしが常に入る (#1631)。
-        # 記憶のツールを隠す純スポットグラフでは、呼び出せない目次を出さない。
-        return self._runtime_config is not None and self._include_todo_tools
+        return self._runtime_config is not None
 
     def episode_index_text(self, player_id: PlayerId) -> str:
         """【思い出せる出来事】の本体。出すたびに、出した呼び名を trace に残す (#1623)。
@@ -1966,16 +1762,9 @@ class WorldRuntime:
             ).environment_name,
         )
 
-    def _memo_tools_enabled(self) -> bool:
-        """memo ツールを LLM に露出する設定か。
-
-        露出を切る実験腕では、tool 定義だけでなく prompt の未完了 memo section
-        も同時に止める。存在しない memo_done への誘導を残さないため。
-        """
-        return bool(getattr(self._runtime_config, "memo_tools_enabled", True))
-
     def _being_memo_enabled(self) -> bool:
-        return bool(getattr(self._runtime_config, "being_memo_enabled", False))
+        # create_world_runtime で組んだ runtime には、メモ帳が常に入る (#1631)。
+        return self._runtime_config is not None
 
     def memo_episode_source_offered(self) -> bool:
         """メモの出どころにエピソードの呼び名を選ばせるか (#1628)。
@@ -2065,8 +1854,7 @@ class WorldRuntime:
             return
         # tz-aware UTC で統一: HeartbeatObservationEmitter /
         # ActionFailedObservationEmitter が aware を発行するため、world_runtime
-        # 経路の naive と混ざると EpisodicChunkCoordinator の obs_slice
-        # フィルタで TypeError になる。詳細: docs/episodic_memory フォローアップ。
+        # 経路の naive と混ざると時刻の比較で TypeError になる。
         if not appender.append(
             player_id, output, datetime.now(timezone.utc), self._time_label()
         ):
@@ -2086,12 +1874,9 @@ class WorldRuntime:
         free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> None:
-        """action_result_store に 1 件積み、episodic chunk_coordinator を起動する。
+        """action_result_store に 1 件積む。
 
         ``tool_name`` は必須引数: 第20回実験で「episode_cues に常に
         ``action:unknown_tool`` が立つ」問題が観測されたため、呼び出し側で
@@ -2099,25 +1884,12 @@ class WorldRuntime:
         ``success`` / ``error_code`` も同様に「常に ``outcome:success`` が立つ」
         ノイズの原因なので、失敗を検知できる経路は明示的に渡す。
 
-        ``scene_boundary``: その行動がエピソード記憶の「シーン切り替え」を
-        意味するかどうか。cognitive science の "doorway effect" を反映して、
-        spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
-
-        ``inner_thought`` / ``intention`` / ``emotion_hint``: LLM が行動前に
-        宣言した主観入力 (心の声 / 目的 / 感情)。予測誤差駆動の学習ループ
-        (#526) の入力。do_* 経由で raw args 由来の値が渡る (U2)。露出スキーマが
-        OFF の間は全 None なので記録挙動は不変。
+        ``inner_thought``: LLM が行動前に書いた独白。do_* 経由で raw args 由来の
+        値が渡る (U2)。
         """
-        # U1 (#526 後続): append → chunk write → semantic promotion (escape baseline
-        # の順序・error isolation) を共有 ActionResultRecorder に委譲する。挙動は
-        # #553 で contract 化済みで不変。subjective fields (intention 等) は
-        # U2 で do_* → ここ → recorder と配線した (露出 OFF の間は None)。
+        # U1 (#526 後続): store への append を共有 ActionResultRecorder に委譲する。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
-        recorder = ActionResultRecorder(
-            self._action_result_store,
-            logger=logger,
-        )
-        acting = self._acting_being_for(player_id)
+        recorder = ActionResultRecorder(self._action_result_store)
         recorder.record(
             player_id,
             action_summary=action_summary,
@@ -2128,30 +1900,16 @@ class WorldRuntime:
             free_text_argument_names=free_text_argument_names,
             success=success,
             error_code=error_code,
-            scene_boundary=scene_boundary,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
-            # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
-            episodic_stack=self._episodic_stack if acting is not None else None,
-            being_id=acting.being_id if acting is not None else None,
         )
-
-    def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> list[ObservationEntry]:
-        """観測バッファを短期記憶へ移し、溢れた観測を返す。"""
-        drained = self._obs_buffer.drain(player_id)
-        if not drained:
-            return []
-        return self._short_term_memory.append_all(player_id, drained)
 
     def _wire_being_stack(self) -> None:
         """プレイヤーに結びつく Being の保存先・用意・解決を、まだ無ければ組む。
 
-        記憶の部品はどれも Being を単位に持つので、古いメモの実行器
-        (``_wire_auxiliary_tool_stack``) の有無に関わらず組む (#1631)。
+        記憶の部品はどれも Being を単位に持つ (#1631)。
         """
         if hasattr(self, "_aux_being_repository"):
             return
@@ -2174,136 +1932,6 @@ class WorldRuntime:
         )
         self._aux_being_resolver = BeingAttachmentResolver(self._aux_being_repository)
         self._aux_being_default_world_id = DEFAULT_SINGLE_WORLD_ID
-
-    def _wire_auxiliary_tool_stack(self) -> None:
-        """TODO ツール実行器を遅延初期化する。
-
-        executor 自体は Resolver を持たず、``run_llm_auxiliary_tool`` が
-        ``ensure_attached`` のあと ``resolve_being_id`` して ``ActingBeing`` を
-        handler に渡す。
-
-        Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
-        の executor も組み立てる (idempotent)。
-        """
-        self._wire_being_stack()
-        # 既に両方 wire 済ならスキップ。recall executor は episodic_stack の
-        # 注入タイミング次第で「todo は wire 済だが recall がまだ」になり得る
-        # ため、各々の None check で個別に判定する。
-        if self._todo_tool_executor is not None:
-            self._wire_memory_recall_executor_if_possible()
-            return
-
-        self._todo_tool_executor = TodoToolExecutor(
-            self._todo_store,
-            short_term_memory=self._short_term_memory,
-            action_result_store=self._action_result_store,
-            current_tick_provider=self.current_tick,
-            trace_recorder=self._trace_recorder,
-        )
-        self._wire_memory_recall_executor_if_possible()
-
-    def _wire_memory_recall_executor_if_possible(self) -> None:
-        """記憶系の能動ツール executor を idempotent に組み立てる。
-
-        episodic_stack が無いと episode store / noun_matcher にアクセス
-        できないため、その場合は executor を作らない。LLM への露出可否は
-        ``get_tool_definitions`` で runtime config と executor の AND として
-        決める。``_aux_being_resolver`` / ``_aux_being_default_world_id`` は
-        ``_wire_being_stack`` で先に初期化される前提。
-
-        PR-D fix: 旧実装は冒頭で ``_memory_recall_tool_executor`` の有無で
-        早期 return していたが、それだと PR-D で追加した
-        ``_memory_recall_by_handle_tool_executor`` の build が
-        ``recall_episodes`` 既存時にスキップされ、tool は spec に出るのに
-        handler が登録されないため LLM が呼ぶと「未対応のツールです」が
-        返る silent failure になっていた。早期 return を外し、各 executor の
-        個別 idempotent ガードに任せる形に変える。
-        """
-        if self._episodic_stack is None:
-            return
-        if not hasattr(self, "_aux_being_resolver"):
-            return
-        from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_tool_executor import (
-            EpisodicMemoryRecallToolExecutor,
-        )
-        from ai_rpg_world.application.llm.services.subjective_time import utc_now
-
-        # idempotent ガード: 既に build 済なら再構築しない (= 既存挙動を保つ)
-        if self._memory_recall_tool_executor is None:
-            self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
-                episode_store=self._episodic_stack.episode_store,
-                noun_matcher=self._episodic_stack.noun_matcher,
-                time_provider=utc_now,
-            )
-
-        if self._memory_explore_related_tool_executor is None:
-            link_store = getattr(self._episodic_stack, "memory_link_store", None)
-            link_service = getattr(self._episodic_stack, "link_service", None)
-            afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
-            recall_slot_store = getattr(
-                self._episodic_stack,
-                "recall_slot_store",
-                None,
-            )
-            if (
-                link_store is not None
-                and link_service is not None
-                and afterglow_store is not None
-                and recall_slot_store is not None
-            ):
-                from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
-                    EpisodicMemoryExploreToolExecutor,
-                )
-
-                self._memory_explore_related_tool_executor = (
-                    EpisodicMemoryExploreToolExecutor(
-                        episode_store=self._episodic_stack.episode_store,
-                        link_store=link_store,
-                        link_service=link_service,
-                        afterglow_store=afterglow_store,
-                        slot_store=recall_slot_store,
-                    )
-                )
-
-        if self._semantic_memory_search_tool_executor is None:
-            semantic_store = getattr(
-                self._episodic_stack, "semantic_memory_store", None
-            )
-            if semantic_store is not None:
-                from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
-                    SemanticMemorySearchToolExecutor,
-                )
-
-                self._semantic_memory_search_tool_executor = (
-                    SemanticMemorySearchToolExecutor(
-                        semantic_store,
-                    )
-                )
-
-        # PR-D: memory_recall_by_handle (afterglow handle → 本文 + slot 再注入)。
-        # afterglow_store + slot_store が両方揃っていなければ意味がないので
-        # 構築をスキップ (= LLM にも見せず handler も登録しない、graceful fallback)。
-        afterglow_store = getattr(self._episodic_stack, "afterglow_store", None)
-        slot_store = getattr(self._episodic_stack, "recall_slot_store", None)
-        if (
-            self._memory_recall_by_handle_tool_executor is None
-            and afterglow_store is not None
-            and slot_store is not None
-        ):
-            from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_handle_tool_executor import (
-                EpisodicMemoryRecallByHandleToolExecutor,
-            )
-            self._memory_recall_by_handle_tool_executor = (
-                EpisodicMemoryRecallByHandleToolExecutor(
-                    episode_store=self._episodic_stack.episode_store,
-                    afterglow_store=afterglow_store,
-                    slot_store=slot_store,
-                    slot_capacity=getattr(
-                        self._episodic_stack, "recall_slot_capacity", 4
-                    ),
-                    current_tick_provider=lambda: self.current_tick(),
-                )
-            )
 
     @property
     def aux_being_resolver(self) -> Any:
@@ -2351,7 +1979,7 @@ class WorldRuntime:
 
         memory = self._short_term_memory
         if not isinstance(memory, SummarizingShortTermMemory):
-            raise RuntimeError("episode writing needs SHORT_TERM_MEMORY_KIND=rolling_summary")
+            raise RuntimeError("episode writing needs SummarizingShortTermMemory")
         for player_id in self.get_player_ids():
             if skip_reason is not None:
                 self._player_episode_writing.skip(
@@ -2377,17 +2005,10 @@ class WorldRuntime:
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: dict[str, Any]
     ) -> LlmCommandResultDto:
-        """TODO 系ツール および memory_recall_episodes を実行する。
+        """エピソードの道具を実行する。
 
-        Phase 3 Step 3a-3: memo handler を起動する前に player_id に Being が
-        attach されていることを保証する (= TodoToolExecutor が being_id 経路を
-        通れるようにする)。
-
-        Issue #526 後続: ``memory_recall_episodes`` も同じ aux Being 経路で
-        動くため、handler 辞書に merge する。executor が wire されていない
-        (= ``_episodic_stack=None``) なら memory_recall は未対応扱いになる。
+        handler を起動する前に player_id に Being が attach されていることを保証する。
         """
-        self._wire_auxiliary_tool_stack()
         acting = self._acting_being_for(player_id)
         if acting is None:
             return LlmCommandResultDto(
@@ -2395,11 +2016,7 @@ class WorldRuntime:
                 message="Being is not attached to this player.",
                 error_code="INVALID_STATE",
             )
-        handlers: dict[str, Any] = (
-            dict(self._todo_tool_executor.get_handlers())
-            if self._todo_tool_executor is not None
-            else {}
-        )
+        handlers: dict[str, Any] = {}
 
         def _merge_handlers(next_handlers: dict[str, Any]) -> None:
             # サイレント上書き防止: 将来 executor が増えたとき同名 tool が
@@ -2411,17 +2028,6 @@ class WorldRuntime:
                 )
             handlers.update(next_handlers)
 
-        if self._memory_recall_tool_executor is not None:
-            _merge_handlers(self._memory_recall_tool_executor.get_handlers())
-        if self._memory_explore_related_tool_executor is not None:
-            _merge_handlers(
-                self._memory_explore_related_tool_executor.get_handlers()
-            )
-        if self._semantic_memory_search_tool_executor is not None:
-            _merge_handlers(self._semantic_memory_search_tool_executor.get_handlers())
-        # PR-D: recall_by_handle も同じ aux 経路で動かす。
-        if self._memory_recall_by_handle_tool_executor is not None:
-            _merge_handlers(self._memory_recall_by_handle_tool_executor.get_handlers())
         if self._being_episode_recall_tool_executor is not None:
             _merge_handlers(self._being_episode_recall_tool_executor.get_handlers())
         if self._being_episode_index_revision_tool_executor is not None:
@@ -2434,35 +2040,6 @@ class WorldRuntime:
                 error_code="UNSUPPORTED_TOOL",
             )
         return cast(LlmCommandResultDto, handler(acting, arguments))
-
-    def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
-        """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
-
-        本家 PromptBuilder と同じロジックを共有するため、active_memos_formatter
-        に委譲する (Issue #227 後続レビュー HIGH-2: drift 防止)。
-
-        memo は Being 単位で持つ (Issue #470 Phase 3)。player_id から BeingId を
-        解決できない配線では、出す memo が決まらないので空を返す。
-        """
-        from ai_rpg_world.application.llm.services.active_memos_formatter import (
-            format_active_memos,
-        )
-
-        resolver = getattr(self, "_aux_being_resolver", None)
-        world_id = getattr(self, "_aux_being_default_world_id", None)
-        if resolver is None or world_id is None:
-            return ""
-        being_id = resolver.resolve_being_id(world_id, player_id)
-        if being_id is None:
-            return ""
-
-        entries = self._todo_store.list_uncompleted_by_being(being_id)
-        return format_active_memos(
-            entries,
-            current_tick=self.current_tick(),
-            stale_age_ticks=stale_age_ticks,
-            minutes_per_tick=_minutes_per_tick(self.scenario),
-        )
 
     # ── 完全プロンプト構築 ──
 
@@ -2570,13 +2147,6 @@ class WorldRuntime:
     _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
         DefaultRecentEventsFormatter()
     )
-    # PR #445: _context_strategy は env (PROMPT_SECTION_ORDER) を尊重するため
-    # **instance field に格上げ**。ClassVar の hard-coded default だと
-    # run_scenario_experiment が env を読んで run_start trace に書くのに、
-    # 実体は無視するという 3 つ目の config-init split silent failure を起こす。
-    # PR #438 の Run A (legacy) はこの bug で実際は stable_to_volatile で
-    # 動いていた可能性が高い。create_world_runtime 末尾で env から作って
-    # 注入する。
     _context_strategy: SectionBasedContextFormatStrategy = field(
         default_factory=SectionBasedContextFormatStrategy
     )
@@ -2596,7 +2166,6 @@ class WorldRuntime:
             DefaultPromptBuilder,
         )
         from ai_rpg_world.application.llm.services.prompt_builder_config import (
-            EpisodicRecallConfig,
             PromptBuilderCoreServices,
             PromptLimits,
             PromptSectionProviders,
@@ -2611,7 +2180,6 @@ class WorldRuntime:
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
             short_term_memory=self._short_term_memory,
-            action_result_store=self._action_result_store,
             recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
@@ -2633,7 +2201,6 @@ class WorldRuntime:
             objective_text_provider=lambda pid: self._resolve_player_objective_text(
                 pid, resolved_objective_text
             ),
-            memo_store=self._todo_store if self._memo_tools_enabled() else None,
             being_memo_text_provider=(
                 self.being_memo_text if self._being_memo_enabled() else None
             ),
@@ -2649,65 +2216,14 @@ class WorldRuntime:
         limits = PromptLimits(
             tile_map_enabled=False,
             default_action_instruction=self._ESCAPE_GAME_ACTION_INSTRUCTION,
-            minutes_per_tick=_minutes_per_tick(self.scenario),
         )
-        # Issue #283 後続: episodic stack が注入されていれば、prompt builder の
-        # passive_recall + noun_matcher を有効化する。未注入なら従来挙動
-        # (recall section が出ない)。
-        episodic_config = EpisodicRecallConfig()
-        if self._episodic_stack is not None:
-            # #526 後続: stack に semantic passive recall があれば
-            # 【関連する学び】section を出すために渡す (default OFF では None/0)。
-            # U3: stack に reinterpretation (段1) があれば、想起時に journal を覗いて
-            # 再解釈後テキストで recall を上書きし、想起 episode を recall_buffer に
-            # 積む配線を有効化する (default OFF では全 None で従来挙動)。
-            _reinterp_coord = self._episodic_stack.reinterpretation_coordinator
-            episodic_config = EpisodicRecallConfig(
-                passive_recall=self._episodic_stack.passive_recall,
-                noun_matcher=self._episodic_stack.noun_matcher,
-                # 想起→強化 (recall_count 加算 / CO_RECALL / ヘブ則) の配線。
-                # これが無いと想起されても recall_count が 0 のままで、semantic
-                # 昇格ゲート (recall_count>=3) を永遠に超えられない
-                # (memory_full_002 実験で発覚)。
-                memory_link_service=self._episodic_stack.link_service,
-                semantic_passive_recall=self._episodic_stack.semantic_passive_recall,
-                semantic_passive_top_k=self._episodic_stack.semantic_passive_top_k,
-                recall_buffer_store=self._episodic_stack.recall_buffer_store,
-                reinterpretation_journal_store=self._episodic_stack.reinterpretation_journal,
-                turn_index_provider=(
-                    _reinterp_coord.current_turn_index
-                    if _reinterp_coord is not None
-                    else None
-                ),
-                # #526 段階 2: 慣化 sidecar。stack で enable された時のみ非 None。
-                recall_habituation_store=self._episodic_stack.recall_habituation_store,
-                recall_habituation_decay_window_ticks=(
-                    self._episodic_stack.recall_habituation_decay_window_ticks
-                ),
-                # #526 段階 3: 想起スロット sidecar。stack で enable された
-                # 時のみ非 None。retrieve 側にも別注入されている (同 store)。
-                recall_slot_store=self._episodic_stack.recall_slot_store,
-                recall_slot_cooldown_ticks=(
-                    self._episodic_stack.recall_slot_cooldown_ticks
-                ),
-                # #526 段階 3 PR-C: afterglow store。stack で enable された
-                # 時のみ非 None。retrieve 側にも同一 store が注入されている。
-                afterglow_store=self._episodic_stack.afterglow_store,
-                encounter_memory=self._encounter_memory,
-                encounter_spot_id_resolver=lambda spot_str_id: self.id_mapper.get_int(
-                    "spot", spot_str_id
-                ),
-                acquaintances=self._player_acquaintances,
-            )
         builder = DefaultPromptBuilder(
             core,
             sections=sections,
             limits=limits,
-            episodic=episodic_config,
             ui_context_builder=self._ui_context_builder,
             current_tick_provider=lambda: self.current_tick(),
-            # Issue #283 後続: recall trace を可視化するため、trace_recorder を
-            # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
+            # trace_recorder は provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
             trace_recorder_provider=lambda: self._trace_recorder,
             # presentation 層で先に組まれている loop_guard (record_and_check の
             # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
@@ -2728,7 +2244,7 @@ class WorldRuntime:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
         Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
-        section 組み立て・recent_events・active_memos・tile-map field 制御は
+        section 組み立て・recent_events・tile-map field 制御は
         DefaultPromptBuilder 内部で処理される。world_runtime 固有の部分は adapter
         (default_prompt_builder_adapters.py) 経由で注入する:
         - WorldQuery 相当: build_llm_context + _build_minimal_player_state_dto
@@ -2750,7 +2266,7 @@ class WorldRuntime:
         旧 shape を期待する caller は messages[0]["content"] / messages[1]["content"]
         への参照に書き換える必要がある。
         """
-        self._wire_auxiliary_tool_stack()
+        self._wire_being_stack()
         if self._public_sns_command_service is not None:
             try:
                 self._public_sns_command_service.retry_pending_notifications(limit=100)
@@ -2876,8 +2392,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
         obj_int = self.id_mapper.get_int("object", object_str_id)
         obj_id = SpotObjectId.create(obj_int)
@@ -2944,8 +2458,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -2959,8 +2471,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
         """手元の道具に宣言された操作を実行し、通常の interact として記録する。"""
         from ai_rpg_world.domain.common.value_object import WorldTick
@@ -3004,8 +2514,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3335,8 +2843,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> Any:
         """同じ場所にいるプレイヤーを対象にした interaction を実行する。
 
@@ -3391,8 +2897,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3477,8 +2981,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotExplorationResultDto:
         spot_name = self.get_player_spot_name(player_id)
         result = self._exploration_service.explore_once(player_id)
@@ -3494,8 +2996,6 @@ class WorldRuntime:
             identifier_arguments=identifier_arguments,
             free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3507,8 +3007,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> None:
         """目的地へ向けて移動を開始する (#404 fix: ネスト advance_tick を排除)。
 
@@ -3574,15 +3072,10 @@ class WorldRuntime:
                 ),
                 free_text_argument_names=free_text_argument_names,
                 inner_thought=inner_thought,
-                intention=intention,
-                emotion_hint=emotion_hint,
             )
             return
 
-        # 移動開始の action result を記録する。scene_boundary は「scene を変える
-        # 意思決定」の時点で立てる (cognitive science の doorway effect は意図
-        # 形成の瞬間 + 物理的境界通過の両方が関係するが、本実装では tool call
-        # 時点を chunk 境界として扱う)。start_travel_to_spot が成功している以上
+        # 移動開始の action result を記録する。start_travel_to_spot が成功している以上
         # 経路は確保されていて、advance_spot_travel_one_tick が異常終了しない
         # 限り必ず arrival する。
         self._record_action_result(
@@ -3598,10 +3091,7 @@ class WorldRuntime:
                 )[0]
             ),
             free_text_argument_names=free_text_argument_names,
-            scene_boundary=True,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
@@ -3937,9 +3427,7 @@ class WorldRuntime:
             )
 
     def _record_distant_cue_skipped(self, *, cue: Any, reason: str) -> None:
-        """debug profile のときだけ cue 境界検出の skipped 理由を trace に残す。"""
-        if not bool(getattr(self._state_builder, "_distant_view_trace_enabled", False)):
-            return
+        """cue 境界検出の skipped 理由を trace に残す。"""
         recorder = self._trace_recorder
         if recorder is None:
             return
@@ -4148,15 +3636,16 @@ class WorldRuntime:
     # ── ゲーム終了判定 ──
 
     def check_game_end(self) -> GameEndResult:
-        # END_ON_ALL_DOWN はシナリオ内の勝敗規則ではなく、実験を行動不能状態で
-        # 回し続けないための外的停止。個人結果規則や end 条件の有無に関係なく、
-        # 宣言された世界の判定より先に一つの入口で評価する。
+        # 全員が行動不能なときの停止はシナリオ内の勝敗規則ではなく、実験を行動不能
+        # 状態で回し続けないための外的停止。世界の判定が成立した tick では世界の
+        # 終了理由を残すため、外的停止は世界の判定が続行のときだけ見る
+        # (design_decisions 43)。終了理由の文字列は、設定で切り替えていた頃の
+        # run と同じ grep で拾えるように変えない。
+        world_end = self._check_game_end_collective_mode()
+        if world_end.is_ended:
+            return world_end
         registry = self._player_outcome_registry
-        if (
-            self._should_end_on_all_down()
-            and registry is not None
-            and self._all_players_unable_to_act(registry)
-        ):
+        if registry is not None and self._all_players_unable_to_act(registry):
             return GameEndResult(
                 is_ended=True,
                 result=None,
@@ -4169,7 +3658,7 @@ class WorldRuntime:
                     self._decide_team_results() if self.scenario.teams else None
                 ),
             )
-        return self._check_game_end_collective_mode()
+        return world_end
 
     def _decide_team_results(self) -> Mapping[str, GameResultEnum]:
         """いまの世界で各チームの勝利条件を評価し、チームの勝敗を決める。"""
@@ -4257,11 +3746,6 @@ class WorldRuntime:
             "teams": teams_payload,
             "players": players_payload,
         }
-
-    def _should_end_on_all_down(self) -> bool:
-        """END_ON_ALL_DOWN による外的停止が有効かを返す。"""
-        cfg = getattr(self, "_runtime_config", None)
-        return bool(getattr(cfg, "end_on_all_down", False))
 
     def _all_players_unable_to_act(self, registry: Any) -> bool:
         """全 player が outcome 確定済み、または unresolved でも down 済みかを返す。"""
@@ -4419,17 +3903,6 @@ class WorldRuntime:
         return str(value)
 
 
-_LLM_TOOL_MODE_DEFAULT = "default"
-_LLM_TOOL_MODE_PURE_SPOT_GRAPH = "pure_spot_graph"
-
-
-def _build_context_format_strategy_from_config(
-    cfg: ResolvedLlmRuntimeConfig,
-) -> SectionBasedContextFormatStrategy:
-    """resolved config から context format strategy を組む。"""
-    return SectionBasedContextFormatStrategy(section_order=cfg.prompt_section_order)
-
-
 def _build_short_term_memory(
     cfg: ResolvedLlmRuntimeConfig,
     *,
@@ -4467,20 +3940,6 @@ def _build_short_term_memory(
         world_character: 操作対象キャラ (rich persona を割り当てる対象)
         persona_block: world_character 由来の persona テキスト
     """
-    from ai_rpg_world.application.llm.wiring.feature_flags import (
-        SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY,
-        log_short_term_memory_kind_state,
-    )
-
-    log_short_term_memory_kind_state(cfg.short_term_memory_kind)
-    if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
-        return DefaultSlidingWindowMemory(
-            event_store=event_store,
-            turn_cap=cfg.short_term_memory_turn_cap,
-            compact_turn_count=cfg.short_term_memory_turn_compact_count,
-        )
-
-    # rolling_summary 経路: LLM 経路を **構築時点で揃える**
     from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
         ShortTermMemoryLongSummaryService,
     )
@@ -4533,39 +3992,6 @@ def _build_short_term_memory(
     )
 
 
-def _build_belief_create_gate(
-    config: ResolvedLlmRuntimeConfig, *, aux_llm_call_sink: AuxLlmCallSink
-) -> Any | None:
-    """profile が求めたときだけ、信念を作る前の判断を組む (#1453)。
-
-    判断ポートは runtime_manager が組むものと別の instance になる。エピソード
-    記憶の組み立てがその前に走るため。Jev のキーが無ければここで落ちる。
-    """
-    if not config.belief_create_gate_enabled:
-        return None
-    from ai_rpg_world.application.llm.services.belief_create_gate import (
-        BeliefCreateGate,
-    )
-    from ai_rpg_world.application.llm.services.text_candidate_narrowing import (
-        create_text_candidate_narrower,
-    )
-    from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
-        create_typed_judgment_port_from_config,
-    )
-
-    port = create_typed_judgment_port_from_config(
-        config, aux_call_sink=aux_llm_call_sink
-    )
-    # config の不変条件が provider=off を弾いている。届いたら解決経路が割れている。
-    assert port is not None
-    return BeliefCreateGate(
-        judgment_port=port,
-        narrower=create_text_candidate_narrower(config.belief_candidate_narrower),
-        top_k=config.belief_candidate_top_k,
-        min_confidence=config.belief_create_gate_min_confidence,
-    )
-
-
 def _build_persona_resolver(
     *,
     scenario: Any,
@@ -4575,7 +4001,7 @@ def _build_persona_resolver(
     """player_id -> (name, persona_block) を引ける callable を組む。
 
     旧 _wire_short_term_llm_services 内に inline されていたロジックを抽出。
-    subjective scheduler wiring と同じ規則:
+    規則:
         - world_character 指定 player には rich persona
         - それ以外は fallback persona
     """
@@ -4679,7 +4105,6 @@ def create_world_runtime(
     *,
     world_character: CharacterPromptInput | None = None,
     llm_turn_trigger: ILlmTurnTrigger | None = None,
-    include_todo_tools: bool | None = None,
     config: ResolvedLlmRuntimeConfig | None = None,
     round_number: int = 1,
 ) -> WorldRuntime:
@@ -4689,10 +4114,6 @@ def create_world_runtime(
         llm_turn_trigger: 省略時は :class:`WorldStandaloneNoopLlmTurnTrigger`。
             スポットグラフのティック後フック用。プレゼン層のセッションでは
             ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
-        include_todo_tools: ``True`` で TODO 系を含める従来構成、``False`` で
-            純スポットグラフモード (TODO 系を除外、speech は残す)。``None``
-            (既定) の場合は環境変数 ``LLM_TOOL_MODE`` から解決する。Issue #155
-            (TODO 設計の再評価) の判断材料を取るための比較実験用。
         config: PR #448 (PR 3/6): LLM runtime 設定の単一窓口。省略時は
             ``ResolvedLlmRuntimeConfig.from_mapping()`` で空設定から既定値を
             resolve。entrypoint (run_scenario_experiment 等) で既に
@@ -4785,8 +4206,6 @@ def create_world_runtime(
     def _world_system_prompt(
         persona: str,
         *,
-        relevant_memories_shown: bool,
-        active_recall_offered: bool,
         episode_index_shown: bool,
         episode_recall_offered: bool,
     ) -> str:
@@ -4794,10 +4213,6 @@ def create_world_runtime(
             world_title=scenario.metadata.title,
             persona_block=persona,
             safe_intro=safe_intro,
-            relevant_memories_shown=relevant_memories_shown,
-            active_recall_offered=active_recall_offered,
-            enable_string_seed_of_thought=config.escape_llm_ssot_enabled,
-            being_memo_enabled=config.being_memo_enabled,
             has_goal=_has_goal,
             limits_actions=scenario.metadata.limits_actions,
             episode_index_shown=episode_index_shown,
@@ -5716,8 +5131,6 @@ def create_world_runtime(
         spot_id_value = int(body.spot_id) if body is not None else None
         structured = {
             "type": "fallen_body_found",
-            # actor / spot_id_value は episodic cue が読む key。ここを外すと
-            # 「誰の」「どこで」が記憶の索引に乗らない。
             "actor": name,
             "is_dead": bool(is_dead),
         }
@@ -5816,7 +5229,6 @@ def create_world_runtime(
         # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
         # 見えていないと受けようがない。
         incoming_trade_offers_provider=_incoming_trade_offers_for,
-        distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
         fallen_body_observer=_observe_fallen_body_for_player,
@@ -6024,7 +5436,6 @@ def create_world_runtime(
                 f"「{spot_name}」に到着した。ここから次の行動を選べる。",
                 tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
                 success=True,
-                scene_boundary=True,
             )
         except Exception as exc:
             runtime._record_world_tick_follow_up_failure(
@@ -6493,8 +5904,6 @@ def create_world_runtime(
         _memory_turn_clock=memory_turn_clock,
         _acquaintance_store=acquaintance_store,
         _player_acquaintances=player_acquaintances,
-        # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
-        _context_strategy=_build_context_format_strategy_from_config(config),
         _time_provider=time_provider,
         _simulation_service=simulation_service,
         _world_tick_failure_isolator=world_tick_failure_isolator,
@@ -6511,11 +5920,6 @@ def create_world_runtime(
         # monster placements の無いシナリオでは両方とも None のまま。
         _monster_repo=monster_repo if scenario.monster_placements else None,
         _attack_orchestrator=monster_attack_orchestrator,
-        _include_todo_tools=(
-            include_todo_tools
-            if include_todo_tools is not None
-            else config.tool_mode != _LLM_TOOL_MODE_PURE_SPOT_GRAPH
-        ),
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
@@ -7472,382 +6876,9 @@ def create_world_runtime(
     runtime._downed_incident_log = downed_incident_log
     runtime._observation_appender = observation_appender
 
-    # Issue #283 後続: episodic memory pipeline の on/off。
-    # episodic ON のときだけ scenario load 時に matcher + chunk coordinator +
-    # passive recall を組み立てる。OFF なら従来動作。
-    # PR #330: シナリオ非依存の builder に統一。world_episodic_wiring 経由の
-    # 旧 alias も後方互換で生きているが、application 層から直接 import する。
-    # #558 MEDIUM-1 後続: 親 gate を env 直読み (is_episodic_enabled) から
-    # config.episodic_enabled に寄せ、ResolvedLlmRuntimeConfig 単一窓口に揃えた。
-    # config=None のときは from_mapping() が空 mapping を解決する (= env は読まず
-    # 全 default = episodic OFF)。実験経路 (run_scenario_experiment.py) は profile
-    # から明示 config を組んで渡すため env に依存しない。explicit config が effect
-    # するので「同 env を 2 経路で別解釈する」silent failure を構造で防げる。
-    from ai_rpg_world.application.llm.wiring.episodic_stack import (
-        build_episodic_stack,
-    )
-    # prompt dataset は記憶機能ではないが、各行へ安定した being_id を保存する。
-    # episodic の親 gate に入れると lean profile では最初の LLM 呼び出しまで
-    # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
-    # 補助 Being を起動時に構築し、全参加者を fail-fast で provision する。
-    if config.prompt_dataset_capture_enabled:
-        runtime._wire_being_stack()
-        for s in getattr(scenario, "player_spawns", ()):
-            runtime._aux_being_provisioning.ensure_attached(
-                PlayerId(int(s.player_id))
-            )
-    if config.episodic_enabled:
-        # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
-        # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線
-        # を早期に確立し、各 player_spawn 分の Being を provision しておく。
-        if not config.prompt_dataset_capture_enabled:
-            runtime._wire_being_stack()
-            for s in getattr(scenario, "player_spawns", ()):
-                try:
-                    runtime._aux_being_provisioning.ensure_attached(
-                        PlayerId(int(s.player_id))
-                    )
-                except Exception:
-                    logger.exception(
-                        "world_runtime: Being provision failed for player_id=%s (chunk "
-                        "coordinator は silent skip するが、episode が書かれない)",
-                        s.player_id,
-                    )
-
-        # Issue #295 後続: LLM 主観文付与の opt-in 配線。
-        # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
-        # が取れるときだけ chunk write 後に裏で LLM が走り、interpreted /
-        # recall_text を上書きする。失敗時は #305 でテンプレ既定値が draft に
-        # 入っているのでそのまま流れる。
-        # PR #309: 同期で LLM を待つとゲーム tick が止まる (1〜3 秒)。
-        # ThreadPoolEpisodicSubjectiveScheduler で裏に逃がし、完了時に
-        # episode_store を同じ episode_id で上書きする (Pattern A:
-        # Fire-and-forget + eventual consistency)。
-        subjective_scheduler = None
-        persona_provider: Callable[[PlayerId], str] | None = None
-        shared_episode_store = None  # scheduler が wire されたときだけ事前生成
-        # U2 (証拠台帳統一設計 / default OFF): BELIEF_EVIDENCE_ENABLED のときだけ
-        # evidence buffer を構築する。OFF なら None のまま扱う。
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            log_belief_attribution_enabled_state,
-            log_belief_consolidation_enabled_state,
-            log_belief_evidence_enabled_state,
-            log_recall_hit_boost_enabled_state,
-        )
-
-        _belief_evidence_enabled = config.belief_evidence_enabled
-        log_belief_evidence_enabled_state(_belief_evidence_enabled)
-        # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default OFF): 的中側
-        # (思い出したから当たった) を recall ranking boost に
-        # 還流する。的中を数える書き手は #1631 で消したので、record_hit は
-        # 行われず安全に縮退する。
-        # 強さ (strength=1) と cap (RECALL_HIT_BOOST_DEFAULT_CAP) は小さく
-        # 始める前提の定数 (habituation_strength と同じく env 非公開。
-        # 「当たる記憶」の固定化を防ぐための上限)。
-        _recall_hit_boost_enabled = config.recall_hit_boost_enabled
-        log_recall_hit_boost_enabled_state(_recall_hit_boost_enabled)
-        _recall_hit_boost_strength = 1
-        # U4 (予測誤差統一設計 部品3 / default OFF): attribution + CONFIRMATION。
-        _belief_attribution_enabled = config.belief_attribution_enabled
-        log_belief_attribution_enabled_state(_belief_attribution_enabled)
-        # U3b: 固着パス。BELIEF_EVIDENCE_ENABLED (PREDICTION_ERROR 転記) とは
-        # 独立した flag だが、両方とも同じ evidence buffer を読み書きするので
-        # どちらか一方でも ON なら buffer store 自体は作る。
-        _belief_consolidation_enabled = config.belief_consolidation_enabled
-        log_belief_consolidation_enabled_state(_belief_consolidation_enabled)
-        belief_evidence_buffer_store = None
-        if (
-            _belief_evidence_enabled
-            or _belief_consolidation_enabled
-        ):
-            from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-                InMemoryBeliefEvidenceBufferStore,
-            )
-
-            belief_evidence_buffer_store = InMemoryBeliefEvidenceBufferStore()
-        if config.episodic_subjective_enabled:
-            from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-                EpisodicChunkSubjectiveFieldsService,
-            )
-            from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
-                ThreadPoolEpisodicSubjectiveScheduler,
-            )
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-            try:
-                _client = create_llm_client_from_config(
-                    config, aux_call_sink=aux_llm_call_sink
-                )
-            except Exception:
-                logger.exception("LLM client factory failed; subjective service disabled")
-                _client = None
-            if isinstance(_client, LiteLLMClient):
-                # subjective service は scheduler 内部に閉じ込める。
-                # episode_store は build_episodic_stack 内で作るが、
-                # scheduler に渡す必要があるので先に作ってから stack 構築側に
-                # 渡したい — が wiring の都合で一旦同じ store を共有する経路
-                # にしておく (= scheduler は episode_store への参照を持ち、
-                # stack 側も同じ store を使う)。
-                # 簡潔さ優先で「stack を組んでから scheduler を作って差し戻す」
-                # 二段階構築は避け、ここで store を先に作って両方に渡す。
-                from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-                    InMemorySubjectiveEpisodeStore,
-                )
-
-                shared_episode_store = InMemorySubjectiveEpisodeStore()
-                _subjective_service = EpisodicChunkSubjectiveFieldsService(
-                    _client,
-                )
-                # scheduler と chunk_coordinator (= stack) が同じ store を
-                # 共有することで、worker が書き込んだ merged episode を
-                # passive_recall が読める ( = Pattern A の整合性条件)。
-                # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
-                # 触る。being_id は chunk_coordinator から submit 引数で渡される。
-                subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
-                    _subjective_service,
-                    shared_episode_store,
-                    max_workers=1,
-                    max_queue_size=100,
-                    trace_recorder_provider=lambda: runtime._trace_recorder,
-                    current_tick_provider=runtime.current_tick,
-                )
-                # 各 player の persona_block を player_id 引きで返す provider。
-                # world_character (= 操作対象) は rich persona、その他は spawn 名
-                # 由来の fallback persona になっている personas_by_player_id
-                # と同じ規則で組み立てる。
-                _persona_by_pid: dict[int, str] = {}
-                if len(scenario.player_spawns) > 1 and world_character is not None:
-                    ec_cid = (world_character.character_id or "").strip()
-                    ec_name = (world_character.name or "").strip()
-                    for s in scenario.player_spawns:
-                        if (ec_cid and s.string_id == ec_cid) or (ec_name and s.name == ec_name):
-                            _persona_by_pid[int(s.player_id)] = persona_block
-                        else:
-                            _persona_by_pid[int(s.player_id)] = (
-                                build_persona_block_from_character(
-                                    None, fallback_display_name=s.name
-                                )
-                            )
-                elif scenario.player_spawns:
-                    # 単独 spawn (旧来構成) や world_character 未指定: 全 player に
-                    # 既存の persona_block を流用 (fallback 含む)
-                    for s in scenario.player_spawns:
-                        _persona_by_pid[int(s.player_id)] = persona_block
-                persona_provider = lambda pid, _d=_persona_by_pid: _d.get(int(pid.value), "")
-            else:
-                logger.info(
-                    "LLM_EPISODIC_SUBJECTIVE_ENABLED=1 だが LiteLLMClient 未使用 "
-                    "(LLM_CLIENT=litellm が必要)。subjective scheduler を無効化。"
-                )
-        # #526 後続: semantic 拡張のフラグ解決。world_runtime でも
-        # SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED で「学びを作る
-        # (promotion) / 出す (passive recall)」を on/off できるようにする。
-        # 既定 OFF (top_k=0 / gist off) で従来の episodic-only 動作を保つ。
-        # フラグは env を直読みせず ResolvedLlmRuntimeConfig (= config) から取る。
-        # こうしないと create_world_runtime(config=...) の明示 config が
-        # semantic だけ無視され、短期記憶など他設定との config 契約が崩れる。
-        _semantic_top_k = config.semantic_passive_top_k
-        _semantic_gist_enabled = config.semantic_llm_gist_enabled
-        # U3b: 固着パスは belief journal (semantic_memory_store) への書き込みを
-        # 前提とするため、他の semantic 系フラグが OFF でも semantic スタック
-        # 自体は組む必要がある。
-        # 能動記憶ツール (memory_search_semantic / memory_explore_related) も
-        # semantic_memory_store / memory_link_store を前提とするため、露出フラグ
-        # が ON のときは同じスタックを組む。tool 定義の露出自体は
-        # get_tool_definitions() が config と executor の AND で決める。
-        _semantic_enabled = (
-            _semantic_top_k > 0
-            or _semantic_gist_enabled
-            or _belief_consolidation_enabled
-            or config.semantic_search_enabled
-            or config.episodic_explore_related_enabled
-        )
-        _semantic_gist_service = None
-        _semantic_persona_resolver = None
-        if _semantic_enabled:
-            _names_by_pid = {
-                int(s.player_id): (s.name or "") for s in scenario.player_spawns
-            }
-            # persona resolver: player_id(int) → (player_name, persona_block)。
-            # gist prompt / promotion が persona を載せるために使う。
-            _semantic_persona_resolver = (
-                lambda pid_int, _n=_names_by_pid, _p=persona_block: (
-                    _n.get(int(pid_int), ""),
-                    _p,
-                )
-            )
-            # gist は短期記憶 builder と同じく config.llm_client_kind で gate する
-            # (config が stub なのに env 側で litellm が動く余地を残さない)。
-            if _semantic_gist_enabled and config.llm_client_kind == "litellm":
-                # R2c-1: full wiring 本体 (wiring/__init__) の private helper でなく、
-                # 抽出済みの optional_llm_services から取る (= wiring/__init__ からの
-                # symbol 依存を廃止)。import-time に wiring/__init__ がロードされる依存は
-                # R2c-2 の __init__ 軽量化 (full wiring 本体削除) で解消する。
-                from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                    create_llm_client_from_config,
-                )
-                from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                    optional_semantic_gist_service,
-                )
-
-                try:
-                    _gist_client = create_llm_client_from_config(
-                        config, aux_call_sink=aux_llm_call_sink
-                    )
-                except Exception:
-                    logger.exception(
-                        "LLM client factory failed; semantic gist disabled"
-                    )
-                    _gist_client = None
-                if _gist_client is not None:
-                    _semantic_gist_service = optional_semantic_gist_service(
-                        _gist_client, True
-                    )
-        # #526 / U3: 段1 (エピソード再解釈) の opt-in 配線。
-        # LLM_EPISODIC_REINTERPRETATION_ENABLED かつ LiteLLMClient が取れるときだけ
-        # completion port (= LLM) を渡す。flag ON でも client が stub なら completion
-        # は None になり、coordinator は構築されるが再解釈 LLM は走らない
-        # (prompt も recall_buffer を覗かない = graceful)。env 直読みせず config から取る。
-        _reinterpretation_enabled = config.episodic_reinterpretation_enabled
-        _reinterpretation_completion = None
-        if _reinterpretation_enabled and config.llm_client_kind == "litellm":
-            # R2c-1: 抽出済み optional_llm_services から取る (wiring/__init__ の
-            # private helper symbol 依存を廃止。import-time 依存は R2c-2 で解消)。
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                optional_episodic_reinterpretation_completion,
-            )
-
-            try:
-                _reinterp_client = create_llm_client_from_config(
-                    config, aux_call_sink=aux_llm_call_sink
-                )
-            except Exception:
-                logger.exception(
-                    "LLM client factory failed; episodic reinterpretation disabled"
-                )
-                _reinterp_client = None
-            if _reinterp_client is not None:
-                _reinterpretation_completion = (
-                    optional_episodic_reinterpretation_completion(
-                        _reinterp_client, None
-                    )
-                )
-        # U3b: 固着パスの completion port。BELIEF_CONSOLIDATION_ENABLED かつ
-        # litellm client が取れるときだけ実 LLM を配線する。client が stub
-        # (llm_client_kind != "litellm") のときは coordinator 自体は構築される
-        # が completion=None のまま (= flush が no-op、evidence は buffer に
-        # 溜まり続けるだけの安全な縮退)。
-        _belief_consolidation_completion = None
-        if _belief_consolidation_enabled and config.llm_client_kind == "litellm":
-            from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-                create_llm_client_from_config,
-            )
-            from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-
-            try:
-                _belief_consolidation_client = create_llm_client_from_config(
-                    config, aux_call_sink=aux_llm_call_sink
-                )
-            except Exception:
-                logger.exception(
-                    "LLM client factory failed; belief consolidation disabled"
-                )
-                _belief_consolidation_client = None
-            if isinstance(_belief_consolidation_client, LiteLLMClient):
-                _belief_consolidation_completion = _belief_consolidation_client
-        runtime._episodic_stack = build_episodic_stack(
-            scenario=scenario,
-            graph=spot_graph_repo.find_graph(),
-            observation_buffer=obs_buffer,
-            short_term_memory=short_term_memory,
-            action_result_store=action_result_store,
-            # trace_recorder は set_trace_recorder で後から差し込まれるので
-            # provider 経由で参照。chunk 書き込みごとに
-            # TraceEventKind.EPISODIC_CHUNK_WRITTEN が記録される。
-            trace_recorder_provider=lambda: runtime._trace_recorder,
-            current_tick_provider=runtime.current_tick,
-            memory_turn_reader=runtime._memory_turn_clock,
-            subjective_completion_scheduler=subjective_scheduler,
-            persona_block_provider=persona_provider,
-            episode_store=shared_episode_store,
-            # semantic 有効時は link / promotion が build_episodic_memory_stack で
-            # 組まれる (BeingId は各 caller 入口で渡す)。
-            semantic_enabled=_semantic_enabled,
-            semantic_passive_top_k=_semantic_top_k,
-            semantic_gist_service=_semantic_gist_service,
-            semantic_persona_resolver=_semantic_persona_resolver,
-            reinterpretation_enabled=_reinterpretation_enabled,
-            reinterpretation_completion=_reinterpretation_completion,
-            # #526 段階 2: 慣化ペナルティ (default off)
-            recall_habituation_enabled=config.recall_habituation_enabled,
-            recall_habituation_decay_window_ticks=(
-                config.recall_habituation_decay_window_ticks
-            ),
-            # #526 段階 3 + PR-A: 想起スロット (working memory / default off)
-            recall_slot_enabled=config.recall_slot_enabled,
-            recall_slot_capacity=config.recall_slot_capacity,
-            recall_slot_insert_per_tick=config.recall_slot_insert_per_tick,
-            recall_slot_max_residence=config.recall_slot_max_residence,
-            recall_slot_cooldown_ticks=config.recall_slot_cooldown_ticks,
-            recall_slot_insert_score_threshold=(
-                config.recall_slot_insert_score_threshold
-            ),
-            # #526 段階 3 PR-C: afterglow index (= ぼんやり覚えてる 1 行見出し)
-            afterglow_enabled=config.afterglow_enabled,
-            afterglow_capacity=config.afterglow_capacity,
-            afterglow_max_residence=config.afterglow_max_residence,
-            # #526 後続 C1: spot_interior_repo を渡し、noun_matcher が
-            # world_object 名を index できるようにする。SpotNode.interior は
-            # 実 runtime では None で保管され、別 repository に格納されている。
-            spot_interior_repo=spot_interior_repo,
-            # #526 後続 C2: chunk write 時の player 現在状況 (場所 / 視界 object
-            # / 同席者) を episode の固定 cue として焼き付けるための provider。
-            # runtime.build_llm_context(pid).tool_runtime_context を返す lambda
-            # を渡す。例外ハンドリングは builder 側で graceful に行う。
-            runtime_context_provider=lambda pid: runtime.build_llm_context(
-                pid
-            ).tool_runtime_context,
-            # U2 (証拠台帳統一設計): store を snapshot 用に stack へ公開する。
-            belief_evidence_buffer_store=belief_evidence_buffer_store,
-            # U3b (固着パス): default OFF。ON のときのみクラスタ昇格が
-            # FAMILIARITY 転用モードになり、BeliefConsolidationCoordinator が
-            # 構築される。
-            belief_consolidation_enabled=_belief_consolidation_enabled,
-            belief_consolidation_completion=_belief_consolidation_completion,
-            belief_create_gate=_build_belief_create_gate(
-                config, aux_llm_call_sink=aux_llm_call_sink
-            ),
-            # U4 (予測誤差統一設計 部品3): 固着 prompt に CONFIRMATION 節を足す。
-            belief_attribution_enabled=_belief_attribution_enabled,
-            # U9b (想起の信用割り当て・的中側): 的中側 sidecar を作り、
-            # passive_recall の順位に使う。回数を足す書き手は #1631 で消した。
-            recall_hit_boost_enabled=_recall_hit_boost_enabled,
-            recall_hit_boost_strength=_recall_hit_boost_strength,
-            episodic_promotion_force_full_scan=(
-                config.episodic_promotion_force_full_scan
-            ),
-            episodic_promotion_expansion_hops=(
-                config.episodic_promotion_expansion_hops
-            ),
-            # episode store の永続化先。subjective 経路は shared_episode_store を
-            # 先に組んで渡すため resolve_default はそれを尊重する (db_path 未使用)。
-            # config の __post_init__ が「db_path + subjective」の無視組み合わせを
-            # fail-fast 済みなので、ここに来る db_path は非 subjective 経路のみ。
-            subjective_episode_db_path=config.subjective_episode_db_path,
-        )
-
-    # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
-    # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
-    # (setter 呼び忘れ silent failure を構造で排除)。
-
     # 会った相手は Being が覚えるので、初期配置の同席を記録する前に全員の Being を用意する。
     # 下の起動時の検査は画面を組んで知り合いの記録を読むので、その前に済ませる。
+    # prompt dataset の各行も being_id を要るので、それより先に組む。
     # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
     # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
     runtime._wire_being_stack()
@@ -7861,7 +6892,11 @@ def create_world_runtime(
                 f"player_id={spawn.player_id} の Being を用意できず、入るときの紹介を"
                 "渡せない"
             ) from exc
-    runtime._wire_auxiliary_tool_stack()
+    # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
+    # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
+    # (setter 呼び忘れ silent failure を構造で排除)。
+
+    runtime._wire_being_stack()
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
     )
@@ -7916,24 +6951,17 @@ def create_world_runtime(
     runtime._validate_disabled_tool_names()
     runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
-    relevant_memories_shown, active_recall_offered = (
-        runtime._memory_parts_named_in_system_prompt()
-    )
     episode_index_shown, episode_recall_offered = (
         runtime._episode_index_parts_named_in_system_prompt()
     )
     runtime._world_llm_system_prompt = _world_system_prompt(
         persona_block,
-        relevant_memories_shown=relevant_memories_shown,
-        active_recall_offered=active_recall_offered,
         episode_index_shown=episode_index_shown,
         episode_recall_offered=episode_recall_offered,
     )
     runtime._world_llm_system_prompts_by_player_id = {
         player_id: _world_system_prompt(
             persona,
-            relevant_memories_shown=relevant_memories_shown,
-            active_recall_offered=active_recall_offered,
             episode_index_shown=episode_index_shown,
             episode_recall_offered=episode_recall_offered,
         )

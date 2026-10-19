@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.enum.monster_enum import (
@@ -18,10 +20,8 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
-    MonsterLifecycleState,
-)
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import (
     MonsterTemplateId,
@@ -56,7 +56,7 @@ def _template() -> MonsterTemplate:
 
 
 def _aggregate(
-    *, status: MonsterStatusEnum = MonsterStatusEnum.ALIVE,
+    *, behavior_state: MonsterBehaviorState | None = None,
 ) -> MonsterAggregate:
     agg = MonsterAggregate(
         monster_id=MonsterId.create(101),
@@ -68,17 +68,8 @@ def _aggregate(
         ),
         status=MonsterStatusEnum.ALIVE,
         spawned_at_tick=WorldTick(0),
+        behavior_state=behavior_state,
     )
-    if status != MonsterStatusEnum.ALIVE:
-        agg._lifecycle_state = MonsterLifecycleState(
-            hp=agg._lifecycle_state.hp,
-            mp=agg._lifecycle_state.mp,
-            status=status,
-            last_death_tick=WorldTick(1),
-            spawned_at_tick=WorldTick(0),
-            hunger=0.0,
-            starvation_timer=0,
-        )
     return agg
 
 
@@ -87,6 +78,16 @@ def _enter_chase(agg: MonsterAggregate) -> None:
         attacker_ref=AttackerRef.of_player(PlayerId(1)),
         last_observed_target_spot_id=SpotId.create(1),
         current_tick=WorldTick(0),
+    )
+
+
+def _observed_state(agg: MonsterAggregate) -> tuple:
+    """拒否要求の直前と直後で比べる公開状態と未配信イベント。"""
+    return (
+        agg.behavior_state, agg.behavior_search_timer,
+        agg.chase_attacker_ref(), agg.chase_last_observed_target_spot_id,
+        agg.chase_started_at_tick, agg.persistence_flee_until_tick,
+        agg.last_attacker_ref, agg.last_attacked_tick, agg.get_events(),
     )
 
 
@@ -99,53 +100,55 @@ class TestStartChaseSearch:
         _enter_chase(agg)
         agg.start_chase_search(3)
         assert agg.is_searching_lost_target() is True
-        assert agg._behavior_state.search_timer == 3
+        assert agg.behavior_search_timer == 3
 
     def test_chase_state_op(self) -> None:
         """IDLE で start_chase_search を呼んでも timer は 0 のまま。"""
         agg = _aggregate()
         agg.start_chase_search(3)
-        assert agg._behavior_state.search_timer == 0
+        assert agg.behavior_search_timer == 0
         assert agg.is_searching_lost_target() is False
 
-    def test_dead_state_op(self) -> None:
-        """DEAD 状態では no op。"""
-        agg = _aggregate(status=MonsterStatusEnum.DEAD)
-        # DEAD なので enter_chase_state も no-op、結果 IDLE のまま
-        _enter_chase(agg)
-        agg.start_chase_search(3)
-        assert agg._behavior_state.search_timer == 0
+    @pytest.mark.parametrize("was_chasing", [False, True], ids=["dead_idle", "dead_chase"])
+    def test_dead_state_op(self, was_chasing: bool) -> None:
+        """死亡後はIDLEでもCHASEでも探索を開始せず、既存状態とイベントを保つ。"""
+        agg = _aggregate()
+        if was_chasing:
+            _enter_chase(agg)
+            agg.start_chase_search(2)
+        agg.apply_damage(agg.hp.value, WorldTick(1))
+        assert agg.status == MonsterStatusEnum.DEAD
+        assert agg.is_chasing() is was_chasing
+        before = _observed_state(agg)
 
-    def test_search_ticks_zero_less_op(self) -> None:
-        """search_ticks <= 0 は timer 設定しない。"""
+        agg.start_chase_search(3)
+
+        assert _observed_state(agg) == before
+
+    @pytest.mark.parametrize("search_ticks", [0, -1])
+    @pytest.mark.parametrize("initial_timer", [0, 3])
+    def test_search_ticks_zero_less_op(self, search_ticks: int, initial_timer: int) -> None:
+        """0以下の探索期間は、既存の探索時間と追跡情報を変更しない。"""
         agg = _aggregate()
         _enter_chase(agg)
-        agg.start_chase_search(0)
-        assert agg._behavior_state.search_timer == 0
-        agg.start_chase_search(-1)
-        assert agg._behavior_state.search_timer == 0
+        if initial_timer:
+            agg.start_chase_search(initial_timer)
+        assert agg.behavior_search_timer == initial_timer
+        before = _observed_state(agg)
+
+        agg.start_chase_search(search_ticks)
+
+        assert _observed_state(agg) == before
 
 
 class TestIsSearchingLostTarget:
     """is_searching_lost_target の境界条件。"""
-
-    def test_idle_false(self) -> None:
-        """IDLE で False。"""
-        agg = _aggregate()
-        assert agg.is_searching_lost_target() is False
 
     def test_chase_search_timer_zero_false(self) -> None:
         """CHASE でも search timer 0 なら False。"""
         agg = _aggregate()
         _enter_chase(agg)
         assert agg.is_searching_lost_target() is False
-
-    def test_chase_search_timer_two_true(self) -> None:
-        """CHASE で search timer 2 なら True。"""
-        agg = _aggregate()
-        _enter_chase(agg)
-        agg.start_chase_search(2)
-        assert agg.is_searching_lost_target() is True
 
 
 class TestTickChaseSearchTimer:
@@ -156,9 +159,10 @@ class TestTickChaseSearchTimer:
         agg = _aggregate()
         _enter_chase(agg)
         agg.start_chase_search(2)
+        assert agg.is_searching_lost_target() is True
         result = agg.tick_chase_search_timer()
         assert result is True
-        assert agg._behavior_state.search_timer == 1
+        assert agg.behavior_search_timer == 1
 
     def test_returns_timer_one_false(self) -> None:
         """timer=1 の最後の tick では減算後 False (timer 切れ)。"""
@@ -167,7 +171,7 @@ class TestTickChaseSearchTimer:
         agg.start_chase_search(1)
         result = agg.tick_chase_search_timer()
         assert result is False
-        assert agg._behavior_state.search_timer == 0
+        assert agg.behavior_search_timer == 0
 
     def test_timer_zero_false(self) -> None:
         """timer 0 では 何もせず False。"""
@@ -176,11 +180,19 @@ class TestTickChaseSearchTimer:
         result = agg.tick_chase_search_timer()
         assert result is False
 
-    def test_chase_false(self) -> None:
-        """CHASE でないと False。"""
-        agg = _aggregate()
-        result = agg.tick_chase_search_timer()
-        assert result is False
+    @pytest.mark.parametrize("search_timer", [0, 2])
+    def test_chase_false(self, search_timer: int) -> None:
+        """非CHASEでは復元した探索時間が正でも減らさずFalseを返す。"""
+        agg = _aggregate(behavior_state=MonsterBehaviorState.from_parts(
+            state=BehaviorStateEnum.IDLE, target_id=None,
+            last_known_position=None, initial_position=None, search_timer=search_timer,
+        ))
+        assert agg.is_chasing() is False
+        assert agg.behavior_search_timer == search_timer
+        before = _observed_state(agg)
+
+        assert agg.tick_chase_search_timer() is False
+        assert _observed_state(agg) == before
 
 
 class TestResetSearchTimerOnRediscovery:
@@ -192,38 +204,26 @@ class TestResetSearchTimerOnRediscovery:
         _enter_chase(agg)
         agg.start_chase_search(3)
         agg.reset_search_timer_on_rediscovery()
-        assert agg._behavior_state.search_timer == 0
+        assert agg.behavior_search_timer == 0
         assert agg.is_chasing() is True
         # chase_attacker_ref / last_observed_target_spot_id は維持される
         assert agg.chase_attacker_ref() == AttackerRef.of_player(PlayerId(1))
         assert agg.chase_last_observed_target_spot_id == SpotId.create(1)
-
-    def test_op(self) -> None:
-        """CHASE 中だが timer 0 なら何もしない。"""
-        agg = _aggregate()
-        _enter_chase(agg)
-        # timer 0 のまま reset を呼ぶ
+        before = _observed_state(agg)
         agg.reset_search_timer_on_rediscovery()
-        assert agg._behavior_state.search_timer == 0
+        assert _observed_state(agg) == before
 
 
 class TestChaseLastObservedProperty:
     """chase_last_observed_target_spot_id プロパティ。"""
 
-    def test_returns_chase_state_value(self) -> None:
-        """CHASE 中は state の値を返す。"""
+    @pytest.mark.parametrize("has_previous_chase", [False, True], ids=["idle", "flee_with_spot"])
+    def test_idle_none(self, has_previous_chase: bool) -> None:
+        """IDLEやFLEEでは、保持中の観測spotがあっても追跡用の取得はNoneになる。"""
         agg = _aggregate()
-        _enter_chase(agg)
-        assert agg.chase_last_observed_target_spot_id == SpotId.create(1)
-
-    def test_idle_none(self) -> None:
-        """IDLE では None。"""
-        agg = _aggregate()
-        assert agg.chase_last_observed_target_spot_id is None
-
-    def test_chase_clear_none(self) -> None:
-        """CHASE を clear すると None。"""
-        agg = _aggregate()
-        _enter_chase(agg)
-        agg.clear_behavior_state_to_idle()
+        if has_previous_chase:
+            _enter_chase(agg)
+            agg.enter_flee_state(WorldTick(10), duration_ticks=3)
+            assert agg.persistence_last_observed_target_spot_id == SpotId(1)
+        assert agg.is_chasing() is False
         assert agg.chase_last_observed_target_spot_id is None
