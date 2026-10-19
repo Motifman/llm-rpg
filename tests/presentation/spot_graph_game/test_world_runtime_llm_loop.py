@@ -6,8 +6,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -30,7 +30,7 @@ class _FakeRuntime:
     def __init__(self) -> None:
         event_store = UnifiedRecentEventStore()
         self._obs_buffer = DefaultObservationContextBuffer(event_store=event_store)
-        self._short_term_memory = DefaultSlidingWindowMemory(
+        self._short_term_memory = SummarizingShortTermMemory(
             event_store=event_store
         )
         self.explore_calls: list[int] = []
@@ -84,8 +84,7 @@ class _FakeRuntime:
         self,
         player_id: PlayerId,
         *,
-        intention=None,
-        emotion_hint=None,
+        inner_thought=None,
     ) -> _ExploreResult:
         # U2: runtime_manager の handler が subjective fields を渡すようになったため、
         # fake も実 runtime と同じ optional kwargs を受ける (値はこのテストでは未使用)。
@@ -108,11 +107,10 @@ class _FakeRuntime:
         tool_name: str = "",
         success: bool = True,
         error_code: str | None = None,
-        # PR-θ2 (経路統合): runtime_manager が subjective (inner_thought /
-        # intention / emotion_hint) を kwarg で渡すようになったので fake 側も
-        # 受け付ける。値は使わない (この fake は action_summary のみ検証)。
-        intention: str | None = None,
-        emotion_hint: str | None = None,
+        # PR-θ2 (経路統合): runtime_manager が subjective (inner_thought) を kwarg で
+        # 渡すようになったので fake 側も受け付ける。値は使わない (この fake は
+        # action_summary のみ検証)。
+        inner_thought: str | None = None,
         identifier_arguments=None,
         free_text_argument_names=(),
     ) -> None:
@@ -141,7 +139,7 @@ class _FakeRuntime:
 #   (実 WorldRuntime + _WorldLlmWiring._tool_handlers[explore] を呼び、
 #    runtime.do_explore 経由で action_result store に記録されることを検証)
 # - tests/integration/test_world_runtime_current_runtime_contract.py::
-#   test_direct_travel_start_records_scene_boundary_and_tick (同上、travel_to)
+#   test_direct_travel_start_records_travel_result_and_tick (同上、travel_to)
 #
 # 旧 test はカバレッジ的にはこれらで十分冗長。fake 経由のテストは削除する。
 

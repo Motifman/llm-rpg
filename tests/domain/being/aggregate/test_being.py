@@ -80,57 +80,84 @@ class TestBeingAttachDetach:
         assert being.attachment == _attachment()
         assert being.is_attached is True
 
-    def test_attach_raises_exception(self) -> None:
-        """0..1 制約: 多重 attach は BeingAlreadyAttachedException。"""
+    @pytest.mark.parametrize("world, player", [(1, 2), (2, 2), (2, 99)])
+    def test_attach_raises_exception(self, world: int, player: int) -> None:
+        """接続済みなら同じ対・別の対への接続を拒否し、元の接続を保持する。"""
+        previous = _attachment(world=1, player=2)
         being = Being(
-            being_id=BeingId("ada"),
-            identity=_identity(),
-            attachment=_attachment(world=1),
+            being_id=BeingId("ada"), identity=_identity(), attachment=previous
         )
-        with pytest.raises(BeingAlreadyAttachedException):
-            being.attach(_attachment(world=2))
+        assert being.attachment == previous
+        assert being.is_attached is True
 
-    def test_attach_vo_raises_type_error(self) -> None:
-        """型違反は TypeError で弾く (BusinessRuleException ではない)。"""
-        being = Being(being_id=BeingId("ada"), identity=_identity())
-        with pytest.raises(TypeError):
+        with pytest.raises(BeingAlreadyAttachedException):
+            being.attach(_attachment(world=world, player=player))
+
+        assert being.attachment == previous
+        assert being.is_attached is True
+
+    @pytest.mark.parametrize("initially_attached", [False, True])
+    def test_attach_vo_raises_type_error(self, initially_attached: bool) -> None:
+        """接続の型違反を拒否しても、未接続・既接続いずれの元状態も変えない。"""
+        previous = _attachment() if initially_attached else None
+        being = Being(
+            being_id=BeingId("ada"), identity=_identity(), attachment=previous
+        )
+        assert being.attachment == previous
+        assert being.is_attached is initially_attached
+
+        with pytest.raises(TypeError, match="attachment"):
             being.attach("not-a-vo")  # type: ignore[arg-type]
 
-    def test_returns_none_detach_attachment(self) -> None:
-        """detach 後は未 attach 状態。"""
+        assert being.attachment == previous
+        assert being.is_attached is initially_attached
+
+    def test_detach_returns_previous_attachment_and_clears_state(self) -> None:
+        """解除は直前の世界・プレイヤー対を返し、主体を未接続にする。"""
+        previous = _attachment()
         being = Being(
-            being_id=BeingId("ada"),
-            identity=_identity(),
-            attachment=_attachment(),
+            being_id=BeingId("ada"), identity=_identity(), attachment=previous
         )
-        being.detach()
+
+        assert being.detach() == previous
         assert being.attachment is None
         assert being.is_attached is False
-
-    def test_returns_detach_before_value(self) -> None:
-        """detach の戻り値で解除前 attachment を取得できる。"""
-        attachment = _attachment()
-        being = Being(
-            being_id=BeingId("ada"), identity=_identity(), attachment=attachment
-        )
-        assert being.detach() == attachment
 
     def test_attach_detach_none_raises_exception(self) -> None:
         """未 attach での detach は no-op として None を返す。"""
         being = Being(being_id=BeingId("ada"), identity=_identity())
         assert being.detach() is None
 
-    def test_detach_attach(self) -> None:
-        """乗り換えシナリオ: detach → attach の往復で別世界に乗せ替えられる。"""
+    @pytest.mark.parametrize("world, player", [(2, 2), (2, 99)])
+    def test_switching_attachments_preserves_identity_and_declarations(
+        self, world: int, player: int
+    ) -> None:
+        """世界だけ替える場合も身体も替える場合も、解除中と接続後に主体情報が残る。"""
+        being_id = BeingId("ada")
+        identity = _identity()
+        kinds = frozenset({MemoryKind.EPISODIC, MemoryKind.MEMO})
+        previous = _attachment(world=1, player=2)
+        destination = _attachment(world=world, player=player)
         being = Being(
-            being_id=BeingId("ada"),
-            identity=_identity(),
-            attachment=_attachment(world=1),
+            being_id=being_id,
+            identity=identity,
+            attachment=previous,
+            declared_memory_kinds=kinds,
         )
-        previous = being.detach()
-        assert previous == _attachment(world=1)
-        being.attach(_attachment(world=2))
-        assert being.attachment == _attachment(world=2)
+
+        assert being.detach() == previous
+        assert being.attachment is None
+        assert being.is_attached is False
+        assert being.being_id == being_id
+        assert being.identity == identity
+        assert being.declared_memory_kinds == kinds
+
+        being.attach(destination)
+        assert being.attachment == destination
+        assert being.is_attached is True
+        assert being.being_id == being_id
+        assert being.identity == identity
+        assert being.declared_memory_kinds == kinds
 
 
 class TestBeingDeclaredMemoryKinds:
@@ -142,18 +169,25 @@ class TestBeingDeclaredMemoryKinds:
         assert being.declared_memory_kinds == frozenset()
         assert being.declares(MemoryKind.MEMO) is False
 
-    def test_kind_declares_true(self) -> None:
-        """渡した kind は declared_memory_kinds に含まれ declares が True。"""
+    def test_declared_memory_kinds_are_isolated_from_caller_updates(self) -> None:
+        """宣言の所属は入力どおりで、入力や取得集合への外側の更新が主体へ波及しない。"""
+        source = [MemoryKind.EPISODIC, MemoryKind.MEMO]
+        expected = frozenset({MemoryKind.EPISODIC, MemoryKind.MEMO})
         being = Being(
             being_id=BeingId("ada"),
             identity=_identity(),
-            declared_memory_kinds=[MemoryKind.EPISODIC, MemoryKind.MEMO],
+            declared_memory_kinds=source,
         )
-        assert being.declared_memory_kinds == frozenset(
-            {MemoryKind.EPISODIC, MemoryKind.MEMO}
-        )
+        assert being.declared_memory_kinds == expected
         assert being.declares(MemoryKind.EPISODIC) is True
         assert being.declares(MemoryKind.MEMO) is True
+        assert being.declares(MemoryKind.SEMANTIC) is False
+
+        source.clear()
+        assert being.declared_memory_kinds == expected
+        exposed = being.declared_memory_kinds
+        exposed |= {MemoryKind.SEMANTIC}
+        assert being.declared_memory_kinds == expected
         assert being.declares(MemoryKind.SEMANTIC) is False
 
     def test_duplicate_kind_frozenset(self) -> None:

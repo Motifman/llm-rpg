@@ -19,6 +19,7 @@ import pytest
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     offered_tools_from_payload,
 )
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
@@ -285,9 +286,12 @@ class TestTorchFromTheSmithy:
     """R7: 鍛冶場の布切れと油の瓶から、たいまつを作れ、たいまつも灯りになることを保証する。"""
 
     def test_a_torch_lights_the_dark_room(self, runtime) -> None:
-        """油の切れたハルが鍛冶場でたいまつを作って機械室に入ると、発電機が見える。"""
+        """カンテラの灯が燃え尽きて機械室が見えなくなったハルが、鍛冶場でたいまつを作ると、発電機が再び見える。"""
         _use(runtime, _HARU, "lamp", "light_lamp")
         _ticks(runtime, _LAMP_BURN_TICKS)
+        _place(runtime, _HARU, "machine_room")
+        assert not _owns(runtime, _HARU, "lamp_flame")
+        assert "発電機" in _hidden_in_the_dark(runtime, _HARU)
 
         done, message = _act(runtime, _HARU, "smithy", "smithy_rags", "make_torch")
         _place(runtime, _HARU, "machine_room")
@@ -382,25 +386,26 @@ class TestGasAndTheCanary:
         assert without_gas == with_gas
         assert "watch_canary_a" in with_gas and "watch_canary_b" in with_gas
 
-    def test_gas_seeps_in_now_and_then_and_clears_after_a_while(self, runtime) -> None:
-        """ガスは 400 tick のうちに溜まり、溜まってから 7 tick 後はまだあり、ちょうど 8 tick 後 (`_GAS_TICKS`) に抜ける。2 度目に溜まったときも 7 tick 後はまだある。"""
-        def wait_for_gas() -> bool:
-            for _ in range(400):
-                runtime.advance_tick()
-                if "gas_present" in _flags(runtime):
-                    return True
-            return False
+    def test_gas_seeps_in_now_and_then_and_clears_after_a_while(self) -> None:
+        """抽選が外れた tick はガスが出ず、当たると溜まり、7 tick 後はまだあり、8 tick 後に抜ける。再発したガスも、その発生から同じ時間で抜ける。"""
+        # 再現実験用の設定で「外れ→当たり」を2回通す。発生・時刻記録・
+        # 消散はシナリオの実際の出来事に任せ、フラグや時計は書き換えない。
+        config = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"SCENARIO_RANDOM_SEED": "560"}
+        )
+        runtime = create_world_runtime(_SCENARIO, config=config)
+        assert "gas_present" not in _flags(runtime)
 
-        appeared = wait_for_gas()
-        _ticks(runtime, _GAS_TICKS - 1)
-        still_there = "gas_present" in _flags(runtime)
-        _ticks(runtime, 1)
-        cleared = "gas_present" not in _flags(runtime)
+        for _ in range(2):
+            _ticks(runtime, 1)
+            assert "gas_present" not in _flags(runtime)
+            _ticks(runtime, 1)
+            assert "gas_present" in _flags(runtime)
 
-        assert (appeared, still_there, cleared) == (True, True, True)
-        assert wait_for_gas()
-        _ticks(runtime, _GAS_TICKS - 1)
-        assert "gas_present" in _flags(runtime)
+            _ticks(runtime, _GAS_TICKS - 1)
+            assert "gas_present" in _flags(runtime)
+            _ticks(runtime, 1)
+            assert "gas_present" not in _flags(runtime)
 
     def test_once_the_gas_clears_the_spare_fuel_can_be_taken(self, runtime) -> None:
         """ガスで断られたあと、ガスが抜けてから探り直すと、予備の燃料の缶が取れる。断られても缶は無くならない。"""

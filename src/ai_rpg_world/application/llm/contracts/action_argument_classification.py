@@ -41,7 +41,7 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "action_name": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # speak.channel: say / shout / whisper の列挙値と完全一致が必要。
     "channel": ActionArgumentDisplayKind.IDENTIFIER_STRING,
-    # speak.content / memo_add.content: 本文を自由に書く入力。
+    # speak.content: 本文を自由に書く入力。
     "content": ActionArgumentDisplayKind.FREE_TEXT,
     # travel_to.destination_label: 現在状態に出た場所名と完全一致が必要。
     "destination_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
@@ -76,8 +76,6 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "new_unit_price": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # market_reprice / market_cancel.side: 売り注文か買い注文かを表す enum 値。
     "side": ActionArgumentDisplayKind.IDENTIFIER_STRING,
-    # memo_done.memo_ids: 表示された memo ID の配列を JSON のまま渡す。
-    "memo_ids": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # interact.parameters: interaction ごとに形が変わる自由入力本文。
     "parameters": ActionArgumentDisplayKind.FREE_TEXT,
     # wait.reason: 待つ理由を自由に書く入力。

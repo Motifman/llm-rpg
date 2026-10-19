@@ -79,6 +79,24 @@ class TestNearestTargetPolicy:
         assert result.object_id == candidate_near.object_id
         assert result.coordinate == Coordinate(6, 5)
 
+        diagonal = WorldObject(
+            object_id=WorldObjectId(3),
+            coordinate=Coordinate(8, 8),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        along_axis = WorldObject(
+            object_id=WorldObjectId(4),
+            coordinate=Coordinate(10, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        result = policy.select_target(actor, [along_axis, diagonal])
+        assert result is not None
+        assert result.object_id == WorldObjectId(3)
+
     def test_select_target_order_independent(self, policy, actor, candidate_near, candidate_far):
         """候補の並び順に依存せず最近距離を選ぶこと"""
         candidates = [candidate_far, candidate_near]
@@ -134,6 +152,24 @@ class TestNearestTargetPolicy:
         result = policy.select_target(actor_3d, [far_xy, near_z])
         assert result is not None
         assert result.object_id == near_z.object_id
+
+        far_z = WorldObject(
+            object_id=WorldObjectId(3),
+            coordinate=Coordinate(0, 0, 2),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        near_xy = WorldObject(
+            object_id=WorldObjectId(4),
+            coordinate=Coordinate(1, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        result = policy.select_target(actor_3d, [far_z, near_xy])
+        assert result is not None
+        assert result.object_id == WorldObjectId(4)
 
 
 class TestHighestThreatTargetPolicy:
@@ -213,6 +249,11 @@ class TestHighestThreatTargetPolicy:
         """threat_by_id に含まれない ID は脅威 0 として扱うこと"""
         context = TargetSelectionContext(threat_by_id={WorldObjectId(2): 5})
         candidates = [candidate_low_threat, candidate_high_threat]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+        context = TargetSelectionContext(threat_by_id={WorldObjectId(2): 1})
         result = policy.select_target(actor, candidates, context)
         assert result is not None
         assert result.object_id == WorldObjectId(2)
@@ -306,6 +347,11 @@ class TestLowestHpTargetPolicy:
         assert result is not None
         assert result.object_id == WorldObjectId(1)
 
+        context = TargetSelectionContext(hp_percentage_by_id={WorldObjectId(2): 0.9})
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
     def test_select_target_empty_hp_percentage_falls_back_to_nearest(self, policy, actor, candidate_near, candidate_far):
         """context はあるが hp_percentage_by_id が空のときは最近距離を返すこと"""
         context = TargetSelectionContext(hp_percentage_by_id={})
@@ -373,11 +419,16 @@ class TestPackLeaderTargetPolicy:
         assert result.object_id == WorldObjectId(1)
 
     def test_select_target_falls_back_when_pack_leader_target_not_in_candidates(
-        self, policy, actor, candidate_near
+        self, policy, actor, candidate_near, candidate_leader_target
     ):
         """pack_leader_target_id が候補に含まれないときはフォールバックで選ぶこと"""
         context = TargetSelectionContext(pack_leader_target_id=WorldObjectId(999))
         candidates = [candidate_near]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+        candidates = [candidate_leader_target, candidate_near]
         result = policy.select_target(actor, candidates, context)
         assert result is not None
         assert result.object_id == WorldObjectId(2)

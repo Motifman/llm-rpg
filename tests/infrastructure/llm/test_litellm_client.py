@@ -16,7 +16,6 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     # OpenRouter routing 系: 開発者のシェルで設定されていてもテスト挙動を汚さない
     monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
     monkeypatch.delenv("OPENROUTER_QUANTIZATION", raising=False)
-    monkeypatch.delenv("OPENROUTER_REQUIRE_PARAMS", raising=False)
     # reasoning effort: 開発者シェルの LLM_REASONING_EFFORT がテストに混入すると
     # 既定 "none" 前提のアサーションが揺れるので隔離する。
     monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
@@ -758,12 +757,12 @@ class TestLiteLLMClientJsonCompletion:
     def client(self):
         return LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-dummy")
 
-    def test_subjective_json_completion_extracts_fenced_json(self, client):
+    def test_json_completion_extracts_fenced_json(self, client):
         """vLLM がコードフェンス付き JSON を返しても object を抽出する。"""
         content = '```json\n{"interpreted": "意味", "recall_text": "回想"}\n```'
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_episode_subjective_json(
+            result = client.complete_short_term_summary_json(
                 [{"role": "user", "content": "json"}],
             )
         assert result == {"interpreted": "意味", "recall_text": "回想"}
@@ -813,21 +812,6 @@ class TestLiteLLMClientJsonCompletion:
         assert kwargs["response_format"] == {"type": "json_object"}
         assert "reasoning_effort" not in kwargs
         assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
-
-    def test_belief_consolidation_json_completion_delegates_and_returns_dict(self, client):
-        """complete_belief_consolidation_json は messages を litellm に渡し、
-        返り値の JSON を decisions を含む dict として返す。"""
-        content = (
-            '{"decisions": [{"action": "create", "text": "探索は空振りが多い", '
-            '"importance": 6, "tags": ["探索"]}]}'
-        )
-        messages = [{"role": "user", "content": "json"}]
-        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
-            m_litellm.completion.return_value = _make_json_content_response(content)
-            result = client.complete_belief_consolidation_json(messages)
-        assert m_litellm.completion.call_args.kwargs["messages"] == messages
-        assert result["decisions"][0]["action"] == "create"
-
 
 class TestLiteLLMClientInit:
     """コンストラクタのバリデーション"""
@@ -970,16 +954,17 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             openrouter_provider="DeepSeek",
         )
         routing = client.openrouter_routing
-        assert routing == {"provider": {"only": ["DeepSeek"]}}
+        assert routing == {
+            "provider": {"only": ["DeepSeek"], "require_parameters": True}
+        }
 
-    def test_quantization_and_require_params_are_both_included(self) -> None:
-        """provider + quantization + require_params を同時に指定。"""
+    def test_provider_and_quantization_are_both_included(self) -> None:
+        """provider と quantization を同時に指定すると、両方の絞り込みと require_parameters が入る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
             openrouter_provider="DeepInfra",
             openrouter_quantization="fp8",
-            openrouter_require_params=True,
         )
         assert client.openrouter_routing == {
             "provider": {
@@ -990,29 +975,15 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         }
 
     def test_quantization_config_provider_not_included(self) -> None:
-        """provider 指定無しなら only は付けず、quantization だけを絞る。"""
+        """provider 指定無しなら only は付けず、quantization を絞って require_parameters を入れる。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
             openrouter_quantization="fp8",
         )
-        assert client.openrouter_routing == {"provider": {"quantizations": ["fp8"]}}
-
-    def test_require_params_true_require_parameters(self) -> None:
-        """truthy 解釈は設定 DTO 側で済ませ、クライアントは bool を受け取る。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_require_params=True
-        )
         assert client.openrouter_routing == {
-            "provider": {"require_parameters": True}
+            "provider": {"quantizations": ["fp8"], "require_parameters": True}
         }
-
-    def test_require_params_false(self) -> None:
-        """False なら他に routing 設定が無いため routing 全体が None になる。"""
-        client = LiteLLMClient(
-            model="m", api_key="sk-x", openrouter_require_params=False
-        )
-        assert client.openrouter_routing is None
 
     def test_completion_base_kwargs_extra_body_injected(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1032,6 +1003,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         assert eb["provider"] == {
             "only": ["DeepInfra"],
             "quantizations": ["fp8"],
+            "require_parameters": True,
         }
         # reasoning は default OFF として乗っているはず (別テストで保証)
 
@@ -1056,6 +1028,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             assert call_kw["extra_body"]["provider"] == {
                 "only": ["DeepInfra"],
                 "quantizations": ["fp8"],
+                "require_parameters": True,
             }
 
     def test_returns_openrouter_routing_property(
@@ -1070,7 +1043,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         snapshot["provider"]["only"] = ["Hacked"]
         # 再取得しても汚染されていない
         assert client.openrouter_routing == {
-            "provider": {"only": ["DeepInfra"]}
+            "provider": {"only": ["DeepInfra"], "require_parameters": True}
         }
 
 
@@ -1162,6 +1135,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         assert eb["provider"] == {
             "only": ["DeepInfra"],
             "quantizations": ["fp8"],
+            "require_parameters": True,
         }
         assert eb["usage"] == {"include": True}
 

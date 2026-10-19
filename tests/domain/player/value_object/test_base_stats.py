@@ -46,122 +46,34 @@ class TestBaseStats:
         assert base_stats.critical_rate == 0.0
         assert base_stats.evasion_rate == 0.0
 
-    def test_create_with_negative_max_hp_raises_error(self):
-        """max_hpが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="max_hp must be greater than 0"):
-            BaseStats(
-                max_hp=-1,
-                max_mp=50,
-                attack=10,
-                defense=5,
-                speed=8,
-                critical_rate=0.05,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_negative_max_mp_raises_error(self):
-        """max_mpが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="max_mp must be greater than 0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=-10,
-                attack=10,
-                defense=5,
-                speed=8,
-                critical_rate=0.05,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_negative_attack_raises_error(self):
-        """attackが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="attack must be greater than 0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=-5,
-                defense=5,
-                speed=8,
-                critical_rate=0.05,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_negative_defense_raises_error(self):
-        """defenseが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="defense must be greater than 0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=10,
-                defense=-2,
-                speed=8,
-                critical_rate=0.05,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_negative_speed_raises_error(self):
-        """speedが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="speed must be greater than 0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=10,
-                defense=5,
-                speed=-3,
-                critical_rate=0.05,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_negative_critical_rate_raises_error(self):
-        """critical_rateが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="critical_rate must be between 0.0 and 1.0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=10,
-                defense=5,
-                speed=8,
-                critical_rate=-0.1,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_critical_rate_over_one_raises_error(self):
-        """critical_rateが1.0を超える場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="critical_rate must be between 0.0 and 1.0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=10,
-                defense=5,
-                speed=8,
-                critical_rate=1.5,
-                evasion_rate=0.03
-            )
-
-    def test_create_with_negative_evasion_rate_raises_error(self):
-        """evasion_rateが負の値の場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="evasion_rate must be between 0.0 and 1.0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=10,
-                defense=5,
-                speed=8,
-                critical_rate=0.05,
-                evasion_rate=-0.05
-            )
-
-    def test_create_with_evasion_rate_over_one_raises_error(self):
-        """evasion_rateが1.0を超える場合エラーが発生すること"""
-        with pytest.raises(BaseStatsValidationException, match="evasion_rate must be between 0.0 and 1.0"):
-            BaseStats(
-                max_hp=100,
-                max_mp=50,
-                attack=10,
-                defense=5,
-                speed=8,
-                critical_rate=0.05,
-                evasion_rate=1.2
-            )
+    @pytest.mark.parametrize(
+        "field, invalid_value, message",
+        [
+            pytest.param('max_hp', -1, 'max_hp must be greater than 0', id='test_create_with_negative_max_hp_raises_error'),
+            pytest.param('max_mp', -10, 'max_mp must be greater than 0', id='test_create_with_negative_max_mp_raises_error'),
+            pytest.param('attack', -5, 'attack must be greater than 0', id='test_create_with_negative_attack_raises_error'),
+            pytest.param('defense', -2, 'defense must be greater than 0', id='test_create_with_negative_defense_raises_error'),
+            pytest.param('speed', -3, 'speed must be greater than 0', id='test_create_with_negative_speed_raises_error'),
+            pytest.param('critical_rate', -0.1, 'critical_rate must be between 0.0 and 1.0', id='test_create_with_negative_critical_rate_raises_error'),
+            pytest.param('critical_rate', 1.5, 'critical_rate must be between 0.0 and 1.0', id='test_create_with_critical_rate_over_one_raises_error'),
+            pytest.param('evasion_rate', -0.05, 'evasion_rate must be between 0.0 and 1.0', id='test_create_with_negative_evasion_rate_raises_error'),
+            pytest.param('evasion_rate', 1.2, 'evasion_rate must be between 0.0 and 1.0', id='test_create_with_evasion_rate_over_one_raises_error'),
+        ],
+    )
+    def test_rejects_invalid_base_stats_fields(self, field, invalid_value, message):
+        """他項目が正常な入力で、指定項目の不正値を固有例外と文言で拒否する。"""
+        values = {
+            'max_hp': 100,
+            'max_mp': 50,
+            'attack': 10,
+            'defense': 5,
+            'speed': 8,
+            'critical_rate': 0.05,
+            'evasion_rate': 0.03,
+        }
+        values[field] = invalid_value
+        with pytest.raises(BaseStatsValidationException, match=message):
+            BaseStats(**values)
 
     def test_grow_with_valid_growth_factor(self):
         """有効な成長率でステータスが成長すること"""
@@ -288,7 +200,7 @@ class TestBaseStats:
         assert grown_stats.evasion_rate == 0.03
 
     def test_grow_returns_new_instance(self):
-        """growメソッドが新しいインスタンスを返すこと"""
+        """成長した新しい値を返し、元の全7項目を変更しない。"""
         base_stats = BaseStats(
             max_hp=100,
             max_mp=50,
@@ -317,6 +229,18 @@ class TestBaseStats:
         # 元のインスタンスは変更されていない
         assert base_stats.max_hp == 100
         assert grown_stats.max_hp == 110  # 100 * (1.0 + 0.1)
+
+        assert (
+            base_stats.max_hp, base_stats.max_mp, base_stats.attack,
+            base_stats.defense, base_stats.speed,
+            base_stats.critical_rate, base_stats.evasion_rate,
+        ) == (100, 50, 10, 5, 8, 0.05, 0.03)
+        assert (
+            grown_stats.max_hp, grown_stats.max_mp, grown_stats.attack,
+            grown_stats.defense, grown_stats.speed,
+        ) == (110, 55, 11, 5, 8)
+        assert grown_stats.critical_rate == pytest.approx(0.06, rel=1e-7)
+        assert grown_stats.evasion_rate == pytest.approx(0.04, rel=1e-7)
 
     def test_equality(self):
         """等価性比較が正しく動作すること"""

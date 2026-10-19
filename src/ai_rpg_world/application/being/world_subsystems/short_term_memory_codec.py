@@ -6,25 +6,18 @@ resume の互換性を保つため、旧 snapshot の次の 3 subsystem を読�
 
 | Codec | 対象 | 内容 |
 |---|---|---|
-| ``ShortTermMemorySubsystemCodec`` | ``_short_term_memory`` | sliding/rolling 両 backend 対応の短期記憶 |
+| ``ShortTermMemorySubsystemCodec`` | ``_short_term_memory`` | 要約する短期記憶 (古い sliding の payload も読む) |
 | ``ObservationBufferSubsystemCodec`` | ``_obs_buffer`` | player_id → pending ObservationEntry list (= LLM turn で drain される) |
 | ``ActionResultStoreSubsystemCodec`` | ``_action_result_store`` | player_id → recent ActionResultEntry list (= 直近の tool 実行結果) |
 
 resume 時に直近の出来事が空だと agent は **「直前の出来事を覚えていない」** 状態で
 再開する (= 前 run の最終 tick で何が起きたかが prompt に乗らない)。
 
-``ShortTermMemorySubsystemCodec`` は 2 つの backend に対応する:
-
-- ``DefaultSlidingWindowMemory`` (``MEMORY_KIND=sliding_window``): 単一 L1
-  raw store のみ
-- ``SummarizingShortTermMemory`` (``MEMORY_KIND=rolling_summary``):
-  L1 raw + L4 mid summary (3 generations) + L5 long summary (1 per player)
-  の 3 階層
-
-K run の最適構成 (= ``rolling_summary``) で snapshot resume するためには
-L4 / L5 の永続化が必須 (= LLM 生成済の要約が失われると agent の
-self_image / world_view が空に戻る)。``schema_version`` を 1 → 2 に上げ、
-``mode`` field で backend を識別する forward-compatible なフォーマットに拡張。
+``ShortTermMemorySubsystemCodec`` は ``SummarizingShortTermMemory`` の
+L1 raw + L4 mid summary (3 generations) + L5 long summary (1 per player) を
+保存する。L4 / L5 が失われると agent の self_image / world_view が空に戻る。
+``mode: "sliding_window"`` (v1 は mode 無しで同じ意味) の payload は、
+固定容量の短期記憶を使っていたころの snapshot で、観測だけを L1 raw に戻す。
 
 すべて dataclass を JSON 化する共通ヘルパを使う。datetime → ISO 8601 文字列で正規化。
 """
@@ -32,7 +25,6 @@ self_image / world_view が空に戻る)。``schema_version`` を 1 → 2 に上
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -126,9 +118,6 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "game_time_label": entry.game_time_label,
         "omit_result_in_prompt": bool(entry.omit_result_in_prompt),
         "inner_thought": entry.inner_thought,
-        "intention": entry.intention,
-        "emotion_hint": entry.emotion_hint,
-        "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
         "execution_provenance": entry.execution_provenance.to_dict() if entry.execution_provenance else None,
     }
@@ -152,9 +141,6 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         game_time_label=data.get("game_time_label"),
         omit_result_in_prompt=bool(data.get("omit_result_in_prompt", False)),
         inner_thought=data.get("inner_thought"),
-        intention=data.get("intention"),
-        emotion_hint=data.get("emotion_hint"),
-        scene_boundary=bool(data.get("scene_boundary", False)),
         occurred_tick=data.get("occurred_tick"),
         execution_provenance=(ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None),
     )
@@ -166,35 +152,6 @@ def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
         raise ValueError(
             f"{key} schema_version={version!r} unsupported (expected {expected})"
         )
-
-
-def _capture_dict_store(
-    store_dict: dict[int, list[Any]],
-    entry_to_dict: Callable[[Any], dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """共通 capture: ``{player_id: [Entry, ...]}`` を JSON-serializable に。"""
-    return sorted(
-        (
-            {
-                "player_id": int(pid),
-                "entries": [entry_to_dict(e) for e in entries],
-            }
-            for pid, entries in store_dict.items()
-        ),
-        key=lambda d: d["player_id"],
-    )
-
-
-def _restore_dict_store(
-    store_dict: dict[int, list[Any]],
-    entries_data: list[dict[str, Any]],
-    dict_to_entry: Callable[[dict[str, Any]], Any],
-) -> None:
-    """共通 restore: store_dict を clear + repopulate。"""
-    store_dict.clear()
-    for entry in entries_data:
-        pid = int(entry["player_id"])
-        store_dict[pid] = [dict_to_entry(d) for d in entry.get("entries", [])]
 
 
 # ----------------------------------------------------------------------------
@@ -252,7 +209,7 @@ def _dict_to_l5_long_summary(d: dict[str, Any]) -> L5LongSummary:
 
 
 # ----------------------------------------------------------------------------
-# 1. Sliding window (= 2 backend に対応: sliding_window / rolling_summary)
+# 1. 短期記憶 (キー名は固定容量の短期記憶だったころの保存形式のまま)
 # ----------------------------------------------------------------------------
 _SW_SUBSYSTEM_KEY = "sliding_window"
 # v1: {schema_version: 1, entries: [...]}                     ← sliding 専用
@@ -263,16 +220,6 @@ _SW_SUBSYSTEM_KEY = "sliding_window"
 _SW_SCHEMA_VERSION = 2
 _SW_MODE_SLIDING = "sliding_window"
 _SW_MODE_ROLLING = "rolling_summary"
-
-
-def _is_rolling_backend(sw: Any) -> bool:
-    """duck typing で rolling_summary backend を識別する。
-
-    循環 import (SummarizingShortTermMemory) を避けるため、内部 attribute
-    の有無で判定する。``_raw`` (L1 raw queue) と ``_mid`` (L4 mid summary
-    deque) の両方を持つのは現状 ``SummarizingShortTermMemory`` のみ。
-    """
-    return hasattr(sw, "_mid") and hasattr(sw, "_long")
 
 
 # ----------------------------------------------------------------------------
@@ -443,7 +390,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                 )
         data: dict[str, Any] = {
             "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
-            "mode": _SW_MODE_ROLLING if _is_rolling_backend(memory) else _SW_MODE_SLIDING,
+            "mode": _SW_MODE_ROLLING if memory is not None else _SW_MODE_SLIDING,
             "entries": entries,
             "completed_turn_sizes": completed_turn_sizes,
             "pending_observations": pending,
@@ -451,7 +398,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
             "long_summaries": [],
             "long_gen_indices": [],
         }
-        if _is_rolling_backend(memory):
+        if memory is not None:
             with memory._mid_lock:
                 data["mid_summaries"] = sorted(
                     (
@@ -512,7 +459,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                     for entry in group.get("entries", [])
                 ],
             )
-        if not _is_rolling_backend(memory):
+        if memory is None:
             return
         with memory._mid_lock:
             memory._mid.clear()
@@ -533,11 +480,10 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
 
 
 class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
-    """``_short_term_memory`` の短期記憶を JSON 化。
+    """``_short_term_memory`` の要約する短期記憶を JSON 化する。
 
-    backend の種別 (``DefaultSlidingWindowMemory`` / ``SummarizingShortTermMemory``)
-    を duck typing で識別し、それぞれの内部構造を保存する。schema_version=2
-    で ``mode`` field を導入し、旧 v1 (sliding 専用) との後方互換も維持。
+    保存は常に ``mode: "rolling_summary"``。固定容量の短期記憶で保存した
+    v1 と v2 の ``mode: "sliding_window"`` も、観測だけを L1 raw に戻して読む。
     """
 
     @property
@@ -554,11 +500,10 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                 "mode": _SW_MODE_SLIDING,
                 "entries": [],
             }
-        if _is_rolling_backend(sw):
-            return self._capture_rolling(sw)
-        return self._capture_sliding(sw)
+        return self._capture_rolling(sw)
 
-    def _capture_sliding(self, sw: Any) -> dict[str, Any]:
+    @staticmethod
+    def _capture_raw_entries(sw: Any) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for pid in sorted(sw._event_store.player_ids()):
             observations = sw._event_store.observations_in_storage_order(
@@ -574,11 +519,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                         ],
                     }
                 )
-        return {
-            "schema_version": _SW_SCHEMA_VERSION,
-            "mode": _SW_MODE_SLIDING,
-            "entries": entries,
-        }
+        return entries
 
     def _capture_rolling(self, sw: Any) -> dict[str, Any]:
         # L4 / L5 は worker thread からも書かれる: 必ず lock 内で snapshot を取る。
@@ -591,7 +532,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         with sw._long_lock:
             long_snapshot: dict[int, L5LongSummary] = dict(sw._long)
             gen_snapshot: dict[int, int] = dict(sw._long_gen_index)
-        raw_entries = self._capture_sliding(sw)["entries"]
+        raw_entries = self._capture_raw_entries(sw)
         mid_groups: list[dict[str, Any]] = list(
                 {
                     "player_id": int(pid),
@@ -638,22 +579,13 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         sw = getattr(runtime, "_short_term_memory", None)
         if sw is None:
             return
-        # v1 は sliding_window 暗黙
         mode = data.get("mode", _SW_MODE_SLIDING)
-        is_rolling = _is_rolling_backend(sw)
-
-        if mode == _SW_MODE_ROLLING and is_rolling:
+        if mode == _SW_MODE_ROLLING:
             self._restore_rolling_to_rolling(sw, data)
-        elif mode == _SW_MODE_SLIDING and not is_rolling:
-            self._restore_observations(sw, data.get("entries", []))
-        elif mode == _SW_MODE_SLIDING and is_rolling:
-            # sliding snapshot を rolling backend に流す: entries は L1 raw に積む。
-            # L4 / L5 は空のまま (= 初回 run と同じ立ち上がり)。
+        elif mode == _SW_MODE_SLIDING:
             self._restore_sliding_to_rolling(sw, data.get("entries", []))
-        else:  # mode == ROLLING and not is_rolling
-            # rolling snapshot を sliding backend に流す: raw_entries だけを
-            # L1 (sliding) に展開。L4 / L5 は捨てる (= sliding には居場所なし)。
-            self._restore_rolling_to_sliding(sw, data.get("raw_entries", []))
+        else:
+            raise ValueError(f"{_SW_SUBSYSTEM_KEY} mode={mode!r} unsupported")
 
     def _restore_rolling_to_rolling(self, sw: Any, data: dict[str, Any]) -> None:
         # L1 raw queue を clear + repopulate
@@ -703,12 +635,6 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         with sw._long_lock:
             sw._long.clear()
             sw._long_gen_index.clear()
-
-    def _restore_rolling_to_sliding(
-        self, sw: Any, raw_entries_data: list[dict[str, Any]]
-    ) -> None:
-        # L4 / L5 は sliding backend に居場所がないため捨てる
-        self._restore_observations(sw, raw_entries_data)
 
     @staticmethod
     def _restore_observations(sw: Any, entries_data: list[dict[str, Any]]) -> None:
@@ -784,9 +710,10 @@ _AR_SUBSYSTEM_KEY = "action_result_store"
 # v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
 # v2〜v5 は、欠けたキーを data.get で None/() に倒せるので実害は無かったが、
 # 意味の変更を示すため版を上げた。
-# expected_result / prediction_context_id / in_context_belief_ids は #1631 で書くのを
-# やめたが、版は 5 のまま据え置いた。版は完全一致で照合するので、上げるといまある
-# snapshot が読めなくなる。キーのある古い snapshot は restore が読み飛ばす。
+# expected_result / prediction_context_id / in_context_belief_ids / scene_boundary /
+# intention / emotion_hint は #1631 で書くのをやめたが、版は 5 のまま据え置いた。
+# 版は完全一致で照合するので、上げるといまある snapshot が読めなくなる。キーの
+# ある古い snapshot は restore が読み飛ばす。
 _AR_SCHEMA_VERSION = 5
 
 
