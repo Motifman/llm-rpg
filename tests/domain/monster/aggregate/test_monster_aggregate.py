@@ -74,8 +74,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
-class TestMonsterAggregate:
-    """MonsterAggregateのテスト"""
+class MonsterAggregateFixtures:
+    """試験を継承せず、モンスター集約の準備だけを共有する。"""
 
     @pytest.fixture
     def base_stats(self) -> BaseStats:
@@ -131,6 +131,10 @@ class TestMonsterAggregate:
             world_object_id=WorldObjectId.create(1001),
             skill_loadout=skill_loadout,
         )
+
+
+class TestMonsterAggregate(MonsterAggregateFixtures):
+    """MonsterAggregateのテスト"""
 
     class TestCreate:
         def test_create_success(self, monster: MonsterAggregate, monster_template: MonsterTemplate):
@@ -1622,8 +1626,8 @@ class TestMonsterAggregate:
             assert agg.get_allow_chase(WorldTick(150)) is True
 
 
-class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
-    """Monster の行動状態スナップショットと decide のテスト（TestMonsterAggregate の fixture を利用）"""
+class TestMonsterAggregateBehaviorState(MonsterAggregateFixtures):
+    """共通の準備を使い、行動状態のスナップショット・遷移・意図通知を検証する。"""
 
     @pytest.fixture
     def spawned_monster(
