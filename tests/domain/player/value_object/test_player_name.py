@@ -70,6 +70,7 @@ class TestPlayerName:
         assert name1 == name2
         assert name1 != name3
         assert name1 != "not a name"
+        assert name1 != "TestPlayer"
 
     def test_hash(self):
         """ハッシュ値が正しく生成されること"""
