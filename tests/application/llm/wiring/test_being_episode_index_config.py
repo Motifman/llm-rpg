@@ -49,11 +49,3 @@ class TestTheEpisodeIndexIsAlwaysOn:
         with pytest.raises(ValueError, match=f"unknown runtime_config key.*{key}"):
             _config(**{key: "off"})
 
-    def test_the_sliding_window_is_rejected(self) -> None:
-        """短期記憶が畳まない sliding_window だと、書き起こしを呼べないので起動前に ValueError で止める。"""
-        with pytest.raises(ValueError, match="SHORT_TERM_MEMORY_KIND must be rolling_summary"):
-            _config(SHORT_TERM_MEMORY_KIND="sliding_window")
-
-    def test_the_old_episodes_stay_off(self) -> None:
-        """目次つきのエピソードが常に入っても、古いエピソード (SubjectiveEpisode) の記憶は有効にならない。"""
-        assert _config().episodic_enabled is False

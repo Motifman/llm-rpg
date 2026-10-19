@@ -99,8 +99,8 @@ def _build_runtime_session(out_dir: Path, monkeypatch: pytest.MonkeyPatch):
 
     # snapshot session を組むためには aux Being stack の初期化が必要
     # (= scripts/run_scenario_experiment.py の経路と同じ)。
-    if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-        runtime._wire_auxiliary_tool_stack()
+    if hasattr(runtime, "_wire_being_stack"):
+        runtime._wire_being_stack()
     for pid in runtime.get_player_ids():
         provisioning = getattr(runtime, "_aux_being_provisioning", None)
         if provisioning is not None:

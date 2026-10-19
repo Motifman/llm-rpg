@@ -92,7 +92,10 @@ class TestUnknownNamesVanish:
             lambda self, viewer_id, other_id: self._entity_name_resolver(other_id),
         )
 
-        assert _stranger_findings(_run(scenario)) != []
+        # 正の対照は既知の漏れの検出だけを見る。組み合わせの探索量は通常の試験に残す。
+        result = run_random_agents(scenario, seed=0, max_world_ticks=2)
+
+        assert _stranger_findings([result]) != []
 
     def test_check_catches_names_left_in_observations(
         self, scenario: Path, monkeypatch: pytest.MonkeyPatch
@@ -102,4 +105,7 @@ class TestUnknownNamesVanish:
             PlayerAcquaintances, "_renamed_for", lambda self, recipient, output: output
         )
 
-        assert _stranger_findings(_run(scenario)) != []
+        # 観測が生成され、後続のプロンプトへ届くところまで 2 tick 回す。
+        result = run_random_agents(scenario, seed=0, max_world_ticks=2)
+
+        assert _stranger_findings([result]) != []

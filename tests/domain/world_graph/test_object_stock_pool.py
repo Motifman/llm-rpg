@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -19,6 +21,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
 )
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
     SpotInteractionService,
@@ -40,7 +45,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 OBJ_ID = SpotObjectId.create(1)
 
 
-def _pool_object(**state) -> SpotObject:
+def _pool_object(*, interactions: tuple[InteractionDef, ...] = (), **state) -> SpotObject:
     base = {
         "stock": 6, "stock_capacity": 6,
         "stock_tick": 0, "stock_refill_interval": 8,
@@ -48,7 +53,7 @@ def _pool_object(**state) -> SpotObject:
     base.update(state)
     return SpotObject(
         object_id=OBJ_ID, name="貝の岩棚", description="t",
-        object_type=ObjectTypeEnum.RESOURCE, state=base, interactions=(),
+        object_type=ObjectTypeEnum.RESOURCE, state=base, interactions=interactions,
     )
 
 
@@ -84,14 +89,25 @@ class TestConsumeObjectStockEffect:
         obj = self._consume(_pool_object(stock=6, stock_tick=0), amount=3, now=0)
         assert obj.state["stock"] == 3
 
-    def test_consume_credits_regen_first(self) -> None:
-        """消費前に経過 tick 分の再生を加算する (0 → 24tick/interval8 → 3 → -3 → 0)。"""
+    @pytest.mark.parametrize(
+        ("now", "amount", "remaining_stock", "canonical_tick"),
+        [(24, 3, 0, 24), (20, 1, 1, 16)],
+        ids=["consume-all-regenerated-stock", "keep-stock-and-partial-progress"],
+    )
+    def test_consume_credits_regen_first(
+        self, now: int, amount: int, remaining_stock: int, canonical_tick: int,
+    ) -> None:
+        """再生後に消費し、全量消費なら0、残量があればその数と端数の進捗を保存する。
+
+        0だけを見ると、再生を無視して引き算を0へ丸める誤りも通る。
+        20手番では2個へ再生して1個残り、基準16からの4手番を持ち越す。
+        """
         obj = self._consume(
             _pool_object(stock=0, stock_capacity=6, stock_tick=0, stock_refill_interval=8),
-            amount=3, now=24,
+            amount=amount, now=now,
         )
-        assert obj.state["stock"] == 0
-        assert obj.state["stock_tick"] == 24  # 満杯未満だが 3*8=24 消費、端数0
+        assert obj.state["stock"] == remaining_stock
+        assert obj.state["stock_tick"] == canonical_tick
 
     def test_consume_writes_canonical_tick(self) -> None:
         """満杯からの消費では stock_tick が now に揃う (端数を溜めない)。"""
@@ -141,6 +157,50 @@ class TestObjectStockAtLeastCondition:
         ok_after, _ = self._can(obj, required=3, now=24)
         assert ok_before is False
         assert ok_after is True
+
+    def test_next_harvest_keeps_partial_regen_progress(self) -> None:
+        """20手番で2個採った後、端数4手番を保ち、31では拒否し32で再び2個採れる。"""
+        action = InteractionDef(
+            action_name="gather", display_label="採る",
+            preconditions=(InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST,
+                target_object_id=OBJ_ID,
+                required_quantity=2,
+                failure_message="採り尽くした。時間が経てば戻る",
+            ),),
+            effects=(InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
+                parameters={"amount": 2},
+            ),),
+        )
+        original = _interior(_pool_object(stock=0, interactions=(action,)))
+        service = SpotInteractionService()
+        first = service.execute_interaction(
+            original, OBJ_ID, "gather", frozenset(), frozenset(),
+            current_tick=WorldTick(20),
+        )
+        remaining = first.new_interior
+        state_after_first = dict(remaining.get_object(OBJ_ID).state)
+        assert state_after_first == {
+            "stock": 0, "stock_capacity": 6,
+            "stock_tick": 16, "stock_refill_interval": 8,
+        }
+
+        with pytest.raises(InteractionNotAllowedException, match="採り尽くした"):
+            service.execute_interaction(
+                remaining, OBJ_ID, "gather", frozenset(), frozenset(),
+                current_tick=WorldTick(31),
+            )
+        assert remaining.get_object(OBJ_ID).state == state_after_first
+
+        second = service.execute_interaction(
+            remaining, OBJ_ID, "gather", frozenset(), frozenset(),
+            current_tick=WorldTick(32),
+        )
+        assert second.new_interior.get_object(OBJ_ID).state == {
+            "stock": 0, "stock_capacity": 6,
+            "stock_tick": 32, "stock_refill_interval": 8,
+        }
 
 
 class TestStockKeysHiddenFromPrompt:
