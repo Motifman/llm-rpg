@@ -473,11 +473,11 @@ class TestActionBudget:
     """_extract_action_budget が行動を用途別に束ね、世界を変える行動の割合を出す挙動を保証する。"""
 
     def test_categorises_tools_and_computes_shares(self, em) -> None:
-        """speak/memo_add/travel_to/explore/interact を 1 件ずつ渡すと、各カテゴリ 1 件・
+        """speak/memory_recall_episodes/travel_to/explore/interact を 1 件ずつ渡すと、各カテゴリ 1 件・
         世界を変える行動 (移動 + 探索 + 世界操作) が 5 件中 3 件で 60.0% になる。"""
         events = [
             _action(0, 1, "speak"),
-            _action(1, 1, "memo_add"),
+            _action(1, 1, "memory_recall_episodes"),
             _action(2, 1, "travel_to"),
             _action(3, 1, "explore"),
             _action(4, 1, "interact"),
@@ -486,7 +486,7 @@ class TestActionBudget:
         assert out["total_actions"] == 5
         assert out["per_category"] == {
             "conversation": 1,
-            "memo": 1,
+            "recall": 1,
             "movement": 1,
             "exploration": 1,
             "world_change": 1,
@@ -506,6 +506,16 @@ class TestActionBudget:
         out = em._extract_action_budget(events)
         assert out["per_category"] == {"conversation": 1, "recall": 1}
         assert out["world_changing_share"] == 0.0
+
+    def test_current_episode_tools_are_counted_as_recall(self, em) -> None:
+        """目次から本文を呼ぶ episode_recall と、目次を直す episode_revise_index は想起に入り、分類外に落ちない。"""
+        events = [
+            _action(0, 1, "episode_recall"),
+            _action(1, 1, "episode_revise_index"),
+        ]
+        out = em._extract_action_budget(events)
+        assert out["per_category"] == {"recall": 2}
+        assert out["unclassified_tools"] == {}
 
     def test_unknown_tool_is_surfaced_as_unclassified_with_its_real_name(
         self, em
@@ -713,3 +723,22 @@ class TestClusteringMetricsIncludedInComputeMetrics:
         assert m["action_budget"]["world_changing_share"] == 50.0
         assert m["speak_chains"]["next_action_after_speak"] == {"travel_to": 1}
         assert m["spatial_dispersion"]["mean_distinct_spots"] == 1.0
+
+
+class TestSummaryCountsEpisodeWriting:
+    """_extract_summary が、いまのエピソードの書き起こしの件数を要約と比較表に出す挙動を保証する。"""
+
+    def test_episode_writing_events_are_counted(self, em) -> None:
+        """episode_writing の trace が 2 件あると、要約の episode_writing は 2 になる。"""
+        events = [
+            {"kind": "episode_writing", "tick": 3, "player_id": 1, "payload": {}},
+            {"kind": "episode_writing", "tick": 7, "player_id": 2, "payload": {}},
+        ]
+        assert em._extract_summary(events)["episode_writing"] == 2
+
+    def test_comparison_table_shows_episode_writing_instead_of_old_chunks(self, em) -> None:
+        """比較表は、撤去した episodic_chunk_written ではなく episode_writing の行を持つ。"""
+        summary = {"summary": em._extract_summary([])}
+        keys = [row["key"] for row in em._make_comparison(summary, summary)]
+        assert "episode_writing" in keys
+        assert "episodic_chunk_written" not in keys

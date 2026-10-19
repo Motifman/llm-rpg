@@ -21,20 +21,14 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class IShortTermMemory(ABC):
     """短期記憶: 直近観測を保持する抽象。
 
-    Phase 2 (#356 後続) で 2 実装が並列に存在する:
-
-    - ``DefaultSlidingWindowMemory``: 固定容量の sliding window (既定)
-    - ``SummarizingShortTermMemory``: L1 raw + L4 mid summary 階層化
-
-    実装方式ではなく、prompt に渡す短期記憶という役割を表す。
+    実装は ``SummarizingShortTermMemory`` (L1 raw + L4 mid summary + L5 long
+    summary) だけ。実装方式ではなく、prompt に渡す短期記憶という役割を表す。
     """
 
     @abstractmethod
@@ -45,11 +39,8 @@ class IShortTermMemory(ABC):
     @abstractmethod
     def append_all(
         self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> list[ObservationEntry]:
-        """
-        指定プレイヤーに観測を複数件追加する。
-        戻り値は今回の追加によりウィンドウから溢れた（捨てられた）観測のリスト。
-        """
+    ) -> None:
+        """指定プレイヤーに観測を複数件追加する。"""
         pass
 
     @abstractmethod
@@ -65,11 +56,10 @@ class IShortTermMemory(ABC):
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """Phase 2: 中期記憶 (L4 mid summary) を prompt 用テキストに整形する。
 
-        ``SummarizingShortTermMemory`` のみ実体を返す。``DefaultSlidingWindowMemory``
-        は default 実装の空文字を返し、prompt §「【最近の流れ】」section ごと出ない。
+        空文字なら prompt §「【最近の流れ】」section ごと出ない。
 
         prompt_builder はこのメソッドを直接呼んで context_format_strategy に
-        渡す。実装差し替えは scenario / env で選ぶ。
+        渡す。
         """
         return ""
 
@@ -77,29 +67,9 @@ class IShortTermMemory(ABC):
         """Phase 3: 長期記憶 (L5 long summary / self_image + world_view) を
         prompt 用テキストに整形する。
 
-        ``SummarizingShortTermMemory`` のみ実体を返す (L5 統合済みの場合)。
-        ``DefaultSlidingWindowMemory`` は空文字 → §「【自己像と世界観】」非表示。
+        空文字なら §「【自己像と世界観】」非表示。
         """
         return ""
-
-    def get_oldest_entry_datetime(
-        self, player_id: PlayerId
-    ) -> datetime | None:
-        """PR5 (R1): 現在 short-term window に乗っている最古 entry の occurred_at。
-
-        episodic recall の時間下限フィルタとして使う。
-        sliding window に entry が無い (= まだ何も観測していない) なら None を
-        返す。caller (prompt_builder) は None を見たら recall に時間下限を渡さない。
-
-        返す ``datetime`` は naive / aware どちらの可能性もある (=
-        ``ObservationEntry.occurred_at`` の値をそのまま返すため)。比較側で
-        UTC 正規化することが前提 (``in_memory_subjective_episode_store._normalize_to_utc``
-        / ``sqlite_subjective_episode_store._datetime_to_occurred_at_key`` 参照)。
-
-        default 実装は None を返す (= 後方互換)。各実装で override する。
-        """
-        return None
-
 
 class IActionResultStore(ABC):
     """直近の LLM 行動結果を保持する。"""
@@ -135,13 +105,6 @@ class IActionResultStore(ABC):
     def get_recent(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
         """指定プレイヤーの直近 limit 件の行動結果を新しい順で返す。"""
         pass
-
-
-# NOTE (Issue #470 Phase 1):
-# 旧 IMemoStore / ITodoStore / MemoEntry は domain/memory/memo/ に昇格・改名された:
-#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-#     from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-# 旧名 alias は Phase 1 cleanup で削除済。
 
 
 class ICurrentStateFormatter(ABC):
@@ -187,18 +150,15 @@ class IRecentEventsFormatter(ABC):
 
 
 class IContextFormatStrategy(ABC):
-    """現在状態・直近出来事・LLM が固定した memo を user prompt 用コンテキストへ整形する。"""
+    """現在状態・直近出来事・メモ帳などを user prompt 用コンテキストへ整形する。"""
 
     @abstractmethod
     def format(
         self,
         current_state_text: str,
         recent_events_text: str,
-        relevant_memories_text: str = "",
-        active_memos_text: str = "",
         objective_text: str = "",
         inventory_text: str = "",
-        learned_text: str = "",
         mid_summary_text: str = "",
         long_summary_text: str = "",
         known_people_text: str = "",
@@ -216,10 +176,6 @@ class IContextFormatStrategy(ABC):
         ``episode_index_text`` はエピソードの目次【思い出せる出来事】の本体。空なら
         section を出さない (#1623)。目次を出す設定では、空の目次も「まだ無い」と渡る。
 
-        ``active_memos_text`` は LLM が ``memo_add`` で固定した「進行中のメモ」
-        section に表示するテキスト (Issue #188 Phase 1a)。空文字なら section を
-        出さない。
-
         ``objective_text`` は実行ランタイムが固定の目的文を渡したい場合に使う
         (例: world_runtime の「【現在の目的】この廃墟から外へ脱出する」)。空なら
         section を出さない (Issue #227 chore β: 経路統一)。
@@ -227,15 +183,10 @@ class IContextFormatStrategy(ABC):
         ``inventory_text`` は所持物証の整形済テキスト。callable provider が
         生成して渡す。空なら section を出さない。
 
-        ``learned_text`` は semantic memory の passive top-K を一覧化した
-        「【関連する学び】」section の本体 (Phase 1c)。`SemanticPassiveRecallService`
-        が状況連想で抽出した上位 K 件を箇条書きにする。空なら section を
-        出さない。
-
         ``mid_summary_text`` は短期記憶 (L4 mid summary) を一覧化した
         「【最近の流れ】」section の本体 (Phase 2)。``SummarizingShortTermMemory``
         が直近 N 件 raw 観測から圧縮した 3 世代分を箇条書きにする。
-        ``DefaultSlidingWindowMemory`` 利用時は空のままで section ごと省略。
+        空なら section ごと省略。
         """
         pass
 

@@ -67,10 +67,6 @@ def register_default_tools(
     trade_virtual_pages_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
-    todo_enabled: bool = False,
-    episodic_explore_related_enabled: bool = False,
-    semantic_search_enabled: bool = False,
-    episodic_recall_enabled: bool = False,
     include_movement_tools: bool = True,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
@@ -122,15 +118,7 @@ def register_default_tools(
         _register_specs(registry, get_sns_specs())
     if sns_enabled and sns_virtual_pages_enabled:
         _register_specs(registry, get_sns_virtual_page_specs())
-    _register_specs(
-        registry,
-        get_memory_specs(
-            todo_enabled=todo_enabled,
-            episodic_explore_related_enabled=episodic_explore_related_enabled,
-            semantic_search_enabled=semantic_search_enabled,
-            episodic_recall_enabled=episodic_recall_enabled,
-        ),
-    )
+    _register_specs(registry, get_memory_specs())
 
 
 __all__ = ["register_default_tools", "register_spot_graph_tools"]

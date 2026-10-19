@@ -108,9 +108,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
@@ -131,9 +128,6 @@ BUSY_FREE_TOOLS: frozenset[str] = frozenset({
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_LIST,
-    TOOL_NAME_TODO_COMPLETE,
 })
 
 def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
@@ -460,23 +454,23 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
         wiring._tool_handlers[tool_name] = adapted
     _wrap_every_handler_with_gold_change(wiring, runtime)
     # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
-    # _todo_tool_executor / _cached_default_prompt_builder は check-then-act
+    # Being の保存先 / _cached_default_prompt_builder は check-then-act
     # で 2 スレッドが同時に初回呼び出しすると double-init になる。並列実行
     # の前に単一スレッドで pre-warm して race を構造的に消す。
     try:
-        if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-            runtime._wire_auxiliary_tool_stack()
+        if hasattr(runtime, "_wire_being_stack"):
+            runtime._wire_being_stack()
         if hasattr(runtime, "_get_or_build_default_prompt_builder"):
             runtime._get_or_build_default_prompt_builder()
     except Exception:
         # pre-warm に失敗しても通常パスはあくまで lazy で動く。安全側 fallback。
         logger.exception(
-            "Pre-warming auxiliary tool stack / default prompt builder failed; "
+            "Pre-warming being stack / default prompt builder failed; "
             "lazy initialization will fall back, but Phase A 並列化時に race の "
             "可能性が残る"
         )
     # PR-E: tool spec (= LLM に見せる) と _tool_handlers (= dispatch SSOT) の
-    # 不整合は起動時に止める。pre-warm が aux executor を完成させた直後に
+    # 不整合は起動時に止める。pre-warm の直後に
     # 一度だけ実行するため、ここに置く。get_tool_definitions に失敗しても
     # それ自体は通常運用で起きるべきでないが、検証ロジックの破綻で実験を
     # 止めるのは過剰なので例外なら警告だけ残す。
@@ -1308,12 +1302,7 @@ def execute_tool(
 def make_auxiliary_tool_handler(
     wiring: WorldLlmWiring, tool_name: str
 ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
-    """TODO/memo ツール用のハンドラを tool_name 固定で返す。
-
-    NOTE: pure_spot_graph mode (B-4 / Issue #155) では TODO/memo ツールは
-    LLM の tools リストに含まれないため、通常到達しない。安全側のフォール
-    バックとして残し、デフォルト構成で memo を使う際の経路を維持する。
-    """
+    """記憶のツール (episode_recall / episode_revise_index) 用のハンドラを tool_name 固定で返す。"""
 
     def handler(
         player_id: PlayerId,

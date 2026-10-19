@@ -32,14 +32,14 @@ def test_projection_keeps_copyable_values_and_only_free_text_names() -> None:
             "parameters": {"text": "長い本文をここへ書く"},
             "say_inline": "書いておこう",
             "stealth": False,
-            "memo_ids": ["memo-a", "memo-b"],
+            "handles": ["ep_a", "ep_b"],
             "inner_thought": "すぐ下の専用行に出る",
         }
     )
 
     assert identifiers == {
         "action_name": "write_note",
-        "memo_ids": '["memo-a","memo-b"]',
+        "handles": '["ep_a","ep_b"]',
         "stealth": "false",
         "target_label": "当番表",
     }
