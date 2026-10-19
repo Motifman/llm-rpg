@@ -133,8 +133,8 @@ class TestDistributedSignalDeposit:
         assert _pit(runtime).state["lit"] is False
         assert _owned_count(runtime, ada, "driftwood") == 3
 
-    def test_deposit_wakes_co_located_witness_with_declared_message(self) -> None:
-        """投入の目撃文は同席者へ届き、観測駆動で次の起動を予約する。"""
+    def test_deposit_delivers_turn_scheduling_observation_to_witness(self) -> None:
+        """投入の宣言文が同席者へ、起動対象となる目撃観測として届く。"""
         runtime = create_world_runtime(SCENARIO)
         ada = _player_id(runtime, "ada")
         noah = _player_id(runtime, "noah")

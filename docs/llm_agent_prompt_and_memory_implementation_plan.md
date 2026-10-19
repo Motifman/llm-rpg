@@ -252,7 +252,7 @@
 - `docs/domain_events_observation_spec.md` — 観測対象イベントと配信先・観測内容
 - `docs/observation_implementation_plans.md` — 観測まわり実装計画
 - `docs/world_query_status_and_llm_context_design.md` — WorldQuery と LLM コンテキスト設計
-- `docs/memory_module_implementation_plan.md` — 記憶モジュール（Phase 4 / Phase 5）の詳細実装計画（エピソード記憶・長期記憶・予測志向検索・Reflection）
+- `docs/memory_module_implementation_plan.md` (#1631 で削除) — 記憶モジュール（Phase 4 / Phase 5）の詳細実装計画（エピソード記憶・長期記憶・予測志向検索・Reflection）
 
 ---
 
@@ -284,7 +284,7 @@
 |------|------|------|
 | **契約（interfaces / dtos）** | `application/llm/contracts/` | ICurrentStateFormatter, IRecentEventsFormatter, IContextFormatStrategy, ISystemPromptBuilder, IPromptBuilder, ISlidingWindowMemory, IActionResultStore, IAvailabilityResolver, IGameToolRegistry, IAvailableToolsProvider, ILLMClient。SystemPromptPlayerInfoDto, ActionResultEntry, LlmCommandResultDto, ToolDefinitionDto。ToolAvailabilityContext は PlayerCurrentStateDto を利用。 |
 | **ツール名プレフィックス** | `application/llm/tool_constants.py` | TOOL_NAME_PREFIX_WORLD, TOOL_NAME_PREFIX_MOVE, TOOL_NAME_PREFIXES, TOOL_NAME_NO_OP, TOOL_NAME_SET_DESTINATION。 |
-| **スライディングウィンドウ** | `application/llm/services/sliding_window_memory.py` | DefaultSlidingWindowMemory（in-memory）。観測の append / append_all / get_recent。 |
+| **スライディングウィンドウ** | `application/llm/services/sliding_window_memory.py` | DefaultSlidingWindowMemory（in-memory）。観測の append / append_all / get_recent。#1631 の #1811 で消した。短期記憶は `SummarizingShortTermMemory` だけ。 |
 | **行動結果ストア** | `application/llm/services/action_result_store.py` | DefaultActionResultStore（in-memory）。 |
 | **フォーマッタ・戦略** | `application/llm/services/` | DefaultCurrentStateFormatter, DefaultRecentEventsFormatter, SectionBasedContextFormatStrategy（案A）。 |
 | **システムプロンプト・プロンプト組み立て** | `application/llm/services/` | DefaultSystemPromptBuilder（初版テンプレート）, DefaultPromptBuilder。drain → SlidingWindow への append は DefaultPromptBuilder.build() 内で実施。IAvailableToolsProvider で tools を取得し返り辞書に含める。 |
