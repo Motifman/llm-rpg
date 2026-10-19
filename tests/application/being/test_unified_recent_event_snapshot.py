@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from ai_rpg_world.application.being.world_subsystems import (
     UnifiedRecentEventStoreSubsystemCodec,
     migrate_legacy_recent_event_subsystems,
@@ -11,8 +13,8 @@ from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
@@ -42,7 +44,7 @@ def _runtime() -> SimpleNamespace:
     store = UnifiedRecentEventStore()
     return SimpleNamespace(
         _recent_event_store=store,
-        _short_term_memory=DefaultSlidingWindowMemory(event_store=store),
+        _short_term_memory=SummarizingShortTermMemory(event_store=store),
         _obs_buffer=DefaultObservationContextBuffer(event_store=store),
         _action_result_store=DefaultActionResultStore(event_store=store),
     )
@@ -71,7 +73,7 @@ def test_unified_snapshot_round_trip_preserves_both_kinds_and_pending() -> None:
     assert [
         entry.output.prose
         for entry in destination._short_term_memory.get_recent(_PLAYER, 20)
-    ] == ["記憶済み", "次の未完了ターン"]
+    ] == ["次の未完了ターン", "記憶済み"]
     assert [
         entry.action_summary
         for entry in destination._action_result_store.get_recent(_PLAYER, 20)
@@ -83,8 +85,18 @@ def test_unified_snapshot_round_trip_preserves_both_kinds_and_pending() -> None:
     assert destination._recent_event_store.completed_turn_sizes(_PLAYER) == (2,)
 
 
-def test_legacy_three_subsystems_migrate_and_resave_as_one() -> None:
-    """旧3 subsystem を読むと同じ内容になり、次の保存は新1形式だけになる。"""
+@pytest.mark.parametrize(
+    "sliding_header",
+    [
+        {"schema_version": 1},
+        {"schema_version": 2, "mode": "sliding_window"},
+    ],
+    ids=["v1_without_mode", "v2_sliding_window"],
+)
+def test_legacy_three_subsystems_migrate_and_resave_as_one(
+    sliding_header: dict[str, object],
+) -> None:
+    """固定容量の短期記憶で保存した旧3 subsystem (v1 と v2 の sliding_window) を要約する短期記憶へ読むと同じ内容になり、次の保存は rolling_summary の新1形式だけになる。"""
     observation_payload = {
         "occurred_at": _NOW.isoformat(),
         "game_time_label": "深夜 0:00",
@@ -104,8 +116,7 @@ def test_legacy_three_subsystems_migrate_and_resave_as_one() -> None:
     }
     old = {
         "sliding_window": {
-            "schema_version": 2,
-            "mode": "sliding_window",
+            **sliding_header,
             "entries": [{"player_id": 1, "entries": [observation_payload]}],
         },
         "observation_buffer": {
@@ -125,6 +136,7 @@ def test_legacy_three_subsystems_migrate_and_resave_as_one() -> None:
     resaved = {codec.subsystem_key: codec.capture(runtime)}
 
     assert set(resaved) == {"recent_event_store"}
+    assert resaved["recent_event_store"]["mode"] == "rolling_summary"
     assert runtime._short_term_memory.get_recent(_PLAYER, 20)[0].output.prose == "旧観測"
     assert runtime._action_result_store.get_recent(_PLAYER, 20)[0].action_summary == "旧行動"
     assert runtime._obs_buffer.get_observations(_PLAYER)[0].output.prose == "旧観測"

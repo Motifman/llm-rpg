@@ -26,7 +26,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -65,7 +65,7 @@ def _build_runtime(
     ``lighting`` はそのスポットの静的な明るさ。``give_actor_a_lamp`` を
     立てると行為者が光源アイテムを持って出発する。
     """
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     scenario["player_interactions"] = list(player_interactions)
     for spot in scenario["spots"]:
         if spot["id"] == "control_room":
@@ -82,7 +82,7 @@ def _build_runtime(
             if spawn["id"] == "player_a":
                 spawn["initial_items"] = ["lamp"]
 
-    path = tmp_path / f"relay_{lighting.lower()}.json"
+    path = tmp_path / f"panel_{lighting.lower()}.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     runtime = create_world_runtime(path)
@@ -215,7 +215,7 @@ class TestObjectInteractionHonoursPlaceConditions:
     _TOO_BRIGHT_FOR_THE_PANEL = "眩しくて盤面が読めない。"
 
     def _runtime_with_gated_panel(self, tmp_path, lighting: str):
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             if spot["id"] != "control_room":
                 continue
@@ -233,7 +233,7 @@ class TestObjectInteractionHonoursPlaceConditions:
                     }],
                     "effects": [],
                 })
-        path = tmp_path / f"relay_panel_{lighting.lower()}.json"
+        path = tmp_path / f"panel_gated_{lighting.lower()}.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
         return create_world_runtime(path)
 
