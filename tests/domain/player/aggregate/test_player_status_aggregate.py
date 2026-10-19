@@ -709,7 +709,7 @@ class TestPlayerStatusAggregate:
         assert aggregate.can_consume_resources() == False
 
     def test_location_updates(self):
-        """位置情報と経路情報の更新テスト"""
+        """現在地の更新値を1件の通知へ転記し、1歩進めた後は現在地と未通過の目的地を残して経路を消去できる。"""
         from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
         from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -725,6 +725,15 @@ class TestPlayerStatusAggregate:
         
         events = aggregate.get_events()
         assert any(isinstance(e, PlayerLocationChangedEvent) for e in events)
+        assert len(events) == 1
+        changed = events[0]
+        assert changed.aggregate_id == PlayerId(1)
+        assert changed.aggregate_type == "PlayerStatusAggregate"
+        assert changed.old_spot_id is None
+        assert changed.old_coordinate is None
+        assert changed.new_spot_id == spot1
+        assert changed.new_coordinate == coord1
+        assert changed.occurred_tick is None
         
         # 2. 経路の設定
         dest = Coordinate(5, 5, 0)
@@ -737,8 +746,9 @@ class TestPlayerStatusAggregate:
         # 3. 経路を1ステップ進める
         next_coord = aggregate.advance_path()
         assert next_coord == Coordinate(1, 0, 0)
-        # 現在地（[0]）と進んだ先（[1]）が残る
+        # 現在地（[0]）と、まだ進んでいない目的地が残る
         assert len(aggregate.planned_path) == 2
+        assert aggregate.planned_path == [coord1, dest]
         
         # 4. 経路のクリア
         aggregate.clear_path()
@@ -781,7 +791,7 @@ class TestPlayerStatusAggregate:
         assert started.last_known.coordinate == snapshot.coordinate
 
     def test_update_pursuit_emits_only_for_meaningful_changes(self):
-        """追跡更新は対象状態の変化があったときだけイベントを発行すること"""
+        """追跡が同値なら通知せず、対象位置が変わると更新値と追跡者・対象を1件で通知する。"""
         aggregate = create_test_status_aggregate()
         snapshot = create_test_pursuit_snapshot()
         aggregate.start_pursuit(snapshot)
@@ -801,6 +811,11 @@ class TestPlayerStatusAggregate:
         updated = next(e for e in events if isinstance(e, PursuitUpdatedEvent))
         assert updated.target_snapshot == new_snapshot
         assert updated.last_known == new_last_known
+        assert len(events) == 1
+        assert updated.aggregate_id == WorldObjectId(1)
+        assert updated.aggregate_type == "PlayerStatusAggregate"
+        assert updated.actor_id == WorldObjectId(1)
+        assert updated.target_id == WorldObjectId(99)
 
     def test_update_pursuit_is_noop_when_snapshot_and_last_known_are_unchanged(self):
         """追跡継続が同じ snapshot/last_known を渡しても更新イベントを出さないこと"""
@@ -859,9 +874,10 @@ class TestPlayerStatusAggregate:
         assert aggregate.get_events() == []
 
     def test_cancel_pursuit_emits_cancelled_event_and_clears_state(self):
-        """明示的な追跡中断で中断イベントが発行されること"""
+        """明示中断で追跡を終了し、追跡者・対象と最終位置情報を1件で通知する。"""
         aggregate = create_test_status_aggregate()
-        aggregate.start_pursuit(create_test_pursuit_snapshot())
+        snapshot = create_test_pursuit_snapshot()
+        aggregate.start_pursuit(snapshot)
         aggregate.clear_events()
 
         aggregate.cancel_pursuit()
@@ -870,6 +886,12 @@ class TestPlayerStatusAggregate:
         events = aggregate.get_events()
         cancelled = next(e for e in events if isinstance(e, PursuitCancelledEvent))
         assert cancelled.target_id == WorldObjectId.create(99)
+        assert len(events) == 1
+        assert cancelled.aggregate_id == WorldObjectId(1)
+        assert cancelled.aggregate_type == "PlayerStatusAggregate"
+        assert cancelled.actor_id == WorldObjectId(1)
+        assert cancelled.target_snapshot == snapshot
+        assert cancelled.last_known == create_test_last_known_state()
 
     class TestPursuitExceptions:
         """追跡関連の例外ケース"""
@@ -900,12 +922,15 @@ class TestPlayerStatusAggregate:
                 aggregate.cancel_pursuit()
 
         def test_start_pursuit_with_different_target_while_active_raises_cannot_switch(self):
-            """追跡中に別の対象へ start_pursuit すると CannotSwitchPursuitTargetException"""
+            """追跡中の別対象への開始を専用例外で拒否し、元の追跡値と未発行通知を保持する。"""
             aggregate = create_test_status_aggregate()
             snapshot1 = create_test_pursuit_snapshot(target_id=99)
             aggregate.start_pursuit(snapshot1)
 
             snapshot2 = create_test_pursuit_snapshot(target_id=88)  # 別の対象
+
+            before_pursuit = aggregate.pursuit_state
+            before_events = aggregate.get_events()
 
             with pytest.raises(
                 CannotSwitchPursuitTargetException,
@@ -916,8 +941,11 @@ class TestPlayerStatusAggregate:
             assert aggregate.pursuit_state is not None
             assert aggregate.pursuit_state.target_id == WorldObjectId.create(99)
 
+            assert aggregate.pursuit_state == before_pursuit
+            assert aggregate.get_events() == before_events
+
         def test_update_pursuit_with_different_target_snapshot_raises_pursuit_target_mismatch(self):
-            """update_pursuit に現行対象と異なる target_id の snapshot を渡すと PursuitTargetMismatchException"""
+            """現行対象と異なる更新を専用例外で拒否し、元の追跡値と未発行通知を保持する。"""
             aggregate = create_test_status_aggregate()
             snapshot1 = create_test_pursuit_snapshot(target_id=99)
             aggregate.start_pursuit(snapshot1)
@@ -925,16 +953,22 @@ class TestPlayerStatusAggregate:
 
             wrong_snapshot = create_test_pursuit_snapshot(target_id=88)
 
+            before_pursuit = aggregate.pursuit_state
+            before_events = aggregate.get_events()
+
             with pytest.raises(
                 PursuitTargetMismatchException,
                 match="target_id.*一致",
             ):
                 aggregate.update_pursuit(target_snapshot=wrong_snapshot, last_known=last_known)
 
+            assert aggregate.pursuit_state == before_pursuit
+            assert aggregate.get_events() == before_events
+
         def test_start_pursuit_with_last_known_target_id_mismatch_raises_pursuit_last_known_mismatch(
             self,
         ):
-            """start_pursuit で last_known の target_id が snapshot と一致しないと PursuitLastKnownMismatchException"""
+            """対象と最後の既知位置のIDが異なる開始を専用例外で拒否し、追跡も通知も作らない。"""
             aggregate = create_test_status_aggregate()
             snapshot = create_test_pursuit_snapshot(target_id=99)
             wrong_last_known = PursuitLastKnownState(
@@ -949,6 +983,9 @@ class TestPlayerStatusAggregate:
                 match="target_id.*一致",
             ):
                 aggregate.start_pursuit(snapshot, last_known=wrong_last_known)
+
+            assert aggregate.pursuit_state is None
+            assert aggregate.get_events() == []
 
     def test_consume_resources_zero_costs(self):
         """ゼロコストでの消費が正常に終了すること"""
@@ -1108,7 +1145,7 @@ class TestPlayerStatusAggregate:
         assert ev.target_player_id is None
 
     def test_speak_shout_success(self):
-        """シャウト（SHOUT）で PlayerSpokeEvent が発火すること"""
+        """SHOUTの本文・話者・場所・座標と宛先なしを1件の発話通知へ転記する。"""
         spot_id = SpotId(2)
         coord = Coordinate(1, 1, 0)
         aggregate = create_test_status_aggregate(
@@ -1128,6 +1165,10 @@ class TestPlayerStatusAggregate:
         assert isinstance(ev, PlayerSpokeEvent)
         assert ev.channel == SpeechChannel.SHOUT
         assert ev.content == "助けて！"
+        assert ev.aggregate_id == PlayerId(2)
+        assert ev.spot_id == spot_id
+        assert ev.speaker_coordinate == coord
+        assert ev.target_player_id is None
 
     def test_speak_whisper_success(self):
         """囁き（WHISPER）で宛先を指定して PlayerSpokeEvent が発火すること"""
@@ -1155,7 +1196,7 @@ class TestPlayerStatusAggregate:
         assert ev.content == "内緒だよ"
 
     def test_speak_whisper_without_target_raises(self):
-        """囁きで宛先未指定の場合は SpeechValidationException"""
+        """宛先なしの囁きはSpeechValidationExceptionで拒否し、未発行通知を作らない。"""
         spot_id = SpotId(1)
         coord = Coordinate(0, 0, 0)
         aggregate = create_test_status_aggregate(
@@ -1172,8 +1213,10 @@ class TestPlayerStatusAggregate:
                 target_player_id=None,
             )
 
+        assert aggregate.get_events() == []
+
     def test_speak_empty_content_raises(self):
-        """発言内容が空の場合は SpeechValidationException"""
+        """空文字と空白だけの発言はそれぞれSpeechValidationExceptionで拒否し、通知を作らない。"""
         spot_id = SpotId(1)
         coord = Coordinate(0, 0, 0)
         aggregate = create_test_status_aggregate(
@@ -1188,6 +1231,7 @@ class TestPlayerStatusAggregate:
                 spot_id=spot_id,
                 speaker_coordinate=coord,
             )
+        assert aggregate.get_events() == []
         with pytest.raises(SpeechValidationException, match="発言内容を空にできません"):
             aggregate.speak(
                 content="   ",
@@ -1195,9 +1239,10 @@ class TestPlayerStatusAggregate:
                 spot_id=spot_id,
                 speaker_coordinate=coord,
             )
+        assert aggregate.get_events() == []
 
     def test_speak_when_downed_raises(self):
-        """ダウン状態では発言できず PlayerDownedException"""
+        """ダウン中は有効な発言もPlayerDownedExceptionで拒否し、未発行通知を作らない。"""
         spot_id = SpotId(1)
         coord = Coordinate(0, 0, 0)
         aggregate = create_test_status_aggregate(
@@ -1213,6 +1258,8 @@ class TestPlayerStatusAggregate:
                 spot_id=spot_id,
                 speaker_coordinate=coord,
             )
+
+        assert aggregate.get_events() == []
 
     def test_speak_strips_content(self):
         """発言内容の前後空白はトリムされてイベントに含まれること"""
