@@ -97,7 +97,6 @@ class IActionResultStore(ABC):
         inner_thought: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
-        scene_boundary: bool = False,
         occurred_tick: int | None = None,
         execution_provenance: ExecutionProvenance | None = None,
     ) -> None:

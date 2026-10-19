@@ -240,7 +240,6 @@ class _ContractRuntime:
         tool_name: str,
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         inner_thought: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
@@ -272,7 +271,6 @@ class _ContractRuntime:
                 "tool_name": tool_name,
                 "success": success,
                 "error_code": error_code,
-                "scene_boundary": scene_boundary,
                 "inner_thought": inner_thought,
                 "intention": intention,
                 "emotion_hint": emotion_hint,
@@ -1804,7 +1802,7 @@ def test_direct_explore_records_natural_language_action_summary(
     assert not entry.action_summary.startswith(f"{TOOL_NAME_SPOT_GRAPH_EXPLORE}(")
 
 
-def test_direct_travel_start_records_scene_boundary_and_tick(
+def test_direct_travel_start_records_travel_result_and_tick(
     clean_runtime_env: None,
 ) -> None:
     runtime = _create_runtime()
@@ -1826,7 +1824,6 @@ def test_direct_travel_start_records_scene_boundary_and_tick(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
     assert entry.success is True
-    assert entry.scene_boundary is True
     assert entry.occurred_tick == tick_before
     assert (
         entry.action_summary

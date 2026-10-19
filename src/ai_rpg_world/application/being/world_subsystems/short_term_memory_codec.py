@@ -121,7 +121,6 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "inner_thought": entry.inner_thought,
         "intention": entry.intention,
         "emotion_hint": entry.emotion_hint,
-        "scene_boundary": bool(entry.scene_boundary),
         "occurred_tick": entry.occurred_tick,
         "execution_provenance": entry.execution_provenance.to_dict() if entry.execution_provenance else None,
     }
@@ -147,7 +146,6 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         inner_thought=data.get("inner_thought"),
         intention=data.get("intention"),
         emotion_hint=data.get("emotion_hint"),
-        scene_boundary=bool(data.get("scene_boundary", False)),
         occurred_tick=data.get("occurred_tick"),
         execution_provenance=(ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None),
     )
