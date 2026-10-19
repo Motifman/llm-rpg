@@ -25,7 +25,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _FIRST = PlayerId(1)
 _SECOND = PlayerId(2)
@@ -33,11 +33,11 @@ _SECOND = PlayerId(2)
 
 def _runtime_with_initial_state(tmp_path: Path, states: dict):
     """players[].initial_state を差し込んだシナリオで runtime を作る。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     for spawn in scenario["players"]:
         if spawn["id"] in states:
             spawn["initial_state"] = states[spawn["id"]]
-    path = tmp_path / "relay_with_state.json"
+    path = tmp_path / "library_with_state.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     return create_world_runtime(path)
 
@@ -100,7 +100,7 @@ class TestDeclaredStateIsUsableAsAPrecondition:
         self, tmp_path
     ) -> None:
         """PLAYER_STATE_IS が、宣言した役割で成立する。"""
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
         for spawn in scenario["players"]:
             spawn["initial_state"] = {"role": "hunter" if spawn["id"] == "player_a" else "crew"}
         scenario["player_interactions"] = [{
@@ -117,7 +117,7 @@ class TestDeclaredStateIsUsableAsAPrecondition:
                 "parameters": {"damage": 1},
             }],
         }]
-        path = tmp_path / "relay_role_gate.json"
+        path = tmp_path / "library_role_gate.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
         runtime = create_world_runtime(path)
 
