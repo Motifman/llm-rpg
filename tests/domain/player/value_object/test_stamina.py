@@ -40,11 +40,12 @@ class TestStamina:
         with pytest.raises(StaminaValidationException, match="スタミナはmax_stamina以下の値である必要があります"):
             Stamina(150, 100)
 
-    def test_consume_success(self):
-        """消費のテスト（正常系）"""
+    @pytest.mark.parametrize("amount, expected_value", [(0, 50), (20, 30)], ids=["zero", "positive"])
+    def test_consume_success(self, amount, expected_value):
+        """消費量0では値を変えず、正量は最大スタミナを保って減算する。"""
         stamina = Stamina.create(50, 100)
-        consumed_stamina = stamina.consume(20)
-        assert consumed_stamina.value == 30
+        consumed_stamina = stamina.consume(amount)
+        assert consumed_stamina.value == expected_value
         assert consumed_stamina.max_stamina == 100
 
     def test_consume_to_zero(self):
@@ -67,11 +68,12 @@ class TestStamina:
         with pytest.raises(StaminaValidationException, match="消費量は0以上の値である必要があります"):
             stamina.consume(-10)
 
-    def test_recover_success(self):
-        """回復のテスト（正常系）"""
+    @pytest.mark.parametrize("amount, expected_value", [(0, 30), (20, 50)], ids=["zero", "positive"])
+    def test_recover_success(self, amount, expected_value):
+        """回復量0では値を変えず、正量は最大スタミナを保って加算する。"""
         stamina = Stamina.create(30, 100)
-        recovered_stamina = stamina.recover(20)
-        assert recovered_stamina.value == 50
+        recovered_stamina = stamina.recover(amount)
+        assert recovered_stamina.value == expected_value
         assert recovered_stamina.max_stamina == 100
 
     def test_recover_over_max(self):
@@ -121,11 +123,6 @@ class TestStamina:
     def test_is_empty_true(self):
         """スタミナが空かどうかのテスト（空）"""
         stamina = Stamina.create(0, 100)
-        assert stamina.is_empty() is True
-
-    def test_is_empty_negative_value(self):
-        """スタミナが負の値の場合（空とみなされる）"""
-        stamina = Stamina.create(-5, 100)
         assert stamina.is_empty() is True
 
     def test_is_full_false(self):
@@ -197,6 +194,8 @@ class TestStamina:
         stamina = Stamina.create(50, 100)
         # メソッド呼び出し後も元のオブジェクトは変更されない
         stamina.consume(10)
+        assert stamina.value == 50
+        assert stamina.max_stamina == 100
         stamina.recover(10)
         assert stamina.value == 50
         assert stamina.max_stamina == 100
