@@ -122,9 +122,12 @@ class TestBehaviorService:
                 growth_context=growth,
                 current_tick=WorldTick(0),
             )
-            assert obs.visible_hostiles or obs.visible_threats or obs.selected_target is not None
+            assert obs.visible_hostiles == [player]
+            assert obs.visible_threats == []
+            assert obs.selected_target is player
             assert obs.growth_context is growth
             assert obs.current_tick is not None
+            assert obs.current_tick == WorldTick(0)
 
         def test_build_observation_non_autonomous_returns_empty_like_observation(self, behavior_service, map_aggregate):
             """自律でないアクターでは build_observation が空の観測を返すこと"""
