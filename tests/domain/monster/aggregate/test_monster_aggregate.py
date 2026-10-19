@@ -43,7 +43,6 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     SpotTargetParams,
     StateTransitionResult,
 )
-from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
@@ -869,8 +868,22 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
     class TestTickHunger:
         """tick_hunger のテスト"""
 
-        def test_tick_hunger_returns_false_when_disabled(self, monster: MonsterAggregate, spot_id: SpotId):
-            """飢餓無効（starvation_ticks=0）のとき False"""
+        @pytest.mark.parametrize(
+            ("starvation_ticks", "increase"),
+            [(None, None), (0, 0.5), (2, 0.0)],
+            ids=["defaults", "starvation_disabled", "increase_disabled"],
+        )
+        def test_tick_hunger_returns_false_when_disabled(
+            self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId, starvation_ticks: int | None, increase: float | None,
+        ):
+            """既定設定または片方だけ無効な飢餓設定では、飢餓値を増やさずFalseを返す。"""
+            template = monster_template if starvation_ticks is None else replace(
+                monster_template, starvation_ticks=starvation_ticks, hunger_increase_per_tick=increase,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+            )
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             result = monster.tick_hunger(WorldTick(1))
             assert result is False
@@ -906,9 +919,18 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.starve(WorldTick(3))
             assert monster.status == MonsterStatusEnum.DEAD
 
-        def test_tick_hunger_returns_false_when_not_spawned(self, monster: MonsterAggregate):
-            """未スポーンでは False"""
+        @pytest.mark.parametrize("hunger_enabled", [False, True], ids=["defaults", "enabled"])
+        def test_tick_hunger_returns_false_when_not_spawned(
+            self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate,
+            hunger_enabled: bool,
+        ):
+            """未出現では飢餓が有効でも無効でも、飢餓値を増やさずFalseを返す。"""
+            template = replace(monster_template, starvation_ticks=2, hunger_increase_per_tick=0.5) if hunger_enabled else monster_template
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
+            )
             assert monster.tick_hunger(WorldTick(1)) is False
+            assert monster.hunger == 0.0
 
     class TestRecordPreyKill:
         """record_prey_kill のテスト"""
@@ -979,47 +1001,25 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             monster.record_feed(0.3)
             assert monster.hunger == pytest.approx(0.5)
 
-        def test_record_feed_when_dead_raises(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
-            """死亡時は record_feed で MonsterAlreadyDeadException"""
-            template = MonsterTemplate(
-                template_id=monster_template.template_id,
-                name=monster_template.name,
-                base_stats=monster_template.base_stats,
-                reward_info=monster_template.reward_info,
-                respawn_info=respawn_info,
-                race=monster_template.race,
-                faction=monster_template.faction,
-                description=monster_template.description,
-                starvation_ticks=10,
-                hunger_decrease_on_feed=0.3,
+        @pytest.mark.parametrize("spawned_then_killed", [True, False], ids=["dead", "unspawned"])
+        def test_record_feed_when_dead_raises(
+            self, monster_template: MonsterTemplate, respawn_info: RespawnInfo,
+            skill_loadout: SkillLoadoutAggregate, spot_id: SpotId, spawned_then_killed: bool,
+        ):
+            """死亡済みと未出現の個体は、採食0.2をMonsterAlreadyDeadExceptionで拒否する。"""
+            template = replace(
+                monster_template, respawn_info=respawn_info,
+                starvation_ticks=10, hunger_decrease_on_feed=0.3,
             )
             monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout,
             )
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(999, WorldTick(10))
+            if spawned_then_killed:
+                monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+                monster.apply_damage(999, WorldTick(10))
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.record_feed(0.2)
 
-        def test_record_feed_when_not_spawned_raises(self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate):
-            """未スポーン（DEAD 状態）では record_feed で MonsterAlreadyDeadException"""
-            template = MonsterTemplate(
-                template_id=monster_template.template_id,
-                name=monster_template.name,
-                base_stats=monster_template.base_stats,
-                reward_info=monster_template.reward_info,
-                respawn_info=monster_template.respawn_info,
-                race=monster_template.race,
-                faction=monster_template.faction,
-                description=monster_template.description,
-                starvation_ticks=10,
-                hunger_decrease_on_feed=0.3,
-            )
-            monster = MonsterAggregate.create(
-                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
-            )
-            with pytest.raises(MonsterAlreadyDeadException):
-                monster.record_feed(0.2)
 
     class TestRememberFeed:
         """餌場記憶（remember_feed / behavior_last_known_feed）のテスト"""
@@ -1034,20 +1034,15 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert monster.behavior_last_known_feed[0].coordinate == Coordinate(1, 2, 0)
 
         def test_remember_feed_lru_evicts_oldest(self, monster: MonsterAggregate, spot_id: SpotId):
-            """MAX_FEED_MEMORIES を超えると古い記憶が追い出される"""
+            """異なる餌場を4件記憶すると最初の1件を外し、残り3件を古い順に公開する。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            for i in range(MAX_FEED_MEMORIES + 1):
-                monster.remember_feed(
-                    WorldObjectId.create(100 + i),
-                    Coordinate(i, i, 0),
-                )
-            assert len(monster.behavior_last_known_feed) == MAX_FEED_MEMORIES
-            # 最初の 1 件（object_id=100）が追い出され、100+1, 100+2, 100+3 が残る
-            ids = [e.object_id for e in monster.behavior_last_known_feed]
-            assert WorldObjectId.create(100) not in ids
-            assert WorldObjectId.create(101) in ids
-            assert WorldObjectId.create(102) in ids
-            assert WorldObjectId.create(103) in ids
+            for i in range(4):
+                monster.remember_feed(WorldObjectId.create(100 + i), Coordinate(i, i, 0))
+            assert monster.behavior_last_known_feed == [
+                FeedMemoryEntry(WorldObjectId.create(101), Coordinate(1, 1, 0)),
+                FeedMemoryEntry(WorldObjectId.create(102), Coordinate(2, 2, 0)),
+                FeedMemoryEntry(WorldObjectId.create(103), Coordinate(3, 3, 0)),
+            ]
 
         def test_remember_feed_same_object_id_moves_to_end(self, monster: MonsterAggregate, spot_id: SpotId):
             """同じ object_id で remember_feed すると末尾に移動（更新）"""
@@ -1060,12 +1055,24 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert monster.behavior_last_known_feed[1].object_id == WorldObjectId.create(100)
             assert monster.behavior_last_known_feed[1].coordinate == Coordinate(1, 1, 0)
 
-        def test_remember_feed_when_dead_does_nothing(self, monster: MonsterAggregate, spot_id: SpotId):
-            """死亡時は remember_feed で何も追加されない（例外なし）"""
+        @pytest.mark.parametrize("has_memory", [False, True], ids=["empty", "remembered"])
+        def test_remember_feed_when_dead_does_nothing(
+            self, monster: MonsterAggregate, spot_id: SpotId, has_memory: bool,
+        ):
+            """死亡個体への記憶要求は、空または既存の餌場記憶をそのまま保つ。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            if has_memory:
+                monster.remember_feed(WorldObjectId.create(99), Coordinate(4, 5, 0))
             monster.apply_damage(999, WorldTick(10))
+            before = monster.behavior_last_known_feed
+            if has_memory:
+                assert before == [FeedMemoryEntry(WorldObjectId.create(99), Coordinate(4, 5, 0))]
+            else:
+                assert before == []
+
             monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 0, 0))
-            assert monster.behavior_last_known_feed == []
+
+            assert monster.behavior_last_known_feed == before
 
         def test_behavior_last_known_feed_cleared_on_spawn(self, monster: MonsterAggregate, spot_id: SpotId, respawn_info: RespawnInfo):
             """spawn 時 _initialize_status で餌場記憶がクリアされる"""
@@ -1376,40 +1383,49 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert event.amount == 20
             assert event.current_mp == 30
 
-        def test_on_tick_regeneration(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
+        @pytest.mark.parametrize(
+            ("regen_max_hp", "regen_max_mp", "regen_rate", "spent_mp", "expected_hp", "expected_mp", "healed", "recovered"),
+            [
+                (100, 50, 0.01, 40, 51, 11, 1, 1),
+                (100, 50, 0.1, 0, 60, 50, 10, 0),
+                (300, 700, 0.01, 40, 53, 17, 3, 7),
+            ],
+            ids=["one_percent_minimum", "custom_rate_full_mp", "distinct_supplied_stats"],
+        )
+        def test_on_tick_regeneration(
+            self, monster: MonsterAggregate, spot_id: SpotId,
+            regen_max_hp: int, regen_max_mp: int, regen_rate: float, spent_mp: int,
+            expected_hp: int, expected_mp: int, healed: int, recovered: int,
+        ):
+            """値で渡した回復率と最大値に従いHP/MPを回復し、実増分だけの未配信通知を1件ずつ積む。"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             monster.apply_damage(50, WorldTick(10))
-            monster.use_mp(40)
+            if spent_mp:
+                monster.use_mp(spent_mp)
             monster.clear_events()
-
-            # When（実効ステータスはアプリ層で算出して渡す）
-            tick_11 = WorldTick(11)
-            regen_stats = compute_effective_stats(
-                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
+            regen_stats = replace(
+                monster.template.base_stats, max_hp=regen_max_hp, max_mp=regen_max_mp,
             )
-            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=0.01)
 
-            # Then（1% で回復。100 * 0.01 = 1）
-            assert monster.hp.value == 51
-            assert monster.mp.value == 11
+            monster.on_tick(WorldTick(11), regen_stats=regen_stats, regen_rate=regen_rate)
+
+            assert monster.hp.value == expected_hp
+            assert monster.mp.value == expected_mp
             events = monster.get_events()
-            assert any(isinstance(e, MonsterHealedEvent) for e in events)
-            assert any(isinstance(e, MonsterMpRecoveredEvent) for e in events)
+            assert len(events) == (2 if recovered else 1)
+            hp_events = [event for event in events if isinstance(event, MonsterHealedEvent)]
+            assert len(hp_events) == 1
+            assert hp_events[0].amount == healed
+            assert hp_events[0].current_hp == expected_hp
+            mp_events = [event for event in events if isinstance(event, MonsterMpRecoveredEvent)]
+            assert len(mp_events) == (1 if recovered else 0)
+            if recovered:
+                assert mp_events[0].amount == recovered
+                assert mp_events[0].current_mp == expected_mp
+            for event in events:
+                assert event.aggregate_id == monster.monster_id
+                assert event.aggregate_type == "MonsterAggregate"
 
-        def test_on_tick_custom_regen_rate(self, monster: MonsterAggregate, spot_id: SpotId):
-            """回復率を値で渡した場合にその率で回復すること"""
-            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            monster.apply_damage(50, WorldTick(10))
-            monster.clear_events()
-
-            tick_11 = WorldTick(11)
-            regen_stats = compute_effective_stats(
-                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
-            )
-            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=0.1)
-
-            assert monster.hp.value == 60  # 50 + 100 * 0.1
 
         def test_on_tick_no_regen_when_rate_none(self, monster: MonsterAggregate, spot_id: SpotId):
             """regen_rate を渡さない場合は回復しないこと"""
