@@ -1876,8 +1876,6 @@ class WorldRuntime:
         success: bool = True,
         error_code: str | None = None,
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> None:
         """action_result_store に 1 件積む。
 
@@ -1887,14 +1885,10 @@ class WorldRuntime:
         ``success`` / ``error_code`` も同様に「常に ``outcome:success`` が立つ」
         ノイズの原因なので、失敗を検知できる経路は明示的に渡す。
 
-        ``inner_thought`` / ``intention`` / ``emotion_hint``: LLM が行動前に
-        宣言した主観入力 (心の声 / 目的 / 感情)。予測誤差駆動の学習ループ
-        (#526) の入力。do_* 経由で raw args 由来の値が渡る (U2)。露出スキーマが
-        OFF の間は全 None なので記録挙動は不変。
+        ``inner_thought``: LLM が行動前に書いた独白。do_* 経由で raw args 由来の
+        値が渡る (U2)。
         """
         # U1 (#526 後続): store への append を共有 ActionResultRecorder に委譲する。
-        # subjective fields (intention 等) は U2 で do_* → ここ → recorder と配線した
-        # (露出 OFF の間は None)。
         # tz-aware UTC で統一 (詳細は _emit_observation_directly のコメント参照)。
         recorder = ActionResultRecorder(self._action_result_store)
         recorder.record(
@@ -1908,8 +1902,6 @@ class WorldRuntime:
             success=success,
             error_code=error_code,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
@@ -2408,8 +2400,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
         obj_int = self.id_mapper.get_int("object", object_str_id)
         obj_id = SpotObjectId.create(obj_int)
@@ -2476,8 +2466,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -2491,8 +2479,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotInteractionResultDto:
         """手元の道具に宣言された操作を実行し、通常の interact として記録する。"""
         from ai_rpg_world.domain.common.value_object import WorldTick
@@ -2536,8 +2522,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -2867,8 +2851,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> Any:
         """同じ場所にいるプレイヤーを対象にした interaction を実行する。
 
@@ -2923,8 +2905,6 @@ class WorldRuntime:
                 else fallback_free_text_names
             ),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3009,8 +2989,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> SpotExplorationResultDto:
         spot_name = self.get_player_spot_name(player_id)
         result = self._exploration_service.explore_once(player_id)
@@ -3026,8 +3004,6 @@ class WorldRuntime:
             identifier_arguments=identifier_arguments,
             free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
         return result
 
@@ -3039,8 +3015,6 @@ class WorldRuntime:
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
     ) -> None:
         """目的地へ向けて移動を開始する (#404 fix: ネスト advance_tick を排除)。
 
@@ -3106,8 +3080,6 @@ class WorldRuntime:
                 ),
                 free_text_argument_names=free_text_argument_names,
                 inner_thought=inner_thought,
-                intention=intention,
-                emotion_hint=emotion_hint,
             )
             return
 
@@ -3128,8 +3100,6 @@ class WorldRuntime:
             ),
             free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
         )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:

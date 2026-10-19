@@ -33,7 +33,7 @@ class TestActionResultRecorder:
         assert events == ["append"]
 
     def test_subjective_fields_passed_through_store(self) -> None:
-        """intention/emotion_hint を store.append に通す口がある (U2 配線用)。"""
+        """独白 inner_thought を store.append に通す口がある (U2 配線用)。"""
         store = _StoreSpy([])
         ActionResultRecorder(store).record(
             PlayerId(1),
@@ -41,11 +41,9 @@ class TestActionResultRecorder:
             result_summary="r", game_time_label=None,
             occurred_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
             tool_name="t",
-            intention="目的Y",
-            emotion_hint="curiosity",
+            inner_thought="独白Y",
         )
-        assert store.last_kwargs["intention"] == "目的Y"
-        assert store.last_kwargs["emotion_hint"] == "curiosity"
+        assert store.last_kwargs["inner_thought"] == "独白Y"
 
     def test_game_time_label_is_required_and_passed_through(self) -> None:
         """記録境界は世界時刻の明示を必須とし、行動結果へそのまま焼き込む。"""

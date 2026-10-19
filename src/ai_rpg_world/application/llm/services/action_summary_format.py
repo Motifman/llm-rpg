@@ -63,16 +63,14 @@ from ai_rpg_world.application.llm.tool_constants import (
 # action_summary の JSON fallback から落とす主観入力・冗長入力フィールド。
 # - inner_thought: ActionResultEntry.inner_thought から「心の声: ...」として出す
 # - content: speak では自然文で出るため JSON から落とす
-# - reason / intention / emotion_hint: recent-events の生 JSON には不要
+# - reason: recent-events の生 JSON には不要
 # - memo: メモは【メモ】に出るもので、行動の要約ではない
 ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
     {
         "content",
         "reason",
         "inner_thought",
-        "intention",
         "memo",
-        "emotion_hint",
     }
 )
 

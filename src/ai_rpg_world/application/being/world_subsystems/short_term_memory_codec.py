@@ -119,8 +119,6 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "game_time_label": entry.game_time_label,
         "omit_result_in_prompt": bool(entry.omit_result_in_prompt),
         "inner_thought": entry.inner_thought,
-        "intention": entry.intention,
-        "emotion_hint": entry.emotion_hint,
         "occurred_tick": entry.occurred_tick,
         "execution_provenance": entry.execution_provenance.to_dict() if entry.execution_provenance else None,
     }
@@ -144,8 +142,6 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         game_time_label=data.get("game_time_label"),
         omit_result_in_prompt=bool(data.get("omit_result_in_prompt", False)),
         inner_thought=data.get("inner_thought"),
-        intention=data.get("intention"),
-        emotion_hint=data.get("emotion_hint"),
         occurred_tick=data.get("occurred_tick"),
         execution_provenance=(ExecutionProvenance.from_dict(data["execution_provenance"]) if data.get("execution_provenance") else None),
     )
@@ -744,8 +740,8 @@ _AR_SUBSYSTEM_KEY = "action_result_store"
 # v4: prediction_context_id 追加 (U1)。v5: in_context_belief_ids 追加 (U4)。
 # v2〜v5 は、欠けたキーを data.get で None/() に倒せるので実害は無かったが、
 # 意味の変更を示すため版を上げた。
-# expected_result / prediction_context_id / in_context_belief_ids は #1631 で書くのを
-# やめたが、版は 5 のまま据え置いた。版は完全一致で照合するので、上げるといまある
+# expected_result / prediction_context_id / in_context_belief_ids / scene_boundary /
+# intention / emotion_hint は #1631 で書くのをやめたが、版は 5 のまま据え置いた。版は完全一致で照合するので、上げるといまある
 # snapshot が読めなくなる。キーのある古い snapshot は restore が読み飛ばす。
 _AR_SCHEMA_VERSION = 5
 

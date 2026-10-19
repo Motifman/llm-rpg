@@ -27,8 +27,6 @@ _FULL_ARGS = {
     "target_label": "OBJ1",
     "action_name": "inspect",
     "inner_thought": "何か手がかりがあるはずだ",
-    "intention": "祭壇の封印の手がかりを探す",
-    "emotion_hint": "curiosity",
 }
 
 
@@ -104,9 +102,7 @@ class TestFormatActionSummaryForDisplay:
                 "content",
                 "reason",
                 "inner_thought",
-                "intention",
                 "memo",
-                "emotion_hint",
             }
         )
 

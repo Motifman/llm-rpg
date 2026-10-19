@@ -95,8 +95,6 @@ class IActionResultStore(ABC):
         game_time_label: str | None = None,
         omit_result_in_prompt: bool = False,
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
         occurred_tick: int | None = None,
         execution_provenance: ExecutionProvenance | None = None,
     ) -> None:

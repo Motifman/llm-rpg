@@ -241,8 +241,6 @@ class _ContractRuntime:
         success: bool = True,
         error_code: str | None = None,
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
         argument_fingerprint: str | None = None,
         identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
@@ -258,8 +256,6 @@ class _ContractRuntime:
             tool_name=tool_name,
             argument_fingerprint=argument_fingerprint,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
             identifier_arguments=identifier_arguments,
             free_text_argument_names=free_text_argument_names,
         )
@@ -272,8 +268,6 @@ class _ContractRuntime:
                 "success": success,
                 "error_code": error_code,
                 "inner_thought": inner_thought,
-                "intention": intention,
-                "emotion_hint": emotion_hint,
                 "identifier_arguments": dict(identifier_arguments or {}),
                 "free_text_argument_names": free_text_argument_names,
             }
@@ -1754,7 +1748,7 @@ def test_phase_b_generic_failure_passes_subjective_fields_to_the_record(
     clean_runtime_env: None,
 ) -> None:
     """sanitizer が JSON から主観入力を落とすので、失敗 (unsupported) 経路でも
-    intention / emotion_hint を構造化フィールドとして _record_action_result に渡す。"""
+    inner_thought を構造化フィールドとして _record_action_result に渡す。"""
     player_id = PlayerId(1)
     runtime = _ContractRuntime()
     wiring = _wiring_for_contract_runtime(runtime)
@@ -1766,8 +1760,7 @@ def test_phase_b_generic_failure_passes_subjective_fields_to_the_record(
                 "name": "contract_unknown_tool",
                 "arguments": {
                     "probe": "x",
-                    "intention": "試しに呼ぶ",
-                    "emotion_hint": "curiosity",
+                    "inner_thought": "試しに呼ぶ",
                 },
             },
         )
@@ -1775,9 +1768,8 @@ def test_phase_b_generic_failure_passes_subjective_fields_to_the_record(
 
     entry = runtime.action_results[0]
     # JSON からは落ちるが構造化フィールドには残る
-    assert "intention" not in entry["action_summary"]
-    assert entry["intention"] == "試しに呼ぶ"
-    assert entry["emotion_hint"] == "curiosity"
+    assert "inner_thought" not in entry["action_summary"]
+    assert entry["inner_thought"] == "試しに呼ぶ"
 
 
 def test_direct_explore_records_natural_language_action_summary(
@@ -1793,8 +1785,7 @@ def test_direct_explore_records_natural_language_action_summary(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE
     assert entry.success is True
-    assert entry.intention is None
-    assert entry.emotion_hint is None
+    assert entry.inner_thought is None
     assert entry.argument_fingerprint is None
     assert entry.should_reschedule is False
     assert entry.omit_result_in_prompt is False
@@ -1839,15 +1830,10 @@ def test_direct_explore_carries_subjective_fields_when_passed(
     runtime = _create_runtime()
     player_id = runtime.get_player_ids()[0]
 
-    runtime.do_explore(
-        player_id,
-        intention="出口を探す",
-        emotion_hint="curiosity",
-    )
+    runtime.do_explore(player_id, inner_thought="出口を探そう")
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.intention == "出口を探す"
-    assert entry.emotion_hint == "curiosity"
+    assert entry.inner_thought == "出口を探そう"
 
 
 def test_direct_travel_carries_subjective_fields_when_passed(
@@ -1866,14 +1852,12 @@ def test_direct_travel_carries_subjective_fields_when_passed(
     runtime.do_move(
         player_id,
         destination_key,
-        intention="次の部屋へ進む",
-        emotion_hint="determination",
+        inner_thought="次の部屋へ進もう",
     )
 
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
-    assert entry.intention == "次の部屋へ進む"
-    assert entry.emotion_hint == "determination"
+    assert entry.inner_thought == "次の部屋へ進もう"
 
 
 def test_explore_handler_threads_subjective_args_into_record(
@@ -1886,9 +1870,6 @@ def test_explore_handler_threads_subjective_args_into_record(
     SpotGraphToolExecutor._explore を wire adapter でラップしたもの) 経由。
     subjective 記録経路は同じ ``runtime.do_explore`` に委譲するので、record 内容
     のアサーションは変わらない。
-
-    露出スキーマが OFF でも、handler は arguments dict から直接読むため、
-    arguments に値が入れば記録に届く (= スキーマ露出 PR が入った瞬間に流れる配線)。
     """
     from ai_rpg_world.application.llm.tool_constants import (
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -1907,8 +1888,6 @@ def test_explore_handler_threads_subjective_args_into_record(
         player_id,
         {
             "inner_thought": "周囲を見る",
-            "intention": "出口を探す",
-            "emotion_hint": "curiosity",
             "say_inline": "何かないか見てみよう",
         },
         ToolRuntimeContextDto.empty(),
@@ -1916,40 +1895,8 @@ def test_explore_handler_threads_subjective_args_into_record(
 
     assert result.success is True
     entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.intention == "出口を探す"
-    assert entry.emotion_hint == "curiosity"
+    assert entry.inner_thought == "周囲を見る"
     assert entry.free_text_argument_names == ("say_inline",)
-
-
-def test_explore_handler_records_none_subjective_when_args_absent(
-    clean_runtime_env: None,
-) -> None:
-    """U2: 露出 OFF の現状 (arguments に subjective キー無し) では全 None で記録され挙動不変。
-
-    PR-θ2 (経路統合) 後: handler は ``_tool_handlers`` から取得する。
-    """
-    from ai_rpg_world.application.llm.tool_constants import (
-        TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    )
-    runtime = _create_runtime()
-    player_id = runtime.get_player_ids()[0]
-    wiring = _WorldLlmWiring(
-        runtime=runtime,
-        observation_buffer=runtime._obs_buffer,
-        short_term_memory=runtime._short_term_memory,
-        llm_client=StubLlmClient(None),
-    )
-
-    handler = wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE]
-    handler(
-        player_id,
-        {"inner_thought": "周囲を見る"},
-        ToolRuntimeContextDto.empty(),
-    )
-
-    entry = runtime._action_result_store.get_recent(player_id, 1)[0]
-    assert entry.intention is None
-    assert entry.emotion_hint is None
 
 
 def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
