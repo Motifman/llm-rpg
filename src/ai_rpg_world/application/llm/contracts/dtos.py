@@ -673,11 +673,3 @@ class LlmUiContextDto:
 
 # ToolAvailabilityContext は PlayerCurrentStateDto をそのまま利用する。
 # ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
-
-
-# NOTE (Issue #470 Phase 1 PR3):
-# MemoEntry / MemoFulfillmentContext / TodoEntry (旧名 alias) は
-# ``domain/memory/memo/value_object/`` に昇格しました。
-# 新規コードは:
-#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-# から import してください。

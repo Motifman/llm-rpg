@@ -4,6 +4,8 @@ prefix cache の工夫 (section reorder + rolling summary) が実 LLM 経由で
 **provider 側 prefix cache hit rate** / **cost** / **latency** にどう効くかを
 最小限の A/B で確認した記録。
 
+> 比べた `PROMPT_SECTION_ORDER=legacy` は、記憶ではない設定の片付け (#1631) の #1754 で消した。本書は実験の記録として残す。
+
 ## 設定
 
 - model: `google/gemma-4-31b-it` (OpenRouter 経由)
@@ -122,7 +124,7 @@ Run B の mean latency が上がった原因は **player_2 で 19.4s の外れ�
 - [ ] 30 tick × A/B を再実行して latency 分布の安定性を見る (cost ~$0.10)
 - [ ] semantic 系 (gist / passive recall) ON-OFF の A/B (記憶機能の cost 影響を切り分け)
 - [ ] DeepInfra fp8 と Parasail fp8 で同条件 run → latency / cost / 応答品質の trade-off を可視化
-- [ ] survival_island_v2 以外のシナリオ (relay_puzzle_demo 等) で再現性確認
+- [ ] survival_island_v2 以外のシナリオ (relay_puzzle_demo 等) で再現性確認 (relay_puzzle_demo は #1631 で退役させたので、確かめるなら別のシナリオで)
 
 ## 副次的な発見: silent fallback の落とし穴
 
