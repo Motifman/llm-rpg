@@ -155,11 +155,8 @@ class ActionResultEntry:
     # 自由文の値は履歴を肥大化させず、呼び出し形を示すため名前だけを残す。
     identifier_arguments: Mapping[str, str] = field(default_factory=dict)
     free_text_argument_names: tuple[str, ...] = ()
-    # 主観入力。episodic 永続化で intention→episode.why / emotion_hint→episode.felt
-    # に配線する。どれも既定 None で後方互換 (= world-action 以外の tool / 旧 snapshot)。
+    # 行動を選ぶ直前の独白。履歴に「心の声」として出す。
     inner_thought: str | None = None
-    intention: str | None = None
-    emotion_hint: str | None = None
     # action が起きた時点のゲーム内 tick (記録時点で取れない caller は None)。
     occurred_tick: int | None = None
     # 実行境界で確定した要求と当人の手番。dataset IDの代わりを捏造しない。
@@ -206,10 +203,6 @@ class ActionResultEntry:
             raise TypeError("omit_result_in_prompt must be bool")
         if self.inner_thought is not None and not isinstance(self.inner_thought, str):
             raise TypeError("inner_thought must be str or None")
-        if self.intention is not None and not isinstance(self.intention, str):
-            raise TypeError("intention must be str or None")
-        if self.emotion_hint is not None and not isinstance(self.emotion_hint, str):
-            raise TypeError("emotion_hint must be str or None")
         if self.occurred_tick is not None and not isinstance(self.occurred_tick, int):
             raise TypeError("occurred_tick must be int or None")
         if isinstance(self.occurred_tick, bool):
@@ -217,25 +210,6 @@ class ActionResultEntry:
             raise TypeError("occurred_tick must not be bool")
         if self.execution_provenance is not None and not isinstance(self.execution_provenance, ExecutionProvenance):
             raise TypeError("execution_provenance must be ExecutionProvenance or None")
-
-
-EMOTION_HINT_VALUES: tuple[str, ...] = (
-    "curiosity",
-    "caution",
-    "fear",
-    "anxiety",
-    "urgency",
-    "relief",
-    "hope",
-    "frustration",
-    "confusion",
-    "trust",
-    "distrust",
-    "determination",
-    "regret",
-    "surprise",
-    "neutral",
-)
 
 
 

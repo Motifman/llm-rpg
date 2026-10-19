@@ -46,8 +46,6 @@ class DefaultActionResultStore(IActionResultStore):
         game_time_label: str | None = None,
         omit_result_in_prompt: bool = False,
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
         occurred_tick: int | None = None,
         execution_provenance: ExecutionProvenance | None = None,
     ) -> None:
@@ -83,10 +81,6 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("omit_result_in_prompt must be bool")
         if inner_thought is not None and not isinstance(inner_thought, str):
             raise TypeError("inner_thought must be str or None")
-        if intention is not None and not isinstance(intention, str):
-            raise TypeError("intention must be str or None")
-        if emotion_hint is not None and not isinstance(emotion_hint, str):
-            raise TypeError("emotion_hint must be str or None")
         if occurred_tick is not None and (
             not isinstance(occurred_tick, int) or isinstance(occurred_tick, bool)
         ):
@@ -108,8 +102,6 @@ class DefaultActionResultStore(IActionResultStore):
             game_time_label=game_time_label,
             omit_result_in_prompt=omit_result_in_prompt,
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
             occurred_tick=occurred_tick,
             execution_provenance=execution_provenance,
         )

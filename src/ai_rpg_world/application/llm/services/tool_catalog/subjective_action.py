@@ -5,26 +5,16 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from ai_rpg_world.application.llm.contracts.dtos import (
-    EMOTION_HINT_VALUES,
-    ToolDefinitionDto,
-)
+from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_NO_OP,
 )
 
-SUBJECTIVE_ACTION_FIELDS = (
-    "inner_thought",
-    "intention",
-    "emotion_hint",
-)
+SUBJECTIVE_ACTION_FIELDS = ("inner_thought",)
 
-SUBJECTIVE_ACTION_TEXT_FIELDS = (
-    "inner_thought",
-    "intention",
-)
+SUBJECTIVE_ACTION_TEXT_FIELDS = ("inner_thought",)
 
 REASON_FIRST_ACTION_OWNED_FIELDS = ("inner_thought",)
 
@@ -39,17 +29,6 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: dict[str, dict[str, Any]] = {
         ),
         "minLength": 1,
         "maxLength": 500,
-    },
-    "intention": {
-        "type": "string",
-        "description": "この行動で何を達成したいか。予測結果や感情ではなく、行動目的を書く。",
-        "minLength": 1,
-        "maxLength": 500,
-    },
-    "emotion_hint": {
-        "type": "string",
-        "description": "行動直前の主要感情。検索・集計しやすい単一ラベルで選ぶ。",
-        "enum": list(EMOTION_HINT_VALUES),
     },
 }
 

@@ -52,8 +52,6 @@ def _action_entry(action: str = "walk") -> ActionResultEntry:
         tool_name=action,
         game_time_label="Day 1",
         inner_thought=f"{action} の前に状況を整理する",
-        intention=f"{action} で先へ進む",
-        emotion_hint="determination",
         occurred_tick=42,
     )
 
@@ -101,8 +99,8 @@ class TestActionResultStoreCodec:
         first_captured = captured["entries"][0]["entries"][0]
         assert first_captured["inner_thought"] == "walk の前に状況を整理する"
         assert "expected_result" not in first_captured
-        assert first_captured["intention"] == "walk で先へ進む"
-        assert first_captured["emotion_hint"] == "determination"
+        assert "intention" not in first_captured
+        assert "emotion_hint" not in first_captured
         assert "prediction_context_id" not in first_captured
         assert "in_context_belief_ids" not in first_captured
         assert "scene_boundary" not in first_captured
@@ -116,12 +114,10 @@ class TestActionResultStoreCodec:
             "attack_summary",
         ]
         assert results[0].inner_thought == "walk の前に状況を整理する"
-        assert results[0].intention == "walk で先へ進む"
-        assert results[0].emotion_hint == "determination"
         assert results[0].occurred_tick == 42
 
     def test_restore_ignores_keys_of_snapshots_saved_before_removal(self) -> None:
-        """expected_result / prediction_context_id / in_context_belief_ids / scene_boundary を書いていたころの v5 の snapshot も読め、ほかの欄はそのまま戻る (#1631)。"""
+        """expected_result / prediction_context_id / in_context_belief_ids / scene_boundary / intention / emotion_hint を書いていたころの v5 の snapshot も読め、ほかの欄はそのまま戻る (#1631)。"""
         src = DefaultActionResultStore()
         src._event_store.replace_action_results(PlayerId(1), [_action_entry("walk")])
         captured = ActionResultStoreSubsystemCodec().capture(SimpleNamespace(_action_result_store=src))
@@ -130,6 +126,8 @@ class TestActionResultStoreCodec:
         old_entry["prediction_context_id"] = "predctx-abc123"
         old_entry["in_context_belief_ids"] = ["sem-belief-1"]
         old_entry["scene_boundary"] = True
+        old_entry["intention"] = "walk で先へ進む"
+        old_entry["emotion_hint"] = "determination"
         dst = DefaultActionResultStore()
 
         ActionResultStoreSubsystemCodec().restore(SimpleNamespace(_action_result_store=dst), captured)
@@ -139,8 +137,9 @@ class TestActionResultStoreCodec:
         assert not hasattr(restored, "prediction_context_id")
         assert not hasattr(restored, "in_context_belief_ids")
         assert not hasattr(restored, "scene_boundary")
+        assert not hasattr(restored, "intention")
+        assert not hasattr(restored, "emotion_hint")
         assert restored.inner_thought == "walk の前に状況を整理する"
-        assert restored.intention == "walk で先へ進む"
 
     def test_action_result_store_none_op(self) -> None:
         """action result store が None でも no op。"""

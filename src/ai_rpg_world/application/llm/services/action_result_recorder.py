@@ -2,8 +2,8 @@
 
 従来 world_runtime._record_action_result が inline で持っていた store への append を
 共有コアに抽出した。直後に回していた古いエピソードの区切りの書き込みと
-クラスタ昇格は #1631 で消した。subjective fields (inner_thought / intention /
-emotion_hint) や fingerprint 等は optional 引数として通す。
+クラスタ昇格は #1631 で消した。独白 (inner_thought) や fingerprint 等は optional
+引数として通す。
 """
 
 from __future__ import annotations
@@ -39,8 +39,6 @@ class ActionResultRecorder:
         occurred_tick: int | None = None,
         game_time_label: str | None,
         inner_thought: str | None = None,
-        intention: str | None = None,
-        emotion_hint: str | None = None,
         argument_fingerprint: str | None = None,
         should_reschedule: bool = False,
         omit_result_in_prompt: bool = False,
@@ -62,8 +60,6 @@ class ActionResultRecorder:
             omit_result_in_prompt=omit_result_in_prompt,
             execution_provenance=current_execution_provenance(),
             inner_thought=inner_thought,
-            intention=intention,
-            emotion_hint=emotion_hint,
             occurred_tick=occurred_tick,
         )
 

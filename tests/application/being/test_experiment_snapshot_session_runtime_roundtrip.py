@@ -158,8 +158,7 @@ def _populate_runtime_state(runtime: Any) -> None:
         success=False,
         error_code="INVALID_TARGET_LABEL",
         tool_name="spot_graph_interact",
-        intention="鍵を探す",
-        emotion_hint="焦り",
+        inner_thought="鍵を探そう",
         occurred_tick=37,
     )
     runtime._encounter_memory.observe(
