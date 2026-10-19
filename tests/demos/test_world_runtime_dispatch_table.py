@@ -20,6 +20,8 @@ from tests.demos._world_runtime_helpers import (
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -32,9 +34,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 
 
@@ -92,9 +91,8 @@ class TestWorldRuntimeDispatchTable:
             TOOL_NAME_SPOT_GRAPH_LISTEN,
             TOOL_NAME_SPOT_GRAPH_WAIT,
             TOOL_NAME_SPEECH,
-            TOOL_NAME_TODO_ADD,
-            TOOL_NAME_TODO_LIST,
-            TOOL_NAME_TODO_COMPLETE,
+            TOOL_NAME_EPISODE_RECALL,
+            TOOL_NAME_EPISODE_REVISE_INDEX,
         }
         missing = required - set(handlers.keys())
         assert not missing, (
@@ -232,87 +230,3 @@ class TestWorldRuntimeScheduleTurnDoesNotTouchSelfRescheduleStreak:
         assert pid.value not in trigger._self_reschedule_streak
         assert pid.value in trigger.pending_player_ids
 
-
-class TestReinterpretationAfterTurnTrigger:
-    """U3: ターン完了で reinterpretation coordinator.after_turn_completed を呼ぶ。"""
-
-    def test_calls_coordinator_after_turn_completed(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """_episodic_stack.reinterpretation_coordinator があれば player_id / being_id 付きで通知する。"""
-        from ai_rpg_world.application.being.acting_being import ActingBeing
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-        state = _create_session(monkeypatch, tmp_path)
-        trigger = state.llm_wiring.llm_turn_trigger
-        expected_being_id = BeingId("being_w1_p1")
-
-        class _CoordSpy:
-            def __init__(self):
-                self.calls: list[tuple[PlayerId, object]] = []
-
-            def after_turn_completed(self, player_id, being_id):
-                self.calls.append((player_id, being_id))
-
-        spy = _CoordSpy()
-        from types import SimpleNamespace
-
-        stack = getattr(trigger.wiring.runtime, "_episodic_stack", None)
-        if stack is None:
-            stack = SimpleNamespace()
-            trigger.wiring.runtime._episodic_stack = stack
-        stack.reinterpretation_coordinator = spy
-        trigger.wiring.runtime._acting_being_for = lambda player_id: ActingBeing(
-            player_id=player_id,
-            being_id=expected_being_id,
-        )
-
-        trigger._note_turn_for_reinterpretation(1)
-        assert len(spy.calls) == 1
-        called_player_id, called_being_id = spy.calls[0]
-        assert called_player_id == PlayerId(1)
-        assert called_being_id == expected_being_id
-
-    def test_skips_when_acting_being_unresolved(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """_acting_being_for が None なら coordinator を呼ばない。"""
-        state = _create_session(monkeypatch, tmp_path)
-        trigger = state.llm_wiring.llm_turn_trigger
-
-        class _CoordSpy:
-            def __init__(self):
-                self.calls = []
-
-            def after_turn_completed(self, player_id, being_id):
-                self.calls.append((player_id, being_id))
-
-        spy = _CoordSpy()
-        from types import SimpleNamespace
-
-        stack = getattr(trigger.wiring.runtime, "_episodic_stack", None)
-        if stack is None:
-            stack = SimpleNamespace()
-            trigger.wiring.runtime._episodic_stack = stack
-        stack.reinterpretation_coordinator = spy
-        trigger.wiring.runtime._acting_being_for = lambda player_id: None
-
-        trigger._note_turn_for_reinterpretation(1)
-        assert spy.calls == []
-
-    def test_coordinator_unwired_op(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """reinterpretation OFF (stack=None / coordinator=None) では何もしない・例外も出さない。"""
-        state = _create_session(monkeypatch, tmp_path)
-        trigger = state.llm_wiring.llm_turn_trigger
-        from types import SimpleNamespace
-
-        trigger.wiring.runtime._episodic_stack = None
-        trigger._note_turn_for_reinterpretation(1)  # 例外なく no-op
-
-        trigger.wiring.runtime._episodic_stack = SimpleNamespace(
-            reinterpretation_coordinator=None
-        )
-        trigger._note_turn_for_reinterpretation(1)  # 例外なく no-op
