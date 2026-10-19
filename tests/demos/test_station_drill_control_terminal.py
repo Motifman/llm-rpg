@@ -122,6 +122,8 @@ def test_both_keepers_see_and_can_use_the_control_terminal(runtime) -> None:
     for other in (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI):
         prompt = runtime.build_full_prompt(other)["messages"][1]["content"]
         assert "制御端末" not in prompt
+        assert "freeze_fuel" not in prompt
+        assert "燃料を凍結させる" not in prompt
         with pytest.raises(InteractionNotAllowedException, match="持っていない"):
             runtime.do_interact_with_item(
                 other, _terminal_spec(runtime), "cut_power"

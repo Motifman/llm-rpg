@@ -181,6 +181,8 @@ scratchpad probe で確認済み (3/3 assess_situation。`"required"` だと自�
 する flag ではない。flag が OFF なら既存 1 段階経路だけを使う。flag が ON の場合も Phase A
 入口で上記 shared state を読んだときだけ 2 段階へ入る。
 
+**その後**: `REASON_FIRST_TWO_STEP_ENABLED` のキーは、記憶ではない設定の片付け (#1631) の #1797 で消した。今は `LLM_TOOL_CHOICE=auto` のときだけ OFF で、それ以外はいつも ON になる。ON のときに Phase A 入口の shared state を読んで 2 段階へ入る条件は変えていない。
+
 停滞 band strong は既存の band-gated reasoning と同じ入力を使うが、両方を同時には焚かない。
 reason-first 側も band だけでは発火させず、既存の `_stagnation_reasoning_latch` が armed の
 ときだけ発火する。つまり「停滞 reflect 注入直後の 1 行動だけ」という band-gated reasoning の

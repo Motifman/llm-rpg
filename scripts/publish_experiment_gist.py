@@ -216,24 +216,8 @@ def _maybe_build_viewer(run_dir: Path) -> Path | None:
         logger.warning("failed to build viewer.html: %s", e)
         return None
 
-    # Phase 3 (実験 #26 user feedback): 追加 viewer 2 種を併せて生成する。
+    # Phase 3 (実験 #26 user feedback): 追加 viewer を併せて生成する。
     # 失敗しても publish は続行 (main viewer はある)。
-    try:
-        from scripts.build_episodic_viewer import (
-            aggregate_episodes,
-        )
-        from scripts.build_episodic_viewer import (
-            load_events as _load_episodic_events,
-        )
-        from scripts.build_episodic_viewer import render_html as _render_episodic
-        episodic_events = _load_episodic_events(trace_path)
-        episodes = aggregate_episodes(episodic_events)
-        if episodes:
-            (run_dir / "episodic.html").write_text(
-                _render_episodic(episodes, run_dir.name), encoding="utf-8",
-            )
-    except Exception as e:
-        logger.warning("failed to build episodic.html: %s", e)
     try:
         from scripts.build_timeline_viewer import (
             load_events as _load_timeline_events,

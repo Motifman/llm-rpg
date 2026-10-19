@@ -76,15 +76,15 @@ def test_counts_unknown_fields_per_route_and_pairs_action_results(
 def test_not_representable_observations_are_counted_by_reason(
     report: ModuleType, tmp_path: Path
 ) -> None:
-    """目的の振り返りは変換されず、理由と種類つきで写せなかった観測に数えられる。"""
+    """ループ警告は変換されず、理由と種類つきで写せなかった観測に数えられる。"""
     trace = _write_trace(
         tmp_path,
         [
             _spawn(1, 2, "ノア", "浜辺"),
             _observation(
                 2, 1, 2, "深夜 0:05",
-                prose="狼煙の準備が進んでいない。",
-                structured={"type": "goal_reflect", "verdict": "stalled"},
+                prose="同じ行動を繰り返している。",
+                structured={"loop_guard": True, "tool_name": "wait"},
                 observation_category="self_only",
             ),
         ],
@@ -94,7 +94,7 @@ def test_not_representable_observations_are_counted_by_reason(
     report.tally_trace(trace, tally)
 
     assert sum(tally.converted.values()) == 0
-    assert dict(tally.not_representable) == {"being_inner_record: goal_reflect": 1}
+    assert dict(tally.not_representable) == {"being_inner_record: loop_guard": 1}
 
 
 def test_memo_tool_result_is_counted_as_not_representable(

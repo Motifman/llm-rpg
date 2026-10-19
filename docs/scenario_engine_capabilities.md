@@ -60,7 +60,7 @@
 | 10 | 話す手段 | **できる** | `speak` の `whisper` (同じ場所の 1 人)、`say` (隣接まで)、`shout` (2 つ先まで)、`say_inline`、SNS、市場の掲示板、場所の掲示 | `tool_catalog/spot_graph.py:213-253` | 届く範囲は engine 固定 (通路の `sound_permeability` だけ書ける)。**チームだけの連絡手段が無い** |
 | 11 | 取引・譲渡・約束 | **部分的** | `give_item`、条件つきの交換 `player_trade` (`offer_expires_in_ticks`)、商人、市場 | `L/parse_world.py:333-369` | **約束 (後払いなど) を記録し、守ったか判定する仕組みは無い** |
 | 12 | 複数人でしかできない行動 | **できる** | `synchronized_action_groups[]`、人数の前提条件 `PLAYERS_AT_SPOT` | `L/parse_sync_groups.py`。使用例: station_drill `restore_frozen_fuel` | 完了時の効果に行為者が居ない。協力した本人たちに品物を渡せない (推測: 全員に配られる) |
-| 13 | 本人だけの情報・目的 | **できる** | `players[]` の `persona_prompt`、`objective`、`goal_locked`、`initial_items`、`initial_state`、`knows_at_start` (入るときに紹介する相手。書かなければ全員)。`role_personas`。属性の `visibility` は `public` / `secret` | `L/parse_actors.py:78-111, 383-536` | 公開範囲は 2 択で、**チーム内だけに公開する属性**は書けない |
+| 13 | 本人だけの情報・目的 | **できる** | `players[]` の `persona_prompt`、`objective`、`initial_items`、`initial_state`、`knows_at_start` (入るときに紹介する相手。書かなければ全員)。`role_personas`。属性の `visibility` は `public` / `secret` | `L/parse_actors.py:78-111, 383-536` | 公開範囲は 2 択で、**チーム内だけに公開する属性**は書けない |
 
 ## C. チームと敵対
 
@@ -76,7 +76,7 @@
 
 | # | 項目 | 判定 | 書き方の要点 | 根拠 | 制限 |
 |---|---|---|---|---|---|
-| 19 | 記憶を持ち越して何回も遊ぶ | **できる** (#1526 で追記) | 実験設定に `"snapshot_load_mode": "replay"` を書く。1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は `make experiment-resume` に前の回の `snapshots` を渡す。回の番号は前の回の resolved から数え、`run_start` に残る | `scripts/run_scenario_experiment.py` の `_resolve_replay_round`、`A/being/world_clock_restart.py`、design_decisions D1514 | 記憶に残る世界の tick の欄は 0 に置き換わり、前の回の記録どうしの前後は消える。保留中の予測は捨てる |
+| 19 | 記憶を持ち越して何回も遊ぶ | **できる** (#1526 で追記) | 実験設定に `"snapshot_load_mode": "replay"` を書く。1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は `make experiment-resume` に前の回の `snapshots` を渡す。回の番号は前の回の resolved から数え、`run_start` に残る | `scripts/run_scenario_experiment.py` の `_resolve_replay_round`、design_decisions D1514 | 記憶の欄は Being のターン数で持ち、世界の tick を持たないので、世界を tick 0 に戻しても記憶の前後はずれない |
 | 20 | 回ごとに役や初期配置を変える | **できる** (#1527 で追記) | シナリオの `round_assignment.groups` に、player と同じ数の枠 (`spawn_spot`、`initial_state`) を書く。`SCENARIO_RANDOM_SEED` と回の番号で並べ替えて割り当て、trace の `round_assignment` に残る | `L/parse_round_assignment.py`、design_decisions D1514-2 | シードが要る。並べ替えなので、回が変わっても同じ並びになることがある。枠ごとの持ち物は書けない |
 | 21 | 1 つの run の中で回を区切る | **できない** | — | ゲームが終わると run も終わる | 持ち物の回収、HP の回復、死者の復帰、tick の巻き戻しは書けない |
 

@@ -20,11 +20,9 @@
    - `safe_world_intro_text` (`llm/services/world_llm_prompt.py:50`) が `metadata.llm_public_intro` を返す (4877 行)
    - `build_world_briefing` (`llm/services/world_briefing.py:438`) が見取り図・陣営の内訳・点検の割り当て・会議の決まりを組み、概要の後ろにつなぐ (4888 行)
    - player ごとのループ (4948〜4997 行) で、ペルソナ (`spawn.persona_prompt` があればそれ) と `scenario.role_personas[役職]` をつなぎ、自分以外の名前の一覧 (`mutually_known_roles` の役職なら「(あなたと同じ側)」を付ける) を作る
-   - `build_world_system_prompt` (`llm/services/world_llm_prompt.py:235`) が、これらと profile の値 (`escape_llm_ssot_enabled`) から本文を組む
+   - `build_world_system_prompt` (`llm/services/world_llm_prompt.py:235`) が、これらから本文を組む (profile の値 `escape_llm_ssot_enabled` で SSoT を足す分岐は #1631 で消した)
 2. できた文字列は `_world_llm_system_prompts_by_player_id` に入れ、run 中は変えない
 3. 毎ターン、`DefaultPromptBuilder.build` が `WorldSystemPromptBuilder.build` (`world_runtime/default_prompt_builder_adapters.py:103`) を呼び、名前から player を引いて `WorldRuntime.build_system_prompt` (1196 行) で保持済みの文字列を返す
-
-`llm/services/system_prompt_builder.py` の `DefaultSystemPromptBuilder` はデモ用で、run では使わない。
 
 ### 毎ターンの user メッセージ
 
@@ -35,8 +33,8 @@
    - 観測バッファから取り出して短期記憶に積む (613 行)
    - 現在地と周囲: `WorldRuntimeQueryAdapter` → `_build_minimal_player_state_dto` → `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`) で現在地の塊を作り、`SpotGraphUiContextBuilder.build` (`llm/services/spot_graph_ui_context_builder.py:513`) が `prompt_section_layout.sections_for` の順に接続先・オブジェクト・その場の人などの節を足す
    - 直近の出来事: `UnifiedRecentEventStore.get_active_timeline` を `RecentEventsFormatter.format_unified_entries` (`llm/services/recent_events_formatter.py:47`) で行にする
-   - 保留中の予測 (`prompt_sections/pending_predictions.py`)。前回の予測と実際は #1631 で消した
-   - 関連する記憶と見出し (`prompt_sections/episodic_recall.py:316`)、関連する学び (`prompt_sections/semantic_recall.py:80`)
+   - 保留中の予測と、前回の予測と実際は #1631 で消した
+   - 関連する記憶、見出し、関連する学びは #1631 で消した。過去の出来事は目次つきのエピソードの【思い出せる出来事】が出す
    - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、最近の流れと自己像と世界観 (短期記憶の `get_mid_summary_text` / `get_long_summary_text`)
 3. `SectionBasedContextFormatStrategy.format` (`llm/services/context_format_strategy.py`) が見出しを付けて並べる (747 行)。run の設定は `stable_to_volatile` で、`_format_stable_to_volatile` (300 行) の順になる
 4. 繰り返しの警告 (`_build_loop_warning_prefix`、780 行) を指示の前に付け、本文の後ろに置く (783 行)
@@ -61,12 +59,12 @@ reason_first の起動判定 (`resolve_reason_first_gate`) が通ったターン
 ```
 system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前提】S4 タイトルと概要 → S5 見取り図など → S6 行動の制限
         → S7【同じ局面にいる者】 → S8【渡される文面の内訳】 → S9【行動ルール】 → S10【独白と一言の書き方】
-        → S11【文脈と履歴の限界】 → S12 SSoT
+        → S11【文脈と履歴の限界】 (S12 SSoT は #1631 で消した)
 user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
-        → U9【保留中の予測】 → U10【関連する学び】 → U11【関連する記憶】 → U12 見出し
-        → U13【進行中のメモ】 → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
+        → (U10【関連する学び】、U11【関連する記憶】、U12 見出しは #1631 で消した)
+        → (U13【進行中のメモ】は #1631 で消した) → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
         → 繰り返しの警告 (U7) → U21 指示の前の知らせ → U22 行動指示
-tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, memo_add, memo_list, memo_done,
+tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run では wait, speak, (memo_* の 3 つは #1631 で消した)
         listen, travel_to, interact, drop_item, pickup_item, give_item, tend_to_player, explore, use_item, attack,
         memory_recall_episodes, memory_recall_by_handle の 17 個
 ```
@@ -90,7 +88,7 @@ tools:  ALWAYS_PRESENT_TOOL_ORDER → _CONDITIONAL_TOOL_ORDER の順。run で�
 | S9 【行動ルール】 | 「- 1 回の応答で選べる tool は 1 つだけである。」「- ラベル（接続先・オブジェクト・相手プレイヤー等）は…『現在地と周囲』等に表示されたものだけを使う。」「- **このシナリオの勝利条件 (最終目的) は…【現在の目的】section に記される**。」 | 本文 (`world_llm_prompt.py:338`)。profile で変わる行は勝利条件の行 (282 行) | 固定文。勝敗条件の有無 | 混ざっている (1 手の決まり・捏造しない・記憶の扱いは Being、ラベルと物の操作の読み方と勝利条件の枠付けは環境) | 無 |
 | S10 【独白と一言の書き方】 | 「- `inner_thought` を持つツールでは…あなた自身の頭の中の独白を…」「- `say_inline` を持つツールでは…同じ場所と隣の場所へ届く。」 | 本文 (`world_llm_prompt.py:351`) | 固定文 | 混ざっている (`inner_thought` の書き方は Being、`say_inline` の届く範囲は環境) | 無 |
 | S11 【文脈と履歴の限界】 | 「- 続く user 文面には、SlidingWindow に残る直近の観測・行動だけが載る…」 | 本文 (`world_llm_prompt.py:355`) | 固定文 | 組み立ての決まり | 無 |
-| S12 SSoT | (この run では無し) 「【String Seed of Thought（SSoT）— 本ターンのツール選択】」 | `_ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK` (`world_llm_prompt.py:151`) | profile の `escape_llm_ssot_enabled` | 組み立ての決まり | 無 |
+| S12 SSoT | (#1631 で消した) | - | - | - | - |
 
 S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`create_world_runtime` が `tool_schema_mode` を渡していないので、run では使われない (確認)。
 
@@ -100,19 +98,19 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 | 部分 | 中身 | 作る場所 | 材料の出どころ | 分類 | Being がいま持つか |
 |---|---|---|---|---|---|
-| U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` (`world_runtime/world_runtime.py:2907`) → `_resolve_objective_via_goal_store` (2499 行)、`_resolve_player_objective_text` (2400 行) | シナリオの `metadata.llm_objective_text` か `players[].objective`。goal journal に無ければ最初に入れ、以後は goal journal の active な目的を描く | 混ざっている (環境が課す目的と、Being が `goal_update` で立て直した目的。`goal_update` は #1631 で消した) | goal journal (`GoalEntry.player_id: int` と `created_tick` が残る) |
-| U2 【自己像と世界観】 | 「私について: 私は難破船から生き延びた探索者。…」「この世界について: …」 | `SummarizingShortTermMemory.get_long_summary_text` (`llm/services/summarizing_short_term_memory.py:318`) | 短期記憶の L5 要約。profile の `short_term_memory_kind=rolling_summary` のときだけ。run では 206 中 7 呼び出し | Being の持ち物 | 無 (整数の player 鍵) |
+| U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` → `_resolve_player_objective_text` (`world_runtime/world_runtime.py`) | シナリオの `players[].objective` か `metadata.llm_objective_text` を、そのまま描く | 環境の材料 (goal journal を #1631 で消すまでは混ざっていた) | 無 |
+| U2 【自己像と世界観】 | 「私について: 私は難破船から生き延びた探索者。…」「この世界について: …」 | `SummarizingShortTermMemory.get_long_summary_text` (`llm/services/summarizing_short_term_memory.py:318`) | 短期記憶の L5 要約。run では 206 中 7 呼び出し | Being の持ち物 | 無 (整数の player 鍵) |
 | U3 【最近の流れ】 | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」「  未解決: …」 | `get_mid_summary_text` (同 330 行)、行の形は 742 行 | 短期記憶の L4 要約。U2 と同じ profile | Being の持ち物 | 無 (整数の player 鍵) |
 | U4 観測の行 | 「- [Day 1 深夜 5:30] カイが言った: 「…」」「- [Day 1 6:00] 朝になった。」「- [Day 1 6:00] 〈森の小道〉の向こうから、カイの遠くの声が聞こえる: 「…」」 | `format_observation_line_for_recent_events` (`llm/contracts/chunk_encoding.py:80`)。遠くの声の文は `player_formatter.py:474` (`observation/services/formatters/`) | 環境のイベントを観測パイプラインが本文にしたもの。`UnifiedRecentEventStore` に積まれる | 混ざっている (環境の観測と、遠くの声で話者の名前を出すかという誰を知っているかの判断) | 無 (`PlayerId` 鍵) |
 | U5 自分の行動の行 | 「- [Day 1 8:30] [行動] 「釣り場」に fish_stream した → [失敗] \| error_code=INTERACTION_PRECONDITION_FAILED \| tool=interact \| 行動が拒否された: 釣竿が必要だ。」「  心の声: …」「（3 名に届いた。ぼんやり=1）」、失敗の観測「interact を試みたが失敗した: … 修正のヒント: …」 | `format_action_result_line_for_recent_events` (`chunk_encoding.py:96`)、失敗の観測は `intent/action_failed_observation_emitter.py:128`、届いた人数は `speech/services/audience_feedback.py:119` | action_result_store (tool 名・引数・`inner_thought`・結果・`error_code`) と、環境が返す結果の文・届いた人数・修正のヒント | 混ざっている (環境の結果の文と、Being の行動と内心の記録) | 無 (`PlayerId` 鍵) |
-| U6 内省の観測行 | 「- [Day 1 深夜 5:00] 枯れ葉が足りず焚き火も起こせず、狼煙の準備がまだ進んでいない。」 | `_emit_reflect_observation` (`world_runtime.py:2585`) が観測バッファへ入れる | belief の整理で出た目的の振り返り (`structured.type=goal_reflect`)。profile の `goal_reflect_enabled` | Being の持ち物 | 無。判断は Being の側だが、表示する行は `PlayerId` 鍵の短期記憶にある |
+| U6 内省の観測行 | (#1631 で消した) | - | - | - | - |
 | U7 繰り返しの警告 | 指示の前の「⚠ 直前のあなたは `wait` を同じ引数で 2 ターン連続実行しました。…」(run では 1 呼び出し)。直近の出来事に入る「⚠ … を 3 回続けて同じ引数で実行している。…」(run には出ていない) | `_build_loop_warning_prefix` (`llm/services/prompt_builder.py:559`)、直近の出来事の行は `llm/services/loop_guard_warning.py` | `ToolCallLoopGuardService` の連続記録 | Being の持ち物 | 無 (整数の player 鍵) |
 | U8 【前回の予測と実際】 | (#1631 で消した) | - | - | - | - |
-| U9 【保留中の予測】 | (この run では無し) | `build_pending_predictions_text` (`prompt_sections/pending_predictions.py:13`) | pending_prediction。再浮上の条件が `spot:<id>` / `player:<名前>` と tick。profile の `pending_prediction_enabled` | Being の持ち物 | pending_prediction |
-| U10 【関連する学び】 | 「- 釣りには釣竿が必要だ」「- 狼煙には流木・枯れ葉・火打ち石が必要だ」 | `run_semantic_passive_recall` (`semantic_recall.py:80`) | semantic store。profile の `semantic_passive_top_k` | Being の持ち物 | semantic store |
-| U11 【関連する記憶】 | 「[Day 1 深夜 5:00] 夜の森の入口に着いた。ノアとカイ、…」、空のとき「(受動想起では何も浮かばなかった)」 | `run_episodic_passive_recall` (`prompt_sections/episodic_recall.py:316`)、空の置き文は 576 行 | episodic store、recall slot、再解釈 | Being の持ち物 | episodic store / recall slot (想起の手がかりが環境の ID に依存。#1454) |
-| U12 さっき思い出した記憶の見出し | 「【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)」「気になる見出しがあれば memory_recall_by_handle にその handle を渡して…」「- [ep_02c662] 釣竿作りが流木不足で失敗した」 | `_format_afterglow_section` (`episodic_recall.py:79`)。U11 の本文の末尾につながり、【関連する記憶】の中に入る | afterglow。profile の `afterglow_enabled` | Being の持ち物 | afterglow |
-| U13 【進行中のメモ】 | 「- [memo_718918…] [tick=11, 経過 13 tick] 狼煙に必要な物: …」 | `_build_active_memos_text` (`prompt_builder.py:971`) → `format_active_memos` (`llm/services/active_memos_formatter.py:19`) | memo store と世界の tick。profile の `memo_tools_enabled` | Being の持ち物 | memo (表示の時計が世界の tick) |
+| U9 【保留中の予測】 | (#1631 で消した) | - | - | - | - |
+| U10 【関連する学び】 | (#1631 で消した) | - | - | - | - |
+| U11 【関連する記憶】 | (#1631 で消した。目次つきのエピソードの【思い出せる出来事】が代わる) | - | - | - | - |
+| U12 さっき思い出した記憶の見出し | (#1631 で消した) | - | - | - | - |
+| U13 【進行中のメモ】 | (#1631 で消した。メモ帳の【メモ】が代わる) | - | - | - | - |
 | U14 現在地の塊 | 「現在地: 高地の泉 (初めて訪れた)」「  山の中腹に湧く泉。…」「雰囲気: …」「天候: 弱い晴れ（屋外）」「現在時刻: Day 1 12:00」「時刻帯: 昼」 | `SpotGraphCurrentStateFormatter.format` (`llm/services/spot_graph_current_state_formatter.py:21`)、注記は `_annotate_current_spot_familiarity` (`llm/services/spot_graph_ui_context_builder.py:628`)。死亡後の【いまの存在状態】は同 529 行 | 世界の snapshot (spot の名前と説明、眺望、天候、時刻、会議の状況、点検の進み具合、残り行動量、自分の状態)。「(初めて訪れた)」は encounter | 混ざっている (環境の描写と、行った場所の記録) | 無 (encounter はシナリオの spot ID と `PlayerId` の鍵) |
 | U15 この場で働きかけられるもの | 「接続先:」「  - "山麓への道" → "山麓"（通行可）」「オブジェクト:」「  - "湧水の口" (今は汲めない・時間を置けば戻る) — …」「      いまできない: 湧水を汲む → "drink_water"（…）」「同じ場所に居るモンスター: (このスポットにモンスターはいない)」 | `SpotGraphUiContextBuilder` の `_build_connection_section` (720 行)、`_build_object_section` (801 行)、`_build_monster_section` (1078 行)、地面のアイテム・商人・市場・所持金・取引の節 | 世界の snapshot とシナリオの物と操作。商人などはシナリオで宣言したときだけ | 環境の材料 | 無 |
 | U16 同じ場所にいるプレイヤー | 「同じ場所にいるプレイヤー: (倒れていない相手には give_item で所持品を直接渡せる)」「  - "エイダ" (初めて会った)」 | `_build_entity_section` (`spot_graph_ui_context_builder.py:927`)、注記は `_player_familiarity_annotation` (687 行) | 世界の snapshot (その場の人、倒れているか、倒れた人の持ち物、人に使える操作)、encounter (「(初めて会った)」) | 混ざっている (環境の在室と、Being が誰を知っているか) | 無 (encounter は `PlayerId` と名前の鍵) |
@@ -122,7 +120,7 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | U20 【現在選べる対象引数】 | 「- travel_to.destination_label: "川の上流", "山麓", "墜落機の残骸"」「※ 一覧にあることは操作の成功を保証しない。…」 | `render_dynamic_argument_candidate_table` (`llm/services/dynamic_argument_candidates.py:342`)、差し込みは `inject_dynamic_argument_candidate_table` (363 行) | U14〜U18 を作るときに集めた対象 (`tool_runtime_context`) と、いま出しているツールの名前 | 環境の材料 | 無 |
 | U21 指示の前の知らせ | (この run では無し) 【公開 SNS】の画面、【進行中の異常】、【時間の経過】 | `build_full_prompt` (`world_runtime.py:3033-3046`) が `_public_sns_screen_text` (3085 行)、`_format_ongoing_conditions` (3093 行)、`_format_time_since_last_gathering` (3107 行) を行動指示の前につなぐ | 公開 SNS の画面、シナリオの `ongoing_conditions` と世界のフラグ、会議の区間 | 環境の材料 | 無 |
 | U22 行動指示 | 「利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。」 | `_ESCAPE_GAME_ACTION_INSTRUCTION` (`world_runtime.py:2341`)。`tool_choice=auto` では `escape_game_action_instruction` (2346 行) がいま呼べるツール名を足す。2 段目は `_REASON_FIRST_ACTION_INSTRUCTION` (`phase_a.py:691`) | 固定文と、いま出しているツールの名前 | 組み立ての決まり | 無 |
-| U23 節の骨組み | 見出しの名前、並び、「観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。」、空のときの「（情報なし）」、【関連する記憶】の添え書き | `SectionBasedContextFormatStrategy` と `_format_stable_to_volatile` (`llm/services/context_format_strategy.py:300`)、置き文は 193〜195 行 | profile の `prompt_section_order` (run では `stable_to_volatile`) | 組み立ての決まり | 無 |
+| U23 節の骨組み | 見出しの名前、並び、「観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。」、空のときの「（情報なし）」、【関連する記憶】の添え書き | `SectionBasedContextFormatStrategy` と `_format_stable_to_volatile` (`llm/services/context_format_strategy.py:300`)、置き文は 193〜195 行 | 固定の並び (`prompt_section_order` で `legacy` を選ぶ口は #1631 で消した) | 組み立ての決まり | 無 |
 
 「（直近の出来事はありません）」は `format_unified_timeline_as_recent_events_bullets` が行の無いときに返す置き文 (`llm/contracts/chunk_encoding.py:30`、215 行)。本文が空にならないので、`_PLACEHOLDER_RECENT_EVENTS`「（なし）」はこの経路では出ない (確認)。
 
@@ -131,11 +129,11 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 部分 | 中身 | 作る場所 | 材料の出どころ | 分類 | Being がいま持つか |
 |---|---|---|---|---|---|
 | T1 環境の行動ツールと固有の引数 | `travel_to`「スポットグラフ上で、指定した接続先へ移動を開始する…」、`interact` の説明「利用可能な action_name と現在の object 状態は『現在の状況』section の各オブジェクト行に出ている…」、引数 `destination_label`、`target_label`、`action_name` など | `get_spot_graph_specs` (`llm/services/tool_catalog/spot_graph.py:1005`)、`get_public_sns_definitions` (`tool_catalog/public_sns.py:41`)、絞り込みは `_build_spot_tool_definitions` (`world_runtime/world_runtime.py:1701`) | ツールカタログの固定の定義。出すかは `ToolExposure.is_exposed` (同時行動、会議、商人・市場の宣言、シナリオの `disabled_tools`) | 環境の材料 (説明がプロンプトの節名を参照している。4 章で消す) | 無 |
-| T2 主観の引数 `inner_thought` | 「この行動を選ぶ直前の、あなた自身の頭の中の独白を一文で。書き方は【独白と一言の書き方】。」。reason_first では行動ツールから外し、`assess_situation` に集める | `inner_thought_property` (`tool_catalog/inner_thought.py:31`)、各ツールの定義に直接入っている。reason_first は `assess_situation_definition` (`tool_catalog/subjective_action.py:231`)、`strip_reason_first_action_subjective_schema` (283 行) | 固定の定義。profile の `reason_first_two_step_enabled` | Being の持ち物 | 無 (書いた値は action_result_store、`PlayerId` 鍵) |
+| T2 主観の引数 `inner_thought` | 「この行動を選ぶ直前の、あなた自身の頭の中の独白を一文で。書き方は【独白と一言の書き方】。」。reason_first では行動ツールから外し、`assess_situation` に集める | `inner_thought_property` (`tool_catalog/inner_thought.py:31`)、各ツールの定義に直接入っている。reason_first は `assess_situation_definition` (`tool_catalog/subjective_action.py:231`)、`strip_reason_first_action_subjective_schema` (283 行) | 固定の定義。解決済み設定の `reason_first_two_step_enabled` | Being の持ち物 | 無 (書いた値は action_result_store、`PlayerId` 鍵) |
 | T3 発話の引数 `say_inline` | 「この行動をしながら発する一言 (任意、200 字以内)。書き方は【独白と一言の書き方】。」 | `say_inline_property` (`tool_catalog/say_inline.py:47`)、各ツールの定義に直接入っている | 固定の定義 | 環境の材料 (説明が Being 側の節名を参照している。5-3) | 無 |
 | T4 予期の引数 `expectations` | (#1631 で消した) | - | - | - | - |
 | T5 目的の引数 `goal_update` / `goal_outcome` | (#1631 で消した) | - | - | - | - |
-| T6 記憶のツール | `memo_add`「ターンを跨いで覚えておきたい情報…を memo として記録します。」、`memo_list`、`memo_done`、`memory_recall_episodes`「受動想起 (= prompt の『関連する記憶』 section) は…」、`memory_recall_by_handle`「prompt の『【さっき思い出した記憶の見出し】』section に並んでいる handle…」 | `get_memory_specs` (`tool_catalog/memory.py:297`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py:1727`) | 固定の定義。profile の `memo_tools_enabled`、`episodic_recall_enabled`、`semantic_search_enabled`、`episodic_explore_related_enabled` と実行部の有無。`ToolExposure` を通らない | Being の持ち物 | memo / episodic store / semantic store。実行部はゲームのパッケージにある (#1469) |
+| T6 記憶のツール | `episode_recall`、`episode_revise_index` (能動想起の 4 つの道具と memo_* の 3 つの道具は #1631 で消した) | `get_memory_specs` (`tool_catalog/memory.py`)、呼び出しは `_build_memory_tool_definitions` (`world_runtime.py`) | 固定の定義。目次つきのエピソードの設定、実行部の有無。`ToolExposure` を通らない | Being の持ち物 | Being のエピソード。実行部はゲームのパッケージにある (#1469) |
 | T7 tool の並びと出し分け | 共通の塊が先、フェーズ固有の塊が後。run では 17 個 (0 章) | `ToolExposure.order_for_payload` と `_PAYLOAD_TOOL_ORDER` (`llm/tool_exposure.py:147`、228 行)、`split_for_phase`、`filter_definitions_for_escape_llm` (`llm/services/world_llm_turn/escape_tools.py:33`) | 固定の並び。会議中か、投票済みか、死亡後か | 組み立ての決まり | 無 |
 
 ### 1-4. 分類の集計
@@ -150,6 +148,8 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 組み立ての決まり | 8 |
 
 1 章を作り直して数え直した。部分の数と分類の件数は元のままで、Being の持ち物のうち `PlayerId` か整数の player を鍵にした store にある件数を 7 から 5 に直した。
+
+#1631 で消した部分 (U6、U8、U13、T4、T5) と、goal journal を消して環境の材料になった U1 は、この集計に反映していない。
 
 ## 2. 環境が公開する情報の型の案
 
@@ -183,10 +183,9 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 
 | 部分 | store | 注意 |
 |---|---|---|
-| 現在の目的 | goal journal | `GoalEntry.player_id: int` と `created_tick` が残る。環境を出るときに環境が課した目的を外す処理は #1465 の範囲 |
-| 保留中の予測 | pending_prediction | 再浮上の条件が `spot:<id>` / `player:<名前>` と tick。名前の文とターン数に替える (#1436) |
-| 関連する学び | semantic store | — |
-| 関連する記憶・見出し | episodic / afterglow / recall slot | 想起の手がかりが環境の ID に依存 (#1454) |
+| 現在の目的 | (goal journal は #1631 で消した) | いまはシナリオの目的の文をそのまま描く。Being が目的を持つ store は無い |
+| 関連する学び | (#1631 で消した) | - |
+| 関連する記憶 | (#1631 で消した) | - |
 | 進行中のメモ | memo | 表示の `tick=…, 経過 … tick` を Being のターン数に替える |
 | 記憶ツールと主観の引数 | 引数と記憶ツール | ツールの実行部はゲームのパッケージにある (#1469) |
 
@@ -239,7 +238,7 @@ encounter はいま、環境の判定にも使われている (確認)。
 
 ### 5-3. tool 名を書くときの露出判断
 
-- 記憶ツールの露出は `ToolExposure` の外 (profile と実行部の有無) で決まる。想起の見出しの本文は `memory_recall_by_handle` を直書きしていて、出すかの判断が別の場所にある (推測: 出さないのに本文が宣伝する組み合わせがありうる)。Being が組み立てるなら、Being のツールの露出を 1 か所で決め、Being の節の本文もそれを通す
+- 記憶ツールの露出は `ToolExposure` の外 (profile と実行部の有無) で決まる。Being が組み立てるなら、Being のツールの露出を 1 か所で決め、Being の節の本文もそれを通す
 - system prompt とツールの説明が、環境の `say_inline` 引数の名前を Being 側の固定文に書いている。`say_inline` を出さない環境では、無い引数を宣伝する。環境の `interface_notes` に移す
 - `tests/demos/test_disabled_tools_vanish_from_the_prompt.py` は環境のツールを 1 つずつ無効にする検査で、Being のツールは対象外 (推測)。同じ総当たりを Being 側にも持つ
 
@@ -249,9 +248,8 @@ encounter はいま、環境の判定にも使われている (確認)。
 |---|---|
 | メモ | `tick=11, 経過 1 tick` |
 | encounter の鍵 | シナリオの spot 文字列 ID、`monster_{整数}`、`player_{整数}`、event_id |
-| 保留中の予測 | `spot:<id>`、tick |
 | 短期記憶の行動の行 | `error_code=INTERACTION_PRECONDITION_FAILED`、`tool=interact` |
-| 目的 | `GoalEntry.player_id: int`、`created_tick` |
+| 目的 | (goal journal と一緒に #1631 で消した) |
 | system prompt | 実装の語「SlidingWindow」 |
 | 人格 | ゲームの効果名「heal_hp 50」(シナリオの文。直すのはシナリオ側) |
 
