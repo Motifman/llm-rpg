@@ -60,7 +60,7 @@ def _create_session_with_stub(
     )
     summary = mgr.create_session(
         SessionCreateRequest(
-            world_id="relay_puzzle_demo", character_ids=[char.id]
+            world_id="forbidden_library_demo", character_ids=[char.id]
         ),
     )
     state = mgr._sessions[summary.session_id]

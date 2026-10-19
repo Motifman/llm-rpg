@@ -149,15 +149,11 @@ class PlayerSpawnConfig:
     # text block にまとめて入れる想定。秘密はそのプレイヤーの prompt にしか
     # 入らないので natural な info asymmetry になる。
     persona_prompt: str | None = None
-    # 目的層 G6: このプレイヤー個別の初期目的文。goal store の seed に使われる。
+    # 目的層 G6: このプレイヤー個別の初期目的文。【現在の目的】に載る。
     # None なら `metadata.llm_objective_text` (シナリオ共通) へフォールバックする
     # ので、既存シナリオの挙動は変わらない。persona_prompt と同じく、秘密の動機を
     # 含む目的をそのプレイヤーの prompt にだけ入れられる (= 情報の非対称性)。
     objective: str | None = None
-    # 目的層 G6: このプレイヤーの初期目的を改訂不可にするか。None なら従来どおり
-    # シナリオ全体の性質 (`_scenario_has_goal`) から導出する。明示すればそれが
-    # 優先され、「勝敗条件つきシナリオでもこの 1 人だけは立て直せる」が書ける。
-    goal_locked: bool | None = None
     # 経済統合 Phase 0: 所持金の初期値。省略すれば 0 で、宣言しないシナリオの
     # 挙動は変わらない。PlayerStatusAggregate への配線は売買ツールを入れる PR
     # の管轄なので、ここでは宣言の保持までを行う。

@@ -13,7 +13,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_PREFIX_MEMO,
-    TOOL_NAME_PREFIX_MEMORY,
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
@@ -61,15 +60,10 @@ class Observer:
     seconds_per_tick: float | None
 
 
-# 目的の振り返りは Being が自分で立てた判断を書き戻したもの、ループ警告は
-# エージェント側の自己監視で、どちらも環境から届く観測ではない。経路の 5 つの
-# どれにも当たらないので、選択肢を足さずに変換を拒む。
-_BEING_INNER_RECORD_TYPES: Final = frozenset({"goal_reflect"})
-
 # メモ・記憶・状況評価の道具は、Being が自分の記録を読み書きするもので、環境に働きかけない。
 # 結果の文 (「メモを追加しました（ID: …）」など) を自分の行動の結果として写すと、記憶の
 # 側が環境で起きたことと取り違える (#1414 の確かめ方で、いま起きたことに混ざっていた)。
-_AGENT_SIDE_TOOL_PREFIXES: Final = (TOOL_NAME_PREFIX_MEMO, TOOL_NAME_PREFIX_MEMORY)
+_AGENT_SIDE_TOOL_PREFIXES: Final = (TOOL_NAME_PREFIX_MEMO,)
 _AGENT_SIDE_TOOLS: Final = frozenset(
     {TOOL_NAME_ASSESS_SITUATION, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX}
 )
@@ -138,10 +132,10 @@ def observation_from_game(
 ) -> Observation:
     structured = output.structured
     kind = _kind(structured)
+    # ループ警告はエージェント側の自己監視で、環境から届く観測ではない。経路の 5 つの
+    # どれにも当たらないので、選択肢を足さずに変換を拒む。
     if structured.get("loop_guard") is True:
         raise ObservationNotRepresentable(NotRepresentableReason.BEING_INNER_RECORD, "loop_guard")
-    if kind in _BEING_INNER_RECORD_TYPES:
-        raise ObservationNotRepresentable(NotRepresentableReason.BEING_INNER_RECORD, kind)
     # 同じ出来事の目撃文が別に届くとき、ゲームは重複する汎用文を空にして送る。
     if not output.prose.strip():
         raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, kind)
