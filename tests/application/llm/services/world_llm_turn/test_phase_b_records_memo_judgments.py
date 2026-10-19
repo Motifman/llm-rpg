@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -21,11 +20,11 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHint,
     MemoCompletionJudgment,
     MemoHintDetection,
+    PendingTodo,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn import phase_b
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.application.trace.events import TraceEventKind
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -48,13 +47,8 @@ class _RecordingTrace:
         return [event for event in self.events if event["kind"] == kind]
 
 
-def _memo(memo_id: str, content: str) -> MemoEntry:
-    return MemoEntry(
-        id=memo_id,
-        content=content,
-        added_at=datetime(2026, 9, 20, tzinfo=timezone.utc),
-        added_at_tick=1,
-    )
+def _memo(memo_id: str, content: str) -> PendingTodo:
+    return PendingTodo(id=memo_id, content=content, handle=f"m_{memo_id}")
 
 
 def _run(detection: MemoHintDetection, monkeypatch: pytest.MonkeyPatch):
