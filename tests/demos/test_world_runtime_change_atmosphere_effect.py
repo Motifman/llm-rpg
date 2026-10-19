@@ -24,7 +24,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 _ITEM_INTERACTION_DEMO = (
     _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "item_interaction_demo.json"
 )
@@ -34,8 +34,8 @@ _OBSERVER = PlayerId(2)
 
 
 def _scenario_with_effect(tmp_path: Path, effect: dict, name: str) -> Path:
-    """relay_puzzle の control_panel/power_on に任意の effect を足して書き出す。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    """control_panel_toggle の control_panel/power_on に任意の effect を足して書き出す。"""
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     patched = False
     for spot in scenario["spots"]:
         for obj in (spot.get("interior") or {}).get("objects", []):
@@ -320,7 +320,7 @@ class TestChangeAtmosphereFromScenarioEvent:
 
     def test_on_tick_event_darkens_the_spot(self, tmp_path: Path) -> None:
         """ON_TICK のシナリオイベントで CHANGE_ATMOSPHERE を宣言すると、その tick で spot が暗くなる。"""
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         scenario.setdefault("scenario_events", []).append(
             {
                 "id": "blackout",
