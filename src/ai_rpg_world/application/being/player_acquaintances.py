@@ -135,21 +135,6 @@ class PlayerAcquaintances:
         name = self._names_by_player_id.get(other.value)
         return None if name is None else self.find(viewer, name)
 
-    def recently_met_names(
-        self, player_id: PlayerId, *, within_turns: int
-    ) -> tuple[str, ...]:
-        being_id = self._resolve(player_id)
-        if being_id is None:
-            return ()
-        now = self._turn_reader.current_turn(being_id)
-        return tuple(
-            a.name if a.knows_name else self._appearance_of_name(a.name)
-            for a in self._store.list_by_being(being_id)
-            if a.environment_name == self._environment_name
-            and a.last_met_turn is not None
-            and 0 <= now - a.last_met_turn <= within_turns
-        )
-
     def knows(self, recipient: PlayerId, other: PlayerId) -> bool:
         """引けないときは知らない側へ倒す。知っていると答えると、相手の存在が届く。"""
         if other.value == recipient.value:

@@ -1,5 +1,5 @@
 """
-チャンク単位のエピソードエンコード入力と、直近出来事の統一タイムライン（契約）。
+直近出来事の統一タイムライン（契約）。
 
 RecentEventsFormatter と同じ行テキスト規則で観測・行動結果を occurred_at 昇順にマージする。
 """
@@ -17,7 +17,6 @@ from ai_rpg_world.application.llm.contracts.action_argument_classification impor
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 UnifiedRecentEventKind = Literal["observation", "action_result"]
 
@@ -202,77 +201,3 @@ def format_unified_timeline_as_recent_events_bullets(
     if not visible_lines:
         return RECENT_EVENTS_EMPTY_PLACEHOLDER
     return "\n".join(f"- {line.text}" for line in visible_lines)
-
-
-@dataclass(frozen=True)
-class ChunkEncodingInput:
-    """
-    チャンク 1 回分のエンコード入力（不変）。
-    unified_timeline は observations と action_results をマージした結果と一致すること。
-    """
-
-    player_id: PlayerId
-    observations: tuple[ObservationEntry, ...]
-    action_results: tuple[ActionResultEntry, ...]
-    unified_timeline: tuple[UnifiedRecentEventLine, ...]
-    observation_overflow_from_window: tuple[ObservationEntry, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
-        if not isinstance(self.observations, tuple):
-            raise TypeError("observations must be tuple[ObservationEntry, ...]")
-        if not isinstance(self.action_results, tuple):
-            raise TypeError("action_results must be tuple[ActionResultEntry, ...]")
-        if not isinstance(self.unified_timeline, tuple):
-            raise TypeError("unified_timeline must be tuple[UnifiedRecentEventLine, ...]")
-        if not isinstance(self.observation_overflow_from_window, tuple):
-            raise TypeError("observation_overflow_from_window must be tuple[ObservationEntry, ...]")
-        for idx, o in enumerate(self.observations):
-            if not isinstance(o, ObservationEntry):
-                raise TypeError(f"observations[{idx}] must be ObservationEntry")
-        for idx, a in enumerate(self.action_results):
-            if not isinstance(a, ActionResultEntry):
-                raise TypeError(f"action_results[{idx}] must be ActionResultEntry")
-        for idx, line in enumerate(self.unified_timeline):
-            if not isinstance(line, UnifiedRecentEventLine):
-                raise TypeError(f"unified_timeline[{idx}] must be UnifiedRecentEventLine")
-        for idx, o in enumerate(self.observation_overflow_from_window):
-            if not isinstance(o, ObservationEntry):
-                raise TypeError(f"observation_overflow_from_window[{idx}] must be ObservationEntry")
-        expected = merge_observations_and_action_results_to_unified_timeline(
-            self.observations, self.action_results
-        )
-        if expected != self.unified_timeline:
-            raise ValueError(
-                "unified_timeline must equal merge of observations and action_results"
-            )
-
-
-def build_chunk_encoding_input(
-    player_id: PlayerId,
-    observations: Sequence[ObservationEntry],
-    action_results: Sequence[ActionResultEntry],
-    *,
-    observation_overflow_from_window: Sequence[ObservationEntry] = (),
-) -> ChunkEncodingInput:
-    """観測スライス・行動結果スライスから ChunkEncodingInput を組み立てる。"""
-    if not isinstance(player_id, PlayerId):
-        raise TypeError("player_id must be PlayerId")
-    obs_t = tuple(observations)
-    act_t = tuple(action_results)
-    timeline = merge_observations_and_action_results_to_unified_timeline(obs_t, act_t)
-    return ChunkEncodingInput(
-        player_id=player_id,
-        observations=obs_t,
-        action_results=act_t,
-        unified_timeline=timeline,
-        observation_overflow_from_window=tuple(observation_overflow_from_window),
-    )
-
-
-def chunk_encoding_episode_generation_allowed(inp: ChunkEncodingInput) -> bool:
-    """チャンク第 1 版: 区間に ActionResultEntry が 1 件以上あるときのみエピソード生成を起動してよい。"""
-    if not isinstance(inp, ChunkEncodingInput):
-        raise TypeError("inp must be ChunkEncodingInput")
-    return len(inp.action_results) >= 1

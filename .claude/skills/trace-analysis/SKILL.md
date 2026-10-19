@@ -30,13 +30,13 @@ PYTHONPATH=. python .claude/skills/trace-analysis/extract_metrics.py <run_dir> [
 - 時系列 cache hit 推移 (20 tick 毎)
 - 時系列 per-tick wall time
 - observation category 内訳
-- summary 生成回数 (L4/L5/episodic_chunk)
+- summary 生成回数 (L4/L5/episode_writing)
 - loop_guard_warning 詳細
 - baseline 比較 (baseline_dir 指定時)
 - 協調指標 (PR-A, survival_island_v3_coop 系向け): ペア別 / 全員同スポット
   共在 tick 数、hearsay (伝聞) evidence の話者別件数、pending_prediction の
   kind 別件数 (created/resolved/expired + 未知 suffix) と resolved の
-  verdict 内訳、give_item 実行件数
+  verdict 内訳 (伝聞と約束は #1631 前の trace のみ)、give_item 実行件数
 
 `extract_metrics.py --help` で詳細。
 
@@ -45,7 +45,7 @@ PYTHONPATH=. python .claude/skills/trace-analysis/extract_metrics.py <run_dir> [
 両方同時に launch (= 1 メッセージで Agent を 2 つ叩く)。**プロンプトはこの SKILL の `prompts/` 配下のテンプレートを読み込んで作る** (中身は run_dir の trace path に置換)。
 
 - **Agent 1 (narrative + per-agent)**: `prompts/narrative_per_agent.md` をベースに、対象 trace へのパスを差し込む。B-09〜B-16 と C-17〜C-24 を担当。
-- **Agent 2 (memory + failures)**: `prompts/memory_failures.md` をベースに、対象 trace へのパスを差し込む。D-25〜D-32 と E-33〜E-36 を担当。
+- **Agent 2 (memory + failures)**: `prompts/memory_failures.md` をベースに、対象 trace へのパスを差し込む。D-25〜D-32b と E-33〜E-36 を担当。
 
 両 Agent ともに 5000 字程度の Markdown レポートを返す契約。
 
@@ -91,13 +91,13 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 - B-12 協力 / 対立 events
 - B-13 感情・トーン推移
 - B-14 ペルソナ忠実度
-- B-15 memo の内省内容
+- B-15 メモ帳の内容
 - B-16 outcome の物語的意味
 
 **C. エージェント別深掘り** (Agent 1 担当)
 - C-17 tool 使用 top 5 / 時系列
 - C-18 error_code 分布
-- C-19 memo lifecycle
+- C-19 メモ帳の移り変わり
 - C-20 主な滞在 spot
 - C-21 inner_thought の質
 - C-22 encounter pattern
@@ -105,14 +105,15 @@ publish 前に `<run_dir>/00_analysis_viewer.html` として analysis.html を�
 - C-24 speech style 一貫性
 
 **D. 記憶システム** (Agent 2 担当)
-- D-25 episodic_recall K 分布と質
-- D-26 recall habituation 効果
-- D-27 recall slot 動作
-- D-28 afterglow / score 構造
-- D-29 episodic_chunk_written と subjective_filled の整合
+- D-25 episodic_recall K 分布と質 (#1631 で受動想起を消す前の trace のみ)
+- D-26 recall habituation 効果 (#1631 前の trace のみ)
+- D-27 recall slot 動作 (#1631 前の trace のみ)
+- D-28 afterglow / score 構造 (afterglow は #1631 前の trace のみ)
+- D-29 episodic_chunk_written と subjective_filled の整合 (#1631 で古いエピソードを消す前の trace のみ)
 - D-30 short / long summary クオリティ
-- D-31 memo 重複と done balance
+- D-31 メモ帳の重複と消し忘れ
 - D-32 失敗の記憶化
+- D-32b 目次つきのエピソードの書き起こし・呼び出し・目次の直し
 
 **E. 失敗・loop_guard・異常** (Agent 2 担当)
 - E-33 error_code 分布

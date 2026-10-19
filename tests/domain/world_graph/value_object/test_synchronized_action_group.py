@@ -48,12 +48,18 @@ class TestSynchronizedActionGroupValidation:
                 on_complete=(_show_msg(),),
             )
 
-    def test_required_actions_must_be_at_least_two(self) -> None:
+    @pytest.mark.parametrize(
+        "required_action_names",
+        [pytest.param(("a",), id="one"), pytest.param((), id="empty")],
+    )
+    def test_required_actions_must_be_at_least_two(
+        self, required_action_names: tuple[str, ...]
+    ) -> None:
         """required_action_names が 1 件以下なら拒否する（同期する意味がない）。"""
         with pytest.raises(SynchronizedActionGroupValidationException, match="at least 2"):
             SynchronizedActionGroup(
                 group_id="x",
-                required_action_names=("a",),
+                required_action_names=required_action_names,
                 window_ticks=1,
                 on_complete=(_show_msg(),),
             )
@@ -68,13 +74,16 @@ class TestSynchronizedActionGroupValidation:
                 on_complete=(_show_msg(),),
             )
 
-    def test_window_ticks_must_be_positive(self) -> None:
+    @pytest.mark.parametrize(
+        "window_ticks", [pytest.param(0, id="zero"), pytest.param(-1, id="negative")]
+    )
+    def test_window_ticks_must_be_positive(self, window_ticks: int) -> None:
         """window_ticks が 0 以下なら拒否する。"""
         with pytest.raises(SynchronizedActionGroupValidationException, match="window_ticks"):
             SynchronizedActionGroup(
                 group_id="x",
                 required_action_names=("a", "b"),
-                window_ticks=0,
+                window_ticks=window_ticks,
                 on_complete=(_show_msg(),),
             )
 

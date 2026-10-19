@@ -35,7 +35,7 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, MonsterFactionEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, MonsterFactionEnum, MonsterStatusEnum
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
@@ -44,7 +44,7 @@ from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.enum.player_enum import Element, Race
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -57,10 +57,14 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -234,7 +238,7 @@ class TestHitBoxDamageHandler:
         data_store.clear_all()
         def create_uow():
             return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
-        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(unit_of_work_factory=create_uow, data_store=data_store)
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(unit_of_work_factory=create_uow, data_store=data_store)
         
         time_provider = InMemoryGameTimeProvider(initial_tick=10)
         map_repo = InMemoryPhysicalMapRepository(data_store, uow)
@@ -337,7 +341,7 @@ class TestHitBoxDamageHandler:
         target = s["player_repo"].find_by_id(PlayerId(200))
         # 防御バフが効いていればダメージは 0 になるはずだが、期限切れなので 20 - (10/2) = 15 入る
         assert target.hp.value == 85
-        assert len(target._active_effects) == 0 # クリーンアップされていること
+        assert target.active_effects == []
 
     def test_monster_hp_updated_in_aggregate_only(self, setup):
         """モンスターにダメージ適用後、Monster 集約の HP のみが更新されること（Component への HP 同期は行わない）"""
@@ -383,7 +387,7 @@ class TestHitBoxDamageHandler:
         assert isinstance(target_obj.component, AutonomousBehaviorComponent)
 
     def test_skip_damage_when_target_already_dead(self, setup):
-        # Given
+        """死亡済みへの被弾は死亡状態・死亡時刻を変えず、追加イベントも発行しない。"""
         s = setup
         pmap = _create_map()
         pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
@@ -391,7 +395,8 @@ class TestHitBoxDamageHandler:
         s["map_repo"].save(pmap)
 
         monster = _create_monster(1, 300, Coordinate(1, 1, 0))
-        monster.apply_damage(999, WorldTick(10)) # 殺しておく
+        monster.apply_damage(999, WorldTick(5))
+        monster.clear_events()
         s["monster_repo"].save(monster)
 
         hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100), BaseStats(100, 100, 10, 10, 10, 0, 0))
@@ -407,13 +412,16 @@ class TestHitBoxDamageHandler:
         with s["uow"]:
             s["handler"].handle(event)
 
-        # Then
-        # 例外が発生せずに正常終了することを確認
-        assert True
+        updated = s["monster_repo"].find_by_id(MonsterId(1))
+        assert updated.hp.value == 0
+        assert updated.status == MonsterStatusEnum.DEAD
+        assert updated.last_death_tick == WorldTick(5)
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_hit_box_not_found(self, setup):
-        # Given
+        """消滅した HitBox の被弾はプレイヤーの HP を変えず、イベントも発行しない。"""
         s = setup
+        s["player_repo"].save(_create_player_status(200))
         event = HitBoxHitRecordedEvent.create(
             aggregate_id=HitBoxId.create(999), # 存在しないID
             aggregate_type="HitBoxAggregate",
@@ -427,11 +435,13 @@ class TestHitBoxDamageHandler:
             s["handler"].handle(event) # エラーにならずに終了することを確認
 
         # Then
-        assert True
+        assert s["player_repo"].find_by_id(PlayerId(200)).hp.value == 100
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_map_not_found(self, setup):
-        # Given
+        """マップ消滅後の被弾はプレイヤーの HP を変えず、イベントも発行しない。"""
         s = setup
+        s["player_repo"].save(_create_player_status(200))
         hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100))
         # マップを削除しておく（インメモリなのでクリア）
         s["data_store"].physical_maps.clear()
@@ -449,11 +459,13 @@ class TestHitBoxDamageHandler:
             s["handler"].handle(event)
 
         # Then
-        assert True
+        assert s["player_repo"].find_by_id(PlayerId(200)).hp.value == 100
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_defender_disappeared(self, setup):
-        # Given
+        """地図から消えた被弾者の HP は変更せず、イベントも発行しない。"""
         s = setup
+        s["player_repo"].save(_create_player_status(200))
         pmap = _create_map()
         pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
         # ディフェンダーを配置しない
@@ -473,7 +485,8 @@ class TestHitBoxDamageHandler:
             s["handler"].handle(event)
 
         # Then
-        assert True
+        assert s["player_repo"].find_by_id(PlayerId(200)).hp.value == 100
+        assert s["event_publisher"].get_published_events() == []
 
 
 class TestCombatAggroHandler:
@@ -483,16 +496,17 @@ class TestCombatAggroHandler:
         data_store.clear_all()
         def create_uow():
             return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
-        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
         
         map_repo = InMemoryPhysicalMapRepository(data_store, uow)
         monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
         hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
-        handler = CombatAggroHandler(hit_box_repo, map_repo, monster_repo, uow)
+        aggro_store = InMemoryAggroStore()
+        handler = CombatAggroHandler(hit_box_repo, map_repo, monster_repo, uow, aggro_store=aggro_store)
         return locals()
 
     def test_aggro_skipped_when_attacker_not_actor(self, setup):
-        # Given
+        """設置物による被弾では、実在するモンスターの標的と脅威を変更しない。"""
         s = setup
         pmap = _create_map()
         # アタッカーは単なるオブジェクト（設置物など）
@@ -505,6 +519,7 @@ class TestCombatAggroHandler:
         pmap.add_object(attacker_obj)
         pmap.add_object(monster_obj)
         s["map_repo"].save(pmap)
+        s["monster_repo"].save(_create_monster(1, 300, Coordinate(1, 1, 0)))
 
         hb = HitBoxAggregate.create(
             hit_box_id=HitBoxId.create(1),
@@ -529,12 +544,10 @@ class TestCombatAggroHandler:
         with s["uow"]:
             s["handler"].handle(event)
 
-        # Then: アタッカーがアクターでないため record_attacked_by は呼ばれず、
-        # ターゲット側の Monster に behavior_target_id は設定されない。
-        # （Component は軽量版のため target_id を持たない。Monster 集約のみが保持）
-        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
-        target = updated_map.get_object(WorldObjectId(300))
-        assert isinstance(target.component, AutonomousBehaviorComponent)
+        target = s["monster_repo"].find_by_world_object_id(WorldObjectId(300))
+        assert target.behavior_target_id is None
+        assert s["aggro_store"].get_threat_by_attacker(SpotId(1), WorldObjectId(500)) == {}
+        assert s["event_publisher"].get_published_events() == []
 
     def test_aggro_skipped_when_target_not_actor(self, setup):
         # Given
@@ -573,7 +586,8 @@ class TestCombatAggroHandler:
 
         # Then
         # エラーにならずに終了することを確認
-        assert True
+        assert s["aggro_store"].get_threat_by_attacker(SpotId(1), WorldObjectId(100)) == {}
+        assert s["event_publisher"].get_published_events() == []
 
     def test_aggro_store_receives_aggro_when_target_is_autonomous(self, setup):
         # Given: アタッカーと被弾者ともにアクター、被弾者はモンスター、aggro_store を注入
@@ -679,6 +693,7 @@ class TestCombatAggroHandler:
     def test_aggro_store_not_called_when_aggro_store_none(self, setup):
         # Given: aggro_store なしでハンドラを構築
         s = setup
+        handler = CombatAggroHandler(s["hit_box_repo"], s["map_repo"], s["monster_repo"], s["uow"])
         pmap = _create_map()
         attacker_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
         monster_obj = WorldObject(
@@ -710,7 +725,7 @@ class TestCombatAggroHandler:
 
         # When: aggro_store なしのハンドラで handle
         with s["uow"]:
-            s["handler"].handle(event)
+            handler.handle(event)
 
         # Then: エラーにならず、モンスター集約に record_attacked_by が反映されている
         updated_monster = s["monster_repo"].find_by_world_object_id(WorldObjectId(300))
@@ -729,7 +744,8 @@ class TestCombatAggroHandler:
         )
         with s["uow"]:
             s["handler"].handle(event)
-        assert True
+        assert s["aggro_store"].get_threat_by_attacker(SpotId(1), WorldObjectId(100)) == {}
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_map_not_found(self, setup):
         """HitBox の spot_id に対応するマップが存在しない場合は例外を出さずに return する"""
@@ -754,7 +770,8 @@ class TestCombatAggroHandler:
         )
         with s["uow"]:
             s["handler"].handle(event)
-        assert True
+        assert s["aggro_store"].get_threat_by_attacker(SpotId(1), WorldObjectId(100)) == {}
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_combatant_disappeared(self, setup):
         """Owner または Target がマップに存在しない（ObjectNotFoundException）場合は例外を出さずに return する"""
@@ -781,7 +798,8 @@ class TestCombatAggroHandler:
         )
         with s["uow"]:
             s["handler"].handle(event)
-        assert True
+        assert s["aggro_store"].get_threat_by_attacker(SpotId(1), WorldObjectId(100)) == {}
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_unexpected_exception_raises_system_error_exception(self, setup):
         """想定外の例外が _handle_impl 内で発生した場合、handle() は SystemErrorException を送出する"""
@@ -834,7 +852,7 @@ class TestMonsterDeathRewardHandler:
         data_store.clear_all()
         def create_uow():
             return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
-        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
         
         player_repo = InMemoryPlayerStatusRepository(data_store, uow)
         inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
@@ -894,8 +912,11 @@ class TestMonsterDeathRewardHandler:
         assert instance.item_spec.item_spec_id == spec.item_spec_id
 
     def test_skip_rewards_when_no_killer(self, setup):
-        # Given
+        """討伐者不明なら既存プレイヤーの報酬・所持品を変えず、イベントも発行しない。"""
         s = setup
+        player_id = PlayerId(100)
+        s["player_repo"].save(_create_player_status(100))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -910,9 +931,13 @@ class TestMonsterDeathRewardHandler:
         with s["uow"]:
             s["handler"].handle(event)
 
-        # Then
-        # エラーにならずに終了することを確認
-        assert True
+        status = s["player_repo"].find_by_id(player_id)
+        assert status.growth.total_exp == 0
+        assert status.gold.value == 0
+        inventory = s["inventory_repo"].find_by_id(player_id)
+        assert inventory.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert s["item_repo"].find_all() == []
+        assert s["event_publisher"].get_published_events() == []
 
     def test_handle_player_status_not_found(self, setup):
         """キラーのプレイヤー状態が存在しない場合は PlayerNotFoundException を投げること"""
@@ -1085,12 +1110,23 @@ class TestMonsterDecidedToUseSkillHandler:
             "map_repo": map_repo,
             "monster_repo": monster_repo,
             "uow": uow,
+            "hit_box_repo": hit_box_repo,
+            "skill_loadout_repo": skill_loadout_repo,
         }
 
     def test_handle_map_not_found_skips(self, handler_deps):
-        """マップが存在しない場合はスキル実行せずスキップすること"""
+        """使用可能な技能を持つモンスターでも、地図がなければMPを消費せず何も生成・保存しない。"""
         from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToUseSkillEvent
         s = handler_deps
+        monster = _create_monster(1, 1, Coordinate(1, 1, 0))
+        skill = SkillSpec(
+            skill_id=SkillId(1), name="Slash", element=Element.NEUTRAL,
+            deck_cost=1, cast_lock_ticks=1, cooldown_ticks=5, power_multiplier=1.0,
+            hit_pattern=SkillHitPattern.single_pulse(SkillHitPatternType.MELEE, HitBoxShape.single_cell()),
+            mp_cost=5,
+        )
+        monster.skill_loadout.equip_skill(DeckTier.NORMAL, 0, skill)
+        s["monster_repo"].save(monster)
         event = MonsterDecidedToUseSkillEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -1102,6 +1138,11 @@ class TestMonsterDecidedToUseSkillHandler:
         )
         with s["uow"]:
             s["handler"].handle(event)
+
+        assert s["monster_repo"].find_by_id(MonsterId(1)).mp.value == 20
+        assert s["hit_box_repo"].find_all() == []
+        s["skill_loadout_repo"].save.assert_not_called()
+        assert s["uow"].get_committed_events() == []
 
     def test_handle_monster_not_found_skips(self, handler_deps):
         """モンスターが存在しない場合はスキル実行せずスキップすること"""
@@ -1121,6 +1162,10 @@ class TestMonsterDecidedToUseSkillHandler:
         )
         with s["uow"]:
             s["handler"].handle(event)
+
+        assert s["hit_box_repo"].find_all() == []
+        s["skill_loadout_repo"].save.assert_not_called()
+        assert s["uow"].get_committed_events() == []
 
 
 class TestCombatIntegration:

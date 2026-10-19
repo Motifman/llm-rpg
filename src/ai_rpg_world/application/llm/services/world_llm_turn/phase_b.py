@@ -72,9 +72,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -125,7 +122,6 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
     的に並ぶように、Phase A の to_run 順で呼ぶ)。
     """
     player_id = phase_a.player_id
-    # 1 手の処理より先に進める。手の中で作る予期 (#1441) が、この手のターン数を持つ。
     if phase_a.failure_result is not None:
         result = phase_a.failure_result
         wiring.runtime._record_action_result(
@@ -295,22 +291,14 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
         arguments=arguments,
         tools_payload=phase_a.tools_payload,
     )
-    # PR 5 (#227): memo 完了 hint で result.message を augment する。
-    # memo_* ツール自身の実行直後は hint を出さない (冗長 / 自己参照ループ
-    # 防止)。本家経路 (LlmAgentOrchestrator._maybe_augment_with_memo_hint)
-    # と同等。
-    if (
-        wiring.memo_completion_hint_service is not None
-        and name
-        and name not in (TOOL_NAME_TODO_ADD, TOOL_NAME_TODO_LIST, TOOL_NAME_TODO_COMPLETE)
-    ):
+    # PR 5 (#227): メモ帳のやることが済んだかもしれないと、result.message に添える。
+    if wiring.memo_completion_hint_service is not None and name:
         try:
             # #552 PR-A: memo hint は target/action/result に key すべきで、
             # 主観入力に依存させない。sanitized summary を使う (健全化)。
             action_summary = format_action_summary_for_display(name, arguments)
             # Issue #240 後続: detect() を直接呼び、hint 発火時に trace に
-            # MEMO_HINT を emit。これにより実 LLM 試走で「hint が出たか / その後
-            # LLM が memo_done を呼んだか」を trace 経由で追える。
+            # MEMO_HINT を emit。実 LLM 試走で hint が出たかを trace 経由で追える。
             acting = wiring.runtime._acting_being_for(player_id)
             if acting is not None:
                 # 同じ行動で足したやることは問わない。足した行動の文と重なるのは当然で、済んだ印ではない。

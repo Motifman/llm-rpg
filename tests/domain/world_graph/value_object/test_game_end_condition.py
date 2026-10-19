@@ -79,22 +79,25 @@ class TestAllPlayerOutcomesResolvedNeedsNoField:
         assert condition.target_flag is None
 
 
-class TestSpotConditionsRequireATarget:
-    """ALL_AT_SPOT / ANY_AT_SPOT は target_spot_id を要る。"""
+class TestConditionRequiredFields:
+    """場所と時間の条件は、それぞれの必須値を構築時に要求する。"""
 
     @pytest.mark.parametrize(
-        "condition_type",
-        [GameEndConditionTypeEnum.ALL_AT_SPOT, GameEndConditionTypeEnum.ANY_AT_SPOT],
-        ids=lambda t: t.value,
+        ("condition_type", "message"),
+        [
+            (GameEndConditionTypeEnum.ALL_AT_SPOT, "target_spot_id が必要です"),
+            (GameEndConditionTypeEnum.ANY_AT_SPOT, "target_spot_id が必要です"),
+            (GameEndConditionTypeEnum.TICK_LIMIT, "tick_limit が必要です"),
+        ],
     )
-    def test_missing_target_spot_is_rejected(
-        self, condition_type: GameEndConditionTypeEnum
+    def test_missing_required_field_is_rejected(
+        self, condition_type: GameEndConditionTypeEnum, message: str
     ) -> None:
-        """target_spot_id を省くと拒否される。"""
+        """場所条件の target_spot_id または時間条件の tick_limit を省くと、欠落項目を示して拒否する。"""
         with pytest.raises(GameEndConditionValidationException) as exc:
             GameEndCondition(condition_type=condition_type)
 
-        assert "target_spot_id が必要です" in str(exc.value)
+        assert message in str(exc.value)
 
     @pytest.mark.parametrize(
         "condition_type",

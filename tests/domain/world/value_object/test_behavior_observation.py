@@ -178,7 +178,7 @@ class TestBehaviorObservationEquality:
     """BehaviorObservation の等価性・同一性"""
 
     def test_same_values_equality(self):
-        """同じ内容の観測は等しいこと（値の比較）"""
+        """同じ内容の観測は等しく、集結座標だけが異なる観測とは等しくないこと。"""
         coord = Coordinate(1, 1)
         obs1 = BehaviorObservation(
             visible_threats=[],
@@ -195,3 +195,11 @@ class TestBehaviorObservationEquality:
         assert obs1.pack_rally_coordinate == obs2.pack_rally_coordinate
         assert obs1.visible_threats == obs2.visible_threats
         assert obs1.visible_hostiles == obs2.visible_hostiles
+        assert obs1 == obs2
+        different_rally = BehaviorObservation(
+            visible_threats=[],
+            visible_hostiles=[],
+            selected_target=None,
+            pack_rally_coordinate=Coordinate(1, 2),
+        )
+        assert obs1 != different_rally
