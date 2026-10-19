@@ -109,11 +109,20 @@ def _owns(runtime, pid: PlayerId, item: str) -> bool:
 
 
 def _knock_down(runtime, actor: PlayerId, target: PlayerId) -> None:
-    """間隔を空けながら、相手が倒れるまで殴る。"""
-    for _ in range(_MAX_HP // _DAMAGE):
-        done, message = _strike(runtime, actor, target)
-        assert done, message
-        _ticks(runtime, _STRIKE_COOLDOWN)
+    """最初の攻撃で相手を知り、HP 調整後に殴り倒してから 3 tick 進める。"""
+    # 入室の観測が最初の攻撃後に届き、互いの存在を知る経路を残す。
+    done, message = _strike(runtime, actor, target)
+    assert done, message
+    _ticks(runtime, _STRIKE_COOLDOWN)
+    # 10 回の累積ダメージは test_ten_strikes_knock_someone_down が検証する。
+    # 最後の攻撃も省かず、身体・蘇生猶予・通知を本番の経路で作る。
+    status = runtime._player_status_repo.find_by_id(target)
+    assert status is not None and status.can_act()
+    status.apply_damage(status.hp.value - _DAMAGE)
+    runtime._player_status_repo.save(status)
+    done, message = _strike(runtime, actor, target)
+    assert done, message
+    _ticks(runtime, _STRIKE_COOLDOWN)
     assert _is_down(runtime, target)
 
 

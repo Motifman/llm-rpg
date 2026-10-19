@@ -188,7 +188,7 @@ cue と tags/text の字面一致で、`SEMANTIC_PASSIVE_TOP_K` の既定は 0 (
 - **外れたとき**: その episode 群を誤差つきで再解釈キューへ (3 段のはしご
   段 1 の誤差専用入口 PR-D と同一。「これらから X を予測したが Y だった」)。
 - **当たったとき**: その episode の想起価値の確認として recall ランキングを
-  boost ([recall_ranking_failure_boost_design.md](./recall_ranking_failure_boost_design.md)
+  boost (`recall_ranking_failure_boost_design.md` (#1631 で削除)
   の路線と接続)。
 - これで「どの記憶を思い出すべきだったか」がループの中で自己修正される。
   想起は状況駆動のままでよい — ランキングが誤差で較正されるから。
@@ -397,7 +397,7 @@ source / cue の軸を足すだけで同じ道に乗る設計になっている�
 
 - 実測: [memory_full_loop_run_2026-07-05.md](./memory_full_loop_run_2026-07-05.md)
 - モデル側の既定路線: [semantic_learning_consolidation_design.md](./semantic_learning_consolidation_design.md) / [prediction_error_correction_design.md](./prediction_error_correction_design.md)
-- 想起較正の前例: [recall_ranking_failure_boost_design.md](./recall_ranking_failure_boost_design.md)
+- 想起較正の前例: `recall_ranking_failure_boost_design.md` (#1631 で削除)
 - コード事実の確認: 2026-07-05 の調査 (cue 構築 `episodic_cue_rules.py:108-172`、
   境界 `chunk_boundary/rules.py:46-49`、圧縮 `episodic_chunk_subjective_fields.py:24-59`、
   昇格 `episodic_semantic_cluster_promotion.py:43-45`、意味想起

@@ -171,7 +171,7 @@
 
 ## 10. 実験 env の不正値は silent fallback せず fail-fast
 
-**何を**: `PROMPT_SECTION_ORDER` / `SHORT_TERM_MEMORY_KIND` / `SHORT_TERM_MEMORY_SCHEDULER_MODE` / `SEMANTIC_PASSIVE_TOP_K` / 各種 bool 系 env 等の **解決層**で、未知の値が来たら warning + default に縮退 (silent fallback) ではなく **`ValueError` を投げて即停止**する。
+**何を**: `SHORT_TERM_MEMORY_KIND` / `SEMANTIC_PASSIVE_TOP_K` / 各種 bool 系 env 等の **解決層**で、未知の値が来たら warning + default に縮退 (silent fallback) ではなく **`ValueError` を投げて即停止**する。
 
 **なぜ**:
 - 短縮形や typo (例: `SHORT_TERM_MEMORY_KIND=rolling` ← 正しくは `rolling_summary`) が silent fallback されると、**実験が間違った設定で走る**
@@ -179,7 +179,7 @@
 - 不正値は **shell の export ミス / 別の env を混同 / Makefile 引数の typo** など。実験者が意図して入れる事はほぼ無い → 黙って受理する価値より、即時 fail させて打ち直す方が安全
 
 **どう実装するか**:
-- enum 系 (`section_order`, `memory_kind`, `scheduler_mode`): 未知文字列で `ValueError(env_name + bad_value + valid_list)`
+- enum 系 (`memory_kind` など。`section_order` と `scheduler_mode` は #1631 で消した): 未知文字列で `ValueError(env_name + bad_value + valid_list)`
 - 数値系 (`semantic_passive_top_k`): 非整数 / 負数で `ValueError`
 - bool 系 (`_parse_bool_env`): TRUTHY と FALSY 両方の明示集合を持ち、どちらにも該当しない値で `ValueError`
 - **未設定 / 空文字** は意図的な「default 採用」と解釈し、引き続き default を返す (この決定は維持)
@@ -190,6 +190,9 @@
 
 **どこでこの判断が出てきたか**:
 - PR #433 で「Parasail A/B 実験 Run B は sliding_window だった」事実が `run_start` payload から判明 → PR #434 で対策
+
+`PROMPT_SECTION_ORDER` は、どの profile も `stable_to_volatile` だったので、記憶ではない設定の片付け (#1631) の #1754 でキーごと消した。
+`SHORT_TERM_MEMORY_SCHEDULER_MODE` も #1759 でキーごと消した。ThreadPool の scheduler (`ThreadPoolShortTermMemoryScheduler`) を設定から組んでいたのは、2026-06-07 (a9eded93b) から 2026-06-21 (2bfd0d3a1) まで full wiring (`wiring/__init__.py`) だけだった。実験と本番が通る escape の経路 (いまの world_runtime) は一度も組んでおらず、`thread_pool` と記録された run も、短期記憶の要約は同期 (inline) で作っていた。非同期の部品は、非同期化を作り直すときのために残す。
 
 ---
 
@@ -309,6 +312,8 @@ player_id keyed のまま残す。``EpisodicMemoryLinkApplicationService`` か�
 - 後続 Phase で frontier を being_id 化したら ``_player_id_for`` helper は
   撤去する
 
+**その後**: 昇格フロンティア (`EpisodicPromotionFrontier`) は、クラスタ昇格と一緒に記憶の部品の撤去 (#1631) の #1792 で消した。
+
 ---
 
 ## 15. BeingSnapshot v2 は memory payload を「オペーク JSON」として持つ
@@ -344,6 +349,8 @@ schema は application 層の `BeingMemorySnapshotService` (Phase 4-2) が版管
 - Phase 4 Step 4-1 着手時 (= 本 PR)
 - 既存 `BeingSnapshot` docstring の「(b) 後で payload field を増やす」方針
   を具体化する形
+
+**その後**: memory payload の `recall_buffer_pending` / `reinterpretation_journal` は、再解釈と一緒に Issue #1631 で消した。消す前の snapshot も読める (restore は足りないキーだけを拒む)。
 
 ---
 
@@ -599,6 +606,15 @@ memory_link / recall_buffer / reinterpretation_journal の 4 store がそもそ�
 - Phase 5 着手時 (= 本 PR)
 - 将来 memo SQLite を入れるときは ``--memo-db`` 引数を追加する
 
+
+**その後**: 再解釈の保存先を消したので、CLI の `--reinterpretation-db` を Issue #1631 で外した。見出しと本文の「4 SQLite DB」は消す前の構成で、いまは 3 つの SQLite DB と in-memory memo で動く。
+
+**その後**: 意味記憶の store (`SqliteSemanticMemoryStore`) は記憶の部品の撤去 (#1631) の #1794 で消した。`--memory-db` の SQLite ファイルにはいま memory_link だけが入る。意味記憶の表を作る版はマイグレーションの履歴として残るので、古い DB ファイルも開ける。
+
+記憶リンクも #1799 で消したので、CLI の `--memory-db` を外した。いまは Being の DB とエピソードの DB の 2 つと、in-memory の memo で動く。
+
+古いエピソードの store (`SqliteSubjectiveEpisodeStore`) も #1805 で消したので、CLI の `--episode-db` を外した。いまは Being の DB と、in-memory の memory store で動く。
+
 ---
 
 ## 9. 速度より「LLM の判断ミス」を優先して直す
@@ -805,6 +821,14 @@ source of truth。``check_game_end`` は ``scenario.win_conditions`` /
 解消した際、それ以前の 3 store を追加した一連の経路 (#580 / #583 が想起
 スロット、#588 が afterglow、Issue #526 段階 2 が慣化 store) すべてが本
 手順を踏んでいなかったことが判明したため、再発防止として本項を追加。
+
+**その後**: 見出しの欄 (afterglow) の store と、役に立った回数の store (`recall_success`) は、Issue #1631 の段 9 で snapshot のキー (`afterglow_entries` / `recall_success_hit_count` / `recall_success_received_event_ids`) ごと消した。手順の 1〜4 を逆にたどって外した。restore は足りないキーだけを拒むので、消す前の snapshot も読める。replay で世界の時計を巻き戻すときは、古い snapshot に残る `afterglow_entries` を読まずに捨てる (`world_clock_restart.py`)。
+
+残る想起の枠と慣れの store も、Issue #1631 の #1777 で snapshot のキー (`recall_slot_entries` / `recall_slot_cooldown` / `recall_habituation_last_recalled`) ごと消した。この項が生まれた PR-G の 3 store は、すべて無くなった。replay では、この 3 キーも読まずに捨てる。
+
+消したキーを捨てる処理は、#1804 で `removed_memory_payload_keys.py` の表に移り、replay かどうかに関わらず同じ表を通るようになった。`world_clock_restart.py` は段 13 で消した (#1810)。
+
+古いメモの store を外した段 11-2b (design_decisions D1631-5) からは、消したキーを `removed_memory_payload_keys.py` の表に足す。読み込みは replay かどうかに関わらず表のキーを捨て、件数を trace に残す。`fallback_used` のログは対象が無くなったので消した。新しい store は `ExperimentSnapshotSession` の必須の一覧に足す。
 
 ## 28. 実験に意味を持つ設定は profile/config だけから入れる
 
@@ -1039,6 +1063,8 @@ HIDDEN) で制御する案。物理的にその場に居る者が「消えた人
 評価するときに profile で再度有効化する。
 
 **その後**: `belief_goal_full` と `ablation_base` は、古い記憶の部品を使う profile として Issue #1631 で退役させた。過去の run の結果は `var/runs` に残る。
+
+能動想起の 4 つの道具 (`memory_recall_episodes` / `memory_recall_by_handle` / `memory_explore_related` / `memory_search_semantic`) と、その露出の設定 (`EPISODIC_RECALL_ENABLED` / `EPISODIC_EXPLORE_RELATED_ENABLED` / `SEMANTIC_SEARCH_ENABLED`) は、Issue #1631 の #1767 で消した。いまは目次つきのエピソード (`episode_recall`、D1623) が呼び出しの道具になる。
 
 ## 34. memo A/B は「蒸留ありの手帳」と「手帳なし」を比較する
 
@@ -1306,6 +1332,8 @@ RESCUED / STRANDED / DEAD が混在する世界終了を `win` や `lose` に置
 `check_game_end` の共通入口でシナリオ宣言より先に評価する。終了理由には設定名を含め、
 世界内の `game_end_conditions` が成立した終了と後から区別できるようにする。
 
+**その後**: どの profile でも全員が行動不能なら止めるので、`END_ON_ALL_DOWN` のキーは記憶ではない設定の片付け (#1631) の #1793 で消した。あわせて評価の順を入れ替え、世界の判定が続行のときだけ外的停止を見るようにした。先に評価する形では、全員の結果が確定して世界の終了条件も成り立つ tick で、終了理由が外的停止に置き換わる。これは上の「後から区別できるようにする」に反していた。実際、`var/runs/mine_v1_009` は全員の結果が確定して tick 37 で終わったのに、report の終了理由は「外的停止 END_ON_ALL_DOWN: …」だった。勝敗は別に計算していたので変わっていない。共通の入口に置く形はそのまま残す。終了理由の文字列は、過去の run と同じ grep で拾えるように変えない。
+
 ## 44. ツール露出は世界・フェーズ・本人状態を公開入口で合成する
 
 run 011 では、投票済みのエージェントへ次のターンでも `vote` が提示され、
@@ -1523,6 +1551,10 @@ capture も episodic 記憶も無効な構成でも、いまは起動時に配�
 Being が持つようになり (design_decisions D1520)、初期配置の同席を最初の手番より前に
 Being へ記録するため。
 
+**その後**: `PROMPT_DATASET_CAPTURE_ENABLED` は記憶ではない設定の片付け (#1631) の #1795 で消し、`make experiment` の run はいつも保存する。起動時の Being の配線も、条件の無い 1 か所にまとめた。
+
+**その後**: 古いエピソードの配線 (`LLM_EPISODIC_ENABLED` / `LLM_EPISODIC_SUBJECTIVE_ENABLED`) は記憶の部品の撤去 (#1631) の #1801 で runtime から外した。Being の配線は、もともとどちらにも依存しない形で組んである。
+
 ## 53. semantic top-K は選抜順位と表示順を分ける
 
 `【関連する学び】` の候補は recency、importance、relevance の score で top-K を
@@ -1540,6 +1572,8 @@ Being へ記録するため。
 直近の出来事が想起を引き起こすという読み順にも合う。`legacy` は A/B 比較用の旧順序
 そのものに価値があるため変更しない。この変更は原則との不整合と順位の揺れを直すが、
 キャッシュ改善量は実測前に主張しない。
+
+【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の #1786 で消した。
 
 ## 54. 直近の出来事は自分のターンを単位に、まとめて畳む
 
@@ -2391,6 +2425,8 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 - 会議は開始と終了を別 event にし、未終了 run でも開始を失わない
 - 要約あり・なしの両短期記憶が同じ圧縮 trace 契約を持つ
 
+会議の逐次化 (`LLM_MEETING_SERIAL_TURNS`) は、どの profile も既定の並列 (false) で動かしていたので、記憶ではない設定の片付け (#1631) の #1776 で消した。会議も自由時間も wave 並列だけになる。上の本文と「どう守るか」にある逐次化の記述 (設定を明示した会議だけ worker 数を 1 にする、逐次会議の後続 prompt に同 tick 発言が入る) は、判断の記録として残すが、もう使えない。
+
 ## 87. 長走比較では短期記憶だけを要約し、補助 JSON 呼び出しは熟考しない
 
 **何を**: `station_drill_lean` と `station_drill_thinking` は 80 tick の長走に備えて
@@ -2411,6 +2447,8 @@ run の変化を短期要約へ帰属できない。JSON 抽出は行動選択�
   無効化 block が入ることを試験する
 - 補助抽出用の設定項目は増やさず、熟考比較が必要になった時点で別途判断する
 - 圧縮発火は `SHORT_TERM_MEMORY_COMPACTED`、要約結果は既存 trace で観測する
+
+`SHORT_TERM_MEMORY_KIND` は、どの profile も `rolling_summary` で動かしていたので、記憶ではない設定の片付け (#1631) の #1785 で消した。短期記憶は常に要約するので、`rolling_summary` をリテラルで見る試験も外した。
 
 ## 88. REMOVE_ITEMは予約されていない具体instanceを全量確保してから消費する
 
@@ -2944,6 +2982,10 @@ episode で誕生日衝突が起きて想起が別の出来事を引き当てる
 - 新 id が接尾辞を持ち、旧 id と機械的に区別できることを確かめる
 - 版が handle の桁を食っていないこと (新旧混在で handle が一意に引ける) を確かめる
 - 材料を減らして衝突が増えていないことを、実 snapshot の全 episode で数える
+
+**その後**: handle を作っていた見出しの欄 (afterglow) は Issue #1631 の段 9 で消した。版を接尾辞で示す決まりはそのまま残し、handle の桁を確かめる試験は消した。
+
+**その後**: エピソードの同一性 (`episode_identity.py`) は、それを使う区切りの書き込みと一緒に記憶の部品の撤去 (#1631) の #1803 で消した。
 
 ## 110. 招集の判断材料には集合後の経過だけを末尾で渡す
 
@@ -3561,6 +3603,10 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 **入口**: prompt 節は build 済みの being_id。chunk は
 `WorldRuntime._record_action_result` の `_acting_being_for`。
 
+**その後**: 受動想起 (`EpisodicPassiveRecallRetrievalService` の `retrieve`) は記憶の部品の撤去 (#1631) の #1796 で消した。chunk の書き込みは残る。
+
+区切りの書き込み (`EpisodicChunkCoordinator`) と主観補完の scheduler も、#1803 で消した。
+
 ## 135. 応答として書かれた文を、常時出る注記に流用しない
 
 **判断**: シナリオが条件ごとに書く `failure_message` は、**その操作を呼んだ人
@@ -3656,6 +3702,10 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 **入口**: `WorldLlmTurnTrigger` が `_acting_being_for` で一度決めて渡す。
 未付着なら sidecar だけ skip し、手番は止めない。
 
+**その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。
+
+固着の coordinator (`BeliefConsolidationCoordinator`) と、その帰属の節 (`BELIEF_ATTRIBUTION_ENABLED`) は、記憶の部品の撤去 (#1631) の #1790 で消した。
+
 ## 146. 記憶リンクとクラスタ昇格は呼び出し側の BeingId を使う
 
 **何を**: `EpisodicMemoryLinkApplicationService` と
@@ -3668,6 +3718,10 @@ link / promotion だけが葉で付着を引き直していた。
 
 **入口**: chunk の `on_episode_committed`、prompt の受動想起候補、
 `ActionResultRecorder` の `on_after_tool_turn`、explore の `ActingBeing`。
+
+**その後**: クラスタ昇格 (`EpisodicSemanticClusterPromotionService`) は、記憶の部品の撤去 (#1631) の #1792 で消した。記憶リンクは受動想起と一緒に続く PR で消す。
+
+記憶リンク (`EpisodicMemoryLinkApplicationService` と store) も、読み手の受動想起を #1796 で消したあと、#1799 で消した。
 
 ## 147. Unit of Workは永続化に絞り、CommandScopeがcommand完了を統括する
 
@@ -4391,6 +4445,12 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 **この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
 `on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
 
+**その後**: runtime は主観エピソード (`SubjectiveEpisode`) を書かなくなった (記憶の部品の撤去 (#1631) の #1801)。区切りの書き起こし・主観補完・store は続く PR で消す。 snapshot のキー `episodic_episodes` もそこで消す。それまでは空で書き出し、古い snapshot に入っているエピソードは読んでも空の store に戻るだけで、次に保存するときに無くなる。
+
+区切りの書き起こし・主観補完のサービスと scheduler は #1803 で消した。`SubjectiveEpisode` と store は段 12 の 3 本目で消す。
+
+`SubjectiveEpisode` と store (in-memory / SQLite)、Being の snapshot のキー `episodic_episodes` も #1805 で消した。消す前の snapshot も読める。
+
 ## 175. 昇格フロンティアは BeingId で分ける
 
 **何を**: `EpisodicPromotionFrontier` のキーを `player_id: int` から `BeingId`
@@ -4412,6 +4472,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
 `SubjectiveEpisode` の再設計。
 
+**その後**: 昇格フロンティアは、クラスタ昇格と一緒に記憶の部品の撤去 (#1631) の #1792 で消した。
+
 ## 176. エピソードがある経路では BeingId を VO から読む
 
 **何を**: `SubjectiveEpisode` を既に受け取る公開入口
@@ -4427,6 +4489,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 **残す**: エピソードがまだ無い入口 (`after_action_recorded`、retrieve、
 `MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
 `being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
+
+**その後**: `SubjectiveEpisode` は記憶の部品の撤去 (#1631) の #1805 で消した。
 
 ## 177. 記憶リンクに経験の主体 BeingId を載せる
 
@@ -4448,6 +4512,8 @@ VO に復元する (スキーマ変更は不要)。
 **この PR で触らない**: `SemanticMemoryEntry.player_id` 他の記憶 VO、
 `SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
 `being_id` 引数削除、未使用 `player_id` 引数の掃除。
+
+**その後**: 記憶リンク (`MemoryLink`、store、Being の snapshot のキー `memory_links`) は記憶の部品の撤去 (#1631) の #1799 で消した。消す前の snapshot も読める (restore は足りないキーだけを拒む。リンクの欄は tick を持たないので replay でも止まらない)。SQLite のリンクの表は、表を作る版ごと使われなくなった。古い DB ファイルに表は残るが、どこも開かない。
 
 ## 178. monster spawnはslot 1件ごとに確定する
 
@@ -5195,6 +5261,12 @@ VO に復元する (スキーマ変更は不要)。
 再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
 `being_id` 引数削除、SQLite スキーマ変更。
 
+**その後**: `BeliefConsolidationCoordinator` は記憶の部品の撤去 (#1631) の #1790 で消した。いまの profile では、意味記憶エントリを書く部品は動かない。
+
+クラスタ昇格と gist (`SEMANTIC_LLM_GIST_ENABLED`) も #1792 で消したので、意味記憶エントリを書く部品は無くなった。意味記憶の store は続く PR で消す。
+
+意味記憶エントリ (`SemanticMemoryEntry`) と、その store・Being の snapshot のキー `semantic_entries` / `semantic_cluster_signatures` は #1794 で消した。消す前の snapshot も読める。
+
 ## 209. 再解釈エントリに経験の主体 BeingId を載せる
 
 **何を**: `EpisodicReinterpretationEntry` に必須フィールド `being_id: BeingId`
@@ -5216,6 +5288,7 @@ snapshot Being から復元する。payload と fallback の両方があり不�
 **この PR で触らない**: `EpisodicRecallObservation` への being_id 載せ、
 `SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
 
+**その後**: 再解釈の coordinator (`EpisodicReinterpretationCoordinator`、`LLM_EPISODIC_REINTERPRETATION_ENABLED`) は Issue #1631 で消した。想起の記録と再解釈エントリの保存先、値の型、Being の snapshot のキー `recall_buffer_pending` / `reinterpretation_journal` も、続く PR で消した。消す前の snapshot も読める。
 
 ## 210. 履歴には、次に真似しても通る形だけを残す
 
@@ -5478,6 +5551,8 @@ tick 単位の起動判定 (#219) に置き換えた。判断の付き方 (作�
 
 **どこで出てきたか**: Jev (#1319) の 3 つ目の用途。観察 profile は
 `station_drill_reply_gate`。
+
+観察 profile の `station_drill_reply_gate` と `station_drill_gemma_reply_gate` は、観察する仕組みが無くなったので #1693 で退役させた (#1631)。
 
 ## 218. 二人で合わせる操作の入口は interact に統合する
 
@@ -6137,6 +6212,8 @@ K=1 で 74%、K=3 で 96%、K=5 で 100%。96 組を人が「同じ主張 72 組
 
 **関連**: #1436 / #1453 / #1414 / #1463 / #234。
 
+作る前の判定 (`BELIEF_CREATE_GATE_*`、`belief_create_gate.py`) と候補の絞り込み (`BELIEF_CANDIDATE_*`) は、記憶の部品の撤去 (#1631) の #1787 で消した。どの profile でも無効だった。測った記録の `scripts/jev_belief_create_gate_measure.py` も一緒に消した。
+
 ## 238. 目的の達成 hint は、判断が得られないとき規則へ縮退しない。清算できない目的は問わない
 
 **何を**: 行動の結果が返ったあと、未達成の目的が達成されたかを Jev に問い、確率が閾値以上なら
@@ -6383,7 +6460,8 @@ snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。sn
   観測は引き継がない。「いまの状況」と判断されたら作らず、状態の信念も置き換えない
 - **状態の変化か前の学びの誤りかは指示文で分ける**: 見落としていた所での発見は前の学びの
   誤りとして `revise` / `contradict` に回す。機械の試験では守れないので、
-  `scripts/belief_state_change_probe.py` の対照の場面で読む (#1452 の確認で 3/5 → 1/5)
+  `scripts/belief_state_change_probe.py` の対照の場面で読む (#1452 の確認で 3/5 → 1/5)。
+  この script は固着と一緒に #1631 の #1790 で消した
 - **snapshot の互換は保たない**: 証拠の payload に `observed_turn` が無ければ読み込まずに
   止める。いつ見たかを捏造しない。信念の `last_observed_turn` は、キーが無ければ不明として
   戻す。不明は値として表せるので、止めるほどではない
@@ -6394,6 +6472,10 @@ snapshot の `memory_turn` は予期と突き合わせずに時計へ戻す。sn
 
 **関連**: design_decisions D1439 (記憶のターン数の保存先) / Issue #1436 / #1440 (ターン数を進める配線) /
 #1443 (予期の外れを証拠につなぐ) / #1453 (作る前の判断)。
+
+**その後**: 証拠のバッファ (`BeliefEvidence`、`BELIEF_EVIDENCE_ENABLED`) は、読み手の固着を #1790 で消したあと、記憶の部品の撤去 (#1631) の #1792 で消した。Being の snapshot のキー `belief_evidence_buffer` / `belief_evidence_received_event_ids` も外した。消す前の snapshot も読める。信念の `last_observed_turn` は、意味記憶の store と一緒に続く PR で消す。
+
+信念の `last_observed_turn` も、意味記憶エントリと一緒に #1794 で消した。
 
 ## D1441. 予期は環境の tool の引数として一律に書かせ、その手のターンの予期として積む
 
@@ -6527,6 +6609,8 @@ U9a / U9b) は外す (Issue #1443)。
 **その後**: 確定した予期を信念の材料・想起の手柄・区切りのメモに返す受け取る側は Issue #1631 で消した。古いエピソードの区切りの `prediction_error` は、外れを決める清算が無くなったので、いつも空になる。
 
 誤差駆動の再解釈 (`ERROR_DRIVEN_REINTERPRETATION_ENABLED`)、ずれを想起の記録に書き添える `stamp_prediction_outcome_for_episodes_by_being`、想起の記録の `prediction_outcome_error` と受け取り済みの出来事の ID も Issue #1631 で消した。Being の snapshot は `recall_buffer_received_event_ids` を書かなくなった。消す前の snapshot も読める。
+
+役に立った回数 (`RECALL_HIT_BOOST_ENABLED` と的中の store) は、書き手を消したあと常に 0 で効いていなかったので、Issue #1631 の段 9 で消した。
 
 ## D1484. 予期の根拠は形と同じ呼び出しで 1 件ずつ問い、確定した当否は根拠にだけ返す
 
@@ -6706,6 +6790,8 @@ U9a / U9b) は外す (Issue #1443)。
 **関連**: design_decisions D1414 / D1463 / Issue #1414 / #1484。
 
 状況の項目から引く想起 (`SITUATION_BELIEF_RECALL_ENABLED` / `_NARROWER`) は、記憶の部品の撤去 (#1631) の #1656 で消した。【関連する学び】は受動想起 (`SEMANTIC_PASSIVE_TOP_K`) が出す。
+
+【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の #1786 で消した。
 
 ## D1414-3. ~~次のターンの想起で残す欄は、ターンの終わりの清算の呼び出しで毎ターン問い、予期の判定とは分けて読む~~
 
@@ -6900,6 +6986,8 @@ D1440) と同じ扱い。
 
 **関連**: design_decisions D1414 / Issue #1414 / #1453。
 
+文字の 2 字組の BM25 (`text_candidate_narrowing.py`) は、使い手だった作る前の判定と一緒に、記憶の部品の撤去 (#1631) の #1787 で消した。
+
 ## D1414-8. 想起は状況の全部の項目をつなげた 1 本の問い合わせで引き、上位 3 件を載せる
 
 **何を**: 状況の 6 つの項目 (`Situation`) の値を、項目の決まった順に改行でつないだ 1 本の文 (`Situation.query`) で
@@ -6964,6 +7052,8 @@ D1440) と同じ扱い。
 
 **関連**: design_decisions D1414-7 / D1414-8 / Issue #1498 / Issue #1454 / Issue #1414。
 
+絞り込みの差し替えの部品 (`text_candidate_narrowing.py`) は、記憶の部品の撤去 (#1631) の #1787 で消した。
+
 ## D1454. 埋め込みの手法は絞り込みの差し替えとして足し、作る部品・ベクトルの索引・縮退を分けて差し替える
 
 **何を**: `ITextCandidateNarrower` の実装として、文の埋め込みで候補を絞る手法を足した。profile の
@@ -7026,6 +7116,8 @@ D1440) と同じ扱い。
   起動時に 1 回試すか、認証の失敗を縮退と分けて止めるかを決める
 
 **関連**: design_decisions 27 / D1414-8 / D1498 / Issue #1454 / Issue #1436。
+
+埋め込みの絞り込み (`embedding_narrowing.py`、OpenRouter と Ruri v3 の埋め込み) と任意の依存 `embedding-local` は、記憶の部品の撤去 (#1631) の #1787 で消した。比べた記録 (`scripts/situation_recall_review.py` の出力) は残る。
 
 ## D1461. SNSの対象には作成時の不変識別子を保存し、表示参照と分ける
 
@@ -7266,6 +7358,14 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 保留中の予測 (約束、`PENDING_PREDICTION_ENABLED`) は Issue #1631 で消した。Being の snapshot も `pending_predictions` を書かなくなった。消す前に保存した snapshot に残る約束は前の回の tick を持つので、replay では読み込む前に捨てる処理を残した。捨てた件数はいまも `world_clock_restarts` に残る。
 
+世界の tick を 0 に置き換える仕組み (`world_clock_restart.py`) は、記憶の部品の撤去 (#1631) の段 13 で消した (#1810)。
+- 置き換える欄は、上の 2 つが消えた時点で無くなっていた。
+- 残っていたのは、名前に tick を含む欄が 0 でなければ止める番人だけだった。今の codec は Being のターン数 (`*_turn`) しか書かないので、番人は発火しなかった。
+- `snapshot_load` の `world_clock_restarts` 欄も無くなった。
+- replay で世界を tick 0 から始め、記憶だけを持ち越す仕組みはそのまま残る。
+
+記憶に世界の tick を書く欄を足すと、前の回の tick が新しい回の記録より新しく見える問題がまた起きる。記憶の欄は Being のターン数で持つ。
+
 ---
 
 ## D1514-2. 回ごとの役と初期配置は、シナリオの `round_assignment` に枠として書き、シードと回の番号で並べ替える
@@ -7354,6 +7454,8 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 **どうしないと壊れるか**: 環境の encounter に人を残すと、知っている人を Being の記憶で決める段で、環境と Being の 2 か所に会った記録ができてずれる。歩いて入った側に記録しないと、相手のところへ行った側だけが相手を知らないままになる。紹介をシナリオで止められないと、互いを知らずに始まる班 (#1508) が作れない。
 
 **関連**: design_decisions 27 / 52 / Issue #1436 / #1465 / #1508。
+
+**その後**: 想起の手がかりの「直近に会った相手」(`PlayerAcquaintances.recently_met_names`) を読んでいた受動想起は、記憶の部品の撤去 (#1631) の #1796 で消した。手がかりを作る側の引数 (`recently_met_names` と encounter の 5 つ) と、読み手のいなくなった `recently_met_names` も一緒に消した。
 
 ---
 
@@ -7816,6 +7918,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 伝聞を抜き出す部品と固める側の伝聞節 (`HEARSAY_ENABLED`) は、記憶の部品の撤去 (#1631) の #1649 で消した。「推測の言い方を残す」決まりは残る。【関連する学び】の印の処理と伝聞の件数 `hearsay_support_count` は、信念の残りを消すまで残る。伝聞の証拠が作られなくなったので、新しく作る信念に印は付かない。
 
+【関連する学び】 (`SEMANTIC_PASSIVE_TOP_K` と `SemanticPassiveRecallService`) は、記憶の部品の撤去 (#1631) の #1786 で消した。印を付ける行 (`belief_recall_line`) も一緒に消えた。
+
 ---
 
 ## D1601. 行動に添えた発言は、行動の結果を問わず dispatch で 1 回出す
@@ -7923,7 +8027,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **なぜ**: `var/runs/mine_v1_007_memo` (profile `memory_jev_mine_v1_v41_thinking_capped_memo_only`、エピソードと想起を止めた設定) のシステムプロンプトが、「【関連する記憶】または能動想起で取り出した内容だけが確かな記憶」「【関連する記憶】が空のときは能動想起の手段を試す」を指示し続けた。この run では欄もツールも出ていない。サヨ T20 は「The instructions mention 能動想起 but no tool」と探し、ゲン T20・T23、サヨ T26 も同じように探した。記憶を比べる run で、記憶なしの条件が無い手段を探すことに手番を使うと、比較が濁る。CLAUDE.md の「プロンプト本文にツール名を書くときは、必ず露出判断を通す」と同じ穴で、欄の名前にも同じ扱いが要る。
 
-**設定値ではなくツールの一覧から決める理由**: 能動想起のツールは、設定と実行器の有無の両方がそろったときに出る。`memory_recall_by_handle` には設定が無く、見出しと想起スロットの store がそろったときだけ出る。`LLM_TOOL_MODE` の純スポットグラフでは、記憶のツールが丸ごと隠れる。設定から推すと、これらの経路で本文と一覧がずれる。一覧は design_decisions 44 の入口が決めたものなので、本文もそれを読む。
+**設定値ではなくツールの一覧から決める理由**: 能動想起のツールは、設定と実行器の有無の両方がそろったときに出る。`memory_recall_by_handle` には設定が無く、見出しと想起スロットの store がそろったときだけ出る。`LLM_TOOL_MODE` の純スポットグラフでは、記憶のツールが丸ごと隠れる (この設定は #1631 の #1762 で消した。いまは `include_todo_tools=False` で組んだときに隠れる)。設定から推すと、これらの経路で本文と一覧がずれる。一覧は design_decisions 44 の入口が決めたものなので、本文もそれを読む。
 
 **既定値を置かない理由**: 置くと、渡し忘れた呼び出しが「両方ある」文へ黙って戻り、無い欄とツールをまた探させる。
 
@@ -7934,6 +8038,10 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **関連**: Issue #1616 / #1587 / #1621、design_decisions 1 / 44。
 
 **その後**: 全部入りの profile (`memory_jev_mine_v1_v41_thinking_capped`) とメモだけの profile は Issue #1631 で退役させた。試験は、新しい記憶の profile に全部入りの run が入れていた古い部品を戻して全部入りの設定を作る。退役前の profile と、止める部品ごとの 1 ターン目のプロンプトが一致することを確かめてから置き換えた。
+
+能動想起の道具は Issue #1631 の #1767 で消した。`active_recall_offered` と `ACTIVE_RECALL_TOOL_NAMES` も消え、書き分けは【関連する記憶】の有無の 2 通りになった。【関連する記憶】だけがある設定と、どちらも無い設定の文は、消す前とバイト単位で同じ。試験の名前の表には能動想起の名前を残し、どの設定でもプロンプトに戻ってこないことを見張る。
+
+受動想起【関連する記憶】も記憶の部品の撤去 (#1631) の #1796 で消したので、`relevant_memories_shown` と `WorldRuntime._relevant_memories_named_in_system_prompt` も消え、記憶の指示は記憶を止めた設定の文だけになった。station_drill のシステムプロンプトも、この文に変わった。
 
 ---
 
@@ -8015,7 +8123,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1623 / #1621 / #1626、design_decisions 1 / 10 / D1616 / D1623 / D1626 / D1628。
 
-**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。 記憶のツールを隠す純スポットグラフ (`LLM_TOOL_MODE=pure_spot_graph`) では、呼び出せない目次を出さない。
+**その後**: `BEING_EPISODE_INDEX_ORDER` は Issue #1631 で消し、目次は常に出す。並べ方は `RecalledRisesToTop` に固定した。並べ方を差し替える作り (`EpisodeIndexSelection` と `NewestFirst`) はドメイン層に残し、profile で選ぶことだけをやめた。trace の `episode_index_shown.order` は過去の run と並べて読めるよう `recalled_rises_to_top` のまま残す。 記憶のツールを隠す純スポットグラフ (#1762 で設定を消し、いまは `include_todo_tools=False`。`LLM_TOOL_MODE=pure_spot_graph`) では、呼び出せない目次を出さない。
 
 ---
 
@@ -8091,6 +8199,10 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1628 / #1621 / #1322 / #1616、design_decisions 1 / D1441 / D1616 / D1623 / D1628。
 
+**その後**: 古いメモの道具と【進行中のメモ】は #1631 の段 11-2a で消した (design_decisions D1631-4)。`MEMO_TOOLS_ENABLED` と、メモ帳と並べたときに止める検査も一緒に消えた。メモ帳はほかのメモと並ばないので、`tests/demos/test_disabled_memory_parts_vanish_from_the_prompt.py` はメモ帳を全部入りに入れ、`_DISABLED_PARTS` で止める形に戻した。
+
+**その後 (2)**: #1631 の段 11-3 (#1806) で `BEING_MEMO_ENABLED` を消し、メモ帳を `create_world_runtime` で組んだ runtime にいつも入れる形にした。上の「既定は off で、既存の profile の tool 定義とプロンプトはバイト単位で変わらない」はもう成り立たない。それまで off だった profile では、環境の tool の 1 つ 1 つに引数 `memo` の定義が付き、システムプロンプトに【メモの書き方】が足され、tool 定義とプロンプトが大きく増える (smoke_stub の 1 ターン目で 16,837 → 34,288 バイト)。済んだかの知らせのサービスも、いつも組む。そのため、型付き判断の port がある profile では、残りのやることが 1 件以上あると、行動の結果を返すたびに型付き判断を 1 回呼ぶ。純スポットグラフ (`include_todo_tools=False`) でもメモ帳は出る。目次は止めているので扱いが食い違うが、どちらに寄せるかは `include_todo_tools` を整理するときに決める。その後、#1807 で `include_todo_tools` と純スポットグラフのモードごと消したので、この食い違いは無くなった (呼ぶ経路は #1762 で `LLM_TOOL_MODE` を消したときから無かった)。
+
 ---
 
 ## D1597. 成功した自分の行動のあとは次の tick に手番を回す。休むのは wait を選んだときと移動中だけ
@@ -8153,6 +8265,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 記憶の部品のために LLM クライアントや Jev を組むときは、`aux_call_sink` を必ず渡す。`tests/application/world_runtime/test_memory_llm_calls_reach_the_trace.py` が、src の中の全呼び出しが `aux_call_sink=` を渡しているかを ast で見張る。新しい部品を足すときは `AuxLlmComponent` に値を足し、report の `_AUX_COMPONENT_LABELS` に日本語の名前を足す (足さなければ部品名がそのまま出る)
 
 **関連**: Issue #1617 / #1587 / #1627 / #1429 / #1631、design_decisions 5 / D1626。
+
+**その後**: 主観補完 (`episode_subjective`) の呼び出しは記憶の部品の撤去 (#1631) の #1801 で消し、`AuxLlmComponent.EPISODE_SUBJECTIVE` も外した。消す前の run の report を読めるよう、表記の対応 (`主観の書き込み`) は文字列のまま残す。
 
 ---
 
@@ -8230,4 +8344,70 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1631 / #1626 / #1621、design_decisions D1623。
 
-**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。
+**その後**: 書き起こしと目次をスイッチの無い標準にしたとき (Issue #1631)、`sliding_window` は設定の検証で拒むようにした。`resolve_short_term_memory_kind` はまだ値として受け付け、`DefaultSlidingWindowMemory` を組む分岐も残る。どちらも設定からは届かず、短期記憶の種類を固定する段 (#1631 の段 13) で消す。キー、解決、`DefaultSlidingWindowMemory` を組む分岐は #1785 で消した。`DefaultSlidingWindowMemory` は試験の代役として残る。#1631 の段 11-4 (#1811) で `DefaultSlidingWindowMemory` を消し、試験の代役は `SummarizingShortTermMemory` (要約の LLM を渡さず、テンプレートで畳む) に付け替えた。snapshot の codec からは、短期記憶が固定容量のときに保存・復元する経路と、要約された snapshot を固定容量の短期記憶へ書き戻す経路を消した。保存は常に `mode: "rolling_summary"` になる。保存形式の subsystem のキー `"sliding_window"` は要約する短期記憶でも使っているので名前を変えず、固定容量の短期記憶で保存した古い snapshot (v1 の mode 無しと v2 の `mode: "sliding_window"`) を要約する短期記憶へ読む経路は残した。これを消すと、過去の snapshot から再開できなくなる。
+
+---
+
+## D1631-2. OpenRouter の provider を固定したら、送る引数をすべて受け付ける provider にだけ送る
+
+**何を**: `OPENROUTER_PROVIDER` か `OPENROUTER_QUANTIZATION` を書いた run は、routing の塊にいつも `require_parameters=true` を入れる。`OPENROUTER_REQUIRE_PARAMS` のキーは #1788 で消した。どちらも書かない呼び出しは、今までどおり routing の塊を作らない。
+
+**なぜ**: このリポジトリでは、行動のターンに `tool_choice="required"` を送るのがほぼ前提になっている (#1053)。`require_parameters` が無いと、OpenRouter はその引数を受け付けない provider にも送ることがあり、引数は無視される。そのため `required` が効かないまま run が進む。true にすると、受け付けない provider には送らず、送る前にエラーで止まる。静かな失敗を、起動直後に見える失敗に変える。
+
+**どうしないと壊れるか**: provider の対応状況は予告なく変わる (`docs/llm_provider_selection.md`)。provider が `required` の対応をやめたとき、false のままだとツールを呼ばない応答が混ざる。それでも run は成功として終わる。 `require_parameters` は `tool_choice` だけでなく、送る引数 (`max_tokens`、`reasoning` など) をすべて見る。どれか 1 つを受け付けない provider に固定した run も、送る前に止まる。
+
+**将来の方針**: `tool_choice="required"` を受け付ける適したモデルが無くなったら、`required` を外す。代わりにプロンプトの末尾に、必ずツールを 1 つ選ぶ指示を足して選ばせる。これは #1053 でやめた形と同じで、その部品 (`force_tool_call_instruction`) は #1677 で消した。戻すときは、#1053 が退けた理由 (行動しない応答を許すこと、比べる run のプロンプトの byte が変わること) を受け入れたうえで判断する。
+
+**関連**: Issue #1631、PR #1053 (熟考の有無にかかわらず `required` を使う)、PR #1677 (末尾の指示の部品を消した)、`docs/llm_provider_selection.md`。
+
+---
+
+## D1631-3. 推論の段階を書かない run は minimal で送る
+
+**何を**: `LLM_REASONING_EFFORT` を書かない設定は `minimal` になる (これまでは `none`)。キーは残し、`none` と書けば熟考なしのまま送る。#1798 で変えた。`LiteLLMClient` を直に組むときの引数の既定 (`none`) は変えていない。プローブ (`scripts/openrouter_ping.py`) と試験が使う。
+
+**なぜ**: 本命の profile をはじめ、実 LLM の run の多くは `minimal` を明示している。`none` で動かす profile も値を明示している。既定の `none` に頼っていたのは、stub の profile と、profile を通らない recall probe だけだった。書き忘れた run だけが熟考なしで走ると、比べたつもりの run と条件がずれる。
+
+**どうしないと壊れるか**: 既定が `none` のままだと、新しい profile で `LLM_REASONING_EFFORT` を書き忘れた run が、本命と違う条件で走る。その違いは、run_start の設定の記録を読まないと気づけない。
+
+**関連**: Issue #1631、design_decisions 87 (補助 JSON 呼び出しは agent turn の値にかかわらず `none`)。
+
+---
+
+## D1631-4. 古いメモのうち LLM から見える部分を消し、保存先と過去の trace を読む側は残す
+
+**何を**: Issue #1631 の段 11-2a。古いメモの道具 (`memo_add` / `memo_list` / `memo_done`)、その実行器、【進行中のメモ】の節、システムプロンプトの案内、設定のキー `MEMO_TOOLS_ENABLED`、古いメモに対する済んだかの知らせの配線を消した。`MEMO_TOOLS_ENABLED` を profile に書くと、未知のキーとして起動前に止まる。済んだかの知らせはメモ帳のやることにだけ出る。
+
+**残したもの**: 保存先 (`_todo_store`、`MemoRepository`)、Being の snapshot の `memo` キー、知らせのサービスにある古いメモの分岐は段 11-2b / 11-3 で扱う。trace の `memo_add` / `memo_done` の種別は、出す側は無いが、viewer と trace 分析が過去の trace を読むので残す。 `memo_id_display.py` の `memo_handle` と `resolve_memo_id_prefix` は、実行器と【進行中のメモ】が消えて使い手が無くなった。知らせのサービスの古いメモの分岐と一緒に、次の段で消す。
+
+**道具の並び**: 常に出す道具の並び (`ALWAYS_PRESENT_TOOL_ORDER`) は `wait`、`speak` だけになった。memo の道具を出していた profile では、後ろの道具が 3 つ前へ詰まる。1 本の run の中では並びが変わらないのでプレフィックスキャッシュ (design_decisions 1) は壊れないが、memo の道具を出していた過去の run とは、プレフィックスを比べられない。
+
+**なぜ一度に消すか**: 道具だけ消して【進行中のメモ】やシステムプロンプトの案内を残すと、エージェントは無い道具を呼ぶ (CLAUDE.md の「プロンプト本文にツール名を書くときは、必ず露出判断を通す」)。設定のキーだけ残すと、有効にしたつもりの run が古いメモなしで走る。
+
+**どうしないと壊れるか**: 保存先に古いメモが残った snapshot を読み込んでも、プロンプトには出ない。`tests/integration/test_world_runtime_current_runtime_contract.py` の `test_old_memo_left_in_the_store_does_not_reach_the_prompt` が見張る。
+
+**関連**: Issue #1631、design_decisions D1628 / D1628-2。
+
+**その後**: 保存先、snapshot の `memo` キー、知らせのサービスの古いメモの分岐、trace の `memo_add` / `memo_done` の種別は、段 11-2b で消した (design_decisions D1631-5)。上の `test_old_memo_left_in_the_store_does_not_reach_the_prompt` は、保存先が無くなったので消した。
+
+## D1631-5. 消した部品の snapshot のキーは、拒まずに捨てて件数を trace に残す
+
+**何を**: Issue #1631 の段 11-2b。古いメモの保存先 (`_todo_store`、`InMemoryMemoStore`、`MemoRepository`、`MemoEntry`、`MemoFulfillmentContext`)、Being の snapshot の `memo` キーと codec、知らせのサービスの古いメモの分岐、`memo_id_display.py`、trace の `memo_add` / `memo_done` の種別と viewer・trace 分析での扱いを消した。済んだかの知らせは、メモ帳のやることだけを見る。
+
+**消したキーの表**: Being の snapshot の memory payload から消したキーは、`src/ai_rpg_world/application/being/removed_memory_payload_keys.py` の `REMOVED_MEMORY_PAYLOAD_KEYS` に 1 か所で並べる。いまは想起の階層と証拠のバッファの 6 キー、`pending_predictions`、`memo`。読み込み (`RestoreBeingSnapshotFromFileUseCase.execute`) は、replay かどうかに関わらず、まず `drop_removed_memory_payload_keys` で表のキーを取り除き、そのあとで replay なら世界の時計を巻き戻す。取り除いたキーごとの件数 (値が list なら要素数) は `snapshot_load` の trace の `removed_memory_keys` に、Being ごとに残る。取り除くキーが無かった Being は載せない。
+
+**なぜ拒まないか**: 消した部品の欄を持つ古い snapshot から、replay も続きからの再開もできるようにするため。黙って捨てると、古い snapshot を読んだことが run の記録から分からなくなるので、件数を残す。それまでは `world_clock_restart.py` が replay のときだけ欄を捨て、続きからの読み込みでは restore が知らないキーを読み飛ばしていた。どちらの読み込みでも同じ表を通す形にそろえた。trace を持たない `BeingPersistenceService.load` も同じ表を通し、件数はログに残す。空の欄は捨てても失うものが無いので、件数に載せない。
+
+**次に消すとき**: 古いエピソードの store を消す段 12 は、`EXPECTED_PAYLOAD_KEYS` から `episodic_episodes` を外し、表に 1 行足す。あわせて、`BeingMemorySnapshotService` の `episodic_episode_store` 引数、`capture` / `restore` の `episodic_episodes` の処理、`ExperimentSnapshotSession` の `_empty_episode_store` を消す。表のキーが `EXPECTED_PAYLOAD_KEYS` に残っていると、表が捨てたあとで restore が欠けとして拒むので、`tests/application/being/test_removed_memory_payload_keys.py` が重なりを見張る。
+
+**trace の欄の変化**: `snapshot_load` の `world_clock_restarts` の要素から `dropped_pending_predictions` が無くなり、`{being_id, reset_tick_fields}` になった。捨てた約束の件数は、新しい欄 `removed_memory_keys` の `counts` に `pending_predictions` として出る。いまの記憶の欄は世界の tick を持たないので、`reset_tick_fields` は 0 になる。
+
+**snapshot session の空の代用**: `ExperimentSnapshotSession` が未配線の store を空で代用してログに残す仕組みは、対象が古いメモの保存先だけだったので一緒に消した。いまの Being の記憶の store は、古いエピソードの store を除き、渡らなければ起動時に止まる。古いエピソードの store は `_empty_episode_store` で空に代用するが、段 12 で store ごと消す。design_decisions 27 の「`fallback_used` ログ対象に新 store の属性名を追加する」は、新しい store を必須の一覧に足すことに読み替える。
+
+**関連**: Issue #1631、design_decisions D1631-4、design_decisions 27。
+
+**その後**: 段 12 で `episodic_episodes` を表に足し、`EXPECTED_PAYLOAD_KEYS` と `BeingMemorySnapshotService` の古いエピソードの処理、`ExperimentSnapshotSession` の空の代用を消した (#1805)。
+
+段 13 で `world_clock_restart.py` を消した (#1810)。読み込みは表のキーを捨てたあと、replay かどうかで分かれない。`snapshot_load` の `world_clock_restarts` 欄も無くなった。
+
+上で「同じ表を通す」と書いた `BeingPersistenceService` は、本番から呼ばれず試験だけが使っていたので、段 13 で消した (#1813)。表を通る読み込みは、`RestoreBeingSnapshotFromFileUseCase` だけになった。
