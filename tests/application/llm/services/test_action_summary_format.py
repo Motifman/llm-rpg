@@ -15,8 +15,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -39,11 +37,6 @@ def _all_declared_tool_names() -> set[str]:
     memory = {
         definition.name
         for definition, _ in get_memory_specs(
-            memo_enabled=True,
-            episodic_recall_enabled=True,
-            recall_by_handle_enabled=True,
-            episodic_explore_related_enabled=True,
-            semantic_search_enabled=True,
             episode_recall_max_handles=3,
             episode_index_revision_enabled=True,
         )
@@ -66,24 +59,13 @@ class TestFormatActionSummaryForDisplay:
         assert natural & fallback == set()
 
     def test_natural_text_examples_for_high_volume_tools(self) -> None:
-        """speak / memo / spot action は JSON ではなく短い自然文になる。"""
+        """speak / spot action は JSON ではなく短い自然文になる。"""
         assert (
             format_action_summary_for_display(
                 TOOL_NAME_SPEECH,
                 {"channel": "say", "content": "北へ行く"},
             )
             == "あなたは言った: 「北へ行く」"
-        )
-        assert (
-            format_action_summary_for_display(TOOL_NAME_MEMO_ADD, {"content": "長い本文"})
-            == "メモを書いた"
-        )
-        assert (
-            format_action_summary_for_display(
-                TOOL_NAME_MEMO_DONE,
-                {"memo_ids": ["bb0aaa", "88cd0a", "bda741"]},
-            )
-            == "メモ 3 件を完了にした (bb0aaa, 88cd0a, bda741)"
         )
         assert (
             format_action_summary_for_display(
@@ -116,7 +98,7 @@ class TestFormatActionSummaryForDisplay:
         )
 
     def test_hidden_fields_include_inner_thought_and_duplicate_content(self) -> None:
-        """JSON フォールバックから心の声・発話本文・メモ本文・メモ帳への書き込みなどの重複入力を落とす。"""
+        """JSON フォールバックから心の声・発話本文・メモ帳への書き込みなどの重複入力を落とす。"""
         assert ACTION_SUMMARY_HIDDEN_FIELDS == frozenset(
             {
                 "content",

@@ -42,7 +42,7 @@ class TestSessionHeartbeatWiring:
         )
         char = mgr.create_character(CharacterCreateRequest(name="ヒートビート確認用キャラクター"))
         summary = mgr.create_session(
-            SessionCreateRequest(world_id="relay_puzzle_demo", character_ids=[char.id]),
+            SessionCreateRequest(world_id="forbidden_library_demo", character_ids=[char.id]),
         )
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime

@@ -2,7 +2,6 @@
 # 伴い、本ファイルの ``being_id`` 参照を deterministic な ``BeingId`` の
 # 既定値で受ける (= テスト内で異なる player_id を使う箇所は個別に上書き)。
 # BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
 
 being_id = _MIG_BeingId('being_w1_p1')
@@ -52,7 +51,7 @@ class TestJsonlTraceRecorder:
         with JsonlTraceRecorder(path) as rec:
             rec.record(TraceEventKind.RUN_START, run_id='exp-01')
             rec.record(TraceEventKind.OBSERVATION, tick=3, player_id=1, prose='扉が軋む')
-            rec.record(TraceEventKind.MEMO_ADD, tick=3, player_id=1, memo_id='m1')
+            rec.record(TraceEventKind.MEMO_HINT, tick=3, player_id=1, memo_id='m1')
         lines = path.read_text(encoding='utf-8').splitlines()
         assert len(lines) == 3
         first = json.loads(lines[0])
@@ -106,62 +105,33 @@ class TestJsonlTraceRecorder:
             e2 = rec.record(TraceEventKind.TICK_END, tick=0)
         assert (e1.seq, e2.seq) == (1, 2)
 
-class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
-    """非同期 LLM 主観文付与 scheduler との close race (#311/#325 後続)。
+class TestJsonlTraceRecorderCloseRaceWithWorkerThread:
+    """閉じた recorder への書き込み (close race) の扱いを保証する。
 
-    実シナリオでは ``ThreadPoolEpisodicSubjectiveScheduler`` の worker thread が
-    ``runtime.shutdown(timeout)`` のタイムアウト後に完了し、閉じた recorder
-    に書きに来るケースがある。本テストは:
-
-    1. recorder を with 文で開く
-    2. ``trace_recorder_provider`` で recorder を持つ scheduler を作る
-    3. delay 付きの stub LLM port で worker を仕込む
-    4. shutdown を timeout=0 で諦める (= worker は走り続ける)
-    5. with 文を抜けて recorder を閉じる
-    6. worker が完了して record を呼ぶ → drop counter が進む / 例外なし
-
-    という流れを再現する。
+    別の thread が、recorder を閉じたあとに record を呼ぶことがある。このときは
+    例外を投げず、書き込みを捨てて ``record_dropped_after_close`` を進める。
     """
 
-    def test_record_after_async_worker_close_increments_dropped_without_exception(self, tmp_path: Path) -> None:
-        """async worker が close 後に record しても 例外なく dropped カウンタが進む。"""
-        import time
-        from datetime import datetime, timezone
-        from typing import Any
+    def test_record_from_a_thread_after_close_increments_dropped_without_exception(self, tmp_path: Path) -> None:
+        """recorder を閉じたあとに別 thread が record しても、例外を投げず dropped カウンタが進む。"""
+        import threading
 
-        from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
-        from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-            IEpisodicChunkSubjectiveCompletionPort,
-        )
-        from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-            EpisodicChunkSubjectiveFieldsService,
-        )
-        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
-            ThreadPoolEpisodicSubjectiveScheduler,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-            InMemorySubjectiveEpisodeStore,
-        )
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        being_id = BeingId('being_w1_p1')
+        recorder = JsonlTraceRecorder(tmp_path / 'trace.jsonl')
+        closed = threading.Event()
+        errors: list[BaseException] = []
 
-        class _SlowPort(IEpisodicChunkSubjectiveCompletionPort):
+        def _late_writer() -> None:
+            closed.wait()
+            try:
+                recorder.record(TraceEventKind.TICK_END, tick=1)
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
 
-            def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
-                time.sleep(0.3)
-                return {'interpreted': 'x', 'recall_text': 'y'}
-        store = InMemorySubjectiveEpisodeStore()
-        path = tmp_path / 'trace.jsonl'
-        recorder = JsonlTraceRecorder(path)
-        scheduler = ThreadPoolEpisodicSubjectiveScheduler(EpisodicChunkSubjectiveFieldsService(_SlowPort()), store, trace_recorder_provider=lambda : recorder)
-        act = ActionResultEntry(occurred_at=datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc), action_summary='待機', result_summary='ok', tool_name='wait')
-        enc = build_chunk_encoding_input(PlayerId(1), (), (act,))
-        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being_w1_p1'))
-        store.put_by_being(being_id, draft)
-        scheduler.submit(draft, persona_text='', encoding_input=enc)
-        scheduler.shutdown(timeout=0.01)
+        worker = threading.Thread(target=_late_writer)
+        worker.start()
         recorder.close()
-        time.sleep(0.5)
-        assert recorder.record_dropped_after_close >= 1
+        closed.set()
+        worker.join(timeout=5)
+
+        assert errors == []
+        assert recorder.record_dropped_after_close == 1

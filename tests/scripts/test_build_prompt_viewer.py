@@ -147,10 +147,10 @@ class TestLoadCalls:
         assert [c.llm_call_id for c in calls] == ["ok"]
         assert "warning" in capsys.readouterr().err
 
-    def test_missing_dataset_raises_with_the_flag_to_set(self, tmp_path) -> None:
-        """capture 無効の run を渡したら、有効化に必要なフラグ名を含めて失敗する。"""
+    def test_missing_dataset_raises_with_what_to_pass(self, tmp_path) -> None:
+        """prompt dataset の無い run を渡したら、保存した run を指定するよう案内して失敗する。"""
         (tmp_path / "run").mkdir()
-        with pytest.raises(FileNotFoundError, match="PROMPT_DATASET_CAPTURE_ENABLED"):
+        with pytest.raises(FileNotFoundError, match="prompt dataset を保存した run"):
             _load_calls(tmp_path / "run")
 
 
