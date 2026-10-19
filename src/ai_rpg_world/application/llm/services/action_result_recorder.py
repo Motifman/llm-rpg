@@ -36,7 +36,6 @@ class ActionResultRecorder:
         free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         occurred_tick: int | None = None,
         game_time_label: str | None,
         inner_thought: str | None = None,
@@ -65,7 +64,6 @@ class ActionResultRecorder:
             inner_thought=inner_thought,
             intention=intention,
             emotion_hint=emotion_hint,
-            scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
         )
 

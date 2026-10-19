@@ -141,7 +141,7 @@ class _FakeRuntime:
 #   (実 WorldRuntime + _WorldLlmWiring._tool_handlers[explore] を呼び、
 #    runtime.do_explore 経由で action_result store に記録されることを検証)
 # - tests/integration/test_world_runtime_current_runtime_contract.py::
-#   test_direct_travel_start_records_scene_boundary_and_tick (同上、travel_to)
+#   test_direct_travel_start_records_travel_result_and_tick (同上、travel_to)
 #
 # 旧 test はカバレッジ的にはこれらで十分冗長。fake 経由のテストは削除する。
 

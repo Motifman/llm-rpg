@@ -1874,7 +1874,6 @@ class WorldRuntime:
         free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         inner_thought: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
@@ -1886,10 +1885,6 @@ class WorldRuntime:
         必ず LLM tool 名 (例: ``TOOL_NAME_SPOT_GRAPH_TRAVEL_TO``) を明示する。
         ``success`` / ``error_code`` も同様に「常に ``outcome:success`` が立つ」
         ノイズの原因なので、失敗を検知できる経路は明示的に渡す。
-
-        ``scene_boundary``: その行動がエピソード記憶の「シーン切り替え」を
-        意味するかどうか。cognitive science の "doorway effect" を反映して、
-        spot 遷移成功時は True を渡すと chunk が閉じやすくなる (Issue #311 後続)。
 
         ``inner_thought`` / ``intention`` / ``emotion_hint``: LLM が行動前に
         宣言した主観入力 (心の声 / 目的 / 感情)。予測誤差駆動の学習ループ
@@ -1911,11 +1906,9 @@ class WorldRuntime:
             free_text_argument_names=free_text_argument_names,
             success=success,
             error_code=error_code,
-            scene_boundary=scene_boundary,
             inner_thought=inner_thought,
             intention=intention,
             emotion_hint=emotion_hint,
-            # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
@@ -3110,10 +3103,7 @@ class WorldRuntime:
             )
             return
 
-        # 移動開始の action result を記録する。scene_boundary は「scene を変える
-        # 意思決定」の時点で立てる (cognitive science の doorway effect は意図
-        # 形成の瞬間 + 物理的境界通過の両方が関係するが、本実装では tool call
-        # 時点を chunk 境界として扱う)。start_travel_to_spot が成功している以上
+        # 移動開始の action result を記録する。start_travel_to_spot が成功している以上
         # 経路は確保されていて、advance_spot_travel_one_tick が異常終了しない
         # 限り必ず arrival する。
         self._record_action_result(
@@ -3129,7 +3119,6 @@ class WorldRuntime:
                 )[0]
             ),
             free_text_argument_names=free_text_argument_names,
-            scene_boundary=True,
             inner_thought=inner_thought,
             intention=intention,
             emotion_hint=emotion_hint,
@@ -5477,7 +5466,6 @@ def create_world_runtime(
                 f"「{spot_name}」に到着した。ここから次の行動を選べる。",
                 tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
                 success=True,
-                scene_boundary=True,
             )
         except Exception as exc:
             runtime._record_world_tick_follow_up_failure(

@@ -244,7 +244,7 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
         # _travel_to 内部で runtime.do_move を呼んで単一の副作用実装を
         # 共有する。runtime.do_move は既に start_travel_to_spot +
         # _process_graph_events + 同一 spot 短絡 + _record_action_result
-        # (scene_boundary + subjective) を面倒見ている。
+        # (主観入力の記録) を面倒見ている。
         runtime=runtime,
     )
     wiring._spot_graph_executor = executor
@@ -1251,7 +1251,7 @@ def execute_tool(
 # PR-θ1/θ2 (経路統合): _handle_travel_to / _handle_explore は削除。
 # SpotGraphToolExecutor._travel_to / _explore に統合され、それぞれ
 # runtime.do_move / runtime.do_explore を呼ぶ薄い wrapper として単一の
-# 実装になった。旧 handler の副作用 (scene_boundary / subjective /
+# 実装になった。旧 handler の副作用 (subjective /
 # _process_graph_events / display_name / 発見なし時の可視 object 併記 /
 # inner_thought 空警告) は全部保持している。
 #
