@@ -20,6 +20,7 @@ dependencies = [
     "pytest==8.4.1",
     "pytest-cov==6.2.1",
     "pytest-xdist==3.6.1",
+    "pytest-split==0.11.0",
     "PyYAML==6.0.1",
     "tomli==2.2.1",
     "typing_extensions==4.14.1",

@@ -8,7 +8,15 @@ on:
 
 jobs:
   test:
+    # 1 台では収集と重い試験の偏りで 6〜7 分かかっていた (#1652)。
+    # .test_durations の時間で 3 組に分け、組ごとの所要時間をそろえる。
+    # 1 組が落ちても残りの組の結果を見られるよう、fail-fast は切る。
+    name: test (${{ matrix.group }}/3)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +42,11 @@ jobs:
         #
         # 手元の既定 (pytest.ini) には入れない。1 件だけ流したいときに
         # 邪魔になり、失敗時の出力も worker 単位に散って読みにくくなる。
-        run: uv run --frozen pytest -n auto
+        #
+        # worksteal は、重い試験が 1 つの worker に積み重なったとき、空いた
+        # worker が残りを引き取る。既定の load では重い 2 本が同じ worker に
+        # 順に並び、ほかの worker が先に手を空けていた。
+        run: uv run --frozen pytest -n auto --dist=worksteal --splits 3 --group "${{ matrix.group }}"
 
   lint:
     # ruff の静的検査。テストとは別 job にして、落ちたときに「テストが壊れた」
