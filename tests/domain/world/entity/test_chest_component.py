@@ -16,8 +16,14 @@ class TestChestComponent:
     """ChestComponent のテスト"""
 
     class TestCreation:
-        def test_default_creation(self):
-            chest = ChestComponent()
+        @pytest.mark.parametrize(
+            "creation_kwargs",
+            [{}, {"is_open": False}],
+            ids=["implicit-closed", "explicit-closed"],
+        )
+        def test_default_creation(self, creation_kwargs):
+            """開状態を省略してもFalseを明示しても、閉じた空箱を作る。"""
+            chest = ChestComponent(**creation_kwargs)
             assert chest.is_open is False
             assert chest.item_ids == []
             assert chest.get_type_name() == "chest"
@@ -28,10 +34,6 @@ class TestChestComponent:
             assert chest.is_open is True
             assert chest.item_ids == ids
             assert [e.value for e in chest.item_ids] == [1, 2]
-
-        def test_creation_empty_item_ids_default(self):
-            chest = ChestComponent(is_open=False)
-            assert chest.item_ids == []
 
     class TestInteractionType:
         def test_interaction_type_is_open_chest(self):

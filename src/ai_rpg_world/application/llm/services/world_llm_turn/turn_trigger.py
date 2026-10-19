@@ -148,13 +148,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
 
         cfg = getattr(runtime, "_runtime_config", None)
         workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)
-        # 比較 run で会議を一人ずつ発言させる場合だけ、同じ world tick の
-        # 先行発言を後続者の prompt へ入れる。既定は実時間を守る並列で、
-        # 自由時間は設定にかかわらず wave の同時性を維持する。
-        if bool(getattr(cfg, "llm_meeting_serial_turns", False)) and (
-            runtime._game_phase_store.is_meeting()
-        ):
-            workers = 1
         if workers <= 1 or len(to_run) <= 1:
             # 旧シリアル経路: 並列化を OFF にした / プレイヤーが 1 人だけ。
             # 完全に従来挙動。
@@ -281,15 +274,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         # event 駆動で頻繁に動く player には heartbeat が出なくなり、
         # 完全 idle な player だけ idle_timeout 経過後に 1 回起こされる。
         self._note_activity_after_turn(player_id_value)
-        # #526 / U3: 段1 エピソード再解釈の trigger 後半。turn 完了を coordinator に
-        # 通知し、interval 到達時に pending recall batch を LLM 再解釈する。
-        # reinterpretation OFF (coordinator 未構築) では no-op。
-        self._note_turn_for_reinterpretation(player_id_value)
-        # U3b: 固着パス。turn 完了を coordinator に通知し、発火条件
-        # (interval 到達 / cue_signature 反復 / salience=high) を満たした
-        # ときだけ evidence batch を belief journal に統合する。
-        # BELIEF_CONSOLIDATION_ENABLED OFF (coordinator 未構築) では no-op。
-        self._note_turn_for_belief_consolidation(player_id_value)
         # PR-T: 次回 prompt の「身体の状態」差分表示用に need 値を snapshot する。
         # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
         # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
@@ -391,51 +375,6 @@ class WorldLlmTurnTrigger(ILlmTurnTrigger):
         except Exception as exc:
             # snapshot 精度低下は致命ではない (差分が 0 になるだけ)
             self._record_follow_up_failure(exc, "llm_turn.needs_snapshot", player_id_value)
-
-    def _note_turn_for_reinterpretation(self, player_id_value: int) -> None:
-        """reinterpretation coordinator に turn 完了を通知する fail-safe ヘルパ。
-
-        coordinator 未配線 (reinterpretation OFF) / 異常系では何もしない
-        (turn 実行自体は壊さない)。``_note_activity_after_turn`` と同じ方式。
-        """
-        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
-        coordinator = (
-            getattr(stack, "reinterpretation_coordinator", None) if stack else None
-        )
-        if coordinator is None:
-            return
-        player_id = PlayerId(player_id_value)
-        acting = self.wiring.runtime._acting_being_for(player_id)
-        if acting is None:
-            return
-        try:
-            coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception as exc:
-            # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
-            self._record_follow_up_failure(exc, "llm_turn.reinterpretation", player_id_value)
-
-    def _note_turn_for_belief_consolidation(self, player_id_value: int) -> None:
-        """固着パス coordinator に turn 完了を通知する fail-safe ヘルパ。
-
-        coordinator 未配線 (BELIEF_CONSOLIDATION_ENABLED OFF) / 異常系では
-        何もしない (turn 実行自体は壊さない)。
-        ``_note_turn_for_reinterpretation`` と同じ方式。
-        """
-        stack = getattr(self.wiring.runtime, "_episodic_stack", None)
-        coordinator = (
-            getattr(stack, "belief_consolidation_coordinator", None) if stack else None
-        )
-        if coordinator is None:
-            return
-        player_id = PlayerId(player_id_value)
-        acting = self.wiring.runtime._acting_being_for(player_id)
-        if acting is None:
-            return
-        try:
-            coordinator.after_turn_completed(player_id, acting.being_id)
-        except Exception as exc:
-            # 固着の失敗は致命ではない (worst case: 学びが固着しないだけ)。
-            self._record_follow_up_failure(exc, "llm_turn.belief_consolidation", player_id_value)
 
     def _note_activity_after_turn(self, player_id_value: int) -> None:
         """heartbeat emitter に「player が今ターン走った」を通知する fail-safe ヘルパ。

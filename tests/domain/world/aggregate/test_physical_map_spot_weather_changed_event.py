@@ -91,6 +91,7 @@ class TestSpotWeatherChangedEventEmission:
         def test_storm_to_blizzard_emits_event(self, outdoor_aggregate):
             """嵐から吹雪に変わったときにイベントが発行される"""
             outdoor_aggregate.set_weather(WeatherState(WeatherTypeEnum.STORM, 1.0))
+            assert outdoor_aggregate.weather_state == WeatherState(WeatherTypeEnum.STORM, 1.0)
             outdoor_aggregate.clear_events()
 
             outdoor_aggregate.set_weather(WeatherState(WeatherTypeEnum.BLIZZARD, 0.9))
@@ -150,15 +151,17 @@ class TestSpotWeatherChangedEventEmission:
             indoor_aggregate.set_weather(WeatherState(WeatherTypeEnum.STORM, 1.0))
 
             assert indoor_aggregate.weather_state.weather_type == WeatherTypeEnum.CLEAR
+            assert indoor_aggregate.weather_state.intensity == 1.0
             events = indoor_aggregate.get_events()
             weather_events = [e for e in events if isinstance(e, SpotWeatherChangedEvent)]
             assert len(weather_events) == 0
 
-        def test_underground_set_blizzard_emits_no_event(self, underground_aggregate):
-            """地下で吹雪を設定しても天候は CLEAR になり、イベントは発行されない"""
+        @pytest.mark.parametrize("intensity", [0.8, 1.0])
+        def test_underground_set_blizzard_emits_no_event(self, underground_aggregate, intensity):
+            """地下で強度0.8/1.0の吹雪を設定しても天候は CLEAR になり、イベントは発行されない。"""
             underground_aggregate.clear_events()
 
-            underground_aggregate.set_weather(WeatherState(WeatherTypeEnum.BLIZZARD, 1.0))
+            underground_aggregate.set_weather(WeatherState(WeatherTypeEnum.BLIZZARD, intensity))
 
             assert underground_aggregate.weather_state.weather_type == WeatherTypeEnum.CLEAR
             events = underground_aggregate.get_events()

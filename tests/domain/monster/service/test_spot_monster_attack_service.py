@@ -83,7 +83,7 @@ class TestCannotAttack:
     """cooldown 中 / DEAD は攻撃不可。"""
 
     def test_can_attack_now_false(self) -> None:
-        """can_attack_now が False のモンスターは攻撃せず cannot_attack 理由を返す。"""
+        """使用不可ならcannot_attackを返し、被害も攻撃時刻も記録しない。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(can_attack=False)
         player = _make_player()
@@ -95,13 +95,14 @@ class TestCannotAttack:
         assert outcome.executed is False
         assert outcome.reason == "cannot_attack"
         player.apply_damage.assert_not_called()
+        monster.record_attack.assert_not_called()
 
 
 class TestVisibility:
     """視認可否判定。"""
 
     def test_darkness_dark_vision_2(self) -> None:
-        """DARK で dark_vision なし → not_visible。"""
+        """暗闇で暗視がなければnot_visibleを返し、被害も攻撃時刻も記録しない。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster(has_dark_vision=False)
         player = _make_player()
@@ -112,6 +113,8 @@ class TestVisibility:
 
         assert outcome.executed is False
         assert outcome.reason == "not_visible"
+        player.apply_damage.assert_not_called()
+        monster.record_attack.assert_not_called()
 
     def test_darkness_dark_vision(self) -> None:
         """DARK + dark_vision あり → 攻撃が通る。"""
@@ -131,7 +134,7 @@ class TestTargetAlreadyDown:
     """既にダウンしているターゲットは攻撃しない。"""
 
     def test_downed(self) -> None:
-        """is_down=True のターゲットは executed=False。"""
+        """対象が既にダウンしていれば不発となり、被害も攻撃時刻も記録しない。"""
         svc = SpotMonsterAttackService()
         monster = _make_monster()
         player = _make_player(is_down_before=True)
@@ -143,6 +146,7 @@ class TestTargetAlreadyDown:
         assert outcome.executed is False
         assert outcome.reason == "target_down"
         player.apply_damage.assert_not_called()
+        monster.record_attack.assert_not_called()
 
 
 class TestSuccessfulAttack:

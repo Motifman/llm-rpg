@@ -70,27 +70,31 @@ class TestCombinationLock:
         assert result.new_puzzle.attempts == 1
 
     def test_already_solved_returns_immediately(self) -> None:
-        """既に解けたパズルは再評価しないこと"""
+        """解決済みへの再入力は再解決せず、入力履歴・試行数を含む全状態を保持する。"""
         svc = PuzzleEvaluationService()
         puzzle = _combination_lock().with_input("1234").with_solved()
         result = svc.evaluate(puzzle, "anything")
         assert result.is_just_solved is False
         assert "既に解かれている" in result.message
+        assert result.new_puzzle == puzzle
 
     def test_max_attempts_blocks(self) -> None:
-        """試行回数上限に達したら操作不能になること"""
+        """組合せ入力は上限まで数え、上限後の正解も拒否して状態を保持する。"""
         svc = PuzzleEvaluationService()
         puzzle = _combination_lock("1234", max_attempts=2)
         # 1回目
         r1 = svc.evaluate(puzzle, "0000")
         assert r1.is_just_solved is False
+        assert r1.new_puzzle.attempts == 1
         # 2回目 → 上限到達メッセージ
         r2 = svc.evaluate(r1.new_puzzle, "0000")
         assert "上限" in r2.message
+        assert r2.new_puzzle.attempts == 2
         # 3回目 → ブロック
         r3 = svc.evaluate(r2.new_puzzle, "1234")
         assert r3.is_just_solved is False
         assert "上限" in r3.message
+        assert r3.new_puzzle == r2.new_puzzle
 
     def test_correct_on_last_attempt(self) -> None:
         """最後の1回で正解すれば解除されること"""
@@ -149,7 +153,7 @@ class TestSequencePuzzle:
         assert r3.new_puzzle.attempts == 0  # 正解ステップはカウントしない
 
     def test_sequence_max_attempts_counts_failed_sequences(self) -> None:
-        """max_attemptsは失敗シーケンス回数でカウントされること"""
+        """順序の失敗列だけを数え、上限後の入力を拒否して状態を保持する。"""
         svc = PuzzleEvaluationService()
         puzzle = PuzzleState(
             puzzle_type="sequence",
@@ -166,6 +170,7 @@ class TestSequencePuzzle:
         r3 = svc.evaluate(r2.new_puzzle, "a")
         assert r3.is_just_solved is False
         assert "上限" in r3.message
+        assert r3.new_puzzle == r2.new_puzzle
 
 
 class TestUnknownPuzzleType:

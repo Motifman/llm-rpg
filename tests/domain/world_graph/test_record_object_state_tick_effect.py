@@ -99,6 +99,7 @@ class TestRecordObjectStateTickEffect:
                 # current_tick を渡さない
             )
         assert "last_harvest_tick" not in result.new_interior.objects[0].state
+        assert result.new_interior.objects[0].state == {"available": True}
         assert any("current_tick" in r.message for r in caplog.records)
 
     def test_propagates_through_spot_interaction_service(self) -> None:

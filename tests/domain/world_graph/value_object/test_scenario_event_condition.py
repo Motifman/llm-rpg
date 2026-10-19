@@ -66,11 +66,17 @@ class TestChildrenTupleInvariant:
             ScenarioEventCondition(condition_type="NOT", children=[flag])  # type: ignore[arg-type]
 
     def test_tuple_children_is_hashable(self) -> None:
-        """tuple children を持つ条件は hash() 可能で frozen の不変条件を保つ。"""
+        """独立に構築した等値な条件木は同じhashを持ち、同じ辞書キーになる。"""
         flag = ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x")
         cond = ScenarioEventCondition(condition_type="NOT", children=(flag,))
-        # set に入れられれば hash() が動いている
-        assert {cond} == {cond}
+        equal_cond = ScenarioEventCondition(
+            condition_type="NOT",
+            children=(ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x"),),
+        )
+
+        assert cond == equal_cond
+        assert hash(cond) == hash(equal_cond)
+        assert {cond: "条件の評価対象"}[equal_cond] == "条件の評価対象"
 
 
 class TestLeafCondition:

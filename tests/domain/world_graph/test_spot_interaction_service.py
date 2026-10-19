@@ -196,6 +196,14 @@ class TestSpotInteractionService:
         assert not result.is_satisfied
         evaluator.evaluate.assert_not_called()
 
+        assert result.failed_predicate is condition
+        assert result.failed_path == (0,)
+        assert result.failure_message == (
+            "この行為には対象オブジェクトが必要な条件が書かれています"
+            if spot_object is None
+            else "OBJECT_STATE_INT_AT_LEAST に state_key がありません"
+        )
+
     def test_object_state_int_reads_explicit_target_object(self) -> None:
         """明示target_object_idがあれば操作元でなく対象objectのstateを共通核へ渡す。"""
         evaluator = MagicMock()
@@ -279,21 +287,24 @@ class TestSpotInteractionService:
         assert predicate == ItemSpecCountAtLeastPredicate(item_spec_id, 2)
         assert context.item_spec_counts == {item_spec_id: 2}
 
-    def test_has_items_evaluates_specs_in_declared_order(self) -> None:
+    @pytest.mark.parametrize("include_third", [False, True])
+    def test_has_items_evaluates_specs_in_declared_order(self, include_third: bool) -> None:
         """HAS_ITEMSは宣言順に各品目を評価し、最初の不足で元条件を返す。"""
         evaluator = MagicMock()
         first = ItemSpecId.create(1)
         second = ItemSpecId.create(2)
+        third = ItemSpecId.create(3)
         evaluator.evaluate.side_effect = [
             PredicateResult.satisfied(),
             PredicateResult.not_satisfied(
                 failed_predicate=ItemSpecCountAtLeastPredicate(second, 2),
                 failed_path=(),
             ),
+            PredicateResult.satisfied(),
         ]
         condition = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.HAS_ITEMS,
-            required_item_spec_ids=(first, second),
+            required_item_spec_ids=(first, second, third) if include_third else (first, second),
             required_quantity=2,
             failure_message="材料が足りない",
         )
@@ -309,7 +320,7 @@ class TestSpotInteractionService:
             _door_object(),
             frozenset({first, second}),
             frozenset(),
-            owned_item_spec_counts={first: 2, second: 1},
+            owned_item_spec_counts={first: 2, second: 1, **({third: 2} if include_third else {})},
         )
 
         assert not result.is_satisfied
@@ -437,6 +448,14 @@ class TestSpotInteractionService:
         assert not result.is_satisfied
         evaluator.evaluate.assert_not_called()
 
+        assert result.failed_predicate is condition
+        assert result.failed_path == (0,)
+        assert result.failure_message == (
+            "HAS_ITEM に target_item_spec_id がありません"
+            if condition.condition_type is InteractionConditionTypeEnum.HAS_ITEM
+            else "HAS_ITEMS に必要アイテムリストがありません"
+        )
+
     @pytest.mark.parametrize(
         "condition",
         [
@@ -488,18 +507,22 @@ class TestSpotInteractionService:
         self, condition: InteractionCondition,
     ) -> None:
         """数量2以上の両条件は個数mapping省略を推測せず、評価前に即時停止する。"""
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = PredicateResult.satisfied()
         interaction = InteractionDef(
             action_name="craft", display_label="作る",
             preconditions=(condition,), effects=(),
         )
 
         with pytest.raises(ValueError, match="owned_item_spec_counts is required"):
-            SpotInteractionService().evaluate_preconditions_result(
+            SpotInteractionService(predicate_evaluator=evaluator).evaluate_preconditions_result(
                 interaction,
                 _door_object(),
                 frozenset({ItemSpecId.create(7)}),
                 frozenset(),
             )
+
+        evaluator.evaluate.assert_not_called()
 
     def test_object_state_delegates_and_keeps_failure_contract(self) -> None:
         """OBJECT_STATEは共通核へ委譲し、元条件・経路・作者文面を維持する。"""
@@ -622,7 +645,8 @@ class TestSpotInteractionService:
                 **{context_kwarg: scoped_aggregate},
             )
 
-    def test_flag_set_delegates_to_shared_predicate_evaluator(self):
+    @pytest.mark.parametrize("world_flags", [frozenset(), frozenset({"already_set"})])
+    def test_flag_set_delegates_to_shared_predicate_evaluator(self, world_flags):
         """FLAG_SET は共通評価核へ一度だけ委譲し、既存の失敗文を維持する。"""
         evaluator = MagicMock()
         evaluator.evaluate.return_value = PredicateResult.not_satisfied(
@@ -647,7 +671,7 @@ class TestSpotInteractionService:
             interaction,
             None,
             frozenset(),
-            frozenset(),
+            world_flags,
         )
 
         assert result.is_satisfied is False
@@ -655,6 +679,10 @@ class TestSpotInteractionService:
         assert result.failed_predicate is interaction.preconditions[0]
         assert result.failed_path == (0,)
         evaluator.evaluate.assert_called_once()
+
+        predicate, context = evaluator.evaluate.call_args.args
+        assert predicate == FlagSetPredicate("power_on")
+        assert context.world_flags == world_flags
 
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_flag_set_evaluation_failure_stops_interaction(self, reason):
@@ -691,6 +719,7 @@ class TestSpotInteractionService:
             )
 
     def test_execute_open_success(self):
+        """鍵があれば返却された扉だけが開き、通知は1回で入力の状態を変えない。"""
         interior = _make_interior(_door_object())
         svc = SpotInteractionService()
         r = svc.execute_interaction(
@@ -704,6 +733,9 @@ class TestSpotInteractionService:
         assert "開いた" in r.messages
         assert r.new_flags == frozenset()
         assert r.action_display_label == "開ける"
+
+        assert r.messages == ("開いた",)
+        assert interior.get_object(SpotObjectId.create(1)).state == {"open": False}
 
     def test_blank_display_label_falls_back_to_action_name(self):
         """loaderを迂回した空ラベルでも、結果表示は落ちずaction_nameへ戻る。"""
@@ -809,6 +841,7 @@ class TestSpotInteractionService:
         assert spec.new_state == "OPEN"
 
     def test_change_object_state_can_target_other_object(self):
+        """別物体への状態効果は対象だけを変え、操作元と入力室内の両物体を保つ。"""
         switch = SpotObject(
             object_id=SpotObjectId.create(10),
             name="Switch",
@@ -852,6 +885,12 @@ class TestSpotInteractionService:
         updated_door = result.new_interior.get_object(SpotObjectId.create(11))
         assert updated_door is not None
         assert updated_door.state["open"] is True
+
+        assert result.new_interior.get_object(switch.object_id).state == {"on": False}
+        assert {obj.object_id: obj.state for obj in interior.objects} == {
+            switch.object_id: {"on": False},
+            door.object_id: {"open": False},
+        }
 
     def test_object_state_precondition_reads_the_explicit_target_object(self):
         """OBJECT_STATE は操作元でなく target_object に宣言した物体の状態を読む。"""
