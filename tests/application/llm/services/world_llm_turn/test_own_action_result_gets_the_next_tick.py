@@ -53,7 +53,6 @@ _SEARCH_DRAWER = {
         "inner_thought": "引き出しに何かあるかもしれない",
     },
 }
-_MEMO_LIST = {"name": "memo_list", "arguments": {}}
 _TRAVEL_TWO_TICKS = {
     "name": "travel_to",
     "arguments": {"destination_label": "雪の峠道", "inner_thought": "峠を見に行く"},
@@ -180,14 +179,13 @@ class TestSucceededActionWithoutObservationGetsTheNextTick:
         [
             ("north_shaft_head", _EXPLORE, "explore"),
             ("company_office", _SEARCH_DRAWER, "interact"),
-            ("north_shaft_head", _MEMO_LIST, "memo_list"),
         ],
-        ids=["explore_finds_nothing", "interact_reads_a_note", "memo_tool"],
+        ids=["explore_finds_nothing", "interact_reads_a_note"],
     )
     def test_next_turn_comes_on_the_next_tick(
         self, spot: str, action: dict[str, Any], tool: str
     ) -> None:
-        """何も見つからない探索・紙切れを読むだけの interact・メモのツールが成功すると、本人の次の手番は 1 tick 後に来る。"""
+        """何も見つからない探索・紙切れを読むだけの interact が成功すると、本人の次の手番は 1 tick 後に来る。"""
         with TemporaryDirectory() as tmp:
             session = _open_session(tmp)
             session.place_hal(spot)

@@ -280,9 +280,8 @@ def stranger_names_in(
 
 
 def leak_shape(line: str) -> str:
-    """時刻・数字・memo の印を伏せた形。同じ漏れが tick ごとに数字だけ変えて何度も出るのを 1 件にまとめる。"""
+    """時刻・数字を伏せた形。同じ漏れが tick ごとに数字だけ変えて何度も出るのを 1 件にまとめる。"""
     line = re.sub(r"^- \[Day [^\]]*\]\s*", "", line)
-    line = re.sub(r"\[?(?:memo_)?[0-9a-f]{6,}…?\]?|\[STALE\]\s*", "", line)
     return re.sub(r"\d+", "N", line)
 
 
