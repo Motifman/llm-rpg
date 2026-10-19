@@ -36,7 +36,6 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 
 # build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
 # 詳細は build() 内コメント参照
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
@@ -360,11 +359,10 @@ class DefaultPromptBuilder(IPromptBuilder):
             ),
         )
 
-        # 2. drain してスライディングウィンドウに append（溢れは記憶抽出用に返す）
+        # 2. drain して短期記憶に append
         drained = self._observation_buffer.drain(player_id)
-        overflow: list[ObservationEntry] = []
         if drained:
-            overflow = self._short_term_memory.append_all(player_id, drained)
+            self._short_term_memory.append_all(player_id, drained)
 
         # 3. 現在状態取得（None の場合はプレースホルダ）
         current_state_dto = self._world_query_service.get_player_current_state(
@@ -491,7 +489,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             "tool_choice": "required",
         }
         result["sns_shown_notification_ids"] = shown_notification_ids
-        result["overflow"] = overflow
         result["tool_runtime_context"] = ui_context.tool_runtime_context
         # Phase A が、実際に API へ出す tool 集合から動的引数候補表を作り、
         # この指示の直前へ安全に差し込むための境界を明示する。

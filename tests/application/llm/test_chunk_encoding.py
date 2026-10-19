@@ -10,24 +10,14 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     merge_observations_and_action_results_to_unified_timeline,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.services.observation_short_term_memory_sync import (
-    drain_observation_buffer_into_short_term_memory,
-)
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
-)
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
-from ai_rpg_world.application.observation.services.observation_context_buffer import (
-    DefaultObservationContextBuffer,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestMergeObservationsAndActionResultsToUnifiedTimeline:
@@ -416,72 +406,3 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         assert len(timeline) == 2
         stamps = tuple(line.occurred_at.timestamp() for line in timeline)
         assert stamps == tuple(sorted(stamps))
-
-
-class TestDrainObservationBufferIntoShortTermMemory:
-    """観測 drain → append_all が PromptBuilder と同順序であること"""
-
-    def test_empty_buffer_returns_empty_overflow(self) -> None:
-        """drain が空なら append せず空リスト"""
-        buf = DefaultObservationContextBuffer()
-        win = SummarizingShortTermMemory(summary_service=None)
-        pid = PlayerId(1)
-        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert overflow == []
-        assert win.get_recent(pid, 10) == []
-
-    def test_drain_appends_every_observation_and_returns_no_overflow(self) -> None:
-        """複数件 drain すると全件が短期記憶に入り、短期記憶は観測を捨てないので溢れは空、バッファは空になる"""
-        buf = DefaultObservationContextBuffer()
-        win = SummarizingShortTermMemory(summary_service=None)
-        pid = PlayerId(1)
-        t0 = datetime(2025, 1, 1, 0, 0, 0)
-        entries = [
-            ObservationEntry(
-                occurred_at=t0,
-                output=ObservationOutput(
-                    prose=f"e{i}", structured={}, observation_category="self_only"
-                ),
-            )
-            for i in range(3)
-        ]
-        for e in entries:
-            buf.append(pid, e)
-        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        assert overflow == []
-        texts = {r.output.prose for r in win.get_recent(pid, 10)}
-        assert texts == {"e0", "e1", "e2"}
-        assert buf.get_observations(pid) == []
-
-    def test_matches_prompt_builder_sequence(self) -> None:
-        """DefaultPromptBuilder の drain→append_all 節と同一の観測列・溢れになる"""
-        buf = DefaultObservationContextBuffer()
-        win = SummarizingShortTermMemory(summary_service=None)
-        pid = PlayerId(1)
-        for i in range(5):
-            buf.append(
-                pid,
-                ObservationEntry(
-                    occurred_at=datetime(2025, 1, 1, 0, 0, i),
-                    output=ObservationOutput(
-                        prose=f"p{i}", structured={}, observation_category="self_only"
-                    ),
-                ),
-            )
-        overflow_helper = drain_observation_buffer_into_short_term_memory(buf, win, pid)
-        buf2 = DefaultObservationContextBuffer()
-        win2 = SummarizingShortTermMemory(summary_service=None)
-        for i in range(5):
-            buf2.append(
-                pid,
-                ObservationEntry(
-                    occurred_at=datetime(2025, 1, 1, 0, 0, i),
-                    output=ObservationOutput(
-                        prose=f"p{i}", structured={}, observation_category="self_only"
-                    ),
-                ),
-            )
-        drained = buf2.drain(pid)
-        overflow_pb = win2.append_all(pid, drained) if drained else []
-        assert overflow_helper == overflow_pb
-        assert win.get_recent(pid, 10) == win2.get_recent(pid, 10)

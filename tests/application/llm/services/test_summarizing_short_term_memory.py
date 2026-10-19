@@ -159,9 +159,8 @@ class TestRollingSummaryBasicQueue:
     def test_append_all_order_append(self) -> None:
         """appendall は順番に append する。"""
         mem = SummarizingShortTermMemory(summary_service=None)
-        evicted = mem.append_all(_PID, [_obs("p1", seq=1), _obs("p2", seq=2)])
-        # rolling 実装は evict せず L4 に畳むので overflow は空
-        assert evicted == []
+        mem.append_all(_PID, [_obs("p1", seq=1), _obs("p2", seq=2)])
+
         assert len(mem.get_recent(_PID, limit=10)) == 2
 
     def test_actions_are_not_included_in_the_l4_summary_input(
