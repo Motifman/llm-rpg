@@ -121,20 +121,14 @@ class TestCompositeItemEffect:
             CompositeItemEffect(effects=None)  # type: ignore[arg-type]
         assert "effects must not be None" in str(exc_info.value)
 
-    def test_effects_contains_non_item_effect_raises(self):
-        """effects に ItemEffect 以外が含まれる場合は ItemEffectValidationException"""
+    @pytest.mark.parametrize("invalid_effect", ["invalid", 1], ids=["string", "integer"])
+    def test_effects_contains_non_item_effect_raises(self, invalid_effect):
+        """第2要素が文字列や整数なら、効果の型違反とその位置を示して拒否する。"""
         heal_effect = HealEffect(amount=50)
         with pytest.raises(ItemEffectValidationException) as exc_info:
-            CompositeItemEffect(effects=(heal_effect, "invalid"))  # type: ignore[arg-type]
+            CompositeItemEffect(effects=(heal_effect, invalid_effect))
         assert "must be ItemEffect" in str(exc_info.value)
         assert "effects[1]" in str(exc_info.value)
-
-    def test_effects_contains_int_raises(self):
-        """effects に int が含まれる場合は ItemEffectValidationException"""
-        heal_effect = HealEffect(amount=50)
-        with pytest.raises(ItemEffectValidationException) as exc_info:
-            CompositeItemEffect(effects=(heal_effect, 1))  # type: ignore[arg-type]
-        assert "must be ItemEffect" in str(exc_info.value)
 
     def test_nested_composite_effect(self):
         """CompositeItemEffect がネストされていても正しく作成される"""
@@ -185,8 +179,9 @@ class TestReviveEffect:
             ReviveEffect(hp_rate=1.5)
         assert "hp_rate" in str(ei.value)
 
-    def test_frozen_dataclass_immutable(self) -> None:
-        """frozen dataclass で immutable。"""
+    def test_rate_is_unchanged_after_assignment_is_rejected(self) -> None:
+        """蘇生率への代入は属性書換の例外で拒否され、元の0.4が保持される。"""
         effect = ReviveEffect(hp_rate=0.4)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             effect.hp_rate = 0.5  # type: ignore[misc]
+        assert effect.hp_rate == 0.4
