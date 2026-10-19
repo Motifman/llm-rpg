@@ -14,6 +14,10 @@
 - `short_term_summary_generated`: L4 short-term summary 更新
 - `short_term_long_summary_generated`: L5 long summary 生成
 - `being_memo`: メモ帳への書き込み。`payload.applied` / `payload.rejected`
+- `episode_writing`: 目次つきのエピソードの書き起こし。`payload.trigger` (compaction / leaving) / `payload.outcome` (written / failed / skipped) / `payload.episodes`
+- `episode_index_shown`: 毎ターンのプロンプトに出した目次。`payload.shown_handles` / `payload.total_count`
+- `episode_recall`: 呼び名でエピソードを呼び出した。`payload.outcome` (recalled / rejected / failed) / `payload.results`
+- `episode_index_revision`: 本人が目次を直した。`payload.before` / `payload.after`
 - `action_result` の `success=false` + `error_code`: 失敗分析
 - `loop_guard_warning`: 同 intent loop 検出
 - `prompt_section_breakdown`: prompt 各 section のサイズ (cache 観測の補助)
@@ -29,6 +33,7 @@
 - **D-30 short / long summary クオリティ**: 1-2 件の中身評価
 - **D-31 メモ帳の重複と消し忘れ**: 同じやることを何度も書いていないか、済んだやることを消しているか
 - **D-32 失敗の記憶化** (#1631 前の trace のみ): recall に失敗エピソードが出ているか (= 学習する記憶か)
+- **D-32b 目次つきのエピソード**: 書き起こしの written / failed / skipped の内訳、目次に出た呼び名のうち呼び出されたものの割合、目次を直した例を 1-2 件 (直す前と後)
 
 ### E. 失敗・loop_guard・異常
 - **E-33 error_code 全分布**: 上位 5 (baseline 指定なら差分)

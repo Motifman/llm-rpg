@@ -6,8 +6,7 @@
 設計指針:
 
 - **default は OFF** (新規機能を実験中の検証変数として導入するため、env で
-  明示的に ON にしたときだけ動かす)。詳細は
-  ``docs/memory_system/semantic_memory_activation_plan.md`` §9
+  明示的に ON にしたときだけ動かす)。
 - **「配線 (wire)」と「有効化 (enable)」を分離**: コードパスは常に通って
   いるが env 未設定なら不活性
 """
