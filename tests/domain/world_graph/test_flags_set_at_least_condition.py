@@ -130,7 +130,9 @@ class TestValidation:
 
         空を許すと「0 個中 0 個」で **開始した瞬間に勝つ**。
         """
-        with pytest.raises(GameEndConditionValidationException):
+        with pytest.raises(
+            GameEndConditionValidationException, match="required_flags が必要です",
+        ):
             _condition(flags=())
 
     def test_threshold_above_the_list_is_rejected(self) -> None:
@@ -205,6 +207,7 @@ class TestItCanBeWrittenInAScenario:
         result = ScenarioLoader().load_from_file(path)
 
         (cond,) = result.win_conditions
+        assert cond.condition_type is GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST
         assert cond.required_flags == _TASKS
         assert cond.min_set_count == 3
 
@@ -221,7 +224,10 @@ class TestItCanBeWrittenInAScenario:
             "min_set_count": 5,
         })
 
-        with pytest.raises(Exception):
+        with pytest.raises(
+            GameEndConditionValidationException,
+            match="min_set_count が required_flags の数を超えています",
+        ):
             ScenarioLoader().load_from_file(path)
 
     def test_a_missing_threshold_is_rejected_at_load(self, tmp_path) -> None:
@@ -233,5 +239,7 @@ class TestItCanBeWrittenInAScenario:
             "required_flags": list(_TASKS),
         })
 
-        with pytest.raises(Exception):
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
+
+        with pytest.raises(ScenarioLoadError, match="整数の min_set_count"):
             ScenarioLoader().load_from_file(path)

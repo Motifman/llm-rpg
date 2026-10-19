@@ -154,30 +154,33 @@ class TestVisibleState:
 
         assert obj.visible_state() == {"opened": True}
 
-    def test_state_display_exact_match_wins_over_at_least_rule(self) -> None:
-        """完全一致と at_least が同時に該当する値は、具体的な完全一致文を表示する。"""
+    @pytest.mark.parametrize("threshold_first", [False, True])
+    def test_state_display_exact_match_wins_over_at_least_rule(
+        self, threshold_first: bool
+    ) -> None:
+        """規則の登録順によらず、完全一致を整数下限の文より優先する。"""
+        exact = StateDisplayRule("count", 3, "ちょうど 3 個ある")
+        threshold = StateDisplayRule("count", None, "3 個以上ある", at_least=3)
         obj = _make(
             {"count": 3},
-            state_display=(
-                StateDisplayRule("count", 3, "ちょうど 3 個ある"),
-                StateDisplayRule(
-                    "count", None, "3 個以上ある", at_least=3
-                ),
-            ),
+            state_display=(threshold, exact) if threshold_first else (exact, threshold),
         )
 
         assert obj.visible_state() == {
             VISIBLE_STATE_TAGS_KEY: ("ちょうど 3 個ある",)
         }
 
-    def test_state_display_uses_largest_matching_at_least_threshold(self) -> None:
-        """完全一致が無い整数値は、該当する at_least のうち最大閾値の文を表示する。"""
+    @pytest.mark.parametrize("count", [6, 5])
+    @pytest.mark.parametrize("largest_first", [False, True])
+    def test_state_display_uses_largest_matching_at_least_threshold(
+        self, count: int, largest_first: bool
+    ) -> None:
+        """下限ちょうどでも超過でも、登録順によらず該当する最大下限の文を選ぶ。"""
+        smaller = StateDisplayRule("count", None, "3 個以上ある", at_least=3)
+        larger = StateDisplayRule("count", None, "5 個以上ある", at_least=5)
         obj = _make(
-            {"count": 6},
-            state_display=(
-                StateDisplayRule("count", None, "3 個以上ある", at_least=3),
-                StateDisplayRule("count", None, "5 個以上ある", at_least=5),
-            ),
+            {"count": count},
+            state_display=(larger, smaller) if largest_first else (smaller, larger),
         )
 
         assert obj.visible_state() == {
@@ -309,6 +312,13 @@ class TestVisibleState:
             ),
         )
 
+        for flags in (frozenset(), frozenset({"unrelated"})):
+            assert obj.visible_state(
+                current_tick=7,
+                minutes_per_tick=5,
+                world_flags=flags,
+            ) == {VISIBLE_STATE_TAGS_KEY: ("燃料停止まであと 25 分",)}
+
         assert obj.visible_state(
             current_tick=7,
             minutes_per_tick=5,
@@ -316,13 +326,18 @@ class TestVisibleState:
         ) == {}
 
     @pytest.mark.parametrize(
-        "lighting",
-        (LightingEnum.DARK, LightingEnum.PITCH_BLACK),
+        ("lighting", "expected"),
+        (
+            (LightingEnum.DARK, {}),
+            (LightingEnum.PITCH_BLACK, {}),
+            (LightingEnum.BRIGHT, {VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)}),
+            (LightingEnum.DIM, {VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)}),
+        ),
     )
-    def test_recent_visual_trace_is_hidden_without_light(
-        self, lighting: LightingEnum
+    def test_recent_visual_trace_is_only_shown_with_light(
+        self, lighting: LightingEnum, expected: dict
     ) -> None:
-        """requires_light の痕跡は、物体自体が暗所可視でも暗闇では表示しない。"""
+        """同じ視覚的な痕跡はBRIGHT/DIMだけで表示し、DARK/PITCH_BLACKでは隠す。"""
         obj = _make(
             {"opened_at_tick": 7},
             hidden=frozenset({"opened_at_tick"}),
@@ -340,7 +355,7 @@ class TestVisibleState:
         assert obj.visible_state(
             current_tick=8,
             effective_lighting=lighting,
-        ) == {}
+        ) == expected
 
     def test_recent_tick_rule_requires_the_current_tick(self) -> None:
         """within_ticks 規則へ現在手番を渡し忘れたら、証拠を黙って消さず例外にする。"""

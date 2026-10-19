@@ -22,7 +22,7 @@ import pytest
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
 
-_A, _B, _C, _D = PlayerId(1), PlayerId(2), PlayerId(3), PlayerId(4)
+_A, _B, _C, _D, _E = (PlayerId(i) for i in range(1, 6))
 
 #: 棄権を表す投票先。
 _SKIP = None
@@ -31,12 +31,33 @@ _SKIP = None
 class TestPlurality:
     """最多票の 1 人が追放される。"""
 
-    def test_clear_winner_is_ejected(self) -> None:
-        """2 対 1 なら多い方が追放される。"""
-        result = resolve_vote({_A: _C, _B: _C, _C: _A})
+    @pytest.mark.parametrize(
+        "ballots",
+        [
+            pytest.param({_A: _C, _B: _C, _C: _A}, id="majority"),
+            pytest.param({_A: _C, _B: _C, _C: _A, _D: _B}, id="half"),
+            pytest.param(
+                {_A: _C, _B: _C, _C: _A, _D: _B, _E: _D}, id="below_half"
+            ),
+        ],
+    )
+    def test_clear_winner_is_ejected(
+        self, ballots: dict[PlayerId, PlayerId | None]
+    ) -> None:
+        """2対1、2対1対1、2対1対1対1では、過半数を要せず最多のCを追放する。"""
+        result = resolve_vote(ballots)
         assert result.ejected_player_id == _C
 
-    def test_a_lone_vote_loses_to_the_skips(self) -> None:
+    @pytest.mark.parametrize(
+        "ballots",
+        [
+            pytest.param({_A: _C, _B: _SKIP, _C: _SKIP}, id="first_voter_names_c"),
+            pytest.param({_A: _SKIP, _B: _SKIP, _C: _B}, id="last_voter_names_b"),
+        ],
+    )
+    def test_a_lone_vote_loses_to_the_skips(
+        self, ballots: dict[PlayerId, PlayerId | None]
+    ) -> None:
         """1 票の指名は、2 つの棄権に負ける。
 
         **棄権は票として数える。** 保留する側が多ければ「決めない」が
@@ -45,7 +66,7 @@ class TestPlurality:
 
         (最初この期待を逆に書いていた。本家は棄権も票として扱う。)
         """
-        result = resolve_vote({_A: _C, _B: _SKIP, _C: _SKIP})
+        result = resolve_vote(ballots)
         assert result.ejected_player_id is None
 
     def test_a_lone_vote_wins_when_it_outnumbers_the_skips(self) -> None:
@@ -68,11 +89,6 @@ class TestTiesEjectNobody:
         棄権は票として数えるので、名指しと並んだら同点になる。
         """
         result = resolve_vote({_A: _C, _B: _SKIP})
-        assert result.ejected_player_id is None
-
-    def test_skip_alone_ejects_nobody(self) -> None:
-        """棄権が最多なら誰も追放されない。"""
-        result = resolve_vote({_A: _SKIP, _B: _SKIP, _C: _B})
         assert result.ejected_player_id is None
 
 

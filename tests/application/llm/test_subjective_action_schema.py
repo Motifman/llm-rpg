@@ -1,4 +1,4 @@
-"""world-action tool の主観入力 schema (主観フィールド 5→4→3) の不変条件。予測 expected_result は #1631 で消した。"""
+"""world-action tool の主観入力 schema (主観フィールド 5→4→3→1) の不変条件。予測 expected_result と目的・感情 (intention / emotion_hint) は #1631 で消した。"""
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
@@ -13,13 +13,13 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     with_subjective_action_schema,
 )
 
-EXPECTED_SUBJECTIVE_FIELDS = ('inner_thought', 'intention', 'emotion_hint')
+EXPECTED_SUBJECTIVE_FIELDS = ('inner_thought',)
 
 class TestSubjectiveActionFieldSet:
-    """主観フィールド集合が 3 facet (attention と expected_result の削除後) であること。"""
+    """主観フィールド集合が独白 inner_thought だけであること。"""
 
-    def test_subjective_action_fields_are_the_three_facets(self) -> None:
-        """SUBJECTIVE_ACTION_FIELDS は声/目的/感情の 3 つで、予測 expected_result は含まない。"""
+    def test_subjective_action_fields_are_only_inner_thought(self) -> None:
+        """SUBJECTIVE_ACTION_FIELDS は独白 inner_thought だけで、予測・目的・感情は含まない。"""
         assert SUBJECTIVE_ACTION_FIELDS == EXPECTED_SUBJECTIVE_FIELDS
 
     def test_attention_is_not_a_subjective_field(self) -> None:
@@ -28,27 +28,28 @@ class TestSubjectiveActionFieldSet:
         assert 'attention' not in SUBJECTIVE_ACTION_TEXT_FIELDS
         assert 'attention' not in SUBJECTIVE_ACTION_FIELD_PROPERTIES
 
-    def test_text_fields_exclude_emotion_hint_enum(self) -> None:
-        """text validation 対象は enum の emotion_hint を含まない 2 つ。"""
-        assert SUBJECTIVE_ACTION_TEXT_FIELDS == ('inner_thought', 'intention')
+    def test_text_fields_are_only_inner_thought(self) -> None:
+        """text validation 対象も inner_thought だけになる。"""
+        assert SUBJECTIVE_ACTION_TEXT_FIELDS == ('inner_thought',)
 
     def test_attention_not_stripped_as_narrative_anymore(self) -> None:
         """fingerprint の narrative strip 対象からも attention は外れている。"""
         assert 'attention' not in NARRATIVE_ARG_FIELDS
 
 class TestWithSubjectiveActionSchema:
-    """with_subjective_action_schema が required へ 3 facet を強制すること。"""
+    """with_subjective_action_schema が required へ inner_thought を強制すること。"""
 
     def _world_tool(self) -> ToolDefinitionDto:
         return ToolDefinitionDto(name='interact', description='何かに作用する', parameters={'type': 'object', 'properties': {}, 'required': []}, category=ToolCategory.WORLD_ACTION)
 
-    def test_required_includes_three_facets(self) -> None:
-        """world-action tool の required に 3 facet が入り、expected_result は properties にも出ない。"""
+    def test_required_includes_inner_thought_only(self) -> None:
+        """world-action tool の required に inner_thought が入り、expected_result / intention / emotion_hint は properties にも出ない。"""
         decorated = with_subjective_action_schema(self._world_tool())
         required = set(decorated.parameters['required'])
         for field_name in EXPECTED_SUBJECTIVE_FIELDS:
             assert field_name in required
-        assert 'expected_result' not in decorated.parameters['properties']
+        for removed in ('expected_result', 'intention', 'emotion_hint'):
+            assert removed not in decorated.parameters['properties']
 
     def test_required_does_not_include_attention(self) -> None:
         """required にも properties にも attention は現れない。"""

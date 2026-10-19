@@ -19,7 +19,6 @@ TOOL_NAME_PREFIX_GUILD = "guild_"
 TOOL_NAME_PREFIX_SHOP = "shop_"
 TOOL_NAME_PREFIX_TRADE = "trade_"
 TOOL_NAME_PREFIX_SNS = "sns_"
-TOOL_NAME_PREFIX_TODO = "todo_"
 TOOL_NAME_PREFIX_MEMO = "memo_"
 # PR-CC (Y_after_pr639_640 後続): spot_graph_ prefix を廃止し、bare 名で
 # 露出する。理由:
@@ -146,15 +145,6 @@ TOOL_NAME_SNS_OPEN_REF = TOOL_NAME_PREFIX_SNS + "open_ref"
 TOOL_NAME_SNS_PAGE_NEXT = TOOL_NAME_PREFIX_SNS + "page_next"
 TOOL_NAME_SNS_PAGE_REFRESH = TOOL_NAME_PREFIX_SNS + "page_refresh"
 TOOL_NAME_SNS_SWITCH_TAB = TOOL_NAME_PREFIX_SNS + "switch_tab"
-TOOL_NAME_MEMO_ADD = TOOL_NAME_PREFIX_MEMO + "add"
-TOOL_NAME_MEMO_LIST = TOOL_NAME_PREFIX_MEMO + "list"
-TOOL_NAME_MEMO_DONE = TOOL_NAME_PREFIX_MEMO + "done"
-# 後方互換のため旧 TODO 名を memo へのエイリアスとして残す (Issue #188 リネーム)。
-# 既存テスト / docstring の参照を一気に直さなくて済むようにする。
-# 新規コードは TOOL_NAME_MEMO_* を使うこと。
-TOOL_NAME_TODO_ADD = TOOL_NAME_MEMO_ADD
-TOOL_NAME_TODO_LIST = TOOL_NAME_MEMO_LIST
-TOOL_NAME_TODO_COMPLETE = TOOL_NAME_MEMO_DONE
 # #1623: 【思い出せる出来事】の目次から、呼び名で本文を呼び出す。
 TOOL_NAME_EPISODE_RECALL = "episode_recall"
 # #1623: 呼び出した本文と目次が合わなかったときに、本人が目次を直す。

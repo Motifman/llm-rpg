@@ -20,6 +20,8 @@ from tests.demos._world_runtime_helpers import (
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -32,9 +34,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 
 
@@ -92,9 +91,8 @@ class TestWorldRuntimeDispatchTable:
             TOOL_NAME_SPOT_GRAPH_LISTEN,
             TOOL_NAME_SPOT_GRAPH_WAIT,
             TOOL_NAME_SPEECH,
-            TOOL_NAME_TODO_ADD,
-            TOOL_NAME_TODO_LIST,
-            TOOL_NAME_TODO_COMPLETE,
+            TOOL_NAME_EPISODE_RECALL,
+            TOOL_NAME_EPISODE_REVISE_INDEX,
         }
         missing = required - set(handlers.keys())
         assert not missing, (

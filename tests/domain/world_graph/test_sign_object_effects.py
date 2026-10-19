@@ -24,7 +24,6 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
-    SIGN_TEXT_MAX_LENGTH,
     WorldGraphEffectService,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
@@ -33,7 +32,11 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
-def _sign(initial_state: dict | None = None) -> SpotObject:
+def _sign(
+    initial_state: dict | None = None,
+    *,
+    hidden_state_keys: frozenset[str] = frozenset(),
+) -> SpotObject:
     return SpotObject(
         object_id=SpotObjectId.create(9),
         name="古い看板",
@@ -41,6 +44,7 @@ def _sign(initial_state: dict | None = None) -> SpotObject:
         object_type=SpotObjectTypeEnum.SIGN,
         state=dict(initial_state or {}),
         interactions=(),
+        hidden_state_keys=hidden_state_keys,
     )
 
 
@@ -106,15 +110,26 @@ class TestWritePlayerTextEffect:
         assert new_state["sign_author_name"] == "ボブ"
         assert new_state["sign_written_tick"] == 5
 
+    @pytest.mark.parametrize(
+        "parameters", [{}, {"text": ""}, {"text": 12345}],
+        ids=["missing", "empty", "numeric"],
+    )
+    @pytest.mark.parametrize(
+        "initial_state",
+        [{}, {"sign_text": "前の本文", "sign_author_name": "前の作者",
+              "sign_written_tick": 9, "public_label": "木製"}],
+        ids=["empty-state", "existing-state"],
+    )
     def test_text_missing_interaction_not_allowed_exception_state(
-        self,
+        self, parameters: dict, initial_state: dict,
     ) -> None:
-        """「書いたつもりで書けていない」まま success=true で返る静かな失敗
-        (実 run t72 で観測) を避けるため、text 欠落は失敗として本人に返す。
-        state を変更する前に例外を投げるので object.state は不変であること
-        も併せて保証する。"""
+        """欠落・空文字・数値の本文を拒否し、元の看板の全状態を保持する。
+
+        空看板の元3入力に、以前の内容がある行を加える。確認するのは
+        元オブジェクトの非破壊性で、外部保存の原子性ではない。
+        """
         svc = WorldGraphEffectService()
-        sign = _sign()
+        sign = _sign(initial_state)
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
             parameters={},
@@ -126,66 +141,25 @@ class TestWritePlayerTextEffect:
                 effects=[effect],
                 world_flags=frozenset(),
                 current_tick=WorldTick(1),
-                interaction_parameters={},
+                interaction_parameters=parameters,
                 acting_player_display_name="アリス",
             )
         assert "text" in str(exc_info.value)
-        assert "sign_text" not in sign.state
+        assert sign.state == initial_state
 
-    def test_empty_string_text_interaction_not_allowed_exception_state(
-        self,
-    ) -> None:
-        """空文字のtextは InteractionNotAllowedException が投げられ state は変わらない。"""
+    @pytest.mark.parametrize(
+        ("long_text", "expected_text"),
+        [("あ" * 250, "あ" * 200), ("先" * 199 + "中" + "尾" * 50, "先" * 199 + "中")],
+        ids=["original-repeated-text", "distinct-tail"],
+    )
+    def test_exceeds(self, long_text: str, expected_text: str) -> None:
+        """200字を超えた本文は先頭200字を保存し、切り詰めたことを伝える。"""
         svc = WorldGraphEffectService()
         sign = _sign()
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
             parameters={},
         )
-        with pytest.raises(InteractionNotAllowedException):
-            svc.apply_effects(
-                interior=_interior_with(sign),
-                acting_object=sign,
-                effects=[effect],
-                world_flags=frozenset(),
-                current_tick=WorldTick(1),
-                interaction_parameters={"text": ""},
-                acting_player_display_name="アリス",
-            )
-        assert "sign_text" not in sign.state
-
-    def test_text_non_string_interaction_not_allowed_exception_state(
-        self,
-    ) -> None:
-        """interact ツールの自由入力は JSON 経由なので数値や配列が渡る余地が
-        あり、非文字列も欠落と同じ扱いにする。"""
-        svc = WorldGraphEffectService()
-        sign = _sign()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
-            parameters={},
-        )
-        with pytest.raises(InteractionNotAllowedException):
-            svc.apply_effects(
-                interior=_interior_with(sign),
-                acting_object=sign,
-                effects=[effect],
-                world_flags=frozenset(),
-                current_tick=WorldTick(1),
-                interaction_parameters={"text": 12345},
-                acting_player_display_name="アリス",
-            )
-        assert "sign_text" not in sign.state
-
-    def test_exceeds(self) -> None:
-        """文字数上限を超えると切り詰められ 可視化される。"""
-        svc = WorldGraphEffectService()
-        sign = _sign()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
-            parameters={},
-        )
-        long_text = "あ" * (SIGN_TEXT_MAX_LENGTH + 50)
         result = svc.apply_effects(
             interior=_interior_with(sign),
             acting_object=sign,
@@ -196,7 +170,8 @@ class TestWritePlayerTextEffect:
             acting_player_display_name="アリス",
         )
         new_state = result.new_interior.objects[0].state
-        assert len(new_state["sign_text"]) == SIGN_TEXT_MAX_LENGTH
+        assert len(new_state["sign_text"]) == 200
+        assert new_state["sign_text"] == expected_text
         assert any("切り詰め" in m for m in result.messages)
 
     def test_display_name_unspecified_default_fallback_saved(self) -> None:
@@ -216,26 +191,7 @@ class TestWritePlayerTextEffect:
             interaction_parameters={"text": "誰かが書いた"},
         )
         new_state = result.new_interior.objects[0].state
-        assert new_state["sign_author_name"]
-
-    def test_public_observable_effect_observation_included(self) -> None:
-        """既定 visibility は PUBLIC_OBSERVABLE (物理オブジェクトへの書き込みは見える)。"""
-        svc = WorldGraphEffectService()
-        sign = _sign()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
-            parameters={},
-        )
-        result = svc.apply_effects(
-            interior=_interior_with(sign),
-            acting_object=sign,
-            effects=[effect],
-            world_flags=frozenset(),
-            current_tick=WorldTick(1),
-            interaction_parameters={"text": "メモ"},
-            acting_player_display_name="アリス",
-        )
-        assert len(result.public_observable_effects) == 1
+        assert new_state["sign_author_name"] == "名無し"
 
     def test_after_3key_hidden_state_keys(self) -> None:
         """PR-J: examine した本人だけが読める設計を守るため、書き込み確定時に
@@ -287,10 +243,22 @@ class TestWritePlayerTextEffect:
         assert "sign_author_name" not in visible
         assert "sign_written_tick" not in visible
 
-    def test_after_hidden_state_keys_preserved(self) -> None:
-        """2人目が書き込んで上書きしても hidden 属性が消えないことを保証する。"""
+    @pytest.mark.parametrize(
+        ("initial_state", "initial_hidden", "expected_visible"),
+        [
+            ({}, frozenset(), {}),
+            ({"secret": "封印", "public_label": "木製"},
+             frozenset({"secret"}), {"public_label": "木製"}),
+        ],
+        ids=["original-empty-state", "existing-private-and-public"],
+    )
+    def test_after_hidden_state_keys_preserved(
+        self, initial_state: dict, initial_hidden: frozenset[str],
+        expected_visible: dict,
+    ) -> None:
+        """初回と再書込みで元の値・秘匿キーを保持し、無関係な公開値は隠さない。"""
         svc = WorldGraphEffectService()
-        sign = _sign()
+        sign = _sign(initial_state, hidden_state_keys=initial_hidden)
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
             parameters={},
@@ -305,6 +273,15 @@ class TestWritePlayerTextEffect:
             acting_player_display_name="アリス",
         )
         updated_sign = first.new_interior.objects[0]
+        expected_hidden = initial_hidden | {
+            "sign_text", "sign_author_name", "sign_written_tick",
+        }
+        assert updated_sign.state == {
+            **initial_state, "sign_text": "1人目のメモ",
+            "sign_author_name": "アリス", "sign_written_tick": 1,
+        }
+        assert updated_sign.hidden_state_keys == expected_hidden
+        assert updated_sign.visible_state() == expected_visible
         second = svc.apply_effects(
             interior=first.new_interior,
             acting_object=updated_sign,
@@ -315,14 +292,19 @@ class TestWritePlayerTextEffect:
             acting_player_display_name="ボブ",
         )
         updated = second.new_interior.objects[0]
-        assert updated.hidden_state_keys == {
-            "sign_text",
-            "sign_author_name",
-            "sign_written_tick",
+        assert updated.state == {
+            **initial_state, "sign_text": "2人目のメモ",
+            "sign_author_name": "ボブ", "sign_written_tick": 5,
         }
+        assert updated.hidden_state_keys == expected_hidden
+        assert updated.visible_state() == expected_visible
         assert "sign_text" not in updated.visible_state()
 
-    def test_state_delta_text_tick_not_included(self) -> None:
+    @pytest.mark.parametrize(
+        "text", ["水場はここから北", "メモ"],
+        ids=["original-private-content", "absorbed-public-summary"],
+    )
+    def test_state_delta_text_tick_not_included(self, text: str) -> None:
         """description には「書き込んだ」という行為の可視性は残すが、
         state_delta からは本文相当の 3 key を除外する。"""
         svc = WorldGraphEffectService()
@@ -337,7 +319,7 @@ class TestWritePlayerTextEffect:
             effects=[effect],
             world_flags=frozenset(),
             current_tick=WorldTick(1),
-            interaction_parameters={"text": "水場はここから北"},
+            interaction_parameters={"text": text},
             acting_player_display_name="アリス",
         )
         assert len(result.public_observable_effects) == 1

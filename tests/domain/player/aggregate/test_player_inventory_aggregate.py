@@ -159,21 +159,24 @@ class TestPlayerInventoryAggregate:
         events = aggregate.get_events()
         assert len(events) == 0
 
-    def test_restore_from_data_invalid_inventory_slots(self):
-        """無効なインベントリスロットデータで復元しようとすると例外が発生すること"""
-        player_id = create_test_player_id(1)
-        max_slots = 10
-
-        # max_slotsを超えるスロットIDを持つデータを用意
-        inventory_slots = {SlotId(i): None for i in range(15)}  # 0-14の15スロット
-        equipment_slots = create_test_equipment_slots()
-
+    @pytest.mark.parametrize(
+        "max_slots, inventory_slots",
+        [
+            pytest.param(10, {SlotId(i): None for i in range(15)}, id="beyond-capacity"),
+            pytest.param(
+                5, {SlotId(0): ItemInstanceId(100), SlotId(5): ItemInstanceId(200)},
+                id="at-capacity",
+            ),
+        ],
+    )
+    def test_restore_from_data_invalid_inventory_slots(self, max_slots, inventory_slots):
+        """容量と同じ番号の枠も、それより大きい枠も復元時に拒否する。"""
         with pytest.raises(InvalidSlotException):
             PlayerInventoryAggregate.restore_from_data(
-                player_id=player_id,
+                player_id=PlayerId(1),
                 max_slots=max_slots,
                 inventory_slots=inventory_slots,
-                equipment_slots=equipment_slots
+                equipment_slots=create_test_equipment_slots(),
             )
 
     def test_restore_from_data_invalid_equipment_slots(self):
@@ -448,13 +451,14 @@ class TestPlayerInventoryAggregate:
 
         # 装備処理を実行（インベントリに空きがない）
         aggregate.complete_equip_item(
-            inventory_slot_id=SlotId(0),  # 仮に空いていたと仮定
+            inventory_slot_id=SlotId(0),
             equipment_slot=EquipmentSlotType.WEAPON,
-            item_instance_id=ItemInstanceId(100)
+            item_instance_id=ItemInstanceId(1000)
         )
 
-        # 装備スロットが正しく更新されていることを確認
-        assert aggregate.get_item_instance_id_by_equipment_slot(EquipmentSlotType.WEAPON) == ItemInstanceId(100)
+        # 元の所持枠が空になり、実在した品が装備されることを確認
+        assert aggregate.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert aggregate.get_item_instance_id_by_equipment_slot(EquipmentSlotType.WEAPON) == ItemInstanceId(1000)
 
         # オーバーフローイベントと装備完了イベントの両方が発行されていることを確認
         events = aggregate.get_events()
@@ -467,7 +471,7 @@ class TestPlayerInventoryAggregate:
 
         equip_event = events[1]
         assert isinstance(equip_event, ItemEquippedEvent)
-        assert equip_event.item_instance_id == ItemInstanceId(100)
+        assert equip_event.item_instance_id == ItemInstanceId(1000)
 
     def test_unequip_item_normal(self):
         """装備アイテムを正常に外せること"""
@@ -603,8 +607,10 @@ class TestPlayerInventoryAggregate:
         assert events[0].aggregate_id == aggregate.player_id
 
     def test_complete_inventory_compaction(self):
-        """整理結果によるインベントリ更新が正常に処理されること"""
-        aggregate = create_test_inventory_aggregate(max_slots=5)
+        """整理済みの配置を反映すると、移動元の枠も空になり、イベントは出ない。"""
+        aggregate = create_test_inventory_aggregate(
+            max_slots=5, inventory_slots={0: 200, 4: 100},
+        )
 
         # 整理後のスロット配置
         compacted_slots = {
@@ -621,6 +627,7 @@ class TestPlayerInventoryAggregate:
         assert aggregate.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(100)
         assert aggregate.get_item_instance_id_by_slot(SlotId(1)) == ItemInstanceId(200)
         assert aggregate.get_item_instance_id_by_slot(SlotId(2)) is None
+        assert aggregate.get_item_instance_id_by_slot(SlotId(4)) is None
 
         # イベントは発行されない（complete_inventory_compactionではイベントを発行しない）
         events = aggregate.get_events()
@@ -651,74 +658,24 @@ class TestPlayerInventoryAggregate:
         assert isinstance(events[0], InventorySortRequestedEvent)
         assert events[0].sort_criteria == InventorySortType.ITEM_TYPE  # デフォルト値
 
-    def test_validate_inventory_slots_valid(self):
-        """有効なインベントリスロットデータがバリデーションを通過すること"""
-        aggregate = create_test_inventory_aggregate(max_slots=5)
+    def test_restore_from_sparse_inventory_slots(self):
+        """疎な保存データも復元でき、省略した枠と明示した空枠はどちらも空と照会できる。"""
+        aggregate = PlayerInventoryAggregate.restore_from_data(
+            player_id=PlayerId(1),
+            max_slots=5,
+            inventory_slots={
+                SlotId(0): ItemInstanceId(100),
+                SlotId(2): ItemInstanceId(200),
+                SlotId(4): None,
+            },
+            equipment_slots=create_test_equipment_slots(),
+        )
 
-        # 有効なデータを準備
-        valid_slots = {
-            SlotId(0): ItemInstanceId(100),
-            SlotId(2): ItemInstanceId(200),
-            SlotId(4): None,
-        }
-
-        # バリデーションが例外を投げないことを確認
-        try:
-            aggregate._validate_inventory_slots(valid_slots)
-        except Exception:
-            pytest.fail("Valid inventory slots should not raise exception")
-
-    def test_validate_inventory_slots_invalid_range(self):
-        """範囲外のスロットIDを持つデータがバリデーションで例外を投げること"""
-        aggregate = create_test_inventory_aggregate(max_slots=5)
-
-        # 無効なデータを準備（max_slotsを超えるスロットID）
-        invalid_slots = {
-            SlotId(0): ItemInstanceId(100),
-            SlotId(5): ItemInstanceId(200),  # 範囲外
-        }
-
-        with pytest.raises(InvalidSlotException):
-            aggregate._validate_inventory_slots(invalid_slots)
-
-    def test_validate_equipment_slots_valid(self):
-        """有効な装備スロットデータがバリデーションを通過すること"""
-        aggregate = create_test_inventory_aggregate()
-
-        # 有効なデータを準備（全てのEquipmentSlotTypeを含む）
-        valid_slots = create_test_equipment_slots({
-            EquipmentSlotType.WEAPON: 100,
-            EquipmentSlotType.ARMOR: 200,
-        })
-
-        # バリデーションが例外を投げないことを確認
-        try:
-            aggregate._validate_equipment_slots(valid_slots)
-        except Exception:
-            pytest.fail("Valid equipment slots should not raise exception")
-
-    def test_validate_equipment_slots_missing_types(self):
-        """必要な装備スロットタイプが欠けている場合、バリデーションで例外を投げること"""
-        aggregate = create_test_inventory_aggregate()
-
-        # 無効なデータを準備（一部のEquipmentSlotTypeが欠けている）
-        invalid_slots = {
-            EquipmentSlotType.WEAPON: ItemInstanceId(100),
-            EquipmentSlotType.HELMET: ItemInstanceId(200),
-            # ARMOR, SHIELD, BOOTS, ACCESSORY が欠けている
-        }
-
-        with pytest.raises(EquipmentSlotValidationException):
-            aggregate._validate_equipment_slots(invalid_slots)
-
-    def test_validate_equipment_slots_extra_types(self):
-        """余分な装備スロットタイプがある場合、バリデーションで例外を投げること"""
-        aggregate = create_test_inventory_aggregate()
-
-        # 無効なデータを準備（存在しないEquipmentSlotTypeを含む）
-        # 実際にはEnumの値しか存在しないので、このテストはスキップ
-        # EquipmentSlotTypeは固定のenumなので、余分なタイプを追加することはできない
-        pass
+        assert aggregate.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(100)
+        assert aggregate.get_item_instance_id_by_slot(SlotId(2)) == ItemInstanceId(200)
+        assert aggregate.get_item_instance_id_by_slot(SlotId(1)) is None
+        assert aggregate.get_item_instance_id_by_slot(SlotId(3)) is None
+        assert aggregate.get_item_instance_id_by_slot(SlotId(4)) is None
 
     def test_event_accumulation_multiple_operations(self):
         """複数の操作でイベントが正しく蓄積されること"""
