@@ -54,7 +54,6 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     NotFacingTargetException,
     NotInteractableException,
     ObjectNotFoundException,
-    SameCoordinateDirectionException,
     TileNotFoundException,
 )
 from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
@@ -297,7 +296,7 @@ class TestPhysicalMapAggregate:
             start_coord = Coordinate(0, 0)
             end_coord = Coordinate(1, 1)
             obj = WorldObject(obj_id, start_coord, ObjectTypeEnum.SIGN, is_blocking=True)
-            aggregate._add_object_to_internal_storage(obj)
+            aggregate.add_object(obj)
             aggregate.clear_events()
             current_tick = WorldTick(10)
             
@@ -323,7 +322,7 @@ class TestPhysicalMapAggregate:
             # Given
             obj_id = WorldObjectId(1)
             obj = WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.SIGN, busy_until=WorldTick(20))
-            aggregate._add_object_to_internal_storage(obj)
+            aggregate.add_object(obj)
             
             # When & Then
             with pytest.raises(ActorBusyException):
@@ -352,18 +351,20 @@ class TestPhysicalMapAggregate:
             obj_id = WorldObjectId(1)
             coord = Coordinate(0, 0)
             obj = WorldObject(obj_id, coord, ObjectTypeEnum.SIGN)
-            aggregate._add_object_to_internal_storage(obj)
+            aggregate.add_object(obj)
             aggregate.clear_events()
             
             aggregate.move_object(obj_id, coord, WorldTick(10))
             
             assert len(aggregate.get_events()) == 0
+            assert aggregate.get_object(obj_id).coordinate == coord
+            assert obj.busy_until is None
 
         def test_move_to_occupied_tile_raises_error(self, aggregate):
             obj1 = WorldObject(WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.CHEST)
             obj2 = WorldObject(WorldObjectId(2), Coordinate(1, 1), ObjectTypeEnum.CHEST)
-            aggregate._add_object_to_internal_storage(obj1)
-            aggregate._add_object_to_internal_storage(obj2)
+            aggregate.add_object(obj1)
+            aggregate.add_object(obj2)
             
             with pytest.raises(InvalidMovementException):
                 aggregate.move_object(WorldObjectId(1), Coordinate(1, 1), WorldTick(10))
@@ -375,7 +376,7 @@ class TestPhysicalMapAggregate:
             ]
             aggregate = PhysicalMapAggregate.create(spot_id, tiles)
             obj_id = WorldObjectId(1)
-            aggregate._add_object_to_internal_storage(WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.CHEST))
+            aggregate.add_object(WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.CHEST))
             
             with pytest.raises(InvalidMovementException):
                 aggregate.move_object(obj_id, Coordinate(1, 1), WorldTick(10))
@@ -386,7 +387,7 @@ class TestPhysicalMapAggregate:
             obj_id = WorldObjectId(1)
             coord = Coordinate(1, 1)
             obj = WorldObject(obj_id, coord, ObjectTypeEnum.DOOR, is_blocking=True)
-            aggregate._add_object_to_internal_storage(obj)
+            aggregate.add_object(obj)
             assert aggregate.is_walkable(coord) is False
             
             # When
@@ -413,7 +414,7 @@ class TestPhysicalMapAggregate:
 
         def test_change_to_wall_with_object_raises_error(self, aggregate):
             coord = Coordinate(1, 1)
-            aggregate._add_object_to_internal_storage(WorldObject(WorldObjectId(1), coord, ObjectTypeEnum.CHEST))
+            aggregate.add_object(WorldObject(WorldObjectId(1), coord, ObjectTypeEnum.CHEST))
             
             with pytest.raises(InvalidPlacementException):
                 aggregate.change_tile_terrain(coord, TerrainType.wall())
@@ -629,11 +630,6 @@ class TestPhysicalMapAggregate:
             with pytest.raises(AreaTriggerNotFoundException):
                 aggregate.remove_area_trigger(AreaTriggerId(999))
 
-        def test_get_direction_to_same_coordinate_raises_error(self, aggregate):
-            coord = Coordinate(0, 0, 0)
-            with pytest.raises(SameCoordinateDirectionException):
-                coord.direction_to(coord)
-
         def test_get_actor_success(self, aggregate):
             # Given
             obj_id = WorldObjectId(1)
@@ -680,8 +676,9 @@ class TestPhysicalMapAggregate:
             
             # Then: The wall should still be impassable because it's a wall (reset override to None)
             assert aggregate.is_walkable(Coordinate(1, 1, 0)) is False
-            # Check the actual tile override
-            assert aggregate.get_tile(Coordinate(1, 1, 0))._is_walkable_override is None
+            # 上書きが固定Falseのまま残っていないことを公開の地形変更で確かめる
+            aggregate.change_tile_terrain(Coordinate(1, 1, 0), TerrainType.road())
+            assert aggregate.is_walkable(Coordinate(1, 1, 0)) is True
 
     class TestVisibilityImprovement:
         def test_visibility_through_missing_tiles(self, spot_id):
@@ -714,7 +711,7 @@ class TestPhysicalMapAggregate:
             # Given
             obj_id = WorldObjectId(1)
             obj = WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.PLAYER, busy_until=WorldTick(20))
-            aggregate._add_object_to_internal_storage(obj)
+            aggregate.add_object(obj)
             
             # When & Then
             with pytest.raises(ActorBusyException):
@@ -868,7 +865,7 @@ class TestPhysicalMapAggregate:
     class TestGetObjectsInRangeBulk:
         """get_objects_in_range_bulk の正常・境界・例外ケース"""
 
-        def test_bulk_returns_same_as_individual_calls(self, spot_id):
+        def test_bulk_returns_expected_objects_for_each_query(self, spot_id):
             # Given: 複数オブジェクトを配置
             tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(5) for y in range(5)]
             aggregate = PhysicalMapAggregate.create(spot_id, tiles)
@@ -888,14 +885,13 @@ class TestPhysicalMapAggregate:
             # When
             bulk_result = aggregate.get_objects_in_range_bulk(centers_with_range)
 
-            # Then: 各クエリは単体の get_objects_in_range と一致
+            # Then: 入力から決めた所属・空集合・件数を検査する
             assert len(bulk_result) == 3
-            single_0 = aggregate.get_objects_in_range(Coordinate(2, 2), 2)
-            single_1 = aggregate.get_objects_in_range(Coordinate(0, 0), 1)
-            single_2 = aggregate.get_objects_in_range(Coordinate(4, 4), 0)
-            assert set(bulk_result[0]) == set(single_0)
-            assert set(bulk_result[1]) == set(single_1)
-            assert set(bulk_result[2]) == set(single_2)
+            assert [sorted(obj.object_id.value for obj in objects) for objects in bulk_result] == [
+                [1, 2],
+                [],
+                [3],
+            ]
             assert len(bulk_result[0]) == 2
             assert obj1 in bulk_result[0]
             assert obj2 in bulk_result[0]
@@ -948,6 +944,11 @@ class TestPhysicalMapAggregate:
             assert len(result[1]) == 1
             assert result[1][0].object_id == WorldObjectId(2)
             assert len(result[2]) == 3
+            assert [sorted(obj.object_id.value for obj in objects) for objects in result] == [
+                [1],
+                [2],
+                [1, 2, 3],
+            ]
 
         def test_bulk_weather_affects_all_queries(self, spot_id):
             # Given: 霧で視界減衰
@@ -974,49 +975,8 @@ class TestPhysicalMapAggregate:
             assert obj_far in result[1]
             assert obj_near not in result[1]
 
-        def test_bulk_order_of_results_matches_input_order(self, spot_id):
-            # Given
-            tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(3) for y in range(3)]
-            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
-            aggregate.add_object(WorldObject(WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.CHEST))
-
-            centers_with_range = [
-                (Coordinate(1, 1), 0),
-                (Coordinate(0, 0), 5),
-                (Coordinate(2, 2), 5),
-            ]
-
-            # When
-            result = aggregate.get_objects_in_range_bulk(centers_with_range)
-
-            # Then: 返り値の順序が入力の (center, range) 順と一致
-            assert len(result) == 3
-            assert result[0][0].object_id == WorldObjectId(1)
-            assert len(result[1]) == 1
-            assert len(result[2]) == 1
-
     class TestIsVisibleBatch:
         """is_visible_batch の正常・境界・例外ケース"""
-
-        def test_batch_returns_same_as_individual_calls(self, aggregate):
-            # Given: 障害物なしのマップ
-            pairs = [
-                (Coordinate(0, 0), Coordinate(2, 2)),
-                (Coordinate(0, 0), Coordinate(1, 1)),
-                (Coordinate(2, 2), Coordinate(0, 0)),
-            ]
-
-            # When
-            batch_result = aggregate.is_visible_batch(pairs)
-
-            # Then: 各ペアは単体の is_visible と一致
-            assert len(batch_result) == 3
-            assert batch_result[0] is aggregate.is_visible(Coordinate(0, 0), Coordinate(2, 2))
-            assert batch_result[1] is aggregate.is_visible(Coordinate(0, 0), Coordinate(1, 1))
-            assert batch_result[2] is aggregate.is_visible(Coordinate(2, 2), Coordinate(0, 0))
-            assert batch_result[0] is True
-            assert batch_result[1] is True
-            assert batch_result[2] is True
 
         def test_batch_empty_input_returns_empty_list(self, aggregate):
             # When
@@ -1025,7 +985,7 @@ class TestPhysicalMapAggregate:
             # Then
             assert result == []
 
-        def test_batch_deduplicates_same_pair(self, spot_id):
+        def test_batch_preserves_repeated_pairs(self, spot_id):
             # Given: 同一ペアを複数回含む
             tiles = [
                 Tile(Coordinate(0, 0), TerrainType.road()),
@@ -1081,20 +1041,36 @@ class TestPhysicalMapAggregate:
             assert len(result) == 1
             assert result[0] is False
 
-        def test_batch_visible_pairs_return_true(self, aggregate):
-            # Given: 障害物なし
-            pairs = [
-                (Coordinate(0, 0), Coordinate(2, 2)),
-                (Coordinate(0, 0), Coordinate(0, 0)),
-            ]
-
-            # When
+        @pytest.mark.parametrize(
+            ("pairs", "expected_count"),
+            [
+                pytest.param(
+                    [(Coordinate(0, 0), Coordinate(2, 2)), (Coordinate(0, 0), Coordinate(0, 0))],
+                    2,
+                    id="visible-and-same-coordinate",
+                ),
+                pytest.param(
+                    [
+                        (Coordinate(0, 0), Coordinate(2, 2)),
+                        (Coordinate(0, 0), Coordinate(1, 1)),
+                        (Coordinate(2, 2), Coordinate(0, 0)),
+                    ],
+                    3,
+                    id="visible-forward-and-reverse",
+                ),
+                pytest.param(
+                    [(Coordinate(1, 1), Coordinate(1, 1))],
+                    1,
+                    id="single-same-coordinate",
+                ),
+            ],
+        )
+        def test_batch_visible_pairs_return_true(self, aggregate, pairs, expected_count):
+            """障害のない順方向・逆方向・同座標を入力順の個数の真偽値Trueで返す。"""
             result = aggregate.is_visible_batch(pairs)
 
-            # Then
-            assert len(result) == 2
-            assert result[0] is True
-            assert result[1] is True
+            assert len(result) == expected_count
+            assert all(value is True for value in result)
 
         def test_batch_order_of_results_matches_input_order(self, spot_id):
             # Given: 可視と不可視が混在（中間タイルで遮られるペアを含む）
@@ -1119,17 +1095,6 @@ class TestPhysicalMapAggregate:
             assert result[0] is True
             assert result[1] is False
             assert result[2] is False
-
-        def test_batch_same_coordinate_returns_true(self, aggregate):
-            # Given: 同一座標ペア
-            pairs = [(Coordinate(1, 1), Coordinate(1, 1))]
-
-            # When
-            result = aggregate.is_visible_batch(pairs)
-
-            # Then
-            assert len(result) == 1
-            assert result[0] is True
 
     class TestGetActorsInPack:
         """get_actors_in_pack の正常・境界・例外ケース"""
@@ -1201,14 +1166,20 @@ class TestPhysicalMapAggregate:
             # Then
             assert result == []
 
-        def test_players_and_non_autonomous_actors_excluded(self, spot_id):
+        @pytest.mark.parametrize(
+            "normal_actor_pack_id",
+            [None, PackId.create("pack")],
+            ids=["unassigned", "same-pack"],
+        )
+        def test_players_and_non_autonomous_actors_excluded(self, spot_id, normal_actor_pack_id):
+            """群れなしでも同じ群れでも通常アクターは除外し、自律アクターだけを返す。"""
             # Given: プレイヤー（ActorComponent）と自律アクター（AutonomousBehaviorComponent）
             tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(2) for y in range(2)]
             aggregate = PhysicalMapAggregate.create(spot_id, tiles)
             pack_id = PackId.create("pack")
             player = WorldObject(
                 WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=None),
+                component=ActorComponent(player_id=None, pack_id=normal_actor_pack_id),
             )
             monster = WorldObject(
                 WorldObjectId(2), Coordinate(1, 0), ObjectTypeEnum.NPC,
@@ -1223,6 +1194,7 @@ class TestPhysicalMapAggregate:
             # Then: 自律アクターのみ
             assert len(result) == 1
             assert result[0].object_id == WorldObjectId(2)
+            assert [obj.object_id for obj in result] == [WorldObjectId(2)]
 
     class TestChestAndDoor:
         """チェスト・ドアのインタラクションと収納・取得のテスト"""
@@ -1276,23 +1248,6 @@ class TestPhysicalMapAggregate:
             assert door.is_blocking is False
             events = aggregate.get_events()
             assert any(isinstance(e, WorldObjectBlockingChangedEvent) for e in events)
-
-        def test_interact_with_locked_door_raises(self, aggregate):
-            actor_id = WorldObjectId(1)
-            door_id = WorldObjectId(2)
-            actor = WorldObject(
-                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(direction=DirectionEnum.SOUTH),
-            )
-            door = WorldObject(
-                door_id, Coordinate(0, 1, 0), ObjectTypeEnum.DOOR,
-                component=DoorComponent(is_locked=True),
-            )
-            aggregate.add_object(actor)
-            aggregate.add_object(door)
-
-            with pytest.raises(LockedDoorException):
-                aggregate.interact_with(actor_id, door_id, WorldTick(10))
 
         def test_interact_with_locked_door_emits_no_event_and_actor_not_busy(self, aggregate):
             """apply_interaction_from が例外を投げた場合、イベント発行・ビジー設定は行わないこと"""
