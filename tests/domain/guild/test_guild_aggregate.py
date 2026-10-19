@@ -107,21 +107,36 @@ class TestGuildAggregate:
                 )
 
         def test_add_member_inviter_not_member_raises(self, guild, guild_id, player_2_id, player_3_id):
+            """非会員の招待を拒否し、既存会員と未発行イベントを変更しない。"""
+            members_before = guild.members
+            events_before = guild.get_events()
+            assert events_before
+
             with pytest.raises(NotGuildMemberException):
                 guild.add_member(
                     inviter_player_id=player_3_id,
                     new_player_id=player_2_id,
                 )
 
+            assert guild.members == members_before
+            assert guild.get_events() == events_before
+
         def test_add_member_member_cannot_invite_raises(
             self, guild_with_members, guild_id, player_2_id, player_3_id
         ):
-            """MEMBER は招待権限がない"""
+            """通常会員の招待を拒否し、既存会員と未発行イベントを変更しない。"""
+            members_before = guild_with_members.members
+            events_before = guild_with_members.get_events()
+            assert events_before
+
             with pytest.raises(InsufficientGuildPermissionException):
                 guild_with_members.add_member(
                     inviter_player_id=player_2_id,
                     new_player_id=player_3_id,
                 )
+
+            assert guild_with_members.members == members_before
+            assert guild_with_members.get_events() == events_before
 
     class TestLeave:
         def test_leave_success(self, guild_with_members, player_2_id):
@@ -170,11 +185,15 @@ class TestGuildAggregate:
         def test_change_role_changer_not_officer_raises(
             self, guild_with_members, creator_id, player_2_id, player_3_id
         ):
-            """MEMBER は役職変更権限がない"""
+            """通常会員の役職変更を拒否し、会員情報と未発行イベントを変更しない。"""
             guild_with_members.add_member(
                 inviter_player_id=creator_id,
                 new_player_id=player_3_id,
             )
+            members_before = guild_with_members.members
+            events_before = guild_with_members.get_events()
+            assert events_before
+
             # player_2 は MEMBER なので change_role できない（1=LEADER, 2=MEMBER, 3=MEMBER）
             with pytest.raises(InsufficientGuildPermissionException):
                 guild_with_members.change_role(
@@ -182,6 +201,9 @@ class TestGuildAggregate:
                     target_player_id=player_3_id,
                     new_role=GuildRole.OFFICER,
                 )
+
+            assert guild_with_members.members == members_before
+            assert guild_with_members.get_events() == events_before
 
         def test_change_role_target_not_member_raises(
             self, guild_with_members, creator_id, player_3_id
@@ -196,12 +218,20 @@ class TestGuildAggregate:
         def test_change_role_leader_cannot_demote_self(
             self, guild_with_members, creator_id, player_2_id
         ):
+            """リーダーの自己降格を拒否し、会員情報と未発行イベントを変更しない。"""
+            members_before = guild_with_members.members
+            events_before = guild_with_members.get_events()
+            assert events_before
+
             with pytest.raises(CannotChangeRoleException):
                 guild_with_members.change_role(
                     changer_player_id=creator_id,
                     target_player_id=creator_id,
                     new_role=GuildRole.MEMBER,
                 )
+
+            assert guild_with_members.members == members_before
+            assert guild_with_members.get_events() == events_before
 
     class TestCanApproveQuest:
         def test_leader_can_approve_quest(self, guild, creator_id):

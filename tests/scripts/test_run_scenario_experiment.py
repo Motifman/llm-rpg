@@ -321,7 +321,7 @@ class TestBuildReport:
     """trace.jsonl からの汎用レポート生成。"""
 
     def test_includes_outcome_event_count(self, tmp_path: Path) -> None:
-        """生成 Markdown に outcome / action 数 / memo 数 / プレイヤー別集計が出る。"""
+        """生成 Markdown に outcome / action 数 / プレイヤー別集計が出て、過去の trace の memo_add は数えない。"""
         scenario = tmp_path / "demo.json"
         scenario.write_text("{}", encoding="utf-8")
         trace_path = tmp_path / "trace.jsonl"
@@ -344,7 +344,7 @@ class TestBuildReport:
                 success=False,
             )
             rec.record(
-                TraceEventKind.MEMO_ADD,
+                "memo_add",
                 tick=2,
                 player_id=2,
                 memo_id="m1",
@@ -364,61 +364,16 @@ class TestBuildReport:
         )
         assert "outcome: **WIN**" in report
         assert "action: 2" in report
-        assert "memo_add: 1" in report
+        assert "memo_add" not in report
         # position_change カウント (今回 0 件)
         assert "position_change: 0" in report
         assert "legacy HTML viewer" in report
         assert "map trace viewer" in report
-        assert "episodic memory viewer" in report
+        assert "episodic memory viewer" not in report
         assert "timeline viewer" in report
         # プレイヤー別集計に 2 行 (新列 moves あり)
-        assert "| 1 | 1 | 1 | 0 | 0 | 0 | 0 |" in report
-        assert "| 2 | 1 | 0 | 1 | 1 | 0 | 0 |" in report
-
-    def test_counts_applied_belief_consolidation_actions(self, tmp_path: Path) -> None:
-        """信念を固めた trace の適用済みの操作を種類ごとに数え、変わり方の信念を作った件数 (explain_change) を report に出す。見送った操作は数えない (#1452)。"""
-        scenario = tmp_path / "demo.json"
-        scenario.write_text("{}", encoding="utf-8")
-        trace_path = tmp_path / "trace.jsonl"
-        with JsonlTraceRecorder(trace_path) as rec:
-            rec.record(
-                TraceEventKind.BELIEF_CONSOLIDATION,
-                being_id="b1",
-                decisions=[{"action": "explain_change"}, {"action": "create"}],
-                skipped_decisions=[{"reason": "explain_change_no_evidence", "decision": {"action": "explain_change"}}],
-            )
-            rec.record(
-                TraceEventKind.BELIEF_CONSOLIDATION,
-                being_id="b2",
-                decisions=[{"action": "explain_change"}],
-                skipped_decisions=[],
-            )
-
-        report = _build_report(
-            scenario_path=scenario,
-            trace_path=trace_path,
-            summary={"outcome": "ENDED", "last_tick": 2, "max_world_ticks": 30, "elapsed_sec": 0.1},
-        )
-
-        assert "## 信念を固めた操作" in report
-        assert "- explain_change: 2" in report
-        assert "- create: 1" in report
-
-    def test_omits_belief_consolidation_section_without_consolidation(self, tmp_path: Path) -> None:
-        """信念を固めた trace が無い run では、信念を固めた操作の節を出さない。"""
-        scenario = tmp_path / "demo.json"
-        scenario.write_text("{}", encoding="utf-8")
-        trace_path = tmp_path / "trace.jsonl"
-        with JsonlTraceRecorder(trace_path) as rec:
-            rec.record(TraceEventKind.RUN_END, outcome="ENDED")
-
-        report = _build_report(
-            scenario_path=scenario,
-            trace_path=trace_path,
-            summary={"outcome": "ENDED", "last_tick": 2, "max_world_ticks": 30, "elapsed_sec": 0.1},
-        )
-
-        assert "信念を固めた操作" not in report
+        assert "| 1 | 1 | 1 | 0 | 0 |" in report
+        assert "| 2 | 1 | 0 | 1 | 0 |" in report
 
     def test_includes_distinct_end_reason(self, tmp_path: Path) -> None:
         """世界内終了と外的停止を区別できるよう、終了理由をreportへ残す。"""
@@ -495,8 +450,8 @@ class TestBuildReport:
             },
         )
         assert "position_change: 3" in report
-        # player 1: actions=0 successes=0 failures=0 memo_adds=0 memo_dones=0 moves=2
-        assert "| 1 | 0 | 0 | 0 | 0 | 0 | 2 |" in report
+        # player 1: actions=0 successes=0 failures=0 moves=2
+        assert "| 1 | 0 | 0 | 0 | 2 |" in report
 
     def test_event_observation_table_min_rendered(
         self, tmp_path: Path
@@ -519,20 +474,19 @@ class TestBuildReport:
             },
         )
         assert "action: 0" in report
-        assert "memo_add: 0" in report
 
 
 class TestEmitHtmlArtifacts:
     """run 完了時に生成する HTML 成果物の挙動を保証する。"""
 
-    def test_emits_legacy_and_four_viewers(
+    def test_emits_legacy_and_three_viewers(
         self,
         tmp_path: Path,
         monkeypatch,
         capsys,
     ) -> None:
-        """trace.html / viewer.html / episodic.html / timeline.html / prompt.html を
-        同じ段で生成する。"""
+        """trace.html / viewer.html / timeline.html / prompt.html を同じ段で生成し、
+        古いエピソードの episodic.html は作らない。"""
         import scripts.run_scenario_experiment as runner
 
         trace_path = tmp_path / "trace.jsonl"
@@ -547,11 +501,6 @@ class TestEmitHtmlArtifacts:
             runner,
             "_render_map_viewer_html",
             lambda run_dir, trace_path, *, title: "<html>map</html>",
-        )
-        monkeypatch.setattr(
-            runner,
-            "_render_episodic_viewer_html",
-            lambda trace_path, *, title: "<html>episodic</html>",
         )
         monkeypatch.setattr(
             runner,
@@ -574,7 +523,6 @@ class TestEmitHtmlArtifacts:
         assert [r.name for r in results] == [
             "trace.html",
             "viewer.html",
-            "episodic.html",
             "timeline.html",
             "prompt.html",
         ]
@@ -584,10 +532,7 @@ class TestEmitHtmlArtifacts:
             == "<html>legacy</html>"
         )
         assert (tmp_path / "viewer.html").read_text(encoding="utf-8") == "<html>map</html>"
-        assert (
-            (tmp_path / "episodic.html").read_text(encoding="utf-8")
-            == "<html>episodic</html>"
-        )
+        assert not (tmp_path / "episodic.html").exists()
         assert (
             (tmp_path / "timeline.html").read_text(encoding="utf-8")
             == "<html>timeline</html>"
@@ -599,7 +544,6 @@ class TestEmitHtmlArtifacts:
         out = capsys.readouterr().out
         assert "[html] trace.html:" in out
         assert "[html] viewer.html:" in out
-        assert "[html] episodic.html:" in out
         assert "[html] timeline.html:" in out
         assert "[html] prompt.html:" in out
 
@@ -627,11 +571,6 @@ class TestEmitHtmlArtifacts:
         monkeypatch.setattr(runner, "_render_map_viewer_html", _raise_map)
         monkeypatch.setattr(
             runner,
-            "_render_episodic_viewer_html",
-            lambda trace_path, *, title: "<html>episodic</html>",
-        )
-        monkeypatch.setattr(
-            runner,
             "_render_timeline_viewer_html",
             lambda trace_path, *, title: "<html>timeline</html>",
         )
@@ -647,10 +586,8 @@ class TestEmitHtmlArtifacts:
         assert by_name["viewer.html"].generated is False
         assert by_name["viewer.html"].error == "cytoscape unavailable"
         assert by_name["trace.html"].generated is True
-        assert by_name["episodic.html"].generated is True
         assert by_name["timeline.html"].generated is True
         assert not (tmp_path / "viewer.html").exists()
-        assert (tmp_path / "episodic.html").exists()
         assert (tmp_path / "timeline.html").exists()
         out = capsys.readouterr().out
         assert "[html-error] viewer.html: cytoscape unavailable" in out
@@ -797,14 +734,12 @@ class TestExperimentProfileManifest:
         profile = self._load_profile("station_drill_lean")
         runtime_config = profile["runtime_config"]
 
-        assert runtime_config["LLM_EPISODIC_ENABLED"] is False
-        assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
     def test_station_drill_lean_keeps_the_long_run_comparison_conditions(
         self,
     ) -> None:
-        """50 tick の長走比較は要約だけを足し、他の記憶機能を無効のまま保つ。"""
+        """50 tick の長走比較は、他の記憶機能を無効のまま保つ。"""
         profile = self._load_profile("station_drill_lean")
 
         # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
@@ -813,28 +748,6 @@ class TestExperimentProfileManifest:
         assert "run 034" in profile["description"]
         assert "並列数を 8" in profile["description"]
         assert profile["max_world_ticks"] == 50
-        assert profile["runtime_config"]["LLM_MEETING_SERIAL_TURNS"] is False
-        assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
-        assert {
-            key: profile["runtime_config"][key]
-            for key in (
-                "LLM_EPISODIC_ENABLED",
-                "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-                "EPISODIC_RECALL_ENABLED",
-                "SEMANTIC_LLM_GIST_ENABLED",
-                "SEMANTIC_SEARCH_ENABLED",
-                "BELIEF_EVIDENCE_ENABLED",
-                "BELIEF_CONSOLIDATION_ENABLED",
-            )
-        } == {
-            "LLM_EPISODIC_ENABLED": False,
-            "LLM_EPISODIC_SUBJECTIVE_ENABLED": False,
-            "EPISODIC_RECALL_ENABLED": False,
-            "SEMANTIC_LLM_GIST_ENABLED": False,
-            "SEMANTIC_SEARCH_ENABLED": False,
-            "BELIEF_EVIDENCE_ENABLED": False,
-            "BELIEF_CONSOLIDATION_ENABLED": False,
-        }
         assert {
             key: profile["runtime_config"][key]
             for key in (
@@ -931,14 +844,6 @@ class TestExperimentProfileManifest:
             ), profile_name
             assert runtime_config["OPENROUTER_PROVIDER"] == "DeepSeek", profile_name
 
-    def test_smoke_stub_does_not_set_active_search_tool_flags(self) -> None:
-        """smoke_stub は能動検索 2 tool を明示せず、既定 false のままにする。"""
-        profile = self._load_profile("smoke_stub")
-        runtime_config = profile["runtime_config"]
-
-        assert "SEMANTIC_SEARCH_ENABLED" not in runtime_config
-        assert "EPISODIC_EXPLORE_RELATED_ENABLED" not in runtime_config
-
     def test_uses_manifest_run_start_resolved_config_remains_profile(
         self,
         tmp_path: Path,
@@ -982,18 +887,14 @@ class TestExperimentProfileManifest:
         assert rc == 0
         cfg = captured["runtime_config"]
         assert cfg.llm_client_kind == "stub"
-        assert cfg.episodic_enabled is False
-        assert cfg.reason_first_two_step_enabled is False
-        # profile 使用時は runtime_config だけを見るので、外側 shell の値は混入しない。
-        assert cfg.belief_evidence_enabled is False
+        assert cfg.reason_first_two_step_enabled is True
 
         resolved = json.loads(
             (out_dir / "experiment.config.resolved.json").read_text(encoding="utf-8")
         )
         assert resolved["profile"] == "smoke_stub"
         assert resolved["runtime_config"]["llm_client_kind"] == "stub"
-        assert resolved["runtime_config"]["reason_first_two_step_enabled"] is False
-        assert resolved["runtime_config"]["belief_evidence_enabled"] is False
+        assert resolved["runtime_config"]["reason_first_two_step_enabled"] is True
         assert "sk-secret" not in json.dumps(resolved, ensure_ascii=False)
         assert resolved["scenario_sha256"]
         assert resolved["git"]["dirty"] in (True, False)
@@ -1004,7 +905,6 @@ class TestExperimentProfileManifest:
         payload = first["payload"]
         assert payload["experiment_profile"] == "smoke_stub"
         assert payload["experiment_manifest_sha256"]
-        assert payload["belief_evidence_enabled"] is False
 
     def test_experiment_config_scenario_max_world_ticks_can_use(
         self,
