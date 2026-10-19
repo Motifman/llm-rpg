@@ -70,8 +70,9 @@ ObservationOutput / tool という transport 非依存の形に揃えてきた**
 [design_decisions.md](design_decisions.md) 判断 9 に
 **「並列化済 (#346 Step 1) で wall time はそれなりに改善した」** とあるが、
 上記の通り **turn 実行の並列化 (Step 1) は未実装**。実装済みなのは
-episodic 主観補完の ThreadPool (#309) と短期記憶 scheduler の thread_pool モード
-(別系統の非同期化) であり、turn の Phase A 並列化ではない。
+episodic 主観補完の ThreadPool (#309) であり、turn の Phase A 並列化ではない。
+短期記憶 scheduler の thread_pool モードも、実験の通る経路では組まれていなかった
+(設定のキーは #1631 で消した)。
 
 これは小さな記述ミスに見えるが、**「docs が事実とずれていると、それを読んで
 判断する未来の作業者 (人間も agent も) が誤る」** という silent failure の一種。
