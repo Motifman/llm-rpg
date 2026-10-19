@@ -8,10 +8,10 @@ on:
 
 jobs:
   test:
-    # 1 台では収集と重い試験の偏りで 6〜7 分かかっていた (#1652)。
+    # 1 台では収集と重い試験の偏りで約 6.8 分かかっていた (2026-10-19、#1652)。
     # .test_durations の時間で 3 組に分け、組ごとの所要時間をそろえる。
     # 1 組が落ちても残りの組の結果を見られるよう、fail-fast は切る。
-    name: test (${{ matrix.group }}/3)
+    name: test (${{ matrix.group }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
