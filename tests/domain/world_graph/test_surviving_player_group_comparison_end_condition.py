@@ -96,7 +96,7 @@ class TestSurvivingPlayerGroupComparison:
         assert _evaluate(_outcomes()).is_ended is False
 
     def test_two_crew_against_two_keepers_ends(self) -> None:
-        """crew 2 人、keeper 2 人なら同数になったため成立する。"""
+        """crew 1 人が DEAD になれば残り 2 対 2 で成立する。幽霊として活動しても DEAD を生存人数へ戻さない。"""
         result = _evaluate(_outcomes(dead=(_CREW[0],)))
 
         assert result.is_ended is True
@@ -105,28 +105,13 @@ class TestSurvivingPlayerGroupComparison:
     def test_two_crew_against_one_keeper_does_not_end(self) -> None:
         """keeper が 1 人退場済みなら crew 2 人で敗北にはならない。
 
-        固定閾値を 2 にする方式との違いが現れる境界である。
+        EJECTED は比較母数から除く。固定閾値を 2 にする方式との違いが現れる境界である。
         """
         result = _evaluate(
             _outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],))
         )
 
         assert result.is_ended is False
-
-    def test_dead_players_who_continue_as_ghosts_are_not_survivors(self) -> None:
-        """DEAD の幽霊は作業を続けられても生存人数には含めない。"""
-        result = _evaluate(_outcomes(dead=(_CREW[0],)))
-
-        assert result.is_ended is True
-
-    def test_ejected_players_are_not_survivors(self) -> None:
-        """追放された keeper は比較する生存人数に含めない。"""
-        result = _evaluate(
-            _outcomes(dead=(_CREW[0],), ejected=(_KEEPERS[0],))
-        )
-
-        assert result.is_ended is False
-
 
 class TestSurvivingPlayerGroupComparisonValidation:
     """比較条件の不足と開始直後から自明に成立する宣言を構築時に拒否する。"""
