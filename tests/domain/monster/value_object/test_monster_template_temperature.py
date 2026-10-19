@@ -73,20 +73,29 @@ class TestComfortRangeValidation:
     """min <= max の不変条件。"""
 
     def test_min_max_ok(self) -> None:
-        """min が max より 寒なら OK。"""
-        _base_template(
+        """COLDからWARMまでの快適範囲と被害量2を指定すると、3つの設定値を保持する。"""
+        template = _base_template(
             min_comfortable_temperature=TemperatureEnum.COLD,
             max_comfortable_temperature=TemperatureEnum.WARM,
             temperature_discomfort_damage_per_tick=2,
         )
+        assert template.min_comfortable_temperature == TemperatureEnum.COLD
+        assert template.max_comfortable_temperature == TemperatureEnum.WARM
+        assert template.temperature_discomfort_damage_per_tick == 2
 
     def test_min_max_same_ok(self) -> None:
-        """寒さに弱く暑さにも弱い (NORMAL のみ快適) は許容。"""
-        _base_template(
+        """NORMALだけが快適な設定を保持し、隣のCOLDとWARMをそれぞれ寒暑の不快と判定する。"""
+        template = _base_template(
             min_comfortable_temperature=TemperatureEnum.NORMAL,
             max_comfortable_temperature=TemperatureEnum.NORMAL,
             temperature_discomfort_damage_per_tick=1,
         )
+        assert template.min_comfortable_temperature == TemperatureEnum.NORMAL
+        assert template.max_comfortable_temperature == TemperatureEnum.NORMAL
+        assert template.temperature_discomfort_damage_per_tick == 1
+        assert template.temperature_discomfort(TemperatureEnum.NORMAL) is None
+        assert template.temperature_discomfort(TemperatureEnum.COLD) == "too_cold"
+        assert template.temperature_discomfort(TemperatureEnum.WARM) == "too_hot"
 
     def test_min_max_raises_exception(self) -> None:
         """min が max より 暑なら 例外。"""
