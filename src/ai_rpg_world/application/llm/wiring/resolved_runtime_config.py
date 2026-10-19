@@ -186,15 +186,9 @@ class ResolvedLlmRuntimeConfig:
     short_term_memory_turn_cap: int = 20
     short_term_memory_turn_compact_count: int = 10
 
-
-
-    # Active episodic recall tool (Issue #526 後続)。
-
     # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
-
-    # Goal / stagnation 系。
 
     # Prompt / tool 表面。
     scenario_random_seed: int | None = None

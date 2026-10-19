@@ -122,7 +122,6 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
     的に並ぶように、Phase A の to_run 順で呼ぶ)。
     """
     player_id = phase_a.player_id
-    # 1 手の処理より先に進める。手の中で作る予期 (#1441) が、この手のターン数を持つ。
     if phase_a.failure_result is not None:
         result = phase_a.failure_result
         wiring.runtime._record_action_result(

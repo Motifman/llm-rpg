@@ -8409,3 +8409,5 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **その後**: 段 12 で `episodic_episodes` を表に足し、`EXPECTED_PAYLOAD_KEYS` と `BeingMemorySnapshotService` の古いエピソードの処理、`ExperimentSnapshotSession` の空の代用を消した (#1805)。
 
 段 13 で `world_clock_restart.py` を消した (#1810)。読み込みは表のキーを捨てたあと、replay かどうかで分かれない。`snapshot_load` の `world_clock_restarts` 欄も無くなった。
+
+上で「同じ表を通す」と書いた `BeingPersistenceService` は、本番から呼ばれず試験だけが使っていたので、段 13 で消した (#1813)。表を通る読み込みは、`RestoreBeingSnapshotFromFileUseCase` だけになった。

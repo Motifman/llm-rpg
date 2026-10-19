@@ -11,7 +11,7 @@ Phase 5 (Issue #470): run 途中再開 (mid-run resume) milestone のもう片�
 3. ``snapshot.has_memory_payload`` なら、消した部品の欄を捨ててから
    ``BeingMemorySnapshotService.restore`` で store に書き戻す
 
-atomicity 制約は ``BeingPersistenceService.load`` と同じ:
+atomicity 制約:
 - snapshot 自体の保存は ``BeingRepository.save_snapshot`` の atomic
 - memory restore は store ごとに順次 (= 設計判断 #15)
 - 失敗時は例外が呼出側 (= CLI) に伝播 (silent failure 禁止)

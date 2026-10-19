@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Being + memory 状態を JSON ファイルに save / load する CLI (Phase 5 / Issue #470)。
 
-run 途中再開 (mid-run resume) milestone の UX 層。``BeingPersistenceService``
-や ``BeingMemorySnapshotService`` を経由して memory store + Being repository
-の状態を 1 つの JSON ファイルに往復させる。
+run 途中再開 (mid-run resume) milestone の UX 層。``BeingMemorySnapshotService``
+を経由して memory store + Being repository の状態を 1 つの JSON ファイルに
+往復させる。
 
 ## 使い方
 
