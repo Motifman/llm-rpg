@@ -23,25 +23,25 @@ class TestValidateSnapshotPayloadCoverage:
     def test_raises_when_emitted_misses_expected_key(self):
         """expected にあるのに emitted に無いキーがあれば SnapshotCoverageError。"""
         with pytest.raises(SnapshotCoverageError):
-            _validate_snapshot_payload_coverage(emitted_keys={'memo'}, expected_keys={'memo', 'recall_slot'})
+            _validate_snapshot_payload_coverage(emitted_keys={'acquaintances'}, expected_keys={'acquaintances', 'recall_slot'})
 
     def test_error_message_lists_missing_keys(self):
         """エラーメッセージに不足キーが含まれ、運用者がどの codec を足せば
         いいか一目で分かる。"""
         with pytest.raises(SnapshotCoverageError) as exc_info:
-            _validate_snapshot_payload_coverage(emitted_keys={'memo'}, expected_keys={'memo', 'recall_slot', 'afterglow'})
+            _validate_snapshot_payload_coverage(emitted_keys={'acquaintances'}, expected_keys={'acquaintances', 'recall_slot', 'afterglow'})
         message = str(exc_info.value)
         assert 'recall_slot' in message
         assert 'afterglow' in message
 
     def test_passes_when_emitted_covers_expected(self):
         """expected ⊆ emitted なら例外を投げない。"""
-        _validate_snapshot_payload_coverage(emitted_keys={'memo', 'recall_slot'}, expected_keys={'memo', 'recall_slot'})
+        _validate_snapshot_payload_coverage(emitted_keys={'acquaintances', 'recall_slot'}, expected_keys={'acquaintances', 'recall_slot'})
 
     def test_allows_extra_emitted_keys(self):
         """emitted が expected の超集合 (= 余分なキーがある) でも許容する。
         schema_version など meta 情報のため。"""
-        _validate_snapshot_payload_coverage(emitted_keys={'memo', 'schema_version'}, expected_keys={'memo'})
+        _validate_snapshot_payload_coverage(emitted_keys={'acquaintances', 'schema_version'}, expected_keys={'acquaintances'})
 
     def test_empty_inputs_are_safe(self):
         """両集合が空でも例外を投げない (= minimal wiring セーフ)。"""
@@ -50,20 +50,7 @@ class TestValidateSnapshotPayloadCoverage:
 def _make_service(memory_turn_clock=None):
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
-    from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        InMemoryEpisodicRecallHabituationStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-    from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-        InMemoryBeliefEvidenceBufferStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-    from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-    from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-    return BeingMemorySnapshotService(memo_store=InMemoryMemoStore(), semantic_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), recall_slot_store=InMemoryEpisodicRecallSlotStore(), afterglow_store=InMemoryAfterglowStore(), recall_habituation_store=InMemoryEpisodicRecallHabituationStore(), belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(), recall_success_store=InMemoryEpisodicRecallSuccessStore(), acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock())
+    return BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock())
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -73,12 +60,12 @@ class TestBeingMemorySnapshotServiceCoverage:
     保証する。"""
 
     def test_capture_succeeds_with_default_expected_keys(self):
-        """既存 6 store + 既定の EXPECTED_PAYLOAD_KEYS で capture が成功する
+        """既存 5 store + 既定の EXPECTED_PAYLOAD_KEYS で capture が成功する
         (= 後方互換)。"""
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         service = _make_service()
         payload_json = service.capture(BeingId('being-test'))
-        assert 'memo' in payload_json
+        assert 'being_memo_book' in payload_json
 
     def test_capture_raises_when_expected_key_is_not_emitted(self, monkeypatch):
         """EXPECTED に key を足したが capture() の生成 dict にその key が
@@ -106,26 +93,10 @@ class TestBeingMemorySnapshotServiceCoverage:
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
         monkeypatch.setattr(BeingMemorySnapshotService, 'EXPECTED_PAYLOAD_KEYS', original | frozenset({'fictional_new_store'}))
         service = _make_service()
-        payload_without_new_key = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'belief_evidence_buffer': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []}
+        payload_without_new_key = {'schema_version': 1, 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': []}
         with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
             service.restore(BeingId('being-test'), json.dumps(payload_without_new_key))
         assert 'fictional_new_store' in str(exc_info.value)
-
-    def test_restore_wraps_belief_evidence_domain_exception_as_format_error(self):
-        """U2 レビュー MEDIUM 対応: BeliefEvidence VO はドメイン例外
-        (BeliefEvidenceValidationException、組み込み例外を継承しない) を
-        投げるが、破損 payload (不正 salience) を restore すると生の
-        ドメイン例外ではなく BeingMemoryPayloadFormatError に wrap されて
-        伝播することを保証する (= _decode_list の except 契約を守る)。"""
-        import json
-
-        from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemoryPayloadFormatError
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
-        service = _make_service()
-        broken_payload = {'schema_version': 1, 'memo': [], 'semantic_entries': [], 'semantic_cluster_signatures': [], 'memory_links': [], 'episodic_episodes': [], 'recall_slot_entries': [], 'recall_slot_cooldown': [], 'afterglow_entries': [], 'recall_habituation_last_recalled': [], 'recall_success_hit_count': [], 'belief_evidence_received_event_ids': [], 'recall_success_received_event_ids': [], 'memory_turn': [], 'acquaintances': [], 'being_episodes': [], 'being_memo_book': [], 'belief_evidence_buffer': [{'evidence_id': 'e1', 'source_kind': 'prediction_error', 'episode_ids': ['ep-1'], 'cue_signature': 'tool:explore', 'text': '探索は空振りだった', 'salience': 'medium', 'occurred_at': '2026-07-05T09:00:00+00:00', 'tick': 7}]}
-        with pytest.raises(BeingMemoryPayloadFormatError) as exc_info:
-            service.restore(BeingId('being-test'), json.dumps(broken_payload))
-        assert 'belief_evidence_buffer' in str(exc_info.value)
 
 class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
     """``ExperimentSnapshotSession.capture_all_to_dir`` の ``except Exception`` が
@@ -142,12 +113,6 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
         from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
-        from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-        from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-        from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-            InMemorySubjectiveEpisodeStore,
-        )
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         original = BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
@@ -155,7 +120,7 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
-        wiring = SimpleNamespace(memo_store=InMemoryMemoStore(), semantic_memory_store=InMemorySemanticMemoryStore(), memory_link_store=InMemoryMemoryLinkStore(), episodic_episode_store=InMemorySubjectiveEpisodeStore(), being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
         provisioning.ensure_attached(PlayerId(1))
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         with pytest.raises(SnapshotCoverageError):

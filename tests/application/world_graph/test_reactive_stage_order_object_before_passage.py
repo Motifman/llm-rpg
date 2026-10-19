@@ -11,7 +11,7 @@ LOCKED となる。
 検証する不変条件:
 - ``ReactiveObjectStateBindingStage`` で object state を更新した結果が、
   **同じ tick の** ``ReactivePassageBindingStage`` から見える
-- relay_puzzle で「operator 離脱 → object stage で power_on=false →
+- relay_puzzle (#1631 で退役) の形で「operator 離脱 → object stage で power_on=false →
   passage stage で扉 LOCKED」が 1 tick 内に完結する (旧 2 tick lag が解消)
 """
 
@@ -77,7 +77,7 @@ def _node(i: int) -> SpotNode:
 
 
 def _build_world():
-    """relay_puzzle 相当の最小世界: control_room (1) - corridor (2) で
+    """relay_puzzle (#1631 で退役) 相当の最小世界: control_room (1) - corridor (2) で
     対象 connection は ID=10 (corridor → vault っぽい配置)、object_panel は ID=7。"""
     g = SpotGraphAggregate.empty(SpotGraphId.create(1))
     for i in (1, 2, 3):

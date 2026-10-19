@@ -193,9 +193,8 @@ class PlayerObservationFormatter:
             # 宣言は prose と structured の両方に効かせる。
             #
             # 片方だけだと、**読む側が増えたときに静かに破れる**。いまは
-            # cue 抽出 (episodic_cue_rules) がこの key を読んでいないので
-            # 実害は無いが、「読まれていないから残してよい」は消費者が
-            # 1 つ増えた瞬間に成り立たなくなる。
+            # この key を読む側が無いので実害は無いが、「読まれていないから
+            # 残してよい」は消費者が 1 つ増えた瞬間に成り立たなくなる。
             if learns_killer:
                 structured["killer_player_id"] = killer_id
                 structured["killer_name"] = killer_name

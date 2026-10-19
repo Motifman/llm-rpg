@@ -49,7 +49,7 @@ class _PromptCaptureClient:
         return {"name": "wait", "arguments": {}}
 
 
-def _runtime(*, include_todo_tools: bool = True, **extra: str):
+def _runtime(**extra: str):
     values = {
         "TYPED_JUDGMENT_PROVIDER": "stub",
         **extra,
@@ -57,7 +57,6 @@ def _runtime(*, include_todo_tools: bool = True, **extra: str):
     runtime = create_world_runtime(
         _ISLAND,
         config=ResolvedLlmRuntimeConfig.from_mapping(values=values),
-        include_todo_tools=include_todo_tools,
     )
     recorder = _Recorder()
     runtime.set_trace_recorder(recorder)
@@ -302,15 +301,12 @@ class TestRevisingTheIndexInATurn:
         assert [p["before"]["about"] for p in revisions] == ["火を起こした"]
 
 
-_MEMO_BOOK = {"BEING_MEMO_ENABLED": "1", "MEMO_TOOLS_ENABLED": "false"}
-
-
 class TestMemoFromAnEpisode:
     """目次を出す設定では、メモの「分かったこと」の出どころにエピソードの呼び名を選べることを保証する。"""
 
     def test_the_memo_argument_offers_the_episode_source_with_the_index(self) -> None:
         """目次とメモ帳の両方を出す設定では、引数 memo の出どころの選択肢に episode が入る。"""
-        runtime, _ = _runtime(**_MEMO_BOOK)
+        runtime, _ = _runtime()
         pid = runtime.get_player_ids()[0]
 
         _, _, tools = _first_turn(runtime, pid)
@@ -319,7 +315,7 @@ class TestMemoFromAnEpisode:
 
     def test_a_fact_from_an_episode_is_written_with_its_handle(self) -> None:
         """行動に添えた memo で、出どころをエピソードにして呼び名を書くと、その呼び名つきの「分かったこと」が入る。"""
-        runtime, _ = _runtime(**_MEMO_BOOK)
+        runtime, _ = _runtime()
         pid = runtime.get_player_ids()[0]
         episode = _write(runtime, pid, 1, summary="火を起こした")
 
@@ -347,7 +343,7 @@ class TestMemoFromAnEpisode:
 
     def test_an_episode_that_sank_out_of_the_index_is_still_accepted(self) -> None:
         """目次の件数から外れた (沈んだ) エピソードの呼び名でも、その Being の記録にあれば出どころとして受け付ける。"""
-        runtime, _ = _runtime(BEING_EPISODE_INDEX_LIMIT="1", **_MEMO_BOOK)
+        runtime, _ = _runtime(BEING_EPISODE_INDEX_LIMIT="1")
         pid = runtime.get_player_ids()[0]
         sunk = _write(runtime, pid, 1, summary="浜に流れ着いた", written_turn=0)
         _write(runtime, pid, 2, summary="火を起こした", written_turn=1)
@@ -374,27 +370,11 @@ class TestMemoFromAnEpisode:
         assert memo.provenance is not None and memo.provenance.source_from == sunk.handle
 
 
-class TestTheRuntimeWithoutTodoTools:
-    """記憶のツールを隠した runtime では、呼び出せない目次を出さないことを保証する (#1631)。"""
+class TestTheIndexAlwaysAppears:
+    """create_world_runtime で組んだ runtime では、目次と 2 つのツールがいつも出ることを保証する (#1631)。"""
 
-    def test_neither_the_index_nor_its_tools_appear(self) -> None:
-        """include_todo_tools=False で組むと、エピソードがあっても【思い出せる出来事】も 2 つのツールもプロンプト全文に出ない。"""
-        runtime, recorder = _runtime(include_todo_tools=False)
-        pid = runtime.get_player_ids()[0]
-        _write(runtime, pid, 1, summary="火を起こした")
-
-        system, user, tools = _first_turn(runtime, pid)
-
-        whole = system + user + json.dumps(tools, ensure_ascii=False)
-        assert [
-            name
-            for name in (_HEADING, TOOL_NAME_EPISODE_RECALL, TOOL_NAME_EPISODE_REVISE_INDEX)
-            if name in whole
-        ] == []
-        assert [k for k, _, _ in recorder.events if k == TraceEventKind.EPISODE_INDEX_SHOWN] == []
-
-    def test_the_default_mode_shows_both(self) -> None:
-        """TODO 系を含む既定の構成では、同じ準備で【思い出せる出来事】と 2 つのツールが出る。"""
+    def test_the_index_and_its_tools_appear(self) -> None:
+        """設定を書かずに組んでも、エピソードがあれば【思い出せる出来事】と 2 つのツールがプロンプトに出る。"""
         runtime, _ = _runtime()
         pid = runtime.get_player_ids()[0]
         _write(runtime, pid, 1, summary="火を起こした")

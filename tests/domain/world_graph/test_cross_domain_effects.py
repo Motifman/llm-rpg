@@ -141,8 +141,8 @@ class TestCombineItemsEffect:
             interior=_empty_interior(), acting_object=None,
             effects=[effect], world_flags=frozenset(),
         )
-        assert len(result.item_spec_ids_to_remove) == 2
-        assert len(result.item_spec_ids_to_grant) == 1
+        assert [sid.value for sid in result.item_spec_ids_to_remove] == [1, 2]
+        assert [sid.value for sid in result.item_spec_ids_to_grant] == [99]
 
 
 class TestMultipleEffectsAccumulate:
@@ -169,9 +169,9 @@ class TestMultipleEffectsAccumulate:
             interior=_empty_interior(), acting_object=None,
             effects=effects, world_flags=frozenset(),
         )
-        assert len(result.damage_specs) == 1
-        assert len(result.teleport_specs) == 1
-        assert len(result.messages) == 1
+        assert [spec.damage for spec in result.damage_specs] == [5]
+        assert [spec.target_spot_id for spec in result.teleport_specs] == [10]
+        assert result.messages == ("落とし穴に落ちた！",)
 
 
 class TestChangePassageStateEffect:
@@ -211,7 +211,10 @@ class TestChangePassageStateEffect:
             interior=_empty_interior(), acting_object=None,
             effects=[effect], world_flags=frozenset(),
         )
+        assert len(result.passage_state_updates) == 1
         spec = result.passage_state_updates[0]
+        assert spec.connection_id == 9
+        assert spec.new_state == "CRACKED"
         assert spec.traversable_override is False
         assert spec.sound_permeability_override == 0.7
 

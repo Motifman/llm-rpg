@@ -88,6 +88,8 @@ class TestMissingPuzzleInput:
 
         assert '"code"' in str(caught.value)
 
+        assert caught.value.failed_condition is _OPEN.preconditions[0]
+
     def test_wrong_code_raises_the_plain_refusal(self, attempt) -> None:
         """"code" に違う番号を入れたときは、親の InteractionNotAllowedException をシナリオの文で投げる。"""
         with pytest.raises(InteractionNotAllowedException) as caught:

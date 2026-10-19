@@ -7,6 +7,8 @@ skip (warning log のみ) で effect 全体は continue。
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import (
@@ -53,13 +55,13 @@ def _make_loot_table(table_id: int, entries: list) -> LootTableAggregate:
     )
 
 
-def _apply(svc: WorldGraphEffectService, params: dict):
+def _apply(svc: WorldGraphEffectService, params: dict, *, following=()):
     effect = InteractionEffect(
         effect_type=InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE,
         parameters=params,
     )
     return svc.apply_effects(
-        effects=(effect,),
+        effects=(effect, *following),
         interior=_make_interior(),
         acting_object=None,
         world_flags=frozenset(),
@@ -67,83 +69,82 @@ def _apply(svc: WorldGraphEffectService, params: dict):
 
 
 class TestBasicLootDrop:
-    """LootTable から確実に 1 アイテムが grant される。"""
+    """選んだ抽選表の品目と、抽選回数・当選数量に応じた付与数を保証する。"""
 
-    def test_single_entry_table_item_rendered(self) -> None:
-        """単一 entry の table は常にその item が出る。"""
+    @pytest.mark.parametrize(
+        ("table_id", "quantity", "params", "expected"),
+        [
+            (1, 1, {"loot_table_id": 1}, (100,)),
+            (1, 1, {"loot_table_id": 1, "times": 2}, (100, 100)),
+            (1, 3, {"loot_table_id": 1}, (100, 100, 100)),
+            (9, 2, {"loot_table_id": 9, "times": 3}, (108, 108, 108, 108, 108, 108)),
+        ],
+    )
+    def test_selected_table_grants_exact_items(self, table_id, quantity, params, expected) -> None:
+        """指定した抽選表の品目を既定1回または指定回数だけ抽選し、数量ぶんだけ付与する。"""
         repo = InMemoryLootTableRepository()
-        repo.save(_make_loot_table(1, [
-            LootEntry(item_spec_id=ItemSpecId.create(100), weight=1),
-        ]))
-        svc = WorldGraphEffectService(loot_table_repository=repo)
+        if table_id != 1:
+            repo.save(_make_loot_table(1, [LootEntry(ItemSpecId.create(999), weight=1)]))
+        repo.save(_make_loot_table(table_id, [LootEntry(
+            item_spec_id=ItemSpecId.create(100 if table_id == 1 else 108),
+            weight=1, min_quantity=quantity, max_quantity=quantity,
+        )]))
 
-        result = _apply(svc, {"loot_table_id": 1})
+        result = _apply(WorldGraphEffectService(loot_table_repository=repo), params)
 
-        # 単一 entry なので必ず item_spec_id=100 が grant される
-        assert any(s.value == 100 for s in result.item_spec_ids_to_grant)
-
-    def test_times_two_2(self) -> None:
-        """times 2 で 2 回抽選。"""
-        repo = InMemoryLootTableRepository()
-        repo.save(_make_loot_table(1, [
-            LootEntry(
-                item_spec_id=ItemSpecId.create(100),
-                weight=1, min_quantity=1, max_quantity=1,
-            ),
-        ]))
-        svc = WorldGraphEffectService(loot_table_repository=repo)
-
-        result = _apply(svc, {"loot_table_id": 1, "times": 2})
-
-        # 各回 quantity=1 なので合計 2 個 grant される
-        assert len([s for s in result.item_spec_ids_to_grant if s.value == 100]) == 2
-
-    def test_min_max_quantity_grant(self) -> None:
-        """min max quantity 範囲で grant される。"""
-        repo = InMemoryLootTableRepository()
-        repo.save(_make_loot_table(1, [
-            LootEntry(
-                item_spec_id=ItemSpecId.create(100),
-                weight=1, min_quantity=3, max_quantity=3,
-            ),
-        ]))
-        svc = WorldGraphEffectService(loot_table_repository=repo)
-
-        result = _apply(svc, {"loot_table_id": 1})
-
-        # min=max=3 なので必ず 3 個出る
-        assert len([s for s in result.item_spec_ids_to_grant if s.value == 100]) == 3
+        assert tuple(s.value for s in result.item_spec_ids_to_grant) == expected
 
 
 class TestSilentSkip:
-    """provider 不在 / table 未登録は silent skip (例外を投げず continue)。"""
+    """抽選元なし・表なし・不正IDは原因を警告し、他の効果を止めない。"""
 
-    def test_repository_uninjected_silent_skip(self) -> None:
-        """repository 未注入なら silent skip。"""
+    def test_repository_uninjected_silent_skip(self, caplog) -> None:
+        """抽選Repository未注入は警告し、付与なしで後続の効果を続ける。"""
         svc = WorldGraphEffectService()  # repo 無し
 
-        result = _apply(svc, {"loot_table_id": 1})
+        result = _apply(svc, {"loot_table_id": 1}, following=(InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.SHOW_MESSAGE, parameters={"message": "採取を続ける"},
+        ),))
 
         # 何も grant されない、例外も投げない
         assert result.item_spec_ids_to_grant == ()
+        assert result.messages == ("採取を続ける",)
+        assert any(record.levelno == logging.WARNING
+                   and "GIVE_FROM_LOOT_TABLE" in record.message
+                   and all(token in record.message for token in ('not injected',))
+                   for record in caplog.records)
 
-    def test_loot_table_id_unregistered_silent_skip(self) -> None:
-        """loottableid が未登録なら silentskip。"""
+    def test_loot_table_id_unregistered_silent_skip(self, caplog) -> None:
+        """未登録の抽選表IDは原因を警告し、付与なしで後続の効果を続ける。"""
         repo = InMemoryLootTableRepository()
         svc = WorldGraphEffectService(loot_table_repository=repo)
 
-        result = _apply(svc, {"loot_table_id": 999})
+        result = _apply(svc, {"loot_table_id": 999}, following=(InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.SHOW_MESSAGE, parameters={"message": "採取を続ける"},
+        ),))
 
         assert result.item_spec_ids_to_grant == ()
+        assert result.messages == ("採取を続ける",)
+        assert any(record.levelno == logging.WARNING
+                   and "GIVE_FROM_LOOT_TABLE" in record.message
+                   and all(token in record.message for token in ('999', 'not found'))
+                   for record in caplog.records)
 
-    def test_loot_table_id_invalid_silent_skip(self) -> None:
-        """loottableid が不正なら silentskip。"""
+    def test_loot_table_id_invalid_silent_skip(self, caplog) -> None:
+        """整数にできない抽選表IDは原因を警告し、付与なしで後続の効果を続ける。"""
         repo = InMemoryLootTableRepository()
         svc = WorldGraphEffectService(loot_table_repository=repo)
 
-        result = _apply(svc, {"loot_table_id": "not_an_int"})
+        result = _apply(svc, {"loot_table_id": "not_an_int"}, following=(InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.SHOW_MESSAGE, parameters={"message": "採取を続ける"},
+        ),))
 
         assert result.item_spec_ids_to_grant == ()
+        assert result.messages == ("採取を続ける",)
+        assert any(record.levelno == logging.WARNING
+                   and "GIVE_FROM_LOOT_TABLE" in record.message
+                   and all(token in record.message for token in ('not_an_int', 'invalid'))
+                   for record in caplog.records)
 
 
 class TestSeededLootDrop:

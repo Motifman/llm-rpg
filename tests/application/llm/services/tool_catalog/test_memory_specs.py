@@ -6,7 +6,6 @@ from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
-    TOOL_NAME_MEMO_ADD,
 )
 
 
@@ -20,14 +19,6 @@ class TestGetMemorySpecsFlags:
     def test_default_returns_no_tools(self) -> None:
         """引数を渡さないとき、道具を 1 つも返さない。"""
         assert get_memory_specs() == []
-
-    def test_memo_enabled_returns_memo_tools_only(self) -> None:
-        """memo_enabled=True のとき memo の道具だけを返し、エピソードの道具は出さない。"""
-        names = _names(get_memory_specs(memo_enabled=True))
-
-        assert TOOL_NAME_MEMO_ADD in names
-        assert TOOL_NAME_EPISODE_RECALL not in names
-        assert TOOL_NAME_EPISODE_REVISE_INDEX not in names
 
     def test_episode_recall_max_handles_exposes_episode_recall(self) -> None:
         """episode_recall_max_handles を渡すと episode_recall を出す。"""

@@ -295,6 +295,10 @@ class TestVisibilityFirstClassField:
         assert len(result.actor_direct_effects) == 1
         assert result.public_observable_effects == ()
         assert result.hidden_effects == ()
+        assert result.actor_direct_effects[0].kind == AppliedEffectKind.DAMAGE
+        assert result.actor_direct_effects[0].visibility == EffectVisibility.ACTOR_DIRECT
+        assert len(result.damage_specs) == 1
+        assert result.damage_specs[0].visibility == EffectVisibility.ACTOR_DIRECT
 
 
 class TestVisibilityOverride:
@@ -363,13 +367,14 @@ class TestVisibilityOverride:
 class TestStateDeltaSemantics:
     """state delta が missing/None/sequential 更新を正しく扱うこと。"""
 
-    def test_new_key_records_before_none(self) -> None:
-        """before に存在しなかったキーは before=None で記録される。"""
+    @pytest.mark.parametrize("new_value", [3, None])
+    def test_new_key_records_before_none(self, new_value: int | None) -> None:
+        """新規キーは値がNoneでも省かず、before=Noneの差分として記録する。"""
         svc = WorldGraphEffectService()
         item = _make_item(state={})  # 空 state
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
-            parameters={"state_updates": {"charges": 3}},
+            parameters={"state_updates": {"charges": new_value}},
         )
         result = svc.apply_effects(
             interior=_empty_interior(),
@@ -382,7 +387,7 @@ class TestStateDeltaSemantics:
         assert len(deltas) == 1
         assert deltas[0].key == "charges"
         assert deltas[0].before is None
-        assert deltas[0].after == 3
+        assert deltas[0].after == new_value
 
     def test_explicit_none_to_value_is_recorded(self) -> None:
         """before に明示的に None が入っていた場合も差分として記録される。"""
@@ -478,9 +483,10 @@ class TestVisibilityBucketIsolation:
             world_flags=frozenset(),
             acting_player_status=status,
         )
-        kinds_actor = {s.kind for s in result.actor_direct_effects}
-        kinds_public = {s.kind for s in result.public_observable_effects}
-        assert AppliedEffectKind.SATISFY_NEED in kinds_actor
-        assert AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE in kinds_public
-        assert AppliedEffectKind.SATISFY_NEED not in kinds_public
-        assert AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE not in kinds_actor
+        assert [s.kind for s in result.actor_direct_effects] == [
+            AppliedEffectKind.SATISFY_NEED
+        ]
+        assert [s.kind for s in result.public_observable_effects] == [
+            AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE
+        ]
+        assert result.hidden_effects == ()

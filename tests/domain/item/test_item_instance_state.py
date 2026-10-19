@@ -58,12 +58,17 @@ class TestItemInstanceState:
         assert inst.state == {}
 
     def test_state_initial_value_can_be_set(self) -> None:
-        """初期 state を constructor で渡せる。"""
+        """構築時の状態を保持し、入力辞書の後続変更から独立する。"""
+        initial_state = {"lit": True, "charges_remaining": 5}
         inst = ItemInstance(
             item_instance_id=ItemInstanceId(1),
             item_spec=_spec(),
-            state={"lit": True, "charges_remaining": 5},
+            state=initial_state,
         )
+        assert inst.state == {"lit": True, "charges_remaining": 5}
+
+        initial_state["lit"] = False
+        initial_state["extra"] = "outside"
         assert inst.state == {"lit": True, "charges_remaining": 5}
 
     def test_state_property_returns_defensive_copy(self) -> None:
@@ -80,14 +85,18 @@ class TestItemInstanceState:
         assert inst.state == {"lit": True}
 
     def test_replace_state_swaps_entire_dict(self) -> None:
-        """replace_state は state 全体を置き換える。"""
+        """状態を全置換し、その後に置換用の入力辞書を変えても個体は変わらない。"""
         inst = ItemInstance(
             item_instance_id=ItemInstanceId(1),
             item_spec=_spec(),
             state={"a": 1, "b": 2},
         )
-        inst.replace_state({"c": 3})
+        new_state = {"c": 3}
+        inst.replace_state(new_state)
         # a, b は消える
+        assert inst.state == {"c": 3}
+
+        new_state["c"] = 4
         assert inst.state == {"c": 3}
 
     def test_merge_state_overwrites_keys_and_adds_new(self) -> None:
@@ -197,18 +206,29 @@ class TestStateValueTypeValidation:
                 state={"created_at": datetime(2026, 1, 1)},
             )
 
-    def test_non_primitive_value_in_replace_state_rejected(self) -> None:
-        """replace_state でも検証されてエラーになる。"""
+    @pytest.mark.parametrize("initial_state", [{}, {"lit": True}], ids=["empty", "existing-state"])
+    def test_non_primitive_value_in_replace_state_rejected(self, initial_state) -> None:
+        """不正値の全置換は、元状態が空でも非空でも変更せず拒否する。"""
         from ai_rpg_world.domain.item.exception import (
             ItemInstanceStateValidationException,
         )
 
-        inst = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=_spec())
+        inst = ItemInstance(
+            item_instance_id=ItemInstanceId(1), item_spec=_spec(), state=initial_state,
+        )
         with pytest.raises(ItemInstanceStateValidationException):
             inst.replace_state({"obj": object()})
+        assert inst.state == initial_state
 
-    def test_non_primitive_value_in_merge_state_rejected(self) -> None:
-        """merge_state でも検証されてエラーになる。state は変化しない。"""
+    @pytest.mark.parametrize(
+        "updates",
+        [
+            pytest.param({"bad": [1, 2, 3]}, id="original-invalid-only"),
+            pytest.param({"lit": False, "bad": [1, 2, 3]}, id="valid-before-invalid"),
+        ],
+    )
+    def test_non_primitive_value_in_merge_state_rejected(self, updates) -> None:
+        """不正値を含む更新は、有効な先行キーも適用せず元状態を保持して拒否する。"""
         from ai_rpg_world.domain.item.exception import (
             ItemInstanceStateValidationException,
         )
@@ -218,7 +238,7 @@ class TestStateValueTypeValidation:
             state={"lit": True},
         )
         with pytest.raises(ItemInstanceStateValidationException):
-            inst.merge_state({"bad": [1, 2, 3]})  # list は非対応
+            inst.merge_state(updates)  # list は非対応
         # 失敗時に state は元のまま (atomicity)
         assert inst.state == {"lit": True}
 
