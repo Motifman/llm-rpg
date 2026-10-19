@@ -1,6 +1,7 @@
 import pytest
 
 from ai_rpg_world.domain.sns.exception import NotificationIdValidationException
+from ai_rpg_world.domain.sns.value_object import PostId, ReplyId, UserId
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 
 
@@ -18,11 +19,13 @@ class TestNotificationId:
         """文字列からの通知ID作成"""
         notification_id = NotificationId.create("123")
         assert notification_id.value == 123
+        assert notification_id == NotificationId(123)
 
     def test_create_notification_id_from_int(self):
         """intからの通知ID作成"""
         notification_id = NotificationId.create(456)
         assert notification_id.value == 456
+        assert notification_id == NotificationId(456)
 
     def test_invalid_notification_id_zero(self):
         """無効な通知ID（0）"""
@@ -53,6 +56,11 @@ class TestNotificationId:
         assert id1 == id2
         assert id1 != id3
         assert id1 != "1"  # 異なる型とは等しくない
+        assert id1 != 1
+        assert id1 != None
+        assert id1 != PostId(1)
+        assert id1 != ReplyId(1)
+        assert id1 != UserId(1)
 
     def test_hash(self):
         """ハッシュのテスト"""
@@ -64,3 +72,10 @@ class TestNotificationId:
         # setで使用可能
         id_set = {id1, id2}
         assert len(id_set) == 1
+
+    def test_immutability(self):
+        """公開valueへの再代入を拒否し、元の通知IDを保持する。"""
+        notification_id = NotificationId(1)
+        with pytest.raises(AttributeError):
+            notification_id.value = 2
+        assert notification_id.value == 1

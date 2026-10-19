@@ -1,37 +1,22 @@
 import pytest
 
 from ai_rpg_world.domain.sns.exception import UserIdValidationException
-from ai_rpg_world.domain.sns.value_object import UserId
+from ai_rpg_world.domain.sns.value_object import NotificationId, PostId, ReplyId, UserId
 
 
 class TestUserId:
     """UserIdバリューオブジェクトのテスト"""
 
-    def test_create_user_id_success(self):
-        """正常なUserIdの作成テスト"""
-        user_id = UserId(1)
-        assert user_id.value == 1
-
-    def test_create_user_id_from_string_success(self):
-        """文字列からのUserId作成テスト"""
-        user_id = UserId.create("123")
-        assert user_id.value == 123
-        assert user_id == UserId(123)
-
     def test_create_user_id_from_int_string_success(self):
-        """int文字列からのUserId作成テスト"""
+        """整数からの公開生成は値123を持つUserIdを返す。"""
         user_id = UserId.create(123)
         assert user_id.value == 123
+        assert user_id == UserId(123)
 
     def test_invalid_user_id_zero_raises_error(self):
         """ユーザーIDが0の場合のエラーテスト"""
         with pytest.raises(UserIdValidationException):
             UserId(0)
-
-    def test_invalid_user_id_negative_raises_error(self):
-        """ユーザーIDが負の場合のエラーテスト"""
-        with pytest.raises(UserIdValidationException):
-            UserId(-1)
 
     def test_invalid_user_id_string_raises_error(self):
         """無効な文字列からのUserId作成エラーテスト"""
@@ -43,11 +28,15 @@ class TestUserId:
         # 最小値（1）
         user_id = UserId(1)
         assert user_id.value == 1
+        assert isinstance(user_id.value, int)
+        assert user_id.value > 0
 
         # 大きな値
         large_user_id = 999999
         user_id = UserId(large_user_id)
         assert user_id.value == large_user_id
+        assert isinstance(user_id.value, int)
+        assert user_id.value > 0
 
     def test_equality_comparison(self):
         """等価性の比較テスト"""
@@ -57,8 +46,6 @@ class TestUserId:
 
         assert user_id1 == user_id2
         assert user_id1 != user_id3
-        assert hash(user_id1) == hash(user_id2)
-        assert hash(user_id1) != hash(user_id3)
 
     def test_string_representation(self):
         """文字列表現のテスト"""
@@ -67,9 +54,11 @@ class TestUserId:
         assert int(user_id) == 123
 
     def test_immutability(self):
-        """不変性のテスト"""
+        """公開valueへの再代入を拒否し、元のIDを保持する。"""
         user_id = UserId(1)
-        # frozen=Trueにより不変性を保証
+        with pytest.raises(AttributeError):
+            user_id.value = 2
+        assert user_id.value == 1
 
     def test_hash_functionality(self):
         """ハッシュ機能のテスト"""
@@ -79,7 +68,6 @@ class TestUserId:
 
         # 同じ値のUserIdは同じハッシュ値を持つ
         assert hash(user_id1) == hash(user_id2)
-        assert hash(user_id1) != hash(user_id3)
 
         # セットや辞書のキーとして使用可能
         user_id_set = {user_id1, user_id2, user_id3}
@@ -92,17 +80,19 @@ class TestUserId:
         assert user_id != "1"
         assert user_id != 1
         assert user_id != None
+        assert user_id != PostId(1)
+        assert user_id != ReplyId(1)
+        assert user_id != NotificationId(1)
 
-    def test_create_from_various_string_formats(self):
-        """様々な文字列形式からの作成テスト"""
-        # 通常の文字列
-        assert UserId.create("123").value == 123
-
-        # 0埋め文字列
-        assert UserId.create("00123").value == 123
-
-        # 最大値文字列
-        assert UserId.create("999999").value == 999999
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [("123", 123), ("00123", 123), ("999999", 999999)],
+    )
+    def test_create_from_various_string_formats(self, value, expected):
+        """通常・0埋め・大きな整数の文字列から、同じ型の数値IDを返す。"""
+        user_id = UserId.create(value)
+        assert user_id.value == expected
+        assert user_id == UserId(expected)
 
     def test_error_message_contains_value(self):
         """エラーメッセージに値が含まれることを確認"""
@@ -111,11 +101,3 @@ class TestUserId:
 
         # エラーメッセージに無効な値が含まれることを確認
         assert str(-1) in str(exc_info.value)
-
-    def test_type_safety(self):
-        """型安全性のテスト"""
-        user_id = UserId(1)
-
-        # 型ヒントによる安全性（実行時エラーではないが、IDEでの支援を確認）
-        assert isinstance(user_id.value, int)
-        assert user_id.value > 0
