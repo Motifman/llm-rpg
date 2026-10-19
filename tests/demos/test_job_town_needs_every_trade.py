@@ -65,6 +65,9 @@ class _Town:
             )
         )
         self._state = manager._sessions[summary.session_id]
+        # ツールを直に叩く道具立てなので、同じ失敗が続いても reason-first の
+        # 1 段目を挟ませない。台本どおりに答える代役は 1 段目に答えられない。
+        self._state.runtime.reason_first_two_step_enabled = False
 
     @property
     def runtime(self) -> Any:
