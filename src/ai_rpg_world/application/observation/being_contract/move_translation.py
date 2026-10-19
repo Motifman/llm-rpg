@@ -18,14 +18,12 @@ def agent_move_from_tool_call(
     remaining = dict(arguments)
     expectation = _pop_text(remaining, "expected_result")
     inner_thought = _pop_text(remaining, "inner_thought")
-    goal_update = _pop_text(remaining, "goal_update")
     return AgentMove(
         call_id=call_id,
         tool_name=tool_name,
         arguments=remaining,
         expectation=expectation,
         inner_thought=inner_thought,
-        goal_update=goal_update,
     )
 
 

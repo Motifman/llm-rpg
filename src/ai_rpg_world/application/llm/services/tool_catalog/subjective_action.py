@@ -13,10 +13,6 @@ from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_PREFIX_TODO,
-)
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-    SELF_AUTHORED_GOAL_TEXT_MAX_CHARS,
 )
 
 SUBJECTIVE_ACTION_FIELDS = (
@@ -58,97 +54,6 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: dict[str, dict[str, Any]] = {
 }
 
 
-# P6 (目的の見直し / G2): world-action tool へ足す optional フィールド。
-# **GOAL_REVISION_ENABLED が ON の run では全ターンで常時露出する** (ターン
-# 非依存 = tick 間で schema byte 不変。設計判断 #1 遵守。旧案の「見直しターン
-# だけ露出」は prefix cache を壊すため撤回済み)。null (または省略) なら
-# 「目的は変えない」。非 null なら orchestrator が goal store を supersede
-# 更新する。inner_thought 等と違い required にはしない (毎ターン必須にすると
-# 目的が揺れる誘惑を作る)。
-GOAL_UPDATE_FIELD_NAME = "goal_update"
-GOAL_UPDATE_FIELD_PROPERTY: dict[str, Any] = {
-    "type": ["string", "null"],
-    "description": (
-        "数日スケールの方針を捨てて立て直すときにだけ書く。"
-        "次の 1 手の意図はここに書かない。"
-        "目的を変えることは、これまでの自分の方針を捨てることでもある。"
-        "続けるなら書かない (null)。"
-    ),
-    # schema の maxLength は advisory (LLM が守るとは限らない) なので、
-    # GoalRevisionApplier が同じ値 (SELF_AUTHORED_GOAL_TEXT_MAX_CHARS) で
-    # 書き込み時にも再検証する。単一の真実源はドメイン側の定数。
-    "maxLength": SELF_AUTHORED_GOAL_TEXT_MAX_CHARS,
-}
-
-
-# P8 (目的の清算 / goal_outcome 自己申告): goal_update と同じ同乗フィールド機構・
-# 同じ GOAL_REVISION_ENABLED で常時露出する optional / nullable な enum。
-# 「達成したのか、見切ったのか」を知っているのは本人だけなので、ルールや reflect
-# ではなく本人に宣言させる (reflect は助言のまま = P7 不変条件維持)。組み合わせの
-# 意味論: goal_update のみ = 言い直し (SUPERSEDED) / goal_outcome + goal_update =
-# 旧目的を清算して次へ / goal_outcome のみ = 閉じて無目的に戻る。null なら「まだ
-# 閉じない」。required にはしない (毎ターン必須にすると目的を急いで閉じる誘惑になる)。
-GOAL_OUTCOME_FIELD_NAME = "goal_outcome"
-GOAL_OUTCOME_ACHIEVED = "achieved"
-GOAL_OUTCOME_ABANDONED = "abandoned"
-GOAL_OUTCOME_FIELD_PROPERTY: dict[str, Any] = {
-    "type": ["string", "null"],
-    "enum": [GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED, None],
-    "description": (
-        "直前の目的を閉じるときだけ書く。成し遂げて閉じるなら achieved、"
-        "見切って捨てるなら abandoned。ただの言い直し (目的は同じで表現を"
-        "変えるだけ) なら書かない (null)。続けるなら書かない。"
-    ),
-}
-
-
-def with_goal_outcome_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
-    """対象 tool の JSON Schema に optional な ``goal_outcome`` を足した定義を返す。
-
-    ``with_goal_update_schema`` と同じく GOAL_REVISION_ENABLED が ON の run で
-    全 subjective action tool に常時適用する (ターン非依存。tick 間 byte 不変)。
-    required には入れない (optional / nullable)。
-    """
-    if not isinstance(definition, ToolDefinitionDto):
-        raise TypeError("definition must be ToolDefinitionDto")
-    if not is_subjective_action_tool(definition.name):
-        return definition
-    parameters = deepcopy(definition.parameters)
-    properties = dict(parameters.get("properties") or {})
-    properties[GOAL_OUTCOME_FIELD_NAME] = deepcopy(GOAL_OUTCOME_FIELD_PROPERTY)
-    parameters["properties"] = properties
-    return ToolDefinitionDto(
-        name=definition.name,
-        description=definition.description,
-        parameters=parameters,
-        category=definition.category,
-    )
-
-
-def with_goal_update_schema(definition: ToolDefinitionDto) -> ToolDefinitionDto:
-    """対象 tool の JSON Schema に optional な ``goal_update`` を足した定義を返す。
-
-    GOAL_REVISION_ENABLED が ON の run で ``get_tool_definitions`` が全 tool に
-    対し常時適用する (ターン非依存。tick 間で schema 不変)。subjective action
-    tool 以外には足さない。required には入れない (optional / nullable)。
-    """
-    if not isinstance(definition, ToolDefinitionDto):
-        raise TypeError("definition must be ToolDefinitionDto")
-    if not is_subjective_action_tool(definition.name):
-        return definition
-    parameters = deepcopy(definition.parameters)
-    properties = dict(parameters.get("properties") or {})
-    properties[GOAL_UPDATE_FIELD_NAME] = deepcopy(GOAL_UPDATE_FIELD_PROPERTY)
-    parameters["properties"] = properties
-    # required には足さない (optional)。
-    return ToolDefinitionDto(
-        name=definition.name,
-        description=definition.description,
-        parameters=parameters,
-        category=definition.category,
-    )
-
-
 def assess_situation_definition() -> ToolDefinitionDto:
     """reason-first の評価段階で使う ``assess_situation`` 定義を返す。
 
@@ -183,8 +88,6 @@ def is_subjective_action_tool(tool_name: str) -> bool:
         return False
     if tool_name == TOOL_NAME_NO_OP:
         return False
-    if tool_name.startswith(TOOL_NAME_PREFIX_TODO):
-        return False
     return bool(tool_name)
 
 
@@ -194,8 +97,7 @@ def strip_reason_first_action_subjective_schema(
     """reason-first の行動段階から step1 所有の主観フィールドだけを外す。
 
     2 段階ターンでは ``inner_thought`` を ``assess_situation`` で先に生成し、
-    行動 tool には書かせない。一方で
-    ``goal_update`` / ``goal_outcome`` は行動に紐づくので残す。
+    行動 tool には書かせない。
     """
     if not isinstance(definition, ToolDefinitionDto):
         raise TypeError("definition must be ToolDefinitionDto")
