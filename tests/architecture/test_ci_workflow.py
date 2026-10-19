@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 import yaml
@@ -86,4 +87,12 @@ def test_the_quality_job_regenerates_goldens_without_parallel_workers() -> None:
     pytest_commands = [c for c in commands if c.startswith("uv run --frozen pytest")]
 
     assert pytest_commands, "品質検査が pytest を実行していない"
-    assert all("-n" not in command.split() for command in pytest_commands)
+    assert all(
+        not any(
+            argument.startswith("-n")
+            or argument == "--numprocesses"
+            or argument.startswith("--numprocesses=")
+            for argument in shlex.split(command)
+        )
+        for command in pytest_commands
+    )

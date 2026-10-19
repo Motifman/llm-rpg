@@ -103,14 +103,11 @@ DEPARTED_TOOLS = frozenset({"speak", "travel_to", "interact", "listen", "wait"})
 #:
 #: ``listen`` と ``tend_to_player`` は状態やシナリオで落ちうるため含めない。
 #: 状態依存の名前をここへ混ぜると、一つ消えただけで後続の長い定義すべてが
-#: プレフィックスキャッシュから外れる。spot / memory という定義元を越えた
+#: プレフィックスキャッシュから外れる。定義元を越えた
 #: 最終順序なので、呼び出し側へ同じ列を書き写さない。
 ALWAYS_PRESENT_TOOL_ORDER = (
     "wait",
     "speak",
-    "memo_add",
-    "memo_list",
-    "memo_done",
 )
 
 #: 常在ブロック以後で、状態により出入りする既知ツールの順序。
@@ -302,7 +299,7 @@ class ToolExposure:
         入れ替わるのは末尾だけにしたい (先頭がプレフィックスキャッシュに
         残る)。共通と固有を 1 つの判定に混ぜると、この並びが崩れる。
 
-        ``memo_add`` などの記憶ツールは実験設定から別経路で追加され、
+        ``episode_recall`` などの記憶ツールは実験設定から別経路で追加され、
         ``split_for_phase`` を通らない。そのため、このメソッドが ``False`` を
         返しても、記憶ツールを有効にした実際の会議 payload には残る。
         """
