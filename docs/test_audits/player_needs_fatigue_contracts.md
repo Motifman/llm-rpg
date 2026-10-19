@@ -162,6 +162,6 @@ Python 3.10.22で、秘密情報を除いた環境・ネットワーク遮断・
 
 ## マージ後の引継ぎ
 
-[PR #1699](https://github.com/Motifman/llm-rpg/pull/1699) が `tests/domain/player/aggregate/AGENTS.md`、[PR #1725](https://github.com/Motifman/llm-rpg/pull/1725) が親の `tests/domain/player/AGENTS.md` を追加中のため、本変更では同じファイルを新設しない。両PRのマージ後、上記「どの境界で何を守るか」の1〜3を集約側、4〜6を親側の所有規約へ移し、既存内容を保持して統合する。[PR #1727](https://github.com/Motifman/llm-rpg/pull/1727)、[PR #1729](https://github.com/Motifman/llm-rpg/pull/1729) の別テスト差分は取り込まない。
+[PR #1727](https://github.com/Motifman/llm-rpg/pull/1727)、[PR #1729](https://github.com/Motifman/llm-rpg/pull/1729) の別テスト差分は取り込まない。
 
 未完成の合成戦闘試験は別の範囲であり、今回の完了数には含めない。公開PRの作成・CI確認・マージ状態はこの文書のローカル試験結果とは分けて報告する。
