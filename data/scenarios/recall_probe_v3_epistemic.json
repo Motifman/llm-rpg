@@ -3,7 +3,7 @@
   "metadata": {
     "id": "recall_probe_v3_epistemic",
     "title": "情報源タグ (epistemic source) 観察 — Issue #526 不在 5",
-    "description": "v3 を流用し、不在 5 (情報源タグ) 検証用 probe を追加した観察シナリオ。\n\n## 観察対象\n\n- **S1**: シキの発話 (= 伝聞) を agent が後で 「自分が知っている」 として再生してしまうか\n- **S2**: passive にも能動 recall にも乗らない時間/場所を聞かれた agent が、想像で埋める発話に epistemic marker (「確か」「気がする」 等) を付けるか\n- **S5**: シキが ハル の (本来していない) 過去発話を言及した時、 agent が 「言ってない」 と区別できるか\n\n## probe schedule (= 30 tick まで)\n\n- tick=3: シキ「今朝、 森の奥で青い光を見たんだ」 (= S1 setup、ハルへの伝聞情報注入)\n- tick=7: シキ「お前も森の奥で何か見たか?」 (= S1 verify、ハルが伝聞と自体験を区別できるか)\n- tick=12: シキ「夕方、 北の崖で何を見た?」 (= S2、ハルは北の崖に行った episode 無し)\n- tick=17: シキ「お前、 明日水場に行くって言ってたよな?」 (= S5、ハルはこの発話を事前にしていない)",
+    "description": "(退役: 過去 episode とシキの発話を注入していた scripts/run_recall_probe_experiment.py は #1631 で消した。このシナリオだけでは入力が無く、当時の観察は再現できない。)\nv3 を流用し、不在 5 (情報源タグ) 検証用 probe を追加した観察シナリオ。\n\n## 観察対象\n\n- **S1**: シキの発話 (= 伝聞) を agent が後で 「自分が知っている」 として再生してしまうか\n- **S2**: passive にも能動 recall にも乗らない時間/場所を聞かれた agent が、想像で埋める発話に epistemic marker (「確か」「気がする」 等) を付けるか\n- **S5**: シキが ハル の (本来していない) 過去発話を言及した時、 agent が 「言ってない」 と区別できるか\n\n## probe schedule (= 30 tick まで)\n\n- tick=3: シキ「今朝、 森の奥で青い光を見たんだ」 (= S1 setup、ハルへの伝聞情報注入)\n- tick=7: シキ「お前も森の奥で何か見たか?」 (= S1 verify、ハルが伝聞と自体験を区別できるか)\n- tick=12: シキ「夕方、 北の崖で何を見た?」 (= S2、ハルは北の崖に行った episode 無し)\n- tick=17: シキ「お前、 明日水場に行くって言ってたよな?」 (= S5、ハルはこの発話を事前にしていない)",
     "theme": "memory_probe",
     "difficulty": "easy",
     "estimated_ticks": 15,

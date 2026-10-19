@@ -17,6 +17,8 @@ trace ではなく世界の状態として持つ。trace は分析用の出力�
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.market_board import MarketBoard
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
@@ -69,6 +71,11 @@ class TestTheBoardRecordsThePriceThatActuallyCleared:
         board, _ = board.taken(MarketOrderId(1), by=_TOM, quantity=1, at_tick=9)
 
         assert board.last_trade_price_of(_BREAD) == 18
+        assert board.orders == ()
+        (row,) = board.rows_for(_TOM).rows
+        assert row.item_spec_id == _BREAD
+        assert row.last_trade_price_gold == 18
+        assert row.buy_price_gold is None
 
     def test_an_item_that_never_traded_has_no_price(self) -> None:
         """一度も約定していない品目の直近の約定価格は None になる。
@@ -111,19 +118,32 @@ class TestTheBoardRecordsThePriceThatActuallyCleared:
         assert board.last_trade_price_of(_BREAD) == 18
         assert board.last_trade_price_of(_HERB) == 5
 
-    def test_a_partial_fill_across_two_orders_keeps_the_last_one(self) -> None:
-        """安い方から順に 2 件をまたいで買うと、直近の約定は最後の 1 件になる。
+    @pytest.mark.parametrize("last_order_quantity", [1, 3], ids=["full_fill", "partial_fill"])
+    def test_a_partial_fill_across_two_orders_keeps_the_last_one(
+        self,
+        last_order_quantity: int,
+    ) -> None:
+        """同じ手番に 2 件を受けると、全量でも部分約定でも最後の単価を憶える。
 
         平均や加重平均は採らない。**約定は単価ごとに 1 件として扱う**という
         判断が既にあり (trace も約定ごとに 1 行で、平均を出さないと決めた)、
         そこへ揃える。平均を混ぜると、値の時系列に一度も成立しなかった値が
         入る。
         """
-        board = _board(_order(1, unit_price_gold=18), _order(2, unit_price_gold=22))
+        board = _board(
+            _order(1, unit_price_gold=18),
+            _order(2, quantity=last_order_quantity, unit_price_gold=22),
+        )
 
         board, _ = board.taken(MarketOrderId(1), by=_TOM, quantity=1, at_tick=9)
         board, _ = board.taken(MarketOrderId(2), by=_TOM, quantity=1, at_tick=9)
 
+        remaining = board.find(MarketOrderId(2))
+        if last_order_quantity == 1:
+            assert remaining is None
+        else:
+            assert remaining is not None
+            assert remaining.quantity == 2
         assert board.last_trade_price_of(_BREAD) == 22
 
 
