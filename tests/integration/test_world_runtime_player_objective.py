@@ -11,7 +11,6 @@ LLM は呼ばない。
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
@@ -19,7 +18,7 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.runtime_config_helpers import episodic_config
+from tests.runtime_config_helpers import runtime_config
 
 _BASE_SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -39,7 +38,7 @@ def _write_scenario(tmp_path: Path, mutate) -> Path:
 
 
 def _runtime(path: Path):
-    return create_world_runtime(path, config=episodic_config())
+    return create_world_runtime(path, config=runtime_config())
 
 
 def _player_id_of(runtime, string_id: str) -> PlayerId:

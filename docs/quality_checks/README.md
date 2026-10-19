@@ -39,21 +39,20 @@ marker に分けてあります (`docs/llm_provider_selection.md` の「実呼�
 
 | ID | テスト | doc | 目的 |
 |---|---|---|---|
-| `yesterday_v1` | `tests/quality/test_yesterday_v1.py` | `yesterday_v1_baseline.md` | 「昨日何してた?」に答えられるか (= 自伝的時系列 / 能動想起) |
-| `prediction_v1` | `tests/quality/test_prediction_v1.py` | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
+| `yesterday_v1` | (Issue #1631 で外した) | `yesterday_v1_baseline.md` | 「昨日何してた?」に答えられるか (= 自伝的時系列 / 能動想起) |
+| `prediction_v1` | (Issue #1631 で外した) | `prediction_v1_baseline.md` | 予測が外れた経験が次の予測を変えるか (= 予測→学習ループ / 不在#3) |
 
 ## 使い方
 
 ```bash
-# シナリオを 1 つ走らせて prompt dump を生成
-uv run pytest tests/quality/test_yesterday_v1.py -m quality
+# quality の検査をまとめて走らせ、dump を再生成する
+uv run pytest -m quality
 
 # quality は既定で除外されるため、パス指定だけでは実行されない
-uv run pytest tests/quality/test_yesterday_v1.py
+uv run pytest tests/quality/test_scenario_state_display_inventory.py
 
-# 結果は docs/quality_checks/yesterday_v1_<variant>.prompt.txt に
-# 上書き保存される。git diff で「前回 PR から prompt がどう変わったか」
-# が確認できる
+# 結果は docs/quality_checks/ の dump に上書き保存される。git diff で
+# 「前回 PR から prompt がどう変わったか」が確認できる
 ```
 
 dump の中身を読んで、対応する baseline `.md` の末尾に短い所感を追記
