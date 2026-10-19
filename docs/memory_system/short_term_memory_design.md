@@ -6,9 +6,9 @@
 > **prefix cache 効率** と **連続性のある記憶** の両立を目的とする。
 >
 > **関連**: 長期記憶側の整理は
-> [semantic_memory_activation_plan.md](./semantic_memory_activation_plan.md)。
+> `semantic_memory_activation_plan.md` (#1631 で削除)。
 > エピソード記憶パイプライン全体像は
-> [../episodic_memory_overview.md](../episodic_memory_overview.md)。
+> `episodic_memory_overview.md` (#1631 で削除)。
 
 ---
 
@@ -52,7 +52,7 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
 
 このモジュールは **「最近やったこと」「今の気分」「自分の語り口」** だけを
 担う。学び (タカシは信頼できる) や世界ルール (毒キノコ = 赤い斑点) は
-**episodic → semantic の経路** に任せる ([semantic_memory_activation_plan.md](./semantic_memory_activation_plan.md) 参照)。
+**episodic → semantic の経路** に任せる (`semantic_memory_activation_plan.md` (#1631 で削除) 参照)。
 
 これは Tulving の memory taxonomy に近い分離:
 - **episodic** = 「あの時あの場所」(具体エピソード)
@@ -81,7 +81,7 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
 軽く、prefix cache 寿命が伸びる。
 
 > **L2 / L3 を欠番にしている理由**: ドキュメント中の番号は
-> [../episodic_memory_overview.md](../episodic_memory_overview.md) の
+> `episodic_memory_overview.md` (#1631 で削除) の
 > エピソード階層 (L0 raw → L2 chunk → L3 episode) と整合させるため。
 
 ### 3.1 状態遷移
@@ -307,6 +307,8 @@ wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingSh
 維持する。Phase 1 以降も削除しない。理由:
 - A/B 実験の比較対象として残す
 - 短いシナリオ (escape_game のような数十ターンで完結する) では sliding window で十分
+
+**その後**: 6.1 と 6.2 の方針はもう使えない。どの profile も `rolling_summary` で動かしていたので、`SHORT_TERM_MEMORY_KIND` は #1631 の #1785 で消した。短期記憶は常に `SummarizingShortTermMemory` で組む。`DefaultSlidingWindowMemory` は試験の代役としてだけ残る。#1811 で `DefaultSlidingWindowMemory` と、snapshot の codec が固定容量の短期記憶へ書き戻す経路を消した。snapshot の保存形式のキー `"sliding_window"` と、固定容量の短期記憶で保存した古い snapshot を要約する短期記憶へ読む経路は残した。
 
 ---
 

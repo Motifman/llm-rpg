@@ -108,9 +108,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_WAIT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
@@ -131,9 +128,6 @@ BUSY_FREE_TOOLS: frozenset[str] = frozenset({
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_LIST,
-    TOOL_NAME_TODO_COMPLETE,
 })
 
 def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
@@ -250,7 +244,7 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
         # _travel_to 内部で runtime.do_move を呼んで単一の副作用実装を
         # 共有する。runtime.do_move は既に start_travel_to_spot +
         # _process_graph_events + 同一 spot 短絡 + _record_action_result
-        # (scene_boundary + subjective) を面倒見ている。
+        # (主観入力の記録) を面倒見ている。
         runtime=runtime,
     )
     wiring._spot_graph_executor = executor
@@ -460,23 +454,23 @@ def wire_missing_spot_graph_tools(wiring: WorldLlmWiring) -> None:
         wiring._tool_handlers[tool_name] = adapted
     _wrap_every_handler_with_gold_change(wiring, runtime)
     # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
-    # _todo_tool_executor / _cached_default_prompt_builder は check-then-act
+    # Being の保存先 / _cached_default_prompt_builder は check-then-act
     # で 2 スレッドが同時に初回呼び出しすると double-init になる。並列実行
     # の前に単一スレッドで pre-warm して race を構造的に消す。
     try:
-        if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-            runtime._wire_auxiliary_tool_stack()
+        if hasattr(runtime, "_wire_being_stack"):
+            runtime._wire_being_stack()
         if hasattr(runtime, "_get_or_build_default_prompt_builder"):
             runtime._get_or_build_default_prompt_builder()
     except Exception:
         # pre-warm に失敗しても通常パスはあくまで lazy で動く。安全側 fallback。
         logger.exception(
-            "Pre-warming auxiliary tool stack / default prompt builder failed; "
+            "Pre-warming being stack / default prompt builder failed; "
             "lazy initialization will fall back, but Phase A 並列化時に race の "
             "可能性が残る"
         )
     # PR-E: tool spec (= LLM に見せる) と _tool_handlers (= dispatch SSOT) の
-    # 不整合は起動時に止める。pre-warm が aux executor を完成させた直後に
+    # 不整合は起動時に止める。pre-warm の直後に
     # 一度だけ実行するため、ここに置く。get_tool_definitions に失敗しても
     # それ自体は通常運用で起きるべきでないが、検証ロジックの破綻で実験を
     # 止めるのは過剰なので例外なら警告だけ残す。
@@ -1257,7 +1251,7 @@ def execute_tool(
 # PR-θ1/θ2 (経路統合): _handle_travel_to / _handle_explore は削除。
 # SpotGraphToolExecutor._travel_to / _explore に統合され、それぞれ
 # runtime.do_move / runtime.do_explore を呼ぶ薄い wrapper として単一の
-# 実装になった。旧 handler の副作用 (scene_boundary / subjective /
+# 実装になった。旧 handler の副作用 (subjective /
 # _process_graph_events / display_name / 発見なし時の可視 object 併記 /
 # inner_thought 空警告) は全部保持している。
 #
@@ -1308,11 +1302,7 @@ def execute_tool(
 def make_auxiliary_tool_handler(
     wiring: WorldLlmWiring, tool_name: str
 ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
-    """TODO/memo ツール用のハンドラを tool_name 固定で返す。
-
-    ``include_todo_tools=False`` で組んだ runtime では TODO/memo ツールが LLM の
-    tools リストに含まれないため、通常到達しない。
-    """
+    """記憶のツール (episode_recall / episode_revise_index) 用のハンドラを tool_name 固定で返す。"""
 
     def handler(
         player_id: PlayerId,

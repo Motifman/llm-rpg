@@ -102,7 +102,7 @@ class TestShopAggregate:
             location_area_id: LocationAreaId,
             owner_id: PlayerId,
         ):
-            """作成時にShopCreatedEventが発行される"""
+            """名前と説明を省略すると、既定値の空文字を含む開設イベントが1件発行される。"""
             shop = ShopAggregate.create(
                 shop_id=shop_id,
                 spot_id=spot_id,
@@ -119,41 +119,12 @@ class TestShopAggregate:
             assert events[0].name == ""
             assert events[0].description == ""
             assert events[0].owner_ids == (owner_id,)
-
-        def test_create_event_contains_all_fields(
-            self,
-            shop_id: ShopId,
-            spot_id: SpotId,
-            location_area_id: LocationAreaId,
-            owner_id: PlayerId,
-        ):
-            """ShopCreatedEventが全てのフィールドを含む"""
-            shop = ShopAggregate.create(
-                shop_id=shop_id,
-                spot_id=spot_id,
-                location_area_id=location_area_id,
-                owner_id=owner_id,
-            )
-            events = shop.get_events()
-            event = events[0]
-            assert isinstance(event, ShopCreatedEvent)
-            assert event.aggregate_id == shop_id
-            assert event.aggregate_type == "ShopAggregate"
-            assert event.spot_id == spot_id
-            assert event.location_area_id == location_area_id
-            assert event.owner_id == owner_id
-            assert event.name == ""
-            assert event.description == ""
-            assert event.owner_ids == (owner_id,)
-            assert hasattr(event, "occurred_at")
-            assert hasattr(event, "event_id")
+            assert events[0].aggregate_type == "ShopAggregate"
+            assert hasattr(events[0], "occurred_at")
+            assert hasattr(events[0], "event_id")
 
     class TestIsOwner:
         """is_ownerメソッドのテスト"""
-
-        def test_owner_returns_true(self, shop: ShopAggregate, owner_id: PlayerId):
-            """オーナーはTrueを返す"""
-            assert shop.is_owner(owner_id) is True
 
         def test_non_owner_returns_false(
             self, shop: ShopAggregate, other_player_id: PlayerId
@@ -169,7 +140,7 @@ class TestShopAggregate:
             shop: ShopAggregate,
             owner_id: PlayerId,
         ):
-            """オーナーが出品すると成功する"""
+            """オーナーの出品が保存され、その内容を含む出品イベントが1件発行される。"""
             shop.clear_events()
             listing_id = ShopListingId(1)
             item_id = ItemInstanceId(100)
@@ -184,6 +155,7 @@ class TestShopAggregate:
             assert listing_id in shop.listings
             listing = shop.get_listing(listing_id)
             assert listing is not None
+            assert listing.listing_id == listing_id
             assert listing.item_instance_id == item_id
             assert listing.price_per_unit == price
             assert listing.listed_by == owner_id
@@ -191,44 +163,7 @@ class TestShopAggregate:
             assert len(events) == 1
             assert isinstance(events[0], ShopItemListedEvent)
 
-        def test_list_item_non_owner_raises(
-            self,
-            shop: ShopAggregate,
-            other_player_id: PlayerId,
-        ):
-            """オーナー以外が出品すると例外"""
-            listing_id = ShopListingId(1)
-            item_id = ItemInstanceId(100)
-            price = ShopListingPrice.of(50)
-            with pytest.raises(NotShopOwnerException):
-                shop.list_item(
-                    listing_id=listing_id,
-                    item_instance_id=item_id,
-                    price_per_unit=price,
-                    listed_by=other_player_id,
-                    listing_projection=_sample_listing_projection(),
-                )
-
-        def test_list_item_event_contains_all_fields(
-            self,
-            shop: ShopAggregate,
-            owner_id: PlayerId,
-        ):
-            """ShopItemListedEventが全てのフィールドを含む"""
-            shop.clear_events()
-            listing_id = ShopListingId(1)
-            item_id = ItemInstanceId(100)
-            price = ShopListingPrice.of(50)
-            shop.list_item(
-                listing_id=listing_id,
-                item_instance_id=item_id,
-                price_per_unit=price,
-                listed_by=owner_id,
-                listing_projection=_sample_listing_projection(),
-            )
-            events = shop.get_events()
             event = events[0]
-            assert isinstance(event, ShopItemListedEvent)
             assert event.aggregate_id == shop.shop_id
             assert event.aggregate_type == "ShopAggregate"
             assert event.listing_id == listing_id
@@ -239,6 +174,40 @@ class TestShopAggregate:
             assert hasattr(event, "occurred_at")
             assert hasattr(event, "event_id")
 
+        @pytest.mark.parametrize("keep_pending_events", [False, True], ids=["empty_events", "pending_events"])
+        def test_list_item_non_owner_raises(
+            self,
+            shop: ShopAggregate,
+            owner_id: PlayerId,
+            other_player_id: PlayerId,
+            keep_pending_events: bool,
+        ):
+            """非オーナーの出品は例外になり、既存の出品と未発行イベントを変更しない。"""
+            shop.list_item(
+                listing_id=ShopListingId(2),
+                item_instance_id=ItemInstanceId(200),
+                price_per_unit=ShopListingPrice.of(50),
+                listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
+            )
+            if not keep_pending_events:
+                shop.clear_events()
+            listings_before = shop.listings
+            events_before = shop.get_events()
+            assert bool(events_before) is keep_pending_events
+
+            with pytest.raises(NotShopOwnerException):
+                shop.list_item(
+                    listing_id=ShopListingId(1),
+                    item_instance_id=ItemInstanceId(100),
+                    price_per_unit=ShopListingPrice.of(50),
+                    listed_by=other_player_id,
+                    listing_projection=_sample_listing_projection(),
+                )
+
+            assert shop.listings == listings_before
+            assert shop.get_events() == events_before
+
     class TestUnlistItem:
         """unlist_itemメソッドのテスト"""
 
@@ -247,7 +216,7 @@ class TestShopAggregate:
             shop: ShopAggregate,
             owner_id: PlayerId,
         ):
-            """オーナーが取り下げると成功する"""
+            """オーナーが取り下げると出品が消え、その情報を含む取り下げイベントが1件発行される。"""
             listing_id = ShopListingId(1)
             item_id = ItemInstanceId(100)
             shop.list_item(
@@ -264,23 +233,45 @@ class TestShopAggregate:
             assert len(events) == 1
             assert isinstance(events[0], ShopItemUnlistedEvent)
 
+            event = events[0]
+            assert event.aggregate_id == shop.shop_id
+            assert event.aggregate_type == "ShopAggregate"
+            assert event.spot_id == shop.spot_id
+            assert event.location_area_id == shop.location_area_id
+            assert event.listing_id == listing_id
+            assert event.unlisted_by == owner_id
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
+
+        @pytest.mark.parametrize("keep_pending_events", [False, True], ids=["empty_events", "pending_events"])
         def test_unlist_item_non_owner_raises(
             self,
             shop: ShopAggregate,
             owner_id: PlayerId,
             other_player_id: PlayerId,
+            keep_pending_events: bool,
         ):
-            """オーナー以外が取り下げると例外"""
+            """非オーナーの取り下げは例外になり、対象・他の出品・未発行イベントを変更しない。"""
             listing_id = ShopListingId(1)
-            shop.list_item(
-                listing_id=listing_id,
-                item_instance_id=ItemInstanceId(100),
-                price_per_unit=ShopListingPrice.of(50),
-                listed_by=owner_id,
-                listing_projection=_sample_listing_projection(),
-            )
+            for existing_id, item_id in [(listing_id, ItemInstanceId(100)), (ShopListingId(2), ItemInstanceId(200))]:
+                shop.list_item(
+                    listing_id=existing_id,
+                    item_instance_id=item_id,
+                    price_per_unit=ShopListingPrice.of(50),
+                    listed_by=owner_id,
+                    listing_projection=_sample_listing_projection(),
+                )
+            if not keep_pending_events:
+                shop.clear_events()
+            listings_before = shop.listings
+            events_before = shop.get_events()
+            assert bool(events_before) is keep_pending_events
+
             with pytest.raises(NotShopOwnerException):
                 shop.unlist_item(listing_id, other_player_id)
+
+            assert shop.listings == listings_before
+            assert shop.get_events() == events_before
 
         def test_unlist_nonexistent_listing_raises(
             self,
@@ -291,63 +282,8 @@ class TestShopAggregate:
             with pytest.raises(ListingNotFoundException):
                 shop.unlist_item(ShopListingId(999), owner_id)
 
-        def test_unlist_item_event_contains_all_fields(
-            self,
-            shop: ShopAggregate,
-            owner_id: PlayerId,
-        ):
-            """ShopItemUnlistedEventが全てのフィールドを含む"""
-            listing_id = ShopListingId(1)
-            shop.list_item(
-                listing_id=listing_id,
-                item_instance_id=ItemInstanceId(100),
-                price_per_unit=ShopListingPrice.of(50),
-                listed_by=owner_id,
-                listing_projection=_sample_listing_projection(),
-            )
-            shop.clear_events()
-            shop.unlist_item(listing_id, owner_id)
-            events = shop.get_events()
-            event = events[0]
-            assert isinstance(event, ShopItemUnlistedEvent)
-            assert event.aggregate_id == shop.shop_id
-            assert event.aggregate_type == "ShopAggregate"
-            assert event.spot_id == shop.spot_id
-            assert event.location_area_id == shop.location_area_id
-            assert event.listing_id == listing_id
-            assert event.unlisted_by == owner_id
-            assert hasattr(event, "occurred_at")
-            assert hasattr(event, "event_id")
-
     class TestRecordPurchase:
         """record_purchaseメソッドのテスト"""
-
-        def test_record_purchase_success(
-            self,
-            shop: ShopAggregate,
-            owner_id: PlayerId,
-            other_player_id: PlayerId,
-        ):
-            """購入記録が成功しイベントが発行される"""
-            listing_id = ShopListingId(1)
-            item_id = ItemInstanceId(100)
-            shop.list_item(
-                listing_id=listing_id,
-                item_instance_id=item_id,
-                price_per_unit=ShopListingPrice.of(50),
-                listed_by=owner_id,
-                listing_projection=_sample_listing_projection(),
-            )
-            shop.clear_events()
-            shop.record_purchase(
-                listing_id=listing_id,
-                buyer_id=other_player_id,
-                quantity=2,
-                total_gold=100,
-            )
-            events = shop.get_events()
-            assert len(events) == 1
-            assert isinstance(events[0], ShopItemPurchasedEvent)
 
         def test_record_purchase_adds_event_with_all_fields(
             self,
@@ -355,7 +291,7 @@ class TestShopAggregate:
             owner_id: PlayerId,
             other_player_id: PlayerId,
         ):
-            """record_purchaseでShopItemPurchasedEventが全てのフィールドを含む"""
+            """購入を記録すると、出品・売買当事者・数量・総額を含む購入イベントが1件発行される。"""
             listing_id = ShopListingId(1)
             item_id = ItemInstanceId(100)
             price = ShopListingPrice.of(50)
@@ -374,6 +310,7 @@ class TestShopAggregate:
                 total_gold=100,
             )
             events = shop.get_events()
+            assert len(events) == 1
             event = events[0]
             assert isinstance(event, ShopItemPurchasedEvent)
             assert event.aggregate_id == shop.shop_id
@@ -428,26 +365,6 @@ class TestShopAggregate:
 
     class TestGetListing:
         """get_listingメソッドのテスト"""
-
-        def test_get_listing_returns_listing(
-            self,
-            shop: ShopAggregate,
-            owner_id: PlayerId,
-        ):
-            """存在するリストを取得できる"""
-            listing_id = ShopListingId(1)
-            item_id = ItemInstanceId(100)
-            shop.list_item(
-                listing_id=listing_id,
-                item_instance_id=item_id,
-                price_per_unit=ShopListingPrice.of(50),
-                listed_by=owner_id,
-                listing_projection=_sample_listing_projection(),
-            )
-            listing = shop.get_listing(listing_id)
-            assert listing is not None
-            assert listing.listing_id == listing_id
-            assert listing.item_instance_id == item_id
 
         def test_get_listing_nonexistent_returns_none(self, shop: ShopAggregate):
             """存在しないリストはNone"""

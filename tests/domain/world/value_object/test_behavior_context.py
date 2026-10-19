@@ -59,17 +59,12 @@ class TestSkillSelectionContext:
 class TestGrowthContext:
     """GrowthContext の正常ケース"""
 
-    def test_create_success_minimal(self):
-        """有効な最小値で作成できること"""
-        ctx = GrowthContext(effective_flee_threshold=0.0, allow_chase=True)
-        assert ctx.effective_flee_threshold == 0.0
-        assert ctx.allow_chase is True
-
     def test_create_success_boundary_flee_threshold(self):
         """effective_flee_threshold の境界値 0.0 と 1.0 で作成できること"""
         ctx_low = GrowthContext(effective_flee_threshold=0.0, allow_chase=True)
         ctx_high = GrowthContext(effective_flee_threshold=1.0, allow_chase=False)
         assert ctx_low.effective_flee_threshold == 0.0
+        assert ctx_low.allow_chase is True
         assert ctx_high.effective_flee_threshold == 1.0
         assert ctx_high.allow_chase is False
 

@@ -1,7 +1,6 @@
 """``SummarizingShortTermMemory``: ターン窓 + L4 要約の階層型短期記憶。
 
-Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替として
-``IShortTermMemory`` を満たす別実装。
+Phase 2 (#356 後続) で導入。``IShortTermMemory`` の唯一の実装。
 
 挙動概要:
 - ``append`` / ``append_all`` で現在の自分のターンへ観測を積む
@@ -198,11 +197,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
     # IShortTermMemory contract
     # ──────────────────────────────────────────────────────────
 
-    @property
-    def recent_equal_timestamp_newest_first(self) -> bool:
-        """同時刻の観測は従来の deque 反転と同じく後から積んだ順に返す。"""
-        return True
-
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
         pid = int(player_id.value)
         self._ensure_player(pid)
@@ -210,15 +204,10 @@ class SummarizingShortTermMemory(IShortTermMemory):
 
     def append_all(
         self, player_id: PlayerId, entries: list[ObservationEntry]
-    ) -> list[ObservationEntry]:
-        """observations を順に append する。
-
-        ``DefaultSlidingWindowMemory`` と違って evict は無い (代わりに L4 に
-        畳む)。本 implementation では戻り値は常に空 list (overflow 0)。
-        """
+    ) -> None:
+        """observations を順に append する。古いターンは捨てずに L4 に畳む。"""
         for e in entries:
             self.append(player_id, e)
-        return []
 
     def get_recent(
         self, player_id: PlayerId, limit: int
@@ -308,38 +297,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
             _logger.exception(
                 "trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping"
             )
-
-    def get_oldest_entry_datetime(
-        self, player_id: PlayerId
-    ) -> datetime | None:
-        """PR5 (R1): 現在 short-term window に乗っている最古 entry の ``occurred_at``。
-
-        L1 raw queue の最古 entry を返す。L4 mid summary は raw を畳んだ
-        概要であり、構成要素の raw entry そのものは既に retire 済みなので、
-        ここでは含めない (= 「**今 raw として手元にあるもの**」の最古を
-        返す)。
-        """
-        if not isinstance(player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
-        pid = int(player_id.value)
-        raw = self._event_store.get_recent_observations(
-            player_id,
-            self._event_store.count_observations(player_id),
-            newest_equal_first=True,
-        )
-        if not raw:
-            return None
-        # raw queue には naive な datetime (= シナリオファイル由来) と aware な
-        # datetime (= LLM 呼び出し後に dataset から組まれた直近観測) が混在しうる。
-        # そのまま min() で比較すると ``TypeError: can't compare offset-naive
-        # and offset-aware datetimes`` で実験が落ちるため、UTC 相当として
-        # 正規化してから比較する。本体の occurred_at は書き換えない。
-        def _as_utc(dt: datetime) -> datetime:
-            if dt.tzinfo is None:
-                return dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
-
-        return min(_as_utc(entry.occurred_at) for entry in raw)
 
     def get_long_summary_text(self, player_id: PlayerId) -> str:
         """Phase 3: L5 long summary を prompt 用テキストに整形する。

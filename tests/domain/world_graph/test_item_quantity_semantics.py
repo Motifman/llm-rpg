@@ -7,6 +7,8 @@ HAS_ITEM / HAS_ITEMS precondition の required_quantity パラメータを
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -105,7 +107,7 @@ class TestGiveItemQuantity:
             interior=_empty_interior(), acting_object=None,
             effects=[effect], world_flags=frozenset(),
         )
-        assert len(result.item_spec_ids_to_grant) == 1
+        assert result.item_spec_ids_to_grant == (ItemSpecId.create(7),)
 
 
 class TestRemoveItemQuantity:
@@ -122,7 +124,7 @@ class TestRemoveItemQuantity:
             interior=_empty_interior(), acting_object=None,
             effects=[effect], world_flags=frozenset(),
         )
-        assert len(result.item_spec_ids_to_remove) == 2
+        assert result.item_spec_ids_to_remove == (ItemSpecId.create(7),) * 2
 
     def test_default_quantity_is_one(self) -> None:
         """quantity を渡さなければ 1 個 remove。"""
@@ -135,7 +137,7 @@ class TestRemoveItemQuantity:
             interior=_empty_interior(), acting_object=None,
             effects=[effect], world_flags=frozenset(),
         )
-        assert len(result.item_spec_ids_to_remove) == 1
+        assert result.item_spec_ids_to_remove == (ItemSpecId.create(7),)
 
 
 def _switch_obj() -> SpotObject:
@@ -160,20 +162,6 @@ class TestHasItemRequiredQuantity:
             effects=(),
         )
 
-    def test_default_required_quantity_is_one(self) -> None:
-        """required_quantity 未指定なら従来通り「1 個以上」で OK。"""
-        svc = SpotInteractionService()
-        spec = ItemSpecId.create(7)
-        cond = InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.HAS_ITEM,
-            target_item_spec_id=spec,
-        )
-        ok, _ = svc.can_interact(
-            self._interaction(cond), _switch_obj(),
-            owned_item_spec_ids=frozenset({spec}),
-            world_flags=frozenset(),
-        )
-        assert ok is True
 
     def test_required_quantity_n_passes_when_owned_n(self) -> None:
         """required_quantity=2 で 2 個保持していれば OK。"""
@@ -251,8 +239,9 @@ class TestHasItemRequiredQuantity:
 class TestRequiredQuantityScenarioLoader:
     """scenario_loader 側の required_quantity バリデーション。"""
 
-    def test_negative_required_quantity_rejected(self) -> None:
-        """`required_quantity: 0` は ScenarioLoadError を投げる。"""
+    @pytest.mark.parametrize("raw_quantity", [0, -1, "not-an-int"])
+    def test_nonpositive_or_invalid_required_quantity_rejected(self, raw_quantity: object) -> None:
+        """必要数0・負数・intへ変換できない文字列は、読込時に原因つきで拒否する。"""
         import pytest
 
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
@@ -284,7 +273,7 @@ class TestRequiredQuantityScenarioLoader:
                         "preconditions": [{
                             "condition_type": "HAS_ITEM",
                             "required_item": "ore",
-                            "required_quantity": 0,  # 不正
+                            "required_quantity": raw_quantity,
                         }],
                         "effects": [],
                     }],
@@ -323,8 +312,9 @@ class TestHasItemsRequiredQuantity:
         )
         assert ok is True
 
-    def test_one_spec_below_required_fails(self) -> None:
-        """1 種でも required_quantity に足りなければ拒否。"""
+    @pytest.mark.parametrize(("a_count", "b_count"), [(5, 1), (1, 5)])
+    def test_one_spec_below_required_fails(self, a_count: int, b_count: int) -> None:
+        """先頭・末尾のいずれの品目でも必要数に足りなければ拒否する。"""
         svc = SpotInteractionService()
         a = ItemSpecId.create(1)
         b = ItemSpecId.create(2)
@@ -341,6 +331,6 @@ class TestHasItemsRequiredQuantity:
             idef, _switch_obj(),
             owned_item_spec_ids=frozenset({a, b}),
             world_flags=frozenset(),
-            owned_item_spec_counts={a: 5, b: 1},
+            owned_item_spec_counts={a: a_count, b: b_count},
         )
         assert ok is False

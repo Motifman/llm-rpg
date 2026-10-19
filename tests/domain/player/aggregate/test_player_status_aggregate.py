@@ -344,15 +344,23 @@ class TestPlayerStatusAggregate:
         assert hasattr(event, "occurred_at")
 
     def test_record_evasion_when_downed_raises_exception(self):
-        """ダウン状態では回避記録できないこと"""
+        """ダウン時は回避記録を拒否し、HPを保って回避成功通知を作らない。"""
         aggregate = create_test_status_aggregate(is_down=True)
 
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーは回避を記録できません"):
             aggregate.record_evasion()
 
-    def test_gain_exp_level_up(self):
-        """経験値を獲得し、レベルアップすること"""
-        aggregate = create_test_status_aggregate()
+        assert aggregate.hp.value == 100
+        assert not any(isinstance(event, PlayerEvadedEvent) for event in aggregate.get_events())
+
+    @pytest.mark.parametrize(
+        ("player_id", "hp", "mp"),
+        [(1, 100, 50), (7, 37, 19)],
+        ids=["original-full-resources", "depleted-distinct-resources"],
+    )
+    def test_gain_exp_level_up(self, player_id, hp, mp):
+        """レベルアップは資源上限を更新して現在HP/MPを引き継ぎ、本人へ通知する。"""
+        aggregate = create_test_status_aggregate(player_id=player_id, hp=hp, mp=mp)
         initial_level = aggregate.growth.level
         initial_stats = aggregate.base_stats
 
@@ -375,6 +383,10 @@ class TestPlayerStatusAggregate:
         assert isinstance(events[0], PlayerLevelUpEvent)
         assert events[0].old_level == initial_level
         assert events[0].new_level == initial_level + 1
+        assert aggregate.hp.value == hp
+        assert aggregate.mp.value == mp
+        assert events[0].aggregate_id.value == player_id
+        assert events[0].aggregate_type == "PlayerStatusAggregate"
 
     def test_gain_exp_no_level_up(self):
         """経験値を獲得してもレベルアップしない場合"""
@@ -391,11 +403,15 @@ class TestPlayerStatusAggregate:
         assert len(events) == 0
 
     def test_gain_exp_when_downed(self):
-        """ダウン状態で経験値を獲得しようとすると例外が発生すること"""
+        """ダウン時は経験値獲得を拒否し、成長値を保ってレベルアップ通知を作らない。"""
         aggregate = create_test_status_aggregate(is_down=True)
 
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーは経験値を獲得できません"):
             aggregate.gain_exp(50)
+
+        assert aggregate.growth.level == 1
+        assert aggregate.growth.total_exp == 0
+        assert not any(isinstance(event, PlayerLevelUpEvent) for event in aggregate.get_events())
 
     def test_heal_hp(self):
         """HPを回復すること"""
@@ -413,12 +429,18 @@ class TestPlayerStatusAggregate:
         assert events[0].total_hp == 80
 
     def test_heal_hp_over_max(self):
-        """HP回復が最大値を超える場合、最大値になること"""
+        """上限を越える回復は100に収め、実際の回復量10を通知する。"""
         aggregate = create_test_status_aggregate(hp=90)
 
         aggregate.heal_hp(20)  # 110になるが、最大値は100
 
         assert aggregate.hp.value == 100
+
+        events = aggregate.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], PlayerHpHealedEvent)
+        assert events[0].healed_amount == 10
+        assert events[0].total_hp == 100
 
     def test_use_mp_normal(self):
         """MPを消費すること"""
@@ -436,7 +458,7 @@ class TestPlayerStatusAggregate:
         assert events[0].remaining_mp == 30
 
     def test_use_mp_insufficient(self):
-        """MPが不足している場合、例外が発生すること"""
+        """不足時はMP消費を拒否し、残量を保って対応する成功通知を作らない。"""
         aggregate = create_test_status_aggregate(mp=10)
 
         with pytest.raises(InsufficientMpException):
@@ -445,12 +467,17 @@ class TestPlayerStatusAggregate:
         # MPが消費されていないことを確認
         assert aggregate.mp.value == 10
 
+        assert not any(isinstance(event, PlayerMpConsumedEvent) for event in aggregate.get_events())
+
     def test_use_mp_when_downed(self):
-        """ダウン状態でMPを消費しようとすると例外が発生すること"""
+        """ダウン時はMP消費を拒否し、操作対象の残量と対応する成功通知を変えない。"""
         aggregate = create_test_status_aggregate(is_down=True)
 
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーはMPを消費できません"):
             aggregate.use_mp(20)
+
+        assert aggregate.mp.value == 50
+        assert not any(isinstance(event, PlayerMpConsumedEvent) for event in aggregate.get_events())
 
     def test_heal_mp(self):
         """MPを回復すること"""
@@ -468,12 +495,18 @@ class TestPlayerStatusAggregate:
         assert events[0].total_mp == 35
 
     def test_heal_mp_over_max(self):
-        """MP回復が最大値を超える場合、最大値になること"""
+        """上限を越える回復は50に収め、実際の回復量5を通知する。"""
         aggregate = create_test_status_aggregate(mp=45)
 
         aggregate.heal_mp(10)  # 55になるが、最大値は50
 
         assert aggregate.mp.value == 50
+
+        events = aggregate.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], PlayerMpHealedEvent)
+        assert events[0].healed_amount == 5
+        assert events[0].total_mp == 50
 
     def test_consume_stamina_normal(self):
         """スタミナを消費すること"""
@@ -491,7 +524,7 @@ class TestPlayerStatusAggregate:
         assert events[0].remaining_stamina == 80
 
     def test_consume_stamina_insufficient(self):
-        """スタミナが不足している場合、例外が発生すること"""
+        """不足時はスタミナ消費を拒否し、残量を保って対応する成功通知を作らない。"""
         aggregate = create_test_status_aggregate(stamina=10)
 
         with pytest.raises(InsufficientStaminaException, match="スタミナが不足しています"):
@@ -500,12 +533,17 @@ class TestPlayerStatusAggregate:
         # スタミナが消費されていないことを確認
         assert aggregate.stamina.value == 10
 
+        assert not any(isinstance(event, PlayerStaminaConsumedEvent) for event in aggregate.get_events())
+
     def test_consume_stamina_when_downed(self):
-        """ダウン状態でスタミナを消費しようとすると例外が発生すること"""
+        """ダウン時はスタミナ消費を拒否し、操作対象の残量と対応する成功通知を変えない。"""
         aggregate = create_test_status_aggregate(is_down=True)
 
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーはスタミナを消費できません"):
             aggregate.consume_stamina(20)
+
+        assert aggregate.stamina.value == 100
+        assert not any(isinstance(event, PlayerStaminaConsumedEvent) for event in aggregate.get_events())
 
     def test_heal_stamina(self):
         """スタミナを回復すること"""
@@ -525,7 +563,7 @@ class TestPlayerStatusAggregate:
         assert events[0].total_stamina == 75
 
     def test_heal_stamina_over_max(self):
-        """スタミナ回復が最大値を超える場合、最大値になること"""
+        """上限を越える回復は100に収め、実際の回復量10を通知する。"""
         aggregate = create_test_status_aggregate()
         aggregate.consume_stamina(10)  # 90/100 に減らす
         aggregate.clear_events()
@@ -533,6 +571,12 @@ class TestPlayerStatusAggregate:
         aggregate.heal_stamina(20)  # 110になるが、最大値は100
 
         assert aggregate.stamina.value == 100
+
+        events = aggregate.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], PlayerStaminaHealedEvent)
+        assert events[0].healed_amount == 10
+        assert events[0].total_stamina == 100
 
     def test_revive_normal(self):
         """戦闘不能状態から復帰すること（回復率を値で渡す）"""
@@ -588,11 +632,15 @@ class TestPlayerStatusAggregate:
         assert isinstance(aggregate.get_events()[0], PlayerHpHealedEvent)
 
     def test_revive_not_down(self):
-        """戦闘不能状態でない場合、PlayerNotDownedException が発生すること"""
+        """非ダウン時は復帰を拒否し、HPと状態を保って復帰成功通知を作らない。"""
         aggregate = create_test_status_aggregate(is_down=False)
 
         with pytest.raises(PlayerNotDownedException, match="プレイヤーは戦闘不能状態ではありません"):
             aggregate.revive(hp_recovery_rate=0.5)
+
+        assert aggregate.hp.value == 100
+        assert aggregate.is_down is False
+        assert not any(isinstance(event, PlayerRevivedEvent) for event in aggregate.get_events())
 
     def test_earn_gold(self):
         """ゴールドを獲得すること"""
@@ -625,7 +673,7 @@ class TestPlayerStatusAggregate:
         assert events[0].total_gold == 70
 
     def test_pay_gold_insufficient(self):
-        """ゴールドが不足している場合、例外が発生すること"""
+        """不足時は支払いを拒否し、残量を保って対応する成功通知を作らない。"""
         aggregate = create_test_status_aggregate(gold=20)
 
         with pytest.raises(InsufficientGoldException):
@@ -634,12 +682,17 @@ class TestPlayerStatusAggregate:
         # ゴールドが支払われていないことを確認
         assert aggregate.gold.value == 20
 
+        assert not any(isinstance(event, PlayerGoldPaidEvent) for event in aggregate.get_events())
+
     def test_pay_gold_when_downed(self):
-        """ダウン状態でゴールドを支払おうとすると例外が発生すること"""
+        """ダウン時は支払いを拒否し、操作対象の残量と対応する成功通知を変えない。"""
         aggregate = create_test_status_aggregate(is_down=True, gold=100)
 
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーはゴールドを支払えません"):
             aggregate.pay_gold(30)
+
+        assert aggregate.gold.value == 100
+        assert not any(isinstance(event, PlayerGoldPaidEvent) for event in aggregate.get_events())
 
     def test_can_act_methods(self):
         """状態チェックメソッドが正しく動作すること"""
@@ -929,7 +982,7 @@ class TestPlayerStatusAggregate:
         assert any(isinstance(e, PlayerStaminaConsumedEvent) for e in events)
 
     def test_consume_resources_insufficient_mp(self):
-        """MP不足時に適切な例外が発生し、リソースが消費されないこと"""
+        """MP不足の一括消費は固有例外で拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(hp=100, mp=5, stamina=100)
         
         with pytest.raises(InsufficientMpException, match="MPが不足しています"):
@@ -940,8 +993,13 @@ class TestPlayerStatusAggregate:
         assert aggregate.mp.value == 5
         assert aggregate.stamina.value == 100
 
+        assert not any(
+            isinstance(event, (PlayerMpConsumedEvent, PlayerStaminaConsumedEvent, PlayerDownedEvent))
+            for event in aggregate.get_events()
+        )
+
     def test_consume_resources_insufficient_stamina(self):
-        """スタミナ不足時に適切な例外が発生し、リソースが消費されないこと"""
+        """スタミナ不足の一括消費は固有例外で拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=10)
         
         with pytest.raises(InsufficientStaminaException, match="スタミナが不足しています"):
@@ -952,8 +1010,13 @@ class TestPlayerStatusAggregate:
         assert aggregate.mp.value == 50
         assert aggregate.stamina.value == 10
 
+        assert not any(
+            isinstance(event, (PlayerMpConsumedEvent, PlayerStaminaConsumedEvent, PlayerDownedEvent))
+            for event in aggregate.get_events()
+        )
+
     def test_consume_resources_insufficient_hp(self):
-        """HP不足（死亡コスト）時に適切な例外が発生し、リソースが消費されないこと"""
+        """HP不足の一括消費は固有例外で拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(hp=20, mp=50, stamina=100)
         
         with pytest.raises(InsufficientHpException, match="HPが不足しています"):
@@ -964,15 +1027,28 @@ class TestPlayerStatusAggregate:
         assert aggregate.mp.value == 50
         assert aggregate.stamina.value == 100
 
+        assert not any(
+            isinstance(event, (PlayerMpConsumedEvent, PlayerStaminaConsumedEvent, PlayerDownedEvent))
+            for event in aggregate.get_events()
+        )
+
     def test_consume_resources_when_downed(self):
-        """ダウン状態での消費試行時に例外が発生すること"""
+        """ダウン時は一括消費を拒否し、全残量を保って消費・ダウン通知を作らない。"""
         aggregate = create_test_status_aggregate(is_down=True)
         
         with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーはリソースを消費できません"):
             aggregate.consume_resources(mp_cost=1, stamina_cost=1, hp_cost=1)
 
+        assert aggregate.hp.value == 100
+        assert aggregate.mp.value == 50
+        assert aggregate.stamina.value == 100
+        assert not any(
+            isinstance(event, (PlayerMpConsumedEvent, PlayerStaminaConsumedEvent, PlayerDownedEvent))
+            for event in aggregate.get_events()
+        )
+
     def test_consume_resources_partial_costs(self):
-        """一部のリソースのみを指定して消費できること"""
+        """連続する部分費用の消費では、指定しなかった資源の残量を引き継ぐ。"""
         aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
         
         # MPのみ
@@ -984,10 +1060,14 @@ class TestPlayerStatusAggregate:
         # スタミナのみ
         aggregate.consume_resources(stamina_cost=20)
         assert aggregate.stamina.value == 80
+        assert aggregate.hp.value == 100
+        assert aggregate.mp.value == 40
         
         # HPのみ
         aggregate.consume_resources(hp_cost=30)
         assert aggregate.hp.value == 70
+        assert aggregate.mp.value == 40
+        assert aggregate.stamina.value == 80
 
     def test_consume_resources_validation_priority(self):
         """バリデーションの優先順位（MP > Stamina > HP）の確認"""
@@ -1171,6 +1251,7 @@ class TestPlayerStatusAggregate:
             assert effective_stats.attack == 36  # 20 * 1.5 * 1.2
 
         def test_effective_stats_filters_expired_effects_via_domain_service(self):
+            """期限切れを計算から除外し、清掃後は期限内の効果だけを保持する。"""
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
@@ -1178,7 +1259,8 @@ class TestPlayerStatusAggregate:
 
             aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
-            aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
+            active_effect = StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20))
+            aggregate.add_status_effect(active_effect)
 
             effective_stats = compute_effective_stats(
                 aggregate.base_stats, aggregate.active_effects, WorldTick(10)
@@ -1186,6 +1268,7 @@ class TestPlayerStatusAggregate:
             assert effective_stats.attack == 30  # 20 * 1.5 のみ（期限切れは除外）
             aggregate.cleanup_expired_effects(WorldTick(10))
             assert len(aggregate.active_effects) == 1
+            assert aggregate.active_effects == [active_effect]
 
         def test_buff_and_debuff_stacking_via_domain_service(self):
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType

@@ -107,7 +107,7 @@ class TestFactionElimination:
     """指定した陣営の生存者が閾値以下になったら成立する。"""
 
     def test_not_ended_while_the_faction_survives(self) -> None:
-        """crew が 2 人生きている間は成立しない。"""
+        """crew 2 人の結果が UNRESOLVED の間は成立しない。実際に倒れた身体からの接続は実行時試験が保証する。"""
         result = _evaluate(_condition(max_surviving=0), _outcomes())
         assert result.is_ended is False
 
@@ -117,21 +117,11 @@ class TestFactionElimination:
         assert result.is_ended is False
 
     def test_ended_when_the_whole_faction_is_dead(self) -> None:
-        """crew が全員 DEAD になったら成立する。"""
+        """crew 全員が DEAD なら成立し、呼び手が渡した LOSE を返す。"""
         result = _evaluate(
             _condition(max_surviving=0), _outcomes(a=_CREW_A, b=_CREW_B)
         )
         assert result.is_ended is True
-
-    def test_result_is_lose(self) -> None:
-        """結果は LOSE。
-
-        「自陣営が全滅した」は集団としての敗北。襲う側の勝ちという読み替えは
-        シナリオの語りが担い、エンジンは集団の WIN / LOSE だけを返す。
-        """
-        result = _evaluate(
-            _condition(max_surviving=0), _outcomes(a=_CREW_A, b=_CREW_B)
-        )
         assert result.result == GameResultEnum.LOSE
 
     def test_other_factions_do_not_count(self) -> None:
@@ -143,32 +133,23 @@ class TestFactionElimination:
         result = _evaluate(_condition(max_surviving=0), _outcomes(k=_KEEPER))
         assert result.is_ended is False
 
-    def test_threshold_above_zero(self) -> None:
-        """max_surviving=1 なら、残り 1 人になった時点で成立する。
+    @pytest.mark.parametrize(
+        ("dead_crew", "is_ended"), [((), False), ((_CREW_A,), True)],
+    )
+    def test_threshold_above_zero(
+        self, dead_crew: tuple[PlayerId, ...], is_ended: bool,
+    ) -> None:
+        """max_surviving=1 では残り 2 人なら続行し、残り 1 人になった時点で成立する。"""
+        outcomes = _outcomes(**{str(i): pid for i, pid in enumerate(dead_crew)})
+        result = _evaluate(_condition(max_surviving=1), outcomes)
+        assert result.is_ended is is_ended
 
-        「最後の一人になったら詰み」のような設定を書けるようにする。
-        """
-        result = _evaluate(_condition(max_surviving=1), _outcomes(a=_CREW_A))
-        assert result.is_ended is True
 
-
-class TestDownedPlayersStillCount:
-    """倒れているだけの相手は生存として数える。"""
-
-    def test_downed_but_not_dead_keeps_the_game_going(self) -> None:
-        """crew 全員が倒れていても、DEAD が確定していなければ続行する。
-
-        倒れた仲間は蘇生できる。ここで終わらせると蘇生の意味が消える。
-        数えないのは PlayerOutcomeEnum.DEAD が確定した相手だけ。
-        """
-        outcomes = {int(pid): PlayerOutcomeEnum.UNRESOLVED for pid in _ALL}
-
-        result = _evaluate(_condition(max_surviving=0), outcomes)
-
-        assert result.is_ended is False
+class TestRescuedPlayersStillCount:
+    """救助された相手を陣営の生存者として数える。"""
 
     def test_rescued_players_are_not_counted_as_dead(self) -> None:
-        """RESCUED も生存として数える (DEAD 以外は全て生存)。"""
+        """RESCUED は退場扱いせず生存として数える。"""
         outcomes = {int(pid): PlayerOutcomeEnum.UNRESOLVED for pid in _ALL}
         outcomes[int(_CREW_A)] = PlayerOutcomeEnum.RESCUED
         outcomes[int(_CREW_B)] = PlayerOutcomeEnum.DEAD

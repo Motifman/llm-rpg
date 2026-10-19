@@ -12,6 +12,8 @@ HP は need と符号の意味が逆 (+ が回復=良い、- が被弾=悪い) �
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -45,9 +47,10 @@ def _make_player(*, hp: int = 100, max_hp: int = 100) -> PlayerStatusAggregate:
 class TestComputeHpDelta:
     """``compute_hp_delta()`` は前回 snapshot からの HP 変化を返す。"""
 
-    def test_initial_call_returns_zero(self):
-        """snapshot が無い初期状態では delta は 0。"""
-        player = _make_player(hp=100)
+    @pytest.mark.parametrize("initial_hp", [100, 40], ids=["full", "nonfull"])
+    def test_initial_call_returns_zero(self, initial_hp):
+        """snapshot が無い初回は、満タンでも非満タンでも delta は0。"""
+        player = _make_player(hp=initial_hp)
         assert player.compute_hp_delta() == 0
 
     def test_snapshot_then_damage_gives_negative_delta(self):
@@ -95,14 +98,16 @@ class TestHpDescribe:
         assert "危険" in line or "瀕死" in line
 
     def test_negative_delta_shows_damage(self):
-        """delta が負 (= 被弾) のとき「前回 -N」を併記する。"""
+        """delta が負 (= 被弾) のとき、現在値/上限と「前回 -N」を併記する。"""
         line = Hp(value=48, max_hp=100).describe(delta=-12)
         assert "前回 -12" in line
+        assert "48/100" in line
 
     def test_positive_delta_shows_heal(self):
-        """delta が正 (= 回復) のとき「前回 +N」を併記する。"""
+        """delta が正 (= 回復) のとき、現在値/上限と「前回 +N」を併記する。"""
         line = Hp(value=60, max_hp=100).describe(delta=20)
         assert "前回 +20" in line
+        assert "60/100" in line
 
     def test_zero_delta_no_suffix(self):
         """delta=0 / None のときは「前回」表記なし (= ノイズ削減)。"""

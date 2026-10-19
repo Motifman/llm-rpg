@@ -71,8 +71,35 @@ class TestSpotGraphNavigationServiceRoute:
         r = nav.calculate_route(g, SpotId.create(1), SpotId.create(1))
         assert r == [SpotId.create(1)]
 
-    def test_shortest_path(self):
+    @pytest.mark.parametrize("with_detour", [False, True])
+    def test_shortest_path(self, with_detour: bool) -> None:
+        """一本道でも長い迂回路があっても、始終点を含む最短の場所列を返す。"""
         g = _three_spot_line_graph()
+        if with_detour:
+            for i in (4, 5):
+                g.add_spot(
+                    SpotNode(
+                        spot_id=SpotId.create(i),
+                        name=f"S{i}",
+                        description="",
+                        category=SpotCategoryEnum.OTHER,
+                        parent_id=None,
+                    )
+                )
+            for connection_id, from_id, to_id in ((10, 1, 4), (20, 4, 5), (30, 5, 3)):
+                g.add_connection(
+                    SpotConnection(
+                        connection_id=ConnectionId.create(connection_id),
+                        from_spot_id=SpotId.create(from_id),
+                        to_spot_id=SpotId.create(to_id),
+                        name="detour",
+                        description="",
+                        travel_ticks=1,
+                        is_bidirectional=False,
+                        passage_conditions=[],
+                        passage=Passage.open(sound_permeability=1.0),
+                    )
+                )
         nav = SpotGraphNavigationService()
         r = nav.calculate_route(g, SpotId.create(1), SpotId.create(3))
         assert r == [SpotId.create(1), SpotId.create(2), SpotId.create(3)]

@@ -481,6 +481,11 @@ class TestAbandonedChaseProse:
     """
 
     @pytest.mark.parametrize(
+        "graph_id",
+        [SpotGraphId.create(1), GRAPH_ID],
+        ids=["graph_1", "graph_999"],
+    )
+    @pytest.mark.parametrize(
         "reason",
         [
             "target_lost",
@@ -491,11 +496,11 @@ class TestAbandonedChaseProse:
         ],
     )
     def test_reason_single_prose(
-        self, formatter: SpotGraphObservationFormatter, reason: str,
+        self, formatter: SpotGraphObservationFormatter, reason: str, graph_id: SpotGraphId,
     ) -> None:
         """reason に依らず単一の事実prose。"""
         ev = MonsterAbandonedChaseInSpotEvent.create(
-            aggregate_id=GRAPH_ID, aggregate_type="SpotGraphAggregate",
+            aggregate_id=graph_id, aggregate_type="SpotGraphAggregate",
             monster_id=MONSTER_WOLF, spot_id=SPOT_A, reason=reason,
         )
         result = formatter.format(ev, PLAYER_1)

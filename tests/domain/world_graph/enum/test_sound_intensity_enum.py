@@ -25,10 +25,6 @@ class TestLevelOrdering:
         assert SoundIntensityEnum.FAINT.level == 1
         assert SoundIntensityEnum.MODERATE.level == 2
         assert SoundIntensityEnum.LOUD.level == 3
-
-    def test_level_order(self) -> None:
-        """level 比較で順序を扱える。"""
-        # 直接比較ではなく level 整数経由で順序判定
         assert SoundIntensityEnum.LOUD.level > SoundIntensityEnum.SILENT.level
         assert SoundIntensityEnum.MODERATE.level > SoundIntensityEnum.FAINT.level
 

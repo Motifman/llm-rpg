@@ -100,8 +100,13 @@ class TestItemSpec:
         assert spec.max_stack_size.value == 1
         assert spec.equipment_type == EquipmentType.WEAPON
 
-    def test_invalid_name_empty(self):
-        """無効な名前（空文字）のテスト"""
+    @pytest.mark.parametrize(
+        "equipment_type",
+        [None, EquipmentType.WEAPON],
+        ids=["original-missing-equipment-type", "otherwise-valid-equipment"],
+    )
+    def test_invalid_name_empty(self, equipment_type):
+        """名前が空なら、装備種別が有効でも ItemSpecValidationException で拒否する。"""
         template_id = ItemSpecId(3)
         max_stack = MaxStackSize(10)
         with pytest.raises(ItemSpecValidationException):
@@ -111,11 +116,17 @@ class TestItemSpec:
                 item_type=ItemType.EQUIPMENT,
                 rarity=Rarity.COMMON,
                 description="A sword",
-                max_stack_size=max_stack
+                max_stack_size=max_stack,
+                equipment_type=equipment_type,
             )
 
-    def test_invalid_name_whitespace(self):
-        """無効な名前（空白のみ）のテスト"""
+    @pytest.mark.parametrize(
+        "equipment_type",
+        [None, EquipmentType.WEAPON],
+        ids=["original-missing-equipment-type", "otherwise-valid-equipment"],
+    )
+    def test_invalid_name_whitespace(self, equipment_type):
+        """名前が空白だけなら、装備種別が有効でも ItemSpecValidationException で拒否する。"""
         template_id = ItemSpecId(4)
         max_stack = MaxStackSize(10)
         with pytest.raises(ItemSpecValidationException):
@@ -125,11 +136,17 @@ class TestItemSpec:
                 item_type=ItemType.EQUIPMENT,
                 rarity=Rarity.COMMON,
                 description="A sword",
-                max_stack_size=max_stack
+                max_stack_size=max_stack,
+                equipment_type=equipment_type,
             )
 
-    def test_invalid_description_empty(self):
-        """無効な説明（空文字）のテスト"""
+    @pytest.mark.parametrize(
+        "equipment_type",
+        [None, EquipmentType.WEAPON],
+        ids=["original-missing-equipment-type", "otherwise-valid-equipment"],
+    )
+    def test_invalid_description_empty(self, equipment_type):
+        """説明が空なら、装備種別が有効でも ItemSpecValidationException で拒否する。"""
         template_id = ItemSpecId(5)
         max_stack = MaxStackSize(10)
         with pytest.raises(ItemSpecValidationException):
@@ -139,13 +156,19 @@ class TestItemSpec:
                 item_type=ItemType.EQUIPMENT,
                 rarity=Rarity.COMMON,
                 description="",
-                max_stack_size=max_stack
+                max_stack_size=max_stack,
+                equipment_type=equipment_type,
             )
 
-    def test_invalid_durability_max_zero(self):
-        """無効な耐久度最大値（0）のテスト"""
+    @pytest.mark.parametrize(
+        "stack_size, equipment_type",
+        [(10, None), (1, EquipmentType.WEAPON)],
+        ids=["original-conflicting-equipment", "otherwise-valid-equipment"],
+    )
+    def test_invalid_durability_max_zero(self, stack_size, equipment_type):
+        """最大耐久が0なら、スタック数と装備種別が有効でも専用例外で拒否する。"""
         template_id = ItemSpecId(6)
-        max_stack = MaxStackSize(10)
+        max_stack = MaxStackSize(stack_size)
         with pytest.raises(ItemSpecValidationException):
             ItemSpec(
                 item_spec_id=template_id,
@@ -154,13 +177,19 @@ class TestItemSpec:
                 rarity=Rarity.COMMON,
                 description="A sword",
                 max_stack_size=max_stack,
-                durability_max=0
+                durability_max=0,
+                equipment_type=equipment_type,
             )
 
-    def test_invalid_durability_max_negative(self):
-        """無効な耐久度最大値（負の値）のテスト"""
+    @pytest.mark.parametrize(
+        "stack_size, equipment_type",
+        [(10, None), (1, EquipmentType.WEAPON)],
+        ids=["original-conflicting-equipment", "otherwise-valid-equipment"],
+    )
+    def test_invalid_durability_max_negative(self, stack_size, equipment_type):
+        """最大耐久が負なら、スタック数と装備種別が有効でも専用例外で拒否する。"""
         template_id = ItemSpecId(7)
-        max_stack = MaxStackSize(10)
+        max_stack = MaxStackSize(stack_size)
         with pytest.raises(ItemSpecValidationException):
             ItemSpec(
                 item_spec_id=template_id,
@@ -169,7 +198,8 @@ class TestItemSpec:
                 rarity=Rarity.COMMON,
                 description="A sword",
                 max_stack_size=max_stack,
-                durability_max=-1
+                durability_max=-1,
+                equipment_type=equipment_type,
             )
 
     def test_invalid_max_stack_size_with_durability(self):
@@ -302,18 +332,6 @@ class TestItemSpec:
         )
         assert armor_spec.equipment_type == EquipmentType.ARMOR
         assert armor_spec.is_equipment()
-
-    def test_equality_same_spec(self, sample_item_spec):
-        """同じスペックの等価性テスト"""
-        same_spec = ItemSpec(
-            item_spec_id=ItemSpecId(1),  # 同じID
-            name="Different Name",  # 異なる名前だがIDが同じなので等価
-            item_type=ItemType.CONSUMABLE,  # 異なるタイプ
-            rarity=Rarity.RARE,  # 異なるレアリティ
-            description="Different description",  # 異なる説明
-            max_stack_size=MaxStackSize(32)  # 異なるスタックサイズ
-        )
-        assert sample_item_spec == same_spec
 
     def test_equality_different_spec(self, sample_item_spec):
         """異なるスペックの等価性テスト"""
