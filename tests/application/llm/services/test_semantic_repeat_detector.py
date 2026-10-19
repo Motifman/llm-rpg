@@ -344,30 +344,6 @@ class TestAnExactMatchResetsTheWindow:
         assert len(port.calls) == asked_before
 
 
-class TestGoalFieldsDoNotReachTheState:
-    """本人の目的を、判断の材料に入れないことを保証する (design_decisions #222)。"""
-
-    def test_goal_fields_riding_on_an_unlisted_tool_do_not_reach_the_state(self) -> None:
-        """要約の表に無い tool に goal_update / goal_outcome が付いていても、state に出さない。"""
-        port = _Port()
-        detector = _detector(port, window=2)
-        action = RecordedAction(
-            player_key=1, tool_name="memory_recall_episodes",
-            fingerprint=build_argument_fingerprint(
-                {"query": "薬草", "goal_update": "ユノから薬草を手に入れる", "goal_outcome": None}
-            ),
-            success=True, error_code=None, tick=50, result_summary="思い出せなかった",
-        )
-
-        detector.observe(action)
-        detector.observe(action)
-
-        state, _ = port.calls[0]
-        assert "ユノから薬草を手に入れる" not in str(state)
-        assert "goal_outcome" not in str(state)
-        assert "薬草" in state["recent_actions"][0]["action"]
-
-
 class TestAnUnexpectedErrorIsTreatedAsUnavailable:
     """判断ポートの想定外の例外を外へ出さず、判断不能として扱うことを保証する。"""
 

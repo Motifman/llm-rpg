@@ -23,7 +23,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_CONTROL_PANEL_TOGGLE = _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "control_panel_toggle.json"
 
 _ACTOR = PlayerId(1)
 _OBSERVER = PlayerId(2)
@@ -32,8 +32,8 @@ _OBSERVER = PlayerId(2)
 def _scenario_with_teleport(
     tmp_path: Path, *, destination_spot: str, witness_policy: str | None = None
 ) -> Path:
-    """relay_puzzle の control_panel/power_on に TELEPORT_ENTITY を足して書き出す。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    """control_panel_toggle の control_panel/power_on に TELEPORT_ENTITY を足して書き出す。"""
+    scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
     patched = False
     for spot in scenario["spots"]:
         for obj in (spot.get("interior") or {}).get("objects", []):
@@ -52,7 +52,7 @@ def _scenario_with_teleport(
                     interaction["witness_policy"] = witness_policy
                 patched = True
     assert patched, "control_panel/power_on が見つからない (シナリオ構造が変わった)"
-    path = tmp_path / "relay_teleport.json"
+    path = tmp_path / "panel_teleport.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     return path
 
@@ -78,7 +78,7 @@ class TestTeleportDestinationValidation:
         行き先が無いと domain 側は spec を作らず、書いたのに何も起きない静かな
         失敗になるため、起動時に落とす。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             for obj in (spot.get("interior") or {}).get("objects", []):
                 if obj.get("id") != "control_panel":
@@ -88,7 +88,7 @@ class TestTeleportDestinationValidation:
                         interaction.setdefault("effects", []).append(
                             {"effect_type": "TELEPORT_ENTITY"}
                         )
-        path = tmp_path / "relay_no_target.json"
+        path = tmp_path / "panel_no_target.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(ScenarioLoadError) as exc_info:
@@ -103,7 +103,7 @@ class TestTeleportDestinationValidation:
         effect 直下に書くと params に載らず無言で消えるため、書き間違いとして
         検出する必要がある。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             for obj in (spot.get("interior") or {}).get("objects", []):
                 if obj.get("id") != "control_panel":
@@ -113,7 +113,7 @@ class TestTeleportDestinationValidation:
                         interaction.setdefault("effects", []).append(
                             {"effect_type": "TELEPORT_ENTITY", "target_spot": "corridor"}
                         )
-        path = tmp_path / "relay_misplaced_target.json"
+        path = tmp_path / "panel_misplaced_target.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(ScenarioLoadError) as exc_info:
@@ -127,7 +127,7 @@ class TestTeleportDestinationValidation:
         書いても挙動は変わらない。「HIDDEN にしたから見られない」と誤解したまま
         秘密の移動を期待されるより、読み込み時に落とす。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_CONTROL_PANEL_TOGGLE.read_text(encoding="utf-8"))
         for spot in scenario["spots"]:
             for obj in (spot.get("interior") or {}).get("objects", []):
                 if obj.get("id") != "control_panel":
@@ -141,7 +141,7 @@ class TestTeleportDestinationValidation:
                                 "visibility": "HIDDEN",
                             }
                         )
-        path = tmp_path / "relay_visibility.json"
+        path = tmp_path / "panel_visibility.json"
         path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
         with pytest.raises(ScenarioLoadError) as exc_info:

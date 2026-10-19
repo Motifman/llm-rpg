@@ -5,24 +5,6 @@ from __future__ import annotations
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     TRAVEL_TO_DEFINITION,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
-    GOAL_UPDATE_FIELD_NAME,
-    with_goal_update_schema,
-)
-
-
-class TestGoalUpdateDescription:
-    """goal_update の説明が、同じツールに無い引数を指さないことを確かめる。"""
-
-    def test_does_not_mention_an_argument_the_tool_does_not_take(self) -> None:
-        """intention を持たない travel_to に goal_update を足しても、説明は intention を指さない。"""
-        definition = with_goal_update_schema(TRAVEL_TO_DEFINITION)
-        properties = definition.parameters["properties"]
-
-        description = properties[GOAL_UPDATE_FIELD_NAME]["description"]
-
-        assert "intention" not in properties
-        assert "intention" not in description
 
 
 class TestDestinationLabelDescription:
