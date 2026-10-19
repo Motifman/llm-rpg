@@ -43,8 +43,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
     def test_system_prompt_does_not_hardcode_escape_as_top_priority(self) -> None:
         """生成された system prompt の【行動ルール】段に「最優先の目的は『脱出』」が無い。"""
         prompt = build_world_system_prompt(
-            relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
@@ -60,8 +58,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
         hardcoded を外しても、grounding に関する規範は別の行で保たれていることを保証する。
         """
         prompt = build_world_system_prompt(
-            relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,
@@ -72,8 +68,6 @@ class TestSystemPromptNoHardcodedEscapeObjective:
     def test_reason_first_prompt_assigns_subjective_fields_to_assess_situation(self) -> None:
         """reason_first では主観入力を書く先を行動 tool ではなく assess_situation と説明する。"""
         prompt = build_world_system_prompt(
-            relevant_memories_shown=True,
-            active_recall_offered=True,
             world_title="テスト世界",
             persona_block="(空)",
             safe_intro=_DEFAULT_SAFE_INTRO,

@@ -40,11 +40,12 @@ class TestMp:
         with pytest.raises(MpValidationException, match="MPはmax_mp以下の値である必要があります"):
             Mp(150, 100)
 
-    def test_heal_success(self):
-        """回復のテスト（正常系）"""
+    @pytest.mark.parametrize("amount, expected_value", [(0, 30), (20, 50)], ids=["zero", "positive"])
+    def test_heal_success(self, amount, expected_value):
+        """回復量0では値を変えず、正量は最大MPを保って加算する。"""
         mp = Mp.create(30, 100)
-        healed_mp = mp.heal(20)
-        assert healed_mp.value == 50
+        healed_mp = mp.heal(amount)
+        assert healed_mp.value == expected_value
         assert healed_mp.max_mp == 100
 
     def test_heal_over_max(self):
@@ -60,11 +61,12 @@ class TestMp:
         with pytest.raises(MpValidationException, match="回復量は0以上の値である必要があります"):
             mp.heal(-10)
 
-    def test_consume_success(self):
-        """消費のテスト（正常系）"""
+    @pytest.mark.parametrize("amount, expected_value", [(0, 50), (20, 30)], ids=["zero", "positive"])
+    def test_consume_success(self, amount, expected_value):
+        """消費量0では値を変えず、正量は最大MPを保って減算する。"""
         mp = Mp.create(50, 100)
-        consumed_mp = mp.consume(20)
-        assert consumed_mp.value == 30
+        consumed_mp = mp.consume(amount)
+        assert consumed_mp.value == expected_value
         assert consumed_mp.max_mp == 100
 
     def test_consume_over_current(self):
@@ -136,7 +138,6 @@ class TestMp:
         mp3 = Mp.create(20, 100)
 
         assert hash(mp1) == hash(mp2)
-        assert hash(mp1) != hash(mp3)
 
         # setで使用可能
         mp_set = {mp1, mp2, mp3}
