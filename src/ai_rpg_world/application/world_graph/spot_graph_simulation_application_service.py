@@ -123,13 +123,11 @@ class SpotGraphSimulationApplicationService:
             # 旧順序 (passage → object) では、object state の変化 (例:
             # 「制御室から人が居なくなって power_on=false」) が、同 tick の
             # passage 評価に反映されず 1 tick の grace period を生んでいた。
-            # この timing exploit は relay_puzzle で operator が「黙って
-            # 制御室を離れて vault に駆け込む」抜け道として悪用されうる。
+            # この timing exploit は relay_puzzle (#1631 で退役) で operator が
+            # 「黙って制御室を離れて vault に駆け込む」抜け道として悪用されえた。
             # 新順序 (object → passage) では、object state 変化が即 passage
             # 評価に反映され、因果として自然な「object が変わったら passage
             # が連動する」挙動になる。
-            # latch mechanism (Step 2) が正規の relay 解法を提供するので、
-            # この順序変更で scenario は依然解ける。
             self._run_stage("reactive_object_state", self._reactive_object_state_stage, current_tick)
         if self._reactive_binding_stage is not None:
             # scenario_event の flag 更新 + reactive_object の object state
