@@ -42,6 +42,7 @@ def test_identity_is_read_only_and_survives_copy_and_deletion(kind: str) -> None
     assert clone.identity_token == token
     with pytest.raises(AttributeError):
         clone.identity_token = "f" * 32
+    assert clone.identity_token == token
 
 
 @pytest.mark.parametrize("token", ["", "post_1", "F" * 32, "0" * 32])
@@ -60,12 +61,16 @@ def test_user_identity_does_not_depend_on_name_or_integer() -> None:
     second = UserAggregate.create_new_user(UserId(1), "hero", "勇者", "")
     assert first.identity_token != second.identity_token
     assert deepcopy(first).identity_token == first.identity_token
+    original_token = first.identity_token
     with pytest.raises(AttributeError):
         first.identity_token = second.identity_token
+    assert first.identity_token == original_token
 
 
 def test_identity_value_object_is_immutable() -> None:
     """識別子の値オブジェクトは値の書き換えを許さない。"""
     token = SnsIdentityToken()
+    original_value = token.value
     with pytest.raises(AttributeError):
         token.value = SnsIdentityToken().value
+    assert token.value == original_value
