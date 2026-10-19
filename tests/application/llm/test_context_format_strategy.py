@@ -1,12 +1,8 @@
 """SectionBasedContextFormatStrategy のテスト。
 
-Issue #356 後続 Phase 0: section 並び順を ``stable_to_volatile`` (default) と
-``legacy`` の 2 モードに切替可能化。
-
-- ``stable_to_volatile`` (default): objective → L5 → L4 → recent_events →
-  prediction → learned → memories → memos → current_state。更新頻度の高い
-  想起群を出来事の後ろへ置き、「今ここ」を末尾に置く
-- ``legacy``: Issue #227 chore β 時代の旧順序。A/B 検証用に保持
+Issue #356 後続 Phase 0: section の並びは objective → L5 → L4 → recent_events →
+learned → memories → memos → current_state。更新頻度の高い想起群を出来事の
+後ろへ置き、「今ここ」を末尾に置く。
 """
 
 import logging
@@ -14,25 +10,16 @@ import logging
 import pytest
 
 from ai_rpg_world.application.llm.services.context_format_strategy import (
-    ENV_PROMPT_SECTION_ORDER,
-    SECTION_ORDER_LEGACY,
-    SECTION_ORDER_STABLE_TO_VOLATILE,
     SectionBasedContextFormatStrategy,
-    build_section_format_strategy_from_env,
-    resolve_section_order_from_env,
 )
 
 
 class TestSectionBasedContextFormatStrategyDefault:
-    """default = stable_to_volatile order での挙動。"""
+    """section の並びと、空の section の扱い。"""
 
     @pytest.fixture
     def strategy(self):
         return SectionBasedContextFormatStrategy()
-
-    def test_default_section_order_stable_volatile(self, strategy):
-        """constructor 引数なしなら ``stable_to_volatile`` モード。"""
-        assert strategy._section_order == SECTION_ORDER_STABLE_TO_VOLATILE
 
     def test_documented_behavior(self, strategy):
         """current_state と recent_events は空でも placeholder で必ず出る。"""
@@ -46,20 +33,15 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "- イベント1" in text
 
     def test_empty_section(self, strategy):
-        """memo / 記憶 / 目的 / 物証 は空なら section ごと省略される。
-
-        Issue #526 後続: 「受動想起では何も浮かばなかった」の sentinel text 注入は
-        prompt_builder._run_passive_recall 側の責務。formatter は受け取った
-        relevant_memories_text を信じて、空なら従来通り section を省略する。"""
+        """メモ帳 / 目的 / 物証 は空なら section ごと省略され、受動想起の【関連する記憶】は出ない。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
-            relevant_memories_text="",
-            active_memos_text="",
+            being_memo_text="",
             objective_text="",
             inventory_text="",
         )
-        assert "【進行中のメモ】" not in text
+        assert "【メモ】" not in text
         assert "【関連する記憶】" not in text
         assert "【現在の目的】" not in text
         assert "【所持・判明した物証】" not in text
@@ -82,20 +64,18 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(
             current_state_text="現在地: x",
             recent_events_text="- 出来事",
-            relevant_memories_text="記憶a",
-            active_memos_text="メモb",
+            being_memo_text="メモb",
             objective_text="目的c",
             inventory_text="物証d",
         )
         idx_current_state = text.index("【現在地と周囲】")
-        for other in ["【現在の目的】", "【進行中のメモ】",
-                       "【関連する記憶】", "【直近の出来事】"]:
+        for other in ["【現在の目的】", "【メモ】", "【直近の出来事】"]:
             assert text.index(other) < idx_current_state, (
                 f"{other} は【現在地と周囲】より前に出るべき"
             )
 
     def test_stable_volatile_order(self, strategy):
-        """objective → recent_events → memories → memos → current_state。
+        """objective → recent_events → memos → current_state。
 
         recent_events は head 安定 (= append-only) なので静的群の直後に置く。
         所持品は current_state に一本化され、この独立sectionには出さない。
@@ -103,46 +83,18 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(
             current_state_text="現在地",
             recent_events_text="出来事",
-            relevant_memories_text="記憶",
-            active_memos_text="メモ",
+            being_memo_text="メモ",
             objective_text="目的",
             inventory_text="物証",
         )
         idx = {
             "obj":      text.index("【現在の目的】"),
             "events":   text.index("【直近の出来事】"),
-            "memos":    text.index("【進行中のメモ】"),
-            "mem":      text.index("【関連する記憶】"),
+            "memos":    text.index("【メモ】"),
             "current":  text.index("【現在地と周囲】"),
         }
         assert "【所持・判明した物証】" not in text
-        assert idx["obj"] < idx["events"] < idx["mem"] < idx["memos"] < idx["current"]
-
-    def test_pending_predictions_follow_recent_events_rendered(self, strategy):
-        """U10a (予測誤差統一設計 部品6): 【保留中の予測】は【直近の出来事】の後、【関連する学び】と【関連する記憶】の前に置く。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-            relevant_memories_text="記憶",
-            pending_predictions_text="・夕方に木の下でカイトと会う",
-            learned_text="- 扉は重い",
-        )
-        assert "【保留中の予測】" in text
-        idx_events = text.index("【直近の出来事】")
-        idx_pending = text.index("【保留中の予測】")
-        idx_learned = text.index("【関連する学び】")
-        idx_mem = text.index("【関連する記憶】")
-        assert idx_events < idx_pending < idx_learned < idx_mem
-
-    def test_returns_empty_when_pending_predictions_section(self, strategy):
-        """再浮上する pending prediction が無ければ (空文字)、【保留中の予測】
-
-        section 自体が出ない (= 導入前と byte 一致)。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-        )
-        assert "【保留中の予測】" not in text
+        assert idx["obj"] < idx["events"] < idx["memos"] < idx["current"]
 
     def test_duplicate_inventory_section_is_omitted(self, strategy):
         """旧 inventory section は省略し、現在地と周囲にある所持品だけを残す。"""
@@ -150,7 +102,6 @@ class TestSectionBasedContextFormatStrategyDefault:
             current_state_text='所持アイテム:\n  - "鍵" x2 (道具)',
             recent_events_text="y",
             inventory_text="- 鍵\n- 鍵",
-            relevant_memories_text="思い出",
         )
         assert "【所持・判明した物証】" not in text
         assert '  - "鍵" x2 (道具)' in text
@@ -166,49 +117,20 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(current_state_text="a", recent_events_text="")
         assert "（なし）" in text
 
-    def test_learned_text_joins_recall_sections_after_recent_events(self, strategy):
-        """【関連する学び】は直近の出来事の後、関連する記憶とメモの前に置かれる。"""
+    def test_mid_summary_precedes_recent_events(self, strategy):
+        """【最近の流れ】は直近の出来事より前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
-            learned_text="- タカシは信頼できる",
-            active_memos_text="メモ",
-            relevant_memories_text="- 思い出",
-        )
-        assert "【関連する学び】" in text
-        assert "- タカシは信頼できる" in text
-        idx_prediction = text.index("【直近の出来事】")
-        idx_learned = text.index("【関連する学び】")
-        idx_memory = text.index("【関連する記憶】")
-        idx_memos = text.index("【進行中のメモ】")
-        assert idx_prediction < idx_learned < idx_memory < idx_memos
-
-    def test_returns_empty_when_learned_text_section(self, strategy):
-        """空文字なら section ヘッダも出ない。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            learned_text="",
-        )
-        assert "【関連する学び】" not in text
-
-    def test_mid_summary_precedes_learned_recall_section(self, strategy):
-        """【最近の流れ】は直近の出来事より前、学びは出来事より後に置かれる。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            objective_text="目的",
-            learned_text="- 学び",
             mid_summary_text="[最新] 動き",
-            active_memos_text="メモ",
+            being_memo_text="メモ",
         )
         assert "【最近の流れ】" in text
         assert "[最新] 動き" in text
         idx_mid = text.index("【最近の流れ】")
         idx_events = text.index("【直近の出来事】")
-        idx_learned = text.index("【関連する学び】")
-        assert idx_mid < idx_events < idx_learned
+        assert idx_mid < idx_events
 
     def test_returns_empty_when_mid_summary_text_section(self, strategy):
         """midsummarytext が空なら section ごと省略。"""
@@ -219,24 +141,22 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" not in text
 
-    def test_long_summary_text_precedes_mid_summary_and_learned(self, strategy):
-        """【自己像と世界観】は最近の流れより前、学びは出来事より後に置かれる。"""
+    def test_long_summary_text_precedes_mid_summary(self, strategy):
+        """【自己像と世界観】は目的の後、最近の流れより前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
             long_summary_text="私について: 寡黙な漁師",
-            learned_text="- タカシは信頼できる",
             mid_summary_text="[最新] 動き",
         )
         assert "【自己像と世界観】" in text
         assert "私について: 寡黙な漁師" in text
         idx_obj = text.index("【現在の目的】")
         idx_long = text.index("【自己像と世界観】")
-        idx_learned = text.index("【関連する学び】")
         idx_mid = text.index("【最近の流れ】")
         idx_events = text.index("【直近の出来事】")
-        assert idx_obj < idx_long < idx_mid < idx_events < idx_learned
+        assert idx_obj < idx_long < idx_mid < idx_events
 
     def test_known_people_follow_objective_and_precede_self_image(self, strategy):
         """【知っている人】は【現在の目的】の直後、【自己像と世界観】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
@@ -283,107 +203,8 @@ class TestSectionBasedContextFormatStrategyDefault:
             )
 
 
-class TestSectionBasedContextFormatStrategyLegacyMode:
-    """legacy order (Issue #227 chore β 時代の旧順序) の挙動。A/B 検証用。"""
-
-    @pytest.fixture
-    def strategy(self):
-        return SectionBasedContextFormatStrategy(section_order=SECTION_ORDER_LEGACY)
-
-    def test_legacy_order(self, strategy):
-        """legacy は全 section を旧順序のまま並べ、A/B 比較の基準を保つ。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-            relevant_memories_text="記憶",
-            active_memos_text="メモ",
-            objective_text="目的",
-            inventory_text="物証",
-            learned_text="学び",
-            mid_summary_text="最近の流れ",
-            long_summary_text="自己像",
-            pending_predictions_text="保留中の予測",
-        )
-        idx = {
-            "obj":      text.index("【現在の目的】"),
-            "l5":       text.index("【自己像と世界観】"),
-            "learned":  text.index("【関連する学び】"),
-            "l4":       text.index("【最近の流れ】"),
-            "current":  text.index("【現在地と周囲】"),
-            "memos":    text.index("【進行中のメモ】"),
-            "pending":  text.index("【保留中の予測】"),
-            "events":   text.index("【直近の出来事】"),
-            "mem":      text.index("【関連する記憶】"),
-        }
-        assert "【所持・判明した物証】" not in text
-        assert (
-            idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
-            < idx["current"] < idx["memos"]
-            < idx["pending"] < idx["events"] < idx["mem"]
-        )
-
-    def test_legacy_known_people_follow_objective(self, strategy):
-        """legacy でも【知っている人】は【現在の目的】の直後に置く。"""
-        text = strategy.format(
-            current_state_text="現在地", recent_events_text="出来事",
-            objective_text="目的", known_people_text="- ノア",
-        )
-        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【現在地と周囲】")
-
-    def test_legacy_empty_section(self, strategy):
-        """空 section の挙動は default と同じ。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-        )
-        assert "【現在の目的】" not in text
-        assert "【進行中のメモ】" not in text
-        assert "【関連する記憶】" not in text
-        assert "【所持・判明した物証】" not in text
-        assert "【関連する学び】" not in text
-
-    def test_legacy_learned_text_keeps_the_comparison_order(self, strategy):
-        """legacy の学びは比較対象の旧仕様どおり目的の後、現在地より前に残る。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            objective_text="目的",
-            learned_text="- タカシは信頼できる",
-        )
-        idx_objective = text.index("【現在の目的】")
-        idx_learned = text.index("【関連する学び】")
-        idx_current = text.index("【現在地と周囲】")
-        assert idx_objective < idx_learned < idx_current
-
-    def test_legacy_pending_predictions_precede_recent_events(self, strategy):
-        """legacy 順序でも【保留中の予測】は【進行中のメモ】の後、【直近の出来事】の直前に置く。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-            active_memos_text="メモ",
-            pending_predictions_text="・夕方に木の下でカイトと会う",
-        )
-        idx_memos = text.index("【進行中のメモ】")
-        idx_pending = text.index("【保留中の予測】")
-        idx_events = text.index("【直近の出来事】")
-        assert idx_memos < idx_pending < idx_events
-
-    def test_returns_empty_when_legacy_pending_predictions(self, strategy):
-        """legacy でも pending predictions が空なら省略される。"""
-        text = strategy.format(
-            current_state_text="現在地",
-            recent_events_text="出来事",
-        )
-        assert "【保留中の予測】" not in text
-
-
 class TestSectionBasedContextFormatStrategyValidation:
     """constructor / format の入力検証。"""
-
-    def test_unknown_section_order_value_error(self):
-        """section_order に未定義の文字列を渡すと ValueError。"""
-        with pytest.raises(ValueError, match="section_order must be one of"):
-            SectionBasedContextFormatStrategy(section_order="random")
 
     def test_non_string_current_state_text_raises_type_error(self):
         """current_state_text が str でないとき TypeError を投げる。"""
@@ -401,16 +222,6 @@ class TestSectionBasedContextFormatStrategyValidation:
             strategy.format(
                 current_state_text="",
                 recent_events_text=None,  # type: ignore[arg-type]
-            )
-
-    def test_non_string_relevant_memories_text_raises_type_error(self):
-        """relevant_memories_text が str でないとき TypeError を投げる。"""
-        strategy = SectionBasedContextFormatStrategy()
-        with pytest.raises(TypeError, match="relevant_memories_text must be str"):
-            strategy.format(
-                current_state_text="",
-                recent_events_text="",
-                relevant_memories_text=[],  # type: ignore[arg-type]
             )
 
     def test_non_string_objective_text_raises_type_error(self):
@@ -432,69 +243,3 @@ class TestSectionBasedContextFormatStrategyValidation:
                 recent_events_text="",
                 inventory_text=None,  # type: ignore[arg-type]
             )
-
-    def test_non_string_learned_text_raises_type_error(self):
-        """learned_text が str でないとき TypeError を投げる (Phase 1c)。"""
-        strategy = SectionBasedContextFormatStrategy()
-        with pytest.raises(TypeError, match="learned_text must be str"):
-            strategy.format(
-                current_state_text="",
-                recent_events_text="",
-                learned_text=[],  # type: ignore[arg-type]
-            )
-
-class TestResolveSectionOrderFromEnv:
-    """``PROMPT_SECTION_ORDER`` env var 解決。実験スクリプトの A/B 用。"""
-
-    def test_env_unset_default(self):
-        """env を渡さなければ default (stable_to_volatile)。"""
-        assert resolve_section_order_from_env(env={}) == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_env_empty_string_default(self):
-        """値があっても空文字なら default 扱い。"""
-        assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: ""}) == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_env_around_blank_default(self):
-        """空白のみも default 扱い (strip)。"""
-        assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "   "}) == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_env_stable_volatile(self):
-        """有効値 ``stable_to_volatile`` がそのまま返る。"""
-        v = resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "stable_to_volatile"})
-        assert v == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_env_legacy(self):
-        """有効値 ``legacy`` がそのまま返る。"""
-        assert resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "legacy"}) == SECTION_ORDER_LEGACY
-
-    def test_unknown_raises_value_error(self):
-        """typo (``stable_to_volatil`` 等) で silent fallback せず即落とす (PR #434)。
-
-        PR #433 経緯: ``rolling`` のような短縮形が silent fallback で sliding_window
-        になり、実験前提を壊した事例があった。同じ silent failure を未然に防ぐ。
-        """
-        with pytest.raises(ValueError) as exc_info:
-            resolve_section_order_from_env(env={ENV_PROMPT_SECTION_ORDER: "stable_to_volatil"})
-        msg = str(exc_info.value)
-        assert "PROMPT_SECTION_ORDER" in msg
-        assert "stable_to_volatil" in msg  # bad value
-        # 正しい値リストがメッセージに含まれる
-        assert "stable_to_volatile" in msg
-        assert "legacy" in msg
-
-
-class TestBuildSectionFormatStrategyFromEnv:
-    """env 由来で strategy を構築するファクトリ。wiring から呼ばれる。"""
-
-    def test_env_unset_default_strategy_rendered(self):
-        """env 未設定なら default の strategy が出る。"""
-        strategy = build_section_format_strategy_from_env(env={})
-        assert isinstance(strategy, SectionBasedContextFormatStrategy)
-        assert strategy.section_order == SECTION_ORDER_STABLE_TO_VOLATILE
-
-    def test_env_legacy_config_legacy_strategy_rendered(self):
-        """envlegacy を設定すると legacystrategy が出る。"""
-        strategy = build_section_format_strategy_from_env(
-            env={ENV_PROMPT_SECTION_ORDER: "legacy"}
-        )
-        assert strategy.section_order == SECTION_ORDER_LEGACY

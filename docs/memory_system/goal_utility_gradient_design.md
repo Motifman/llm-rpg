@@ -7,6 +7,10 @@
 > 位置づけ: [unified_memory_phase3_implementation_plan.md](./unified_memory_phase3_implementation_plan.md)
 > §保留 が「単調ループが R1 で再現したら設計へ」とした条件が r1_003 で発火したことへの応答。
 > ステータス: **案1 はユーザーと合意済み (2026-07-18)。案2 は併走案でレビュー中。**
+>
+> 本文が現役として書いている G4 の清算 (`goal_outcome`) と G2 の `goal_update` は、目的の見直し (`GOAL_REVISION_ENABLED`) として、記憶の部品の撤去 (#1631) の #1664 で消した。
+> 案1 と案2 が読む目的の振り返り (`GOAL_REFLECT_ENABLED`、固着パスの reflect) も、#1679 で消した。
+> 目的の保存先 (`GOAL_STORE_ENABLED`) も #1686 で消した。
 
 ## 1. 問題 — 効用勾配の不在の再現
 
