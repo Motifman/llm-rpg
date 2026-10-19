@@ -192,30 +192,23 @@ class TestTheFactoryBuildsWhatTheProfileAskedFor:
         assert "EMPTY" in str(caught.value)
 
 
-class TestTheReplyGateSettingsComeFromTheProfile:
-    """起動判定の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
+class TestTheRemovedTurnGateKeysAreRejected:
+    """消した起動判定 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
 
-    def test_the_gate_is_off_by_default(self) -> None:
-        """何も書かなければ起動判定は無効。provider を jev にしても入らない。閾値の既定は 0.15。"""
-        config = _config(TYPED_JUDGMENT_PROVIDER="jev")
-        assert config.typed_judgment_turn_gate_enabled is False
-        assert config.typed_judgment_turn_gate_skip_below == 0.15
+    黙って無視すると、起動判定を入れたつもりの run が全員を回したまま走る。
+    """
 
-    def test_a_profile_can_turn_the_gate_on(self) -> None:
-        """TYPED_JUDGMENT_TURN_GATE_ENABLED=1 と書いたときだけ起動判定が入る。"""
-        config = _config(TYPED_JUDGMENT_TURN_GATE_ENABLED="1")
-        assert config.typed_judgment_turn_gate_enabled is True
-
-    def test_a_profile_can_move_the_threshold(self) -> None:
-        """閾値は profile の値が解決済み設定に載る。"""
-        config = _config(TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW="0.2")
-        assert config.typed_judgment_turn_gate_skip_below == 0.2
-
-    def test_a_threshold_outside_the_unit_interval_is_rejected(self) -> None:
-        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
-        with pytest.raises(ValueError):
-            _config(TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW="1.5")
-
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("TYPED_JUDGMENT_TURN_GATE_ENABLED", "1"),
+            ("TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW", "0.2"),
+        ],
+    )
+    def test_a_removed_turn_gate_key_is_rejected_as_unknown(self, key: str, value: str) -> None:
+        """起動判定の有効化と閾値のキーを書くと、unknown runtime_config key の ValueError になる。"""
+        with pytest.raises(ValueError, match=f"unknown runtime_config key.*{key}"):
+            _config(**{key: value})
 
 
 class TestTheRemovedThresholdKeysAreRejected:
