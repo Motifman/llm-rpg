@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Being + memory 状態を JSON ファイルに save / load する CLI (Phase 5 / Issue #470)。
 
-run 途中再開 (mid-run resume) milestone の UX 層。``BeingPersistenceService``
-や ``BeingMemorySnapshotService`` を経由して 5 memory store + Being repository
-の状態を 1 つの JSON ファイルに往復させる。
+run 途中再開 (mid-run resume) milestone の UX 層。``BeingMemorySnapshotService``
+を経由して memory store + Being repository の状態を 1 つの JSON ファイルに
+往復させる。
 
 ## 使い方
 
@@ -12,9 +12,6 @@ run 途中再開 (mid-run resume) milestone の UX 層。``BeingPersistenceServi
 ```bash
 uv run python scripts/being_snapshot_cli.py save \
     --being-db var/game/beings.db \
-    --memory-db var/game/memory_graph.db \
-    --episode-db var/game/episodes.db \
-    --reinterpretation-db var/game/reinterpretation.db \
     --being-id being_w1_p1 \
     --output var/snapshots/being_w1_p1.json
 ```
@@ -24,26 +21,14 @@ uv run python scripts/being_snapshot_cli.py save \
 ```bash
 uv run python scripts/being_snapshot_cli.py load \
     --being-db var/restored_beings.db \
-    --memory-db var/restored_memory.db \
-    --episode-db var/restored_episodes.db \
-    --reinterpretation-db var/restored_reinterpretation.db \
     --input var/snapshots/being_w1_p1.json
 ```
-
-## DB 配線の方針
-
-memo store は in-memory のみで永続化されていないため、本 CLI は **memo は
-in-memory で初期化** する。実用上は「LLM ターン中の memo が JSON snapshot
-には残る → 復元時に in-memory に書き戻される」という流れで動く。
-
-将来 memo に SQLite 実装が入ったら本 CLI に ``--memo-db`` 引数を追加する。
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -66,24 +51,9 @@ from ai_rpg_world.application.being.capture_being_snapshot_to_file_use_case impo
 from ai_rpg_world.application.being.restore_being_snapshot_from_file_use_case import (  # noqa: E402
     RestoreBeingSnapshotFromFileUseCase,
 )
-from ai_rpg_world.application.llm.services.in_memory_memo_store import (  # noqa: E402
-    InMemoryMemoStore,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId  # noqa: E402
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import (  # noqa: E402
     SqliteBeingRepository,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (  # noqa: E402
-    SqliteEpisodicReinterpretationStore,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (  # noqa: E402
-    SqliteMemoryLinkStore,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import (  # noqa: E402
-    SqliteSemanticMemoryStore,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (  # noqa: E402
-    SqliteSubjectiveEpisodeStore,
 )
 
 logger = logging.getLogger("being_snapshot_cli")
@@ -92,56 +62,14 @@ logger = logging.getLogger("being_snapshot_cli")
 def _build_stack(
     *,
     being_db: Path,
-    memory_db: Path,
-    episode_db: Path,
-    reinterpretation_db: Path,
 ) -> tuple[
     SqliteBeingRepository,
     BeingMemorySnapshotService,
     BeingSnapshotFileGateway,
 ]:
-    """4 つの sqlite DB + in-memory memo store から本 CLI 用 stack を組む。
-
-    memo store は SQLite 実装がないため in-memory で常に新規。snapshot JSON
-    に memo が入っていれば restore で書き戻される。
-    """
+    """Being の sqlite DB と in-memory の store から本 CLI 用 stack を組む。"""
     being_repo = SqliteBeingRepository.connect(str(being_db))
 
-    semantic_conn = sqlite3.connect(str(memory_db), check_same_thread=False)
-    semantic_store = SqliteSemanticMemoryStore(semantic_conn)
-    memory_link_store = SqliteMemoryLinkStore(semantic_conn)
-    # semantic / memory_link は同一接続を共有 (= apply_memory_graph_migrations
-    # が共通の memory_graph schema を扱うため)
-
-    reinterpretation_store = SqliteEpisodicReinterpretationStore.connect(
-        str(reinterpretation_db)
-    )
-    episode_store = SqliteSubjectiveEpisodeStore.connect(str(episode_db))
-
-    # PR-G: 想起階層 (slot / afterglow / habituation) は CLI 経由の単発 dump で
-    # 使う場面が無いので、空の in-memory store を渡すだけで足る。
-    # U2: belief evidence buffer も同様に CLI では in-memory で足りる。
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        InMemoryAfterglowStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
-        InMemoryEpisodicRecallHabituationStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
-        InMemoryEpisodicRecallSlotStore,
-    )
-    from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
-        InMemoryEpisodicRecallSuccessStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-        InMemoryBeliefEvidenceBufferStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
-        InMemoryGoalJournalStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-        InMemoryPendingPredictionStore,
-    )
     from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
         InMemoryAcquaintanceRepository,
     )
@@ -154,33 +82,11 @@ def _build_stack(
     from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
         InMemoryMemoryTurnClock,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_expectation_repository import (
-        InMemoryExpectationRepository,
-    )
 
     memory_snapshot = BeingMemorySnapshotService(
-        memo_store=InMemoryMemoStore(),
-        semantic_store=semantic_store,
-        memory_link_store=memory_link_store,
-        recall_buffer_store=reinterpretation_store,
-        reinterpretation_journal_store=reinterpretation_store,
-        episodic_episode_store=episode_store,
-        recall_slot_store=InMemoryEpisodicRecallSlotStore(),
-        afterglow_store=InMemoryAfterglowStore(),
-        recall_habituation_store=InMemoryEpisodicRecallHabituationStore(),
-        belief_evidence_buffer_store=InMemoryBeliefEvidenceBufferStore(),
-        # U9b: CLI 経由の単発 dump では的中側 sidecar も in-memory で足りる
-        # (PR-G の想起階層 3 store と同じ扱い)。
-        recall_success_store=InMemoryEpisodicRecallSuccessStore(),
-        # U10a: CLI 経由の単発 dump では pending prediction も in-memory で
-        # 足りる (的中側 sidecar と同じ扱い)。
-        pending_prediction_store=InMemoryPendingPredictionStore(),
-        # P5: CLI 経由の単発 dump では goal store も in-memory で足りる。
-        goal_journal_store=InMemoryGoalJournalStore(),
         acquaintance_store=InMemoryAcquaintanceRepository(),
         being_episode_store=InMemoryEpisodeRepository(),
         being_memo_store=InMemoryMemoBookRepository(),
-        expectation_store=InMemoryExpectationRepository(),
         memory_turn_clock=InMemoryMemoryTurnClock(),
     )
     return being_repo, memory_snapshot, BeingSnapshotFileGateway()
@@ -192,24 +98,6 @@ def _add_db_args(parser: argparse.ArgumentParser) -> None:
         type=Path,
         required=True,
         help="SqliteBeingRepository の DB ファイルパス",
-    )
-    parser.add_argument(
-        "--memory-db",
-        type=Path,
-        required=True,
-        help="semantic + memory_link を保持する SQLite ファイル (memory_graph schema)",
-    )
-    parser.add_argument(
-        "--episode-db",
-        type=Path,
-        required=True,
-        help="SqliteSubjectiveEpisodeStore の DB ファイル",
-    )
-    parser.add_argument(
-        "--reinterpretation-db",
-        type=Path,
-        required=True,
-        help="SqliteEpisodicReinterpretationStore の DB ファイル (= recall_buffer + reinterpretation_journal)",
     )
 
 
@@ -227,16 +115,12 @@ def cmd_save(args: argparse.Namespace) -> int:
 
     being_repo, memory_snapshot, gateway = _build_stack(
         being_db=args.being_db,
-        memory_db=args.memory_db,
-        episode_db=args.episode_db,
-        reinterpretation_db=args.reinterpretation_db,
     )
-    # PR-G: CLI 経由の dump は RAM 上の sidecar (slot / afterglow / habituation)
-    # に到達できないので、これらは常に空のまま保存される。実験 run 中の想起
-    # 状態を取りこぼしていることがユーザに伝わるよう、明示的に warning を残す。
+    # CLI 経由の dump は RAM 上の sidecar に到達できないので、これらは常に
+    # 空のまま保存される。取りこぼしていることがユーザに伝わるよう、明示的に
+    # warning を残す。
     logger.warning(
-        "recall_slot / afterglow / habituation / expectations (with their "
-        "undelivered events and memory turn) / acquaintances / being "
+        "memory turn / acquaintances / being "
         "episodes / being memo book are in-memory sidecars and "
         "are NOT captured via this CLI. The resulting snapshot will have "
         "those layers empty."
@@ -275,9 +159,6 @@ def cmd_load(args: argparse.Namespace) -> int:
 
     being_repo, memory_snapshot, gateway = _build_stack(
         being_db=args.being_db,
-        memory_db=args.memory_db,
-        episode_db=args.episode_db,
-        reinterpretation_db=args.reinterpretation_db,
     )
     use_case = RestoreBeingSnapshotFromFileUseCase(
         being_repository=being_repo,
@@ -298,11 +179,13 @@ def cmd_load(args: argparse.Namespace) -> int:
         )
         return 1
     logger.info(
-        "snapshot restored: being_id=%s input=%s version=%d memory_restored=%s",
+        "snapshot restored: being_id=%s input=%s version=%d memory_restored=%s "
+        "removed_memory_keys=%s",
         result.being_id.value,
         result.input_path,
         result.snapshot_version,
         result.memory_restored,
+        result.removed_memory_key_counts,
     )
     return 0
 

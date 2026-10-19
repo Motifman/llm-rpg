@@ -60,7 +60,7 @@ class TestStripReasonFirstActionSubjectiveSchema:
     """reason-first の行動段階では LLM に主観フィールドを書かせない。"""
 
     def _action_tool(self) -> ToolDefinitionDto:
-        return ToolDefinitionDto(name='interact', description='何かに作用する', parameters={'type': 'object', 'properties': {'object_label': {'type': 'string'}, 'inner_thought': {'type': 'string'}, 'goal_update': {'type': ['string', 'null']}, 'goal_outcome': {'type': ['string', 'null'], 'enum': ['achieved', 'abandoned', None]}}, 'required': ['object_label', 'inner_thought']}, category=ToolCategory.WORLD_ACTION)
+        return ToolDefinitionDto(name='interact', description='何かに作用する', parameters={'type': 'object', 'properties': {'object_label': {'type': 'string'}, 'inner_thought': {'type': 'string'}, 'expected_result': {'type': 'string'}}, 'required': ['object_label', 'inner_thought']}, category=ToolCategory.WORLD_ACTION)
 
     def test_removes_only_inner_thought(self) -> None:
         """reason-first action schema は step1 が所有する inner_thought だけを落とす。"""
@@ -71,8 +71,7 @@ class TestStripReasonFirstActionSubjectiveSchema:
         assert 'inner_thought' not in required
         assert 'object_label' in props
         assert 'object_label' in required
-        assert 'goal_update' in props
-        assert 'goal_outcome' in props
+        assert 'expected_result' in props
 
     def test_does_not_mutate_input_definition(self) -> None:
         """入力定義は破壊せず、legacy toolset の schema を汚さない。"""
@@ -92,63 +91,3 @@ class TestAssessSituationDefinition:
         assert definition.parameters['required'] == ['inner_thought']
         assert set(definition.parameters['properties']) == {'inner_thought'}
         assert '実行しない' in definition.description
-
-class TestWithGoalUpdateSchema:
-    """P6: with_goal_update_schema が goal_update を optional で足すこと。"""
-
-    def _world_tool(self) -> ToolDefinitionDto:
-        return ToolDefinitionDto(name='interact', description='何かに作用する', parameters={'type': 'object', 'properties': {}, 'required': []}, category=ToolCategory.WORLD_ACTION)
-
-    def _todo_tool(self) -> ToolDefinitionDto:
-        return ToolDefinitionDto(name='todo_add', description='メモ追加', parameters={'type': 'object', 'properties': {}, 'required': []}, category=ToolCategory.WORLD_ACTION)
-
-    def test_goal_update_added_to_properties_not_required(self) -> None:
-        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_update_schema
-        decorated = with_goal_update_schema(self._world_tool())
-        assert 'goal_update' in decorated.parameters['properties']
-        assert 'goal_update' not in decorated.parameters['required']
-
-    def test_description_contrasts_with_the_next_move_without_naming_an_argument(self) -> None:
-        """高度の防衛は説明文。次の 1 手の意図との対比を載せるが、goal_update を足す tool が受け取らない intention 引数は指さない。"""
-        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_update_schema
-        decorated = with_goal_update_schema(self._world_tool())
-        desc = decorated.parameters['properties']['goal_update']['description']
-        assert '次の 1 手の意図' in desc
-        assert 'intention' not in desc
-        assert '数日スケール' in desc
-        assert '続けるなら書かない' in desc
-
-    def test_not_added_to_non_subjective_tool(self) -> None:
-        """todo 系 (非 subjective action) には足さない。"""
-        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_update_schema
-        decorated = with_goal_update_schema(self._todo_tool())
-        assert 'goal_update' not in decorated.parameters.get('properties', {})
-
-class TestWithGoalOutcomeSchema:
-    """P8: with_goal_outcome_schema が goal_outcome を nullable enum で足すこと。"""
-
-    def _world_tool(self) -> ToolDefinitionDto:
-        return ToolDefinitionDto(name='interact', description='何かに作用する', parameters={'type': 'object', 'properties': {}, 'required': []}, category=ToolCategory.WORLD_ACTION)
-
-    def _todo_tool(self) -> ToolDefinitionDto:
-        return ToolDefinitionDto(name='todo_add', description='メモ追加', parameters={'type': 'object', 'properties': {}, 'required': []}, category=ToolCategory.WORLD_ACTION)
-
-    def test_goal_outcome_added_as_nullable_enum_not_required(self) -> None:
-        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_outcome_schema
-        decorated = with_goal_outcome_schema(self._world_tool())
-        prop = decorated.parameters['properties']['goal_outcome']
-        assert prop['enum'] == ['achieved', 'abandoned', None]
-        assert 'null' in prop['type']
-        assert 'goal_outcome' not in decorated.parameters['required']
-
-    def test_description_distinguishes_close_from_rephrase(self) -> None:
-        """説明文が「閉じる (清算)」と「言い直し (書かない)」を区別する。"""
-        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_outcome_schema
-        desc = with_goal_outcome_schema(self._world_tool()).parameters['properties']['goal_outcome']['description']
-        assert 'achieved' in desc and 'abandoned' in desc
-        assert '言い直し' in desc
-
-    def test_not_added_to_non_subjective_tool(self) -> None:
-        from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import with_goal_outcome_schema
-        decorated = with_goal_outcome_schema(self._todo_tool())
-        assert 'goal_outcome' not in decorated.parameters.get('properties', {})

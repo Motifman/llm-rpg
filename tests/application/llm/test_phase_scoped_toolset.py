@@ -146,19 +146,17 @@ class TestCommonToolsComeFirst:
         )
 
     def test_the_shared_prefix_is_not_trivially_short(self, runtime) -> None:
-        """共通の先頭が 1 個や 2 個ではない。
+        """会議で落ちる tool より前の共通の先頭は wait / speak / listen の 3 個で、1 個や 2 個に縮んでいない。
 
         並べ替えが崩れて共通部分がほぼ無くなっても、上のテストは
-        「先頭 0 個が一致」で通ってしまう。実際に意味のある長さを要求する。
+        「先頭 0 個が一致」で通ってしまう。実際の並びを要求する。
         """
         free_roam = _tool_names(runtime)
         first_dropped = next(
             i for i, name in enumerate(free_roam) if name in _FREE_ROAM_ONLY
         )
 
-        assert first_dropped >= len(_MEETING_ALLOWED), (
-            f"共通の先頭が短すぎる: {free_roam[:first_dropped]}"
-        )
+        assert free_roam[:first_dropped] == ["wait", "speak", "listen"]
 
 
 class TestPrefixIsStableWithinAPhase:

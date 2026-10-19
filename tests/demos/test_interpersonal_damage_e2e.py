@@ -29,7 +29,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -51,9 +51,9 @@ _STRIKE_DEF = {
 @pytest.fixture()
 def runtime(tmp_path: Path):
     """殴る行為を宣言し、二人を同じスポットに揃えた runtime。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     scenario["player_interactions"] = [_STRIKE_DEF]
-    path = tmp_path / "relay_with_strike.json"
+    path = tmp_path / "library_with_strike.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     rt = create_world_runtime(path)
@@ -263,7 +263,7 @@ class TestSelfDamageIsNotSilentlyIgnored:
         受け取っておいて何も起きないのが最悪で、作者は書いたつもりのまま
         気付けない。
         """
-        scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+        scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
         scenario["player_interactions"] = [{
             "action_name": "reckless_strike",
             "display_label": "捨て身で殴る",

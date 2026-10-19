@@ -1,6 +1,6 @@
-"""players[].objective / players[].goal_locked のパース検証 (目的層 G6)。
+"""players[].objective のパース検証 (目的層 G6) と、消した goal_locked の拒否。
 
-シナリオ JSON でプレイヤーごとの初期目的と改訂可否を宣言したとき、loader が
+シナリオ JSON でプレイヤーごとの初期目的を宣言したとき、loader が
 それを PlayerSpawnConfig に正しく載せること、未指定・空文字・不正型の扱いを
 確認する。
 """
@@ -77,27 +77,14 @@ class TestPlayerObjectiveParsing:
         assert "objective" in str(exc_info.value)
 
 
-class TestPlayerGoalLockedParsing:
-    """JSON の players[].goal_locked が PlayerSpawnConfig.goal_locked に載る挙動を保証する。"""
+class TestRemovedGoalLockedIsRejected:
+    """消した players[].goal_locked を書いたシナリオが、黙って読み飛ばされずに止まることを保証する。"""
 
-    def test_goal_locked_unspecified_becomes_none(self) -> None:
-        """goal_locked を書かなければ None になり、シナリオ全体の性質からの導出を意味する。"""
-        spawn = _load_first_spawn(_scenario_with_player(_player()))
-        assert spawn.goal_locked is None
-
-    def test_goal_locked_true_is_carried_through(self) -> None:
-        """goal_locked に true を書くとそのまま True が載る。"""
-        spawn = _load_first_spawn(_scenario_with_player(_player(goal_locked=True)))
-        assert spawn.goal_locked is True
-
-    def test_goal_locked_false_is_distinguished_from_unspecified(self) -> None:
-        """goal_locked に false を書くと False が載り、未指定 (None) とは区別される。"""
-        spawn = _load_first_spawn(_scenario_with_player(_player(goal_locked=False)))
-        assert spawn.goal_locked is False
-
-    def test_goal_locked_non_boolean_raises_with_player_id(self) -> None:
-        """goal_locked に bool 以外を渡すと ValueError を投げ、対象 player id を含む。"""
+    @pytest.mark.parametrize("value", [True, False])
+    def test_goal_locked_raises_with_player_id(self, value: bool) -> None:
+        """goal_locked を書くと値にかかわらず ValueError を投げ、対象 player id と項目名を含む。"""
         with pytest.raises(ValueError) as exc_info:
-            _load_first_spawn(_scenario_with_player(_player(goal_locked="true")))
+            _load_first_spawn(_scenario_with_player(_player(goal_locked=value)))
+
         assert "p1" in str(exc_info.value)
         assert "goal_locked" in str(exc_info.value)
