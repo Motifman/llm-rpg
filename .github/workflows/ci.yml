@@ -34,7 +34,14 @@ jobs:
         #
         # 手元の既定 (pytest.ini) には入れない。1 件だけ流したいときに
         # 邪魔になり、失敗時の出力も worker 単位に散って読みにくくなる。
-        run: uv run --frozen pytest -n auto
+        run: uv run --frozen pytest -n auto --durations=50 --junitxml=junit.xml
+
+      - name: Upload junit (measurement only, #1652)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit
+          path: junit.xml
 
   lint:
     # ruff の静的検査。テストとは別 job にして、落ちたときに「テストが壊れた」
