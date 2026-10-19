@@ -14,7 +14,7 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     PlaceableComponent,
     StaticPlaceableInnerComponent,
 )
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, TriggerTypeEnum
 from ai_rpg_world.domain.world.event.map_events import (
     AreaEnteredEvent,
     AreaExitedEvent,
@@ -502,15 +502,28 @@ class TestComputeObjectTriggerEvents:
         assert triggered[0].actor_id == actor_id
         assert triggered[0].spot_id == spot_id
 
-    def test_actor_self_does_not_trigger(self, spot_id):
-        # Given: アクター自身がトリガーを持っている（同一object_id）
+    @pytest.mark.parametrize(
+        ("object_type", "component"),
+        [
+            (ObjectTypeEnum.PLAYER, None),
+            (
+                ObjectTypeEnum.SWITCH,
+                PlaceableComponent(
+                    item_spec_id=ItemSpecId(1),
+                    inner=StaticPlaceableInnerComponent(),
+                    trigger_on_step=DamageTrigger(10),
+                ),
+            ),
+        ],
+        ids=["without_component", "with_step_trigger"],
+    )
+    def test_actor_self_does_not_trigger(self, spot_id, object_type, component):
+        """移動物体自身は、踏み発動の部品があっても自分の罠を発動しない。"""
         actor_id = WorldObjectId(1)
         coord = Coordinate(2, 2, 0)
-        # アクターがトリガー付きで同じマスにいる場合、自分自身はスキップ
-        objects = {actor_id: WorldObject(actor_id, coord, ObjectTypeEnum.PLAYER)}
+        objects = {actor_id: WorldObject(actor_id, coord, object_type, component=component)}
         object_positions = {coord: [actor_id]}
 
-        # When: アクターに get_trigger_on_step は通常ないが、万一あっても自分はスキップ
         events = MapTriggerEngine.compute_object_trigger_events(
             actor_id=actor_id,
             new_coordinate=coord,
@@ -519,7 +532,6 @@ class TestComputeObjectTriggerEvents:
             spot_id=spot_id,
         )
 
-        # Then: actor_id と obj_id が同じなら continue でスキップされる
         assert len(events) == 0
 
     def test_object_without_component_skipped(self, spot_id):
@@ -668,6 +680,7 @@ class TestComputeTriggerActivationAtCoordinate:
         assert len(events) == 0
 
     def test_returns_first_matching_trigger_when_overlapping(self, spot_id):
+        """重複範囲では、渡された辞書で最初に一致する効果とその発動通知を返す。"""
         # Given: 重なった2つのトリガー
         t1 = AreaTrigger(AreaTriggerId(1), PointArea(Coordinate(1, 1, 0)), DamageTrigger(10))
         t2 = AreaTrigger(AreaTriggerId(2), PointArea(Coordinate(1, 1, 0)), WarpTrigger(SpotId(2), Coordinate(0, 0, 0)))
@@ -681,9 +694,14 @@ class TestComputeTriggerActivationAtCoordinate:
             spot_id=spot_id,
         )
 
-        # Then: 最初にマッチしたもの（dictの Iteration 順）
+        # Then: 渡された辞書の列挙順で最初に一致した範囲
         assert map_trigger is not None
         assert len(events) == 1
+        assert isinstance(map_trigger, DamageTrigger)
+        assert map_trigger.damage == 10
+        assert isinstance(events[0], AreaTriggeredEvent)
+        assert events[0].trigger_id == AreaTriggerId(1)
+        assert events[0].trigger_type == TriggerTypeEnum.DAMAGE
 
     def test_inactive_trigger_skipped(self, spot_id):
         # Given: 非アクティブトリガー
