@@ -49,11 +49,14 @@ class TestUniqueAttachedBeing:
         being = _being("ada", attached=(1, 2))
         assert unique_attached_being([being]) is being
 
-    def test_multiple_beings_raises_exception(self) -> None:
-        """2 件以上の列を渡すと BeingMultipleAttachmentException を投げる。"""
-        ada = _being("ada", attached=(1, 2))
-        ben = _being("ben", attached=(1, 2))
+    @pytest.mark.parametrize("count", [2, 3])
+    def test_multiple_beings_raises_exception(self, count: int) -> None:
+        """同じ身体に付く主体が2件でも3件でも、一意性違反として拒否する。"""
+        beings = [
+            _being(being_id, attached=(1, 2))
+            for being_id in ("ada", "ben", "cal")[:count]
+        ]
         with pytest.raises(
             BeingMultipleAttachmentException, match="multiple Beings"
         ):
-            unique_attached_being([ada, ben])
+            unique_attached_being(beings)

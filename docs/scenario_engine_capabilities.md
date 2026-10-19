@@ -76,7 +76,7 @@
 
 | # | 項目 | 判定 | 書き方の要点 | 根拠 | 制限 |
 |---|---|---|---|---|---|
-| 19 | 記憶を持ち越して何回も遊ぶ | **できる** (#1526 で追記) | 実験設定に `"snapshot_load_mode": "replay"` を書く。1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は `make experiment-resume` に前の回の `snapshots` を渡す。回の番号は前の回の resolved から数え、`run_start` に残る | `scripts/run_scenario_experiment.py` の `_resolve_replay_round`、`A/being/world_clock_restart.py`、design_decisions D1514 | 記憶に残る世界の tick の欄は 0 に置き換わり、前の回の記録どうしの前後は消える。保留中の予測は捨てる |
+| 19 | 記憶を持ち越して何回も遊ぶ | **できる** (#1526 で追記) | 実験設定に `"snapshot_load_mode": "replay"` を書く。1 回目は `SNAPSHOT_LOAD_DIR` 無し、2 回目以降は `make experiment-resume` に前の回の `snapshots` を渡す。回の番号は前の回の resolved から数え、`run_start` に残る | `scripts/run_scenario_experiment.py` の `_resolve_replay_round`、design_decisions D1514 | 記憶の欄は Being のターン数で持ち、世界の tick を持たないので、世界を tick 0 に戻しても記憶の前後はずれない |
 | 20 | 回ごとに役や初期配置を変える | **できる** (#1527 で追記) | シナリオの `round_assignment.groups` に、player と同じ数の枠 (`spawn_spot`、`initial_state`) を書く。`SCENARIO_RANDOM_SEED` と回の番号で並べ替えて割り当て、trace の `round_assignment` に残る | `L/parse_round_assignment.py`、design_decisions D1514-2 | シードが要る。並べ替えなので、回が変わっても同じ並びになることがある。枠ごとの持ち物は書けない |
 | 21 | 1 つの run の中で回を区切る | **できない** | — | ゲームが終わると run も終わる | 持ち物の回収、HP の回復、死者の復帰、tick の巻き戻しは書けない |
 
