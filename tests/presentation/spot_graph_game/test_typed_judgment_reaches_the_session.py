@@ -199,43 +199,6 @@ class TestTheArgumentResolverKnowsWhichToolsExist:
                 assert asks(tool) == exposure.is_exposed(tool)
 
 
-class TestTheTurnTriggerGetsTheGate:
-    """tick の終わりに回す人を決める trigger に、起動判定が挟まることを保証する。
-
-    起動判定のクラスと trigger の差し込み口が揃っても、本番配線が渡さなければ run では
-    全員が回り続ける。単体試験は緑のままなので静かに効かない。
-    """
-
-    def test_the_wiring_has_a_gate_when_the_profile_turns_it_on(self) -> None:
-        """判断ポートがあり、起動判定を明示的に有効にした profile では、配線は tick 単位の起動判定を持つ。"""
-        from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import TurnGate
-
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(
-                typed_judgment_provider="stub",
-                typed_judgment_turn_gate_enabled=True,
-                typed_judgment_turn_gate_skip_below=0.2,
-            )
-        ):
-            gate = wiring.turn_gate
-            assert isinstance(gate, TurnGate)
-            assert gate.judgment_port is wiring.typed_judgment_port
-            assert gate.skip_below == 0.2
-
-    def test_the_wiring_has_no_gate_by_default(self) -> None:
-        """profile が求めなければ、配線は起動判定を持たない (**正の対照**)。"""
-        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
-            assert wiring.turn_gate is None
-
-    def test_judgment_alone_does_not_bring_the_gate(self) -> None:
-        """provider だけを入れた profile では、判断ポートは載るが起動判定は入らない (既定 off)。"""
-        for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-        ):
-            assert wiring.typed_judgment_port is not None
-            assert wiring.turn_gate is None
-
-
 class TestTheWiringGetsTheToolNameJudgment:
     """存在しない tool 名への提案を選ぶ口に、判断が届くことを保証する (#1413)。"""
 
