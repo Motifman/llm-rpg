@@ -16,7 +16,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _session(runtime: Any, directory: Path) -> ExperimentSnapshotSession:
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     return ExperimentSnapshotSession(
         wiring_result=_wiring_stub_from_world_runtime(runtime),
         snapshot_dir=directory,

@@ -25,15 +25,13 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.being.domain.memo_book import MemoBook, MemoKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
-)
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.hp import Hp
@@ -51,17 +49,12 @@ _SCENARIO_NAME = "forbidden_library_demo"
 
 def _snapshot_runtime_config() -> Any:
     """本命観察 run 周辺で使う per-Being store を実体化する設定を返す。"""
-    return runtime_config(
-        episodic_enabled=True,
-        semantic_passive_top_k=3,
-        belief_consolidation_enabled=True,
-        belief_evidence_enabled=True,
-    )
+    return runtime_config()
 
 
 def _create_runtime() -> Any:
     runtime = create_world_runtime(_SCENARIO_PATH, config=_snapshot_runtime_config())
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     for player_id in runtime.get_player_ids():
         runtime._aux_being_provisioning.ensure_attached(player_id)
     return runtime
@@ -176,27 +169,16 @@ def _populate_runtime_state(runtime: Any) -> None:
     )
     runtime._player_acquaintances.record_meeting(player_id, "リン")
 
-    runtime._todo_store.add_by_being(
+    runtime._being_memo_store.save(
         being_id,
-        "再開後も忘れてはいけない作業",
-        current_tick=37,
-    )
-    runtime._episodic_stack.semantic_memory_store.add_by_being(
-        being_id,
-        SemanticMemoryEntry(
-            entry_id="sem-runtime-1",
-            player_id=player_id.value, being_id=BeingId(f"being_w1_p{player_id.value}"),
-            text="古い棚には鍵が隠れていることがある",
-            evidence_episode_ids=("ep-runtime-1",),
-            confidence=0.72,
-            created_at=_NOW,
-            importance_score=8,
-            tags=("library",),
+        MemoBook.empty().add(
+            memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+            kind=MemoKind.TODO,
+            text="再開後も忘れてはいけない作業",
+            provenance=None,
+            turn=2,
+            environment_name="島",
         ),
-    )
-    runtime._episodic_stack.semantic_memory_store.register_cluster_signature_if_new_by_being(
-        being_id,
-        "spot:ancient_archive|tool:interact",
     )
 
 
@@ -226,8 +208,7 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
 
     world 側は tick / 位置 / HP / needs / inventory / item_instance /
     spot_interior / sliding_window / action_result / encounter を、Being 側は
-    semantic / goal を含む snapshot payload
-    一式を照合する。
+    メモ帳 / 知り合いを含む snapshot payload 一式を照合する。
     """
     source_runtime = _create_runtime()
     _populate_runtime_state(source_runtime)
@@ -302,7 +283,7 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
     )
 
     being_payload = expected_memory["being_w1_p1"]
-    assert being_payload["memo"][0]["content"] == "再開後も忘れてはいけない作業"
-    assert being_payload["semantic_entries"][0]["entry_id"] == "sem-runtime-1"
+    assert being_payload["being_memo_book"][0]["text"] == "再開後も忘れてはいけない作業"
+    assert "memo" not in being_payload
     assert "pending_predictions" not in being_payload
     assert [a["name"] for a in being_payload["acquaintances"]] == ["リン"]

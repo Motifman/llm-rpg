@@ -384,7 +384,6 @@ class SpotGraphCurrentStateBuilder:
         areas: Sequence[Any] = (),
         distant_cues: Sequence[Any] = (),
         distant_view_service: DistantViewService | None = None,
-        distant_view_trace_enabled: bool = False,
         trace_recorder_provider: Callable[[], Any] | None = None,
         visible_monster_observer: VisibleMonsterObserver | None = None,
         # 倒れている人を見たことを runtime へ通知する hook。初回判定と観測の
@@ -449,7 +448,6 @@ class SpotGraphCurrentStateBuilder:
         self._areas = tuple(areas)
         self._distant_cues = tuple(distant_cues)
         self._distant_view_service = distant_view_service or DistantViewService()
-        self._distant_view_trace_enabled = distant_view_trace_enabled
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
         self._fallen_body_observer = fallen_body_observer
@@ -923,9 +921,7 @@ class SpotGraphCurrentStateBuilder:
         current_area_id: str | None,
         result: DistantViewResult,
     ) -> None:
-        """遠景の現在状態系 trace を明示フラグ有効時だけ記録する。"""
-        if not self._distant_view_trace_enabled:
-            return
+        """遠景の現在状態系 trace を記録する。"""
         if self._trace_recorder_provider is None:
             return
         recorder = self._trace_recorder_provider()
@@ -1543,14 +1539,10 @@ class SpotGraphCurrentStateBuilder:
         # ``snapshot_needs_for_delta_after_prompt_build`` で本 build の末尾に
         # 呼ぶ (= 「prompt build 完了直前」を次回 baseline にする)。
         need_lines: tuple[str, ...] = ()
-        need_states: tuple[Any, ...] = ()
         hp_line: str = ""
         if player is not None:
             deltas = player.compute_need_deltas()
             need_lines = player.needs.describe_all_with_deltas(deltas)
-            # 表示文とは別に欲求そのものを渡す。想起の検索語は値から決める
-            # (以前は need_lines を文字列として読み直していた / 系統2)。
-            need_states = tuple(player.needs)
             # HP を need と同じ「身体の状態」section に、値 + 前 turn からの
             # 増減つきで出す。baseline の snapshot は need と同じく prompt build
             # 完了直前 (runtime_manager) で snapshot_hp_for_delta() を呼ぶ。
@@ -1607,7 +1599,6 @@ class SpotGraphCurrentStateBuilder:
             ground_items=tuple(ground_items),
             time_of_day=self._build_time_of_day_entry(),
             need_lines=need_lines,
-            need_states=need_states,
             hp_line=hp_line,
             ground_item_lines=ground_lines,
             connection_lines=connection_lines,
