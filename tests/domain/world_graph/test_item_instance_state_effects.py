@@ -1,14 +1,4 @@
-"""Phase 4-A PR 2: item instance state を操作する effect / precondition のテスト。
-
-新規追加:
-- `CHANGE_ITEM_INSTANCE_STATE` effect — acting item instance の state を merge
-- `RECORD_ITEM_INSTANCE_STATE_TICK` effect — current_tick.value を state[key] に書く
-- `ITEM_INSTANCE_STATE` precondition — acting item instance の state を判定
-
-acting_item_aggregate が渡されないとき silent failure を避けるため:
-- effect 系は warning ログを出して no-op
-- precondition は False を返して interaction を拒否
-"""
+"""実体ごとの状態効果・前提条件を、使う側と使われる側の公開入口で検証する。"""
 
 from __future__ import annotations
 
@@ -24,278 +14,343 @@ from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
-from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
-from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
-    InteractionConditionTypeEnum,
-)
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
-    InteractionEffectTypeEnum,
-)
-from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
-from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
-    SpotInteractionService,
-)
-from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
-    WorldGraphEffectService,
-)
-from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
-    InteractionCondition,
-)
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum as Condition
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum as Effect
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import WorldGraphEffectService
+from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
-    InteractionEffect,
-)
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 
 
-def _empty_interior() -> SpotInterior:
-    return SpotInterior((), (), (), ())
-
-
-def _lantern_aggregate(initial_state: dict | None = None) -> ItemAggregate:
+def _item(instance_id: int, state: dict) -> ItemAggregate:
     spec = ItemSpec(
         item_spec_id=ItemSpecId(7),
-        name="Lantern",
+        name="道具",
         item_type=ItemType.MATERIAL,
         rarity=Rarity.COMMON,
-        description="A lantern.",
+        description="状態を持つ道具",
         max_stack_size=MaxStackSize(64),
     )
     return ItemAggregate.create(
-        item_instance_id=ItemInstanceId(101),
+        item_instance_id=ItemInstanceId(instance_id),
         item_spec=spec,
         quantity=1,
-        state=initial_state,
+        state=state,
     )
 
 
-class TestChangeItemInstanceStateEffect:
-    """CHANGE_ITEM_INSTANCE_STATE effect の挙動。"""
+def _pair() -> dict[str, ItemAggregate]:
+    return {
+        "acting": _item(101, {"lit": False, "fuel": 5}),
+        "target": _item(102, {"lit": False, "fuel": 9}),
+    }
 
-    def test_merges_state_updates_into_acting_item(self) -> None:
-        """state_updates が acting_item_aggregate にマージされる。"""
-        svc = WorldGraphEffectService()
-        agg = _lantern_aggregate(initial_state={"lit": False, "fuel": 5})
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
-            parameters={"state_updates": {"lit": True}},
+
+def _item_arguments(items: dict[str, ItemAggregate]) -> dict:
+    return {f"{role}_item_aggregate": item for role, item in items.items()}
+
+
+def _states(items: dict[str, ItemAggregate]) -> dict:
+    return {role: dict(item.state) for role, item in items.items()}
+
+
+def _apply(effect: InteractionEffect, items: dict[str, ItemAggregate], tick=None):
+    return WorldGraphEffectService().apply_effects(
+        interior=SpotInterior((), (), (), ()),
+        acting_object=None,
+        effects=[effect],
+        world_flags=frozenset(),
+        current_tick=tick,
+        **_item_arguments(items),
+    )
+
+
+def _assert_flags(result, expected: tuple[bool, bool]) -> None:
+    assert result.item_instance_state_changed is expected[0]
+    assert result.target_item_instance_state_changed is expected[1]
+
+
+def _interaction(*conditions: InteractionCondition) -> InteractionDef:
+    return InteractionDef(
+        action_name="use",
+        display_label="使う",
+        preconditions=conditions,
+        effects=(),
+    )
+
+
+def _assert_warning(caplog, effect_type: Effect, cause: str) -> None:
+    assert any(
+        record.levelno >= logging.WARNING and effect_type.value in record.getMessage() and cause in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.parametrize(
+    ("effect_type", "expected_states", "expected_flags"),
+    [
+        (
+            Effect.CHANGE_ITEM_INSTANCE_STATE,
+            {"acting": {"lit": True, "fuel": 5}, "target": {"lit": False, "fuel": 9}},
+            (True, False),
+        ),
+        (
+            Effect.CHANGE_TARGET_ITEM_INSTANCE_STATE,
+            {"acting": {"lit": False, "fuel": 5}, "target": {"lit": True, "fuel": 9}},
+            (False, True),
+        ),
+    ],
+    ids=["acting", "target"],
+)
+def test_merges_only_selected_item_state(effect_type, expected_states, expected_flags):
+    """選択側の指定キーだけ変え、未指定キーと反対側を残し、選択側だけ変更を通知する。"""
+    items = _pair()
+    result = _apply(
+        InteractionEffect(effect_type=effect_type, parameters={"state_updates": {"lit": True}}),
+        items,
+    )
+    assert _states(items) == expected_states
+    _assert_flags(result, expected_flags)
+
+
+@pytest.mark.parametrize(
+    ("effect_type", "missing_role", "parameters"),
+    [
+        (Effect.CHANGE_ITEM_INSTANCE_STATE, "acting", {"state_updates": {"lit": True}}),
+        (Effect.CHANGE_TARGET_ITEM_INSTANCE_STATE, "target", {"state_updates": {"lit": True}}),
+        (Effect.RECORD_ITEM_INSTANCE_STATE_TICK, "acting", {"state_key": "used_at_tick"}),
+        (Effect.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK, "target", {"state_key": "used_at_tick"}),
+    ],
+)
+def test_missing_item_warns_without_changing_other_item(effect_type, missing_role, parameters, caplog):
+    """必要実体だけ欠落すると、その効果と不足実体を警告し、反対側へ代替適用しない。"""
+    items = _pair()
+    del items[missing_role]
+    before = _states(items)
+    with caplog.at_level(logging.WARNING):
+        result = _apply(InteractionEffect(effect_type=effect_type, parameters=parameters), items, WorldTick(1))
+    assert _states(items) == before
+    _assert_flags(result, (False, False))
+    _assert_warning(caplog, effect_type, f"{missing_role}_item_aggregate")
+
+
+@pytest.mark.parametrize("effect_type", [Effect.CHANGE_ITEM_INSTANCE_STATE, Effect.CHANGE_TARGET_ITEM_INSTANCE_STATE])
+def test_invalid_state_updates_warns_without_mutation(effect_type, caplog):
+    """更新値が辞書でなければ原因を警告し、両実体の状態と両変更通知を変えない。"""
+    items = _pair()
+    before = _states(items)
+    with caplog.at_level(logging.WARNING):
+        result = _apply(
+            InteractionEffect(effect_type=effect_type, parameters={"state_updates": "lit=true"}),
+            items,
         )
-        result = svc.apply_effects(
-            interior=_empty_interior(),
+    assert _states(items) == before
+    _assert_flags(result, (False, False))
+    _assert_warning(caplog, effect_type, "state_updates")
+
+
+@pytest.mark.parametrize(
+    ("role", "effect_type", "tick", "with_other", "expected_flags"),
+    [
+        ("acting", Effect.RECORD_ITEM_INSTANCE_STATE_TICK, 42, False, (True, False)),
+        ("target", Effect.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK, 99, False, (False, True)),
+        ("acting", Effect.RECORD_ITEM_INSTANCE_STATE_TICK, 0, True, (True, False)),
+        ("target", Effect.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK, 0, True, (False, True)),
+    ],
+)
+def test_records_tick_only_on_selected_item(role, effect_type, tick, with_other, expected_flags):
+    """反対側なしでも現在時刻を記録し、両側があれば選択側だけを更新・通知する。"""
+    items = {role: _item(101, {"lit": True})}
+    if with_other:
+        other_role = "target" if role == "acting" else "acting"
+        items[other_role] = _item(102, {"untouched": "yes"})
+    expected = {role: {"lit": True, "used_at_tick": tick}}
+    if with_other:
+        expected[other_role] = {"untouched": "yes"}
+    result = _apply(
+        InteractionEffect(effect_type=effect_type, parameters={"state_key": "used_at_tick"}),
+        items,
+        WorldTick(tick),
+    )
+    assert _states(items) == expected
+    _assert_flags(result, expected_flags)
+
+
+@pytest.mark.parametrize(
+    "effect_type", [Effect.RECORD_ITEM_INSTANCE_STATE_TICK, Effect.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK]
+)
+@pytest.mark.parametrize(
+    ("parameters", "tick", "cause"),
+    [({"state_key": "used_at_tick"}, None, "current_tick"), ({}, WorldTick(1), "state_key")],
+    ids=["missing-tick", "missing-key"],
+)
+def test_invalid_tick_context_warns_without_mutation(effect_type, parameters, tick, cause, caplog):
+    """時刻か書込先だけ欠落すると対応する原因を警告し、既存状態と両変更通知を保つ。"""
+    items = _pair()
+    before = _states(items)
+    with caplog.at_level(logging.WARNING):
+        result = _apply(InteractionEffect(effect_type=effect_type, parameters=parameters), items, tick)
+    assert _states(items) == before
+    _assert_flags(result, (False, False))
+    _assert_warning(caplog, effect_type, cause)
+
+
+@pytest.mark.parametrize(
+    ("role", "condition_type", "failure_message"),
+    [
+        ("acting", Condition.ITEM_INSTANCE_STATE, "ランタンに火を点けてから使う必要がある"),
+        ("target", Condition.TARGET_ITEM_INSTANCE_STATE, "この剣は錆びていない"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("state", "required", "other_state", "expected"),
+    [
+        ({"lit": True, "fuel": 3}, {"lit": True}, None, True),
+        ({"lit": True, "fuel": 3}, {"lit": True, "fuel": 3}, {"lit": False, "fuel": 5}, True),
+        ({"lit": False, "fuel": 3}, {"lit": True, "fuel": 3}, {"lit": True, "fuel": 3}, False),
+        ({"lit": True, "fuel": 5}, {"lit": True, "fuel": 3}, {"lit": True, "fuel": 3}, False),
+    ],
+    ids=["subset-without-other", "all-match", "first-key-differs", "last-key-differs"],
+)
+def test_required_state_matches_only_selected_instance(
+    role, condition_type, failure_message, state, required, other_state, expected
+):
+    """反対側なしでも部分一致は成立し、複数キーでは選択側の全要求値と作者の拒否文を守る。"""
+    items = {role: _item(101, state)}
+    if other_state is not None:
+        items["target" if role == "acting" else "acting"] = _item(102, other_state)
+    before = _states(items)
+    condition = InteractionCondition(
+        condition_type=condition_type,
+        required_state=required,
+        failure_message=failure_message,
+    )
+    ok, message = SpotInteractionService().can_interact(
+        _interaction(condition),
+        None,
+        frozenset(),
+        frozenset(),
+        **_item_arguments(items),
+    )
+    assert ok is expected
+    assert message == (None if expected else failure_message)
+    assert _states(items) == before
+
+
+@pytest.mark.parametrize(
+    ("condition_type", "missing_role", "reason_fragment"),
+    [
+        (Condition.ITEM_INSTANCE_STATE, "acting", "acting item"),
+        (Condition.TARGET_ITEM_INSTANCE_STATE, "target", "target item"),
+    ],
+)
+def test_missing_item_condition_refuses_with_reason(condition_type, missing_role, reason_fragment):
+    """必要実体が欠けると、反対側が要求を満たしていても必要な実体を示して拒否する。"""
+    other_role = "target" if missing_role == "acting" else "acting"
+    items = {other_role: _item(101, {"lit": True})}
+    before = _states(items)
+    condition = InteractionCondition(condition_type=condition_type, required_state={"lit": True})
+    ok, message = SpotInteractionService().can_interact(
+        _interaction(condition),
+        None,
+        frozenset(),
+        frozenset(),
+        **_item_arguments(items),
+    )
+    assert ok is False
+    assert reason_fragment in (message or "")
+    assert _states(items) == before
+
+
+@pytest.mark.parametrize(
+    ("used", "rust", "expected", "message"),
+    [
+        (False, "high", True, None),
+        (True, "high", False, "道具は使用済み"),
+        (False, "low", False, "剣は修理済み"),
+        (True, "low", False, "道具は使用済み"),
+    ],
+)
+def test_each_item_condition_can_refuse_independently(used, rust, expected, message):
+    """両側が一致するときだけ成立し、どちらの単独不一致でも作者の理由で拒否する。"""
+    items = {"acting": _item(101, {"used": used}), "target": _item(102, {"rust": rust})}
+    before = _states(items)
+    interaction = _interaction(
+        InteractionCondition(
+            condition_type=Condition.ITEM_INSTANCE_STATE,
+            required_state={"used": False},
+            failure_message="道具は使用済み",
+        ),
+        InteractionCondition(
+            condition_type=Condition.TARGET_ITEM_INSTANCE_STATE,
+            required_state={"rust": "high"},
+            failure_message="剣は修理済み",
+        ),
+    )
+    ok, actual_message = SpotInteractionService().can_interact(
+        interaction,
+        None,
+        frozenset(),
+        frozenset(),
+        **_item_arguments(items),
+    )
+    assert ok is expected
+    assert actual_message == message
+    assert _states(items) == before
+
+
+def test_apply_effects_rejects_same_instance_for_acting_and_target():
+    """同じ実体を両側へ渡すと、効果が空でも二重変更・二重保存を防ぐため即時拒否する。"""
+    item = _item(101, {"x": 1})
+    with pytest.raises(ValueError, match="must be distinct instances"):
+        WorldGraphEffectService().apply_effects(
+            interior=SpotInterior((), (), (), ()),
             acting_object=None,
-            effects=[effect],
+            effects=[],
             world_flags=frozenset(),
-            acting_item_aggregate=agg,
+            acting_item_aggregate=item,
+            target_item_aggregate=item,
         )
-        # 部分マージ: lit のみ書き換え、fuel は残る
-        assert agg.state == {"lit": True, "fuel": 5}
-        assert result.item_instance_state_changed is True
-
-    def test_no_op_and_warn_when_acting_item_is_none(self, caplog) -> None:
-        """acting_item_aggregate を渡さない場合、警告ログを出して state を変えない。"""
-        svc = WorldGraphEffectService()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
-            parameters={"state_updates": {"lit": True}},
-        )
-        with caplog.at_level(logging.WARNING):
-            result = svc.apply_effects(
-                interior=_empty_interior(),
-                acting_object=None,
-                effects=[effect],
-                world_flags=frozenset(),
-                # acting_item_aggregate を渡さない
-            )
-        assert result.item_instance_state_changed is False
-        assert any("acting_item_aggregate" in r.message for r in caplog.records)
-
-    def test_no_op_when_state_updates_is_not_dict(self, caplog) -> None:
-        """parameters.state_updates が dict 以外なら警告 + no-op。"""
-        svc = WorldGraphEffectService()
-        agg = _lantern_aggregate(initial_state={"lit": False})
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE,
-            parameters={"state_updates": "lit=true"},  # 不正
-        )
-        with caplog.at_level(logging.WARNING):
-            result = svc.apply_effects(
-                interior=_empty_interior(),
-                acting_object=None,
-                effects=[effect],
-                world_flags=frozenset(),
-                acting_item_aggregate=agg,
-            )
-        assert agg.state == {"lit": False}
-        assert result.item_instance_state_changed is False
+    assert item.state == {"x": 1}
 
 
-class TestRecordItemInstanceStateTickEffect:
-    """RECORD_ITEM_INSTANCE_STATE_TICK effect の挙動。"""
-
-    def test_writes_current_tick_into_state_key(self) -> None:
-        """current_tick.value を state[state_key] に書き込む。"""
-        svc = WorldGraphEffectService()
-        agg = _lantern_aggregate(initial_state={"lit": True})
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK,
-            parameters={"state_key": "lit_at_tick"},
+def test_can_interact_rejects_same_instance_for_acting_and_target():
+    """同じ実体を両側へ渡すと、前提条件が空でも公開条件入口で即時拒否する。"""
+    item = _item(101, {"x": 1})
+    with pytest.raises(ValueError, match="must be distinct instances"):
+        SpotInteractionService().can_interact(
+            _interaction(),
+            None,
+            frozenset(),
+            frozenset(),
+            acting_item_aggregate=item,
+            target_item_aggregate=item,
         )
-        result = svc.apply_effects(
-            interior=_empty_interior(),
-            acting_object=None,
-            effects=[effect],
-            world_flags=frozenset(),
-            current_tick=WorldTick(42),
-            acting_item_aggregate=agg,
-        )
-        assert agg.state == {"lit": True, "lit_at_tick": 42}
-        assert result.item_instance_state_changed is True
-
-    def test_no_op_when_current_tick_missing(self, caplog) -> None:
-        """current_tick が None なら警告 + no-op (silent failure 回避)。"""
-        svc = WorldGraphEffectService()
-        agg = _lantern_aggregate()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK,
-            parameters={"state_key": "lit_at_tick"},
-        )
-        with caplog.at_level(logging.WARNING):
-            svc.apply_effects(
-                interior=_empty_interior(),
-                acting_object=None,
-                effects=[effect],
-                world_flags=frozenset(),
-                acting_item_aggregate=agg,
-                # current_tick を渡さない
-            )
-        assert "lit_at_tick" not in agg.state
-
-    def test_no_op_when_state_key_missing(self, caplog) -> None:
-        """state_key が無ければ警告 + no-op。"""
-        svc = WorldGraphEffectService()
-        agg = _lantern_aggregate()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK,
-            parameters={},
-        )
-        with caplog.at_level(logging.WARNING):
-            svc.apply_effects(
-                interior=_empty_interior(),
-                acting_object=None,
-                effects=[effect],
-                world_flags=frozenset(),
-                current_tick=WorldTick(1),
-                acting_item_aggregate=agg,
-            )
-        assert agg.state == {}
-
-    def test_no_op_when_acting_item_missing(self, caplog) -> None:
-        """acting_item_aggregate が None なら警告 + no-op。"""
-        svc = WorldGraphEffectService()
-        effect = InteractionEffect(
-            effect_type=InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK,
-            parameters={"state_key": "lit_at_tick"},
-        )
-        with caplog.at_level(logging.WARNING):
-            result = svc.apply_effects(
-                interior=_empty_interior(),
-                acting_object=None,
-                effects=[effect],
-                world_flags=frozenset(),
-                current_tick=WorldTick(1),
-                # acting_item_aggregate を渡さない
-            )
-        assert result.item_instance_state_changed is False
+    assert item.state == {"x": 1}
 
 
-class TestItemInstanceStatePrecondition:
-    """ITEM_INSTANCE_STATE precondition の挙動。"""
-
-    def _switch_obj(self) -> SpotObject:
-        return SpotObject(
-            object_id=SpotObjectId.create(1),
-            name="switch",
-            description="d",
-            object_type=SpotObjectTypeEnum.OTHER,
-            state={},
-            interactions=(),
-        )
-
-    def _interaction_with(self, cond: InteractionCondition) -> InteractionDef:
-        return InteractionDef(
-            action_name="x",
-            display_label="X",
-            preconditions=(cond,),
-            effects=(),
-        )
-
-    def test_passes_when_state_matches(self) -> None:
-        """acting item の state が required_state と一致すれば成立。"""
-        svc = SpotInteractionService()
-        agg = _lantern_aggregate(initial_state={"lit": True, "fuel": 3})
-        cond = InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.ITEM_INSTANCE_STATE,
-            required_state={"lit": True},
-        )
-        ok, _ = svc.can_interact(
-            self._interaction_with(cond), self._switch_obj(),
-            owned_item_spec_ids=frozenset(),
-            world_flags=frozenset(),
-            acting_item_aggregate=agg,
-        )
-        assert ok is True
-
-    def test_fails_when_state_differs(self) -> None:
-        """acting item の state が required_state と不一致なら拒否。"""
-        svc = SpotInteractionService()
-        agg = _lantern_aggregate(initial_state={"lit": False})
-        cond = InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.ITEM_INSTANCE_STATE,
-            required_state={"lit": True},
-            failure_message="ランタンに火を点けてから使う必要がある",
-        )
-        ok, msg = svc.can_interact(
-            self._interaction_with(cond), self._switch_obj(),
-            owned_item_spec_ids=frozenset(),
-            world_flags=frozenset(),
-            acting_item_aggregate=agg,
-        )
-        assert ok is False
-        assert msg == "ランタンに火を点けてから使う必要がある"
-
-    def test_fails_when_acting_item_is_none(self) -> None:
-        """acting_item_aggregate を渡さない場合、precondition は失敗する (silent pass を避ける)。"""
-        svc = SpotInteractionService()
-        cond = InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.ITEM_INSTANCE_STATE,
-            required_state={"lit": True},
-        )
-        ok, msg = svc.can_interact(
-            self._interaction_with(cond), self._switch_obj(),
-            owned_item_spec_ids=frozenset(),
-            world_flags=frozenset(),
-            # acting_item_aggregate を渡さない
-        )
-        assert ok is False
-        assert "acting item" in (msg or "") or "use_item" in (msg or "")
-
-    def test_required_state_with_multiple_keys_all_match(self) -> None:
-        """required_state が複数キーを持つ場合、全て一致で成立。1 つでも不一致なら拒否。"""
-        svc = SpotInteractionService()
-        agg = _lantern_aggregate(initial_state={"lit": True, "fuel": 3})
-        cond_pass = InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.ITEM_INSTANCE_STATE,
-            required_state={"lit": True, "fuel": 3},
-        )
-        cond_fail = InteractionCondition(
-            condition_type=InteractionConditionTypeEnum.ITEM_INSTANCE_STATE,
-            required_state={"lit": True, "fuel": 5},
-        )
-        for cond, expected in ((cond_pass, True), (cond_fail, False)):
-            ok, _ = svc.can_interact(
-                self._interaction_with(cond), self._switch_obj(),
-                owned_item_spec_ids=frozenset(),
-                world_flags=frozenset(),
-                acting_item_aggregate=agg,
-            )
-            assert ok is expected
+def test_both_aggregates_can_be_modified_in_one_apply():
+    """一度の適用で道具を使用済み、剣を修理済みと現在時刻にし、両変更を通知する。"""
+    items = {"acting": _item(101, {"used": False}), "target": _item(102, {"rust": "high"})}
+    result = WorldGraphEffectService().apply_effects(
+        interior=SpotInterior((), (), (), ()),
+        acting_object=None,
+        effects=[
+            InteractionEffect(
+                effect_type=Effect.CHANGE_ITEM_INSTANCE_STATE, parameters={"state_updates": {"used": True}}
+            ),
+            InteractionEffect(
+                effect_type=Effect.CHANGE_TARGET_ITEM_INSTANCE_STATE, parameters={"state_updates": {"rust": "low"}}
+            ),
+            InteractionEffect(
+                effect_type=Effect.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK,
+                parameters={"state_key": "last_repaired_tick"},
+            ),
+        ],
+        world_flags=frozenset(),
+        current_tick=WorldTick(7),
+        **_item_arguments(items),
+    )
+    assert _states(items) == {"acting": {"used": True}, "target": {"rust": "low", "last_repaired_tick": 7}}
+    _assert_flags(result, (True, True))
