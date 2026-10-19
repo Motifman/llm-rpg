@@ -183,5 +183,4 @@ CIはPython3.10の `uv run --frozen pytest -n auto`、Ruff、型検査などで�
 - 不足時の前検証は実体を本当に変更する効果と抽選入口を使い、拒否だけでなく無変更・未開始を確認する。所持数が足りる対照も持つ
 - 警告付き継続は警告水準・原因と、後続効果の実行を確認する。logger名や全文を固定しない
 - 数量の予約とItemのスタック適合性は別所有者。[#1682](https://github.com/Motifman/llm-rpg/pull/1682) / [#1764](https://github.com/Motifman/llm-rpg/pull/1764) の耐久品数量0・仕様ID・満杯・実集約サービス接続と、状態付きスタック拒否は別の保持契約として残す
-- `tests/domain/world_graph/AGENTS.md` は先行 [#1735](https://github.com/Motifman/llm-rpg/pull/1735) が変更しているため、この枝から追加・変更しない。統合後に上の所有規約を調停する
 - 今回の基準失敗は0で、製品修理は0。状態効果24宣言など残る領域は別監査へ引き継ぐ
