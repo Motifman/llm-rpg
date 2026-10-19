@@ -24,7 +24,7 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
-_SCENARIO = Path("data/scenarios/relay_puzzle_demo.json")
+_SCENARIO = Path("data/scenarios/forbidden_library_demo.json")
 _BODY_SPOT = SpotId(1)
 
 

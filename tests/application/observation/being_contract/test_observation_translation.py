@@ -287,15 +287,13 @@ class TestRoute:
     @pytest.mark.parametrize(
         "structured",
         [
-            {"type": "goal_reflect", "verdict": "stalled"},
-            {"type": "goal_revision"},
             {"loop_guard": True, "tool_name": "wait"},
         ],
     )
     def test_being_inner_records_are_not_representable(
         self, structured: dict[str, Any]
     ) -> None:
-        """目的の振り返り・改訂とループ警告は、環境からの観測ではないので変換を拒む。"""
+        """ループ警告は、環境からの観測ではないので変換を拒む。"""
         with pytest.raises(ObservationNotRepresentable) as raised:
             _translate(_output(structured, category="self_only"))
 

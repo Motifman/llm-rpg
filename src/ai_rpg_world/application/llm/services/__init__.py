@@ -20,9 +20,6 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
-from ai_rpg_world.application.llm.services.in_memory_todo_store import (
-    InMemoryTodoStore,
-)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.llm_player_resolver import (
     ProfileBasedLlmPlayerResolver,
@@ -31,12 +28,6 @@ from ai_rpg_world.application.llm.services.llm_player_resolver import (
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
-)
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
-)
-from ai_rpg_world.application.llm.services.system_prompt_builder import (
-    DefaultSystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
@@ -53,7 +44,6 @@ from ai_rpg_world.application.llm.services.ui_context_builder import (
 
 __all__ = [
     "DefaultActionResultStore",
-    "InMemoryTodoStore",
     "DefaultAvailableToolsProvider",
     "DefaultCurrentStateFormatter",
     "DefaultLlmUiContextBuilder",
@@ -63,8 +53,6 @@ __all__ = [
     "DefaultRecentEventsFormatter",
     "ProfileBasedLlmPlayerResolver",
     "SetBasedLlmPlayerResolver",
-    "DefaultSlidingWindowMemory",
-    "DefaultSystemPromptBuilder",
     "NoOpAvailabilityResolver",
     "SectionBasedContextFormatStrategy",
     "SetDestinationAvailabilityResolver",

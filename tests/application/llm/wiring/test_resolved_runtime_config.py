@@ -21,52 +21,27 @@ class TestFromEnvDefaults:
     def test_empty_config_default_resolve(self) -> None:
         """空設定で default に resolve。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.short_term_memory_kind == 'rolling_summary'
-        assert cfg.short_term_memory_scheduler_mode == 'thread_pool'
-        assert cfg.prompt_section_order == 'stable_to_volatile'
         assert cfg.llm_client_kind == 'stub'
         assert cfg.llm_model is None
         assert cfg.llm_api_key is None
         assert cfg.llm_api_base is None
         assert cfg.llm_request_timeout_seconds == 90.0
-        assert cfg.llm_reasoning_effort == 'none'
+        assert cfg.llm_reasoning_effort == 'minimal'
         assert cfg.llm_wall_time_cap_seconds is None
         assert cfg.llm_rate_limit_retry_attempts == 3
         assert cfg.llm_rate_limit_retry_base_sleep == 2.0
         assert cfg.openrouter_provider is None
         assert cfg.openrouter_quantization is None
-        assert cfg.openrouter_require_params is False
-        assert cfg.episodic_enabled is False
-        assert cfg.episodic_subjective_enabled is True
-        assert cfg.episodic_explore_related_enabled is False
-        assert cfg.episodic_promotion_force_full_scan is False
-        assert cfg.episodic_promotion_expansion_hops == 4
-        assert cfg.semantic_llm_gist_enabled is False
-        assert cfg.semantic_passive_top_k == 0
-        assert cfg.semantic_search_enabled is False
-        assert cfg.episodic_reinterpretation_enabled is False
-        assert cfg.belief_evidence_enabled is False
-        assert cfg.memo_tools_enabled is True
-        assert cfg.goal_reflect_enabled is False
-        assert cfg.tool_mode == 'default'
         assert cfg.scenario_random_seed is None
-        assert cfg.prompt_dataset_capture_enabled is False
         assert cfg.prompt_dataset_capture_failure_policy == 'fail'
-        assert cfg.reason_first_two_step_enabled is False
+        assert cfg.reason_first_two_step_enabled is True
 
 class TestPromptDatasetCaptureConfig:
-    """prompt dataset capture は episodic 記憶と独立して設定できる。"""
+    """prompt dataset の保存に失敗したときの方針を解決する。"""
 
-    def test_enabled_without_episodic_is_allowed(self) -> None:
-        """capture は記録機能なので episodic 無効でも有効化できる。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_DATASET_CAPTURE_ENABLED': '1'})
-        assert cfg.prompt_dataset_capture_enabled is True
-        assert cfg.episodic_enabled is False
-
-    def test_enabled_with_episodic_resolves_failure_policy(self) -> None:
-        """episodic 有効なら capture を有効化でき、保存失敗時方針も解決される。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'PROMPT_DATASET_CAPTURE_ENABLED': '1', 'PROMPT_DATASET_CAPTURE_FAILURE_POLICY': 'warn'})
-        assert cfg.prompt_dataset_capture_enabled is True
+    def test_failure_policy_resolves_to_warn(self) -> None:
+        """PROMPT_DATASET_CAPTURE_FAILURE_POLICY に warn を書くと、保存失敗時の方針が warn になる。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_DATASET_CAPTURE_FAILURE_POLICY': 'warn'})
         assert cfg.prompt_dataset_capture_failure_policy == 'warn'
 
 class TestWorldTickFailurePolicyConfig:
@@ -91,91 +66,36 @@ class TestWorldTickFailurePolicyConfig:
         with pytest.raises(ValueError, match='fail_fast'):
             ResolvedLlmRuntimeConfig.for_tests(world_tick_failure_policy='skip')
 
-class TestReasonFirstTwoStepConfig:
-    """reason-first 2段階ターンの有効化 flag を単一窓口で解決する。"""
+class TestReasoningEffortDefault:
+    """LLM_REASONING_EFFORT の既定は minimal で、明示した値はそのまま使う。"""
 
-    def test_unset_false(self) -> None:
-        """REASON_FIRST_TWO_STEP_ENABLED 未設定なら既存 1段階 turn のまま。"""
+    def test_unset_resolves_to_minimal(self) -> None:
+        """LLM_REASONING_EFFORT を書かないと minimal になる。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.reason_first_two_step_enabled is False
+        assert cfg.llm_reasoning_effort == 'minimal'
 
-    def test_truthy_true(self) -> None:
-        """REASON_FIRST_TWO_STEP_ENABLED=1 で gated reason-first を有効化する。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'REASON_FIRST_TWO_STEP_ENABLED': '1'})
+    def test_explicit_none_stays_none(self) -> None:
+        """LLM_REASONING_EFFORT に none と書けば、既定の minimal ではなく none のまま。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_REASONING_EFFORT': 'none'})
+        assert cfg.llm_reasoning_effort == 'none'
+
+class TestReasonFirstTwoStepConfig:
+    """reason-first 2段階ターンを使うかを、設定のキーではなく tool_choice から決める。"""
+
+    def test_required_enables_it(self) -> None:
+        """何も書かない (tool_choice は既定の required) と、gated reason-first を使う。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         assert cfg.reason_first_two_step_enabled is True
 
-    def test_invalid_value_fail_fast(self) -> None:
-        """typo は silent に OFF へ落とさず ValueError で止める。"""
-        with pytest.raises(ValueError, match='REASON_FIRST_TWO_STEP_ENABLED'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'REASON_FIRST_TWO_STEP_ENABLED': 'maybe'})
+    def test_for_tests_follows_the_tool_choice(self) -> None:
+        """for_tests も本番と同じく、tool_choice が auto なら使わず、required なら使う。"""
+        assert ResolvedLlmRuntimeConfig.for_tests().reason_first_two_step_enabled is True
+        assert ResolvedLlmRuntimeConfig.for_tests(llm_tool_choice='auto').reason_first_two_step_enabled is False
 
     def test_trace_dict_includes_flag(self) -> None:
-        """run_start / manifest から reason-first 有効化条件を後で確認できる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(reason_first_two_step_enabled=True)
-        assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
-
-class TestEpisodicReinterpretationEnabled:
-    """段1 (エピソード再解釈) の on/off 解決。"""
-
-    def test_unset_false_2(self) -> None:
-        """LLM_EPISODIC_REINTERPRETATION_ENABLED 未設定なら False (= 従来 episodic-only)。"""
-        assert ResolvedLlmRuntimeConfig.from_mapping(values={}).episodic_reinterpretation_enabled is False
-
-    def test_truthy_true_2(self) -> None:
-        """1/true 等で True。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_REINTERPRETATION_ENABLED': '1'})
-        assert cfg.episodic_reinterpretation_enabled is True
-
-    def test_for_tests_default_False(self) -> None:
-        """for_tests の default は False、override 可。"""
-        assert ResolvedLlmRuntimeConfig.for_tests().episodic_reinterpretation_enabled is False
-        assert ResolvedLlmRuntimeConfig.for_tests(episodic_reinterpretation_enabled=True).episodic_reinterpretation_enabled is True
-
-class TestRecallHabituationEnabled:
-    """段階 2 (慣化ペナルティ) の on/off + decay_window の解決。"""
-
-    def test_unset_false(self) -> None:
-        """``LLM_EPISODIC_RECALL_HABITUATION_ENABLED`` 未設定なら False。"""
+        """run_start / manifest から reason-first を使ったかを後で確認できる。"""
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.recall_habituation_enabled is False
-        assert cfg.recall_habituation_decay_window_ticks == 5
-
-    def test_truthy_true(self) -> None:
-        """truthy で True。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_ENABLED': '1'})
-        assert cfg.recall_habituation_enabled is True
-
-    def test_decay_window_can_be_set_explicitly(self) -> None:
-        """``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で window を上書き。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_ENABLED': '1', 'LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS': '8'})
-        assert cfg.recall_habituation_decay_window_ticks == 8
-
-    def test_decay_window_negative_raises_value_error(self) -> None:
-        """負値は fail-fast。"""
-        with pytest.raises(ValueError, match='HABITUATION_DECAY_TICKS'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS': '-1'})
-
-    def test_decay_window_raises_value_error(self) -> None:
-        """decay window 非数値は ValueError。"""
-        with pytest.raises(ValueError, match='HABITUATION_DECAY_TICKS'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS': 'abc'})
-
-    def test_for_tests_default(self) -> None:
-        cfg = ResolvedLlmRuntimeConfig.for_tests()
-        assert cfg.recall_habituation_enabled is False
-        assert cfg.recall_habituation_decay_window_ticks == 5
-
-    def test_for_tests_override(self) -> None:
-        cfg = ResolvedLlmRuntimeConfig.for_tests(recall_habituation_enabled=True, recall_habituation_decay_window_ticks=10)
-        assert cfg.recall_habituation_enabled is True
-        assert cfg.recall_habituation_decay_window_ticks == 10
-
-    def test_trace_dict_included_2(self) -> None:
-        """totracedict に含まれる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(recall_habituation_enabled=True, recall_habituation_decay_window_ticks=7)
-        d = cfg.to_trace_dict()
-        assert d['recall_habituation_enabled'] is True
-        assert d['recall_habituation_decay_window_ticks'] == 7
+        assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
 
 class TestShortTermMemoryTurnWindow:
     """自分のターン単位の窓設定を、全構築経路で同じ不変条件に保つ。"""
@@ -201,54 +121,21 @@ class TestFromEnvExplicit:
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling_summary', 'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'thread_pool', 'PROMPT_SECTION_ORDER': 'legacy', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'minimal', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'OPENROUTER_REQUIRE_PARAMS': 'true', 'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'EPISODIC_EXPLORE_RELATED_ENABLED': '1', 'EPISODIC_PROMOTION_FORCE_FULL_SCAN': '1', 'EPISODIC_PROMOTION_EXPANSION_HOPS': '6', 'SEMANTIC_LLM_GIST_ENABLED': '1', 'SEMANTIC_PASSIVE_TOP_K': '3', 'SEMANTIC_SEARCH_ENABLED': 'yes', 'EPISODIC_RECALL_ENABLED': '1', 'PREDICTION_CONTEXT_ID_ENABLED': '1', 'BELIEF_EVIDENCE_ENABLED': '1', 'BELIEF_CONSOLIDATION_ENABLED': '1', 'BELIEF_ATTRIBUTION_ENABLED': '1', 'MEMO_TOOLS_ENABLED': '0', 'UNCONSCIOUS_CONTEXT_ENABLED': '1', 'ERROR_DRIVEN_REINTERPRETATION_ENABLED': '1', 'RECALL_HIT_BOOST_ENABLED': '1', 'PENDING_PREDICTION_ENABLED': '1', 'GOAL_STORE_ENABLED': '1', 'GOAL_REVISION_ENABLED': '1', 'GOAL_REFLECT_ENABLED': '1', 'LLM_TOOL_MODE': 'pure_spot_graph', 'ESCAPE_LLM_SSOT': '1', 'SCENARIO_RANDOM_SEED': '42'})
-        assert cfg.short_term_memory_kind == 'rolling_summary'
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.short_term_memory_turn_cap == 24
         assert cfg.short_term_memory_turn_compact_count == 8
-        assert cfg.short_term_memory_scheduler_mode == 'thread_pool'
-        assert cfg.prompt_section_order == 'legacy'
         assert cfg.llm_client_kind == 'litellm'
         assert cfg.llm_model == 'openrouter/google/gemma-4-31b-it'
         assert cfg.llm_api_key is None
         assert cfg.llm_api_base == 'https://openrouter.ai/api/v1'
         assert cfg.llm_request_timeout_seconds == 60.0
-        assert cfg.llm_reasoning_effort == 'minimal'
+        assert cfg.llm_reasoning_effort == 'low'
         assert cfg.llm_wall_time_cap_seconds == 65.0
         assert cfg.llm_rate_limit_retry_attempts == 2
         assert cfg.llm_rate_limit_retry_base_sleep == 1.5
         assert cfg.openrouter_provider == 'Parasail'
         assert cfg.openrouter_quantization == 'fp8'
-        assert cfg.openrouter_require_params is True
-        assert cfg.episodic_enabled is True
-        assert cfg.episodic_subjective_enabled is False
-        assert cfg.episodic_explore_related_enabled is True
-        assert cfg.episodic_promotion_force_full_scan is True
-        assert cfg.episodic_promotion_expansion_hops == 6
-        assert cfg.semantic_llm_gist_enabled is True
-        assert cfg.semantic_passive_top_k == 3
-        assert cfg.semantic_search_enabled is True
-        assert cfg.episodic_recall_enabled is True
-        assert cfg.prediction_context_id_enabled is True
-        assert cfg.belief_evidence_enabled is True
-        assert cfg.belief_consolidation_enabled is True
-        assert cfg.belief_attribution_enabled is True
-        assert cfg.memo_tools_enabled is False
-        assert cfg.unconscious_context_enabled is True
-        assert cfg.error_driven_reinterpretation_enabled is True
-        assert cfg.recall_hit_boost_enabled is True
-        assert cfg.pending_prediction_enabled is True
-        assert cfg.goal_store_enabled is True
-        assert cfg.goal_revision_enabled is True
-        assert cfg.goal_reflect_enabled is True
-        assert cfg.tool_mode == 'pure_spot_graph'
-        assert cfg.escape_llm_ssot_enabled is True
         assert cfg.scenario_random_seed == 42
-
-    def test_end_on_all_down_flag_defaults_off_and_can_be_enabled(self) -> None:
-        """END_ON_ALL_DOWN は既定 off で、profile/runtime_config から明示的に ON にできる。"""
-        assert ResolvedLlmRuntimeConfig.from_mapping().end_on_all_down is False
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'END_ON_ALL_DOWN': 'true'})
-        assert cfg.end_on_all_down is True
 
     def test_empty_string_env_default(self) -> None:
         """空文字は「未設定」と等価 (PR #434 ポリシー)。"""
@@ -270,21 +157,6 @@ class TestFromEnvFailFast:
         with pytest.raises(ValueError, match='secret key'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'OPENAI_API_KEY': 'sk-secret'})
 
-    def test_short_term_memory_kind_raises_value_error(self) -> None:
-        """shorttermmemorykind 短縮形は ValueError。"""
-        with pytest.raises(ValueError, match='SHORT_TERM_MEMORY_KIND'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_KIND': 'rolling'})
-
-    def test_scheduler_mode_unknown_raises_value_error(self) -> None:
-        """scheduler mode 未知の値は ValueError。"""
-        with pytest.raises(ValueError, match='SHORT_TERM_MEMORY_SCHEDULER_MODE'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_SCHEDULER_MODE': 'async_io'})
-
-    def test_section_order_typo_raises_value_error(self) -> None:
-        """section order typo は ValueError。"""
-        with pytest.raises(ValueError, match='PROMPT_SECTION_ORDER'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'PROMPT_SECTION_ORDER': 'stable_to_volatil'})
-
     def test_llm_client_unknown_raises_value_error(self) -> None:
         """llm client 未知の値は ValueError。"""
         with pytest.raises(ValueError, match='LLM_CLIENT'):
@@ -294,32 +166,6 @@ class TestFromEnvFailFast:
         """timeout 非数値は ValueError。"""
         with pytest.raises(ValueError, match='LLM_REQUEST_TIMEOUT_SECONDS'):
             ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_REQUEST_TIMEOUT_SECONDS': 'ten'})
-
-    def test_episodic_enabled_typo_raises_value_error(self) -> None:
-        """episodic enabled typo は ValueError。"""
-        with pytest.raises(ValueError, match='boolean'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': 'yeah'})
-
-    def test_openrouter_require_params_typo_raises_value_error(self) -> None:
-        """openrouter require params typo は ValueError。"""
-        with pytest.raises(ValueError, match='boolean'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'OPENROUTER_REQUIRE_PARAMS': 'tru'})
-
-    def test_semantic_passive_top_k_raises_value_error_2(self) -> None:
-        """semantic passive top k 非数値は ValueError。"""
-        with pytest.raises(ValueError, match='SEMANTIC_PASSIVE_TOP_K'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SEMANTIC_PASSIVE_TOP_K': 'abc'})
-
-    def test_semantic_passive_top_k_raises_value_error(self) -> None:
-        """semantic passive top k 負数は ValueError。"""
-        with pytest.raises(ValueError, match='SEMANTIC_PASSIVE_TOP_K'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SEMANTIC_PASSIVE_TOP_K': '-1'})
-
-    def test_llm_tool_mode_unknown_raises_value_error(self) -> None:
-        """実験条件を変える tool mode の typo は fail-fast。"""
-        with pytest.raises(ValueError, match='LLM_TOOL_MODE'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_TOOL_MODE': 'pure'})
-
 
 class TestTheRemovedMemoryPartKeysAreRejected:
     """消した記憶の部品 (#1631) のキーを profile に書くと、未知のキーとして起動前に落ちることを保証する。
@@ -331,6 +177,13 @@ class TestTheRemovedMemoryPartKeysAreRejected:
         "key",
         [
             "STATE_COLLAPSE_EVIDENCE_ENABLED",
+            "BELIEF_EVIDENCE_ENABLED",
+            "LLM_EPISODIC_ENABLED",
+            "LLM_EPISODIC_SUBJECTIVE_ENABLED",
+            "SUBJECTIVE_EPISODE_DB_PATH",
+            "EPISODIC_PROMOTION_EXPANSION_HOPS",
+            "EPISODIC_PROMOTION_FORCE_FULL_SCAN",
+            "SEMANTIC_LLM_GIST_ENABLED",
             "SALIENCE_STRUCTURED_FAILURE_ENABLED",
             "HEARSAY_ENABLED",
             "ERROR_GATED_ENCODING_ENABLED",
@@ -352,6 +205,49 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             "STAGNATION_REASONING_ENABLED",
             "STAGNATION_PRESSURE_ENABLED",
             "GOAL_STAGNATION_EVIDENCE_ENABLED",
+            "GOAL_REVISION_ENABLED",
+            "GOAL_REFLECT_ENABLED",
+            "GOAL_STORE_ENABLED",
+            "PREDICTION_CONTEXT_ID_ENABLED",
+            "UNCONSCIOUS_CONTEXT_ENABLED",
+            "PENDING_PREDICTION_ENABLED",
+            "ERROR_DRIVEN_REINTERPRETATION_ENABLED",
+            "LLM_EPISODIC_REINTERPRETATION_ENABLED",
+            "ESCAPE_LLM_SSOT",
+            "PROMPT_SECTION_ORDER",
+            "SHORT_TERM_MEMORY_SCHEDULER_MODE",
+            "LLM_TOOL_MODE",
+            "LLM_MEETING_SERIAL_TURNS",
+            "SHORT_TERM_MEMORY_KIND",
+            "OPENROUTER_REQUIRE_PARAMS",
+            "DISTANT_VIEW_TRACE_ENABLED",
+            "END_ON_ALL_DOWN",
+            "PROMPT_DATASET_CAPTURE_ENABLED",
+            "BEING_MEMO_ENABLED",
+            "REASON_FIRST_TWO_STEP_ENABLED",
+            "EPISODIC_RECALL_ENABLED",
+            "EPISODIC_EXPLORE_RELATED_ENABLED",
+            "SEMANTIC_SEARCH_ENABLED",
+            "LLM_AFTERGLOW_ENABLED",
+            "LLM_AFTERGLOW_CAPACITY",
+            "LLM_AFTERGLOW_MAX_RESIDENCE",
+            "RECALL_HIT_BOOST_ENABLED",
+            "LLM_EPISODIC_RECALL_HABITUATION_ENABLED",
+            "LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS",
+            "LLM_EPISODIC_RECALL_SLOT_ENABLED",
+            "LLM_EPISODIC_RECALL_SLOT_CAPACITY",
+            "LLM_EPISODIC_RECALL_SLOT_INSERT_PER_TICK",
+            "LLM_EPISODIC_RECALL_SLOT_MAX_RESIDENCE",
+            "LLM_EPISODIC_RECALL_SLOT_COOLDOWN",
+            "LLM_EPISODIC_RECALL_SLOT_INSERT_SCORE_THRESHOLD",
+            "SEMANTIC_PASSIVE_TOP_K",
+            "BELIEF_CREATE_GATE_ENABLED",
+            "BELIEF_CREATE_GATE_MIN_CONFIDENCE",
+            "BELIEF_CANDIDATE_NARROWER",
+            "BELIEF_CANDIDATE_TOP_K",
+            "BELIEF_CONSOLIDATION_ENABLED",
+            "BELIEF_ATTRIBUTION_ENABLED",
+            "MEMO_TOOLS_ENABLED",
         ],
     )
     def test_a_removed_memory_part_key_is_rejected_as_unknown(self, key: str) -> None:
@@ -360,62 +256,14 @@ class TestTheRemovedMemoryPartKeysAreRejected:
             ResolvedLlmRuntimeConfig.from_mapping(values={key: "true"})
 
 
-class TestSubjectiveEpisodeDbPath:
-    """SUBJECTIVE_EPISODE_DB_PATH を単一窓口 (config) に載せる (二重入口撤去)。
-
-    従来は ``_default_episodic_episode_store`` が os.environ を直読みしており、
-    profile/config の外で episode store の永続化先が決まってしまっていた
-    (manifest にも残らない silent failure)。config フィールド化して解決経路を
-    from_mapping の 1 本に固定する。
-    """
-
-    def test_unset_is_none(self) -> None:
-        """未設定なら None (= in-memory episode store)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.subjective_episode_db_path is None
-
-    def test_set_resolves_to_path_when_subjective_off(self) -> None:
-        """subjective OFF + episodic ON なら SUBJECTIVE_EPISODE_DB_PATH をそのまま解決する。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SUBJECTIVE_EPISODE_DB_PATH': '  var/episodes.db  '})
-        assert cfg.subjective_episode_db_path == 'var/episodes.db'
-
-    def test_recorded_in_trace_dict(self) -> None:
-        """解決した path は run_start trace / manifest に残る (再現性)。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SUBJECTIVE_EPISODE_DB_PATH': 'var/episodes.db'})
-        assert cfg.to_trace_dict()['subjective_episode_db_path'] == 'var/episodes.db'
-
-    def test_for_tests_default_none_and_override(self) -> None:
-        """for_tests の default は None、override 可。"""
-        assert ResolvedLlmRuntimeConfig.for_tests().subjective_episode_db_path is None
-        cfg = ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True, episodic_subjective_enabled=False, subjective_episode_db_path='var/x.db')
-        assert cfg.subjective_episode_db_path == 'var/x.db'
-
-    def test_with_subjective_enabled_raises_value_error(self) -> None:
-        """subjective 経路は常に in-memory なので db_path 併用は静かな無視。fail-fast で落とす。"""
-        with pytest.raises(ValueError, match='SUBJECTIVE_EPISODE_DB_PATH'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '1', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '1', 'SUBJECTIVE_EPISODE_DB_PATH': 'var/episodes.db'})
-
-    def test_without_episodic_raises_value_error(self) -> None:
-        """episodic OFF では episode store 自体を組まないので db_path は無視される。fail-fast で落とす。"""
-        with pytest.raises(ValueError, match='SUBJECTIVE_EPISODE_DB_PATH'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_EPISODIC_ENABLED': '0', 'LLM_EPISODIC_SUBJECTIVE_ENABLED': '0', 'SUBJECTIVE_EPISODE_DB_PATH': 'var/episodes.db'})
-
 class TestFromMappingIgnoresOsEnviron:
     """引数省略時も環境変数を読まず、空設定の既定値になる。"""
 
     def test_values_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """values 省略時も os environ を読まない。"""
-        monkeypatch.setenv('SHORT_TERM_MEMORY_KIND', 'sliding_window')
-        monkeypatch.setenv('PROMPT_SECTION_ORDER', 'legacy')
+        monkeypatch.setenv('SHORT_TERM_MEMORY_TURN_CAP', '99')
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
-        assert cfg.short_term_memory_kind == 'rolling_summary'
-        assert cfg.prompt_section_order == 'stable_to_volatile'
-
-    def test_subjective_episode_db_path_os_environ_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """SUBJECTIVE_EPISODE_DB_PATH が env にあっても config は読まない (二重入口撤去)。"""
-        monkeypatch.setenv('SUBJECTIVE_EPISODE_DB_PATH', '/tmp/leaked.db')
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.subjective_episode_db_path is None
+        assert cfg.short_term_memory_turn_cap == 20
 
 class TestImmutability:
     """frozen dataclass: 構築後の改変を防ぐ (= hash 可能 / 共有 safe)。"""
@@ -425,7 +273,7 @@ class TestImmutability:
         from dataclasses import FrozenInstanceError
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         with pytest.raises(FrozenInstanceError):
-            cfg.short_term_memory_kind = 'rolling_summary'
+            cfg.llm_client_kind = 'litellm'
 
     def test_hash(self) -> None:
         """frozen=True なので hash できる (= set / dict key に使える)。"""
@@ -443,11 +291,8 @@ class TestForTestsFactory:
 
     def test_override_keyword(self) -> None:
         """override だけ keyword で指定できる。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', llm_client_kind='litellm')
-        assert cfg.short_term_memory_kind == 'rolling_summary'
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm')
         assert cfg.llm_client_kind == 'litellm'
-        assert cfg.prompt_section_order == 'stable_to_volatile'
-        assert cfg.semantic_passive_top_k == 0
 
     def test_unknown_override_key_raises_type_error(self) -> None:
         """typo を発見する fail-fast。"""
@@ -459,15 +304,12 @@ class TestToTraceDict:
 
     def test_all_dict_rendered(self) -> None:
         """全フィールドが dict に出る。"""
-        cfg = ResolvedLlmRuntimeConfig.for_tests(short_term_memory_kind='rolling_summary', prompt_section_order='stable_to_volatile', llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
+        cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
         d = cfg.to_trace_dict()
-        assert d['short_term_memory_kind'] == 'rolling_summary'
-        assert d['prompt_section_order'] == 'stable_to_volatile'
+        assert d['short_term_memory_turn_cap'] == 20
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
-        assert 'belief_evidence_enabled' in d
-        assert 'goal_reflect_enabled' in d
-        assert 'tool_mode' in d
+        assert 'typed_judgment_provider' in d
 
     def test_api_key(self) -> None:
         """API key の生値は絶対に trace に出さない (漏洩防止)。"""
@@ -481,29 +323,3 @@ class TestToTraceDict:
         cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key=None)
         d = cfg.to_trace_dict()
         assert d['llm_api_key'] is None
-
-class TestExistingResolverParity:
-    """``from_mapping`` が既存 resolver と同じ値を返すことを担保する (= 移行時の
-    behavior 等価)。PR 3/6 で既存 wiring を本 DTO に置き換えるときに、両経路で
-    結果が一致することを構造的に保証する。"""
-
-    def test_short_term_memory_kind_existing_resolver_matches(self) -> None:
-        """shorttermmemorykind は既存 resolver と一致。"""
-        from ai_rpg_world.application.llm.wiring.feature_flags import resolve_short_term_memory_kind
-        values = {'SHORT_TERM_MEMORY_KIND': 'rolling_summary'}
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
-        assert cfg.short_term_memory_kind == resolve_short_term_memory_kind(env=values)
-
-    def test_section_order_existing_resolver_matches(self) -> None:
-        """sectionorder は既存 resolver と一致。"""
-        from ai_rpg_world.application.llm.services.context_format_strategy import resolve_section_order_from_env
-        values = {'PROMPT_SECTION_ORDER': 'legacy'}
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
-        assert cfg.prompt_section_order == resolve_section_order_from_env(env=values)
-
-    def test_semantic_passive_top_k_existing_resolver_matches(self) -> None:
-        """semanticpassivetopk は既存 resolver と一致。"""
-        from ai_rpg_world.application.llm.wiring.feature_flags import resolve_semantic_passive_top_k
-        values = {'SEMANTIC_PASSIVE_TOP_K': '5'}
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values=values)
-        assert cfg.semantic_passive_top_k == resolve_semantic_passive_top_k(env=values)
