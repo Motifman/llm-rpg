@@ -32,14 +32,24 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraph
 def _make_graph_with_connection(bidirectional: bool = False) -> SpotGraphAggregate:
     """2スポット + 1接続のグラフを構築する。"""
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
-    graph.add_spot(SpotNode(
-        spot_id=SpotId.create(1), name="Room A", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
-    ))
-    graph.add_spot(SpotNode(
-        spot_id=SpotId.create(2), name="Room B", description="",
-        category=SpotCategoryEnum.OTHER, parent_id=None,
-    ))
+    graph.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(1),
+            name="Room A",
+            description="",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
+    graph.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(2),
+            name="Room B",
+            description="",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+        )
+    )
     conn = SpotConnection(
         connection_id=ConnectionId.create(10),
         from_spot_id=SpotId.create(1),
@@ -94,22 +104,26 @@ class TestRemoveConnectionBidirectional:
     """双方向接続の削除テスト"""
 
     def test_remove_deletes_both_directions(self) -> None:
-        """双方向接続の削除で逆方向も消えること"""
+        """正方向から削除すると、正逆のID参照と両端の出方向一覧から消える。"""
         graph = _make_graph_with_connection(bidirectional=True)
         graph.remove_connection(ConnectionId.create(10))
         with pytest.raises(UnknownConnectionException):
             graph.get_connection(ConnectionId.create(10))
         with pytest.raises(UnknownConnectionException):
             graph.get_connection(ConnectionId.create(11))
+        assert graph.iter_outgoing_connections_from(SpotId.create(1)) == []
+        assert graph.iter_outgoing_connections_from(SpotId.create(2)) == []
 
     def test_remove_reverse_also_deletes_forward(self) -> None:
-        """逆方向IDで削除しても正方向も消えること"""
+        """逆方向から削除しても、正逆のID参照と両端の出方向一覧から消える。"""
         graph = _make_graph_with_connection(bidirectional=True)
         graph.remove_connection(ConnectionId.create(11))
         with pytest.raises(UnknownConnectionException):
             graph.get_connection(ConnectionId.create(10))
         with pytest.raises(UnknownConnectionException):
             graph.get_connection(ConnectionId.create(11))
+        assert graph.iter_outgoing_connections_from(SpotId.create(1)) == []
+        assert graph.iter_outgoing_connections_from(SpotId.create(2)) == []
 
 
 class TestEffectServiceCreateConnection:

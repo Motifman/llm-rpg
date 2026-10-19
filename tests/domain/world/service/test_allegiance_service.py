@@ -13,10 +13,14 @@ class TestPackAllegianceService:
         return PackAllegianceService()
 
     def test_same_pack_is_ally(self, service):
+        """同じ群れの値なら、別に生成した識別子でも味方とみなす。"""
         pack = PackId.create("p1")
         a = AutonomousBehaviorComponent(pack_id=pack)
         b = AutonomousBehaviorComponent(pack_id=pack)
         assert service.is_ally(a, b) is True
+
+        same_pack = AutonomousBehaviorComponent(pack_id=PackId.create("p1"))
+        assert service.is_ally(a, same_pack) is True
 
     def test_different_pack_not_ally(self, service):
         a = AutonomousBehaviorComponent(pack_id=PackId.create("p1"))

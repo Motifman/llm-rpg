@@ -50,21 +50,29 @@ class TestPassageFactories:
 
     def test_wall_overrides_apply(self) -> None:
         """WALL のデフォルト値を override 可能。"""
-        passage = Passage.wall(
-            WallStateEnum.INTACT, traversable=True, sound_permeability=0.95
-        )
+        passage = Passage.wall(WallStateEnum.INTACT, traversable=True, sound_permeability=0.95)
         assert passage.traversable is True
         assert passage.sound_permeability == pytest.approx(0.95)
 
-    def test_door_locked_is_not_traversable(self) -> None:
-        """DOOR LOCKED は通行不可。"""
-        passage = Passage.door(DoorStateEnum.LOCKED)
-        assert passage.traversable is False
-
-    def test_door_closed_is_not_traversable_by_default(self) -> None:
-        """DOOR CLOSED の既定は通行不可（明示的に開ける必要がある設計）。"""
-        passage = Passage.door(DoorStateEnum.CLOSED)
-        assert passage.traversable is False
+    @pytest.mark.parametrize(
+        "state,expected_traversable,expected_sound",
+        [
+            (DoorStateEnum.LOCKED, False, None),
+            (DoorStateEnum.CLOSED, False, None),
+            (DoorStateEnum.OPEN, True, 1.0),
+        ],
+    )
+    def test_door_state_default_table(
+        self,
+        state: DoorStateEnum,
+        expected_traversable: bool,
+        expected_sound: float | None,
+    ) -> None:
+        """施錠・閉扉は通行不可、開扉は通行可で音透過率1.0になる。"""
+        passage = Passage.door(state)
+        assert passage.traversable is expected_traversable
+        if expected_sound is not None:
+            assert passage.sound_permeability == pytest.approx(expected_sound)
 
     def test_door_closed_can_be_overridden_to_traversable(self) -> None:
         """DOOR CLOSED は override で通行可にできる（古典 RPG 風の挙動）。"""
@@ -133,9 +141,7 @@ class TestPassageWithState:
     def test_with_state_overrides_apply(self) -> None:
         """with_state の override 引数で個別値を上書き可能。"""
         intact = Passage.wall(WallStateEnum.INTACT)
-        cracked = intact.with_state(
-            WallStateEnum.CRACKED.value, sound_permeability=0.55
-        )
+        cracked = intact.with_state(WallStateEnum.CRACKED.value, sound_permeability=0.55)
         assert cracked.sound_permeability == pytest.approx(0.55)
         # traversable は default のまま
         assert cracked.traversable is False

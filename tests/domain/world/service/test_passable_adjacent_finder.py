@@ -70,6 +70,7 @@ class TestFindOne:
         def test_finds_passable_adjacent_when_object_at_center(
             self, map_with_object_at_center
         ):
+            """全方向が通れるとき、中央物体の北にある通行可能な隣接セルを返す。"""
             # Given: 中央 (2,2) にオブジェクト、周囲は道路
             physical_map = map_with_object_at_center
             object_coord = Coordinate(2, 2, 0)
@@ -88,38 +89,45 @@ class TestFindOne:
             assert physical_map.is_passable(
                 result, capability, exclude_object_id=exclude_id
             )
-
-        def test_returns_north_first_when_all_passable(self, map_with_object_at_center):
-            # Given: 全方向通行可能。finder は NORTH から順に探索する
-            physical_map = map_with_object_at_center
-            object_coord = Coordinate(2, 2, 0)
-            capability = MovementCapability.normal_walk()
-            exclude_id = WorldObjectId(100)
-
-            # When
-            result = PassableAdjacentFinder.find_one(
-                physical_map, object_coord, capability, exclude_object_id=exclude_id
-            )
-
-            # Then: NORTH が (2, 1) なので、最初に見つかる隣接は NORTH 方向
-            assert result is not None
-            assert result.y == 1  # NORTH は y-1
+            assert result.y == 1
             assert result.x == 2
 
         def test_excludes_object_from_passability_check(self, map_with_object_at_center):
-            # Given: オブジェクト (2,2) の隣に別オブジェクトがある場合、
-            # exclude しないとオブジェクト上は通行不可だが、exclude すると判定から外れる
-            # 単純に object_coord の隣が通行可能かチェック。exclude_object_id は
-            # 対象オブジェクト (2,2) 自体を除外（オブジェクト座標は通行不可のため）
+            """隣接が全て塞がるとき、候補上の物体を除外した場合だけその座標を返す。"""
             physical_map = map_with_object_at_center
             object_coord = Coordinate(2, 2, 0)
             capability = MovementCapability.normal_walk()
 
-            # exclude あり: 隣接セルのみチェック（(2,2) 上のオブジェクトは除外）
+            # 元の入力も残す。中央の物体は隣接候補を塞いでいない。
             result = PassableAdjacentFinder.find_one(
                 physical_map, object_coord, capability, exclude_object_id=WorldObjectId(100)
             )
             assert result is not None
+
+            neighbors = (
+                Coordinate(2, 1, 0),
+                Coordinate(3, 1, 0),
+                Coordinate(3, 2, 0),
+                Coordinate(3, 3, 0),
+                Coordinate(2, 3, 0),
+                Coordinate(1, 3, 0),
+                Coordinate(1, 2, 0),
+                Coordinate(1, 1, 0),
+            )
+            for object_id, coordinate in enumerate(neighbors, start=200):
+                physical_map.add_object(
+                    WorldObject(WorldObjectId(object_id), coordinate, ObjectTypeEnum.CHEST)
+                )
+
+            assert PassableAdjacentFinder.find_one(
+                physical_map, object_coord, capability, exclude_object_id=None
+            ) is None
+            assert PassableAdjacentFinder.find_one(
+                physical_map, object_coord, capability, exclude_object_id=WorldObjectId(200)
+            ) == Coordinate(2, 1, 0)
+            assert PassableAdjacentFinder.find_one(
+                physical_map, object_coord, capability, exclude_object_id=WorldObjectId(100)
+            ) is None
 
     class TestNoPassableNeighbor:
         def test_returns_none_when_all_neighbors_blocked(self, map_surrounded_by_walls):
@@ -137,11 +145,10 @@ class TestFindOne:
             # Then: 隣接が全て壁なので None
             assert result is None
 
-        def test_returns_none_when_object_at_map_edge(
+        def test_finds_passable_neighbor_when_object_at_map_edge(
             self, spot_id, road_tiles_5x5
         ):
-            # Given: オブジェクトが (0,0) の角にあり、neighbor で負座標になる方向は
-            # CoordinateValidationException でスキップ。有効な隣接は (1,0) と (0,1) のみ
+            """地図角では負座標になる北と北東を飛ばし、通行可能な東隣を返す。"""
             obj = WorldObject(WorldObjectId(1), Coordinate(0, 0, 0), ObjectTypeEnum.CHEST)
             physical_map = PhysicalMapAggregate.create(
                 spot_id, road_tiles_5x5, objects=[obj]
@@ -154,6 +161,7 @@ class TestFindOne:
                 exclude_object_id=WorldObjectId(1),
             )
             assert result is not None
+            assert result == Coordinate(1, 0, 0)
 
     class TestExcludeObjectId:
         def test_exclude_none_still_finds_neighbor_if_passable(

@@ -65,8 +65,8 @@ class NullTraceRecorder(ITraceRecorder):
 
     def __init__(self) -> None:
         self._seq = 0
-        # PR #358 review HIGH 1 後続: Phase A 並列化 (#354) + 非同期 LLM 主観文
-        # scheduler (#309) で複数 thread が同時に record を叩く。_seq の
+        # PR #358 review HIGH 1 後続: Phase A 並列化 (#354) で複数 thread が
+        # 同時に record を叩く。_seq の
         # increment は GIL があっても複合代入なので保護する必要がある。
         self._lock = threading.Lock()
 
@@ -107,11 +107,10 @@ class JsonlTraceRecorder(ITraceRecorder):
         self._path = path
         self._fh: TextIO | None = open(path, "w", encoding="utf-8")
         self._seq = 0
-        # Issue #311 後続 (#325 結果): 非同期 LLM 主観文付与 scheduler のワーカー
-        # thread が close 後に record を呼ぶ "close race" を観測可能にするカウンタ。
-        # 値が大きいときは scheduler shutdown drain がタイムアウトしている可能性。
+        # Issue #311 後続 (#325 結果): 別 thread が close 後に record を呼ぶ
+        # "close race" を観測可能にするカウンタ。
         self._record_dropped_after_close: int = 0
-        # PR #358 review HIGH 1 後続: Phase A 並列化 + 非同期 scheduler で複数
+        # PR #358 review HIGH 1 後続: Phase A 並列化で複数
         # thread が同時に record を叩くと _seq / _fh.write が interleave して
         # JSONL が破損する。lock で record 全体を直列化する。
         self._lock = threading.Lock()
@@ -139,11 +138,11 @@ class JsonlTraceRecorder(ITraceRecorder):
     ) -> TraceEvent:
         with self._lock:
             if self._fh is None:
-                # Issue #311 後続: 非同期 LLM 主観文付与 (#310) のワーカー thread が
-                # ``runtime.shutdown(timeout)`` のタイムアウト後に完了した場合、
-                # 既に閉じた recorder に書き込みを試みる "close race" が起きる。
-                # これは非同期パイプラインで構造的に避けがたいので、例外を投げる
-                # 代わりに **silently drop + カウンタ加算** で処理する。
+                # 別 thread の仕事が recorder を閉じたあとに完了すると、閉じた
+                # recorder に書き込みを試みる "close race" が起きる (#311 で主観補完の
+                # worker が起こした。主観補完は #1631 で消した)。非同期の仕事が残る限り
+                # 構造的に避けがたいので、例外を投げる代わりに **silently drop +
+                # カウンタ加算** で処理する。
                 self._record_dropped_after_close += 1
                 _logger.debug(
                     "JsonlTraceRecorder.record(%s) dropped: recorder already closed "
@@ -182,11 +181,9 @@ class JsonlTraceRecorder(ITraceRecorder):
                 self._fh.close()
                 self._fh = None
         if self._record_dropped_after_close > 0:
-            # 大量に dropped していたら shutdown drain の調整が必要なので
-            # INFO で残す。0 件 (= 完璧な drain) では何も出さない。
+            # close 後に捨てた書き込みがあったら INFO で残す。0 件では何も出さない。
             _logger.info(
-                "JsonlTraceRecorder closed with %d post-close record drops "
-                "(async scheduler may need longer shutdown timeout)",
+                "JsonlTraceRecorder closed with %d post-close record drops",
                 self._record_dropped_after_close,
             )
 

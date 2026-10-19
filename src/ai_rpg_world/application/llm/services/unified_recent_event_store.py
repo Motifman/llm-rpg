@@ -46,16 +46,13 @@ class UnifiedRecentEventStore:
         self,
         player_id: PlayerId,
         entry: ObservationEntry,
-        *,
-        max_entries: int | None = None,
-    ) -> list[ObservationEntry]:
+    ) -> None:
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
         key = self._key(player_id)
         self._entries.setdefault(key, []).append(
             UnifiedRecentEventEntry.from_observation(entry)
         )
-        return self._trim_kind(key, "observation", ObservationEntry, max_entries)
 
     def append_action_result(
         self,

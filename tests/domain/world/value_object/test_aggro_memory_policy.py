@@ -24,8 +24,12 @@ class TestAggroMemoryPolicy:
         assert policy.is_forgotten(100, 0) is True
 
     def test_revenge_never_forget_default_false(self):
+        """復讐フラグの省略時はFalseになり、明示Falseでも通常の閾値で忘却する。"""
         policy = AggroMemoryPolicy(forget_after_ticks=10, revenge_never_forget=False)
         assert policy.is_forgotten(21, 10) is True
+
+        default_policy = AggroMemoryPolicy(forget_after_ticks=10)
+        assert default_policy.revenge_never_forget is False
 
     def test_revenge_never_forget_true_does_not_affect_is_forgotten(self):
         """revenge_never_forget は is_forgotten の戻り値は変えず、将来の拡張用"""

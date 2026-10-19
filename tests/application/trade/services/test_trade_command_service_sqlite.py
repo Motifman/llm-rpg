@@ -8,7 +8,9 @@ from tests.application.trade.services.test_trade_command_scope_migration import 
     _seed_offer_dependencies,
 )
 from tests.application.trade.services.test_trade_command_service import (
-    TestTradeCommandService,
+    TestTradeCommandService as _TestTradeCommandService,
+)
+from tests.application.trade.services.test_trade_command_service import (
     _cmd_trade_listing_projection,
 )
 
@@ -131,7 +133,7 @@ def _build_sqlite_setup(
     )
 
 
-class TestTradeCommandServiceSqlite(TestTradeCommandService):
+class TestTradeCommandServiceSqlite(_TestTradeCommandService):
     @pytest.fixture
     def setup_service(self, tmp_path):
         database = tmp_path / "game.db"
@@ -227,7 +229,7 @@ def test_accept_command_persists_a_restorable_event_payload(tmp_path) -> None:
     """実際の受託commandがoutboxへ保存したイベントを型付きで復元できる。"""
     database = tmp_path / "game.db"
     setup = _build_sqlite_setup(database)
-    trade_id, _ = TestTradeCommandService()._seed_active_trade(setup)
+    trade_id, _ = _TestTradeCommandService()._seed_active_trade(setup)
 
     setup[0].accept_trade(AcceptTradeCommand(trade_id=trade_id.value, buyer_id=2))
 

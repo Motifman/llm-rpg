@@ -8,15 +8,11 @@ from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 class TestShopId:
     """ShopId値オブジェクトのテスト"""
 
-    def test_create_positive_int_id(self):
-        """正の整数値で作成できること"""
-        shop_id = ShopId(1)
-        assert shop_id.value == 1
-
-    def test_create_large_positive_int_id(self):
-        """大きな正の整数値で作成できること"""
-        shop_id = ShopId(999999)
-        assert shop_id.value == 999999
+    @pytest.mark.parametrize("value", [1, 999999])
+    def test_create_positive_int_id(self, value: int):
+        """最小値1と大きな正整数999999を、そのままショップIDとして保持する。"""
+        shop_id = ShopId(value)
+        assert shop_id.value == value
 
     def test_create_from_int_create_method(self):
         """createメソッドでintから作成できること"""
