@@ -36,19 +36,7 @@ from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
     LlmCallMetricsSink,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
-    IBeliefConsolidationCompletionPort,
-)
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
-)
-from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
-    IEpisodicReinterpretationCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
-from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
-    ISemanticGistCompletionPort,
-)
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
@@ -92,22 +80,6 @@ _ERROR_DETAIL_MAX_CHARS = 500
 # 通常 p99 ≈ 30-40s なので 45s なら正常 call はほぼ通る + outlier だけ切れる。
 _ENV_VAR_LLM_WALL_CAP = "LLM_WALL_TIME_CAP_SECONDS"
 _DEFAULT_WALL_CAP_BUFFER_SECONDS = 5.0
-
-# OpenRouter provider routing 用の env 群。
-# `OPENROUTER_PROVIDER=DeepInfra OPENROUTER_QUANTIZATION=fp8` のように指定すると
-# 全 litellm.completion 呼び出しに `extra_body.provider.{only, quantizations,
-# require_parameters}` を注入する。
-# OpenRouter docs: https://openrouter.ai/docs/provider-routing
-#
-# なぜ必要か: api_base=https://openrouter.ai/api/v1 で叩くと OpenRouter が
-# provider を自由に選ぶ。例えば Gemma 4 31B では DeepInfra が turbo (fp4) /
-# fp8 の 2 variant を出しており、turbo は tools / response_format / structured_outputs
-# を非対応のため、tool_choice="required" や JSON mode 経路が即座に壊れる。
-# 実験 mid-run の事故を防ぐため、provider を明示的に固定する。
-_ENV_VAR_OPENROUTER_PROVIDER = "OPENROUTER_PROVIDER"
-_ENV_VAR_OPENROUTER_QUANTIZATION = "OPENROUTER_QUANTIZATION"
-_ENV_VAR_OPENROUTER_REQUIRE_PARAMS = "OPENROUTER_REQUIRE_PARAMS"
-_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 # Reasoning effort 制御 (deepseek-v4-flash 等の reasoning model 対策)。
 #
@@ -189,16 +161,25 @@ def _detect_openrouter_base(api_base: str | None) -> bool:
     return "openrouter.ai" in api_base.lower()
 
 
+# runtime_config に `"OPENROUTER_PROVIDER": "DeepInfra"`、`"OPENROUTER_QUANTIZATION": "fp8"`
+# を書くと、全 litellm.completion 呼び出しに `extra_body.provider.{only, quantizations,
+# require_parameters}` を注入する。
+# OpenRouter docs: https://openrouter.ai/docs/provider-routing
+#
+# なぜ必要か: api_base=https://openrouter.ai/api/v1 で叩くと OpenRouter が
+# provider を自由に選ぶ。例えば Gemma 4 31B では DeepInfra が turbo (fp4) /
+# fp8 の 2 variant を出しており、turbo は tools / response_format / structured_outputs
+# を非対応のため、tool_choice="required" や JSON mode 経路が即座に壊れる。
+# 実験 mid-run の事故を防ぐため、provider を明示的に固定する。
 def _build_openrouter_routing(
     *,
     provider: str | None,
     quantization: str | None,
-    require_params: bool,
 ) -> dict[str, Any] | None:
     """明示値から OpenRouter provider routing 設定を組む。"""
     provider = (provider or "").strip()
     quantization = (quantization or "").strip()
-    if not provider and not quantization and not require_params:
+    if not provider and not quantization:
         return None
     block: dict[str, Any] = {}
     if provider:
@@ -208,8 +189,9 @@ def _build_openrouter_routing(
         block["only"] = [provider]
     if quantization:
         block["quantizations"] = [quantization]
-    if require_params:
-        block["require_parameters"] = True
+    # tool_choice="required" を受け付けない provider へ黙って流さず、OpenRouter に
+    # 送る前に止めさせる (design_decisions D1631-2)。
+    block["require_parameters"] = True
     return {"provider": block}
 
 
@@ -310,10 +292,6 @@ _Result = TypeVar("_Result")
 
 class LiteLLMClient(
     ILLMClient,
-    IEpisodicChunkSubjectiveCompletionPort,
-    IEpisodicReinterpretationCompletionPort,
-    ISemanticGistCompletionPort,
-    IBeliefConsolidationCompletionPort,
     IShortTermMemorySummaryCompletionPort,
     IShortTermMemoryLongSummaryCompletionPort,
     EpisodeWritingCompletion,
@@ -332,7 +310,6 @@ class LiteLLMClient(
         timeout_seconds: float | None = None,
         openrouter_provider: str | None = None,
         openrouter_quantization: str | None = None,
-        openrouter_require_params: bool = False,
         reasoning_effort: str = _DEFAULT_REASONING_EFFORT,
         max_output_tokens: int | None = None,
         wall_cap_seconds: float | None = None,
@@ -375,7 +352,6 @@ class LiteLLMClient(
         self._openrouter_routing: dict[str, Any] | None = _build_openrouter_routing(
             provider=openrouter_provider,
             quantization=openrouter_quantization,
-            require_params=openrouter_require_params,
         )
 
         self._reasoning_effort = _validate_reasoning_effort(
@@ -1004,13 +980,6 @@ class LiteLLMClient(
         except (TypeError, ValueError):
             return 0.0
 
-    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
-        """
-        tools 無しで JSON object を強制する chat completion を行いパース済み dict を返す。
-        失敗や不正 JSON ではここでは補完せず LlmApiCallException を送出し、呼び出し元が草案テンプレへフォールバックする。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.EPISODE_SUBJECTIVE)
-
     def _complete_aux_json(
         self,
         messages: list[dict[str, Any]],
@@ -1097,14 +1066,14 @@ class LiteLLMClient(
                 )
             )
         except Exception as e:
-            self._logger.exception("LiteLLM subjective completion failed: %s", e)
+            self._logger.exception("LiteLLM aux JSON completion failed: %s", e)
             error_code = "LLM_API_CALL_FAILED"
             if isinstance(e, LitellmAuthenticationError):
                 error_code = "LLM_AUTHENTICATION_ERROR"
             elif isinstance(e, LitellmRateLimitError):
                 error_code = "LLM_RATE_LIMIT"
             raise LlmApiCallException(
-                f"LLM subjective completion failed: {e}",
+                f"LLM aux JSON completion failed: {e}",
                 error_code=error_code,
                 cause=e,
             ) from e
@@ -1113,60 +1082,31 @@ class LiteLLMClient(
     def _parse_json_object(response: Any) -> dict[str, Any]:
         if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
             raise LlmApiCallException(
-                "Empty response from subjective completion",
-                error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_RESPONSE",
+                "Empty response from aux JSON completion",
+                error_code="LLM_AUX_JSON_EMPTY_RESPONSE",
             )
         message = response.choices[0].message
         content = getattr(message, "content", None) if message else None
         if not isinstance(content, str) or not content.strip():
             raise LlmApiCallException(
-                "Missing message content from subjective completion",
-                error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_CONTENT",
+                "Missing message content from aux JSON completion",
+                error_code="LLM_AUX_JSON_EMPTY_CONTENT",
             )
         extracted_content = _extract_first_json_object(content)
         try:
             parsed = json.loads(extracted_content)
         except (json.JSONDecodeError, TypeError) as e:
             raise LlmApiCallException(
-                f"Subjective completion content is not valid JSON: {e}",
-                error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
+                f"Aux JSON completion content is not valid JSON: {e}",
+                error_code="LLM_AUX_JSON_INVALID_JSON",
                 cause=e,
             ) from e
         if not isinstance(parsed, dict):
             raise LlmApiCallException(
-                "Subjective completion JSON root must be an object",
-                error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
+                "Aux JSON completion JSON root must be an object",
+                error_code="LLM_AUX_JSON_INVALID_JSON",
             )
         return parsed
-
-    def complete_episodic_reinterpretation_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで想起後再解釈 JSON object を返す。"""
-        return self._complete_aux_json(messages, AuxLlmComponent.EPISODIC_REINTERPRETATION)
-
-    def complete_semantic_gist_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで semantic gist JSON object を返す (Phase 1b)。
-
-        ``complete_episode_subjective_json`` と同じ json_object 強制完了を
-        使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.SEMANTIC_GIST)
-
-    def complete_belief_consolidation_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで固着パス (belief journal 統合) の decisions JSON を返す (U3b)。
-
-        ``complete_episode_subjective_json`` と同じ json_object 強制完了を
-        使う (LLM 側から見れば同じ呼び出し)。失敗ハンドリングも共通。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.BELIEF_CONSOLIDATION)
 
     def complete_short_term_summary_json(
         self,
