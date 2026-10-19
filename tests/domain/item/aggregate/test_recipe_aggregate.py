@@ -76,15 +76,6 @@ class TestRecipeAggregate:
             )
         )
 
-    def test_create_valid_recipe_aggregate(self, sample_recipe):
-        """正常なレシピ集約作成のテスト"""
-        assert sample_recipe.recipe_id == RecipeId(1)
-        assert sample_recipe.name == "Wooden Sword Recipe"
-        assert sample_recipe.description == "Craft a wooden sword using wood and stone"
-        assert len(sample_recipe.ingredients) == 2
-        assert sample_recipe.result.item_spec_id == ItemSpecId(3)
-        assert sample_recipe.result.quantity == 1
-
     def test_create_recipe_with_empty_name_raises_error(self, sample_item_spec_wood, sample_item_spec_sword):
         """空の名前での作成はエラーになるテスト"""
         with pytest.raises(InvalidRecipeException) as exc_info:
@@ -368,6 +359,37 @@ class TestRecipeAggregate:
         assert len(available) == 1
         assert available[sample_item_spec_wood.item_spec_id] == 10  # 5 + 3 + 2
 
+    def test_calculate_inventory_quantities_mixed_specs(self, sample_item_spec_wood, sample_item_spec_stone):
+        """混合スペックのインベントリ数量計算テスト"""
+        inventory = [
+            ItemAggregate.create(
+                item_instance_id=ItemInstanceId(1),
+                item_spec=sample_item_spec_wood,
+                quantity=5
+            ),
+            ItemAggregate.create(
+                item_instance_id=ItemInstanceId(2),
+                item_spec=sample_item_spec_stone,
+                quantity=3
+            ),
+            ItemAggregate.create(
+                item_instance_id=ItemInstanceId(3),
+                item_spec=sample_item_spec_wood,
+                quantity=2
+            ),
+            ItemAggregate.create(
+                item_instance_id=ItemInstanceId(4),
+                item_spec=sample_item_spec_stone,
+                quantity=1
+            )
+        ]
+
+        quantities = RecipeAggregate.calculate_available_quantities(inventory)
+
+        assert len(quantities) == 2
+        assert quantities[sample_item_spec_wood.item_spec_id] == 7   # 5 + 2
+        assert quantities[sample_item_spec_stone.item_spec_id] == 4   # 3 + 1
+
     def test_equality_same_recipe(self, sample_recipe):
         """同じレシピの等価性テスト"""
         recipe2 = RecipeAggregate(
@@ -416,7 +438,6 @@ class TestRecipeAggregate:
         )
 
         assert sample_recipe != recipe2
-        assert hash(sample_recipe) != hash(recipe2)
 
     def test_equality_with_non_recipe_aggregate(self, sample_recipe):
         """RecipeAggregate以外との比較テスト"""

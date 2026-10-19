@@ -146,15 +146,18 @@ class TestInteractRegistersTheListenerSide:
         """同じ人が両方の弁を interact しても、2 つ目は拒否され 1 人では完成しない。"""
         executor = _executor(runtime)
         _move(runtime, _MORI, "fuel_bay")
-        _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
+        first = _interact(runtime, executor, _MORI, "fuel_thaw_valve", "open_thaw_valve")
         _move(runtime, _MORI, "machine_room")
 
         second = _interact(runtime, executor, _MORI, "oil_feed_valve", "open_oil_feed_valve")
 
+        assert first.success is True
         assert second.success is False
         assert second.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "別の参加者" in second.message
         runtime.advance_tick()
         assert "fuel_frozen" in _flags(runtime)
+        assert "fuel_restored" not in _flags(runtime)
 
     def test_say_inline_still_reaches_the_room_when_a_valve_is_taken(self, runtime) -> None:
         """弁を受け持ちながらの一言 (say_inline) は、通常の interact と同じく同室者へ届く。"""
