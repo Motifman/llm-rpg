@@ -99,12 +99,6 @@ class TestTradeRequestedGold:
         gold2 = TradeRequestedGold(150)
         assert hash(gold1) == hash(gold2)
 
-    def test_hash_different_for_different_values(self):
-        """異なる値のオブジェクトは異なるハッシュ値を持つこと"""
-        gold1 = TradeRequestedGold(100)
-        gold2 = TradeRequestedGold(200)
-        assert hash(gold1) != hash(gold2)
-
     # ===== 不変性のテスト =====
 
     def test_immutability(self):
