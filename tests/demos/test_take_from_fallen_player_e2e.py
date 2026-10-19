@@ -26,7 +26,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -62,7 +62,7 @@ _TAKE_DEF = {
 
 
 def _scenario_dict(extra_players=()) -> dict:
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     scenario["player_interactions"] = [_TAKE_DEF]
     scenario["players"] = list(scenario["players"]) + list(extra_players)
     return scenario
@@ -70,7 +70,7 @@ def _scenario_dict(extra_players=()) -> dict:
 
 def _runtime_from(scenario: dict, tmp_path: Path, *, gather: tuple):
     """``gather`` の player を全員 actor と同じスポットに揃えた runtime。"""
-    path = tmp_path / "relay_with_take.json"
+    path = tmp_path / "library_with_take.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
     rt = create_world_runtime(path)
     graph = rt._spot_graph_repo.find_graph()
@@ -90,7 +90,7 @@ def runtime_with_bystander(tmp_path: Path):
             {
                 "id": "player_c",
                 "name": "ミナ",
-                "spawn_spot": "corridor",
+                "spawn_spot": "reading_room",
                 "initial_items": [],
             }
         ]
@@ -101,9 +101,9 @@ def runtime_with_bystander(tmp_path: Path):
 @pytest.fixture()
 def runtime(tmp_path: Path):
     """take を宣言したシナリオで、両者を同じスポットに揃えた runtime。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     scenario["player_interactions"] = [_TAKE_DEF]
-    path = tmp_path / "relay_with_take.json"
+    path = tmp_path / "library_with_take.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     rt = create_world_runtime(path)
