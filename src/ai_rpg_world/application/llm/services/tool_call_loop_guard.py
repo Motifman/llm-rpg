@@ -11,7 +11,7 @@
   fingerprint は既存の ``build_argument_fingerprint`` を流用。
   → ``travel_to(\"A\") → travel_to(\"B\")`` のように引数が変われば発火しない。
 - 閾値は tool 系統ごとに設定 (wait は 3、travel_to は 2、interact は 4、
-  その他は 5)。連打しても害が薄い tool (memo_list 等) も default に含まれる。
+  その他は 5)。
 - 注入は ObservationContextBuffer に直接 append。prompt_builder.drain で
   自然に次ターンに流れる。ObservationPipeline 経由の domain event 化は
   オーバーキル。

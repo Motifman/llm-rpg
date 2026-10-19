@@ -24,7 +24,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_FORBIDDEN_LIBRARY = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 
 _ACTOR = PlayerId(1)
 _VICTIM = PlayerId(2)
@@ -49,13 +49,13 @@ _POISON = {
 
 def _build(tmp_path: Path, definition: dict):
     """三人を同じスポットに揃えた runtime を作る。"""
-    scenario = json.loads(_RELAY_PUZZLE.read_text(encoding="utf-8"))
+    scenario = json.loads(_FORBIDDEN_LIBRARY.read_text(encoding="utf-8"))
     scenario["players"].append({
         "id": "player_c", "name": "ミナ",
-        "spawn_spot": "control_room", "initial_items": [],
+        "spawn_spot": "entrance_hall", "initial_items": [],
     })
     scenario["player_interactions"] = [definition]
-    path = tmp_path / f"relay_{definition['action_name']}.json"
+    path = tmp_path / f"library_{definition['action_name']}.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 
     runtime = create_world_runtime(path)
