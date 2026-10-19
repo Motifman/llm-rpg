@@ -1,4 +1,4 @@
-"""プレイヤーの Being を用意する処理が、古いメモの実行器の準備に頼らないことを保証する (#1631)。"""
+"""プレイヤーの Being を用意する処理と、記憶の道具の振り分けを保証する (#1631)。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
     DefaultActionResultStore,
 )
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_EPISODE_RECALL
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _SCENARIO = (
@@ -15,20 +16,18 @@ _SCENARIO = (
 )
 
 
-class TestBeingStackWithoutOldMemoExecutor:
-    """Being の解決と補助ツールの振り分けが、古いメモの実行器が無くても動くことを保証する。"""
+class TestBeingStack:
+    """Being の解決と記憶の道具の振り分けが、create_world_runtime の組んだ runtime で動くことを保証する。"""
 
-    def test_acting_being_is_resolved_without_building_the_old_memo_executor(self) -> None:
-        """古いメモの実行器が無い runtime でも、プレイヤーから Being を解決でき、実行器は作られないまま残る。"""
+    def test_acting_being_is_resolved_for_a_spawned_player(self) -> None:
+        """起動時に配置したプレイヤーから、そのプレイヤーの Being を解決できる。"""
         runtime = create_world_runtime(_SCENARIO)
         player_id = runtime.get_player_ids()[0]
-        runtime._todo_tool_executor = None
 
         acting = runtime._acting_being_for(player_id)
 
         assert acting is not None
         assert acting.being_id.value == f"being_w1_p{player_id.value}"
-        assert runtime._todo_tool_executor is None
 
     def test_wiring_the_being_stack_again_keeps_the_same_beings(self) -> None:
         """Being の準備を何度呼んでも作り直さず、起動時に用意した Being を同じ解決器で引ける。"""
@@ -38,22 +37,19 @@ class TestBeingStackWithoutOldMemoExecutor:
         before = resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id)
 
         runtime._wire_being_stack()
-        runtime._wire_auxiliary_tool_stack()
 
         assert runtime.aux_being_resolver is resolver
         assert resolver.resolve_being_id(runtime.aux_being_default_world_id, player_id) == before
 
-    def test_auxiliary_tool_without_old_memo_executor_reports_unsupported_tool(self) -> None:
-        """古いメモの実行器を組まない runtime で古いメモのツールを呼ぶと、止まらずに未対応のツールとして返す。実行器があれば同じ呼び出しは通る。"""
+    def test_old_memo_tool_is_reported_as_unsupported_while_episode_recall_is_handled(self) -> None:
+        """古いメモのツール名 memo_add を呼ぶと、止まらずに未対応のツールとして返す。同じ入口で episode_recall は扱われる。"""
         runtime = create_world_runtime(_SCENARIO)
         player_id = runtime.get_player_ids()[0]
-        with_executor = runtime.run_llm_auxiliary_tool(
-            player_id, "memo_add", {"content": "鍵を探す"}
+
+        old_memo = runtime.run_llm_auxiliary_tool(player_id, "memo_add", {"content": "鍵を探す"})
+        recall = runtime.run_llm_auxiliary_tool(
+            player_id, TOOL_NAME_EPISODE_RECALL, {"handles": ["ep_000000"]}
         )
-        runtime._todo_tool_executor = None
-        runtime._wire_auxiliary_tool_stack = runtime._wire_being_stack  # type: ignore[method-assign]
 
-        result = runtime.run_llm_auxiliary_tool(player_id, "memo_add", {"content": "鍵を探す"})
-
-        assert with_executor.success
-        assert (result.success, result.error_code) == (False, "UNSUPPORTED_TOOL")
+        assert (old_memo.success, old_memo.error_code) == (False, "UNSUPPORTED_TOOL")
+        assert recall.error_code != "UNSUPPORTED_TOOL"

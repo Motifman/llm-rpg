@@ -28,7 +28,9 @@ class TestSkillTargetingDomainService:
         return WorldObject(WorldObjectId(actor_id), coord, ObjectTypeEnum.PLAYER, component=comp)
 
     class TestCalculateAutoAimDirection:
-        def test_finds_nearest_enemy(self, service, simple_map):
+        @pytest.mark.parametrize("reverse_order", [False, True], ids=["near-first", "far-first"])
+        def test_finds_nearest_enemy(self, service, simple_map, reverse_order):
+            """対象の追加順によらず、遠い南の相手より近い東の相手を狙う。"""
             outer = TestSkillTargetingDomainService()
             actor_id = 1
             actor_coord = Coordinate(5, 5)
@@ -37,8 +39,12 @@ class TestSkillTargetingDomainService:
             # 2つの敵: 1つは距離2 (7,5)、もう1つは距離3 (5,8)
             enemy1_id = 101
             enemy2_id = 102
-            simple_map.add_object(outer._create_actor(enemy1_id, Coordinate(7, 5))) # EAST
-            simple_map.add_object(outer._create_actor(enemy2_id, Coordinate(5, 8))) # SOUTH
+            enemies = [
+                outer._create_actor(enemy1_id, Coordinate(7, 5)),
+                outer._create_actor(enemy2_id, Coordinate(5, 8)),
+            ]
+            for enemy in reversed(enemies) if reverse_order else enemies:
+                simple_map.add_object(enemy)
             
             direction = service.calculate_auto_aim_direction(simple_map, WorldObjectId(actor_id))
             assert direction == DirectionEnum.EAST
@@ -97,6 +103,13 @@ class TestSkillTargetingDomainService:
             # 同じ座標
             (Coordinate(5, 5), DirectionEnum.SOUTH),
         ])
-        def test_directions(self, service, to_coord, expected):
-            from_coord = Coordinate(5, 5)
-            assert service._calculate_general_direction(from_coord, to_coord) == expected
+        def test_directions(self, service, simple_map, to_coord, expected):
+            """公開照準は距離の傾きによらず8方向を返し、同じ座標では南を返す。"""
+            for actor_id, coordinate in [(1, Coordinate(5, 5)), (101, to_coord)]:
+                simple_map.add_object(WorldObject(
+                    WorldObjectId(actor_id), coordinate, ObjectTypeEnum.PLAYER,
+                    is_blocking=False, is_blocking_sight=False,
+                    component=ActorComponent(player_id=PlayerId(actor_id)),
+                ))
+
+            assert service.calculate_auto_aim_direction(simple_map, WorldObjectId(1)) == expected
