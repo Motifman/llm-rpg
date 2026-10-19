@@ -26,8 +26,8 @@ class ObservationTimestampResolver:
     def resolve_occurred_at(self, event: Any) -> datetime:
         """イベントの発生日時を返す。属性が無い場合は現在時刻。
 
-        Issue #311 後続: フォールバックも tz-aware UTC で返す。chunk_coordinator
-        の occurred_at 比較で aware と混ざる経路を塞ぐ。
+        Issue #311 後続: フォールバックも tz-aware UTC で返す。occurred_at を
+        比べる側で aware と naive が混ざる経路を塞ぐ。
         """
         occurred_at = getattr(event, "occurred_at", None)
         if occurred_at is None:

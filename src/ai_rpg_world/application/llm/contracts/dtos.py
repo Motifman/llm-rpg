@@ -155,42 +155,15 @@ class ActionResultEntry:
     # 自由文の値は履歴を肥大化させず、呼び出し形を示すため名前だけを残す。
     identifier_arguments: Mapping[str, str] = field(default_factory=dict)
     free_text_argument_names: tuple[str, ...] = ()
-    # 予測→学習ループの主観入力。次ターン feedback (PR1) では expected_result のみ
-    # 使うが、episodic 永続化 (PR2) で intention→episode.why / expected_result→
-    # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
-    # 後方互換 (= world-action 以外の tool / 旧 snapshot)。
-    expected_result: str | None = None
+    # 主観入力。episodic 永続化で intention→episode.why / emotion_hint→episode.felt
+    # に配線する。どれも既定 None で後方互換 (= world-action 以外の tool / 旧 snapshot)。
     inner_thought: str | None = None
     intention: str | None = None
     emotion_hint: str | None = None
-    # Issue #311 後続: エピソード記憶のチャンク境界判定で「シーン切り替え」を
-    # 明示的に伝えるためのヒント。``True`` の action が bucket に入ったら
-    # chunk を閉じる候補とする (cognitive science の "doorway effect" 等を
-    # 反映)。spot 遷移成功や重要な interaction 等の caller が True にする。
-    # 未指定 (False) の action はチャンク化に対して中立 = 従来の境界条件で判定。
-    scene_boundary: bool = False
     # action が起きた時点のゲーム内 tick (記録時点で取れない caller は None)。
-    # ``decide_chunk_boundary`` の TEMPORAL_GAP 判定で bucket 内 actions の
-    # tick 差を見るのに使う (wall-clock では LLM レイテンシで歪むため)。
     occurred_tick: int | None = None
-    # U1 (予測誤差統一設計 部品1): この行動が発生した turn の prompt build 時に
-    # 発行された prediction_context_id。「どのプロンプト (何が in-context
-    # だったか) で立てた予測が、どう外れたか」を後から辿るための紐付けキー。
-    # ``PredictionContextLedger`` が発行し、``ActionResultRecorder.record`` が
-    # consume してここに焼き込む。id が consume されないまま次の build が来た
-    # 場合や、この entry の生成元が prompt build を経由しない場合は None
-    # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
-    prediction_context_id: str | None = None
     # 実行境界で確定した要求と当人の手番。dataset IDの代わりを捏造しない。
     execution_provenance: ExecutionProvenance | None = None
-    # U4 (予測誤差統一設計 部品3): この行動の prompt build 時に【関連する学び】
-    # として in-context だった belief_id 群。``PredictionContextLedger.consume``
-    # が返す ``PredictionContext.belief_ids`` を ``ActionResultRecorder.record``
-    # がここへ焼き込む。新規 per-Being store は作らず、この entry に載せたまま
-    # chunk 転記点 (encoding_input.action_results) まで運ぶ設計 (U1 のパターンを
-    # 延長)。ledger 未注入 (U1 flag OFF) や consume 失敗時は空タプル
-    # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
-    in_context_belief_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -231,16 +204,12 @@ class ActionResultEntry:
             raise TypeError("game_time_label must be str or None")
         if not isinstance(self.omit_result_in_prompt, bool):
             raise TypeError("omit_result_in_prompt must be bool")
-        if self.expected_result is not None and not isinstance(self.expected_result, str):
-            raise TypeError("expected_result must be str or None")
         if self.inner_thought is not None and not isinstance(self.inner_thought, str):
             raise TypeError("inner_thought must be str or None")
         if self.intention is not None and not isinstance(self.intention, str):
             raise TypeError("intention must be str or None")
         if self.emotion_hint is not None and not isinstance(self.emotion_hint, str):
             raise TypeError("emotion_hint must be str or None")
-        if not isinstance(self.scene_boundary, bool):
-            raise TypeError("scene_boundary must be bool")
         if self.occurred_tick is not None and not isinstance(self.occurred_tick, int):
             raise TypeError("occurred_tick must be int or None")
         if isinstance(self.occurred_tick, bool):
@@ -248,15 +217,6 @@ class ActionResultEntry:
             raise TypeError("occurred_tick must not be bool")
         if self.execution_provenance is not None and not isinstance(self.execution_provenance, ExecutionProvenance):
             raise TypeError("execution_provenance must be ExecutionProvenance or None")
-        if self.prediction_context_id is not None and not isinstance(
-            self.prediction_context_id, str
-        ):
-            raise TypeError("prediction_context_id must be str or None")
-        if not isinstance(self.in_context_belief_ids, tuple):
-            raise TypeError("in_context_belief_ids must be tuple[str, ...]")
-        for idx, bid in enumerate(self.in_context_belief_ids):
-            if not isinstance(bid, str) or not bid:
-                raise TypeError(f"in_context_belief_ids[{idx}] must be non-empty str")
 
 
 EMOTION_HINT_VALUES: tuple[str, ...] = (
@@ -703,11 +663,3 @@ class LlmUiContextDto:
 
 # ToolAvailabilityContext は PlayerCurrentStateDto をそのまま利用する。
 # ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
-
-
-# NOTE (Issue #470 Phase 1 PR3):
-# MemoEntry / MemoFulfillmentContext / TodoEntry (旧名 alias) は
-# ``domain/memory/memo/value_object/`` に昇格しました。
-# 新規コードは:
-#     from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-# から import してください。

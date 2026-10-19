@@ -28,7 +28,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 @pytest.fixture
 def clean_runtime_env(monkeypatch):
     # 既存 contract test と同じ env clean を実施 (env leak を防ぐ)
-    monkeypatch.delenv("LLM_EPISODIC_ENABLED", raising=False)
     yield
 
 
