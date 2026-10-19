@@ -77,9 +77,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_EPISODE_RECALL,
     TOOL_NAME_EPISODE_REVISE_INDEX,
     TOOL_NAME_SPEECH,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
 )
 from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
@@ -190,30 +187,7 @@ class WorldLlmWiring:
         # の prompt を流して二重に attention を取りに行く。
         if hasattr(self.runtime, "set_tool_call_loop_guard"):
             self.runtime.set_tool_call_loop_guard(self.tool_call_loop_guard)
-        # PR 5 (#227): memo 完了 hint。LLM が memo_done を呼ばずに memo を
-        # 放置するケースを救済するため、action_summary / result_summary と
-        # 未完了 memo の content を SequenceMatcher で比較し、類似度が高ければ
-        # 「memo を完了したかも」hint を result.message に append する。
-        # PR #230 で本家経路に配線済みだが、world_runtime の独自 turn 実行は
-        # 経由しないため、ここで wiring に直接組み込む。
         runtime_config = getattr(self.runtime, "_runtime_config", None)
-        memo_tools_enabled = bool(
-            getattr(runtime_config, "memo_tools_enabled", True)
-        )
-        memo_store = getattr(self.runtime, "_todo_store", None)
-        # runtime 側で aux being stack を初期化しておく。phase_b の
-        # _acting_being_for が動くために必要。idempotent な呼び出し。
-        if memo_tools_enabled and memo_store is not None and hasattr(
-            self.runtime, "_wire_auxiliary_tool_stack"
-        ):
-            try:
-                self.runtime._wire_auxiliary_tool_stack()
-            except Exception:
-                logger.warning(
-                    "_wire_auxiliary_tool_stack failed; "
-                    "MemoCompletionHintService will be disabled",
-                    exc_info=True,
-                )
         min_probability = float(
             getattr(
                 runtime_config,
@@ -222,16 +196,8 @@ class WorldLlmWiring:
             )
         )
         self.memo_completion_hint_service: MemoCompletionHintService | None = None
-        if memo_tools_enabled and memo_store is not None:
-            # #1322: profile が型付き判断を求めていれば、文字の重なりでなく
-            # 意味で完了を判定する。求めていなければ従来の重なり判定で動く。
-            self.memo_completion_hint_service = MemoCompletionHintService(
-                memo_store=memo_store,
-                judgment_port=self.typed_judgment_port,
-                min_probability=min_probability,
-            )
-        elif bool(getattr(runtime_config, "being_memo_enabled", False)):
-            # #1628: メモ帳のやることにも同じ判定を使う。自動では消さない。
+        if runtime_config is not None:
+            # #1628: メモ帳のやることが済んだかを問う。自動では消さない。
             self.memo_completion_hint_service = MemoCompletionHintService(
                 pending_todos=self._pending_todos,
                 judgment_port=self.typed_judgment_port,
@@ -277,11 +243,6 @@ class WorldLlmWiring:
             #   は将来の別ランタイム用に残す。仮に何らかの経路で呼ばれても、
             #   default `_execute_tool` の UNSUPPORTED_TOOL 経路で正しく弾く。
             TOOL_NAME_SPEECH: self._handle_speech,
-            TOOL_NAME_TODO_ADD: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_ADD),
-            TOOL_NAME_TODO_LIST: self._make_auxiliary_tool_handler(TOOL_NAME_TODO_LIST),
-            TOOL_NAME_TODO_COMPLETE: self._make_auxiliary_tool_handler(
-                TOOL_NAME_TODO_COMPLETE
-            ),
             # #1623: 定義は目次を出す設定でだけ get_tool_definitions が出す。
             TOOL_NAME_EPISODE_RECALL: self._make_auxiliary_tool_handler(
                 TOOL_NAME_EPISODE_RECALL

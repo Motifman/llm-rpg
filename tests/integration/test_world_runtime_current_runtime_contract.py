@@ -12,7 +12,6 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -31,17 +30,14 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCaptureSink,
 )
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
-    TOOL_NAME_MEMO_ADD,
-    TOOL_NAME_MEMO_DONE,
-    TOOL_NAME_MEMO_LIST,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -55,9 +51,6 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
-    SemanticMemoryEntry,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -82,12 +75,6 @@ _FIXTURE_SCENARIOS_DIR = (
 def clean_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep these contract tests independent from the caller's shell env."""
     for key in (
-        "LLM_EPISODIC_ENABLED",
-        "LLM_EPISODIC_SUBJECTIVE_ENABLED",
-        "SEMANTIC_PASSIVE_TOP_K",
-        "SEMANTIC_LLM_GIST_ENABLED",
-        "SHORT_TERM_MEMORY_KIND",
-        "MEMO_TOOLS_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -96,7 +83,6 @@ def _create_runtime(
     config: ResolvedLlmRuntimeConfig | None = None,
     *,
     scenario_path: Path = _SCENARIO_PATH,
-    include_todo_tools: bool = True,
 ):
     from ai_rpg_world.application.world_runtime.world_runtime import (
         create_world_runtime,
@@ -105,7 +91,6 @@ def _create_runtime(
     return create_world_runtime(
         scenario_path,
         config=config or ResolvedLlmRuntimeConfig.for_tests(),
-        include_todo_tools=include_todo_tools,
     )
 
 
@@ -123,37 +108,6 @@ def _system_prompt_text(prompt: dict) -> str:
         for m in prompt.get("messages", [])
         if m.get("role") == "system"
     )
-
-
-def _seed_semantic_learning(runtime, player_id, text: str) -> None:
-    stack = runtime._episodic_stack
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert stack.semantic_memory_store is not None
-    stack.semantic_memory_store.add_by_being(
-        being,
-        SemanticMemoryEntry(
-            entry_id="contract-semantic-entry",
-            player_id=int(player_id.value),
-            being_id=being,
-            text=text,
-            evidence_episode_ids=("contract-episode",),
-            confidence=0.8,
-            created_at=datetime.now(timezone.utc),
-            importance_score=8,
-            tags=("contract",),
-        ),
-    )
-
-
-class _PromotionSpy:
-    def __init__(self) -> None:
-        self.calls: list[tuple[int, BeingId]] = []
-
-    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
-        self.calls.append((player_id, being_id))
 
 
 class _OrderedActionStoreSpy:
@@ -175,44 +129,6 @@ class _OrderedActionStoreSpy:
             "result_summary": result_summary,
             **kwargs,
         }
-
-
-class _OrderedChunkCoordinatorSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-        self.calls: list[PlayerId] = []
-
-    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
-        self.events.append("chunk")
-        self.calls.append(player_id)
-
-
-class _OrderedPromotionSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-        self.calls: list[tuple[int, BeingId]] = []
-
-    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
-        self.events.append("promotion")
-        self.calls.append((player_id, being_id))
-
-
-class _RaisingChunkCoordinatorSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
-        self.events.append("chunk")
-        raise RuntimeError("chunk failed")
-
-
-class _RaisingPromotionSpy:
-    def __init__(self, events: list[str]) -> None:
-        self.events = events
-
-    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
-        self.events.append("promotion")
-        raise RuntimeError("promotion failed")
 
 
 class _LoopGuardSpy:
@@ -241,7 +157,7 @@ class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
         recent_event_store = UnifiedRecentEventStore()
-        self._short_term_memory = DefaultSlidingWindowMemory(
+        self._short_term_memory = SummarizingShortTermMemory(
             event_store=recent_event_store
         )
         self._action_result_store = DefaultActionResultStore(
@@ -324,7 +240,6 @@ class _ContractRuntime:
         tool_name: str,
         success: bool = True,
         error_code: str | None = None,
-        scene_boundary: bool = False,
         inner_thought: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
@@ -333,7 +248,7 @@ class _ContractRuntime:
         free_text_argument_names: tuple[str, ...] = (),
     ) -> None:
         # 実 escape _record_action_result (U2) と同じ subjective kwargs を受ける。
-        self.events.extend(["append", "chunk", "promotion"])
+        self.events.append("append")
         self._action_result_store.append(
             player_id,
             action_summary,
@@ -356,7 +271,6 @@ class _ContractRuntime:
                 "tool_name": tool_name,
                 "success": success,
                 "error_code": error_code,
-                "scene_boundary": scene_boundary,
                 "inner_thought": inner_thought,
                 "intention": intention,
                 "emotion_hint": emotion_hint,
@@ -624,11 +538,9 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
 
     assert "【現在地と周囲】" in user
     assert "【直近の出来事】" in user
-    assert "【関連する学び】" not in user
     assert "visible_tile_map" not in user
     assert "current_terrain_type" not in user
     assert "travel_to" in tool_names
-    assert runtime._episodic_stack is None
 
 
 def test_synchronized_action_groups_expose_no_tool_of_their_own(
@@ -673,15 +585,13 @@ def test_being_provisioning_failure_stops_runtime_creation(
         BeingProvisioningService,
     )
 
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-
     def _boom(self, player_id):
         raise RuntimeError("provision boom")
 
     monkeypatch.setattr(BeingProvisioningService, "ensure_attached", _boom)
 
     with pytest.raises(RuntimeError, match="player_id=") as excinfo:
-        _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+        _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
     assert "provision boom" in str(excinfo.value.__cause__)
 
 
@@ -1355,115 +1265,23 @@ def test_world_runtime_build_full_prompt_uses_shared_default_prompt_builder(
     assert builder is runtime._get_or_build_default_prompt_builder()
 
 
-def test_episodic_stack_gate_follows_config_not_env(
+def test_old_memo_tools_are_not_offered(
     clean_runtime_env: None,
 ) -> None:
-    """#558 MEDIUM-1 後続: env 未設定でも explicit config.episodic_enabled だけで
-    stack が立つ。親 gate を env 直読みから config 単一窓口に寄せた回帰テスト。
-
-    clean_runtime_env が LLM_EPISODIC_ENABLED を消すので、env 経路では立たない。
-    config だけで立つことが、env と config を別解釈する silent failure の不在を示す。"""
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    assert runtime._episodic_stack is not None
-    # episodic OFF の config なら立たない (= gate が config を見ている裏付け)
-    off = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=False))
-    assert off._episodic_stack is None
-
-
-def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """episodic stack だけを立てると意味記憶の部品は組まれず、行動の道具は出る。"""
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-
-    stack = runtime._episodic_stack
-    assert stack is not None
-    assert stack.chunk_coordinator is not None
-    assert stack.passive_recall is not None
-    assert stack.noun_matcher is not None
-    assert stack.semantic_passive_recall is None
-    assert stack.semantic_passive_top_k == 0
-    assert stack.episodic_semantic_promotion is None
-    assert stack.semantic_memory_store is None
-    assert stack.memory_link_store is None
-
-    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-
-
-def test_memo_tools_default_visible_in_get_tool_definitions(
-    clean_runtime_env: None,
-) -> None:
-    """既定では既存 run 互換で memo_add / memo_list / memo_done を LLM に露出する。"""
+    """既定の設定で、古いメモの道具 memo_add / memo_list / memo_done は LLM に出ず、環境の道具は出る。"""
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
-    assert {TOOL_NAME_MEMO_ADD, TOOL_NAME_MEMO_LIST, TOOL_NAME_MEMO_DONE} <= tool_names
+    assert {"memo_add", "memo_list", "memo_done"} & tool_names == set()
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
 
 
-def test_memo_tools_flag_false_hides_only_memo_tools(
+def test_memo_completion_hint_service_is_built_with_the_memo_book(
     clean_runtime_env: None,
 ) -> None:
-    """MEMO_TOOLS_ENABLED=false は memo tool だけを隠し、記憶本体と他 tool は残す。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_passive_top_k=3,
-            memo_tools_enabled=False,
-        )
-    )
-
-    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
-
-    assert TOOL_NAME_MEMO_ADD not in tool_names
-    assert TOOL_NAME_MEMO_LIST not in tool_names
-    assert TOOL_NAME_MEMO_DONE not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert runtime._episodic_stack is not None
-    assert runtime._episodic_stack.passive_recall is not None
-    assert runtime._episodic_stack.semantic_passive_recall is not None
-
-
-def test_memo_tools_flag_false_hides_active_memo_section_from_prompt(
-    clean_runtime_env: None,
-) -> None:
-    """memo tool 非露出時は未完了 memo section も消し、使えない memo_done へ誘導しない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            memo_tools_enabled=False,
-        )
-    )
-    runtime._wire_auxiliary_tool_stack()
-    being_id = runtime.aux_being_resolver.resolve_being_id(
-        runtime.aux_being_default_world_id,
-        PlayerId(1),
-    )
-    assert being_id is not None
-    runtime._todo_store.add_by_being(being_id, "山頂で狼煙を上げる")
-
-    prompt = runtime.build_full_prompt(PlayerId(1))
-    system_text = _system_prompt_text(prompt)
-    user_text = _user_prompt_text(prompt)
-
-    assert TOOL_NAME_MEMO_ADD not in system_text
-    assert TOOL_NAME_MEMO_LIST not in system_text
-    assert TOOL_NAME_MEMO_DONE not in system_text
-    assert "【進行中のメモ】" not in user_text
-    assert "山頂で狼煙を上げる" not in user_text
-
-
-def test_memo_tools_flag_false_disables_memo_completion_hint_service(
-    clean_runtime_env: None,
-) -> None:
-    """memo tool 非露出時は memo 完了 hint も作らず、存在しない memo_done を促さない。"""
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(memo_tools_enabled=False)
-    )
+    """メモ帳はいつも入るので、そのやることが済んだかの知らせのサービスも、設定を書かずに組んだ runtime でいつも組まれる。"""
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     wiring = _WorldLlmWiring(
         runtime=runtime,
@@ -1472,219 +1290,7 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
         llm_client=StubLlmClient(None),
     )
 
-    assert wiring.memo_completion_hint_service is None
-
-
-def test_semantic_config_wires_world_runtime_stack_and_prompt_learning(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """SEMANTIC config enables stores, links, promotion, and prompt learning."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    monkeypatch.delenv("SEMANTIC_PASSIVE_TOP_K", raising=False)
-    monkeypatch.delenv("SEMANTIC_LLM_GIST_ENABLED", raising=False)
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_passive_top_k=3,
-            semantic_llm_gist_enabled=False,
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    stack = runtime._episodic_stack
-
-    assert stack is not None
-    assert stack.semantic_passive_top_k == 3
-    assert stack.semantic_passive_recall is not None
-    assert stack.episodic_semantic_promotion is not None
-    assert stack.semantic_memory_store is not None
-    assert stack.memory_link_store is not None
-
-    _seed_semantic_learning(
-        runtime,
-        player_id,
-        "CONTRACT_SEMANTIC_MARKER: 禁書庫ではノアの沈黙が手がかりになる",
-    )
-    prompt = runtime.build_full_prompt(player_id)
-    user = _user_prompt_text(prompt)
-
-    assert "【関連する学び】" in user
-    assert "CONTRACT_SEMANTIC_MARKER" in user
-
-
-def test_action_result_recording_runs_semantic_promotion_hook_when_enabled(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """world_runtime's action path calls the semantic promotion hook after chunk write."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    spy = _PromotionSpy()
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        episodic_semantic_promotion=spy,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 周囲を確認する",
-        "CONTRACT_RESULT: 禁書庫の静けさを確認した",
-        tool_name="contract_probe",
-    )
-
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert spy.calls == [(player_id.value, being)]
-
-
-def test_record_action_result_preserves_escape_hook_order(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """escape runtime records action first, then chunk, then semantic promotion."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    store = _OrderedActionStoreSpy(events)
-    chunk = _OrderedChunkCoordinatorSpy(events)
-    promotion = _OrderedPromotionSpy(events)
-
-    runtime._action_result_store = store
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=chunk,
-        episodic_semantic_promotion=promotion,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 静けさを確認した",
-        "CONTRACT_RESULT: 記録した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append", "chunk", "promotion"]
-    # U1: _record_action_result は共有 ActionResultRecorder に委譲し、recorder は
-    # 全フィールドを既定値込みで append に渡す。escape が意味的に渡すフィールドが
-    # 含まれていることを subset で固定する (完全一致は呼び出し形の過剰指定)。
-    assert {
-        "player_id",
-        "action_summary",
-        "result_summary",
-        "occurred_at",
-        "tool_name",
-        "success",
-        "error_code",
-        "scene_boundary",
-        "occurred_tick",
-        "game_time_label",
-    } <= set(store.kwargs)
-    assert store.kwargs["occurred_at"].tzinfo is timezone.utc
-    assert store.kwargs["tool_name"] == "contract_probe"
-    assert store.kwargs["game_time_label"] == runtime._time_label()
-    # escape は当面 subjective fields を渡さない (#553 baseline / U2 で配線)
-    assert store.kwargs["intention"] is None
-    assert store.kwargs["emotion_hint"] is None
-    being = runtime.aux_being_resolver.resolve_being_id(
-        runtime._aux_being_default_world_id, player_id
-    )
-    assert being is not None
-    assert chunk.calls == [player_id]
-    assert promotion.calls == [(player_id.value, being)]
-
-
-def test_record_action_result_skips_memory_hooks_when_episodic_stack_absent(
-    clean_runtime_env: None,
-) -> None:
-    runtime = _create_runtime()
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._action_result_store = _OrderedActionStoreSpy(events)
-    runtime._episodic_stack = None
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 待機した",
-        "CONTRACT_RESULT: 何も起きなかった",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append"]
-
-
-def test_record_action_result_skips_promotion_when_not_configured(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._action_result_store = _OrderedActionStoreSpy(events)
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=_OrderedChunkCoordinatorSpy(events),
-        episodic_semantic_promotion=None,
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 周囲を見た",
-        "CONTRACT_RESULT: 記録した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["append", "chunk"]
-
-
-def test_record_action_result_keeps_action_success_when_memory_hooks_fail(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Chunk/promotion failures are logged but do not block the action record."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-    player_id = runtime.get_player_ids()[0]
-    events: list[str] = []
-    runtime._episodic_stack = replace(
-        runtime._episodic_stack,
-        chunk_coordinator=_RaisingChunkCoordinatorSpy(events),
-        episodic_semantic_promotion=_RaisingPromotionSpy(events),
-    )
-
-    runtime._record_action_result(
-        player_id,
-        "CONTRACT_ACTION: 失敗する記憶 hook を通る",
-        "CONTRACT_RESULT: action 自体は完了した",
-        tool_name="contract_probe",
-    )
-
-    assert events == ["chunk", "promotion"]
-    entries = runtime._action_result_store.get_recent(player_id, 10)
-    assert len(entries) == 1
-    assert entries[0].action_summary == "CONTRACT_ACTION: 失敗する記憶 hook を通る"
-    assert entries[0].success is True
+    assert wiring.memo_completion_hint_service is not None
 
 
 def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
@@ -1723,7 +1329,7 @@ def test_phase_b_runs_loop_guard_after_escape_recording_hooks(
     )
 
     assert result.success is True
-    assert events == ["append", "chunk", "promotion", "loop_guard"]
+    assert events == ["append", "loop_guard"]
 
 
 def test_phase_b_records_tool_trace_payload_in_action_result_trace(
@@ -2196,7 +1802,7 @@ def test_direct_explore_records_natural_language_action_summary(
     assert not entry.action_summary.startswith(f"{TOOL_NAME_SPOT_GRAPH_EXPLORE}(")
 
 
-def test_direct_travel_start_records_scene_boundary_and_tick(
+def test_direct_travel_start_records_travel_result_and_tick(
     clean_runtime_env: None,
 ) -> None:
     runtime = _create_runtime()
@@ -2218,7 +1824,6 @@ def test_direct_travel_start_records_scene_boundary_and_tick(
     entry = entries[0]
     assert entry.tool_name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
     assert entry.success is True
-    assert entry.scene_boundary is True
     assert entry.occurred_tick == tick_before
     assert (
         entry.action_summary
@@ -2347,73 +1952,20 @@ def test_explore_handler_records_none_subjective_when_args_absent(
     assert entry.emotion_hint is None
 
 
-def test_semantic_env_does_not_override_explicit_config_off(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """world_runtime semantic flags follow ResolvedLlmRuntimeConfig, not direct env reads."""
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    monkeypatch.setenv("SEMANTIC_PASSIVE_TOP_K", "5")
-    monkeypatch.setenv("SEMANTIC_LLM_GIST_ENABLED", "1")
-
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True,
-            semantic_passive_top_k=0,
-            semantic_llm_gist_enabled=False,
-        )
-    )
-    stack = runtime._episodic_stack
-
-    assert stack is not None
-    assert stack.semantic_passive_top_k == 0
-    assert stack.semantic_passive_recall is None
-    assert stack.semantic_memory_store is None
-    assert stack.memory_link_store is None
-
-
 def test_experiment_wiring_stub_exposes_current_world_runtime_snapshot_surface(
     clean_runtime_env: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
 
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests(episodic_enabled=True))
+    runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
     stub = _wiring_stub_from_world_runtime(runtime)
 
-    assert stub.memo_store is runtime._todo_store
-    assert stub.episodic_episode_store is runtime._episodic_stack.episode_store
-    assert stub.semantic_memory_store is None
-    assert stub.memory_link_store is None
+    assert not hasattr(stub, "memo_store")
+    assert not hasattr(stub, "episodic_episode_store")
     assert stub.being_attachment_resolver is runtime.aux_being_resolver
     assert stub.being_repository is runtime._aux_being_repository
-
-
-def test_experiment_wiring_stub_exposes_semantic_stores_when_enabled(
-    clean_runtime_env: None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """experiment snapshot surface includes semantic and link stores after #547."""
-    from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
-
-    monkeypatch.setenv("LLM_EPISODIC_ENABLED", "1")
-    monkeypatch.setenv("LLM_EPISODIC_SUBJECTIVE_ENABLED", "0")
-    runtime = _create_runtime(
-        ResolvedLlmRuntimeConfig.for_tests(
-            episodic_enabled=True, semantic_passive_top_k=3
-        )
-    )
-
-    stub = _wiring_stub_from_world_runtime(runtime)
-
-    assert stub.semantic_memory_store is runtime._episodic_stack.semantic_memory_store
-    assert stub.memory_link_store is runtime._episodic_stack.memory_link_store
-    assert stub.semantic_memory_store is not None
-    assert stub.memory_link_store is not None
 
 
 # ── R2a: escape run_phase_b の trace 発火カバレッジ ──

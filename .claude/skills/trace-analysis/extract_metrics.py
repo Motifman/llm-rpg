@@ -140,10 +140,9 @@ def _extract_summary(events: list[dict]) -> dict[str, Any]:
         "action_total": total_action,
         "action_fail": fail,
         "action_fail_rate": (fail / total_action) if total_action else 0.0,
-        "memo_add": counts_by_kind.get("memo_add", 0),
-        "memo_done": counts_by_kind.get("memo_done", 0),
         "episodic_chunk_written": counts_by_kind.get("episodic_chunk_written", 0),
         "episodic_subjective_filled": counts_by_kind.get("episodic_subjective_filled", 0),
+        "episode_writing": counts_by_kind.get("episode_writing", 0),
         "short_term_summary": counts_by_kind.get("short_term_summary_generated", 0),
         "short_term_long_summary": counts_by_kind.get("short_term_long_summary_generated", 0),
         "loop_guard_warning": counts_by_kind.get("loop_guard_warning", 0),
@@ -615,8 +614,10 @@ def _extract_give_item(events: list[dict]) -> dict[str, Any]:
 #: ときに分類漏れが数字として見えることが、この分類の一番の価値。
 ACTION_BUDGET_CATEGORIES: dict[str, tuple[str, ...]] = {
     "conversation": ("speak", "listen"),
-    "memo": ("memo_add", "memo_done", "memo_list"),
     "recall": (
+        "episode_recall",
+        "episode_revise_index",
+        # 以下は #1631 で消した道具。消す前の trace を読むために残す。
         "memory_recall_episodes",
         "memory_recall_by_handle",
         "memo_recall_by_handle",
@@ -915,14 +916,10 @@ def _extract_action_name_rescue(events: list[dict]) -> dict[str, Any]:
 
 
 def _extract_memo_completion_hint(events: list[dict]) -> dict[str, Any]:
-    """memo 完了 hint の発火と、その後の追従を数える (#1322)。
-
-    hint の件数だけでは当たっていたか分からない。hint の後に当人が同じ memo を
-    memo_done で完了した割合が、hint の適合率の代理になる。
+    """memo 完了 hint の発火を数える (#1322)。
 
     重なり由来と判断由来を別に数える。混ぜると、意味判定に替えた効果が薄まって
-    見えない。hint が 0 件の run では率を出さない — 0 除算を 0% と書くと
-    「出したが全部外した」と読めてしまう。
+    見えない。
     """
     asked = 0
     accepted = 0
@@ -942,19 +939,8 @@ def _extract_memo_completion_hint(events: list[dict]) -> dict[str, Any]:
         else:
             below_threshold += 1
 
-    # memo_id ごとの完了 tick。hint より後の完了だけを追従と数える。
-    done_ticks: dict[str, list[int]] = defaultdict(list)
-    for event in events:
-        if event.get("kind") != "memo_done":
-            continue
-        memo_id = event.get("payload", {}).get("memo_id")
-        if memo_id:
-            done_ticks[str(memo_id)].append(int(event.get("tick") or 0))
-
     hints = 0
-    followed = 0
     by_source: Counter = Counter()
-    followed_by_source: Counter = Counter()
     for event in events:
         if event.get("kind") != "memo_hint":
             continue
@@ -962,11 +948,6 @@ def _extract_memo_completion_hint(events: list[dict]) -> dict[str, Any]:
         source = str(payload.get("hint_source") or "overlap")
         hints += 1
         by_source[source] += 1
-        memo_id = str(payload.get("memo_id") or "")
-        hint_tick = int(event.get("tick") or 0)
-        if any(tick >= hint_tick for tick in done_ticks.get(memo_id, ())):
-            followed += 1
-            followed_by_source[source] += 1
 
     return {
         "asked": asked,
@@ -975,11 +956,6 @@ def _extract_memo_completion_hint(events: list[dict]) -> dict[str, Any]:
         "unavailable": unavailable,
         "hints": hints,
         "hints_by_source": dict(by_source),
-        "followed_through": followed,
-        "followed_through_by_source": {
-            source: followed_by_source.get(source, 0) for source in by_source
-        },
-        "follow_through_rate": (followed / hints) if hints else None,
     }
 
 
@@ -1026,9 +1002,7 @@ def _make_comparison(current: dict, baseline: dict) -> list[dict]:
         ("cost (USD)", "cost_usd_total", "f4"),
         ("action 総数", "action_total", "int"),
         ("失敗率", "action_fail_rate", "pct"),
-        ("memo_add", "memo_add", "int"),
-        ("memo_done", "memo_done", "int"),
-        ("episodic_chunk_written", "episodic_chunk_written", "int"),
+        ("episode_writing", "episode_writing", "int"),
         ("short_term_summary", "short_term_summary", "int"),
         ("short_term_long_summary", "short_term_long_summary", "int"),
         ("loop_guard_warning", "loop_guard_warning", "int"),

@@ -3,7 +3,7 @@
   "metadata": {
     "id": "recall_probe_v3",
     "title": "能動 recall 検証 v3 — persona + NPC シキ (Issue #526)",
-    "description": "v2 を踏まえた修正:\n1. **ハルに persona_prompt を設定** — v1/v2 では 1 spawn 構成で persona_prompt が活性化されない経路だった (escape_game_runtime の per-player persona builder は len(player_spawns) > 1 が必要)\n2. **シキを 2 番目の player_spawn として追加** — これで (a) persona 配線が活性化、(b) ハルの『現在地と周囲』にシキが出る、(c) シキが応答できるべき相手として LLM に認識される\n3. シキは runner script で LLM 抑制 (= ObservationTurnScheduler の resolver を patch)\n4. objective_text は v2 と同じ中立「漂流島で生き延びる」のまま\n5. 接続無しの拠点孤立も v2 のまま (= passive 痩せ)",
+    "description": "(退役: 過去 episode とシキの発話を注入していた scripts/run_recall_probe_experiment.py は #1631 で消した。このシナリオだけでは入力が無く、当時の観察は再現できない。)\nv2 を踏まえた修正:\n1. **ハルに persona_prompt を設定** — v1/v2 では 1 spawn 構成で persona_prompt が活性化されない経路だった (escape_game_runtime の per-player persona builder は len(player_spawns) > 1 が必要)\n2. **シキを 2 番目の player_spawn として追加** — これで (a) persona 配線が活性化、(b) ハルの『現在地と周囲』にシキが出る、(c) シキが応答できるべき相手として LLM に認識される\n3. シキは runner script で LLM 抑制 (= ObservationTurnScheduler の resolver を patch)\n4. objective_text は v2 と同じ中立「漂流島で生き延びる」のまま\n5. 接続無しの拠点孤立も v2 のまま (= passive 痩せ)",
     "theme": "memory_probe",
     "difficulty": "easy",
     "estimated_ticks": 15,

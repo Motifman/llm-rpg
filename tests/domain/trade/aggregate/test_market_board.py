@@ -50,12 +50,6 @@ def _order(order_id: int, **overrides) -> MarketOrder:
 class TestOrdersGoOntoTheBoard:
     """注文を置く・取り下げる。"""
 
-    def test_placing_an_order_puts_one_row_on_the_board(self) -> None:
-        """注文を 1 件置くと、板の行が 1 件になる。"""
-        board = MarketBoard.empty().with_order(_order(1))
-
-        assert len(board.orders) == 1
-
     def test_two_orders_for_the_same_item_stay_as_two_rows(self) -> None:
         """同じ品目の売り注文が 2 件あると、値が違うので別々の行として残る。
 
@@ -101,11 +95,13 @@ class TestOrdersGoOntoTheBoard:
             board.cancelled(MarketOrderId(1), by=_LENA)
 
     def test_placing_an_order_leaves_the_previous_board_untouched(self) -> None:
-        """注文を置いても、元の板は変わらない (不変オブジェクト)。"""
+        """空の板へ注文を置くと、その注文だけを持つ板を返し、元の板は空のまま。"""
         board = MarketBoard.empty()
+        order = _order(1)
 
-        board.with_order(_order(1))
+        after = board.with_order(order)
 
+        assert after.orders == (order,)
         assert board.orders == ()
 
 
@@ -226,12 +222,13 @@ class TestExpiryIsReadWithoutChangingTheBoard:
     """
 
     def test_orders_past_their_expiry_are_listed(self) -> None:
-        """期限を過ぎた注文が取り出せる。"""
-        board = MarketBoard.empty().with_order(
-            _order(1, listed_at_tick=5, expires_in_ticks=10)
-        )
+        """期限切れ一覧を読んでも板は変わらず、同じ注文を繰り返し読める。"""
+        order = _order(1, listed_at_tick=5, expires_in_ticks=10)
+        board = MarketBoard.empty().with_order(order)
 
         assert [o.order_id for o in board.expired_orders(16)] == [MarketOrderId(1)]
+        assert board.orders == (order,)
+        assert board.expired_orders(16) == (order,)
 
     def test_live_orders_are_not_listed(self) -> None:
         """期限内の注文は取り出されない (正の対照)。"""
