@@ -125,10 +125,10 @@ def resolve_prompt_capture_being_id(wiring: WorldLlmWiring, player_id: PlayerId)
     resolver = getattr(wiring.runtime, "aux_being_resolver", None)
     world_id = getattr(wiring.runtime, "aux_being_default_world_id", None)
     if resolver is None or world_id is None:
-        raise RuntimeError("PROMPT_DATASET_CAPTURE_ENABLED requires aux Being resolver")
+        raise RuntimeError("prompt dataset capture requires aux Being resolver")
     being_id = resolver.resolve_being_id(world_id, player_id)
     if being_id is None:
-        raise RuntimeError(f"PROMPT_DATASET_CAPTURE_ENABLED requires being_id for player_id={player_id.value}")
+        raise RuntimeError(f"prompt dataset capture requires being_id for player_id={player_id.value}")
     return str(being_id.value)
 
 

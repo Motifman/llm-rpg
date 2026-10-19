@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-SCENARIO = Path("data/scenarios/relay_puzzle_demo.json")
+SCENARIO = Path("data/scenarios/survival_island_v4_coop.json")
 
 
 def test_runtime_wires_object_and_passage_to_same_scope_factory() -> None:
