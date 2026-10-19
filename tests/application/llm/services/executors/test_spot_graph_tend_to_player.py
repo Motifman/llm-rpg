@@ -10,6 +10,7 @@ resolver で target_player_id まで解決済みの args を受けて、
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,6 +24,8 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -68,7 +71,9 @@ def _build_player(
     return status
 
 
-def _build_executor() -> tuple[SpotGraphToolExecutor, MagicMock, MagicMock]:
+def _build_executor(
+    *, runtime: SimpleNamespace | None = None,
+) -> tuple[SpotGraphToolExecutor, MagicMock, MagicMock]:
     """tend_to_player 用の最小 executor を返す。
 
     Returns:
@@ -93,6 +98,7 @@ def _build_executor() -> tuple[SpotGraphToolExecutor, MagicMock, MagicMock]:
         item_repository=item_repo,
         event_publisher=publisher,
         player_status_repository=status_repo,
+        runtime=runtime,
     )
     return exec, status_repo, publisher
 
@@ -287,3 +293,51 @@ class TestDispatch:
         exec, _, _ = _build_executor()
         handlers = exec.get_handlers()
         assert TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER in handlers
+
+
+class TestTendNoLongerRevivesTheConfirmedDead:
+    """確定死者は拒否し、まだ猶予のある相手は実際に蘇生する。"""
+
+    def _executor_with(self, *, outcome: PlayerOutcomeEnum):
+        registry = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
+        registry.set_outcome(PlayerId(2), outcome)
+        executor, status_repo, publisher = _build_executor(
+            runtime=SimpleNamespace(_player_outcome_registry=registry)
+        )
+        actor = _build_player(player_id=1, is_down=False, spot_id=1)
+        target = _build_player(player_id=2, is_down=True, spot_id=1, hp_current=0)
+        status_repo.find_by_id.side_effect = {
+            PlayerId(1): actor, PlayerId(2): target,
+        }.get
+        return executor, target, status_repo, publisher
+
+    def test_a_confirmed_dead_target_cannot_be_revived(self) -> None:
+        """DEADが確定した相手は失敗理由を返し、身体・保存・通知を変えない。"""
+        executor, target, status_repo, publisher = self._executor_with(
+            outcome=PlayerOutcomeEnum.DEAD
+        )
+
+        result = executor._execute_tend_to_player_in_scope(
+            1, {"target_player_id": 2, "target_display_name": "セナ"}
+        )
+
+        assert result.success is False
+        assert "戻らない" in result.message
+        assert target.is_down is True
+        assert target.hp.value == 0
+        status_repo.save.assert_not_called()
+        publisher.publish_all.assert_not_called()
+
+    def test_a_merely_downed_target_can_still_be_revived(self) -> None:
+        """UNRESOLVEDの昏倒者は成功し、HPが回復して起き上がる。"""
+        executor, target, _, _ = self._executor_with(
+            outcome=PlayerOutcomeEnum.UNRESOLVED
+        )
+
+        result = executor._execute_tend_to_player_in_scope(
+            1, {"target_player_id": 2, "target_display_name": "セナ"}
+        )
+
+        assert result.success is True
+        assert target.is_down is False
+        assert target.hp.value == 60

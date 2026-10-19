@@ -51,18 +51,16 @@ class TestDefaultActionResultStore:
         assert got[0].argument_fingerprint == "{}"
         assert got[0].should_reschedule is True
 
-    def test_append_with_intention_and_emotion_hint(self, store):
-        """目的 (intention) と感情 (emotion_hint) を append し取り出せる。"""
+    def test_append_with_inner_thought(self, store):
+        """独白 (inner_thought) を append し取り出せる。"""
         store.append(
             PlayerId(1),
             "調べる",
             "扉は固く閉まっていた",
-            intention="扉の先へ進む",
-            emotion_hint="caution",
+            inner_thought="扉の先へ進みたい",
         )
         got = store.get_recent(PlayerId(1), 1)
-        assert got[0].intention == "扉の先へ進む"
-        assert got[0].emotion_hint == "caution"
+        assert got[0].inner_thought == "扉の先へ進みたい"
 
     def test_get_recent_empty_for_unknown_player(self, store):
         """未登録プレイヤーでは get_recent が空リストを返す"""
