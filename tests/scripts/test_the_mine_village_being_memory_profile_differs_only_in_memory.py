@@ -1,8 +1,10 @@
-"""廃坑の山村の新しい記憶の profile が、古い記憶の部品を止め、新しい記憶だけを入れている。
+"""廃坑の山村の新しい記憶の profile が、比べた run と同じ thinking・出力の上限と目次の件数で動く。
 
 新しい記憶 (#1621) を全部入りの run (mine_v1_006) と比べる。比べた古い profile は
-#1631 で退役させたので、止めた部品と入れた部品をこの profile の上で直接見張る。
-古い部品が黙って入ると、行動の違いを新しい記憶のせいと読めなくなる。
+#1631 で退役させたので、比べるときにそろえた設定をこの profile の上で直接見張る。
+設定が黙ってずれると、行動の違いを新しい記憶のせいと読めなくなる。古い記憶の
+部品のキーは、書くと未知のキーとして起動前に落ちる
+(``TestTheRemovedMemoryPartKeysAreRejected``) ので、ここでは見ない。
 """
 
 from __future__ import annotations
@@ -27,25 +29,12 @@ _PROFILES = _ROOT / "data" / "experiment_profiles"
 
 _BEING_MEMORY = "memory_jev_mine_v1_v41_thinking_capped_being_memory"
 
-#: 全部入りの run (mine_v1_006) が入れていて、この profile が止める古い記憶の部品。
-_OLD_MEMORY_PARTS_TURNED_OFF = frozenset({
-})
-
-
 def _load(name: str) -> dict:
     return json.loads((_PROFILES / f"{name}.json").read_text(encoding="utf-8"))
 
 
 class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
-    """新しい記憶の profile が、古い記憶の部品を止め、新しい記憶を入れることを保証する。"""
-
-    def test_old_memory_parts_are_off(self) -> None:
-        """古い記憶の部品はすべて false で書かれている。"""
-        being = _load(_BEING_MEMORY)["runtime_config"]
-
-        not_off = {key for key in _OLD_MEMORY_PARTS_TURNED_OFF if being.get(key) is not False}
-
-        assert not_off == set()
+    """新しい記憶の profile が、比べた run と同じ thinking・出力の上限と目次の件数を持つことを保証する。"""
 
     def test_new_memory_is_on_with_the_compared_settings(self) -> None:
         """常に入る目次は、比べた設定 (10 件、一度に 3 件) で出る。"""
@@ -70,7 +59,7 @@ class TestTheBeingMemoryProfileSwapsOnlyTheMemory:
         assert being["LLM_MAX_OUTPUT_TOKENS"] == 4096
 
     def test_profile_resolves_with_new_memory_on_and_old_memory_off(self) -> None:
-        """make experiment と同じ経路で解決すると起動時の検査に通り、新しいエピソードが入り、古いエピソードは止まっている。"""
+        """make experiment と同じ経路で解決すると起動時の検査に通り、目次は比べた件数 (10 件、一度に 3 件) で入る。"""
         being = _load(_BEING_MEMORY)
 
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
