@@ -7,7 +7,7 @@
 
 このプロジェクト (`llm-rpg`) は AI エージェントを「ゲーム世界の中で連続的に存在する人物」として作ることを目指している。連続とは、ある時点のエージェントと時間が経った後のエージェントが**外から見て同じ存在として整合**することを指す。最終ビジョンは AI を「指示をこなすロボット」ではなく「人間と区別のつかない存在」として人間世界に接続することにある。
 
-現状の実装は `docs/memory_system/episodic_memory_system_spec.md` にあるとおり、すでに Experience Trace → Subjective Episode → Cue Index → Associative Memory Graph → Reinterpretation → Semantic Promotion の階層を持つ。多くの市販/OSS の memory system よりも踏み込んでいる。
+現状の実装は `docs/memory_system/episodic_memory_system_spec.md` (#1631 で削除) にあるとおり、すでに Experience Trace → Subjective Episode → Cue Index → Associative Memory Graph → Reinterpretation → Semantic Promotion の階層を持つ。多くの市販/OSS の memory system よりも踏み込んでいる。
 
 このレポートは 4 つの観点で外部知見を集約し、最後に**プロジェクトに直接効く優先度付きの提言**としてまとめている。
 
@@ -709,7 +709,7 @@ class EpisodeLocationEnvHint:
 - [Examining Identity Drift in LLM Agents](https://arxiv.org/pdf/2412.00804)
 
 ### プロジェクト内主要ファイル
-- `docs/memory_system/episodic_memory_system_spec.md` — 現状仕様
+- `docs/memory_system/episodic_memory_system_spec.md` (#1631 で削除) — 現状仕様
 - `src/ai_rpg_world/application/observation/contracts/dtos.py`
 - `src/ai_rpg_world/application/llm/contracts/episodic_memory.py`
 - `src/ai_rpg_world/application/llm/contracts/chunk_encoding.py`

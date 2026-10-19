@@ -4,26 +4,22 @@
 特徴:
     - シナリオ非依存: ``data/scenarios/*.json`` を ``--scenario`` で指定
     - trace 自動記録: ``JsonlTraceRecorder`` を内部で生成して runtime に inject
-    - HTML 自動生成: 実行後に trace.html / viewer.html / episodic.html / timeline.html を出力
-    - 汎用レポート: WIN/LOSE/tick/action 数/memo 数の最小集計を Markdown で
-
-scenario 固有の集計 (relay_puzzle の latch tick / kaito-rin marker など) は
-``scripts/issue154_full_tables_experiment.py`` に残し、本スクリプトとは独立。
+    - HTML 自動生成: 実行後に trace.html / viewer.html / timeline.html を出力
+    - 汎用レポート: WIN/LOSE/tick/action 数などの最小集計を Markdown で
 
 使い方::
 
     python scripts/run_scenario_experiment.py \\
-        --scenario data/scenarios/relay_puzzle_demo.json \\
+        --scenario data/scenarios/forbidden_library_demo.json \\
         --max-world-ticks 30 \\
-        --out var/runs/relay-foo
+        --out var/runs/library-foo
 
     # 出力:
-    #   var/runs/relay-foo/trace.jsonl
-    #   var/runs/relay-foo/report.md
-    #   var/runs/relay-foo/trace.html
-    #   var/runs/relay-foo/viewer.html
-    #   var/runs/relay-foo/episodic.html
-    #   var/runs/relay-foo/timeline.html
+    #   var/runs/library-foo/trace.jsonl
+    #   var/runs/library-foo/report.md
+    #   var/runs/library-foo/trace.html
+    #   var/runs/library-foo/viewer.html
+    #   var/runs/library-foo/timeline.html
 """
 
 from __future__ import annotations
@@ -559,7 +555,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """``WorldRuntime`` から ``ExperimentSnapshotSession`` 用の wiring stub を作る。
 
     Phase 6 (Issue #470): world_runtime runtime には ``LlmAgentWiringResult`` の
-    全 store ハンドルが揃わない (semantic / memory_link は world_runtime の
+    全 store ハンドルが揃わない (episode store は world_runtime の
     通常経路では作られないことがある) ため、runtime の
     内部 field から **拾える分だけ** 集めて wiring 風オブジェクトを返す。
     足りない store は ``ExperimentSnapshotSession`` 側で空 in-memory に
@@ -567,86 +563,15 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
     """
     from types import SimpleNamespace
 
-    # episode_store は _episodic_stack が None のときは None。
-    episodic_stack = getattr(runtime, "_episodic_stack", None)
-    episode_store = (
-        getattr(episodic_stack, "episode_store", None)
-        if episodic_stack is not None
-        else None
-    )
     # 注意: ``_aux_being_repository`` は private 属性 (public property なし)。
     # ``aux_being_resolver`` の方は public property があるのでそちらを使う。
     # 将来 ``aux_being_repository`` の public property が追加されたら同じ
     # 形式に揃える。
     aux_resolver = getattr(runtime, "aux_being_resolver", None)
     aux_repo = getattr(runtime, "_aux_being_repository", None)
-    # #526 後続: SEMANTIC_PASSIVE_TOP_K / SEMANTIC_LLM_GIST_ENABLED が ON だと
-    # episodic_stack が semantic store + memory link store を持つ。あれば snapshot に
-    # 拾う (OFF なら従来どおり None = 空 in-memory fallback)。link store も拾わないと
-    # semantic entries だけ保存され、昇格根拠の link graph が空 fallback になる。
-    semantic_store = (
-        getattr(episodic_stack, "semantic_memory_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    memory_link_store = (
-        getattr(episodic_stack, "memory_link_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED ON のとき episodic_stack が
-    # belief evidence buffer store を持つ。checklist #27 (memory_full_003 で
-    # stub 追従漏れが実際に起きた教訓) に従い、ここで拾わないと flag ON でも
-    # evidence が save/load で silent に失われる。OFF なら None = 従来どおり
-    # 空 in-memory fallback。
-    belief_evidence_buffer_store = (
-        getattr(episodic_stack, "belief_evidence_buffer_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # U9b (予測誤差統一設計 部品5・想起の信用割り当て): RECALL_HIT_BOOST_ENABLED
-    # ON のとき episodic_stack が的中側 sidecar store を持つ。checklist #27
-    # (memory_full_003 で stub 追従漏れが実際に起きた教訓) に従い、ここで
-    # 拾わないと flag ON でも的中回数が save/load で silent に失われる。
-    # OFF なら None = 空 in-memory fallback。
-    recall_success_store = (
-        getattr(episodic_stack, "recall_success_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    # PR-G (想起階層: slot / afterglow / habituation): #526 段階 3 で
-    # episodic_stack に生えた 3 store。checklist #27 の追従漏れが実際に
-    # 起きていた箇所 (ExperimentSnapshotSession 側は getattr で拾う準備が
-    # 済んでいたが、この stub がここまで一度も拾っていなかった)。ここで
-    # 拾わないと enable 時でも想起スロット / afterglow index / 慣化状態が
-    # save/load で silent に失われる。OFF なら None = 空 in-memory fallback。
-    recall_slot_store = (
-        getattr(episodic_stack, "recall_slot_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    afterglow_store = (
-        getattr(episodic_stack, "afterglow_store", None)
-        if episodic_stack is not None
-        else None
-    )
-    recall_habituation_store = (
-        getattr(episodic_stack, "recall_habituation_store", None)
-        if episodic_stack is not None
-        else None
-    )
     return SimpleNamespace(
-        memo_store=getattr(runtime, "_todo_store", None),
-        semantic_memory_store=semantic_store,
-        memory_link_store=memory_link_store,
-        episodic_episode_store=episode_store,
         being_repository=aux_repo,
         being_attachment_resolver=aux_resolver,
-        belief_evidence_buffer_store=belief_evidence_buffer_store,
-        recall_success_store=recall_success_store,
-        recall_slot_store=recall_slot_store,
-        afterglow_store=afterglow_store,
-        recall_habituation_store=recall_habituation_store,
         acquaintance_store=getattr(runtime, "_acquaintance_store", None),
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
@@ -672,7 +597,7 @@ def _drive_scenario(
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
     GameRuntimeManager を内部で使う。:class:`WorldRuntime` 経由なので
-    既存の world_runtime / relay_puzzle 路線と互換。
+    既存の world_runtime 路線と互換。
 
     Args:
         max_world_ticks: ループ終了条件 (#404 P1)。``runtime.current_tick()`` が
@@ -714,7 +639,7 @@ def _drive_scenario(
         state.llm_wiring.prompt_dataset_sink = prompt_dataset_sink
         # API session の UUID ではなく実験 run 名を使い、run を跨ぐ衝突を避ける。
         state.llm_wiring.llm_session_run_id = run_id
-        # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
+        # Phase 1d: trace recorder を runtime に注入 (LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
 
         round_assignment = runtime.round_assignment_trace()
@@ -767,8 +692,8 @@ def _drive_scenario(
             )
 
             # aux Being stack を確実に初期化 (= _aux_being_repository を作る)
-            if hasattr(runtime, "_wire_auxiliary_tool_stack"):
-                runtime._wire_auxiliary_tool_stack()
+            if hasattr(runtime, "_wire_being_stack"):
+                runtime._wire_being_stack()
             for pid in runtime.get_player_ids():
                 provisioning = getattr(runtime, "_aux_being_provisioning", None)
                 if provisioning is not None:
@@ -791,7 +716,6 @@ def _drive_scenario(
                 restore_report = snapshot_session.restore_all_from_dir(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
-                    restart_world_clock=replay,
                 )
                 logger.info(
                     "restored %d being snapshot(s)", len(restore_report.restored)
@@ -816,9 +740,9 @@ def _drive_scenario(
                     world_snapshot_ignored=(
                         replay and (snapshot_load_dir / "world.json").exists()
                     ),
-                    world_clock_restarts=[
-                        {"being_id": b.value, **r.to_trace_dict()}
-                        for b, r in restore_report.world_clock_restarts.items()
+                    removed_memory_keys=[
+                        {"being_id": b.value, "counts": counts}
+                        for b, counts in restore_report.removed_memory_key_counts.items()
                     ],
                 )
 
@@ -1035,12 +959,7 @@ def _drive_scenario(
             skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None
         )
 
-        # Phase 6: snapshot save。**runtime.shutdown より前** に行う理由:
-        # async LLM scheduler の drain が終わると episode_store に最後の
-        # 主観文 episode が書き込まれる可能性があるが、その後に capture
-        # すると snapshot 経路が ``shutdown=True`` の store を触る恐れがある。
-        # 「shutdown 前の last consistent state」を写し取るのが安全。
-        # 失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
+        # Phase 6: snapshot save。失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
         # Phase 7: source_scenario を埋め込み + trace event 発行。
         if snapshot_session is not None and snapshot_save_dir is not None:
             try:
@@ -1146,22 +1065,6 @@ def _drive_scenario(
                         exc_info=True,
                     )
 
-        # Issue #311/#325 後続: 非同期 LLM 主観文付与 scheduler (#310) の in-flight
-        # ジョブを drain してから return する。これをしないと、scenario 終了
-        # 直後に `with JsonlTraceRecorder` が close され、後追いで完了した worker
-        # が "recorder is already closed" RuntimeError に当たる (第21回/第22回
-        # 実験で各 2 件観測)。30s timeout は max latency (~14s) の余裕分。
-        shutdown = getattr(runtime, "shutdown", None)
-        if callable(shutdown):
-            try:
-                shutdown(timeout=30.0)
-            except Exception:
-                # shutdown 自体の失敗で trace 書き出しを止めない
-                logger.warning(
-                    "runtime.shutdown(timeout=30) raised; "
-                    "async LLM completions may not be fully drained",
-                    exc_info=True,
-                )
         # 実験用の差し替え runtime は持っていないことがある。0 件と区別するため None で返す。
         failure_counts_getter = getattr(runtime, "world_tick_failure_counts", None)
         world_tick_failure_counts = (
@@ -1205,9 +1108,8 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 
 _AUX_COMPONENT_LABELS: dict[str, str] = {
-    AuxLlmComponent.EPISODE_SUBJECTIVE.value: "主観の書き込み",
-    AuxLlmComponent.SEMANTIC_GIST.value: "意味記憶の要旨",
-    AuxLlmComponent.BELIEF_CONSOLIDATION.value: "信念の統合",
+    # 主観補完は #1631 で消した。消す前の run の report を読むために残す。
+    "episode_subjective": "主観の書き込み",
     AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
     AuxLlmComponent.SHORT_TERM_LONG_SUMMARY.value: "短期記憶の長い要約",
     AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
@@ -1331,28 +1233,17 @@ def _build_report(
     events = list(load_trace_events(trace_path))
     actions: list[Any] = []
     action_results: list[Any] = []
-    memo_adds: list[Any] = []
-    memo_dones: list[Any] = []
     memo_hints: list[Any] = []
     position_changes: list[Any] = []
     llm_calls: list[Any] = []
     aux_calls: list[Any] = []
     aux_record_failures: list[Any] = []
-    consolidation_actions: Counter[str] = Counter()
     by_player: dict[int, dict[str, int]] = {}
     for e in events:
-        if e.kind == TraceEventKind.BELIEF_CONSOLIDATION:
-            for decision in e.payload.get("decisions") or ():
-                if isinstance(decision, dict):
-                    consolidation_actions[str(decision.get("action"))] += 1
         if e.kind == TraceEventKind.ACTION:
             actions.append(e)
         elif e.kind == TraceEventKind.ACTION_RESULT:
             action_results.append(e)
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            memo_adds.append(e)
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            memo_dones.append(e)
         elif e.kind == TraceEventKind.MEMO_HINT:
             memo_hints.append(e)
         elif e.kind == TraceEventKind.POSITION_CHANGE:
@@ -1372,8 +1263,6 @@ def _build_report(
                 "actions": 0,
                 "successes": 0,
                 "failures": 0,
-                "memo_adds": 0,
-                "memo_dones": 0,
                 "moves": 0,
             },
         )
@@ -1384,10 +1273,6 @@ def _build_report(
                 bucket["successes"] += 1
             else:
                 bucket["failures"] += 1
-        elif e.kind == TraceEventKind.MEMO_ADD:
-            bucket["memo_adds"] += 1
-        elif e.kind == TraceEventKind.MEMO_DONE:
-            bucket["memo_dones"] += 1
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             # 初期配置 (from_spot_id=None) は move カウントに含めない
             from_spot = e.payload.get("from_spot_id") if isinstance(e.payload, dict) else None
@@ -1434,31 +1319,19 @@ def _build_report(
     lines.append("")
     lines.append(f"- action: {len(actions)}")
     lines.append(f"- action_result: {len(action_results)}")
-    lines.append(f"- memo_add: {len(memo_adds)}")
-    lines.append(f"- memo_done: {len(memo_dones)}")
     lines.append(f"- memo_hint: {len(memo_hints)}")
     lines.append(f"- position_change: {len(position_changes)}")
     lines.append("")
-    if consolidation_actions:
-        lines.append("## 信念を固めた操作")
-        lines.append("")
-        lines.append(
-            "適用した操作の件数。explain_change は状態の信念を変わり方の信念に置き換えた件数。"
-        )
-        lines.append("")
-        for action, count in sorted(consolidation_actions.items()):
-            lines.append(f"- {action}: {count}")
-        lines.append("")
     if by_player:
         lines.append("## プレイヤー別集計")
         lines.append("")
-        lines.append("| player_id | actions | successes | failures | memo_adds | memo_dones | moves |")
-        lines.append("|-----------|---------|-----------|----------|-----------|------------|-------|")
+        lines.append("| player_id | actions | successes | failures | moves |")
+        lines.append("|-----------|---------|-----------|----------|-------|")
         for pid in sorted(by_player):
             b = by_player[pid]
             lines.append(
                 f"| {pid} | {b['actions']} | {b['successes']} | {b['failures']} | "
-                f"{b['memo_adds']} | {b['memo_dones']} | {b.get('moves', 0)} |"
+                f"{b.get('moves', 0)} |"
             )
         lines.append("")
     lines.append("## 成果物")
@@ -1466,7 +1339,6 @@ def _build_report(
     lines.append(f"- trace: `{trace_path}`")
     lines.append(f"- legacy HTML viewer: `{trace_path.with_suffix('.html')}`")
     lines.append(f"- map trace viewer: `{trace_path.parent / 'viewer.html'}`")
-    lines.append(f"- episodic memory viewer: `{trace_path.parent / 'episodic.html'}`")
     lines.append(f"- timeline viewer: `{trace_path.parent / 'timeline.html'}`")
     lines.append("")
     return "\n".join(lines)
@@ -1515,19 +1387,6 @@ def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> s
         scenario_topology=topology,
         cytoscape_js_src=asset.content,
     )
-
-
-def _render_episodic_viewer_html(trace_path: Path, *, title: str) -> str:
-    """episodic.html の HTML 文字列を返す。"""
-    from scripts.build_episodic_viewer import (
-        aggregate_episodes,
-        load_events,
-    )
-    from scripts.build_episodic_viewer import render_html as render_episodic_html
-
-    events = load_events(trace_path)
-    episodes = aggregate_episodes(events)
-    return render_episodic_html(episodes, title)
 
 
 def _render_timeline_viewer_html(trace_path: Path, *, title: str) -> str:
@@ -1612,13 +1471,6 @@ def _emit_html_artifacts(
     )
     artifacts.append(
         _write_html_artifact(
-            name="episodic.html",
-            path=run_dir / "episodic.html",
-            render=lambda: _render_episodic_viewer_html(trace_path, title=title),
-        )
-    )
-    artifacts.append(
-        _write_html_artifact(
             name="timeline.html",
             path=run_dir / "timeline.html",
             render=lambda: _render_timeline_viewer_html(trace_path, title=title),
@@ -1654,7 +1506,7 @@ def main(argv: list[str] | None = None) -> int:
         "--scenario",
         type=Path,
         default=None,
-        help="Path to scenario JSON (e.g. data/scenarios/relay_puzzle_demo.json)",
+        help="Path to scenario JSON (e.g. data/scenarios/forbidden_library_demo.json)",
     )
     parser.add_argument(
         "--profile",
@@ -1810,27 +1662,11 @@ def main(argv: list[str] | None = None) -> int:
         f"[run] scenario={args.scenario.name} max_world_ticks={args.max_world_ticks}",
         flush=True,
     )
-    print(
-        f"[run] semantic_llm_gist={'on' if cfg.semantic_llm_gist_enabled else 'off'} "
-        "(runtime_config.SEMANTIC_LLM_GIST_ENABLED)",
-        flush=True,
-    )
-    print(
-        f"[run] semantic_passive_top_k={cfg.semantic_passive_top_k} "
-        "(runtime_config.SEMANTIC_PASSIVE_TOP_K)",
-        flush=True,
-    )
-    print(
-        f"[run] short_term_memory_kind={cfg.short_term_memory_kind} "
-        "(runtime_config.SHORT_TERM_MEMORY_KIND)",
-        flush=True,
-    )
     # OpenRouter provider routing: 設定されているときだけ表示
-    if cfg.openrouter_provider or cfg.openrouter_quantization or cfg.openrouter_require_params:
+    if cfg.openrouter_provider or cfg.openrouter_quantization:
         print(
             f"[run] openrouter routing: provider={cfg.openrouter_provider or '-'} "
-            f"quantization={cfg.openrouter_quantization or '-'} "
-            f"require_params={'true' if cfg.openrouter_require_params else '-'}",
+            f"quantization={cfg.openrouter_quantization or '-'}",
             flush=True,
         )
     print(f"[out] {out_dir}", flush=True)
@@ -1858,26 +1694,24 @@ def main(argv: list[str] | None = None) -> int:
         no_html=args.no_html,
         no_progress_jsonl=args.no_progress_jsonl,
     )
-    prompt_dataset_sink = None
-    if cfg.prompt_dataset_capture_enabled:
-        from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
-            PromptDatasetCaptureSink,
-        )
+    from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+        PromptDatasetCaptureSink,
+    )
 
-        prompt_dataset_sink = PromptDatasetCaptureSink(
-            run_dir=out_dir,
-            run_id=out_dir.name,
-            run_metadata={
-                "source_run_dir": str(out_dir),
-                "experiment_manifest_path": str(manifest_path),
-                "experiment_manifest_sha256": manifest_sha256,
-                "profile": config_source.get("profile"),
-                "scenario_path": str(args.scenario),
-                "scenario_sha256": _sha256_file(args.scenario),
-                "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
-            },
-            failure_policy=cfg.prompt_dataset_capture_failure_policy,
-        )
+    prompt_dataset_sink = PromptDatasetCaptureSink(
+        run_dir=out_dir,
+        run_id=out_dir.name,
+        run_metadata={
+            "source_run_dir": str(out_dir),
+            "experiment_manifest_path": str(manifest_path),
+            "experiment_manifest_sha256": manifest_sha256,
+            "profile": config_source.get("profile"),
+            "scenario_path": str(args.scenario),
+            "scenario_sha256": _sha256_file(args.scenario),
+            "runtime_config": _prompt_dataset_runtime_config_payload(cfg),
+        },
+        failure_policy=cfg.prompt_dataset_capture_failure_policy,
+    )
 
     with JsonlTraceRecorder(trace_path) as rec:
         # PR #448: trace payload は cfg.to_trace_dict() で一括出力 + scenario /

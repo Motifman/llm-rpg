@@ -19,7 +19,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
-def setup_inventory(max_slots=5, occupied_slots=None):
+def setup_inventory(max_slots=5, occupied_slots=None, reserved_item_ids=None):
     player_id = PlayerId(1)
     inventory_slots = {SlotId(i): None for i in range(max_slots)}
     if occupied_slots:
@@ -33,7 +33,7 @@ def setup_inventory(max_slots=5, occupied_slots=None):
         max_slots=max_slots,
         inventory_slots=inventory_slots,
         equipment_slots=equipment_slots,
-        reserved_item_ids=set()
+        reserved_item_ids=reserved_item_ids
     )
 
 class TestPlayerInventoryReservation:
@@ -132,18 +132,13 @@ class TestPlayerInventoryReservation:
             inventory.complete_equip_item(SlotId(0), EquipmentSlotType.WEAPON, item_id)
 
     def test_remove_reserved_item_not_in_slot(self):
-        # 予約リストにはあるが、何らかの理由でスロットから消えている不整合ケース
-        inventory = setup_inventory(occupied_slots={0: 100})
+        """予約だけが残る保存データは、成約除去を拒否して存在しない品の予約を解く。"""
         item_id = ItemInstanceId(100)
-        inventory.reserve_item(SlotId(0))
-        
-        # 強制的にスロットから消す（内部状態を直接操作）
-        inventory._inventory_slots[SlotId(0)] = None
-        
+        inventory = setup_inventory(reserved_item_ids={item_id})
+
         with pytest.raises(ItemNotInSlotException):
             inventory.remove_reserved_item(item_id)
-        
-        # 整合性確保のため、予約リストからも消えているべき
+
         assert inventory.is_item_reserved(item_id) is False
 
     def test_unreserve_non_reserved_item(self):

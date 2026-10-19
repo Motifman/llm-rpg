@@ -25,12 +25,17 @@ def _base_stats(attack: int = 20, defense: int = 10, speed: int = 5) -> BaseStat
 class TestComputeEffectiveStats:
     """compute_effective_stats のテスト"""
 
-    def test_no_effects_returns_base_unchanged(self):
-        base = _base_stats(attack=20)
+    @pytest.mark.parametrize(
+        "base",
+        [
+            pytest.param(_base_stats(attack=20), id="original_zero_rates"),
+            pytest.param(BaseStats(200, 80, 15, 12, 7, 0.25, 0.1), id="nonzero_rates"),
+        ],
+    )
+    def test_no_effects_returns_base_unchanged(self, base):
+        """効果が空なら、資源上限・攻撃・防御・速度・割合の全7項目を保つ。"""
         result = compute_effective_stats(base, [], WorldTick(10))
-        assert result.attack == 20
-        assert result.defense == 10
-        assert result.max_hp == 100
+        assert result == base
 
     def test_multiple_buffs_multiply(self):
         base = _base_stats(attack=20)

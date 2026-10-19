@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -163,8 +165,9 @@ class TestDepositQuantityConsistency:
             == 2
         )
 
-    def test_all_moves_every_owned_item_and_leaves_no_remainder(self) -> None:
-        """quantity=all は所持 4 個すべてを減算予約し、state にも 4 加える。"""
+    @pytest.mark.parametrize("explicit_target", [False, True])
+    def test_all_moves_every_owned_item_and_leaves_no_remainder(self, explicit_target: bool) -> None:
+        """all は所持4個を消費予約し、暗黙または明示した対象だけの蓄積1へ4を加える。"""
         effect = InteractionEffect(
             effect_type=InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT,
             parameters={
@@ -174,9 +177,13 @@ class TestDepositQuantityConsistency:
             },
         )
         pit = _fire_pit(stacked=1)
+        target = replace(pit, object_id=SpotObjectId.create(11)) if explicit_target else pit
+        if explicit_target:
+            effect = replace(effect, parameters={**effect.parameters, "object_id": target.object_id.value})
+        interior = SpotInterior((), (pit, target) if explicit_target else (pit,), (), ())
 
         result = WorldGraphEffectService().apply_effects(
-            interior=_interior(pit),
+            interior=interior,
             acting_object=pit,
             effects=(effect,),
             world_flags=frozenset(),
@@ -185,9 +192,13 @@ class TestDepositQuantityConsistency:
 
         assert result.item_spec_ids_to_remove == (DRIFTWOOD_ID,) * 4
         assert (
-            result.new_interior.get_object(FIRE_PIT_ID).state["driftwood_stacked"]
+            result.new_interior.get_object(target.object_id).state["driftwood_stacked"]
             == 5
         )
+
+        if explicit_target:
+            assert result.new_interior.get_object(FIRE_PIT_ID).state == {"driftwood_stacked": 1}
+        assert all(obj.state == {"driftwood_stacked": 1} for obj in interior.objects)
 
     def test_missing_state_key_starts_from_zero(self) -> None:
         """対象 state にキーが無い場合は 0 起点で、投入数と同じ値を新設する。"""
@@ -266,7 +277,7 @@ class TestObjectStateIntAtLeast:
         expected: bool,
         expected_message: str | None,
     ) -> None:
-        """閾値ちょうどは成立し、1不足・キー不在・非整数は現在値0として不成立になる。"""
+        """閾値ちょうどは成立し、1不足は不成立、キー不在・非整数は現在値0として不成立になる。"""
         condition = InteractionCondition(
             condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
             target_object_id=FIRE_PIT_ID,

@@ -97,101 +97,76 @@ class TestInitialState:
 class TestCooldown:
     """record_attack 後の cooldown 経過判定。"""
 
-    def test_record_attack_after_false(self) -> None:
-        """同じ tick では cooldown 未満で can_attack_now=False。"""
-        agg = _aggregate(_template(attack_cooldown_ticks=3))
+    @pytest.mark.parametrize(
+        ("cooldown_ticks", "checks"),
+        [
+            pytest.param(
+                3, ((10, False), (11, False), (12, False), (13, True)),
+                id="three-tick-cooldown",
+            ),
+            pytest.param(1, ((10, False),), id="same-tick-with-minimum-cooldown"),
+            pytest.param(5, ((14, False), (15, True)), id="five-tick-boundary"),
+        ],
+    )
+    def test_attack_availability_after_recording(
+        self, cooldown_ticks: int, checks: tuple[tuple[int, bool], ...],
+    ) -> None:
+        """tick10の攻撃後は指定間隔に達するまで拒否し、境界ちょうどで許可する。"""
+        agg = _aggregate(_template(attack_cooldown_ticks=cooldown_ticks))
         agg.record_attack(WorldTick(10))
-        assert agg.can_attack_now(WorldTick(10)) is False
-        assert agg.can_attack_now(WorldTick(11)) is False
-        assert agg.can_attack_now(WorldTick(12)) is False
 
-    def test_record_attack_same_tick_can_attack_now_false(self) -> None:
-        """同じ tick で 2 回目を呼ぶと False（elapsed=0 < cooldown）。"""
-        agg = _aggregate(_template(attack_cooldown_ticks=1))
-        agg.record_attack(WorldTick(10))
-        # cooldown=1 でも record と同じ tick なら elapsed=0 で不可
-        assert agg.can_attack_now(WorldTick(10)) is False
-
-    def test_boundary_value_elapsed_cooldown_equals_true(self) -> None:
-        """`elapsed == attack_cooldown_ticks` で can_attack_now=True（>= 比較）。"""
-        agg = _aggregate(_template(attack_cooldown_ticks=5))
-        agg.record_attack(WorldTick(10))
-        # 境界の少し下は False
-        assert agg.can_attack_now(WorldTick(14)) is False
-        # 境界ちょうどで True
-        assert agg.can_attack_now(WorldTick(15)) is True
-
-    def test_record_attack_after_cooldown_true(self) -> None:
-        """`current_tick - last_attack_tick >= attack_cooldown_ticks` で True。"""
-        agg = _aggregate(_template(attack_cooldown_ticks=3))
-        agg.record_attack(WorldTick(10))
-        assert agg.can_attack_now(WorldTick(13)) is True
+        for tick, expected in checks:
+            assert agg.can_attack_now(WorldTick(tick)) is expected
 
     def test_last_attack_tick_value_updated(self) -> None:
-        """連続 record_attack で last_attack_tick が上書きされる。"""
+        """tick10に続くtick20の攻撃で記録を更新し、待ち時間2を再び適用する。"""
         agg = _aggregate(_template(attack_cooldown_ticks=2))
         agg.record_attack(WorldTick(10))
         agg.record_attack(WorldTick(20))
         assert agg.last_attack_tick == WorldTick(20)
+        assert agg.can_attack_now(WorldTick(20)) is False
+        assert agg.can_attack_now(WorldTick(21)) is False
+        assert agg.can_attack_now(WorldTick(22)) is True
 
 
 class TestDeadMonster:
     """DEAD 状態の挙動。"""
 
     def test_dead_can_attack_now_false(self) -> None:
-        """status=DEAD は cooldown 関係なく False。"""
+        """致命ダメージで死亡した個体は、時間が経過しても攻撃できない。"""
         agg = _aggregate()
-        agg._lifecycle_state = agg._lifecycle_state.apply_damage(999)  # 致命
-        # 致命後の状態は apply_damage 経由で扱うべきだが、ここでは status を
-        # 直接書き換えて DEAD を再現する（テストの purpose は can_attack_now
-        # の戻り値検証のみ）。
-        from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
-            MonsterLifecycleState,
-        )
+        agg.take_environmental_damage(damage=999, current_tick=WorldTick(5))
+        assert agg.hp.value == 0
+        assert agg.status == MonsterStatusEnum.DEAD
 
-        agg._lifecycle_state = MonsterLifecycleState(
-            hp=agg._lifecycle_state.hp,
-            mp=agg._lifecycle_state.mp,
-            status=MonsterStatusEnum.DEAD,
-            last_death_tick=WorldTick(5),
-            spawned_at_tick=WorldTick(0),
-            hunger=0.0,
-            starvation_timer=0,
-        )
         assert agg.can_attack_now(WorldTick(100)) is False
 
     def test_dead_record_attack_raises_exception(self) -> None:
-        """DEAD 状態で record_attack を呼ぶと MonsterAlreadyDeadException。"""
-        from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import (
-            MonsterLifecycleState,
-        )
-
+        """HPが残る飢餓死後の攻撃記録は拒否され、既存の記録とイベントを保つ。"""
         agg = _aggregate()
-        agg._lifecycle_state = MonsterLifecycleState(
-            hp=agg._lifecycle_state.hp,
-            mp=agg._lifecycle_state.mp,
-            status=MonsterStatusEnum.DEAD,
-            last_death_tick=WorldTick(5),
-            spawned_at_tick=WorldTick(0),
-            hunger=0.0,
-            starvation_timer=0,
-        )
+        agg.starve(WorldTick(5))
+        assert agg.hp.value == 10
+        assert agg.status == MonsterStatusEnum.DEAD
+        events_before = agg.get_events()
+        assert events_before
+
         with pytest.raises(MonsterAlreadyDeadException):
             agg.record_attack(WorldTick(100))
+
+        assert agg.last_attack_tick is None
+        assert agg.get_events() == events_before
 
 
 class TestTemplateValidation:
     """attack_cooldown_ticks / has_dark_vision のバリデーション。"""
 
-    def test_zero_or_less_attack_cooldown_ticks_raise_exception(self) -> None:
-        """0 以下は ValidationException。"""
+    @pytest.mark.parametrize("cooldown_ticks", [0, -1])
+    def test_nonpositive_attack_cooldown_ticks_raise_exception(
+        self, cooldown_ticks: int,
+    ) -> None:
+        """攻撃間隔が0または負数なら、テンプレートの検証例外で拒否する。"""
         with pytest.raises(MonsterTemplateValidationException):
-            _template(attack_cooldown_ticks=0)
-
-    def test_negative_attack_cooldown_ticks_raise_exception(self) -> None:
-        """負値は ValidationException。"""
-        with pytest.raises(MonsterTemplateValidationException):
-            _template(attack_cooldown_ticks=-1)
+            _template(attack_cooldown_ticks=cooldown_ticks)
 
     def test_has_dark_vision_default_false(self) -> None:
         """デフォルト has_dark_vision は False。"""

@@ -73,9 +73,6 @@ class TestPrefixCacheIsNotDisturbed:
         assert ALWAYS_PRESENT_TOOL_ORDER == (
             "wait",
             "speak",
-            "memo_add",
-            "memo_list",
-            "memo_done",
         )
 
     def test_economy_tools_are_ordered_after_the_existing_conditional_tools(self) -> None:

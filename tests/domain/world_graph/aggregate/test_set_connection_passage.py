@@ -59,31 +59,39 @@ def _graph_with_wall_connection(wall_state: WallStateEnum = WallStateEnum.INTACT
 class TestSetConnectionPassage:
     """SpotGraphAggregate.set_connection_passage の挙動。"""
 
-    def test_replaces_passage(self) -> None:
-        """passage を置換すると新しい kind+state で通行可否・音透過率が決まる。"""
+    @pytest.mark.parametrize(
+        "replacement,expected_kind,expected_state",
+        [
+            (Passage.wall(WallStateEnum.BROKEN), "WALL", "BROKEN"),
+            (Passage.door(DoorStateEnum.OPEN), "DOOR", "OPEN"),
+        ],
+    )
+    def test_replaces_passage(self, replacement: Passage, expected_kind: str, expected_state: str) -> None:
+        """同種・別種の通路へ置換すると、形態・状態・通行可否・遮音値が変わる。"""
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
-        g.set_connection_passage(ConnectionId.create(7), Passage.wall(WallStateEnum.BROKEN))
+        g.set_connection_passage(ConnectionId.create(7), replacement)
         conn = g.get_connection(ConnectionId.create(7))
-        assert conn.passage.state == "BROKEN"
+        assert conn.passage.kind.value == expected_kind
+        assert conn.passage.state == expected_state
         assert conn.passage.traversable is True
         assert conn.passage.sound_permeability == pytest.approx(1.0)
 
     def test_emits_state_changed_event_when_passability_flips(self) -> None:
         """通行可否が変化したときだけ ConnectionStateChangedEvent が発火する。"""
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
-        g.set_connection_passage(
-            ConnectionId.create(7), Passage.wall(WallStateEnum.BROKEN)
-        )
+        g.set_connection_passage(ConnectionId.create(7), Passage.wall(WallStateEnum.BROKEN))
         events = [e for e in g.get_events() if isinstance(e, ConnectionStateChangedEvent)]
         assert len(events) == 1
         assert events[0].traversable is True
 
     def test_no_event_when_passability_unchanged(self) -> None:
-        """通行可否が変わらない遷移（INTACT→CRACKED）ではイベントが出ない。"""
+        """INTACTからCRACKEDへ実状態と遮音値は変わるが、通行変化の通知は出ない。"""
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
-        g.set_connection_passage(
-            ConnectionId.create(7), Passage.wall(WallStateEnum.CRACKED)
-        )
+        g.set_connection_passage(ConnectionId.create(7), Passage.wall(WallStateEnum.CRACKED))
+        passage = g.get_connection(ConnectionId.create(7)).passage
+        assert passage.state == "CRACKED"
+        assert passage.traversable is False
+        assert passage.sound_permeability == pytest.approx(0.4)
         events = [e for e in g.get_events() if isinstance(e, ConnectionStateChangedEvent)]
         assert events == []
 
@@ -99,15 +107,31 @@ class TestSetConnectionPassageState:
         assert conn.passage.kind.value == "WALL"
         assert conn.passage.state == "BROKEN"
 
-    def test_overrides_apply_to_transitioned_passage(self) -> None:
-        """traversable / sound_permeability の override が遷移後の passage に反映される。"""
+    @pytest.mark.parametrize(
+        "new_state,overrides,expected_traversable",
+        [
+            ("CRACKED", {}, False),
+            ("CRACKED", {"traversable_override": True}, True),
+            ("BROKEN", {"traversable_override": False}, False),
+        ],
+    )
+    def test_overrides_apply_to_transitioned_passage(
+        self,
+        new_state: str,
+        overrides: dict[str, bool],
+        expected_traversable: bool,
+    ) -> None:
+        """音の上書きと、未指定・真・偽の通行上書きを状態遷移へ反映する。"""
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
         g.set_connection_passage_state(
             ConnectionId.create(7),
-            "CRACKED",
+            new_state,
             sound_permeability_override=0.55,
+            **overrides,
         )
         conn = g.get_connection(ConnectionId.create(7))
+        assert conn.passage.state == new_state
+        assert conn.passage.traversable is expected_traversable
         assert conn.passage.sound_permeability == pytest.approx(0.55)
 
     def test_rejects_state_of_different_kind(self) -> None:

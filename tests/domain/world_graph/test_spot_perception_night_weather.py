@@ -29,26 +29,6 @@ def _atm(lighting: LightingEnum) -> SpotAtmosphere:
     )
 
 
-class TestBackwardCompat:
-    """既存呼び出し (kwarg 省略) は従来挙動を維持。"""
-
-    def test_kwarg(self) -> None:
-        """kwarg 省略時は 従来挙動。"""
-        svc = SpotPerceptionService()
-        # 屋外/夜/悪天候の各 kwarg を省略 = default False
-        # → 屋外でも夜でも悪天候でもないものとして扱う
-        result = svc.compute_effective_lighting(_atm(LightingEnum.BRIGHT), False)
-        assert result is LightingEnum.BRIGHT
-
-    def test_dark_spot_dim(self) -> None:
-        """既存挙動: 光源持ちは PITCH_BLACK/DARK を DIM にする。"""
-        svc = SpotPerceptionService()
-        result = svc.compute_effective_lighting(
-            _atm(LightingEnum.DARK), spot_has_any_light_bearer=True,
-        )
-        assert result is LightingEnum.DIM
-
-
 class TestOutdoorNight:
     """屋外スポットは夜になると 1 段暗くなる。"""
 

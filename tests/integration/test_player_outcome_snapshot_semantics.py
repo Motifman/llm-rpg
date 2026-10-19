@@ -34,7 +34,7 @@ def _build_runtime_and_snapshot_session(
         world_id="station_drill",
     )
     runtime = state.runtime
-    runtime._wire_auxiliary_tool_stack()
+    runtime._wire_being_stack()
     for player_id in runtime.get_player_ids():
         runtime._aux_being_provisioning.ensure_attached(player_id)
 
