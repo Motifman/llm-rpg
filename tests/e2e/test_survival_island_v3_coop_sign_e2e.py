@@ -88,8 +88,18 @@ class TestCampNoticeBoardCarriesMessageAcrossAbsence:
         noah = _player_id(runtime, "noah")
         board_id = SpotObjectId.create(_id_int(runtime, "object", "camp_notice_board"))
 
-        # ada は campsite で書き残し、その後 noah が (別の場所から) 訪れる想定。
+        # 未記入の明示も同じ板切れで確認し、Noahは書込み前に立ち去る。
+        _teleport(runtime, int(noah), "campsite")
+        empty = runtime._interaction_service.execute_interaction(
+            noah, board_id, "read_notice"
+        )
+        assert empty.messages == ("何も書かれていない。",)
+        _teleport(runtime, int(noah), "shipwreck_beach")
         _teleport(runtime, int(ada), "campsite")
+        graph = runtime._spot_graph_repo.find_graph()
+        assert graph.get_entity_spot(EntityId.create(int(noah))) != SpotId.create(
+            _id_int(runtime, "spot", "campsite")
+        )
         write_result = runtime._interaction_service.execute_interaction(
             ada,
             board_id,
@@ -109,25 +119,6 @@ class TestCampNoticeBoardCarriesMessageAcrossAbsence:
         assert read_result.messages == (
             "『山頂ルートは川沿い。合流して。』 — エイダ",
         )
-
-    def test_unwritten_board_shows_nothing_written(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """誰も書いていない板切れを読むと「何も書かれていない。」になる
-        (未記入を silent failure にせず明示するのが #714 の仕様)。"""
-        state = _create_coop_session(monkeypatch, tmp_path)
-        runtime = state.runtime
-        noah = _player_id(runtime, "noah")
-        board_id = SpotObjectId.create(_id_int(runtime, "object", "camp_notice_board"))
-        _teleport(runtime, int(noah), "campsite")
-
-        read_result = runtime._interaction_service.execute_interaction(
-            noah,
-            board_id,
-            "read_notice",
-        )
-
-        assert read_result.messages == ("何も書かれていない。",)
 
 
 class TestTrailCairnAtFoothillsForksTowardMountain:

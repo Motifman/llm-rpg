@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -65,22 +67,23 @@ def _tick(
 class TestNeedsDecayTickSkipped:
     """ダウン中・needs 空のときは何も変わらない。"""
 
-    def test_downed_player_unchanged(self) -> None:
-        """ダウン中は欲求も HP も変化しない。"""
+    @pytest.mark.parametrize("hunger, fatigue", [(50, 0), (100, 95)])
+    def test_downed_player_unchanged(self, hunger: int, fatigue: int) -> None:
+        """ダウン中は欲求を増やさず、飢餓・疲労限界に達していてもHPを減らさない。"""
         status = _new_status(is_down=True)
-        status.increase_need(NeedType.HUNGER, 50)
+        status.increase_need(NeedType.HUNGER, hunger)
+        status.increase_need(NeedType.FATIGUE, fatigue)
         hunger_before = status.needs.get(NeedType.HUNGER)
         assert hunger_before is not None
         hp_before = status.hp.value
 
-        result = status.apply_needs_decay_tick(
-            _tick(starvation_damage_per_tick=1, fatigue_critical_damage_per_tick=1)
-        )
+        result = status.apply_needs_decay_tick(_tick(starvation_damage_per_tick=1, fatigue_critical_damage_per_tick=1))
 
         assert result.changed is False
         hunger_after = status.needs.get(NeedType.HUNGER)
         assert hunger_after is not None
         assert hunger_after.value == hunger_before.value
+        assert status.fatigue_value == fatigue
         assert status.hp.value == hp_before
 
     def test_empty_needs_unchanged(self) -> None:
@@ -88,9 +91,7 @@ class TestNeedsDecayTickSkipped:
         status = _new_status(needs=AgentNeeds.empty())
         hp_before = status.hp.value
 
-        result = status.apply_needs_decay_tick(
-            _tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=1)
-        )
+        result = status.apply_needs_decay_tick(_tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=1))
 
         assert result.changed is False
         assert status.hp.value == hp_before
@@ -102,9 +103,7 @@ class TestNeedsDecayTickHungerIncrease:
     def test_hunger_increases_below_max_no_damage(self) -> None:
         """max 未満なら HUNGER +1 のみで HP は減らない。"""
         status = _new_status()
-        result = status.apply_needs_decay_tick(
-            _tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=1)
-        )
+        result = status.apply_needs_decay_tick(_tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=1))
 
         assert result.changed is True
         hunger = status.needs.get(NeedType.HUNGER)
@@ -117,9 +116,7 @@ class TestNeedsDecayTickHungerIncrease:
         status = _new_status()
         status.increase_need(NeedType.HUNGER, 99)
 
-        result = status.apply_needs_decay_tick(
-            _tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=2)
-        )
+        result = status.apply_needs_decay_tick(_tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=2))
 
         assert result.changed is True
         hunger = status.needs.get(NeedType.HUNGER)
@@ -132,9 +129,7 @@ class TestNeedsDecayTickHungerIncrease:
         status = _new_status()
         status.increase_need(NeedType.HUNGER, 100)
 
-        result = status.apply_needs_decay_tick(
-            _tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=0)
-        )
+        result = status.apply_needs_decay_tick(_tick(rates={NeedType.HUNGER: 1}, starvation_damage_per_tick=0))
 
         assert result.changed is False
         assert status.hp.value == 100
@@ -217,9 +212,7 @@ class TestNeedsDecayTickCombined:
         assert fatigue_before is not None
         assert fatigue_before.value == 0
 
-        result = status.apply_needs_decay_tick(
-            _tick(rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 0})
-        )
+        result = status.apply_needs_decay_tick(_tick(rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 0}))
 
         assert result.changed is True
         fatigue_after = status.needs.get(NeedType.FATIGUE)

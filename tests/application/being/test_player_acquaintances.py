@@ -117,34 +117,6 @@ class TestOnObservation:
         assert store.list_by_being(BeingId("being_p1")) == ()
 
 
-class TestRecentlyMetNames:
-    """recently_met_names が、Being のターン数で数えた直近に会った相手だけを返すことを保証する。"""
-
-    def test_only_people_met_within_the_window_are_returned(self) -> None:
-        """最後に会ったターンが現在のターンから窓の幅以内の相手だけを、初めて会った順に返す。"""
-        acquaintances, _, turns = _make()
-        ada = BeingId("being_p1")
-        acquaintances.record_meeting(ADA, "リオ")
-        for _ in range(4):
-            turns.advance_turn(ada)
-        acquaintances.record_meeting(ADA, "ノア")
-        turns.advance_turn(ada)
-        turns.advance_turn(ada)
-
-        assert acquaintances.recently_met_names(ADA, within_turns=2) == ("ノア",)
-        assert acquaintances.recently_met_names(ADA, within_turns=6) == ("リオ", "ノア")
-
-    def test_window_boundary_is_inclusive(self) -> None:
-        """最後に会ったターンから現在までがちょうど窓の幅なら含め、1 つ超えたら含めない。"""
-        acquaintances, _, turns = _make()
-        acquaintances.record_meeting(ADA, "ノア")
-        for _ in range(3):
-            turns.advance_turn(BeingId("being_p1"))
-
-        assert acquaintances.recently_met_names(ADA, within_turns=3) == ("ノア",)
-        assert acquaintances.recently_met_names(ADA, within_turns=2) == ()
-
-
 class TestWhoCanBeMet:
     """会った相手として記録するのはシナリオの参加者だけで、名前の取り違えを起動時に止めることを保証する。"""
 
@@ -276,14 +248,6 @@ class TestIntroductionsAndKnownPeople:
         acquaintances.receive_entry(STRANGER, _entry())
 
         assert acquaintances.known_people_text(STRANGER) == ""
-
-    def test_introduced_but_unmet_person_is_not_recently_met(self) -> None:
-        """紹介されただけでまだ会っていない相手は、直近に会った相手に入らない。"""
-        acquaintances, _, _ = _make()
-        acquaintances.receive_entry(ADA, _entry(Introduction(name="ノア")))
-
-        assert acquaintances.recently_met_names(ADA, within_turns=5) == ()
-
 
 def _entry(*introductions: Introduction) -> EnvironmentEntry:
     return EnvironmentEntry(

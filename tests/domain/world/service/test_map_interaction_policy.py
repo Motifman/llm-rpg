@@ -33,7 +33,13 @@ class TestValidateCanInteract:
     """validate_can_interact のテスト"""
 
     class TestSuccessCases:
-        def test_adjacent_facing_target_succeeds(self, current_tick):
+        @pytest.mark.parametrize(
+            "interaction_args",
+            [("talk", {"name": "Bob"}), ("talk",)],
+            ids=["with-data", "without-data"],
+        )
+        def test_adjacent_facing_target_succeeds(self, current_tick, interaction_args):
+            """データの有無にかかわらず、正しい向きの隣接対象への操作を許す。"""
             # Given: actor at (0,0) facing SOUTH, target at (0,1)
             actor = WorldObject(
                 WorldObjectId(1),
@@ -45,7 +51,7 @@ class TestValidateCanInteract:
                 WorldObjectId(2),
                 Coordinate(0, 1, 0),
                 ObjectTypeEnum.NPC,
-                component=InteractableComponent("talk", {"name": "Bob"}),
+                component=InteractableComponent(*interaction_args),
             )
 
             # When & Then: 例外なしで通過
@@ -188,24 +194,6 @@ class TestValidateCanInteract:
             with pytest.raises(NotFacingTargetException) as exc_info:
                 MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
             assert "facing" in str(exc_info.value).lower()
-
-        def test_passes_when_facing_correct_direction(self, current_tick):
-            # Given: actor faces SOUTH, target is South
-            actor = WorldObject(
-                WorldObjectId(1),
-                Coordinate(0, 0, 0),
-                ObjectTypeEnum.PLAYER,
-                component=ActorComponent(direction=DirectionEnum.SOUTH),
-            )
-            target = WorldObject(
-                WorldObjectId(2),
-                Coordinate(0, 1, 0),
-                ObjectTypeEnum.NPC,
-                component=InteractableComponent("talk"),
-            )
-
-            # When & Then
-            MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
 
     class TestInteractable:
         def test_raises_when_target_not_interactable(self, current_tick):
