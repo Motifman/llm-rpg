@@ -17,7 +17,7 @@
 
 試験は67→63宣言/実行ケース、481→458行（追加0・削除23）。製品4所有者249行、専用支援0行は変更していない。廃止ファイル・追加の恒久試験・試験専用の製品口は無い。
 
-`TradeAggregate`のイベント生成、同席取引の`PendingTradeOffer`、市場板の`MarketBoard`/`MarketOrder`は別所有者であり、編集も今回の完了件数への追加もしない。取引集約の規則を置く共通`tests/domain/trade/AGENTS.md`は別変更と競合させず、この文書に今回の判断を残す。
+`TradeAggregate`のイベント生成、同席取引の`PendingTradeOffer`、市場板の`MarketBoard`/`MarketOrder`は別所有者であり、編集も今回の完了件数への追加もしない。今回の判断はこの文書に残す。
 
 ## 3件の統合
 
