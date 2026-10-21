@@ -695,59 +695,44 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
             assert event.damage == 42
             assert event.current_hp == 58
 
-        def test_application_style_damage_flow_evaded(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
-            monster.spawn(Coordinate(1, 1, 0), spot_id, WorldTick(0))
-            attacker_stats = BaseStats(
-                max_hp=100,
-                max_mp=30,
-                attack=50,
-                defense=5,
-                speed=12,
-                critical_rate=0.0,
-                evasion_rate=0.0,
-            )
-            monster.clear_events()
-
-            # When (アプリケーション層の責務を模した流れ)
-            with patch("random.random", return_value=0.0):
-                damage = CombatLogicService.calculate_damage(
-                    attacker_stats=attacker_stats,
-                    defender_stats=monster.template.base_stats,
-                )
-            if damage.is_evaded:
-                monster.record_evasion()
-            else:
-                monster.apply_damage(damage.value, WorldTick(10))
-
-            # Then
-            assert monster.hp.value == 100
-            events = monster.get_events()
-            assert len(events) == 1
-            event = events[0]
-            assert isinstance(event, MonsterEvadedEvent)
-            assert event.coordinate == {"x": 1, "y": 1, "z": 0}
-            assert event.current_hp == 100
-
     class TestRecordEvasion:
-        def test_record_evasion_success(self, monster: MonsterAggregate, spot_id: SpotId):
+        @pytest.mark.parametrize(
+            ("coordinate", "prior_damage", "expected_hp", "expected_coordinate"),
+            [
+                pytest.param(
+                    Coordinate(2, 3, 0), 20, 80, {"x": 2, "y": 3, "z": 0},
+                    id="original-wounded",
+                ),
+                pytest.param(
+                    Coordinate(1, 1, 0), None, 100, {"x": 1, "y": 1, "z": 0},
+                    id="transferred-uninjured",
+                ),
+            ],
+        )
+        def test_record_evasion_success(
+            self, monster: MonsterAggregate, spot_id: SpotId,
+            coordinate, prior_damage, expected_hp, expected_coordinate,
+        ):
+            """負傷時も無傷時も、回避は実HPを保ち、現在の座標とHPの通知を1件だけ追加する。"""
             # Given
-            monster.spawn(Coordinate(2, 3, 0), spot_id, WorldTick(0))
-            monster.apply_damage(20, WorldTick(1))
+            monster.spawn(coordinate, spot_id, WorldTick(0))
+            if prior_damage is not None:
+                monster.apply_damage(prior_damage, WorldTick(1))
             monster.clear_events()
 
             # When
             monster.record_evasion()
 
             # Then
+            assert monster.hp.value == expected_hp
             events = monster.get_events()
             assert len(events) == 1
             event = events[0]
             assert isinstance(event, MonsterEvadedEvent)
             assert event.aggregate_id == monster.monster_id
             assert event.aggregate_type == "MonsterAggregate"
-            assert event.coordinate == {"x": 2, "y": 3, "z": 0}
-            assert event.current_hp == 80
+            assert event.coordinate == expected_coordinate
+            assert event.current_hp == expected_hp
             assert hasattr(event, "event_id")
             assert hasattr(event, "occurred_at")
 
