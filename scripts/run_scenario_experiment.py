@@ -576,6 +576,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
         memory_turn_clock=getattr(runtime, "_memory_turn_clock", None),
+        being_short_term_memory_store=getattr(runtime, "_being_short_term_memory_store", None),
     )
 
 

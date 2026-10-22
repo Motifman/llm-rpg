@@ -16,12 +16,25 @@ from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemoryPayloadSchemaError,
     BeingMemorySnapshotService,
 )
+from ai_rpg_world.being.contract import (
+    UNKNOWN,
+    AgentMove,
+    EnvironmentNotice,
+    Observation,
+    ObservedTime,
+    OwnActionResult,
+    OwnBodyState,
+    SeenOrHeard,
+    ToldOrWritten,
+)
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoCertainty, MemoKind, MemoProvenance, MemoSource
+from ai_rpg_world.being.domain.short_term_memory import Backstory, RememberedEvent, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import InMemoryAcquaintanceRepository
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
+from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
@@ -31,8 +44,9 @@ def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     acquaintances = InMemoryAcquaintanceRepository()
     being_episodes = InMemoryEpisodeRepository()
     being_memo = InMemoryMemoBookRepository()
-    svc = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock())
-    return (svc, {'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo})
+    short_term = InMemoryShortTermMemoryRepository()
+    svc = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=short_term)
+    return (svc, {'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo, 'short_term': short_term})
 
 def _populate(stores: dict[str, object], being_id: BeingId) -> None:
     """知り合いに最小サンプルデータを書き込む。"""
@@ -47,7 +61,7 @@ class TestCapture:
         being = BeingId('ada')
         payload = json.loads(svc.capture(being))
         assert payload['schema_version'] == CURRENT_PAYLOAD_SCHEMA_VERSION
-        for k in ('acquaintances', 'being_episodes', 'being_memo_book'):
+        for k in ('acquaintances', 'being_episodes', 'being_memo_book', 'being_short_term_memory'):
             assert payload[k] == []
 
     def test_includes_acquaintance_store(self) -> None:
@@ -371,3 +385,119 @@ class TestRestoreValidation:
 
 class TestConstructor:
     """constructor の型ガード。"""
+
+    def test_short_term_memory_store_of_wrong_type_raises_type_error(self) -> None:
+        """短期記憶の store に ShortTermMemoryRepository でない値を渡すと TypeError を投げる。"""
+        with pytest.raises(TypeError, match='being_short_term_memory_store'):
+            BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryMemoBookRepository())
+
+
+class TestPayloadKeyTables:
+    """後から足したキーの表が、必須のキーの表と食い違わないことを保証する。"""
+
+    def test_added_keys_are_part_of_expected_keys(self) -> None:
+        """ADDED_PAYLOAD_KEYS のキーは、どれも EXPECTED_PAYLOAD_KEYS にもある。ADDED にだけ足すと capture も restore もそのキーを扱わない。"""
+        assert BeingMemorySnapshotService.ADDED_PAYLOAD_KEYS <= BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS
+
+
+def _every_field_short_term_memory() -> ShortTermMemory:
+    """5 つの経路、分かる欄と「不明」の両方、入れ子の引数、いきさつ 2 世代を含む短期記憶。"""
+    def observation(route: object, **fields: object) -> Observation:
+        base: dict[str, object] = {'body': 'ミオが坑道から戻ってきた', 'route': route, 'time': ObservedTime(display='1日目 朝'), 'subject_is_self': False, 'subject_name': UNKNOWN, 'source': UNKNOWN, 'place': UNKNOWN, 'addressed_to_self': UNKNOWN}
+        return Observation(**{**base, **fields})
+    events = (
+        RememberedEvent(turn=1, observation=observation(SeenOrHeard(), subject_name='ミオ', source='ミオ', place='坑道の入口', addressed_to_self=False, body_if_subject_unknown='誰かが坑道から戻ってきた', wants_wake=True, time=ObservedTime(display='1日目 朝', seconds=21600.0))),
+        RememberedEvent(turn=1, observation=observation(ToldOrWritten(), subject_name='カイト', withheld_if_subject_unknown=True, wants_wake=False)),
+        RememberedEvent(turn=1, observation=observation(OwnBodyState(), body='少し空腹だ', subject_is_self=True)),
+        RememberedEvent(turn=1, observation=observation(EnvironmentNotice(), body='日が暮れた')),
+        RememberedEvent(turn=1, observation=observation(OwnActionResult(call_id='call-1', succeeded=False), body='扉は開かなかった', subject_is_self=True, addressed_to_self=True), move=AgentMove(call_id='call-1', tool_name='interact', arguments={'target': '扉', 'options': {'force': True, 'tries': [1, 2.5, None, 'again']}}, expectation='扉が開く', inner_thought='鍵が要るかもしれない')),
+        RememberedEvent(turn=2, observation=observation(OwnActionResult(call_id='call-2', succeeded=True), body='挨拶した', subject_is_self=True), move=AgentMove(call_id='call-2', tool_name='speak', arguments={})),
+    )
+    backstories = (Backstory(flow='坑道の奥で鍵を探していた', mood='少し焦っている', written_turn=20), Backstory(flow='鍵を見つけて村へ戻った', mood='', written_turn=30))
+    return ShortTermMemory(events=events, backstories=backstories)
+
+
+class TestShortTermMemoryPayload:
+    """短期記憶 (#1824) を Being の snapshot で往復させ、キーを足す前の snapshot も読めることを保証する。"""
+
+    def test_empty_short_term_memory_round_trips_as_empty_list(self) -> None:
+        """まだ誰も書いていない短期記憶は [] で保存され、戻しても空のまま。"""
+        (src_svc, _) = _make_service()
+        being = BeingId('ada')
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, payload_json)
+
+        assert json.loads(payload_json)['being_short_term_memory'] == []
+        assert dst_stores['short_term'].get(being) == ShortTermMemory.empty()
+
+    def test_snapshot_saved_before_the_key_was_added_restores_the_other_stores(self) -> None:
+        """短期記憶のキーを足す前に保存した snapshot は、キーが無くても落ちず、短期記憶は空、ほかの store は元どおりに戻る。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        _populate(src_stores, being)
+        payload = json.loads(src_svc.capture(being))
+        old_payload = {k: v for (k, v) in payload.items() if k != 'being_short_term_memory'}
+        (dst_svc, dst_stores) = _make_service()
+        dst_stores['short_term'].save(being, _every_field_short_term_memory())
+
+        dst_svc.restore(being, json.dumps(old_payload))
+
+        assert dst_stores['short_term'].get(being) == ShortTermMemory.empty()
+        assert json.loads(dst_svc.capture(being)) == payload
+
+    def test_every_field_round_trips(self) -> None:
+        """5 つの経路、「不明」の欄、入れ子の引数、いきさつを持つ短期記憶が、保存して戻すと元と等しい。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['short_term'].save(being, _every_field_short_term_memory())
+        payload_json = src_svc.capture(being)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, payload_json)
+
+        assert dst_stores['short_term'].get(being) == _every_field_short_term_memory()
+
+    def test_more_than_one_memory_is_rejected(self) -> None:
+        """1 つの Being に短期記憶が 2 つ書かれた payload は FormatError。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['short_term'].save(being, _every_field_short_term_memory())
+        payload = json.loads(src_svc.capture(being))
+        payload['being_short_term_memory'] = payload['being_short_term_memory'] * 2
+        (svc, _) = _make_service()
+
+        with pytest.raises(BeingMemoryPayloadFormatError, match='being_short_term_memory'):
+            svc.restore(being, json.dumps(payload))
+
+    def test_events_out_of_turn_order_are_rejected_before_any_store_is_written(self) -> None:
+        """出来事が手番の順に並んでいない payload は FormatError になり、どの store も書き換えない。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        _populate(src_stores, being)
+        src_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
+        src_stores['being_memo'].save(being, MemoBook.empty().add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='鍵を取る', provenance=None, turn=1, environment_name='島'))
+        src_stores['short_term'].save(being, _every_field_short_term_memory())
+        payload = json.loads(src_svc.capture(being))
+        payload['being_short_term_memory'][0]['events'].reverse()
+        (svc, stores) = _make_service()
+
+        with pytest.raises(BeingMemoryPayloadFormatError, match='invalid being short-term memory payload'):
+            svc.restore(being, json.dumps(payload))
+        assert tuple(stores['acquaintances'].list_by_being(being)) == ()
+        assert tuple(stores['being_episodes'].list_by_being(being)) == ()
+        assert stores['being_memo'].get(being) == MemoBook.empty()
+        assert stores['short_term'].get(being) == ShortTermMemory.empty()
+
+    def test_unknown_route_kind_is_rejected(self) -> None:
+        """経路の種類が 5 つのどれでもない payload は FormatError。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['short_term'].save(being, _every_field_short_term_memory())
+        payload = json.loads(src_svc.capture(being))
+        payload['being_short_term_memory'][0]['events'][0]['observation']['route']['kind'] = 'dreamed'
+        (svc, _) = _make_service()
+
+        with pytest.raises(BeingMemoryPayloadFormatError, match='being_short_term_memory'):
+            svc.restore(being, json.dumps(payload))

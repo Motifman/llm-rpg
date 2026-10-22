@@ -139,6 +139,12 @@ class MemoNotFoundException(BeingDomainException, NotFoundException):
     error_code = "BEING.MEMO_NOT_FOUND"
 
 
+class ShortTermMemoryValidationException(BeingDomainException, ValidationException):
+    """短期記憶の出来事やいきさつが決まり (手番の番号、結果と 1 手の対、並び、世代の上限) を満たさない。"""
+
+    error_code = "BEING.SHORT_TERM_MEMORY_VALIDATION"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -156,4 +162,5 @@ __all__ = [
     "MemoLimitReachedException",
     "MemoNotFoundException",
     "MemoValidationException",
+    "ShortTermMemoryValidationException",
 ]
