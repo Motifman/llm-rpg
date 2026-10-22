@@ -12,7 +12,7 @@
 - `episodic_chunk_written`: 新しい episode の生成。古いエピソードは #1631 で消したので、それより後の trace には出ない (出ないのが正常)
 - `episodic_subjective_filled`: subjective field (= chunk の意味付け) の埋め込み。同じく #1631 前の trace のみ
 - `short_term_summary_generated`: L4 short-term summary 更新
-- `short_term_long_summary_generated`: L5 long summary 生成
+- `short_term_long_summary_generated`: L5 long summary 生成。L5 は #1824 で消したので、それより後の trace には出ない (出ないのが正常)
 - `being_memo`: メモ帳への書き込み。`payload.applied` / `payload.rejected`
 - `episode_writing`: 目次つきのエピソードの書き起こし。`payload.trigger` (compaction / leaving) / `payload.outcome` (written / failed / skipped) / `payload.episodes`
 - `episode_index_shown`: 毎ターンのプロンプトに出した目次。`payload.shown_handles` / `payload.total_count`
