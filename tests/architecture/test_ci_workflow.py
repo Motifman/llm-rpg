@@ -61,13 +61,20 @@ def test_test_and_quality_jobs_use_python_lower_bound_and_frozen_uv_lock() -> No
 _PINNED_UV_FROM_PYPI = re.compile(r"python -m pip install uv==\d+\.\d+\.\d+")
 
 
+# 行頭だけを見ると、`cd x && uv run ...` や `FOO=1 uv sync ...` の形で書かれた
+# uv が拾えず、その job の検査が黙って飛ばされる。
+_UV_INVOCATION = re.compile(
+    r"(?:^|&&|\|\||;|\||\bthen\b|\bdo\b)\s*(?:\w+=\S+\s+)*(uv\s[^;&|]*)"
+)
+
+
 def _uv_command_lines(job: dict) -> list[tuple[int, str]]:
     return [
-        (index, line.strip())
+        (index, match.group(1).strip())
         for index, step in enumerate(job["steps"])
         if isinstance(step, dict) and "run" in step
         for line in str(step["run"]).splitlines()
-        if line.strip().split(" ", 1)[0] == "uv"
+        for match in _UV_INVOCATION.finditer(line.strip())
     ]
 
 

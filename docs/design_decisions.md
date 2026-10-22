@@ -3031,7 +3031,7 @@ runner 消費だけを倍にしていた。無固定の pip 解決は確認時�
 
 - workflow を構文として読み、main push と全 pull request に `secret-leak` があることを確かめる
 - `secret-leak` が pytest でなく走査スクリプトを直接呼ぶことを確かめる
-- 通常試験と品質検査の Python 3.10、setup-uv、locked sync、frozen run を固定する
+- 通常試験と品質検査の Python 3.10、setup-uv、locked sync、frozen run を固定する (uv の入れ方は design_decisions D1652 で PyPI からに変えた)
 - 注入した 0.05 秒が 0.05 / 0.10 秒の待ちになり、既定値は 2 秒のままかを確かめる
 
 ## 112. 商人は世界の外との出入り口で、世界の中に物を溜めない
@@ -8411,3 +8411,21 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 段 13 で `world_clock_restart.py` を消した (#1810)。読み込みは表のキーを捨てたあと、replay かどうかで分かれない。`snapshot_load` の `world_clock_restarts` 欄も無くなった。
 
 上で「同じ表を通す」と書いた `BeingPersistenceService` は、本番から呼ばれず試験だけが使っていたので、段 13 で消した (#1813)。表を通る読み込みは、`RestoreBeingSnapshotFromFileUseCase` だけになった。
+
+## D1652. CI の uv は、配布元からではなく PyPI から固定版を入れる
+
+**何を**: CI で uv を使う job は、`actions/setup-python` のあと `python -m pip install uv==<固定版>` で uv を入れる。`astral-sh/setup-uv` は使わない。版は全 job で同じにする。そのあとの `uv sync --locked` と `uv run --frozen` は変えない (design_decisions 111 の、uv.lock のとおりに入れる守りはそのまま)。依存のキャッシュは置かない。
+
+**なぜ**: setup-uv は、uv の版の一覧を `raw.githubusercontent.com` から、uv 本体を `releases.astral.sh` から取りに行く。ここで時間切れが 2 回起きた。
+
+- #1710 の CI (run 39278879113 の 1 回目) では、版の一覧の取得が 5 秒で時間切れになり、test job が落ちた
+- main の run 39289145404 では、uv 本体の取得が 180 秒で時間切れになって再試行し、test (3/3) の job が 355 秒になった
+
+#1652 で test job を 3 台に分けたので、1 回の CI で uv を取りに行く回数も増えた。PyPI は依存を入れるときにすでに頼っている取得先なので、取得先が 1 つ減る。
+
+キャッシュを置かないのは、無くても遅くならなかったため。setup-uv のキャッシュがあったころの main では、uv の準備が 2〜6 秒、依存を入れる手順が 1〜3 秒だった。キャッシュ無しで PyPI から入れると、uv を入れるのが 1〜4 秒、依存を入れるのが 2〜4 秒だった (#1826 の CI)。数秒のために `actions/cache` を足すと、キャッシュの置き場所という取得先がもう 1 つ増える。
+
+**どう守るか**:
+
+- `tests/architecture/test_ci_workflow.py` が、uv を使う job がどれも、uv を使う前に PyPI から同じ固定版の uv を入れること、setup-uv を使わないことを見る
+- 同じ試験が、どの job の `uv sync` も `--locked`、`uv run` も `--frozen` であることを見る
