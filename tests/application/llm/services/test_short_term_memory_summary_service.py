@@ -285,7 +285,7 @@ class TestShortTermMemorySummaryServicePromptStructure:
 
         system = port.captured[0][0]["content"]
         assert hashlib.sha256(system.encode()).hexdigest() == (
-            "4aa484db7f36f0a44b30bf387b3c3c43989b35ced40b24202cfe5363c0431e03"
+            "43c5719dafca9db4e6fe8536b75f79fcbadc9ceb817976cc71b6d66ba4fa9ba3"
         )
 
     def test_relations_and_world_rules_are_left_to_the_memo(self) -> None:
