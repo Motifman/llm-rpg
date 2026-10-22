@@ -35,7 +35,7 @@
    - 直近の出来事: `UnifiedRecentEventStore.get_active_timeline` を `RecentEventsFormatter.format_unified_entries` (`llm/services/recent_events_formatter.py:47`) で行にする
    - 保留中の予測と、前回の予測と実際は #1631 で消した
    - 関連する記憶、見出し、関連する学びは #1631 で消した。過去の出来事は目次つきのエピソードの【思い出せる出来事】が出す
-   - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、最近の流れと自己像と世界観 (短期記憶の `get_mid_summary_text` / `get_long_summary_text`)
+   - 進行中のメモ (`_build_active_memos_text`、705 行)、現在の目的 (`objective_text_provider`、713 行)、ここまでのいきさつ (短期記憶の `get_mid_summary_text`。自己像と世界観は #1824 で消した)
 3. `SectionBasedContextFormatStrategy.format` (`llm/services/context_format_strategy.py`) が見出しを付けて並べる (747 行)。run の設定は `stable_to_volatile` で、`_format_stable_to_volatile` (300 行) の順になる
 4. 繰り返しの警告 (`_build_loop_warning_prefix`、780 行) を指示の前に付け、本文の後ろに置く (783 行)
 5. `run_phase_a` に戻り、`inject_dynamic_argument_candidate_table` (`llm/services/dynamic_argument_candidates.py:363`) が【現在選べる対象引数】を指示の直前に差し込む (`phase_a.py:231`)
@@ -60,7 +60,7 @@ reason_first の起動判定 (`resolve_reason_first_gate`) が通ったターン
 system: S1 冒頭 → S2 ペルソナ → S3 役職の知識 → 【世界の前提】S4 タイトルと概要 → S5 見取り図など → S6 行動の制限
         → S7【同じ局面にいる者】 → S8【渡される文面の内訳】 → S9【行動ルール】 → S10【独白と一言の書き方】
         → S11【文脈と履歴の限界】 (S12 SSoT は #1631 で消した)
-user:   U1【現在の目的】 → U2【自己像と世界観】 → U3【最近の流れ】 → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
+user:   U1【現在の目的】 → U3【ここまでのいきさつ】 (U2【自己像と世界観】は #1824 で消した) → 【直近の出来事】(U4〜U7 の行が時刻順に混ざる)
         → (U10【関連する学び】、U11【関連する記憶】、U12 見出しは #1631 で消した)
         → (U13【進行中のメモ】は #1631 で消した) → 【現在地と周囲】(U14〜U18。並びは U19) → U20【現在選べる対象引数】
         → 繰り返しの警告 (U7) → U21 指示の前の知らせ → U22 行動指示
@@ -99,8 +99,8 @@ S9 の 2 段階ターン向けの行 (`tool_schema_mode="reason_first"`) は、`
 | 部分 | 中身 | 作る場所 | 材料の出どころ | 分類 | Being がいま持つか |
 |---|---|---|---|---|---|
 | U1 【現在の目的】 | 「- 最終目標は『救助されること』。…」「- 4 人は初対面だ。…」 | `objective_text_provider` → `_resolve_player_objective_text` (`world_runtime/world_runtime.py`) | シナリオの `players[].objective` か `metadata.llm_objective_text` を、そのまま描く | 環境の材料 (goal journal を #1631 で消すまでは混ざっていた) | 無 |
-| U2 【自己像と世界観】 | 「私について: 私は難破船から生き延びた探索者。…」「この世界について: …」 | `SummarizingShortTermMemory.get_long_summary_text` (`llm/services/summarizing_short_term_memory.py:318`) | 短期記憶の L5 要約。run では 206 中 7 呼び出し | Being の持ち物 | 無 (整数の player 鍵) |
-| U3 【最近の流れ】 | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」「  未解決: …」 | `get_mid_summary_text` (同 330 行)、行の形は 742 行 | 短期記憶の L4 要約。U2 と同じ profile | Being の持ち物 | 無 (整数の player 鍵) |
+| U2 【自己像と世界観】 | (#1824 で消した。長い期間の流れはエピソードの目次が受け持つ) | - | - | - | - |
+| U3 【ここまでのいきさつ】 (#1824 で【最近の流れ】から改名) | 「[最新] 難破船の浜で遺体確認と漂着物の回収を続け、…」「  気分: …」 (片付いていないことは #1824 で外した) | `get_mid_summary_text` (`llm/services/summarizing_short_term_memory.py`)、行の形は `format_mid_summary_block` | 短期記憶の L4 要約 | Being の持ち物 | 無 (整数の player 鍵) |
 | U4 観測の行 | 「- [Day 1 深夜 5:30] カイが言った: 「…」」「- [Day 1 6:00] 朝になった。」「- [Day 1 6:00] 〈森の小道〉の向こうから、カイの遠くの声が聞こえる: 「…」」 | `format_observation_line_for_recent_events` (`llm/contracts/chunk_encoding.py:80`)。遠くの声の文は `player_formatter.py:474` (`observation/services/formatters/`) | 環境のイベントを観測パイプラインが本文にしたもの。`UnifiedRecentEventStore` に積まれる | 混ざっている (環境の観測と、遠くの声で話者の名前を出すかという誰を知っているかの判断) | 無 (`PlayerId` 鍵) |
 | U5 自分の行動の行 | 「- [Day 1 8:30] [行動] 「釣り場」に fish_stream した → [失敗] \| error_code=INTERACTION_PRECONDITION_FAILED \| tool=interact \| 行動が拒否された: 釣竿が必要だ。」「  心の声: …」「（3 名に届いた。ぼんやり=1）」、失敗の観測「interact を試みたが失敗した: … 修正のヒント: …」 | `format_action_result_line_for_recent_events` (`chunk_encoding.py:96`)、失敗の観測は `intent/action_failed_observation_emitter.py:128`、届いた人数は `speech/services/audience_feedback.py:119` | action_result_store (tool 名・引数・`inner_thought`・結果・`error_code`) と、環境が返す結果の文・届いた人数・修正のヒント | 混ざっている (環境の結果の文と、Being の行動と内心の記録) | 無 (`PlayerId` 鍵) |
 | U6 内省の観測行 | (#1631 で消した) | - | - | - | - |
