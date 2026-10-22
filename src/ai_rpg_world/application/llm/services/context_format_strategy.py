@@ -17,7 +17,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
     1b. **【知っている人】** — known_people_text (Being が知っている人。新しい人を知ったときだけ変わる)
-    2. **【自己像と世界観】** — long_summary_text (L5)
     3. **【最近の流れ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
     5b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
@@ -37,7 +36,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
         objective_text: str = "",
         inventory_text: str = "",
         mid_summary_text: str = "",
-        long_summary_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
         being_memo_text: str = "",
@@ -48,7 +46,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             ("objective_text", objective_text),
             ("inventory_text", inventory_text),
             ("mid_summary_text", mid_summary_text),
-            ("long_summary_text", long_summary_text),
             ("known_people_text", known_people_text),
             ("episode_index_text", episode_index_text),
             ("being_memo_text", being_memo_text),
@@ -62,7 +59,6 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             objective_text=objective_text,
             inventory_text=inventory_text,
             mid_summary_text=mid_summary_text,
-            long_summary_text=long_summary_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
             being_memo_text=being_memo_text,
@@ -129,16 +125,6 @@ def _emit_mid_summary(sections: list[str], mid_summary_text: str) -> None:
         ])
 
 
-def _emit_long_summary(sections: list[str], long_summary_text: str) -> None:
-    """``【自己像と世界観】`` (L5 long summary) を呼び出し位置へ挿入する。"""
-    if long_summary_text.strip():
-        sections.extend([
-            "",
-            "【自己像と世界観】",
-            long_summary_text.strip(),
-        ])
-
-
 def _format_stable_to_volatile(
     *,
     current_state_text: str,
@@ -146,14 +132,13 @@ def _format_stable_to_volatile(
     objective_text: str,
     inventory_text: str,
     mid_summary_text: str,
-    long_summary_text: str,
     known_people_text: str = "",
     episode_index_text: str = "",
     being_memo_text: str = "",
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → self_image (L5) → mid_summary (L4) → recent_events →
+    順序: objective → mid_summary (L4) → recent_events →
     memos → current_state。
 
     section 寿命 / 変動率の根拠 (Y_after_pr612 実測, tick 1-107):
@@ -161,7 +146,6 @@ def _format_stable_to_volatile(
     | section              | 変動率 (per tick) | 種類 |
     |----------------------|------------------|------|
     | objective            | 0% (静的)         | 純 stable |
-    | L5 self_image        | ~45 tick に 1 回   | stable |
     | L4 mid_summary       | 15 tick に 1 世代  | stable |
     | recent_events (head) | ~0% (末尾 append) | **head 安定** |
     | memos                | 23-43%            | high-volatile (agent 操作依存) |
@@ -187,15 +171,6 @@ def _format_stable_to_volatile(
     _emit_objective(sections, objective_text)
     _emit_known_people(sections, known_people_text)
 
-    # 2. 自己像と世界観 (L5 long summary、空なら省略)
-    # 最も更新頻度が低い (= prefix cache 寿命最長) ので objective の直後
-    if long_summary_text.strip():
-        sections.extend([
-            "【自己像と世界観】",
-            long_summary_text.strip(),
-            "",
-        ])
-
     # 3. 最近の流れ (L4 mid summary、空なら省略)
     if mid_summary_text.strip():
         sections.extend([
@@ -206,7 +181,7 @@ def _format_stable_to_volatile(
 
     # 4. 直近の出来事 (常に出す。空なら「（なし）」)
     # 末尾 append 中心で **head は完全安定** (一度 append された行は決して
-    # 変わらない)。静的群の直後に置くことで「objective + L5 + L4 +
+    # 変わらない)。静的群の直後に置くことで「objective + L4 +
     # recent_events の head」までを stable prefix として cache hit
     # させる。memos を上に置くと、その変動で
     # recent_events の head 安定 cache が破壊される。

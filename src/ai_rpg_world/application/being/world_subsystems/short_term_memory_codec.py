@@ -14,8 +14,8 @@ resume 時に直近の出来事が空だと agent は **「直前の出来事を
 再開する (= 前 run の最終 tick で何が起きたかが prompt に乗らない)。
 
 ``ShortTermMemorySubsystemCodec`` は ``SummarizingShortTermMemory`` の
-L1 raw + L4 mid summary (3 generations) + L5 long summary (1 per player) を
-保存する。L4 / L5 が失われると agent の self_image / world_view が空に戻る。
+L1 raw + L4 mid summary (3 generations) を保存する。L4 が失われると、直近 20 ターン
+より前の流れが空に戻る。
 ``mode: "sliding_window"`` (v1 は mode 無しで同じ意味) の payload は、
 固定容量の短期記憶を使っていたころの snapshot で、観測だけを L1 raw に戻す。
 
@@ -35,9 +35,6 @@ from ai_rpg_world.application.common.execution_provenance import ExecutionProven
 from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
-)
-from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
-    L5LongSummary,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -155,7 +152,7 @@ def _check_version(data: dict[str, Any], key: str, expected: int) -> None:
 
 
 # ----------------------------------------------------------------------------
-# L4 / L5 summary serializer (rolling_summary backend 専用)
+# L4 summary serializer (rolling_summary backend 専用)
 # ----------------------------------------------------------------------------
 
 def _l4_mid_summary_to_dict(s: L4MidSummary) -> dict[str, Any]:
@@ -184,30 +181,6 @@ def _dict_to_l4_mid_summary(d: dict[str, Any]) -> L4MidSummary:
     )
 
 
-def _l5_long_summary_to_dict(s: L5LongSummary) -> dict[str, Any]:
-    return {
-        "summary_id": s.summary_id,
-        "player_id": int(s.player_id),
-        "generation_index": int(s.generation_index),
-        "generated_at": _dt_to_iso(s.generated_at),
-        "self_image": s.self_image,
-        "world_view": s.world_view,
-        "is_fallback": bool(s.is_fallback),
-    }
-
-
-def _dict_to_l5_long_summary(d: dict[str, Any]) -> L5LongSummary:
-    return L5LongSummary(
-        summary_id=str(d["summary_id"]),
-        player_id=int(d["player_id"]),
-        generation_index=int(d["generation_index"]),
-        generated_at=_iso_to_dt(str(d["generated_at"])),
-        self_image=str(d["self_image"]),
-        world_view=str(d["world_view"]),
-        is_fallback=bool(d.get("is_fallback", False)),
-    )
-
-
 # ----------------------------------------------------------------------------
 # 1. 短期記憶 (キー名は固定容量の短期記憶だったころの保存形式のまま)
 # ----------------------------------------------------------------------------
@@ -215,8 +188,9 @@ _SW_SUBSYSTEM_KEY = "sliding_window"
 # v1: {schema_version: 1, entries: [...]}                     ← sliding 専用
 # v2: {schema_version: 2, mode: "sliding_window", entries: [...]}
 #     {schema_version: 2, mode: "rolling_summary",
-#      raw_entries: [...], mid_summaries: [...], long_summaries: [...],
-#      long_gen_indices: [...]}
+#      raw_entries: [...], mid_summaries: [...]}
+# long_summaries / long_gen_indices (要約の要約 L5) は #1824 で書くのをやめた。版は
+# 据え置き、古い snapshot のこのキーは restore が読み飛ばす。
 _SW_SCHEMA_VERSION = 2
 _SW_MODE_SLIDING = "sliding_window"
 _SW_MODE_ROLLING = "rolling_summary"
@@ -332,14 +306,12 @@ def migrate_legacy_recent_event_subsystems(
         "completed_turn_sizes": [],
         "pending_observations": ob.get("entries", []),
         "mid_summaries": sw.get("mid_summaries", []),
-        "long_summaries": sw.get("long_summaries", []),
-        "long_gen_indices": sw.get("long_gen_indices", []),
     }
     return migrated
 
 
 class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
-    """統一時系列と未処理観測、L4/L5 を一つの subsystem として往復する。"""
+    """統一時系列と未処理観測、L4 を一つの subsystem として往復する。"""
 
     @property
     def subsystem_key(self) -> str:
@@ -356,8 +328,6 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                 "completed_turn_sizes": [],
                 "pending_observations": [],
                 "mid_summaries": [],
-                "long_summaries": [],
-                "long_gen_indices": [],
             }
         entries: list[dict[str, Any]] = []
         completed_turn_sizes = []
@@ -395,8 +365,6 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
             "completed_turn_sizes": completed_turn_sizes,
             "pending_observations": pending,
             "mid_summaries": [],
-            "long_summaries": [],
-            "long_gen_indices": [],
         }
         if memory is not None:
             with memory._mid_lock:
@@ -407,24 +375,6 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                             "summaries": [_l4_mid_summary_to_dict(s) for s in summaries],
                         }
                         for pid, summaries in memory._mid.items()
-                    ),
-                    key=lambda group: group["player_id"],
-                )
-            with memory._long_lock:
-                data["long_summaries"] = sorted(
-                    (
-                        {
-                            "player_id": int(pid),
-                            "summary": _l5_long_summary_to_dict(summary),
-                        }
-                        for pid, summary in memory._long.items()
-                    ),
-                    key=lambda group: group["player_id"],
-                )
-                data["long_gen_indices"] = sorted(
-                    (
-                        {"player_id": int(pid), "index": int(index)}
-                        for pid, index in memory._long_gen_index.items()
                     ),
                     key=lambda group: group["player_id"],
                 )
@@ -468,15 +418,6 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                     _dict_to_l4_mid_summary(item)
                     for item in group.get("summaries", [])
                 )
-        with memory._long_lock:
-            memory._long.clear()
-            memory._long_gen_index.clear()
-            for group in data.get("long_summaries", []):
-                memory._long[int(group["player_id"])] = _dict_to_l5_long_summary(
-                    group["summary"]
-                )
-            for group in data.get("long_gen_indices", []):
-                memory._long_gen_index[int(group["player_id"])] = int(group["index"])
 
 
 class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
@@ -522,16 +463,13 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         return entries
 
     def _capture_rolling(self, sw: Any) -> dict[str, Any]:
-        # L4 / L5 は worker thread からも書かれる: 必ず lock 内で snapshot を取る。
+        # L4 は worker thread からも書かれる: 必ず lock 内で snapshot を取る。
         # L1 (_raw) は main thread 専用なので lock 不要 (SummarizingShortTermMemory
         # の自己ドキュメント済の不変条件)。
         with sw._mid_lock:
             mid_snapshot: dict[int, list[L4MidSummary]] = {
                 int(pid): list(dq) for pid, dq in sw._mid.items()
             }
-        with sw._long_lock:
-            long_snapshot: dict[int, L5LongSummary] = dict(sw._long)
-            gen_snapshot: dict[int, int] = dict(sw._long_gen_index)
         raw_entries = self._capture_raw_entries(sw)
         mid_groups: list[dict[str, Any]] = list(
                 {
@@ -543,28 +481,11 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                 for pid, summaries in mid_snapshot.items()
         )
         mid_summaries = sorted(mid_groups, key=lambda d: d["player_id"])
-        long_groups: list[dict[str, Any]] = list(
-                {
-                    "player_id": int(pid),
-                    "summary": _l5_long_summary_to_dict(l5),
-                }
-                for pid, l5 in long_snapshot.items()
-        )
-        long_summaries = sorted(long_groups, key=lambda d: d["player_id"])
-        long_gen_indices = sorted(
-            (
-                {"player_id": int(pid), "index": int(idx)}
-                for pid, idx in gen_snapshot.items()
-            ),
-            key=lambda d: d["player_id"],
-        )
         return {
             "schema_version": _SW_SCHEMA_VERSION,
             "mode": _SW_MODE_ROLLING,
             "raw_entries": raw_entries,
             "mid_summaries": mid_summaries,
-            "long_summaries": long_summaries,
-            "long_gen_indices": long_gen_indices,
         }
 
     # -------- restore --------
@@ -598,7 +519,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                 for d in player_entry.get("entries", [])
             ]
             sw._event_store.replace_observations(PlayerId(pid), entries)
-        # L4 / L5 / generation index は lock 内で書き戻す (worker thread と race)
+        # L4 は lock 内で書き戻す (worker thread と race)
         with sw._mid_lock:
             sw._mid.clear()
             for player_entry in data.get("mid_summaries", []):
@@ -613,16 +534,6 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
             for pid in sw._event_store.player_ids():
                 if pid not in sw._mid:
                     sw._mid[pid] = deque()
-        with sw._long_lock:
-            sw._long.clear()
-            for player_entry in data.get("long_summaries", []):
-                pid = int(player_entry["player_id"])
-                sw._long[pid] = _dict_to_l5_long_summary(player_entry["summary"])
-            sw._long_gen_index.clear()
-            for player_entry in data.get("long_gen_indices", []):
-                sw._long_gen_index[int(player_entry["player_id"])] = int(
-                    player_entry["index"]
-                )
 
     def _restore_sliding_to_rolling(
         self, sw: Any, entries_data: list[dict[str, Any]]
@@ -632,9 +543,6 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
             sw._mid.clear()
             for pid in sw._event_store.player_ids():
                 sw._mid[pid] = deque()
-        with sw._long_lock:
-            sw._long.clear()
-            sw._long_gen_index.clear()
 
     @staticmethod
     def _restore_observations(sw: Any, entries_data: list[dict[str, Any]]) -> None:

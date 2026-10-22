@@ -145,20 +145,16 @@ class TestShortTermMemoryLlmServicesWired:
         assert isinstance(sw, SummarizingShortTermMemory)
         # stub なので LLM 経路は注入されない
         assert sw._service is None
-        assert sw._long_service is None
 
     def test_rolling_summary_litellm_client_summary_service(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """PR #444 fix の核心 assert: rolling + litellm なら setter 注入が走り、
-        ``_service`` / ``_long_service`` が None でなくなる。
+        ``_service`` が None でなくなる。
 
         PR #444 前は呼び出し側 wiring が未実装で、ここが None のまま動いていた
-        (= L4 / L5 が全件 template fallback)。
+        (= L4 が全件 template fallback)。
         """
-        from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-            ShortTermMemoryLongSummaryService,
-        )
         from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
             ShortTermMemorySummaryService,
         )
@@ -181,11 +177,7 @@ class TestShortTermMemoryLlmServicesWired:
             "なのに sliding_window._service=None。L4 が template fallback で動く危険"
         )
         assert isinstance(sw._service, ShortTermMemorySummaryService)
-        assert sw._long_service is not None, (
-            "PR #444 silent failure 再発: long_service が未注入で L5 が template fallback"
-        )
-        assert isinstance(sw._long_service, ShortTermMemoryLongSummaryService)
-        # persona_resolver も注入される (= L4 / L5 が player ごとの persona を読める)
+        # persona_resolver も注入される (= L4 が player ごとの persona を読める)
         assert sw._persona_resolver is not None
 
 
