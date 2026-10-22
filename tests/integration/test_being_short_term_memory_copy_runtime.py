@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_WAI
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.being.contract import OwnActionResult
@@ -27,8 +29,8 @@ def _game(*, copy: bool = True) -> tuple[Any, _WorldLlmWiring, RecordingTraceRec
     recorder = RecordingTraceRecorder()
     runtime.set_trace_recorder(recorder)
     if not copy:
+        runtime._recent_event_store.remove_append_listener(runtime._being_short_term_memory_copy.on_appended)
         runtime._being_short_term_memory_copy = None
-        runtime._recent_event_store._append_listeners.clear()
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
@@ -69,6 +71,26 @@ class TestCopyInTheRuntime:
             p for p in recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED)
             if p["reason"] in {"memory_rule", "contract_violation", "unexpected_error"}
         ] == []
+
+    def test_observation_gets_the_number_of_the_move_that_sees_it(self) -> None:
+        """手番の前に預かった観測は、プロンプトを組むときに取り出され、それを見る 1 手と同じ番号になる。出来事は届いた順に [観測 1, 結果 1, 観測 2, 結果 2] と並ぶ。"""
+        runtime, wiring, _ = _game()
+
+        for minute, prose in ((1, "鐘が鳴った"), (2, "扉の向こうで足音がした")):
+            runtime._obs_buffer.append(
+                _ME,
+                ObservationEntry(occurred_at=datetime(2026, 6, 1, 0, minute, tzinfo=timezone.utc), game_time_label=f"深夜 0:0{minute}", output=ObservationOutput(prose=prose, structured={"type": "distant_cue_appeared"})),
+            )
+            _turn(wiring)
+
+        being_id = runtime._acting_being_for(_ME).being_id
+        events = runtime._being_short_term_memory_store.get(being_id).events
+        assert [(e.turn, type(e.observation.route).__name__, e.observation.body.split("\n")[0]) for e in events] == [
+            (1, "SeenOrHeard", "鐘が鳴った"),
+            (1, "OwnActionResult", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
+            (2, "SeenOrHeard", "扉の向こうで足音がした"),
+            (2, "OwnActionResult", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
+        ]
 
     def test_copying_does_not_change_the_prompt(self) -> None:
         """写す側があってもなくても、同じ 2 手のあとに組むプロンプトは同じ文になる。"""

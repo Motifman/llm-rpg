@@ -225,6 +225,18 @@ class TestAppendListeners:
 
         assert received == []
 
+    def test_removed_listener_is_no_longer_called(self) -> None:
+        """外した口には、そのあとの追記を知らせない。"""
+        store = UnifiedRecentEventStore()
+        received: list[object] = []
+        listener = lambda pid, entry: received.append(entry)  # noqa: E731
+        store.add_append_listener(listener)
+
+        store.remove_append_listener(listener)
+        store.append_observation(_PLAYER, _observation(1, "扉が開いた"))
+
+        assert received == []
+
     def test_non_callable_listener_is_rejected(self) -> None:
         """呼べない値を知らせる口に渡すと TypeError を投げる。"""
         with pytest.raises(TypeError):

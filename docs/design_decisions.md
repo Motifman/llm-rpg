@@ -8470,7 +8470,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 |---|---|
 | `action_summary`、`result_summary`、`error_code`、`should_reschedule` の文、`identifier_arguments` と `free_text_argument_names` (「呼び出し:」の行)、`omit_result_in_prompt`、発話の特別扱い | 環境が今と同じ規則で 1 つの文にし、観測の本文 (`body`) に入れる (`format_action_result_body`)。時刻の前置きと心の声は入れない |
 | `game_time_label` | 観測の時刻 (`ObservedTime.display`) |
-| `occurred_tick` | 観測の時刻の秒 (`ObservedTime.seconds`) |
+| `occurred_tick` | 観測の時刻の秒 (`ObservedTime.seconds`)。下の「時刻の秒」 |
 | `should_reschedule` | 起こしてほしいかの助言 (`wants_wake`) |
 | `success` | `OwnActionResult.succeeded` |
 | `tool_name`、引数、心の声 | 1 手 (`AgentMove`) |
@@ -8498,6 +8498,10 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 | `unexpected_error` | 上のどれでもない例外。run は止めず、例外の型を残す |
 
 **3 本目への引き継ぎ**: 【直近の出来事】を Being の側から組むと、上の表の写さないものは出なくなる。記憶の道具の結果と `no_agent_move` の行は、今のプロンプトには出ている。3 本目で、これらを出し続けるか、Being の内側の記録として別に持つかを決める。
+
+**時刻の秒**: 観測 (`ObservationEntry`) は起きた tick を持たない。取り出した時点の tick で秒を埋めると、時刻の表示 (起きた時点のラベル) とずれるので、観測の秒は分からない (`None`) とする。行動の結果は記録した tick (`occurred_tick`) を持つので秒を入れる。
+
+**1 手に結果が 2 件付くこと**: 移動の出発のように、1 手の中で行動の結果を 2 回記録する経路がある。どちらも同じ `call_id` の自分の行動の結果として写る。1 手の数を数える側は、`call_id` の重なりを数え分ける。
 
 **1 手を出さない結果**: 移動の到着と、移動が止められた知らせは、1 手と同じ手番には届かない (`execution_provenance` が無い)。契約の決まり (呼び出しの ID を持たない他の経路で届く) どおり、経路を「見た・聞いた」にして写す。D1824-5 の規則で、次の 1 手の番号になる。今の短期記憶でも、手番の間に届くので次の区切りに入る。
 

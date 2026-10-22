@@ -73,24 +73,28 @@ class PlayerShortTermMemoryCopy:
     def note_move(self, player_id: PlayerId, tool_name: str, arguments: Mapping[str, Any]) -> None:
         """実行中の要求の ID を ``call_id`` にして書き留める。結果と 1 手はこの ID で結ぶ。"""
         self._moves.pop(player_id, None)
-        being_id = self._being_id_of(player_id)
-        provenance = current_execution_provenance()
-        if being_id is None or provenance is None:
-            return
+        being_id: BeingId | None = None
         try:
+            being_id = self._being_id_of(player_id)
+            provenance = current_execution_provenance()
+            if being_id is None or provenance is None:
+                return
             self._moves[player_id] = agent_move_from_tool_call(
                 tool_name, arguments, call_id=provenance.execution_request_id
             )
         except (ContractViolation, ValueError):
             self._not_copied(player_id, being_id, source="move", reason=REASON_CONTRACT_VIOLATION, event_kind=tool_name)
+        except Exception as exc:
+            self._unexpected(player_id, being_id, source="move", event_kind=tool_name, exc=exc)
 
     def on_appended(self, player_id: PlayerId, entry: UnifiedRecentEventEntry) -> None:
-        being_id = self._being_id_of(player_id)
-        if being_id is None:
-            return
         source = entry.kind
         kind = _kind_of(entry.payload)
+        being_id: BeingId | None = None
         try:
+            being_id = self._being_id_of(player_id)
+            if being_id is None:
+                return
             observation, move = self._translate(player_id, entry.payload)
             turn = turn_for_event(observation.route, current_turn=self._turn_reader.current_turn(being_id))
             memory = self._store.get(being_id).remember(
@@ -106,15 +110,26 @@ class PlayerShortTermMemoryCopy:
         except ContractViolation:
             self._not_copied(player_id, being_id, source=source, reason=REASON_CONTRACT_VIOLATION, event_kind=kind)
         except Exception as exc:
-            _logger.exception("copying a short-term memory event to the Being failed")
-            self._not_copied(
-                player_id,
-                being_id,
-                source=source,
-                reason=REASON_UNEXPECTED_ERROR,
-                event_kind=kind,
-                error_type=type(exc).__name__,
-            )
+            self._unexpected(player_id, being_id, source=source, event_kind=kind, exc=exc)
+
+    def _unexpected(
+        self,
+        player_id: PlayerId,
+        being_id: BeingId | None,
+        *,
+        source: str,
+        event_kind: str | None,
+        exc: Exception,
+    ) -> None:
+        _logger.exception("copying a short-term memory event to the Being failed")
+        self._not_copied(
+            player_id,
+            being_id,
+            source=source,
+            reason=REASON_UNEXPECTED_ERROR,
+            event_kind=event_kind,
+            error_type=type(exc).__name__,
+        )
 
     def _translate(
         self, player_id: PlayerId, payload: ObservationEntry | ActionResultEntry
@@ -124,7 +139,9 @@ class PlayerShortTermMemoryCopy:
             return (
                 observation_from_game(
                     payload.output,
-                    tick=self._current_tick_provider(),
+                    # 観測は起きた tick を持たない。取り出した時点の tick で埋めると、時刻の
+                    # 表示とずれるので、秒は分からないとする (design_decisions D1824-7)。
+                    tick=None,
                     game_time_label=payload.game_time_label,
                     observer=observer,
                 ),
@@ -140,7 +157,7 @@ class PlayerShortTermMemoryCopy:
             raise _NoAgentMove
         return observation_from_action_result(payload, call_id=move.call_id, observer=observer), move
 
-    def _not_copied(self, player_id: PlayerId, being_id: BeingId, **payload: Any) -> None:
+    def _not_copied(self, player_id: PlayerId, being_id: BeingId | None, **payload: Any) -> None:
         try:
             recorder = self._trace_recorder_provider()
             if recorder is None:
@@ -149,7 +166,7 @@ class PlayerShortTermMemoryCopy:
                 TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED,
                 tick=self._current_tick_provider(),
                 player_id=int(player_id.value),
-                being_id=being_id.value,
+                being_id=None if being_id is None else being_id.value,
                 **payload,
             )
         except Exception:

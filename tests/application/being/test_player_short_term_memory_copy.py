@@ -97,14 +97,14 @@ class TestCopyOneTurn:
     """PlayerShortTermMemoryCopy が、1 回の手番で今の短期記憶に入った出来事を、D1824-5 の番号を付けて Being 側の短期記憶に写すことを保証する。"""
 
     def test_observation_seen_before_the_move_gets_the_next_move_number(self) -> None:
-        """時計が 0 のときに取り出された観測は、それを見る 1 手の番号 1 で写り、時刻の秒は今の tick から作る。"""
+        """時計が 0 のときに取り出された観測は、それを見る 1 手の番号 1 で写る。観測は起きた tick を持たないので、時刻は表示だけで秒は分からない。"""
         world = _World()
 
         world.copy.on_appended(ADA, _observation())
 
         (event,) = world.events()
         assert (event.turn, event.observation.body, event.move) == (1, "ミオが坑道から戻ってきた", None)
-        assert event.observation.time.seconds == 3 * 300
+        assert (event.observation.time.display, event.observation.time.seconds) == ("1日目 朝", None)
 
     def test_own_result_pairs_with_the_noted_move_of_the_same_request(self) -> None:
         """1 手を受け取って時計が 1 に進んだあと、同じ実行の要求の結果は、その 1 手と対になって番号 1 で写る。"""
@@ -218,6 +218,27 @@ class TestNotCopied:
         world.copy.on_appended(ADA, _observation())
 
         assert world.recorder.not_copied() == [{"being_id": "being_p1", "source": "observation", "reason": "unexpected_error", "event_kind": None, "error_type": "RuntimeError"}]
+
+
+class TestFailuresOutsideTheTranslation:
+    """Being の解決そのものが例外を投げても、手番を止めずに unexpected_error として残すことを保証する。"""
+
+    @pytest.mark.parametrize("call", ["note_move", "on_appended"])
+    def test_being_lookup_error_is_traced_without_being_id(self, call: str) -> None:
+        """Being を引く処理が例外を投げると、外へ投げず、being_id の無い unexpected_error を 1 件残す。"""
+        world = _World()
+        def broken_being_id_of(player_id: PlayerId) -> BeingId | None:
+            raise RuntimeError("解決できない")
+        world.copy._being_id_of = broken_being_id_of
+
+        with execution_provenance_scope(_provenance()):
+            if call == "note_move":
+                world.copy.note_move(ADA, "interact", {"target": "扉"})
+            else:
+                world.copy.on_appended(ADA, _observation())
+
+        (payload,) = world.recorder.not_copied()
+        assert (payload["being_id"], payload["reason"], payload["error_type"]) == (None, "unexpected_error", "RuntimeError")
 
 
 class TestPlayersWithoutBeing:

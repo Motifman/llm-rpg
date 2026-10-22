@@ -48,6 +48,9 @@ class UnifiedRecentEventStore:
             raise TypeError("listener must be callable")
         self._append_listeners.append(listener)
 
+    def remove_append_listener(self, listener: AppendListener) -> None:
+        self._append_listeners.remove(listener)
+
     def _append(self, player_id: PlayerId, entry: UnifiedRecentEventEntry) -> None:
         self._entries.setdefault(self._key(player_id), []).append(entry)
         for listener in self._append_listeners:
