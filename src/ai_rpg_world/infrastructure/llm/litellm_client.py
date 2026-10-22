@@ -38,7 +38,6 @@ from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
-    IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )
 from ai_rpg_world.being.application.episode_writing import EpisodeWritingCompletion
@@ -293,7 +292,6 @@ _Result = TypeVar("_Result")
 class LiteLLMClient(
     ILLMClient,
     IShortTermMemorySummaryCompletionPort,
-    IShortTermMemoryLongSummaryCompletionPort,
     EpisodeWritingCompletion,
 ):
     """
@@ -1118,17 +1116,6 @@ class LiteLLMClient(
         prompt 構築や parse は ``ShortTermMemorySummaryService`` 側の責務。
         """
         return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_SUMMARY)
-
-    def complete_short_term_long_summary_json(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """tools 無しで L5 long summary JSON object を返す (Phase 3)。
-
-        既存の json_object 強制完了をそのまま使う (LLM 側から見れば同じ呼出)。
-        prompt 構築や parse は ``ShortTermMemoryLongSummaryService`` 側の責務。
-        """
-        return self._complete_aux_json(messages, AuxLlmComponent.SHORT_TERM_LONG_SUMMARY)
 
     def complete_episode_writing_json(
         self,

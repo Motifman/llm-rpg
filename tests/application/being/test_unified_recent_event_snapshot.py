@@ -140,3 +140,36 @@ def test_legacy_three_subsystems_migrate_and_resave_as_one(
     assert runtime._short_term_memory.get_recent(_PLAYER, 20)[0].output.prose == "旧観測"
     assert runtime._action_result_store.get_recent(_PLAYER, 20)[0].action_summary == "旧行動"
     assert runtime._obs_buffer.get_observations(_PLAYER)[0].output.prose == "旧観測"
+
+
+def test_legacy_rolling_summary_with_long_summaries_migrates_without_them() -> None:
+    """要約の要約 (L5) を持つ旧 rolling_summary の 3 subsystem を移し替えると、L5 は引き継がれず、読み込みも落ちない (#1824)。"""
+    old_l5 = {
+        "summary_id": "l5-old",
+        "player_id": 1,
+        "generation_index": 1,
+        "generated_at": _NOW.isoformat(),
+        "self_image": "探索者",
+        "world_view": "危うい島",
+        "is_fallback": False,
+    }
+    old = {
+        "sliding_window": {
+            "schema_version": 2,
+            "mode": "rolling_summary",
+            "raw_entries": [],
+            "mid_summaries": [],
+            "long_summaries": [{"player_id": 1, "summary": old_l5}],
+            "long_gen_indices": [{"player_id": 1, "index": 1}],
+        },
+        "observation_buffer": {"schema_version": 1, "entries": []},
+        "action_result_store": {"schema_version": 5, "entries": []},
+    }
+
+    migrated = migrate_legacy_recent_event_subsystems(old)
+    runtime = _runtime()
+    UnifiedRecentEventStoreSubsystemCodec().restore(runtime, migrated["recent_event_store"])
+
+    assert "long_summaries" not in migrated["recent_event_store"]
+    assert "long_gen_indices" not in migrated["recent_event_store"]
+    assert not hasattr(runtime._short_term_memory, "_long")

@@ -16,7 +16,7 @@
 - `episodic_recall`: passive recall 結果 (#1631 で受動想起を消す前の trace のみ)
 - `being_memo`: メモ帳への書き込み
 - `episode_writing` / `episode_recall` / `episode_index_revision`: 目次つきのエピソードの書き起こし・呼び出し・目次の直し
-- `short_term_summary_generated` / `short_term_long_summary_generated`: L4/L5 要約
+- `short_term_summary_generated` / `short_term_long_summary_generated`: L4/L5 要約 (L5 は #1824 で消したので、それより前の trace のみ)
 - `loop_guard_warning`: 同 tool 連発の警告
 - `tick_start` / `tick_end`
 

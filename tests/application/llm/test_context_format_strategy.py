@@ -141,57 +141,32 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" not in text
 
-    def test_long_summary_text_precedes_mid_summary(self, strategy):
-        """【自己像と世界観】は目的の後、最近の流れより前に置かれる。"""
-        text = strategy.format(
-            current_state_text="x",
-            recent_events_text="y",
-            objective_text="目的",
-            long_summary_text="私について: 寡黙な漁師",
-            mid_summary_text="[最新] 動き",
-        )
-        assert "【自己像と世界観】" in text
-        assert "私について: 寡黙な漁師" in text
-        idx_obj = text.index("【現在の目的】")
-        idx_long = text.index("【自己像と世界観】")
-        idx_mid = text.index("【最近の流れ】")
-        idx_events = text.index("【直近の出来事】")
-        assert idx_obj < idx_long < idx_mid < idx_events
-
-    def test_known_people_follow_objective_and_precede_self_image(self, strategy):
-        """【知っている人】は【現在の目的】の直後、【自己像と世界観】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
+    def test_known_people_follow_objective_and_precede_recent_flow(self, strategy):
+        """【知っている人】は【現在の目的】の直後、【最近の流れ】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
             known_people_text="- ノア（あなたと同じ側）\n- カイ",
-            long_summary_text="私について",
+            mid_summary_text="[最新] 動き",
         )
         assert "【知っている人】\n- ノア（あなたと同じ側）\n- カイ\n" in text
-        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【自己像と世界観】")
+        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【最近の流れ】")
 
     def test_known_people_section_is_omitted_when_empty(self, strategy):
         """known_people_text が空なら【知っている人】の節ごと省略する。"""
         text = strategy.format(current_state_text="x", recent_events_text="y", known_people_text="")
         assert "【知っている人】" not in text
 
-    def test_returns_empty_when_long_summary_text_section(self, strategy):
-        """longsummarytext が空なら section ごと省略。"""
+    def test_self_image_section_is_never_rendered(self, strategy):
+        """要約の要約 (L5) は #1824 で消したので、どの節を渡しても【自己像と世界観】は出ない。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
-            long_summary_text="",
+            objective_text="目的",
+            mid_summary_text="[最新] 動き",
         )
         assert "【自己像と世界観】" not in text
-
-    def test_non_string_long_summary_text_raises_type_error(self, strategy):
-        """long summary text が str でなければ type error。"""
-        with pytest.raises(TypeError, match="long_summary_text must be str"):
-            strategy.format(
-                current_state_text="",
-                recent_events_text="",
-                long_summary_text=[],  # type: ignore[arg-type]
-            )
 
     def test_non_string_mid_summary_text_raises_type_error(self, strategy):
         """mid summary text が str でなければ type error。"""

@@ -9,7 +9,6 @@ Port = 外部 LLM API との境界 (= application 層の責務)。
 
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
-    IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
@@ -26,7 +25,6 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
 __all__ = [
     "ChoiceQuestion",
     "ILLMClient",
-    "IShortTermMemoryLongSummaryCompletionPort",
     "IShortTermMemorySummaryCompletionPort",
     "ITypedJudgmentPort",
     "JudgmentResult",
