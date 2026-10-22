@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from pathlib import Path
 
@@ -52,16 +53,63 @@ def test_test_and_quality_jobs_use_python_lower_bound_and_frozen_uv_lock() -> No
             if step.get("uses") == "actions/setup-python@v5"
         )
         assert setup_python["with"]["python-version"] == "3.10"
-        setup_uv = next(
-            step
-            for step in job["steps"]
-            if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
-        )
-        assert setup_uv["with"]["version"] == "0.11.28"
-        assert setup_uv["with"]["cache-dependency-glob"] == "uv.lock"
         commands = _run_commands(job)
         assert "uv sync --locked --extra export" in commands
         assert any(command.startswith("uv run --frozen pytest") for command in commands)
+
+
+_PINNED_UV_FROM_PYPI = re.compile(r"python -m pip install uv==\d+\.\d+\.\d+")
+
+
+def _uv_command_lines(job: dict) -> list[tuple[int, str]]:
+    return [
+        (index, line.strip())
+        for index, step in enumerate(job["steps"])
+        if isinstance(step, dict) and "run" in step
+        for line in str(step["run"]).splitlines()
+        if line.strip().split(" ", 1)[0] == "uv"
+    ]
+
+
+def test_every_job_that_runs_uv_installs_the_same_pinned_uv_from_pypi() -> None:
+    """uv を使う job はどれも、uv を使う前に PyPI から同じ固定版の uv を入れる。
+
+    setup-uv は uv 本体を配布元から取りに行き、そこで時間切れになって job が
+    止まった (design_decisions D1652)。版が job ごとにずれると、同じ uv.lock を
+    別の uv が読むことになる。
+    """
+    pins: set[str] = set()
+    for name, job in _workflow()["jobs"].items():
+        uv_lines = _uv_command_lines(job)
+        if not uv_lines:
+            continue
+        assert not any(
+            str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
+            for step in job["steps"]
+        ), name
+        installs = [
+            (index, str(step["run"]).strip())
+            for index, step in enumerate(job["steps"])
+            if "run" in step and "pip install uv" in str(step["run"])
+        ]
+        assert len(installs) == 1, name
+        install_index, install = installs[0]
+        assert _PINNED_UV_FROM_PYPI.fullmatch(install), install
+        assert install_index < min(index for index, _ in uv_lines), name
+        pins.add(install)
+
+    assert len(pins) == 1, pins
+
+
+def test_every_uv_command_keeps_the_lock_unchanged() -> None:
+    """どの job の uv も uv.lock を書き換えない。sync は ``--locked``、run は ``--frozen``。"""
+    for name, job in _workflow()["jobs"].items():
+        for _, line in _uv_command_lines(job):
+            subcommand = line.split()[1]
+            if subcommand == "sync":
+                assert "--locked" in line.split(), (name, line)
+            elif subcommand == "run":
+                assert line.split()[2] == "--frozen", (name, line)
 
 
 def _test_job_pytest_arguments() -> list[str]:
