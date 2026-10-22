@@ -67,7 +67,6 @@ def _client(sink: Any) -> LiteLLMClient:
 
 _METHOD_TO_COMPONENT = [
     ("complete_short_term_summary_json", AuxLlmComponent.SHORT_TERM_SUMMARY),
-    ("complete_short_term_long_summary_json", AuxLlmComponent.SHORT_TERM_LONG_SUMMARY),
     ("complete_episode_writing_json", AuxLlmComponent.EPISODE_WRITING),
 ]
 

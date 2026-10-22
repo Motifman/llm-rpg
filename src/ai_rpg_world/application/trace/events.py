@@ -148,11 +148,6 @@ class TraceEventKind:
     # 別に、圧縮自体の発火を測る。payload: completed_turn_count_before / after /
     # entry_count_before / after / compacted_turn_count。
     SHORT_TERM_MEMORY_COMPACTED = "short_term_memory_compacted"
-    # PR #435: L5 long summary が install された瞬間 (LLM 成功 / template fallback
-    # / previous_l5 延命を含む)。Phase 3 で生成される self_image / world_view を
-    # 後から振り返るための trace。生成タイミング + 内容を 1 件で残す。
-    # payload: summary_id / generation_index / self_image / world_view / is_fallback
-    SHORT_TERM_LONG_SUMMARY_GENERATED = "short_term_long_summary_generated"
     # Phase 7 (Issue #470): Being snapshot save / load。run が前回 snapshot
     # からの続きか・どの player の memory が今 run の trace に乗っているかを
     # post-hoc 分析できるようにする。silent failure 防止用に **必ず** trace に

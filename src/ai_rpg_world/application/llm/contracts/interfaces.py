@@ -63,14 +63,6 @@ class IShortTermMemory(ABC):
         """
         return ""
 
-    def get_long_summary_text(self, player_id: PlayerId) -> str:
-        """Phase 3: 長期記憶 (L5 long summary / self_image + world_view) を
-        prompt 用テキストに整形する。
-
-        空文字なら §「【自己像と世界観】」非表示。
-        """
-        return ""
-
 class IActionResultStore(ABC):
     """直近の LLM 行動結果を保持する。"""
 
@@ -157,7 +149,6 @@ class IContextFormatStrategy(ABC):
         objective_text: str = "",
         inventory_text: str = "",
         mid_summary_text: str = "",
-        long_summary_text: str = "",
         known_people_text: str = "",
         episode_index_text: str = "",
         being_memo_text: str = "",

@@ -431,26 +431,12 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
             mid_summary_text = ""
 
-        # Phase 3: 短期記憶の L5 long summary (self_image / world_view)。
-        try:
-            raw_long = self._short_term_memory.get_long_summary_text(player_id)
-            long_summary_text = raw_long if isinstance(raw_long, str) else ""
-        except Exception as e:
-            self._logger.warning(
-                "get_long_summary_text failed for player_id=%s: %s",
-                player_id.value,
-                e,
-                exc_info=True,
-            )
-            long_summary_text = ""
-
         context = self._context_format_strategy.format(
             current_state_text=current_state_text,
             recent_events_text=recent_events_text,
             objective_text=objective_text,
             inventory_text=inventory_text,
             mid_summary_text=mid_summary_text,
-            long_summary_text=long_summary_text,
             known_people_text=known_people_text,
             episode_index_text=episode_index_text,
             being_memo_text=being_memo_text,
