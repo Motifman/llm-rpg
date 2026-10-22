@@ -18,6 +18,7 @@ from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import 
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
+from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -32,7 +33,7 @@ def _make_environment():
     """新規 store 群 + 2 use case + gateway を組んで返す。"""
     repo = InMemoryBeingRepository()
     acquaintances = InMemoryAcquaintanceRepository()
-    memory_snapshot = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+    memory_snapshot = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
     gateway = BeingSnapshotFileGateway()
     capture = CaptureBeingSnapshotToFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)
     restore = RestoreBeingSnapshotFromFileUseCase(being_repository=repo, memory_snapshot_service=memory_snapshot, file_gateway=gateway)

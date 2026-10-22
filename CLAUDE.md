@@ -121,6 +121,8 @@ per-Being scope の state を持つ store (= `BeingId` をキーに保持する 
 3. `capture()` の payload dict に新 key の生成ロジックを追加
 4. `restore()` のデコード + 書き戻しを追加 (= store interface に
    `replace_all_by_being` を生やす)
+5. 足す前の snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足す
+   (`docs/design_decisions.md` の D1824-6)
 
 1 だけ足して 3 / 4 を忘れた状態は PR-F (#593) で導入した起動時 fail-fast が
 止めてくれる。1 を含めて完全に忘れた場合は構造で検出できないので、本

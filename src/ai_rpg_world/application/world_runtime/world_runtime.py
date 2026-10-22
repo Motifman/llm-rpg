@@ -305,6 +305,7 @@ from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
+from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -316,6 +317,9 @@ from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
 )
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
     InMemoryMemoryTurnClock,
+)
+from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
+    InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -626,6 +630,10 @@ class WorldRuntime:
     # #1628: エピソードと同じく、世界の snapshot には入らない。
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
+    )
+    # #1824: Being 側の短期記憶。世界の snapshot には入らない。まだ誰も書かない。
+    _being_short_term_memory_store: ShortTermMemoryRepository = field(
+        default_factory=InMemoryShortTermMemoryRepository, repr=False
     )
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで

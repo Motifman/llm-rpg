@@ -60,14 +60,20 @@ from ai_rpg_world.application.being._memory_payload_codecs import (
     acquaintance_to_dict,
     being_episode_to_dict,
     being_memo_to_dict,
+    being_short_term_memory_to_dict,
     dict_to_acquaintance,
     dict_to_being_episode,
     dict_to_being_memo,
+    dict_to_being_short_term_memory,
 )
 from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock
+from ai_rpg_world.being.domain.short_term_memory import (
+    ShortTermMemory,
+    ShortTermMemoryRepository,
+)
 from ai_rpg_world.domain.being.exception.being_exceptions import MemoValidationException
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -149,6 +155,8 @@ class BeingMemorySnapshotService:
     2. ``__init__`` に新 store の引数を追加
     3. ``capture()`` の payload dict に新 key の生成ロジックを追加
     4. ``restore()`` のデコード / 書き戻しに新 key を追加
+    5. 足す前の snapshot も読めるようにするなら ``ADDED_PAYLOAD_KEYS`` にも足す
+       (design_decisions D1824-6)
 
     1 だけ足して 3 を忘れると、初回 capture() で ``SnapshotCoverageError``
     が起動時に投げられ silent failure を構造的に防ぐ。
@@ -161,6 +169,11 @@ class BeingMemorySnapshotService:
         "acquaintances",
         "being_episodes",
         "being_memo_book",
+        "being_short_term_memory",
+    })
+    # 後から足したキー。足す前に保存した snapshot には無いので、無ければ空として読む。
+    ADDED_PAYLOAD_KEYS: frozenset[str] = frozenset({
+        "being_short_term_memory",
     })
 
     def __init__(
@@ -170,6 +183,7 @@ class BeingMemorySnapshotService:
         being_episode_store: EpisodeRepository,
         being_memo_store: MemoBookRepository,
         memory_turn_clock: MemoryTurnClock,
+        being_short_term_memory_store: ShortTermMemoryRepository,
     ) -> None:
         if not isinstance(acquaintance_store, AcquaintanceRepository):
             raise TypeError("acquaintance_store must be AcquaintanceRepository")
@@ -179,10 +193,13 @@ class BeingMemorySnapshotService:
             raise TypeError("being_memo_store must be MemoBookRepository")
         if not isinstance(memory_turn_clock, MemoryTurnClock):
             raise TypeError("memory_turn_clock must be MemoryTurnClock")
+        if not isinstance(being_short_term_memory_store, ShortTermMemoryRepository):
+            raise TypeError("being_short_term_memory_store must be ShortTermMemoryRepository")
         self._acquaintance = acquaintance_store
         self._being_episode = being_episode_store
         self._being_memo = being_memo_store
         self._memory_turn_clock = memory_turn_clock
+        self._being_short_term_memory = being_short_term_memory_store
 
     def capture(self, being_id: BeingId) -> str:
         """各 store から being_id 配下の全状態を読み出し、JSON 文字列で返す。"""
@@ -202,6 +219,12 @@ class BeingMemorySnapshotService:
         payload["being_memo_book"] = [
             being_memo_to_dict(m) for m in self._being_memo.get(being_id).memos
         ]
+        short_term_memory = self._being_short_term_memory.get(being_id)
+        payload["being_short_term_memory"] = (
+            []
+            if short_term_memory == ShortTermMemory.empty()
+            else [being_short_term_memory_to_dict(short_term_memory)]
+        )
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
         # しているか起動時に確認する。新 store を追加して EXPECTED に key を
         # 足したが capture() の dict 生成を忘れた状態を即時に止める。
@@ -252,6 +275,10 @@ class BeingMemorySnapshotService:
         # 新 store を追加して EXPECTED に key を足したが restore() の検証を
         # 忘れた場合に備え、欠落キーは SnapshotCoverageError ではなく従来通り
         # BeingMemoryPayloadFormatError で報告する (= 形式エラーの一種)。
+        payload = {
+            **{key: [] for key in self.ADDED_PAYLOAD_KEYS if key not in payload},
+            **payload,
+        }
         for key in sorted(self.EXPECTED_PAYLOAD_KEYS):
             if key not in payload:
                 raise BeingMemoryPayloadFormatError(
@@ -303,10 +330,23 @@ class BeingMemorySnapshotService:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
             ) from exc
+        short_term_raw = payload["being_short_term_memory"]
+        if len(short_term_raw) > 1:
+            raise BeingMemoryPayloadFormatError(
+                "payload['being_short_term_memory'] must be [] or [one memory], "
+                f"got {len(short_term_raw)} items"
+            )
+        short_term_memories = _decode_list(
+            short_term_raw, dict_to_being_short_term_memory, "being_short_term_memory"
+        )
+        short_term_memory = (
+            short_term_memories[0] if short_term_memories else ShortTermMemory.empty()
+        )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
         self._being_memo.replace_all_by_being(being_id, being_memo_book)
+        self._being_short_term_memory.replace_all_by_being(being_id, short_term_memory)
 
 
 __all__ = [

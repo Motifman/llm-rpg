@@ -275,7 +275,7 @@ class ExperimentSnapshotSession:
     ) -> None:
         # **必須** store: 「これがなければ snapshot 自体が意味を持たない」もの。
         # being_repository / resolver はないと that's that.
-        # 知り合いの記録・目次つきのエピソード・メモ帳・記憶のターン数は runtime が常に持つ。
+        # 知り合いの記録・目次つきのエピソード・メモ帳・記憶のターン数・短期記憶は runtime が常に持つ。
         # 空で代用すると、再開した Being が会った相手や書いた記憶を忘れたまま、配線漏れと
         # 見分けられない。
         required_fields = (
@@ -285,6 +285,7 @@ class ExperimentSnapshotSession:
             "being_episode_store",
             "being_memo_store",
             "memory_turn_clock",
+            "being_short_term_memory_store",
         )
         missing_required = [
             name
@@ -302,6 +303,7 @@ class ExperimentSnapshotSession:
             being_episode_store=wiring_result.being_episode_store,
             being_memo_store=wiring_result.being_memo_store,
             memory_turn_clock=wiring_result.memory_turn_clock,
+            being_short_term_memory_store=wiring_result.being_short_term_memory_store,
         )
         self._memory_turn_clock = wiring_result.memory_turn_clock
         self._gateway = BeingSnapshotFileGateway()
