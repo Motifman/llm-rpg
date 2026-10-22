@@ -149,8 +149,8 @@ class TestActionResultStoreCodec:
 
 class TestSlidingWindowCodecRollingSummaryBackend:
     """``SummarizingShortTermMemory`` backend での
-    capture / restore を検証する (#471 後続)。L4 / L5 が失われると agent の
-    self_image / world_view が空に戻るため、永続化は実験再現性に必須。"""
+    capture / restore を検証する (#471 後続)。L4 が失われると直近 20 ターンより前の
+    流れが空に戻るため、永続化は実験再現性に必須。"""
 
     def _make_rolling(self) -> Any:
         from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
@@ -159,15 +159,11 @@ class TestSlidingWindowCodecRollingSummaryBackend:
 
         return SummarizingShortTermMemory(l4_keep_generations=3)
 
-    def test_includes_all_l_one_raw_l4_l_five(self) -> None:
-        """L1raw と L4 と L5 が全部往復する。"""
+    def test_includes_all_l_one_raw_and_l4(self) -> None:
+        """L1 raw と L4 が全部往復し、要約の要約 (L5) の欄は書き出さない。"""
         from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
             L4MidSummary,
         )
-        from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
-            L5LongSummary,
-        )
-
         src = self._make_rolling()
         # L1 raw に 3 件 (= soft_cap 未満なので畳まれない)
         src.append(PlayerId(1), _obs_entry("raw-1"))
@@ -186,27 +182,13 @@ class TestSlidingWindowCodecRollingSummaryBackend:
                 is_fallback=False,
             )
         )
-        # L5 も書き込む (= _install_l4 は L4 evict 時のみ L5 trigger なので直接書く)
-        with src._long_lock:
-            src._long[1] = L5LongSummary(
-                summary_id="l5-test",
-                player_id=1,
-                generation_index=2,
-                generated_at=_NOW,
-                self_image="探索者カイ",
-                world_view="火を絶やしてはならない島",
-                is_fallback=False,
-            )
-            src._long_gen_index[1] = 2
-
         src_runtime = SimpleNamespace(_short_term_memory=src)
         captured = ShortTermMemorySubsystemCodec().capture(src_runtime)
         assert captured["mode"] == "rolling_summary"
         assert captured["schema_version"] == 2
         assert len(captured["raw_entries"]) == 2  # player 1, 2
         assert len(captured["mid_summaries"][0]["summaries"]) == 1
-        assert captured["long_summaries"][0]["summary"]["self_image"] == "探索者カイ"
-        assert captured["long_gen_indices"][0]["index"] == 2
+        assert "long_summaries" not in captured
 
         # 別 instance に restore
         dst = self._make_rolling()
@@ -218,10 +200,6 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         p1_recent = dst.get_recent(PlayerId(1), limit=10)
         assert [e.output.prose for e in p1_recent] == ["raw-2", "raw-1"]  # 新しい順
         assert dst._mid_generations(1)[0].compressed_activity == "3 時間山を登った"
-        l5 = dst._long_summary(1)
-        assert l5 is not None
-        assert l5.self_image == "探索者カイ"
-        assert dst._long_gen_index[1] == 2
 
     def test_sliding_v1_snapshot_rolling_backend_load(self) -> None:
         """v1 (sliding 専用) フォーマットを rolling backend が読めるか (= マイグレーション互換)。"""
@@ -251,14 +229,9 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         ShortTermMemorySubsystemCodec().restore(runtime, v1_data)
         recent = dst.get_recent(PlayerId(1), limit=5)
         assert [e.output.prose for e in recent] == ["migrated"]
-        assert dst._long_summary(1) is None  # v1 には L5 が無い
 
     def test_sliding_v2_snapshot_replaces_observations_and_clears_summaries(self) -> None:
-        """固定容量の短期記憶で保存した v2 の mode: sliding_window を読むと、観測は保存されたものに置き換わり、L4 / L5 は空になる。"""
-        from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
-            L5LongSummary,
-        )
-
+        """固定容量の短期記憶で保存した v2 の mode: sliding_window を読むと、観測は保存されたものに置き換わり、L4 は空になる。"""
         v2_data = {
             "schema_version": 2,
             "mode": "sliding_window",
@@ -283,17 +256,6 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         }
         dst = self._make_rolling()
         dst.append(PlayerId(99), _obs_entry("stale"))
-        with dst._long_lock:
-            dst._long[1] = L5LongSummary(
-                summary_id="l5-stale",
-                player_id=1,
-                generation_index=1,
-                generated_at=_NOW,
-                self_image="復元前の自己像",
-                world_view="復元前の世界観",
-                is_fallback=False,
-            )
-            dst._long_gen_index[1] = 1
 
         ShortTermMemorySubsystemCodec().restore(
             SimpleNamespace(_short_term_memory=dst), v2_data
@@ -303,8 +265,6 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         recent = dst.get_recent(PlayerId(1), limit=5)
         assert [e.output.prose for e in recent] == ["sliding で保存した観測"]
         assert dst._mid_generations(1) == []
-        assert dst._long_summary(1) is None
-        assert dst._long_gen_index == {}
 
     def test_unknown_mode_raises_exception(self) -> None:
         """mode が rolling_summary でも sliding_window でもない payload は ValueError で拒む。"""

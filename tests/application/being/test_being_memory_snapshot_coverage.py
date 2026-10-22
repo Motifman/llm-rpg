@@ -15,6 +15,7 @@ from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import 
 from ai_rpg_world.being.infrastructure.in_memory_episode_repository import InMemoryEpisodeRepository
 from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import InMemoryMemoBookRepository
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
+from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import InMemoryShortTermMemoryRepository
 
 
 class TestValidateSnapshotPayloadCoverage:
@@ -50,7 +51,7 @@ class TestValidateSnapshotPayloadCoverage:
 def _make_service(memory_turn_clock=None):
     """既存テストと同じ in-memory store を使って service を作る。"""
     from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
-    return BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock())
+    return BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=memory_turn_clock or InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
 
 class TestBeingMemorySnapshotServiceCoverage:
     """``BeingMemorySnapshotService`` 本体の網羅性 fail-fast の挙動。
@@ -120,7 +121,7 @@ class TestExperimentSnapshotSessionDoesNotSwallowCoverageError:
         repo = InMemoryBeingRepository()
         resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
-        wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock())
+        wiring = SimpleNamespace(being_repository=repo, being_attachment_resolver=resolver, acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryShortTermMemoryRepository())
         provisioning.ensure_attached(PlayerId(1))
         session = ExperimentSnapshotSession(wiring_result=wiring, snapshot_dir=tmp_path / 'snap')
         with pytest.raises(SnapshotCoverageError):

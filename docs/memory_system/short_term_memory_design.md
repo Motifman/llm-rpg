@@ -182,6 +182,8 @@ tick {t1}: {raw_obs_1}
 
 ### 4.2 L5 生成 (long summary 更新)
 
+> L5 と【自己像と世界観】は #1824 で消した (design_decisions D1824)。以下は消す前の設計の記録。
+
 ```
 あなた = {player_name}
 あなたの性格 = {persona_block}

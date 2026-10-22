@@ -305,6 +305,7 @@ from ai_rpg_world.being.domain.acquaintance import AcquaintanceRepository
 from ai_rpg_world.being.domain.episode import EpisodeRepository
 from ai_rpg_world.being.domain.memo_book import MemoBookRepository
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnClock, MemoryTurnReader
+from ai_rpg_world.being.domain.short_term_memory import ShortTermMemoryRepository
 from ai_rpg_world.being.infrastructure.in_memory_acquaintance_repository import (
     InMemoryAcquaintanceRepository,
 )
@@ -316,6 +317,9 @@ from ai_rpg_world.being.infrastructure.in_memory_memo_book_repository import (
 )
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import (
     InMemoryMemoryTurnClock,
+)
+from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
+    InMemoryShortTermMemoryRepository,
 )
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -626,6 +630,10 @@ class WorldRuntime:
     # #1628: エピソードと同じく、世界の snapshot には入らない。
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
+    )
+    # #1824: Being 側の短期記憶。世界の snapshot には入らない。まだ誰も書かない。
+    _being_short_term_memory_store: ShortTermMemoryRepository = field(
+        default_factory=InMemoryShortTermMemoryRepository, repr=False
     )
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
@@ -1030,7 +1038,7 @@ class WorldRuntime:
         player_interaction_service = getattr(self, "_player_interaction_service", None)
         if player_interaction_service is not None:
             player_interaction_service.set_trace_recorder(recorder, self.current_tick)
-        # 短期記憶の構築時点では recorder が未確定なので、L4 / L5 と圧縮発火の
+        # 短期記憶の構築時点では recorder が未確定なので、L4 と圧縮発火の
         # trace provider をここで注入する。実装差は getattr で吸収する。
         set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
         if callable(set_recorder):
@@ -3926,8 +3934,8 @@ def _build_short_term_memory(
     新構造 (本 PR):
       1. cfg + scenario + persona から LLM client / summary services /
          persona resolver を **構築時点で全部揃える**
-      2. ``SummarizingShortTermMemory(summary_service=X, long_summary_service=Y,
-         persona_resolver=Z)`` を ctor 一発で組む
+      2. ``SummarizingShortTermMemory(summary_service=X, persona_resolver=Z)``
+         を ctor 一発で組む
       3. ``set_summary_services`` 経由の後注入経路は廃止
 
     trace_recorder / current_tick は runtime instance に依存するため、別経路
@@ -3940,9 +3948,6 @@ def _build_short_term_memory(
         world_character: 操作対象キャラ (rich persona を割り当てる対象)
         persona_block: world_character 由来の persona テキスト
     """
-    from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-        ShortTermMemoryLongSummaryService,
-    )
     from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
         ShortTermMemorySummaryService,
     )
@@ -3955,7 +3960,6 @@ def _build_short_term_memory(
     from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
     summary_service = None
-    long_summary_service = None
     persona_resolver = None
     if cfg.llm_client_kind == "litellm":
         try:
@@ -3965,7 +3969,6 @@ def _build_short_term_memory(
             client = None
         if isinstance(client, LiteLLMClient):
             summary_service = ShortTermMemorySummaryService(client)
-            long_summary_service = ShortTermMemoryLongSummaryService(client)
             persona_resolver = _build_persona_resolver(
                 scenario=scenario,
                 world_character=world_character,
@@ -3973,17 +3976,16 @@ def _build_short_term_memory(
             )
             logger.info(
                 "short-term memory: LLM 経路を ctor 注入 (rolling_summary + LiteLLM)。"
-                "L4 / L5 は LLM 圧縮で生成される。"
+                "L4 は LLM 圧縮で生成される。"
             )
         else:
             logger.info(
                 "LLM_CLIENT=litellm が未取得。short-term memory は template fallback "
-                "only で動作 (L4 / L5 の LLM 圧縮は無効)。"
+                "only で動作 (L4 の LLM 圧縮は無効)。"
             )
 
     return SummarizingShortTermMemory(
         summary_service=summary_service,
-        long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,
         event_store=event_store,
         turn_cap=cfg.short_term_memory_turn_cap,
@@ -5358,7 +5360,7 @@ def create_world_runtime(
     recent_event_store = UnifiedRecentEventStore()
     obs_buffer = DefaultObservationContextBuffer(event_store=recent_event_store)
     # PR #451 (PR 6/6): 短期記憶を「全部揃ってから 1 回 build」式に統合。
-    # LLM 経路 (summary_service / long_summary_service / persona_resolver) は
+    # LLM 経路 (summary_service / persona_resolver) は
     # 旧来 setter で後注入していたが、ctor 注入に統一して呼び忘れ silent failure
     # を構造で排除。trace_recorder / current_tick は runtime instance に依存する
     # ため別経路 (set_trace_recorder) で差し替え (NullObject 経由で安全)。

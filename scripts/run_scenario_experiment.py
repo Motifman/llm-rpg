@@ -576,6 +576,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
         being_episode_store=getattr(runtime, "_being_episode_store", None),
         being_memo_store=getattr(runtime, "_being_memo_store", None),
         memory_turn_clock=getattr(runtime, "_memory_turn_clock", None),
+        being_short_term_memory_store=getattr(runtime, "_being_short_term_memory_store", None),
     )
 
 
@@ -1108,10 +1109,11 @@ def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
 
 
 _AUX_COMPONENT_LABELS: dict[str, str] = {
-    # 主観補完は #1631 で消した。消す前の run の report を読むために残す。
+    # 主観補完は #1631 で、短期記憶の長い要約は #1824 で消した。消す前の run の
+    # report を読むために残す。
     "episode_subjective": "主観の書き込み",
+    "short_term_long_summary": "短期記憶の長い要約",
     AuxLlmComponent.SHORT_TERM_SUMMARY.value: "短期記憶の要約",
-    AuxLlmComponent.SHORT_TERM_LONG_SUMMARY.value: "短期記憶の長い要約",
     AuxLlmComponent.EPISODE_WRITING.value: "エピソードの書き起こし",
     AuxLlmComponent.TYPED_JUDGMENT.value: "Jev の型付き判断",
 }
