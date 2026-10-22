@@ -103,7 +103,7 @@ class TestTheBackstoryInstruction:
     """いきさつを作る指示が、言われた予定と実際にしたことを分けて書かせることを保証する。"""
 
     def test_instruction_separates_what_was_said_from_what_was_done(self) -> None:
-        """要約の LLM に送る指示に、言われた予定と実際にしたことを分けて書く旨が入り、片付いていないことの欄は求めない。"""
+        """要約の LLM に送る指示に、言われた予定と実際にしたことを分けて書く旨と、言われた約束を一覧にせず流れの中に書く旨が入り、片付いていないことの欄は求めない。"""
         port = _Port()
         memory = SummarizingShortTermMemory(summary_service=ShortTermMemorySummaryService(port))
 
@@ -112,6 +112,7 @@ class TestTheBackstoryInstruction:
         (messages,) = port.messages
         system = messages[0]["content"]
         assert _SEPARATE_SAID_FROM_DONE in system
+        assert "「誰が何をすると言った」として流れの中に書く" in system
         assert '"unresolved"' not in system
 
 
