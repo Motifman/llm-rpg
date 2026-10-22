@@ -56,7 +56,7 @@ class IShortTermMemory(ABC):
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """Phase 2: 中期記憶 (L4 mid summary) を prompt 用テキストに整形する。
 
-        空文字なら prompt §「【最近の流れ】」section ごと出ない。
+        空文字なら prompt §「【ここまでのいきさつ】」section ごと出ない。
 
         prompt_builder はこのメソッドを直接呼んで context_format_strategy に
         渡す。
@@ -172,7 +172,7 @@ class IContextFormatStrategy(ABC):
         生成して渡す。空なら section を出さない。
 
         ``mid_summary_text`` は短期記憶 (L4 mid summary) を一覧化した
-        「【最近の流れ】」section の本体 (Phase 2)。``SummarizingShortTermMemory``
+        「【ここまでのいきさつ】」section の本体 (Phase 2)。``SummarizingShortTermMemory``
         が直近 N 件 raw 観測から圧縮した 3 世代分を箇条書きにする。
         空なら section ごと省略。
         """

@@ -82,7 +82,7 @@ class TestThePromptHasNoSelfImageSection:
     """1 ターンのプロンプトに【自己像と世界観】が出ないことを保証する。"""
 
     def test_prompt_after_overflow_shows_recent_flow_but_not_self_image(self) -> None:
-        """要約が 4 世代分たまったあとのプロンプトに、【最近の流れ】は出て【自己像と世界観】は出ない。"""
+        """要約が 4 世代分たまったあとのプロンプトに、【ここまでのいきさつ】は出て【自己像と世界観】は出ない。"""
         import tests.demos.test_disabled_memory_parts_vanish_from_the_prompt as capture
 
         scenario, mapping = capture._profile_mapping("smoke_stub")
@@ -103,7 +103,7 @@ class TestThePromptHasNoSelfImageSection:
         ).run_phase_a(player_id)
 
         prompt = "\n".join(str(message["content"]) for message in client.messages)
-        assert "【最近の流れ】" in prompt
+        assert "【ここまでのいきさつ】" in prompt
         assert "【自己像と世界観】" not in prompt
 
 

@@ -17,7 +17,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
 
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
     1b. **【知っている人】** — known_people_text (Being が知っている人。新しい人を知ったときだけ変わる)
-    3. **【最近の流れ】** — mid_summary_text (L4)
+    3. **【ここまでのいきさつ】** — mid_summary_text (L4)
     4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
     5b. **【思い出せる出来事】** — episode_index_text (エピソードの目次。書き起こしと呼び出しのときだけ変わる)
     6. **【メモ】** — being_memo_text (Being のメモ帳、#1628)
@@ -116,11 +116,11 @@ def _emit_recent_events(sections: list[str], recent_events_text: str) -> None:
 
 
 def _emit_mid_summary(sections: list[str], mid_summary_text: str) -> None:
-    """``【最近の流れ】`` (L4 mid summary) を呼び出し位置へ挿入する。"""
+    """``【ここまでのいきさつ】`` (L4 mid summary) を呼び出し位置へ挿入する。"""
     if mid_summary_text.strip():
         sections.extend([
             "",
-            "【最近の流れ】",
+            "【ここまでのいきさつ】",
             mid_summary_text.strip(),
         ])
 
@@ -171,10 +171,10 @@ def _format_stable_to_volatile(
     _emit_objective(sections, objective_text)
     _emit_known_people(sections, known_people_text)
 
-    # 3. 最近の流れ (L4 mid summary、空なら省略)
+    # 3. ここまでのいきさつ (L4 mid summary、空なら省略)
     if mid_summary_text.strip():
         sections.extend([
-            "【最近の流れ】",
+            "【ここまでのいきさつ】",
             mid_summary_text.strip(),
             "",
         ])

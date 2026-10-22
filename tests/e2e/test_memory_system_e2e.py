@@ -5,7 +5,7 @@ memory 機能が **1 つのシナリオの中で一貫して動く** ことを�
 
 検証範囲:
 - Phase 0: prompt section の順序 (stable_to_volatile)
-- Phase 2: §「【最近の流れ】」 (L4 mid summary) が本人ターン上限で生成
+- Phase 2: §「【ここまでのいきさつ】」 (L4 mid summary) が本人ターン上限で生成
 - Phase 2.1: scheduler 経由で L4 生成 (Inline で同期実行)
 - L4 が 3 世代を超えると最古を捨てる。要約の要約 (L5) は作らない (#1824)
 - 全 trace event の経路が alive (``PROMPT_SECTION_BREAKDOWN`` 等)
@@ -166,17 +166,17 @@ class TestPromptSectionsE2E:
         text = strategy.format(current_state_text='現在地: 海岸', recent_events_text='- 直近の出来事', being_memo_text='- メモ', objective_text='生き延びる', inventory_text='- 流木 x3', mid_summary_text='[最新] 北東を探索')
         assert '【現在の目的】' in text
         assert '【自己像と世界観】' not in text
-        assert '【最近の流れ】' in text
+        assert '【ここまでのいきさつ】' in text
         assert '【メモ】' in text
         assert '【所持・判明した物証】' not in text
         assert '【関連する記憶】' not in text
         assert '【直近の出来事】' in text
         assert '【現在地と周囲】' in text
-        idx = {'obj': text.index('【現在の目的】'), 'l4': text.index('【最近の流れ】'), 'events': text.index('【直近の出来事】'), 'memos': text.index('【メモ】'), 'current': text.index('【現在地と周囲】')}
+        idx = {'obj': text.index('【現在の目的】'), 'l4': text.index('【ここまでのいきさつ】'), 'events': text.index('【直近の出来事】'), 'memos': text.index('【メモ】'), 'current': text.index('【現在地と周囲】')}
         assert idx['obj'] < idx['l4'] < idx['events'] < idx['memos'] < idx['current']
 
     def test_l4_section(self) -> None:
-        """RollingSummary が L4 を生成した後の text が正しく組み立つ。"""
+        """RollingSummary が L4 を生成した後の text が正しく組み立ち、LLM が返した unresolved は出ない。"""
         stub = _StubSummaryPort(l4_response={'compressed_activity': '北東を探索した', 'emotional_summary': 'やや疲労', 'unresolved': ['水源を見つける']})
         mem = _build_memory(stub)
         for batch in range(4):
@@ -187,10 +187,10 @@ class TestPromptSectionsE2E:
         mid = mem.get_mid_summary_text(_PID)
         assert '北東を探索した' in mid
         assert 'やや疲労' in mid
-        assert '水源を見つける' in mid
+        assert '水源を見つける' not in mid
         strategy = SectionBasedContextFormatStrategy()
         full = strategy.format(current_state_text='now', recent_events_text='recent', mid_summary_text=mid)
-        assert full.index('【最近の流れ】') < full.index('【現在地と周囲】')
+        assert full.index('【ここまでのいきさつ】') < full.index('【現在地と周囲】')
 
 class TestMemoryE2ETraceObservability:
     """fallback / drop の経路が必ず trace + warning で観測可能。

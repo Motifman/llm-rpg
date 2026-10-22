@@ -118,7 +118,7 @@ class TestSectionBasedContextFormatStrategyDefault:
         assert "（なし）" in text
 
     def test_mid_summary_precedes_recent_events(self, strategy):
-        """【最近の流れ】は直近の出来事より前に置かれる。"""
+        """【ここまでのいきさつ】は直近の出来事より前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
@@ -126,9 +126,9 @@ class TestSectionBasedContextFormatStrategyDefault:
             mid_summary_text="[最新] 動き",
             being_memo_text="メモ",
         )
-        assert "【最近の流れ】" in text
+        assert "【ここまでのいきさつ】" in text
         assert "[最新] 動き" in text
-        idx_mid = text.index("【最近の流れ】")
+        idx_mid = text.index("【ここまでのいきさつ】")
         idx_events = text.index("【直近の出来事】")
         assert idx_mid < idx_events
 
@@ -139,10 +139,10 @@ class TestSectionBasedContextFormatStrategyDefault:
             recent_events_text="y",
             mid_summary_text="",
         )
-        assert "【最近の流れ】" not in text
+        assert "【ここまでのいきさつ】" not in text
 
     def test_known_people_follow_objective_and_precede_recent_flow(self, strategy):
-        """【知っている人】は【現在の目的】の直後、【最近の流れ】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
+        """【知っている人】は【現在の目的】の直後、【ここまでのいきさつ】より前に置く。新しい人を知ったときだけ、この節から後ろが変わる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
@@ -151,7 +151,7 @@ class TestSectionBasedContextFormatStrategyDefault:
             mid_summary_text="[最新] 動き",
         )
         assert "【知っている人】\n- ノア（あなたと同じ側）\n- カイ\n" in text
-        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【最近の流れ】")
+        assert text.index("【現在の目的】") < text.index("【知っている人】") < text.index("【ここまでのいきさつ】")
 
     def test_known_people_section_is_omitted_when_empty(self, strategy):
         """known_people_text が空なら【知っている人】の節ごと省略する。"""

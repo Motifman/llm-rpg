@@ -142,7 +142,7 @@ class TraceEventKind:
     # 「rolling が何を圧縮して覚えていたか」が事後追えなかった (実験 #30 前準備で
     # ギャップとして発覚)。
     # payload: summary_id / raw_count / compressed_activity / emotional_summary /
-    # unresolved / is_fallback
+    # is_fallback (unresolved は #1824 で消した)
     SHORT_TERM_SUMMARY_GENERATED = "short_term_summary_generated"
     # 短期記憶のターン窓が古いターン群を畳んだ瞬間。summary 生成の成否とは
     # 別に、圧縮自体の発火を測る。payload: completed_turn_count_before / after /

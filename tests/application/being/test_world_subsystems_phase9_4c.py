@@ -178,7 +178,6 @@ class TestSlidingWindowCodecRollingSummaryBackend:
                 generated_at=_NOW,
                 compressed_activity="3 時間山を登った",
                 emotional_summary="達成感がある",
-                unresolved=("狼煙の燃料",),
                 is_fallback=False,
             )
         )

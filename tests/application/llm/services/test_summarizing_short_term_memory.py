@@ -213,7 +213,7 @@ class TestRollingSummaryTrigger:
         """cap 到達時は古い K ターンの観測だけを L4 にし、残りを L1 に保つ。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
+                compressed_activity="ok", emotional_summary=""
             )
         )
         mem = SummarizingShortTermMemory(
@@ -246,7 +246,6 @@ class TestRollingSummaryTrigger:
                 return _ParsedSummary(
                     compressed_activity="ok",
                     emotional_summary="",
-                    unresolved=(),
                 )
 
         store = UnifiedRecentEventStore()
@@ -287,7 +286,6 @@ class TestRollingSummaryTrigger:
                 return _ParsedSummary(
                     compressed_activity="ok",
                     emotional_summary="",
-                    unresolved=(),
                 )
 
         store = UnifiedRecentEventStore()
@@ -316,7 +314,7 @@ class TestRollingSummaryTrigger:
     def test_observations_alone_do_not_create_l4(self) -> None:
         """観測を追加しただけでは、件数にかかわらず L4 は生成されない。"""
         stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="")
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
         for i in range(_SUMMARY_INPUT_COUNT - 1):
@@ -331,7 +329,6 @@ class TestRollingSummaryTrigger:
             result=_ParsedSummary(
                 compressed_activity="北東を探索",
                 emotional_summary="疲労",
-                unresolved=("水源",),
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
@@ -350,7 +347,7 @@ class TestRollingSummaryTrigger:
         """L4 は 3世代までで 最古を破棄。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
+                compressed_activity="ok", emotional_summary=""
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
@@ -369,7 +366,7 @@ class TestRollingSummaryTrigger:
         """L4 は新しい順に appendleft される。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
+                compressed_activity="ok", emotional_summary=""
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
@@ -438,7 +435,7 @@ class TestRollingSummaryLLMFailure:
         """観測件数が多くても、自分のターン境界までは L4 を生成しない。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
-                compressed_activity="ok", emotional_summary="", unresolved=()
+                compressed_activity="ok", emotional_summary=""
             )
         )
         mem = SummarizingShortTermMemory(
@@ -472,7 +469,6 @@ class TestRollingSummaryMidSummaryText:
             result=_ParsedSummary(
                 compressed_activity="今日の動き",
                 emotional_summary="気分1",
-                unresolved=("X",),
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
@@ -483,7 +479,6 @@ class TestRollingSummaryMidSummaryText:
         assert "[最新]" in text
         assert "今日の動き" in text
         assert "気分1" in text
-        assert "X" in text
 
 
 class TestRollingSummaryPersonaResolver:
@@ -510,7 +505,7 @@ class TestRollingSummaryPersonaResolver:
             ):  # type: ignore[override]
                 called_with_args["player_name"] = player_name
                 called_with_args["persona_block"] = persona_block
-                return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
+                return _ParsedSummary(compressed_activity="x", emotional_summary="")
 
         def broken(pid: int):
             raise RuntimeError("oops")
@@ -547,7 +542,7 @@ class TestRollingSummaryPersonaResolver:
                 previous_l4=None,
             ):  # type: ignore[override]
                 called["name"] = player_name
-                return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
+                return _ParsedSummary(compressed_activity="x", emotional_summary="")
 
         mem = SummarizingShortTermMemory(summary_service=_RecordingService())
         for i in range(_SUMMARY_INPUT_COUNT):
@@ -607,7 +602,6 @@ class TestFormatMidSummaryBlock:
                 generated_at=datetime(2026, 6, 1, 12, i, tzinfo=timezone.utc),
                 compressed_activity=f"動き{i}",
                 emotional_summary=f"気分{i}",
-                unresolved=(f"item{i}",),
             )
             for i in range(2)
         ]
@@ -616,8 +610,8 @@ class TestFormatMidSummaryBlock:
         # 2 世代目には [2 世代前] ラベル
         assert "[2 世代前]" in text
 
-    def test_returns_empty_when_emotional_summary_unresolved(self) -> None:
-        """emotionalsummary と unresolved が空なら該当行が出ない。"""
+    def test_returns_empty_when_emotional_summary_empty(self) -> None:
+        """emotional_summary が空なら気分の行が出ず、片付いていないことの行も無い。"""
         gen = L4MidSummary(
             summary_id="l4-1",
             player_id=1,
@@ -625,7 +619,6 @@ class TestFormatMidSummaryBlock:
             generated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
             compressed_activity="動き",
             emotional_summary="",
-            unresolved=(),
         )
         text = format_mid_summary_block([gen])
         assert "気分" not in text
@@ -649,7 +642,7 @@ class TestRollingSummarySchedulerIntegration:
     def test_inline_scheduler_works(self) -> None:
         """明示 Inline scheduler でも 動く。"""
         stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="")
         )
         mem = SummarizingShortTermMemory(
             summary_service=stub,
@@ -677,7 +670,6 @@ class TestRollingSummarySchedulerIntegration:
                 return _ParsedSummary(
                     compressed_activity="slow result",
                     emotional_summary="",
-                    unresolved=(),
                 )
 
         scheduler = ThreadPoolShortTermMemoryScheduler(max_workers=1)
@@ -720,7 +712,7 @@ class TestRollingSummarySchedulerIntegration:
                 return False  # 常に drop
 
         stub = _StubSummaryService.make(
-            result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
+            result=_ParsedSummary(compressed_activity="ok", emotional_summary="")
         )
         mem = SummarizingShortTermMemory(
             summary_service=stub,
@@ -777,7 +769,6 @@ class TestShortTermSummaryGeneratedTrace:
         parsed = _ParsedSummary(
             compressed_activity="森でキノコを採集した",
             emotional_summary="やや疲れた",
-            unresolved=("キノコの種類不明",),
         )
         mem = SummarizingShortTermMemory(
             summary_service=_StubSummaryService.make(result=parsed),
@@ -796,7 +787,7 @@ class TestShortTermSummaryGeneratedTrace:
         assert ev["raw_count"] == _SUMMARY_INPUT_COUNT
         assert ev["compressed_activity"] == "森でキノコを採集した"
         assert ev["emotional_summary"] == "やや疲れた"
-        assert ev["unresolved"] == ["キノコの種類不明"]
+        assert "unresolved" not in ev
         assert ev["is_fallback"] is False
         assert ev["summary_id"].startswith("l4-")
 
