@@ -2683,7 +2683,7 @@ class SpotGraphToolExecutor:
                     continue
                 msg = (
                     f"{item_disp} をもう持っていません。"
-                    "所持品欄に表示されているアイテム名を確認してください。"
+                    "「所持アイテム:」に出ている名前を確認してください。"
                 )
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
