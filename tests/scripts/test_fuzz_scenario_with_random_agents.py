@@ -183,6 +183,27 @@ class TestDetectsExceptions:
         assert len(swallowed) == len(waits)
         assert all(f.detail.startswith("wait: SYSTEM_ERROR") for f in swallowed)
 
+    def test_an_action_whose_result_is_recorded_nowhere_is_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """待つ行動の結果だけ記録先に積まれないと、待つたびに 1 件出す。記録された他の行動は出さない。"""
+        record = WorldRuntime._record_action_result
+
+        def record_except_wait(self, player_id, action_summary, result_summary, *, tool_name, **kwargs):
+            if tool_name != "wait":
+                record(self, player_id, action_summary, result_summary, tool_name=tool_name, **kwargs)
+
+        monkeypatch.setattr(WorldRuntime, "_record_action_result", record_except_wait)
+
+        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=20)
+
+        waits = [a for a in result.actions if a.tool == "wait"]
+        unrecorded = [f for f in result.findings if f.kind == "unrecorded_action"]
+        assert waits, "このシードでは一度も待たなかった。シードを変えないと何も確かめていない"
+        assert len(waits) < len(result.actions), "待つ以外の行動が無いと、誤って出さないことを確かめていない"
+        assert len(unrecorded) == len(waits)
+        assert all(f.detail.startswith("wait ") for f in unrecorded)
+
 
 class TestDetectsLeaks:
     """内部の番号やシナリオの ID がエージェントへの文に出たら見つける。"""
