@@ -54,14 +54,14 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     # application/llm/services/failure_helpers.py のファクトリから参照される。
     "INVALID_ARGUMENT": "ツール引数の型 / 必須項目を確認してください。",
     "SNS_REF_STALE": "SNS の ref は世代管理されています。ページを再読込してから ref を取得し直してください。",
-    "SNS_PAGE_NOT_SUPPORTED": "現在の SNS ページではこの操作は実行できません。open_page で適切なページに遷移してから再度試してください。",
+    "SNS_PAGE_NOT_SUPPORTED": "現在の SNS ページではこの操作は実行できません。この操作ができるページへ移ってから再度試してください。",
     "SNS_REPLY_PARENT_AMBIGUOUS": "リプライの親は 1 つだけです。parent_post_ref か parent_reply_ref の、返信したい方だけを指定してください。",
     "TRADE_ARG_MISSING": "取引ツールの必須引数 (item_instance_id / slot_id / requested_gold / trade_ref 等) を確認してください。",
     "TRADE_PAGE_NOT_SUPPORTED": "現在の SNS / Trade ページではこの操作は実行できません。対応するページに遷移してください。",
     "ATTACK_PRECONDITION_FAILED": "攻撃の前提条件 (クールダウン / 対象の生死 / 攻撃力など) を確認し、必要なら待機または別行動を選んでください。",
     "INVENTORY_NOT_FOUND": "プレイヤーのインベントリが見つかりません。プレイヤー初期化が完了しているか確認してください。",
     "ITEM_NOT_CONSUMABLE": "そのアイテムは食べ物ではないので、食べる行動では使えません。素材や道具は、近くのものに働きかけて使ってください (例: 焚き火跡に火打ち石で着火)。食べるなら所持アイテムの「食料」を選んでください。",
-    "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
+    "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。いま開いているアプリを閉じてから、開き直してください。",
     "INVALID_DIRECTION": "方向は 北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西 のいずれかを指定してください。",
     "PURSUIT_FAILED": "追跡対象が視界外か既に去っている可能性があります。対象を再確認してください。",
     "PURSUIT_START_FAILED": "追跡対象を確認してください (視界内か / 同じスポットか)。",
@@ -102,7 +102,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "SPEAKER_DOWN": "倒れている間は声を出せません。いまの発言は誰にも届いていません。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
-    "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。inspect_target で自分の所持品を確認し、所持品欄に表示されているアイテム名を指定してください。",
+    "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。【現在地と周囲】の「所持アイテム:」に出ている名前を確かめて、その名前で指定してください。",
     "PICKUP_ITEM_GROUND_ITEM_GONE": "そのアイテムはもう地面にありません。他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。周囲を見直すか、別の目的に切り替えてください。",
     "PICKUP_ITEM_SELF_INVENTORY_FULL": "持ち物がいっぱいです。不要なものを 1 つ手放して空きを作ってから、もう一度拾ってください。",
     # PR-γ (Y_after_pr639_640 後続): audit で未登録が発覚した 5 code に

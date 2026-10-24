@@ -208,7 +208,7 @@ def test_slot_empty_error_message_japanese() -> None:
     exc = SlotIsEmptyError(slot_id=3)
     msg = str(exc)
     # 何をすべきか (所持品確認) が読める
-    assert "所持品" in msg
+    assert "所持アイテム" in msg
     assert "確認" in msg
     assert "スロット" not in msg
     assert "スロット番号を指定" not in msg

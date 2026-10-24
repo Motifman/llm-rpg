@@ -185,7 +185,9 @@ class TestGiveItemSlotIsEmpty:
         assert result.error_code == "ITEM_TRANSFER_SLOT_IS_EMPTY"
         # remediation も agent が指定できる item_label の確認へ誘導する
         assert result.remediation is not None
-        assert "所持品" in result.remediation
+        assert "所持アイテム" in result.remediation
+        assert "inspect_target" not in result.remediation
+        assert "inspect_target" not in result.message
         assert "スロット" not in result.message
         assert "スロット番号を指定" not in result.message
 

@@ -123,7 +123,7 @@ class SlotIsEmptyError(ItemTransferException):
 
     agent 向け経路では item_label から実行時に slot を引き直すため、LLM が
     slot 番号を指定することはない。message でも存在しない引数を案内せず、
-    所持品欄の名前を再確認するよう促す。
+    所持アイテムの欄の名前を再確認するよう促す。
 
     ``slot_id`` は内部診断用に保持するが、LLM 向け message には出さない。
     """
@@ -133,8 +133,8 @@ class SlotIsEmptyError(ItemTransferException):
     def __init__(self, *, slot_id: int) -> None:
         msg = (
             "その名前のアイテムをもう持っていません。"
-            "inspect_target で自分の所持品を確認してから、"
-            "所持品欄に表示されているアイテム名を指定してください。"
+            "【現在地と周囲】の「所持アイテム:」に出ている名前を確認して、"
+            "その名前で指定してください。"
         )
         super().__init__(msg)
         self.slot_id = slot_id
