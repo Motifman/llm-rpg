@@ -25,8 +25,6 @@ class TraceEventKind:
     残すため (JSONL なので緩く)。よく使う既知値だけここに集める。
     """
 
-    # payload の replay は、記憶だけを持ち越す回 (#1514) で {round,
-    # previous_run_dir, previous_scenario_sha256, scenario_sha256}。それ以外は None。
     RUN_START = "run_start"
     RUN_END = "run_end"
     TICK_START = "tick_start"
@@ -159,8 +157,6 @@ class TraceEventKind:
     #     記憶のターン数)
     #   - source_scenario: str | None (= snapshot 内に書かれていた元シナリオ名。
     #     現 scenario と異なる場合は cross-scenario transfer)
-    #   - load_mode: "continue" | "replay" (#1514。replay は記憶だけを持ち越す)
-    #   - world_snapshot_ignored: bool (= replay で world.json を読まなかった)
     #   - removed_memory_keys: list[{being_id, counts: {キー: 件数}}] (= 消した
     #     部品の欄を snapshot から捨てた件数。捨てなかった Being は載せない)
     # SNAPSHOT_SAVE payload:
