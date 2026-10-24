@@ -46,6 +46,7 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -61,6 +62,9 @@ _DEFAULT_BEING_EPISODE_INDEX_LIMIT = 10
 _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES = 3
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
+    "ASYNC_EVENT_WORKERS",
+    "ASYNC_EVENT_MAX_PENDING",
+    "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS",
     "BEING_EPISODE_INDEX_LIMIT",
     "BEING_EPISODE_RECALL_MAX_HANDLES",
     "LLM_CLIENT",
@@ -206,6 +210,9 @@ class ResolvedLlmRuntimeConfig:
     # 世界の tick の 1 体ぶんの例外を、取りやめて続けるか止めるか (design_decisions D1558)。
     # 既定が isolate なのは、その場で書いた実験設定がキーを書き忘れても run を捨てないため。
     world_tick_failure_policy: str = WorldTickFailurePolicy.ISOLATE.value
+    async_event_workers: int = 2
+    async_event_max_pending: int = 100
+    async_event_shutdown_timeout_seconds: float = 10.0
 
     # ──────────────────────────────────────────────────────────────
     # Invariants
@@ -229,6 +236,13 @@ class ResolvedLlmRuntimeConfig:
                 f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. "
                 f"valid: {sorted(_VALID_TOOL_CHOICES)}"
             )
+        for name in ("async_event_workers", "async_event_max_pending"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name}は1以上の整数である必要があります")
+        timeout = self.async_event_shutdown_timeout_seconds
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
+            raise ValueError("async_event_shutdown_timeout_secondsは0以上の有限の秒数である必要があります")
         WorldTickFailurePolicy.parse(self.world_tick_failure_policy)
         if self.prompt_dataset_capture_failure_policy not in {"fail", "warn"}:
             raise ValueError(
@@ -432,6 +446,11 @@ class ResolvedLlmRuntimeConfig:
             prompt_dataset_capture_failure_policy=prompt_dataset_capture_failure_policy,
             reason_first_two_step_enabled=reason_first_two_step_enabled,
             world_tick_failure_policy=world_tick_failure_policy,
+            async_event_workers=_resolve_positive_int(source, "ASYNC_EVENT_WORKERS", default=2),
+            async_event_max_pending=_resolve_positive_int(source, "ASYNC_EVENT_MAX_PENDING", default=100),
+            async_event_shutdown_timeout_seconds=_resolve_non_negative_float(
+                source, "ASYNC_EVENT_SHUTDOWN_TIMEOUT_SECONDS", default=10.0
+            ),
         )
 
     @classmethod
@@ -496,6 +515,9 @@ class ResolvedLlmRuntimeConfig:
             prompt_dataset_capture_failure_policy="fail",
             reason_first_two_step_enabled=True,
             world_tick_failure_policy=WorldTickFailurePolicy.ISOLATE.value,
+            async_event_workers=2,
+            async_event_max_pending=100,
+            async_event_shutdown_timeout_seconds=10.0,
         )
         unknown = set(overrides) - set(defaults)
         if unknown:
