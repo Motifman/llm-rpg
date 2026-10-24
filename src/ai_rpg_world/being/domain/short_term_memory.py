@@ -23,6 +23,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 RECENT_TURNS: Final = 20
 FOLD_TURNS: Final = 10
@@ -196,21 +197,16 @@ class Backstory:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ExperiencesFolded:
-    """直近の範囲から古いターンの出来事を外した。受け手は、外した出来事からエピソードを書き起こし、いきさつを作り直す。
+class ExperiencesFolded(DomainEvent):
+    """直近の範囲から古いターンの出来事を外した。受け手は、外した出来事からエピソードを書き起こし、いきさつを作り直す。"""
 
-    ``event_id`` と ``occurred_at`` は、イベント基盤の作り直し (#1837) の共通の基底に乗せ替えるときに型の形を変えずに済むよう、同じ名前で持つ。
-    """
-
-    event_id: int
-    occurred_at: datetime
     being_id: BeingId
     turn: int
     folded: tuple[Experience, ...]
     backstories: tuple[Backstory, ...]
 
 
-class ShortTermMemory:
+class ShortTermMemory(AggregateRoot[ExperiencesFolded]):
     """Being ごとに 1 つある、直近の出来事といきさつを持つ集約 (design_decisions D1824-9)。
 
     操作は中身を書き換え、値を返さない。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。
@@ -228,8 +224,8 @@ class ShortTermMemory:
     ) -> None:
         if not isinstance(being_id, BeingId):
             raise ShortTermMemoryValidationException("being_id must be BeingId")
+        super().__init__()
         self._being_id = being_id
-        self._events: list[ExperiencesFolded] = []
         self._become(experiences, backstories, recent_from, awaiting)
 
     @classmethod
@@ -326,7 +322,7 @@ class ShortTermMemory:
         self._become(kept, self._backstories, recent_from, awaiting)
         if not folded:
             return
-        self._events.append(
+        self.add_event(
             ExperiencesFolded(
                 event_id=uuid.uuid4().int,
                 occurred_at=datetime.now(timezone.utc),
@@ -340,13 +336,6 @@ class ShortTermMemory:
     def add_backstory(self, backstory: Backstory) -> None:
         backstories = (*self._backstories, backstory)[-BACKSTORY_GENERATIONS:]
         self._become(self._experiences, backstories, self._recent_from, self._awaiting)
-
-    def get_events(self) -> list[ExperiencesFolded]:
-        """まだ渡していないイベント。ゲームの ``AggregateRoot`` と同じ口にそろえる。"""
-        return list(self._events)
-
-    def clear_events(self) -> None:
-        self._events.clear()
 
     def _with(self, experience: Experience) -> tuple[Experience, ...]:
         """同じ番号の出来事のあと、次の番号の出来事の前に入れる。"""

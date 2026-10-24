@@ -8570,11 +8570,11 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 | `fold(今のターン)` | 直近の範囲 (`recent_from` から今のターンまで。出来事の無いターンも数える) が `RECENT_TURNS` (20) に届いていれば、古い `FOLD_TURNS` (10) ターン分を外し、範囲の始まりを 10 進め、「出来事を外した」イベント (`ExperiencesFolded`。外した出来事と、そのときのいきさつ) をためる。外すターンに選んだまま結果の来ない 1 手も、結果の分からない試みとして一緒に外す。外す出来事が無ければイベントはためない |
 | `add_backstory` | 足して新しい `BACKSTORY_GENERATIONS` (3) 世代だけ残す |
 
-ためたイベントは、ゲームの集約 (`AggregateRoot`) と同じ `get_events()` / `clear_events()` で渡す。`being/` はゲームのパッケージを import できないので、`AggregateRoot` は継承せず、同じ名前のメソッドを自前で持つ。イベントを取り出して受け手 (いきさつを作る、エピソードを書き起こす) に渡すのは、イベント基盤の作り直し (#1837) のあと。
+集約はイベント基盤の共通の `AggregateRoot` (`eventing/`) を継ぎ、`add_event` でためて `get_events()` / `clear_events()` で渡す (design_decisions D1837 の 3)。イベントを取り出して受け手 (いきさつを作る、エピソードを書き起こす) に渡すのは、イベント基盤の配送ができてから (D1837 の 4・6)。
 
 保存先 (`InMemoryShortTermMemoryRepository`) は、出し入れのたびに写しを渡し、ためたイベントは保存しない。同じ集約を指し続けると、save し忘れた書き換えも保存されたように見えるため。写しを渡すのは SQLite の保存先 (`sqlite_shop_repository.py` の `copy.deepcopy`) と同じ考え方だが、出来事といきさつは中身の変わらない値なので、deepcopy せず、同じ値を持つ集約を作り直して写しにする (出来事が 2000 件の集約で、deepcopy 1 回に 25ms ほどかかった)。snapshot は取った時点で JSON にするので、あとで集約を書き換えても変わらない。
 
-イベントの型 (`ExperiencesFolded`) は、ゲームの `BaseDomainEvent` を継がない素の値にする。`being/` が `domain.common` を import できないため。イベント基盤の作り直し (#1837) の共通の基底に乗せ替えるとき型の形を変えずに済むよう、`event_id` (`uuid4().int`) と `occurred_at` (UTC) を同じ名前で持ち、Being の ID とターンを自分で持つ。ゲームの集約にある `add_event` と `warn_if_pending_events` は、取り出す側ができるまで持たない。
+イベントの型 (`ExperiencesFolded`) は、共通の `DomainEvent` (`event_id` と `occurred_at`) を継ぎ、Being の ID とターンを自分で持つ (D1837 の 2)。ゲームの `BaseDomainEvent` は継がない。`being/` は `domain.common` を import できないため。`event_id` はゲームと同じく `uuid4().int`、`occurred_at` は UTC。
 
 出来事を種類ごとに読む側 (文を作る側、snapshot の保存) は、`Experience.show_to(reader)` で種類ごとのメソッドを呼ばれる (`ExperienceReader`)。型を見分けずに済む。
 
