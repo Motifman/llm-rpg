@@ -33,6 +33,7 @@ class TestBeingEpisodesCrossRuns:
             source.aux_being_default_world_id, ada
         )
         episode = Episode.write(
+            being_id=being_id,
             episode_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
             environment_name="島",
             written_turn=2,
@@ -41,7 +42,7 @@ class TestBeingEpisodesCrossRuns:
         )
         episode.recall(turn=4)
         episode.revise_index(EpisodeIndex(summary="流木で火をおこした", recall_when="火が要るとき"), turn=5)
-        source._being_episode_store.add(being_id, episode)
+        source._being_episode_store.add(episode)
         ExperimentSnapshotSession(
             wiring_result=_wiring_stub_from_world_runtime(source),
             snapshot_dir=tmp_path,

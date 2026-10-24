@@ -313,7 +313,9 @@ class BeingMemorySnapshotService:
                 "payload['acquaintances'] has the same person twice"
             )
         being_episodes = _decode_list(
-            payload["being_episodes"], dict_to_being_episode, "being_episodes"
+            payload["being_episodes"],
+            lambda data: dict_to_being_episode(data, being_id=being_id),
+            "being_episodes",
         )
         for field_name in ("episode_id", "handle"):
             values = [getattr(e, field_name) for e in being_episodes]

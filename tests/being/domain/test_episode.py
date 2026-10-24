@@ -12,6 +12,9 @@ from ai_rpg_world.being.domain.episode import (
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+ADA = BeingId("being_ada")
 
 EPISODE_ID = "3f2a7b9c-1d2e-4f00-8a00-000000000001"
 INDEX = EpisodeIndex(summary="金庫の番号を探した", recall_when="金庫や鍵の話が出たとき")
@@ -19,6 +22,7 @@ INDEX = EpisodeIndex(summary="金庫の番号を探した", recall_when="金庫�
 
 def _write(**overrides: object) -> Episode:
     fields: dict[str, object] = {
+        "being_id": ADA,
         "episode_id": EPISODE_ID,
         "environment_name": "地下の金庫室",
         "written_turn": 5,
@@ -143,6 +147,7 @@ class TestEpisodeInvariants:
     def _fields(self, **overrides: object) -> dict[str, object]:
         episode = _write()
         fields: dict[str, object] = {
+            "being_id": episode.being_id,
             "episode_id": episode.episode_id,
             "handle": episode.handle,
             "environment_name": episode.environment_name,
@@ -153,9 +158,14 @@ class TestEpisodeInvariants:
         fields.update(overrides)
         return fields
 
-    def test_episode_holds_no_owner(self) -> None:
-        """エピソードは持ち主の BeingId を持たない。保存の側が Being ごとに分ける。"""
-        assert not hasattr(_write(), "being_id")
+    def test_episode_holds_its_owner(self) -> None:
+        """エピソードは、書いた Being の ID を持つ。"""
+        assert _write().being_id == ADA
+
+    def test_an_owner_that_is_not_a_being_id_is_rejected(self) -> None:
+        """BeingId でない持ち主を渡すと EpisodeValidationException を投げる。"""
+        with pytest.raises(EpisodeValidationException):
+            _write(being_id="being_ada")
 
     @pytest.mark.parametrize("handle", ["ep_3f2a7", "ep_3f2a7c", "3f2a7b", "ep_3f2a7b9c-"])
     def test_handle_that_does_not_come_from_the_id_is_rejected(self, handle: str) -> None:
@@ -251,7 +261,13 @@ class TestRecallingAnEpisode:
 
         (event,) = episode.get_events()
         assert isinstance(event, EpisodeRecalled)
-        assert (event.episode_id, event.handle, event.turn, event.recall_count) == (EPISODE_ID, "ep_3f2a7b", 9, 1)
+        assert (event.being_id, event.episode_id, event.handle, event.turn, event.recall_count) == (
+            ADA,
+            EPISODE_ID,
+            "ep_3f2a7b",
+            9,
+            1,
+        )
 
     @pytest.mark.parametrize("turn", [8, 4, -1])
     def test_recall_that_goes_back_in_time_changes_nothing(self, turn: int) -> None:
@@ -318,7 +334,8 @@ class TestRevisingTheIndex:
 
         (event,) = episode.get_events()
         assert isinstance(event, EpisodeIndexRevised)
-        assert (event.episode_id, event.handle, event.previous, event.index, event.turn) == (
+        assert (event.being_id, event.episode_id, event.handle, event.previous, event.index, event.turn) == (
+            ADA,
             EPISODE_ID,
             "ep_3f2a7b",
             INDEX,
@@ -341,3 +358,18 @@ class TestRevisingTheIndex:
             episode.revise_index(index, turn=turn)  # type: ignore[arg-type]
 
         assert (episode.index, len(episode.index_history), episode.get_events()) == (self.NEW_INDEX, 1, [])
+
+
+class TestFollows:
+    """Episode.follows が、同じ持ち主の、呼び出しと目次の直しだけで行き着ける版だけを後の版と認めることを保証する。"""
+
+    def test_a_recalled_copy_follows_the_original(self) -> None:
+        """同じ持ち主のエピソードを呼び出した版は、元の版の後の版になる。"""
+        later = _write()
+        later.recall(turn=9)
+
+        assert later.follows(_write()) is True
+
+    def test_the_same_episode_of_another_being_does_not_follow(self) -> None:
+        """ID も中身も同じでも、持ち主が違うエピソードは後の版ではない。"""
+        assert _write(being_id=BeingId("being_kai")).follows(_write()) is False

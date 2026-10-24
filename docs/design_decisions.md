@@ -8651,9 +8651,11 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 ## D1621. エピソードは、自分の目次を持つ集約にする。目次の並びは問い合わせで作る
 
-**何を**: エピソード (`being/domain/episode.py` の `Episode`) を、1 件ずつ ID を持つ集約にする。集約は自分の目次 (`EpisodeIndex`) と、直した履歴 (`IndexRevision` の並び) を持つ。呼び出し (`recall`) と目次の直し (`revise_index`) は中身を書き換え、値を返さず、`EpisodeRecalled` / `EpisodeIndexRevised` をためる。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。本文・呼び名・書いた時・書いた環境は変わらない。`EpisodeIndex` と `IndexRevision` は値のまま。
+**何を**: エピソード (`being/domain/episode.py` の `Episode`) を、1 件ずつ ID を持つ集約にする。集約は、書いた Being の ID と、自分の目次 (`EpisodeIndex`) と、直した履歴 (`IndexRevision` の並び) を持つ。呼び出し (`recall`) と目次の直し (`revise_index`) は中身を書き換え、値を返さず、`EpisodeRecalled` / `EpisodeIndexRevised` をためる。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。本文・呼び名・書いた時・書いた環境は変わらない。`EpisodeIndex` と `IndexRevision` は値のまま。
 
 目次として見せる並び (どれを何件、どの順で) は、状態として持たず、これまでどおり `EpisodeIndexSelection` が保存先の一覧から毎回作る。呼び名が同じ Being の中で重ならない決まりは、集約ではなく保存先 (`EpisodeRepository.add` と `replace_all_by_being` の `EpisodeConflictException`) に残す。
+
+持ち主の `BeingId` は集約が持つ (短期記憶・メモ帳と同じ)。保存先は集約の `being_id` で分けて持ち、別の Being のエピソードを混ぜて戻そうとすると断る。イベントを受け取る側は、誰のエピソードかを集約のイベントから知れる。snapshot の payload は Being ごとに 1 本なので、エピソードの欄に持ち主は書かず、戻す先の Being の ID で組み立てる。
 
 保存先は出し入れのたびに写しを渡し、ためたイベントは保存しない (D1824-9 の短期記憶と同じ)。後の版でない書き戻しを断る検査 (`Episode.follows`) は残す。写しを持つ手が 2 つあると、古い写しを後から書き戻せるため。
 

@@ -11,10 +11,14 @@ from ai_rpg_world.being.domain.episode_index_selection import (
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+ADA = BeingId("being_ada")
 
 
 def _episode(number: int, written_turn: int) -> Episode:
     return Episode.write(
+        being_id=ADA,
         episode_id=f"{number:08x}-0000-4000-8000-000000000000",
         environment_name="島",
         written_turn=written_turn,

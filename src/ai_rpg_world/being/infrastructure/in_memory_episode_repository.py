@@ -22,6 +22,7 @@ def _require_no_overlap(episodes: Sequence[Episode]) -> None:
 def _copy(episode: Episode) -> Episode:
     """目次や履歴は中身の変わらない値なので、同じ中身を持つ新しい集約を作れば写しになる。ためたイベントは写さない。"""
     return Episode(
+        being_id=episode.being_id,
         episode_id=episode.episode_id,
         handle=episode.handle,
         environment_name=episode.environment_name,
@@ -40,7 +41,8 @@ class InMemoryEpisodeRepository(EpisodeRepository):
     def __init__(self) -> None:
         self._by_being: dict[BeingId, dict[str, Episode]] = {}
 
-    def add(self, being_id: BeingId, episode: Episode) -> None:
+    def add(self, episode: Episode) -> None:
+        being_id = episode.being_id
         book = self._by_being.get(being_id, {})
         _require_no_overlap([*book.values(), episode])
         self._by_being[being_id] = {**book, episode.episode_id: _copy(episode)}
@@ -54,7 +56,8 @@ class InMemoryEpisodeRepository(EpisodeRepository):
     def list_by_being(self, being_id: BeingId) -> tuple[Episode, ...]:
         return tuple(_copy(e) for e in self._by_being.get(being_id, {}).values())
 
-    def save(self, being_id: BeingId, episode: Episode) -> None:
+    def save(self, episode: Episode) -> None:
+        being_id = episode.being_id
         book = self._by_being.get(being_id, {})
         known = book.get(episode.episode_id)
         if known is None:
@@ -66,6 +69,9 @@ class InMemoryEpisodeRepository(EpisodeRepository):
         book[episode.episode_id] = _copy(episode)
 
     def replace_all_by_being(self, being_id: BeingId, episodes: Sequence[Episode]) -> None:
+        strangers = [e.episode_id for e in episodes if e.being_id != being_id]
+        if strangers:
+            raise EpisodeConflictException(f"episodes of another being cannot be put under {being_id}: {strangers}")
         _require_no_overlap(episodes)
         if not episodes:
             self._by_being.pop(being_id, None)
