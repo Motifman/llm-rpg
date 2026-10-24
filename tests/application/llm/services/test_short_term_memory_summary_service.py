@@ -24,8 +24,6 @@ from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports impor
 from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
     COMPRESSED_ACTIVITY_MAX_CHARS,
     EMOTIONAL_SUMMARY_MAX_CHARS,
-    UNRESOLVED_ITEM_MAX_CHARS,
-    UNRESOLVED_MAX_ITEMS,
     ShortTermMemorySummaryService,
     build_template_fallback_summary,
 )
@@ -94,7 +92,7 @@ class TestShortTermMemorySummaryServiceGenerate:
     """正常系: LLM 応答を _ParsedSummary に変換する。"""
 
     def test_llm_result_included(self) -> None:
-        """有効な LLM 応答がそのまま result に乗る。"""
+        """有効な LLM 応答の流れと気分が result に乗る。古い形の unresolved を返しても result には無い。"""
         port = _StubPort(response={
             "compressed_activity": "北東を探索したが収穫薄",
             "emotional_summary": "やや疲労",
@@ -109,7 +107,7 @@ class TestShortTermMemorySummaryServiceGenerate:
         )
         assert result.compressed_activity == "北東を探索したが収穫薄"
         assert result.emotional_summary == "やや疲労"
-        assert result.unresolved == ("水源を見つける", "タカシと再会する")
+        assert not hasattr(result, "unresolved")
 
     def test_compressed_activity_cap(self) -> None:
         """compressed activity は cap される。"""
@@ -144,55 +142,6 @@ class TestShortTermMemorySummaryServiceGenerate:
             compacted_turn_count=2,
         )
         assert len(result.emotional_summary) == EMOTIONAL_SUMMARY_MAX_CHARS
-
-    def test_unresolved_three_cap(self) -> None:
-        """unresolved は 3件 でcap される。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": [f"item{i}" for i in range(10)],
-        })
-        svc = ShortTermMemorySummaryService(port)
-        result = svc.generate(
-            player_name="x",
-            persona_block="",
-            events=[_observation_event("p")],
-            compacted_turn_count=2,
-        )
-        assert len(result.unresolved) == UNRESOLVED_MAX_ITEMS
-
-    def test_unresolved_element_120_cap(self) -> None:
-        """unresolved の各要素は 120 字で cap される。"""
-        long = "あ" * (UNRESOLVED_ITEM_MAX_CHARS * 2)
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": [long],
-        })
-        svc = ShortTermMemorySummaryService(port)
-        result = svc.generate(
-            player_name="x",
-            persona_block="",
-            events=[_observation_event("p")],
-            compacted_turn_count=2,
-        )
-        assert len(result.unresolved[0]) == UNRESOLVED_ITEM_MAX_CHARS
-
-    def test_unresolved_non_str_empty_string(self) -> None:
-        """unresolved の非 str や空文字は除外。"""
-        port = _StubPort(response={
-            "compressed_activity": "ok",
-            "emotional_summary": "",
-            "unresolved": ["a", "", "  ", 123, None, "b"],
-        })
-        svc = ShortTermMemorySummaryService(port)
-        result = svc.generate(
-            player_name="x",
-            persona_block="",
-            events=[_observation_event("p")],
-            compacted_turn_count=2,
-        )
-        assert result.unresolved == ("a", "b")
 
     def test_emotional_summary_non_str_empty_string(self) -> None:
         """emotionalsummary が非 str でも空文字に縮退。"""
@@ -240,7 +189,6 @@ class TestShortTermMemorySummaryServicePromptStructure:
             generated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
             compressed_activity="先回の行動",
             emotional_summary="先回の気分",
-            unresolved=("先回未解決",),
         )
         svc.generate(
             player_name="x",
@@ -252,7 +200,6 @@ class TestShortTermMemorySummaryServicePromptStructure:
         user = port.captured[0][1]["content"]
         assert "先回の行動" in user
         assert "先回の気分" in user
-        assert "先回未解決" in user
 
     def test_system_label(self) -> None:
         """system メッセージに ラベル禁止 の指示が 入る。"""
@@ -338,7 +285,7 @@ class TestShortTermMemorySummaryServicePromptStructure:
 
         system = port.captured[0][0]["content"]
         assert hashlib.sha256(system.encode()).hexdigest() == (
-            "cf8f7a46eb2d4eb04c25fdf70163899cd5088ce6fc07bdadb437c45ed84e1560"
+            "43c5719dafca9db4e6fe8536b75f79fcbadc9ceb817976cc71b6d66ba4fa9ba3"
         )
 
     def test_relations_and_world_rules_are_left_to_the_memo(self) -> None:
@@ -417,7 +364,6 @@ class TestBuildTemplateFallbackSummary:
         assert "p1" in result.compressed_activity
         assert "p2" in result.compressed_activity
         assert result.emotional_summary == ""
-        assert result.unresolved == ()
 
     def test_returns_observation_empty_string_placeholder(self) -> None:
         """観測ゼロでも 空文字 placeholder を返す。"""

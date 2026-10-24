@@ -25,7 +25,6 @@ def _make(**overrides):
         generated_at=_NOW,
         compressed_activity="北東を探索した",
         emotional_summary="やや疲労",
-        unresolved=("水源を見つける",),
     )
     base.update(overrides)
     return L4MidSummary(**base)
@@ -38,7 +37,7 @@ class TestL4MidSummaryValidation:
         """正常値で 構築できる。"""
         e = _make()
         assert e.compressed_activity == "北東を探索した"
-        assert e.unresolved == ("水源を見つける",)
+        assert not hasattr(e, "unresolved")
         assert e.is_fallback is False
 
     def test_summary_id_empty_string_value_error_2(self) -> None:
@@ -60,16 +59,6 @@ class TestL4MidSummaryValidation:
         """generated at が datetime でなければ type error。"""
         with pytest.raises(TypeError, match="generated_at"):
             _make(generated_at="2026")  # type: ignore[arg-type]
-
-    def test_unresolved_tuple_type_error(self) -> None:
-        """unresolved は tuple でなければ type error。"""
-        with pytest.raises(TypeError, match="unresolved"):
-            _make(unresolved=["x"])  # type: ignore[arg-type]
-
-    def test_non_string_unresolved_element_raises_type_error(self) -> None:
-        """unresolved 要素が str でなければ type error。"""
-        with pytest.raises(TypeError, match="unresolved"):
-            _make(unresolved=(1,))  # type: ignore[arg-type]
 
     def test_fallback_true_2(self) -> None:
         """is fallback True でも 構築可。"""

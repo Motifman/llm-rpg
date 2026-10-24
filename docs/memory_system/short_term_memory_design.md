@@ -131,6 +131,8 @@ prompt 表示時は **生成中の世代を待たない**: 現状の L4 をそ�
 
 ### 4.1 L4 生成 (mid summary)
 
+> #1824 で、L4 は【ここまでのいきさつ】として流れと気分だけを持つ形にした。`unresolved` は外し、言われた予定と実際にしたことを分けて書かせる。今の指示は `short_term_memory_summary_service.py` の `_SYSTEM_PROMPT` (design_decisions D1824-2)。以下は変える前の設計の記録。
+
 ```
 あなた = {player_name}
 あなたの性格 = {persona_block}

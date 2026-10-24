@@ -163,7 +163,6 @@ def _l4_mid_summary_to_dict(s: L4MidSummary) -> dict[str, Any]:
         "generated_at": _dt_to_iso(s.generated_at),
         "compressed_activity": s.compressed_activity,
         "emotional_summary": s.emotional_summary,
-        "unresolved": list(s.unresolved),
         "is_fallback": bool(s.is_fallback),
     }
 
@@ -176,7 +175,6 @@ def _dict_to_l4_mid_summary(d: dict[str, Any]) -> L4MidSummary:
         generated_at=_iso_to_dt(str(d["generated_at"])),
         compressed_activity=str(d["compressed_activity"]),
         emotional_summary=str(d["emotional_summary"]),
-        unresolved=tuple(str(u) for u in d.get("unresolved", [])),
         is_fallback=bool(d.get("is_fallback", False)),
     )
 

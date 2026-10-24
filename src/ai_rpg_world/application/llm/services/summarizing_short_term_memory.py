@@ -280,8 +280,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """L4 mid summary を prompt 用テキストに整形する。
 
-        新しい世代から順に、各世代の compressed_activity / emotional_summary /
-        unresolved を箇条書きで並べる。L4 が空なら空文字 (= section 非表示)。
+        新しい世代から順に、各世代の compressed_activity / emotional_summary を
+        並べる。L4 が空なら空文字 (= section 非表示)。
 
         non-blocking: lock の中で snapshot を取って lock 外で整形する。
         """
@@ -401,7 +401,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
             generated_at=datetime.now(timezone.utc),
             compressed_activity=parsed.compressed_activity,
             emotional_summary=parsed.emotional_summary,
-            unresolved=parsed.unresolved,
             is_fallback=is_fallback,
         )
         self._install_l4(summary)
@@ -457,7 +456,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 raw_count=summary.raw_count,
                 compressed_activity=summary.compressed_activity,
                 emotional_summary=summary.emotional_summary,
-                unresolved=list(summary.unresolved),
                 is_fallback=summary.is_fallback,
             )
         except Exception:
@@ -545,10 +543,6 @@ def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
         lines.append(f"{header}{gen.compressed_activity.strip()}")
         if gen.emotional_summary.strip():
             lines.append(f"  気分: {gen.emotional_summary.strip()}")
-        if gen.unresolved:
-            lines.append("  未解決:")
-            for u in gen.unresolved:
-                lines.append(f"    - {u}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
