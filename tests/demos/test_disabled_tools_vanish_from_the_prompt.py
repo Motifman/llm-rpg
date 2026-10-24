@@ -374,3 +374,36 @@ class TestAdviceDoesNotNameAToolThatMightNotExist:
         ]
 
         assert offenders == []
+
+
+class TestTheExhaustedRefusalNamesNoTool:
+    """疲労で重い行動を断る文が、ツールの名前を出さないことを保証する。
+
+    この文は対処文の表ではなく実行器の中で組み立てるので、表を見る走査に
+    入っていなかった。`wait` / `use_item` / `speech` を名前で勧めていて、
+    そのツールが無い世界では打てない手を勧める。
+    """
+
+    def test_neither_message_nor_remediation_names_a_tool(self, monkeypatch) -> None:
+        """疲労が限界で travel_to を断られたとき、本文にも対処文にも、どのカタログのツール名も出ない。"""
+        from types import SimpleNamespace
+
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_TRAVEL_TO
+
+        runtime = create_world_runtime(_DRILL)
+        executor = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
+        )._spot_graph_executor
+        monkeypatch.setattr(
+            executor, "_get_status", lambda player_id: SimpleNamespace(is_exhausted=lambda: True)
+        )
+
+        refusal = executor._is_exhausted_and_block(int(_MORI), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO)
+
+        assert refusal is not None and refusal.error_code == "EXHAUSTED"
+        text = f"{refusal.message}\n{refusal.remediation}"
+        assert [name for name in sorted(_all_tool_identifiers()) if _names(text, name)] == []

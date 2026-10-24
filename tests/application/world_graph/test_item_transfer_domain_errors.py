@@ -106,7 +106,7 @@ def test_target_self_error_message_japanese_llm() -> None:
 
 
 def test_target_not_same_spot_error_message_target_current_spot_included() -> None:
-    """LLM が travel_to 判断できるよう、相手の名前と自分の現在地を含める。"""
+    """相手の場所へ移るかを LLM が決められるよう、相手の名前と自分の現在地を含め、travel_to の名前は出さない。"""
     from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
         TargetNotInSameSpotError,
     )
@@ -117,8 +117,8 @@ def test_target_not_same_spot_error_message_target_current_spot_included() -> No
     msg = str(exc)
     assert "ノア" in msg
     assert "森の広場" in msg
-    # 次アクション (travel_to) を示唆
-    assert "travel" in msg or "移動" in msg
+    assert "移って" in msg
+    assert "travel_to" not in msg
 
 
 def test_target_inventory_full_error_message_target_drop_included() -> None:
