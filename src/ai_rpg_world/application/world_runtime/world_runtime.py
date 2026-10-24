@@ -6972,6 +6972,7 @@ def create_world_runtime(
         being_id_of=_being_id_of,
         turn_reader=memory_turn_clock,
         observer_of=runtime._being_observer,
+        environment_of=runtime.environment_name_for,
         current_tick_provider=lambda: runtime.current_tick(),
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )

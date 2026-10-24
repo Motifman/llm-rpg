@@ -38,6 +38,7 @@ from ai_rpg_world.being.contract import (
     UNKNOWN,
     EnvironmentNotice,
     ObservedTime,
+    OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
     SeenOrHeard,
@@ -702,3 +703,20 @@ class TestWithheldFromStrangersFromGame:
         )
 
         assert _translate(own).withheld_if_subject_unknown is False
+
+
+class TestOccurrenceOrderIsCarried:
+    """写す関数が、渡された起きた順を観測にそのまま入れることを保証する (design_decisions D1824-8)。"""
+
+    def test_every_translation_carries_the_given_order(self) -> None:
+        """観測、自分の行動の結果、1 手と同じ手番に届かない結果のどれも、渡した起きた順を持つ。"""
+        order = OccurrenceOrder(environment="浜辺の村", value=1.5)
+        result = ActionResultEntry(occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc), action_summary="待った", result_summary="様子を見た", success=True, tool_name="wait", game_time_label="一日目の朝 0:10")
+
+        observations = [
+            observation_from_game(ObservationOutput(prose="鐘が鳴った", structured={"type": "distant_cue_appeared"}), tick=None, game_time_label="一日目の朝 0:10", observer=_NOAH, order=order),
+            observation_from_action_result(result, call_id="c", observer=_NOAH, order=order),
+            observation_from_unprompted_result(result, observer=_NOAH, order=order),
+        ]
+
+        assert [o.order for o in observations] == [order] * 3

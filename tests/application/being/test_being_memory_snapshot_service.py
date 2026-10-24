@@ -22,6 +22,7 @@ from ai_rpg_world.being.contract import (
     EnvironmentNotice,
     Observation,
     ObservedTime,
+    OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
     SeenOrHeard,
@@ -401,7 +402,7 @@ class TestPayloadKeyTables:
 
 
 def _every_field_short_term_memory() -> ShortTermMemory:
-    """5 つの経路、分かる欄と「不明」の両方、入れ子の引数、いきさつ 2 世代を含む短期記憶。"""
+    """5 つの経路、分かる欄と「不明」の両方、入れ子の引数、起きた順のあるものと無いもの、いきさつ 2 世代を含む短期記憶。"""
     def observation(route: object, **fields: object) -> Observation:
         base: dict[str, object] = {'body': 'ミオが坑道から戻ってきた', 'route': route, 'time': ObservedTime(display='1日目 朝'), 'subject_is_self': False, 'subject_name': UNKNOWN, 'source': UNKNOWN, 'place': UNKNOWN, 'addressed_to_self': UNKNOWN}
         return Observation(**{**base, **fields})
@@ -409,9 +410,9 @@ def _every_field_short_term_memory() -> ShortTermMemory:
         RememberedEvent(turn=1, observation=observation(SeenOrHeard(), subject_name='ミオ', source='ミオ', place='坑道の入口', addressed_to_self=False, body_if_subject_unknown='誰かが坑道から戻ってきた', wants_wake=True, time=ObservedTime(display='1日目 朝', seconds=21600.0))),
         RememberedEvent(turn=1, observation=observation(ToldOrWritten(), subject_name='カイト', withheld_if_subject_unknown=True, wants_wake=False)),
         RememberedEvent(turn=1, observation=observation(OwnBodyState(), body='少し空腹だ', subject_is_self=True)),
-        RememberedEvent(turn=1, observation=observation(EnvironmentNotice(), body='日が暮れた')),
+        RememberedEvent(turn=1, observation=observation(EnvironmentNotice(), body='日が暮れた', order=OccurrenceOrder(environment='廃坑の山村', value=1729000000.25))),
         RememberedEvent(turn=1, observation=observation(OwnActionResult(call_id='call-1', succeeded=False), body='扉は開かなかった', subject_is_self=True, addressed_to_self=True), move=AgentMove(call_id='call-1', tool_name='interact', arguments={'target': '扉', 'options': {'force': True, 'tries': [1, 2.5, None, 'again']}}, expectation='扉が開く', inner_thought='鍵が要るかもしれない')),
-        RememberedEvent(turn=2, observation=observation(OwnActionResult(call_id='call-2', succeeded=True), body='挨拶した', subject_is_self=True), move=AgentMove(call_id='call-2', tool_name='speak', arguments={})),
+        RememberedEvent(turn=2, observation=observation(OwnActionResult(call_id='call-2', succeeded=True), body='挨拶した', subject_is_self=True, order=OccurrenceOrder(environment='廃坑の山村', value=1729000001.5)), move=AgentMove(call_id='call-2', tool_name='speak', arguments={})),
     )
     backstories = (Backstory(flow='坑道の奥で鍵を探していた', mood='少し焦っている', written_turn=20), Backstory(flow='鍵を見つけて村へ戻った', mood='', written_turn=30))
     return ShortTermMemory(events=events, backstories=backstories)
@@ -501,3 +502,21 @@ class TestShortTermMemoryPayload:
 
         with pytest.raises(BeingMemoryPayloadFormatError, match='being_short_term_memory'):
             svc.restore(being, json.dumps(payload))
+
+
+class TestOccurrenceOrderPayload:
+    """起きた順を足す前に保存した短期記憶も読めることを保証する (design_decisions D1824-8)。"""
+
+    def test_events_saved_before_the_order_was_added_restore_without_order(self) -> None:
+        """出来事の payload に order が無ければ、起きた順の無い出来事として戻る。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['short_term'].save(being, _every_field_short_term_memory())
+        payload = json.loads(src_svc.capture(being))
+        popped = [event['observation'].pop('order') for event in payload['being_short_term_memory'][0]['events']]
+        assert any(order is not None for order in popped)
+        (svc, stores) = _make_service()
+
+        svc.restore(being, json.dumps(payload))
+
+        assert all(e.observation.order is None for e in stores['short_term'].get(being).events)

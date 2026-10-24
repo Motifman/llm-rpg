@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -24,7 +24,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
-from ai_rpg_world.being.contract import AgentMove, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.contract import AgentMove, OccurrenceOrder, OwnActionResult, SeenOrHeard
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
@@ -65,6 +65,7 @@ class _World:
             being_id_of=lambda pid: ADA_BEING if pid == ADA else None,
             turn_reader=self.clock,
             observer_of=self._observer,
+            environment_of=lambda pid: "廃坑の山村",
             current_tick_provider=lambda: self.tick,
             trace_recorder_provider=lambda: self.recorder,
         )
@@ -239,6 +240,27 @@ class TestFailuresOutsideTheTranslation:
 
         (payload,) = world.recorder.not_copied()
         assert (payload["being_id"], payload["reason"], payload["error_type"]) == (None, "unexpected_error", "RuntimeError")
+
+
+class TestOccurrenceOrder:
+    """写した出来事が、今の環境の名前と、今の短期記憶が並べ直しに使う時刻を、起きた順として持つことを保証する (design_decisions D1824-8)。"""
+
+    def test_each_copied_event_carries_its_own_occurred_at_as_order(self) -> None:
+        """観測、1 手と対の結果、1 手を持たない結果は、どれも環境「廃坑の山村」と、それぞれの occurred_at の値を起きた順に持つ。"""
+        world = _World()
+        world.copy.on_appended(ADA, _observation())
+        world.clock.advance_turn(ADA_BEING)
+        provenance = _provenance()
+        with execution_provenance_scope(provenance):
+            world.copy.note_move(ADA, "interact", {"target": "扉"})
+        world.copy.on_appended(ADA, _result(provenance, occurred_at=_AT + timedelta(seconds=1)))
+        world.copy.on_appended(ADA, _result(None, occurred_at=_AT + timedelta(seconds=2)))
+
+        orders = [event.observation.order for event in world.events()]
+
+        assert orders == [
+            OccurrenceOrder(environment="廃坑の山村", value=(_AT + timedelta(seconds=s)).timestamp()) for s in (0, 1, 2)
+        ]
 
 
 class TestPlayersWithoutBeing:

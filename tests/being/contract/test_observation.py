@@ -14,6 +14,7 @@ from ai_rpg_world.being.contract import (
     EnvironmentNotice,
     Observation,
     ObservedTime,
+    OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
     SeenOrHeard,
@@ -207,13 +208,14 @@ class TestClosedContract:
     """観測の欄が契約で閉じていて、環境が欄を足したり後から書き換えたりできないことを保証する。"""
 
     def test_fields_are_exactly_the_contract(self) -> None:
-        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1・主体を知らない受け手向けの本文と届けない印の 2 の 11 個だけである。"""
+        """観測の欄は、必須 4・分かるなら書く 4・任意の助言 1・主体を知らない受け手向けの本文と届けない印の 2・その環境の中で起きた順 1 の 12 個だけである。"""
         names = {f.name for f in dataclasses.fields(Observation)}
 
         assert names == {
             "body", "route", "time", "subject_is_self",
             "subject_name", "source", "place", "addressed_to_self",
             "wants_wake", "body_if_subject_unknown", "withheld_if_subject_unknown",
+            "order",
         }
 
     def test_unexpected_field_cannot_be_added(self) -> None:
@@ -299,3 +301,63 @@ class TestWithheldIfSubjectUnknown:
         """bool でない値、自分が主体の観測、伏せた本文と一緒の指定は拒む (ContractViolation)。"""
         with pytest.raises(ContractViolation):
             Observation(**_fields(**overrides))
+
+
+class TestOccurrenceOrder:
+    """OccurrenceOrder (その環境の中で起きた順) が、同じ環境の中でだけ大小を比べられ、別の環境の値と比べると落ちることを保証する (design_decisions D1824-8)。"""
+
+    def test_orders_in_the_same_environment_compare_by_value(self) -> None:
+        """同じ環境の値どうしは、値の小さい方が先に起きたことになり、並べ替えられる。"""
+        first = OccurrenceOrder(environment="廃坑の山村", value=10.0)
+        later = OccurrenceOrder(environment="廃坑の山村", value=12.5)
+
+        assert first < later and later > first and first <= first
+        assert sorted([later, first]) == [first, later]
+
+    @pytest.mark.parametrize("compare", ["lt", "le", "gt", "ge"])
+    def test_comparing_orders_of_different_environments_fails(self, compare: str) -> None:
+        """別の環境の値と大小を比べると ContractViolation を投げる。環境ごとの時計は互いに比べられないため。"""
+        here = OccurrenceOrder(environment="廃坑の山村", value=10.0)
+        there = OccurrenceOrder(environment="水門の町", value=12.0)
+
+        with pytest.raises(ContractViolation):
+            getattr(here, f"__{compare}__")(there)
+
+    def test_comparing_with_something_other_than_an_order_fails(self) -> None:
+        """OccurrenceOrder 以外の値 (数など) と大小を比べると ContractViolation を投げる。"""
+        order = OccurrenceOrder(environment="廃坑の山村", value=10.0)
+
+        with pytest.raises(ContractViolation):
+            order < 12.0  # noqa: B015
+
+    def test_equality_does_not_fail_across_environments(self) -> None:
+        """同じ環境で同じ値なら等しく hash も一致する。別の環境の値とは、例外を投げずに等しくないとなる。"""
+        order = OccurrenceOrder(environment="廃坑の山村", value=10.0)
+
+        assert order == OccurrenceOrder(environment="廃坑の山村", value=10.0)
+        assert hash(order) == hash(OccurrenceOrder(environment="廃坑の山村", value=10.0))
+        assert order != OccurrenceOrder(environment="水門の町", value=10.0)
+
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"environment": " ", "value": 1.0},
+            {"environment": "廃坑の山村", "value": float("nan")},
+            {"environment": "廃坑の山村", "value": True},
+            {"environment": "廃坑の山村", "value": "1"},
+        ],
+        ids=["blank-environment", "nan", "bool", "str"],
+    )
+    def test_invalid_fields_are_rejected(self, fields: dict[str, Any]) -> None:
+        """環境の名前が空白だけ、値が有限の数でないときは ContractViolation を投げる。"""
+        with pytest.raises(ContractViolation):
+            OccurrenceOrder(**fields)
+
+    def test_observation_carries_an_optional_order(self) -> None:
+        """観測は起きた順を任意で持つ。渡さなければ None、OccurrenceOrder 以外は拒む。"""
+        order = OccurrenceOrder(environment="廃坑の山村", value=10.0)
+
+        assert Observation(**_fields()).order is None
+        assert Observation(**_fields(order=order)).order == order
+        with pytest.raises(ContractViolation):
+            Observation(**_fields(order=10.0))

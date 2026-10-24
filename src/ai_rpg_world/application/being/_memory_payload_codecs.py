@@ -20,6 +20,7 @@ from ai_rpg_world.being.contract import (
     FrozenJsonObject,
     Observation,
     ObservedTime,
+    OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
     SeenOrHeard,
@@ -205,6 +206,15 @@ def _none_to_unknown(value: Any) -> Any:
     return UNKNOWN if value is None else value
 
 
+def _order_to_dict(order: OccurrenceOrder | None) -> dict[str, Any] | None:
+    return None if order is None else {"environment": order.environment, "value": order.value}
+
+
+def _dict_to_order(data: dict[str, Any] | None) -> OccurrenceOrder | None:
+    """起きた順を足す前に保存した出来事は持たない (design_decisions D1824-8)。"""
+    return None if data is None else OccurrenceOrder(environment=data["environment"], value=data["value"])
+
+
 def _observation_to_dict(observation: Observation) -> dict[str, Any]:
     return {
         "body": observation.body,
@@ -218,6 +228,7 @@ def _observation_to_dict(observation: Observation) -> dict[str, Any]:
         "wants_wake": observation.wants_wake,
         "body_if_subject_unknown": observation.body_if_subject_unknown,
         "withheld_if_subject_unknown": observation.withheld_if_subject_unknown,
+        "order": _order_to_dict(observation.order),
     }
 
 
@@ -234,6 +245,7 @@ def _dict_to_observation(data: dict[str, Any]) -> Observation:
         wants_wake=data["wants_wake"],
         body_if_subject_unknown=data["body_if_subject_unknown"],
         withheld_if_subject_unknown=data["withheld_if_subject_unknown"],
+        order=_dict_to_order(data.get("order")),
     )
 
 
