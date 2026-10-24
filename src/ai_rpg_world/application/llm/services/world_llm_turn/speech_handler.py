@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     resolve_player_target,
 )
@@ -26,10 +27,12 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     SPEECH_CHANNEL_VALUES,
     SPEECH_CHANNEL_WHISPER,
 )
+from ai_rpg_world.application.speech.exceptions import SpeechCommandException
 from ai_rpg_world.application.speech.services.audience_feedback import (
     compact_audience_summary_text,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.exception import PlayerDownedException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
@@ -122,7 +125,18 @@ def handle_speech(
                     ),
                 )
 
-    wiring.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
+    try:
+        wiring.runtime.do_speech(player_id, content, channel_enum, target_player_id_obj)
+    except SpeechCommandException as exc:
+        # 手番を選ばれたあと、同じ tick の先行者に倒されることがある (design_decisions 47)。
+        if exc.error_code != PlayerDownedException.error_code:
+            raise
+        return LlmCommandResultDto(
+            success=False,
+            message="倒れていて声が出せません。",
+            error_code="SPEAKER_DOWN",
+            remediation=get_remediation("SPEAKER_DOWN"),
+        )
 
     audience_suffix = build_audience_summary(
         wiring, player_id, channel_enum, target_player_id_obj
