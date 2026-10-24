@@ -25,7 +25,7 @@ class HarvestDomainService:
         """
         採集の報酬付与とスタミナ消費を処理し、生成されたアイテムがあれば返す。
         """
-        events = []
+        events: list[DomainEvent] = []
         item_aggregate = None
 
         # スタミナ消費

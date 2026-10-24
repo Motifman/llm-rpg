@@ -3,11 +3,12 @@ Unit of Workインターフェース
 DDDにおけるトランザクション管理の抽象化を提供します。
 """
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+    from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 
 class UnitOfWork(Protocol):
@@ -29,7 +30,7 @@ class UnitOfWork(Protocol):
         pass
 
     @abstractmethod
-    def add_events(self, events: list["BaseDomainEvent[Any, Any]"]) -> None:
+    def add_events(self, events: Sequence["DomainEvent"]) -> None:
         """保留中のイベントを追加"""
         pass
 
@@ -42,7 +43,7 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を返す。flush_sync_events の複数回呼び出しで重複処理を防ぐ。"""
         ...
 
-    def get_pending_events_since(self, processed_count: int) -> tuple[list["BaseDomainEvent[Any, Any]"], int]:
+    def get_pending_events_since(self, processed_count: int) -> tuple[list["DomainEvent"], int]:
         """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
         ...
 
@@ -50,7 +51,7 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を進める。"""
         ...
 
-    def get_committed_events(self) -> list["BaseDomainEvent[Any, Any]"]:
+    def get_committed_events(self) -> list["DomainEvent"]:
         """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
         ...
 

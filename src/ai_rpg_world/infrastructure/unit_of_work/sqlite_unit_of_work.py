@@ -11,10 +11,11 @@ ReadModel 等は `Sqlite*Repository.for_shared_unit_of_work(connection)` で共�
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Union
 
-from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 
@@ -44,10 +45,10 @@ class SqliteUnitOfWork(UnitOfWork):
         self._owns_connection = connection is None
         self._conn: sqlite3.Connection | None = None
         self._in_transaction = False
-        self._pending_events: list[BaseDomainEvent[Any, Any]] = []
+        self._pending_events: list[DomainEvent] = []
         self._processed_sync_count = 0
         self._committed = False
-        self._committed_events: list[BaseDomainEvent[Any, Any]] = []
+        self._committed_events: list[DomainEvent] = []
         self._sync_event_dispatcher = sync_event_dispatcher
         self._poisoned = False
 
@@ -172,7 +173,7 @@ class SqliteUnitOfWork(UnitOfWork):
         if cleanup_error is not None:
             raise cleanup_error
 
-    def add_events(self, events: list[BaseDomainEvent[Any, Any]]) -> None:
+    def add_events(self, events: Sequence[DomainEvent]) -> None:
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
         self._pending_events.extend(events)
@@ -195,14 +196,14 @@ class SqliteUnitOfWork(UnitOfWork):
 
     def get_pending_events_since(
         self, processed_count: int
-    ) -> tuple[list[BaseDomainEvent[Any, Any]], int]:
+    ) -> tuple[list[DomainEvent], int]:
         events = self._pending_events[processed_count:]
         return (events, len(self._pending_events))
 
     def advance_sync_processed_count(self, new_count: int) -> None:
         self._processed_sync_count = new_count
 
-    def get_committed_events(self) -> list[BaseDomainEvent[Any, Any]]:
+    def get_committed_events(self) -> list[DomainEvent]:
         return self._committed_events.copy()
 
     def clear_committed_events(self) -> None:

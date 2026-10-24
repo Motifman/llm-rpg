@@ -15,12 +15,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BEING_ROOT = _REPO_ROOT / "src/ai_rpg_world/being"
 _CONTRACT_ROOT = _BEING_ROOT / "contract"
 
-_GAME_PACKAGES = (
-    "ai_rpg_world.domain",
-    "ai_rpg_world.application",
-    "ai_rpg_world.infrastructure",
-    "ai_rpg_world.presentation",
-)
 _TEMPORARY_EXCEPTIONS = (
     "ai_rpg_world.domain.being",
 )
@@ -38,7 +32,7 @@ def _imported_modules(path: Path, package: str) -> list[str]:
             modules.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             base = _resolve_from(node, package)
-            modules.append(base)
+            # 親の名前空間ではなく、実際に参照する名前で依存先を判定する。
             modules.extend(f"{base}.{alias.name}" for alias in node.names)
     return modules
 
@@ -76,7 +70,11 @@ def _violations(
 
 
 def _game_package_violations(root: Path) -> list[str]:
-    return _violations(root, allowed=_TEMPORARY_EXCEPTIONS, forbidden=_GAME_PACKAGES)
+    return _violations(
+        root,
+        allowed=(*_TEMPORARY_EXCEPTIONS, "ai_rpg_world.being", "ai_rpg_world.eventing"),
+        forbidden=("ai_rpg_world",),
+    )
 
 
 def _contract_violations(root: Path) -> list[str]:
@@ -154,7 +152,6 @@ def test_relative_import_reaching_game_package_is_reported(tmp_path: Path) -> No
     )
 
     assert _game_package_violations(tmp_path) == [
-        "module.py: ai_rpg_world.application.llm",
         "module.py: ai_rpg_world.application.llm.contracts",
     ]
 
@@ -175,3 +172,26 @@ def test_similarly_named_package_is_not_mistaken_for_exception(tmp_path: Path) -
     )
 
     assert len(_game_package_violations(tmp_path)) >= 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from ai_rpg_world.eventing import DomainEvent, AggregateRoot\n",
+        "from ai_rpg_world import eventing\n",
+        "from ai_rpg_world.eventing.domain_event import DomainEvent\n",
+        "from ..eventing import DomainEvent\n",
+    ],
+)
+def test_being_can_import_eventing(tmp_path: Path, source: str) -> None:
+    """Being は、共通のイベント基盤を絶対 import と相対 import のどちらでも使える。"""
+    (tmp_path / "module.py").write_text(source, encoding="utf-8")
+    assert _game_package_violations(tmp_path) == []
+
+
+def test_contract_cannot_import_eventing(tmp_path: Path) -> None:
+    """契約に eventing の import があれば、契約外への依存として報告する。"""
+    (tmp_path / "module.py").write_text(
+        "from ai_rpg_world.eventing import DomainEvent\n", encoding="utf-8"
+    )
+    assert _contract_violations(tmp_path)

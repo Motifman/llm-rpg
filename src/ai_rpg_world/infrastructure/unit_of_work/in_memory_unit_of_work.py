@@ -2,11 +2,11 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
 if TYPE_CHECKING:
@@ -51,11 +51,11 @@ class InMemoryUnitOfWork(UnitOfWork):
     ) -> None:
         self._in_transaction = False
         self._pending_operations: list[Callable[[], object]] = []
-        self._pending_events: list[BaseDomainEvent[Any, Any]] = []
+        self._pending_events: list[DomainEvent] = []
         self._pending_aggregates: dict[tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
         self._committed = False
-        self._committed_events: list[BaseDomainEvent[Any, Any]] = []
+        self._committed_events: list[DomainEvent] = []
         self._event_publisher = event_publisher
         self._data_store = data_store
         self._snapshot = None
@@ -244,7 +244,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
         self._pending_operations.append(operation)
 
-    def add_events(self, events: list[BaseDomainEvent[Any, Any]]) -> None:
+    def add_events(self, events: Sequence[DomainEvent]) -> None:
         """保留中のイベントを追加"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
@@ -260,7 +260,7 @@ class InMemoryUnitOfWork(UnitOfWork):
                 self._pending_events.extend(events)
             aggregate.clear_events()
 
-    def get_pending_events(self) -> list[BaseDomainEvent[Any, Any]]:
+    def get_pending_events(self) -> list[DomainEvent]:
         """保留中のイベントを取得（テスト用）"""
         return self._pending_events.copy()
 
@@ -280,7 +280,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         """同期イベント処理済み件数を返す。"""
         return self._processed_sync_count
 
-    def get_pending_events_since(self, processed_count: int) -> tuple[list[BaseDomainEvent[Any, Any]], int]:
+    def get_pending_events_since(self, processed_count: int) -> tuple[list[DomainEvent], int]:
         """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
         events = self._pending_events[processed_count:]
         return (events, len(self._pending_events))
@@ -289,7 +289,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         """同期イベント処理済み件数を進める。"""
         self._processed_sync_count = new_count
 
-    def get_committed_events(self) -> list[BaseDomainEvent[Any, Any]]:
+    def get_committed_events(self) -> list[DomainEvent]:
         """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
         return self._committed_events.copy()
 
