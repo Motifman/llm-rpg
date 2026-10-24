@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
     WorldLlmWiring,
 )
@@ -39,6 +40,7 @@ def handlers():
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
         short_term_memory=runtime._short_term_memory,
+        llm_client=StubLlmClient(None),
     )
     return dict(wiring._tool_handlers)
 
@@ -108,6 +110,7 @@ class TestTheWrappingActuallyWatchesEveryone:
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
+            llm_client=StubLlmClient(None),
         )
 
         assert seen, "ツールが 1 つも包まれていない"

@@ -541,10 +541,11 @@ class SpotGraphToolExecutor:
         )
 
     def _apply_fatigue_safe(self, player_id: int, amount: int) -> None:
-        """疲労蓄積を best-effort で適用する (PR β)。失敗時は silent。
+        """疲労蓄積を best-effort で適用する (PR β)。
 
-        action 成功時の post-処理として呼ぶ。repo 未注入や save 失敗で親
-        action を倒さないために silent (debug log 程度に留める)。
+        action 成功時の後処理として呼ぶ。保存に失敗しても親 action は倒さず、
+        確定済みの処理に続く後処理の失敗として trace に残す (design_decisions
+        D1558-2)。trace の記録先を持たない実行器では WARNING のログに残す。
         """
         if amount <= 0:
             return
@@ -562,11 +563,31 @@ class SpotGraphToolExecutor:
             # _get_status は repo 未注入なら None を返すので、status があれば repo もある
             assert self._player_status_repository is not None
             self._player_status_repository.save(status)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._record_fatigue_failure(exc, player_id)
+
+    def _record_fatigue_failure(self, exc: Exception, player_id: int) -> None:
+        if self._runtime is None:
+            logger.warning(
+                "fatigue was not saved (player_id=%s); continuing", player_id, exc_info=exc
+            )
+            return
+        try:
+            self._runtime._record_world_tick_follow_up_failure(
+                exc, stage="action.fatigue", target_kind="player", target_id=player_id, player_id=player_id
+            )
+        except Exception as stop:
+            # fail_fast の投げ直しも、記録できなかった失敗も、ツールの中からは run を止められない
+            # (phase_b が例外を失敗の結果に変えて続ける)。失敗の結果を返すと、確定済みの行動を
+            # LLM がもう一度出して二重に実行するので、行動は成功のまま返す。
+            logger.error(
+                "fatigue failure could not stop the run (player_id=%s); the action stays committed",
+                player_id,
+                exc_info=stop,
+            )
 
     def _recover_fatigue_safe(self, player_id: int, amount: int) -> None:
-        """疲労回復を best-effort で適用する (PR β)。"""
+        """疲労回復を best-effort で適用する (PR β)。保存の失敗の残し方は ``_apply_fatigue_safe`` と同じ。"""
         if amount <= 0:
             return
         status = self._get_status(player_id)
@@ -579,10 +600,10 @@ class SpotGraphToolExecutor:
             # _get_status は repo 未注入なら None を返すので、status があれば repo もある
             assert self._player_status_repository is not None
             self._player_status_repository.save(status)
-        except Exception:
+        except Exception as exc:
             if getattr(self, "_use_item_strict_effects", False):
                 raise
-            pass
+            self._record_fatigue_failure(exc, player_id)
 
     def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         return {
