@@ -358,3 +358,18 @@ class TestRevisingTheIndex:
             episode.revise_index(index, turn=turn)  # type: ignore[arg-type]
 
         assert (episode.index, len(episode.index_history), episode.get_events()) == (self.NEW_INDEX, 1, [])
+
+
+class TestFollows:
+    """Episode.follows が、同じ持ち主の、呼び出しと目次の直しだけで行き着ける版だけを後の版と認めることを保証する。"""
+
+    def test_a_recalled_copy_follows_the_original(self) -> None:
+        """同じ持ち主のエピソードを呼び出した版は、元の版の後の版になる。"""
+        later = _write()
+        later.recall(turn=9)
+
+        assert later.follows(_write()) is True
+
+    def test_the_same_episode_of_another_being_does_not_follow(self) -> None:
+        """ID も中身も同じでも、持ち主が違うエピソードは後の版ではない。"""
+        assert _write(being_id=BeingId("being_kai")).follows(_write()) is False
