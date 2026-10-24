@@ -24,9 +24,11 @@ from ai_rpg_world.application.observation.being_contract import (
     NotRepresentableReason,
     ObservationNotRepresentable,
     Observer,
+    lapse_body_and_time,
     observation_from_action_result,
     observation_from_game,
     observation_from_unprompted_result,
+    result_from_action_result,
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
@@ -44,6 +46,7 @@ from ai_rpg_world.being.contract import (
     SeenOrHeard,
     ToldOrWritten,
 )
+from ai_rpg_world.being.domain.short_term_memory import MemoryOperationResult
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _NOAH = Observer(
@@ -609,6 +612,107 @@ class TestAgentSideToolResult:
         )
 
         assert isinstance(observation.route, OwnActionResult)
+
+
+class TestResultFromActionResult:
+    """1 手の結果を、環境に働きかける道具なら自分の行動の結果の観測に、記憶の道具なら記憶の結果 (MemoryOperationResult) に写す規則を保証する (design_decisions D1824-9)。"""
+
+    def _entry(self, tool_name: str | None, **overrides: Any) -> ActionResultEntry:
+        fields: dict[str, Any] = {
+            "occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "action_summary": f"{tool_name}()",
+            "result_summary": "メモを追加しました（ID: ccd325…）。",
+            "success": True,
+            "tool_name": tool_name,
+            "game_time_label": "一日目の朝 0:10",
+            "occurred_tick": 2,
+        }
+        fields.update(overrides)
+        return ActionResultEntry(**fields)
+
+    def test_every_catalogued_tool_becomes_an_observation_or_a_memory_operation_result(self) -> None:
+        """道具のカタログの全道具について、環境に働きかける道具 (world_action) は自分の行動の結果の観測に、それ以外 (メモ・記憶・状況評価) は記憶の結果になる。どちらも渡した呼び出しの ID と起きた順を持つ。"""
+        order = OccurrenceOrder(environment="浜辺の村", value=1.5)
+
+        for name, category in _catalogued_tool_definitions().items():
+            result = result_from_action_result(self._entry(name), call_id="c", observer=_NOAH, order=order)
+            if category is ToolCategory.WORLD_ACTION:
+                assert result.route == OwnActionResult(call_id="c", succeeded=True), name  # type: ignore[union-attr]
+            else:
+                assert isinstance(result, MemoryOperationResult), name
+                assert (result.call_id, result.order) == ("c", order), name
+
+    def test_memory_operation_result_keeps_the_line_body_and_time(self) -> None:
+        """記憶の結果の本文は、直近の出来事の行から時刻と心の声を除いた文。時刻は表示と、記録した tick から求めた秒を持つ。"""
+        entry = self._entry("memo_add")
+
+        result = result_from_action_result(entry, call_id="c", observer=_NOAH)
+
+        assert result == MemoryOperationResult(
+            call_id="c",
+            body=format_action_result_body(entry),
+            time=ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick),  # type: ignore[operator]
+        )
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"action_summary": " ", "result_summary": " "}, NotRepresentableReason.EMPTY_BODY),
+            ({"game_time_label": None}, NotRepresentableReason.MISSING_TIME_LABEL),
+        ],
+        ids=["empty-body", "no-time-label"],
+    )
+    def test_memory_operation_result_without_body_or_time_is_not_representable(
+        self, overrides: dict[str, Any], reason: NotRepresentableReason
+    ) -> None:
+        """記憶の道具の結果でも、本文が空か時刻が無ければ写せない。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            result_from_action_result(self._entry("memo_add", **overrides), call_id="c", observer=_NOAH)
+
+        assert (raised.value.reason, raised.value.kind) == (reason, "memo_add")
+
+
+class TestLapseBodyAndTime:
+    """1 手を出せなかったときに環境が残す行 (迷い、一瞬の空白) から、出せなかったことの本文と時刻を取り出す規則を保証する (design_decisions D1824-9)。"""
+
+    def _entry(self, **overrides: Any) -> ActionResultEntry:
+        fields: dict[str, Any] = {
+            "occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "action_summary": "迷い",
+            "result_summary": "何をするか決めきれず、時間が過ぎた。",
+            "success": False,
+            "tool_name": "迷い",
+            "game_time_label": "一日目の朝 0:10",
+            "occurred_tick": 2,
+        }
+        fields.update(overrides)
+        return ActionResultEntry(**fields)
+
+    def test_body_is_the_line_and_time_has_seconds(self) -> None:
+        """本文は直近の出来事の行から時刻と心の声を除いた文。時刻は表示と、記録した tick から求めた秒を持つ。"""
+        entry = self._entry()
+
+        body, time = lapse_body_and_time(entry, observer=_NOAH)
+
+        assert body == format_action_result_body(entry)
+        assert time == ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick)  # type: ignore[operator]
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"action_summary": " ", "result_summary": " "}, NotRepresentableReason.EMPTY_BODY),
+            ({"game_time_label": " "}, NotRepresentableReason.MISSING_TIME_LABEL),
+        ],
+        ids=["empty-body", "no-time-label"],
+    )
+    def test_line_without_body_or_time_is_not_representable(
+        self, overrides: dict[str, Any], reason: NotRepresentableReason
+    ) -> None:
+        """本文が空か時刻が無ければ写せない。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            lapse_body_and_time(self._entry(**overrides), observer=_NOAH)
+
+        assert raised.value.reason is reason
 
 
 def _catalogued_tool_definitions() -> dict[str, ToolCategory]:

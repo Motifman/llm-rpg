@@ -7,14 +7,18 @@ from pathlib import Path
 from typing import Any
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_WAIT
+from ai_rpg_world.application.llm.services.world_llm_turn.types import WORLD_ACTION_HESITATION
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_EPISODE_RECALL,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
+)
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.being.domain.short_term_memory import Attempt, Perception
+from ai_rpg_world.being.domain.short_term_memory import Attempt, Lapse, MemoryOperationResult, Perception
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from tests.judgment_helpers import ScriptedJudgmentPort
@@ -24,7 +28,12 @@ _DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_d
 _ME = PlayerId(1)
 
 
-def _game(*, copy: bool = True) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
+_WAIT = {"name": TOOL_NAME_SPOT_GRAPH_WAIT, "arguments": {"inner_thought": "様子を見る"}}
+
+
+def _game(
+    *, copy: bool = True, tool_call: dict[str, Any] | None = _WAIT
+) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
     runtime = create_world_runtime(_DRILL, config=ResolvedLlmRuntimeConfig.for_tests())
     recorder = RecordingTraceRecorder()
     runtime.set_trace_recorder(recorder)
@@ -35,9 +44,7 @@ def _game(*, copy: bool = True) -> tuple[Any, _WorldLlmWiring, RecordingTraceRec
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
         short_term_memory=runtime._short_term_memory,
-        llm_client=StubLlmClient(
-            {"name": TOOL_NAME_SPOT_GRAPH_WAIT, "arguments": {"inner_thought": "様子を見る"}}
-        ),
+        llm_client=StubLlmClient(tool_call),
         typed_judgment_port=ScriptedJudgmentPort(),
     )
     return runtime, wiring, recorder
@@ -105,3 +112,35 @@ class TestCopyInTheRuntime:
             _turn(wiring)
 
         assert with_copy.build_full_prompt(_ME)["messages"] == without_copy.build_full_prompt(_ME)["messages"]
+
+
+class TestMemoryOperationsAndLapsesInTheRuntime:
+    """本番の手番の流れで、記憶の道具の 1 手と、1 手を出せなかったことが Being 側の短期記憶に入ることを保証する (design_decisions D1824-9)。"""
+
+    def test_memory_tool_move_is_kept_with_its_memory_operation_result(self) -> None:
+        """エピソードを思い出す 1 手を選ぶと、その 1 手と組の Attempt が、記憶の結果を持って番号 1 で入る。写せなかった trace は残らない。"""
+        runtime, wiring, recorder = _game(
+            tool_call={"name": TOOL_NAME_EPISODE_RECALL, "arguments": {"handles": ["鍵のこと"], "inner_thought": "思い出す"}}
+        )
+
+        _turn(wiring)
+
+        being_id = runtime._acting_being_for(_ME).being_id
+        (attempt,) = [e for e in runtime._being_short_term_memory_store.get(being_id).experiences if isinstance(e, Attempt)]
+        assert (attempt.turn, attempt.move.tool_name) == (1, TOOL_NAME_EPISODE_RECALL)
+        assert isinstance(attempt.result, MemoryOperationResult)
+        assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []
+
+    def test_turn_without_a_tool_call_is_kept_as_a_lapse(self) -> None:
+        """LLM が道具を選ばなかった手番は、迷いの行が番号 1 の Lapse として入り、結果を待つ 1 手は無い。写せなかった trace は残らない。"""
+        runtime, wiring, recorder = _game(tool_call=None)
+
+        _turn(wiring)
+
+        being_id = runtime._acting_being_for(_ME).being_id
+        memory = runtime._being_short_term_memory_store.get(being_id)
+        (lapse,) = [e for e in memory.experiences if isinstance(e, Lapse)]
+        assert lapse.turn == 1
+        assert WORLD_ACTION_HESITATION in lapse.body
+        assert memory.awaiting is None
+        assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []

@@ -34,6 +34,7 @@ from ai_rpg_world.being.contract import (
     ToldOrWritten,
     UnknownValue,
 )
+from ai_rpg_world.being.domain.short_term_memory import MemoryOperationResult
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -192,6 +193,28 @@ def observation_from_action_result(
     )
 
 
+def result_from_action_result(
+    entry: ActionResultEntry,
+    *,
+    call_id: str,
+    observer: Observer,
+    order: OccurrenceOrder | None = None,
+) -> Observation | MemoryOperationResult:
+    """1 手の結果。記憶の道具 (メモ、エピソード、状況の評価) なら Being の記憶が返した結果、それ以外は自分の行動の結果の観測 (design_decisions D1824-9)。
+
+    記憶の道具は手書きの一覧で見分ける。道具のカタログの分類 (world_action でないもの) と一致することは試験が見張る。
+    """
+    if not _is_agent_side_tool(entry.tool_name):
+        return observation_from_action_result(entry, call_id=call_id, observer=observer, order=order)
+    body, time = _body_and_time(entry, observer=observer)
+    return MemoryOperationResult(call_id=call_id, body=body, time=time, order=order)
+
+
+def lapse_body_and_time(entry: ActionResultEntry, *, observer: Observer) -> tuple[str, ObservedTime]:
+    """1 手を出せなかったときに環境が残す行 (迷い、一瞬の空白) の本文と時刻。"""
+    return _body_and_time(entry, observer=observer)
+
+
 def observation_from_unprompted_result(
     entry: ActionResultEntry, *, observer: Observer, order: OccurrenceOrder | None = None
 ) -> Observation:
@@ -206,18 +229,11 @@ def _observation_from_result(
         raise ObservationNotRepresentable(
             NotRepresentableReason.BEING_INNER_RECORD, entry.tool_name
         )
-    if not (entry.result_summary.strip() or entry.action_summary.strip()):
-        raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, entry.tool_name)
-    if entry.game_time_label is None or not entry.game_time_label.strip():
-        raise ObservationNotRepresentable(
-            NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name
-        )
+    body, time = _body_and_time(entry, observer=observer)
     return Observation(
-        body=format_action_result_body(entry),
+        body=body,
         route=route,
-        time=_observed_time(
-            entry.occurred_tick, entry.game_time_label, observer.seconds_per_tick
-        ),
+        time=time,
         subject_is_self=True,
         subject_name=observer.name,
         source=observer.name,
@@ -226,6 +242,17 @@ def _observation_from_result(
         wants_wake=entry.should_reschedule,
         order=order,
     )
+
+
+def _body_and_time(entry: ActionResultEntry, *, observer: Observer) -> tuple[str, ObservedTime]:
+    if not (entry.result_summary.strip() or entry.action_summary.strip()):
+        raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, entry.tool_name)
+    if entry.game_time_label is None or not entry.game_time_label.strip():
+        raise ObservationNotRepresentable(
+            NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name
+        )
+    time = _observed_time(entry.occurred_tick, entry.game_time_label, observer.seconds_per_tick)
+    return format_action_result_body(entry), time
 
 
 def _is_agent_side_tool(tool_name: str | None) -> bool:

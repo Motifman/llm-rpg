@@ -178,7 +178,7 @@ class TraceEventKind:
     EPISODE_WRITING = "episode_writing"
     # 今の短期記憶に入った出来事を、Being 側の短期記憶へ写さなかった (#1824、design_decisions D1824-7)。
     # 写さなかった 1 件ごとに 1 件。payload: being_id / source (observation / action_result /
-    # move) / reason (being_inner_record / empty_body / missing_time_label / no_agent_move /
+    # move) / reason (being_inner_record / empty_body / missing_time_label / unpaired_result /
     # memory_rule / contract_violation / unexpected_error) / event_kind (観測の種類か道具の名前。無ければ None)。
     # unexpected_error なら error_type も持つ。
     BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"

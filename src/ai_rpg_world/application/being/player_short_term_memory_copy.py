@@ -21,9 +21,10 @@ from ai_rpg_world.application.observation.being_contract import (
     ObservationNotRepresentable,
     Observer,
     agent_move_from_tool_call,
-    observation_from_action_result,
+    lapse_body_and_time,
     observation_from_game,
     observation_from_unprompted_result,
+    result_from_action_result,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
@@ -40,7 +41,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)
 
-REASON_NO_AGENT_MOVE = "no_agent_move"
 REASON_UNPAIRED_RESULT = "unpaired_result"
 REASON_MEMORY_RULE = "memory_rule"
 REASON_CONTRACT_VIOLATION = "contract_violation"
@@ -49,10 +49,6 @@ REASON_UNEXPECTED_ERROR = "unexpected_error"
 
 # 1 手を出せなかったときに、環境が結果の代わりに残す行の道具の名前 (phase_b)。
 _LAPSE_TOOL_NAMES = frozenset({WORLD_ACTION_HESITATION, WORLD_ACTION_MOMENTARY_BLANK})
-
-
-class _NoAgentMove(Exception):
-    pass
 
 
 class PlayerShortTermMemoryCopy:
@@ -110,8 +106,6 @@ class PlayerShortTermMemoryCopy:
             self._store.save(memory)
         except ObservationNotRepresentable as exc:
             self._not_copied(player_id, being_id, source=source, reason=exc.reason.value, event_kind=exc.kind)
-        except _NoAgentMove:
-            self._not_copied(player_id, being_id, source=source, reason=REASON_NO_AGENT_MOVE, event_kind=kind)
         except ShortTermMemoryUnpairedResultException:
             self._not_copied(player_id, being_id, source=source, reason=REASON_UNPAIRED_RESULT, event_kind=kind)
         except ShortTermMemoryValidationException:
@@ -163,16 +157,18 @@ class PlayerShortTermMemoryCopy:
             )
             memory.perceive(observation, current_turn=current_turn)
             return
+        if payload.tool_name in _LAPSE_TOOL_NAMES:
+            body, time = lapse_body_and_time(payload, observer=observer)
+            memory.lapse(body=body, time=time, current_turn=current_turn, order=order)
+            return
         provenance = payload.execution_provenance
         if provenance is None:
             observation = observation_from_unprompted_result(payload, observer=observer, order=order)
             memory.perceive(observation, current_turn=current_turn)
             return
-        result = observation_from_action_result(
+        result = result_from_action_result(
             payload, call_id=provenance.execution_request_id, observer=observer, order=order
         )
-        if payload.tool_name in _LAPSE_TOOL_NAMES:
-            raise _NoAgentMove
         memory.receive_result(result, current_turn=current_turn)
 
     def _not_copied(self, player_id: PlayerId, being_id: BeingId | None, **payload: Any) -> None:
