@@ -111,7 +111,7 @@ class TargetNotInSameSpotError(ItemTransferException):
     ) -> None:
         msg = (
             f"{target_name} は同じ場所にいません (あなたの現在地: {sender_spot_name})。"
-            f"travel_to で移動してから再度渡してください。"
+            f"相手のいる場所へ移ってから、もう一度渡してください。"
         )
         super().__init__(msg)
         self.target_name = target_name

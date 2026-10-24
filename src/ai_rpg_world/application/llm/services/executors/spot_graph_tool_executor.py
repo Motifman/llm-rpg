@@ -543,15 +543,12 @@ class SpotGraphToolExecutor:
         return LlmCommandResultDto(
             success=False,
             message=(
-                "疲労が限界に達してその場に崩れ落ちている。激しい行動 "
-                "(travel_to / attack / interact) は今できない。"
-                "wait や食事 (use_item) で回復してから動き直すこと。"
+                "疲労が限界に達してその場に崩れ落ちている。移動や争い、物への"
+                "働きかけのような激しい行動は今できない。休むか、何か食べて"
+                "回復してから動き直すこと。"
             ),
             error_code="EXHAUSTED",
-            remediation=(
-                "wait で休む / 食料や寝具系アイテムを use_item する / 仲間に"
-                "助けを求める speech で短期的に凌ぐ。回復したら再度試す。"
-            ),
+            remediation=get_remediation("EXHAUSTED"),
         )
 
     def _apply_fatigue_safe(self, player_id: int, amount: int) -> None:
@@ -874,13 +871,13 @@ class SpotGraphToolExecutor:
                         "新しい発見はなかった。"
                         f"{exhausted_hint}"
                         f"既に見えているオブジェクト: {visible_objects}"
-                        " (interact するにはこのオブジェクトの名前を target_label に指定する)"
+                        " (働きかけるときは、このオブジェクトの名前を target_label に指定する)"
                     )
                 else:
                     message = (
                         "新しい発見はなかった。"
                         f"{exhausted_hint}"
-                        "(この場所に interactable なオブジェクトは無い)"
+                        "(この場所に働きかけられるオブジェクトは無い)"
                     )
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -2755,7 +2752,7 @@ class SpotGraphToolExecutor:
                 # なので相手名だけ具体化)。
                 msg = (
                     f"{target_disp} は同じ場所にいません。"
-                    f"travel_to で移動してから再度渡してください。"
+                    f"相手のいる場所へ移ってから、もう一度渡してください。"
                 )
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
