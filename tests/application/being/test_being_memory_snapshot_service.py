@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     CURRENT_PAYLOAD_SCHEMA_VERSION,
     BeingMemoryPayloadFormatError,
@@ -191,14 +192,17 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         store = src_stores['being_episodes']
         first = Episode.write(episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='地下の金庫室', written_turn=3, index=EpisodeIndex(summary='金庫の番号を探した', recall_when='金庫や鍵の話が出たとき'), body='棚の裏に紙が貼ってあり、番号の半分だけが読めた。')
-        store.add(being, first.recalled_at(turn=5).recalled_at(turn=8).with_revised_index(EpisodeIndex(summary='番号の半分を見つけた', recall_when='数字を考えるとき'), turn=9))
+        first.recall(turn=5)
+        first.recall(turn=8)
+        first.revise_index(EpisodeIndex(summary='番号の半分を見つけた', recall_when='数字を考えるとき'), turn=9)
+        store.add(being, first)
         store.add(being, Episode.write(episode_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', environment_name='島', written_turn=12, index=EpisodeIndex(summary='浜で火をおこした', recall_when='寒いとき'), body='流木を集めて火をおこした。', taken_handles={first.handle}))
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
         dst_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000003', environment_name='島', written_turn=1, index=EpisodeIndex(summary='消えるはず', recall_when='消えるはず'), body='戻す前にあった記録'))
         dst_svc.restore(being, payload_json)
         restored = dst_stores['being_episodes'].list_by_being(being)
-        assert restored == store.list_by_being(being)
+        assert [being_episode_to_dict(e) for e in restored] == [being_episode_to_dict(e) for e in store.list_by_being(being)]
         assert [e.handle for e in restored] == ['ep_3f2a7b', 'ep_3f2a7bc']
 
     def test_no_being_episodes_round_trip_as_empty(self) -> None:
