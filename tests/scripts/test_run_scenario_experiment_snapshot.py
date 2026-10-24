@@ -255,3 +255,19 @@ class TestSnapshotTraceCarriesMemoryTurns:
             turns.append({c["being_id"]: c["memory_turn"] for c in counts})
         assert turns[0] == turns[1]
         assert any(turn > 0 for turn in turns[0].values())
+
+    def test_resumed_run_after_compaction_leaves_no_false_mismatch(self, tmp_path: Path) -> None:
+        """今の短期記憶が古いターンを畳んだあとで保存し、続きから再開しても、影は食い違いを残さない。再開した run では、今の文の行が同じ順で Being の文に含まれるかで比べるため (design_decisions D1824-10)。"""
+        from scripts.run_scenario_experiment import main
+
+        common = ["--profile", "smoke_stub", "--no-html", "--no-progress-jsonl", "--no-stderr-progress"]
+        snapshots = tmp_path / "snapshots"
+        # smoke_stub は 4 人が 4 tick に 1 回ずつ手番を持つ。84 tick で 1 人 21 手になり、20 手目で畳む。
+        assert main([*common, "--max-world-ticks", "84", "--out", str(tmp_path / "first"), "--snapshot-save-dir", str(snapshots)]) == 0
+        # 上限は世界の tick の通し番号なので、続きから 12 tick 回す。
+        assert main([*common, "--max-world-ticks", "96", "--out", str(tmp_path / "second"), "--snapshot-load-dir", str(snapshots)]) == 0
+
+        writes = self._events(tmp_path / "first" / "trace.jsonl", "episode_writing")
+        assert any(w["payload"]["trigger"] == "compaction" for w in writes)
+        assert self._events(tmp_path / "second" / "trace.jsonl", "prompt_section_breakdown") != []
+        assert self._events(tmp_path / "second" / "trace.jsonl", "recent_events_shadow_mismatch") == []

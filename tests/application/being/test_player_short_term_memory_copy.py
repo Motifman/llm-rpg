@@ -184,16 +184,15 @@ class TestNotCopied:
     @pytest.mark.parametrize(
         ("entry", "source", "reason", "kind"),
         [
-            (_observation("同じ行動が続いている", loop_guard=True), "observation", "being_inner_record", "loop_guard"),
             (_observation(" ", type="player_spoke"), "observation", "empty_body", "player_spoke"),
             (_observation("あなたは息を吹き返した", label=None, type="player_revived_post_hoc"), "observation", "missing_time_label", "player_revived_post_hoc"),
             (_result(None, tool_name="memo_add"), "action_result", "being_inner_record", "memo_add"),
             (_result(_provenance(), tool_name=WORLD_ACTION_HESITATION, action_summary=" ", result_summary=" "), "action_result", "empty_body", WORLD_ACTION_HESITATION),
         ],
-        ids=["loop-guard", "empty-observation", "no-time-label", "memo-result-without-move", "empty-lapse"],
+        ids=["empty-observation", "no-time-label", "memo-result-without-move", "empty-lapse"],
     )
     def test_rejected_event_is_traced_and_not_remembered(self, entry: UnifiedRecentEventEntry, source: str, reason: str, kind: str) -> None:
-        """警告、空の本文、時刻の無い観測、1 手を持たない記憶の道具の結果、本文の無い出せなかったときの行は写さず、trace に 1 件残す。"""
+        """空の本文、時刻の無い観測、1 手を持たない記憶の道具の結果、本文の無い出せなかったときの行は写さず、trace に 1 件残す。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
 

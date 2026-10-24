@@ -199,6 +199,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
         self._recent_events_projection = core.recent_events_projection
+        self._recent_events_shadow = core.recent_events_shadow
         self._recent_events_formatter = recent_events_formatter
         self._context_format_strategy = context_format_strategy
         self._system_prompt_builder = system_prompt_builder
@@ -391,6 +392,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_events_text = self._recent_events_formatter.format_unified_entries(
             projected_entries
         )
+        if self._recent_events_shadow is not None:
+            self._recent_events_shadow(player_id, recent_events_text)
 
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)

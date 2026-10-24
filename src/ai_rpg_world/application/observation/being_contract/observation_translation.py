@@ -136,15 +136,26 @@ def observation_from_game(
 ) -> Observation:
     structured = output.structured
     kind = _kind(structured)
-    # ループ警告はエージェント側の自己監視で、環境から届く観測ではない。経路の 5 つの
-    # どれにも当たらないので、選択肢を足さずに変換を拒む。
-    if structured.get("loop_guard") is True:
-        raise ObservationNotRepresentable(NotRepresentableReason.BEING_INNER_RECORD, "loop_guard")
     # 同じ出来事の目撃文が別に届くとき、ゲームは重複する汎用文を空にして送る。
     if not output.prose.strip():
         raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, kind)
     if game_time_label is None or not game_time_label.strip():
         raise ObservationNotRepresentable(NotRepresentableReason.MISSING_TIME_LABEL, kind)
+    # 繰り返しの警告は、出すかどうかを環境が判定する。自分についての環境からの知らせとして
+    # 渡す (design_decisions D1824-10)。
+    if structured.get("loop_guard") is True:
+        return Observation(
+            body=output.prose,
+            route=EnvironmentNotice(),
+            time=_observed_time(tick, game_time_label, observer.seconds_per_tick),
+            subject_is_self=True,
+            subject_name=observer.name,
+            source=UNKNOWN,
+            place=_known(observer.place_name),
+            addressed_to_self=True,
+            wants_wake=output.schedules_turn,
+            order=order,
+        )
 
     targets_self = _targets_self(structured, observer)
     route = _route(kind, output.observation_category, targets_self)

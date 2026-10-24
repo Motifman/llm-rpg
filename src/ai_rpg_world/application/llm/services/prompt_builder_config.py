@@ -88,6 +88,8 @@ class PromptBuilderCoreServices:
     system_prompt_builder: ISystemPromptBuilder
     available_tools_provider: IAvailableToolsProvider
     recent_events_projection: Callable[[PlayerId, list[Any]], tuple[list[Any], tuple[str, ...]]] | None = None
+    # 組んだ【直近の出来事】を、Being の短期記憶から作った文と並べて比べる (#1824 の影)。
+    recent_events_shadow: Callable[[PlayerId, str], None] | None = None
 
 
 @dataclass(frozen=True)
