@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final
 
+from ai_rpg_world.application.llm.contracts.chunk_encoding import format_action_result_body
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
@@ -172,21 +173,36 @@ def observation_from_game(
 def observation_from_action_result(
     entry: ActionResultEntry, *, call_id: str, observer: Observer
 ) -> Observation:
-    """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。"""
+    """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。
+
+    本文は直近の出来事の行から時刻と心の声を除いた文 (design_decisions D1824-7)。
+    """
+    return _observation_from_result(
+        entry, route=OwnActionResult(call_id=call_id, succeeded=entry.success), observer=observer
+    )
+
+
+def observation_from_unprompted_result(entry: ActionResultEntry, *, observer: Observer) -> Observation:
+    """移動の到着のように、1 手と同じ手番に届かない結果。呼び出しの ID を持たない経路で写す。"""
+    return _observation_from_result(entry, route=SeenOrHeard(), observer=observer)
+
+
+def _observation_from_result(
+    entry: ActionResultEntry, *, route: Route, observer: Observer
+) -> Observation:
     if _is_agent_side_tool(entry.tool_name):
         raise ObservationNotRepresentable(
             NotRepresentableReason.BEING_INNER_RECORD, entry.tool_name
         )
-    body = entry.result_summary.strip() or entry.action_summary.strip()
-    if not body:
+    if not (entry.result_summary.strip() or entry.action_summary.strip()):
         raise ObservationNotRepresentable(NotRepresentableReason.EMPTY_BODY, entry.tool_name)
     if entry.game_time_label is None or not entry.game_time_label.strip():
         raise ObservationNotRepresentable(
             NotRepresentableReason.MISSING_TIME_LABEL, entry.tool_name
         )
     return Observation(
-        body=body,
-        route=OwnActionResult(call_id=call_id, succeeded=entry.success),
+        body=format_action_result_body(entry),
+        route=route,
         time=_observed_time(
             entry.occurred_tick, entry.game_time_label, observer.seconds_per_tick
         ),

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -15,6 +15,7 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _Entry = TypeVar("_Entry", ObservationEntry, ActionResultEntry)
+AppendListener = Callable[[PlayerId, UnifiedRecentEventEntry], None]
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,25 @@ class UnifiedRecentEventStore:
         # ターン完了後から現在までに届いた open bucket になる。空ターンも
         # 0 として残すため、entry の有無ではターン数を代用しない。
         self._completed_turn_sizes: dict[int, list[int]] = {}
+        self._append_listeners: list[AppendListener] = []
+
+    def add_append_listener(self, listener: AppendListener) -> None:
+        """時系列に足した出来事を、足すたびに知らせる。
+
+        Being 側の短期記憶へ並べて書くための口 (design_decisions D1824-7)。未処理の
+        観測の預かりと、snapshot から戻す置き換えは知らせない。
+        """
+        if not callable(listener):
+            raise TypeError("listener must be callable")
+        self._append_listeners.append(listener)
+
+    def remove_append_listener(self, listener: AppendListener) -> None:
+        self._append_listeners.remove(listener)
+
+    def _append(self, player_id: PlayerId, entry: UnifiedRecentEventEntry) -> None:
+        self._entries.setdefault(self._key(player_id), []).append(entry)
+        for listener in self._append_listeners:
+            listener(player_id, entry)
 
     @staticmethod
     def _key(player_id: PlayerId) -> int:
@@ -49,10 +69,7 @@ class UnifiedRecentEventStore:
     ) -> None:
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
-        key = self._key(player_id)
-        self._entries.setdefault(key, []).append(
-            UnifiedRecentEventEntry.from_observation(entry)
-        )
+        self._append(player_id, UnifiedRecentEventEntry.from_observation(entry))
 
     def append_action_result(
         self,
@@ -63,11 +80,10 @@ class UnifiedRecentEventStore:
     ) -> list[ActionResultEntry]:
         if not isinstance(entry, ActionResultEntry):
             raise TypeError("entry must be ActionResultEntry")
-        key = self._key(player_id)
-        self._entries.setdefault(key, []).append(
-            UnifiedRecentEventEntry.from_action_result(entry)
+        self._append(player_id, UnifiedRecentEventEntry.from_action_result(entry))
+        return self._trim_kind(
+            self._key(player_id), "action_result", ActionResultEntry, max_entries
         )
-        return self._trim_kind(key, "action_result", ActionResultEntry, max_entries)
 
     def _trim_kind(
         self,
