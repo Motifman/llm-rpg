@@ -219,3 +219,46 @@ def test_stage_rejects_transaction_for_different_database(tmp_path: Path) -> Non
 
     assert _row(outbox_database, 1) is None
     assert _row(transaction_database, 1) is None
+
+
+@pytest.mark.parametrize("redelivery", [False, True])
+def test_durable_failure_keeps_pending_after_later_handler_succeeds(tmp_path: Path, redelivery: bool) -> None:
+    """初回配送・再送とも、再送必須の失敗後に後続が成功しても outbox は未配送のまま残る。"""
+    from ai_rpg_world.application.common.command_scope import CommandScope
+    from ai_rpg_world.application.common.event_delivery import DeliveryChannel, DeliveryGuarantee
+    from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+    from ai_rpg_world.application.common.outbox_worker import OutboxDeliveryException
+    from ai_rpg_world.infrastructure.events.command_event_dispatcher import CommandEventDispatcher
+    from ai_rpg_world.infrastructure.events.trade_outbox_worker_factory import build_trade_outbox_worker
+
+    database = tmp_path / "game.db"
+    _initialize(database)
+    transaction = SqliteUnitOfWorkTransactionAdapter(SqliteUnitOfWork(database=database))
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
+    later_calls: list[int] = []
+
+    def fail(event: TradeCancelledEvent) -> None:
+        raise RuntimeError("first failed")
+
+    for handler in (fail, lambda event: later_calls.append(event.event_id)):
+        dispatcher.register_after_commit(
+            TradeCancelledEvent, handler, channel=DeliveryChannel.READ_MODEL, guarantee=DeliveryGuarantee.DURABLE_RETRY
+        )
+    outbox = SqliteTransactionalOutbox(
+        database, serializer=TradeEventJsonSerializer(), is_durable=dispatcher.requires_durable_retry
+    )
+    if redelivery:
+        transaction.begin()
+        outbox.stage((_event(),), transaction)
+        transaction.commit()
+        with pytest.raises(OutboxDeliveryException):
+            build_trade_outbox_worker(database, dispatcher).run_once()
+    else:
+        with pytest.raises(CommandPostCommitException):
+            with CommandScope(
+                transaction, sync_dispatcher=dispatcher, after_commit_handoff=dispatcher, transactional_outbox=outbox
+            ) as context:
+                context.collect(_event())
+
+    assert later_calls == [1]
+    assert _row(database, 1)["status"] == "pending"

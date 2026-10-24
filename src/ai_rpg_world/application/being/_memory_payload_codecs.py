@@ -103,10 +103,14 @@ def being_episode_to_dict(episode: Episode) -> dict[str, Any]:
     }
 
 
-def dict_to_being_episode(data: dict[str, Any]) -> Episode:
-    """呼び名は ID から作り直さない。伸ばした呼び名が 6 文字に戻ると、前の呼び名が別の記録を指す。"""
+def dict_to_being_episode(data: dict[str, Any], *, being_id: BeingId) -> Episode:
+    """呼び名は ID から作り直さない。伸ばした呼び名が 6 文字に戻ると、前の呼び名が別の記録を指す。
+
+    持ち主は payload に書かず、戻す先の Being の ID を使う。payload は Being ごとに 1 本なので。
+    """
     try:
         return Episode(
+            being_id=being_id,
             episode_id=data["episode_id"],
             handle=data["handle"],
             environment_name=data["environment_name"],

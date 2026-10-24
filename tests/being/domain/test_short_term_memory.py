@@ -33,6 +33,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     ShortTermMemoryValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 ADA = BeingId("being_p1")
 
@@ -399,7 +400,16 @@ class TestFold:
 
 
 class TestEvents:
-    """ShortTermMemory が、ためたイベントをゲームの集約と同じ口 (get_events / clear_events) で渡すことを保証する。"""
+    """ShortTermMemory が、ためたイベントをイベント基盤 (eventing) の AggregateRoot の get_events / clear_events で渡すことを保証する。"""
+
+    def test_memory_and_event_are_on_the_eventing_base(self) -> None:
+        """短期記憶はイベント基盤の AggregateRoot を継ぎ、ためた「出来事を外した」イベントは共通の DomainEvent を継ぐ (design_decisions D1837 の 2・3)。"""
+        memory = TestFold._one_result_per_turn(20)
+
+        memory.fold(current_turn=20)
+
+        (event,) = memory.get_events()
+        assert isinstance(memory, AggregateRoot) and isinstance(event, DomainEvent)
 
     def test_clear_events_empties_the_pending_events(self) -> None:
         """clear_events() のあとは get_events() が空になり、中身は変わらない。"""

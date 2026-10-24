@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # circular import 回避 (= Phase 9-4c test と同じ順序)
+from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
     DefaultActionResultStore,
 )
@@ -31,20 +32,17 @@ class TestBeingEpisodesCrossRuns:
         being_id = source.aux_being_resolver.resolve_being_id(
             source.aux_being_default_world_id, ada
         )
-        episode = (
-            Episode.write(
-                episode_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
-                environment_name="島",
-                written_turn=2,
-                index=EpisodeIndex(summary="浜で火をおこした", recall_when="寒いとき"),
-                body="流木を集めて火をおこした。",
-            )
-            .recalled_at(turn=4)
-            .with_revised_index(
-                EpisodeIndex(summary="流木で火をおこした", recall_when="火が要るとき"), turn=5
-            )
+        episode = Episode.write(
+            being_id=being_id,
+            episode_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+            environment_name="島",
+            written_turn=2,
+            index=EpisodeIndex(summary="浜で火をおこした", recall_when="寒いとき"),
+            body="流木を集めて火をおこした。",
         )
-        source._being_episode_store.add(being_id, episode)
+        episode.recall(turn=4)
+        episode.revise_index(EpisodeIndex(summary="流木で火をおこした", recall_when="火が要るとき"), turn=5)
+        source._being_episode_store.add(episode)
         ExperimentSnapshotSession(
             wiring_result=_wiring_stub_from_world_runtime(source),
             snapshot_dir=tmp_path,
@@ -56,4 +54,6 @@ class TestBeingEpisodesCrossRuns:
             snapshot_dir=tmp_path,
         ).restore_all_from_dir(tmp_path)
 
-        assert restored._being_episode_store.list_by_being(being_id) == (episode,)
+        assert [being_episode_to_dict(e) for e in restored._being_episode_store.list_by_being(being_id)] == [
+            being_episode_to_dict(episode)
+        ]

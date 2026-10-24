@@ -75,7 +75,7 @@ def _scope_factory(
     store: InMemoryDataStore,
     handlers: Sequence[Callable[[ItemSpoiledEvent], None]],
 ) -> CommandScopeFactory:
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     for handler in handlers:
         dispatcher.register_after_commit(
             ItemSpoiledEvent,

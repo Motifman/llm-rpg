@@ -6,6 +6,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from enum import Enum
 from types import MappingProxyType
 
@@ -15,6 +16,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     MemoValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 MEMO_TEXT_MAX_LENGTH = 60
 HANDLE_PREFIX = "m_"
@@ -164,35 +166,73 @@ def _require_known_episode(
         raise MemoValidationException(f"no episode {provenance.source_from!r}")
 
 
-@dataclass(frozen=True)
-class MemoBook:
-    """Being ごとに 1 つ。分類ごとの件数の上限は、複数のメモにまたがる決まりなのでここで守る。
+@dataclass(frozen=True, kw_only=True)
+class MemoAdded(DomainEvent):
+    being_id: BeingId
+    memo: Memo
 
-    並びは書いた順。持ち主の ``BeingId`` は持たず、保存の側が Being ごとに分ける。
+
+@dataclass(frozen=True, kw_only=True)
+class MemoEdited(DomainEvent):
+    """``memo`` は書き換えたあとのメモ。"""
+
+    being_id: BeingId
+    memo: Memo
+
+
+@dataclass(frozen=True, kw_only=True)
+class MemoRemoved(DomainEvent):
+    being_id: BeingId
+    memo: Memo
+
+
+MemoBookEvent = MemoAdded | MemoEdited | MemoRemoved
+
+
+def _checked(memos: object) -> tuple[Memo, ...]:
+    if not isinstance(memos, tuple) or not all(isinstance(m, Memo) for m in memos):
+        raise MemoValidationException("memos must be a tuple of Memo")
+    for field_name in ("memo_id", "handle"):
+        values = [getattr(m, field_name) for m in memos]
+        if len(set(values)) != len(values):
+            raise MemoValidationException(f"the same {field_name} appears twice")
+    for kind, limit in KIND_LIMITS.items():
+        if sum(1 for m in memos if m.kind is kind) > limit:
+            raise MemoValidationException(f"more than {limit} {kind.value} memos")
+    return memos
+
+
+class MemoBook(AggregateRoot[MemoBookEvent]):
+    """Being ごとに 1 つある、メモを持つ集約。分類ごとの件数の上限は、複数のメモにまたがる決まりなのでここで守る。
+
+    並びは書いた順。操作は中身を書き換え、値を返さない。足した・書き換えた・消したメモは
+    イベントとしてためる。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。
     """
 
-    memos: tuple[Memo, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.memos, tuple) or not all(isinstance(m, Memo) for m in self.memos):
-            raise MemoValidationException("memos must be a tuple of Memo")
-        for field_name in ("memo_id", "handle"):
-            values = [getattr(m, field_name) for m in self.memos]
-            if len(set(values)) != len(values):
-                raise MemoValidationException(f"the same {field_name} appears twice")
-        for kind, limit in KIND_LIMITS.items():
-            if self._count(kind) > limit:
-                raise MemoValidationException(f"more than {limit} {kind.value} memos")
+    def __init__(self, being_id: BeingId, *, memos: tuple[Memo, ...] = ()) -> None:
+        super().__init__()
+        if not isinstance(being_id, BeingId):
+            raise MemoValidationException("being_id must be BeingId")
+        self._being_id = being_id
+        self._memos = _checked(memos)
 
     @classmethod
-    def empty(cls) -> MemoBook:
-        return cls()
+    def empty(cls, being_id: BeingId) -> MemoBook:
+        return cls(being_id)
+
+    @property
+    def being_id(self) -> BeingId:
+        return self._being_id
+
+    @property
+    def memos(self) -> tuple[Memo, ...]:
+        return self._memos
 
     def _count(self, kind: MemoKind) -> int:
-        return sum(1 for m in self.memos if m.kind is kind)
+        return sum(1 for m in self._memos if m.kind is kind)
 
     def find(self, handle: str) -> Memo | None:
-        for memo in self.memos:
+        for memo in self._memos:
             if memo.handle == handle:
                 return memo
         return None
@@ -213,7 +253,7 @@ class MemoBook:
         turn: int,
         environment_name: str,
         known_episode_handles: Collection[str] = (),
-    ) -> MemoBook:
+    ) -> None:
         """``known_episode_handles`` は、出どころに書けるエピソードの呼び名。"""
         if isinstance(kind, MemoKind) and self._count(kind) >= KIND_LIMITS[kind]:
             raise MemoLimitReachedException(
@@ -222,14 +262,22 @@ class MemoBook:
         _require_known_episode(provenance, known_episode_handles)
         memo = Memo(
             memo_id=memo_id,
-            handle=_handle_for(memo_id, {m.handle for m in self.memos}),
+            handle=_handle_for(memo_id, {m.handle for m in self._memos}),
             kind=kind,
             text=text,
             provenance=provenance,
             written_turn=turn,
             environment_name=environment_name,
         )
-        return MemoBook(memos=(*self.memos, memo))
+        self._memos = _checked((*self._memos, memo))
+        self.add_event(
+            MemoAdded(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
+                memo=memo,
+            )
+        )
 
     def edit(
         self,
@@ -239,7 +287,7 @@ class MemoBook:
         turn: int,
         provenance: MemoProvenance | None = None,
         known_episode_handles: Collection[str] = (),
-    ) -> MemoBook:
+    ) -> None:
         """``provenance`` を渡さなければ、分かったことでも前の出どころのまま。"""
         memo = self._require(handle)
         _require_known_episode(provenance, known_episode_handles)
@@ -252,23 +300,40 @@ class MemoBook:
             provenance=provenance if provenance is not None else memo.provenance,
             edited_turn=turn,
         )
-        return MemoBook(memos=tuple(edited if m is memo else m for m in self.memos))
+        self._memos = _checked(tuple(edited if m is memo else m for m in self._memos))
+        self.add_event(
+            MemoEdited(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
+                memo=edited,
+            )
+        )
 
-    def remove(self, handle: str) -> tuple[MemoBook, Memo]:
+    def remove(self, handle: str) -> None:
         memo = self._require(handle)
-        return MemoBook(memos=tuple(m for m in self.memos if m is not memo)), memo
+        self._memos = tuple(m for m in self._memos if m is not memo)
+        self.add_event(
+            MemoRemoved(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
+                memo=memo,
+            )
+        )
 
 
 class MemoBookRepository(ABC):
     @abstractmethod
     def get(self, being_id: BeingId) -> MemoBook:
-        """まだ何も書いていない Being には空のメモ帳を返す。"""
+        """まだ何も書いていない Being には空のメモ帳を返す。返した集約を書き換えても、``save`` するまで保存先は変わらない。"""
 
     @abstractmethod
-    def save(self, being_id: BeingId, book: MemoBook) -> None: ...
+    def save(self, book: MemoBook) -> None:
+        """保存したあとで渡した集約を書き換えても、保存先は変わらない。"""
 
     @abstractmethod
-    def replace_all_by_being(self, being_id: BeingId, book: MemoBook) -> None:
+    def replace_all_by_being(self, book: MemoBook) -> None:
         """記憶の持ち越しから戻すときに使う。空ならその Being の記録を消す。"""
 
 
@@ -276,10 +341,14 @@ __all__ = [
     "KIND_LIMITS",
     "MEMO_TEXT_MAX_LENGTH",
     "Memo",
+    "MemoAdded",
     "MemoBook",
+    "MemoBookEvent",
     "MemoBookRepository",
     "MemoCertainty",
+    "MemoEdited",
     "MemoKind",
     "MemoProvenance",
+    "MemoRemoved",
     "MemoSource",
 ]

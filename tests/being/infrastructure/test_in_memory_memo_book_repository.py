@@ -10,8 +10,9 @@ ADA = BeingId("being-ada")
 BEN = BeingId("being-ben")
 
 
-def _book(text: str = "事務所で鍵を取る") -> MemoBook:
-    return MemoBook.empty().add(
+def _book(being_id: BeingId = ADA, text: str = "事務所で鍵を取る") -> MemoBook:
+    book = MemoBook.empty(being_id)
+    book.add(
         memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
         kind=MemoKind.TODO,
         text=text,
@@ -19,47 +20,85 @@ def _book(text: str = "事務所で鍵を取る") -> MemoBook:
         turn=1,
         environment_name="水門の町",
     )
+    return book
+
+
+def _texts(book: MemoBook) -> list[str]:
+    return [m.text for m in book.memos]
 
 
 class TestInMemoryMemoBookRepository:
     """InMemoryMemoBookRepository が、Being ごとにメモ帳を 1 つ持ち、丸ごと置き換えることを保証する。"""
 
     def test_a_being_without_memos_gets_an_empty_book(self) -> None:
-        """まだ何も保存していない Being には、空のメモ帳を返す。"""
+        """まだ何も保存していない Being には、その Being の空のメモ帳を返す。"""
         repository = InMemoryMemoBookRepository()
 
-        assert repository.get(ADA) == MemoBook.empty()
+        book = repository.get(ADA)
+
+        assert (book.being_id, book.memos) == (ADA, ())
 
     def test_saved_book_comes_back_only_for_its_being(self) -> None:
-        """保存したメモ帳はその Being にだけ返り、別の Being は空のまま。"""
+        """保存したメモ帳は持ち主の Being にだけ返り、別の Being は空のまま。"""
         repository = InMemoryMemoBookRepository()
 
-        repository.save(ADA, _book())
+        repository.save(_book())
 
-        assert (repository.get(ADA), repository.get(BEN)) == (_book(), MemoBook.empty())
+        assert (_texts(repository.get(ADA)), repository.get(BEN).memos) == (["事務所で鍵を取る"], ())
 
     def test_save_replaces_the_whole_book(self) -> None:
         """もう一度保存すると、前のメモ帳を丸ごと置き換える。"""
         repository = InMemoryMemoBookRepository()
-        repository.save(ADA, _book())
+        repository.save(_book())
 
-        repository.save(ADA, _book("水門を見に行く"))
+        repository.save(_book(text="水門を見に行く"))
 
-        assert [m.text for m in repository.get(ADA).memos] == ["水門を見に行く"]
+        assert _texts(repository.get(ADA)) == ["水門を見に行く"]
 
     def test_replace_all_with_an_empty_book_leaves_no_memo(self) -> None:
         """持ち越しから空のメモ帳で戻すと、前に保存したメモは残らず、空のメモ帳を返す。"""
         repository = InMemoryMemoBookRepository()
-        repository.save(ADA, _book())
+        repository.save(_book())
 
-        repository.replace_all_by_being(ADA, MemoBook.empty())
+        repository.replace_all_by_being(MemoBook.empty(ADA))
 
-        assert repository.get(ADA) == MemoBook.empty()
+        assert repository.get(ADA).memos == ()
 
     def test_replace_all_puts_the_given_book(self) -> None:
         """持ち越しから戻すと、渡したメモ帳がそのまま入る。"""
         repository = InMemoryMemoBookRepository()
 
-        repository.replace_all_by_being(ADA, _book())
+        repository.replace_all_by_being(_book())
 
-        assert repository.get(ADA) == _book()
+        assert _texts(repository.get(ADA)) == ["事務所で鍵を取る"]
+
+
+class TestTheRepositoryHandsOutCopies:
+    """InMemoryMemoBookRepository が、出し入れのたびに写しを渡し、save し忘れた書き換えを保存したように見せないことを保証する。"""
+
+    def test_changing_a_fetched_book_without_saving_leaves_the_store(self) -> None:
+        """取り出したメモ帳を書き換えても、save しなければ、次に取り出したメモ帳は前のまま。"""
+        repository = InMemoryMemoBookRepository()
+        repository.save(_book())
+
+        repository.get(ADA).remove("m_3f2a7b")
+
+        assert _texts(repository.get(ADA)) == ["事務所で鍵を取る"]
+
+    def test_changing_a_book_after_saving_leaves_the_store(self) -> None:
+        """保存したあとで渡したメモ帳を書き換えても、保存先は保存した時のまま。"""
+        repository = InMemoryMemoBookRepository()
+        book = _book()
+        repository.save(book)
+
+        book.remove("m_3f2a7b")
+
+        assert _texts(repository.get(ADA)) == ["事務所で鍵を取る"]
+
+    def test_recorded_events_are_not_stored(self) -> None:
+        """ためたイベントは保存先に残らず、取り出したメモ帳はイベントを持たない。"""
+        repository = InMemoryMemoBookRepository()
+
+        repository.save(_book())
+
+        assert repository.get(ADA).get_events() == []

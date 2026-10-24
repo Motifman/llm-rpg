@@ -313,7 +313,9 @@ class BeingMemorySnapshotService:
                 "payload['acquaintances'] has the same person twice"
             )
         being_episodes = _decode_list(
-            payload["being_episodes"], dict_to_being_episode, "being_episodes"
+            payload["being_episodes"],
+            lambda data: dict_to_being_episode(data, being_id=being_id),
+            "being_episodes",
         )
         for field_name in ("episode_id", "handle"):
             values = [getattr(e, field_name) for e in being_episodes]
@@ -325,7 +327,7 @@ class BeingMemorySnapshotService:
             payload["being_memo_book"], dict_to_being_memo, "being_memo_book"
         )
         try:
-            being_memo_book = MemoBook(memos=tuple(being_memos))
+            being_memo_book = MemoBook(being_id, memos=tuple(being_memos))
         except MemoValidationException as exc:
             raise BeingMemoryPayloadFormatError(
                 f"payload['being_memo_book'] is not a valid memo book: {exc}"
@@ -347,7 +349,7 @@ class BeingMemorySnapshotService:
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
-        self._being_memo.replace_all_by_being(being_id, being_memo_book)
+        self._being_memo.replace_all_by_being(being_memo_book)
         self._being_short_term_memory.replace_all_by_being(short_term_memory)
 
 

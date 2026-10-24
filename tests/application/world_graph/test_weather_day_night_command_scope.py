@@ -101,7 +101,7 @@ def _scope_factory(
     fail_commit: bool = False,
     fail_after_commit: bool = False,
 ):
-    dispatcher = dispatcher or CommandEventDispatcher()
+    dispatcher = dispatcher or CommandEventDispatcher(failure_observer=lambda *args: None)
     return CommandScopeFactory[object](
         RollbackParticipantTransactionFactory(
             _TransactionFactory(
@@ -144,7 +144,7 @@ def test_weather_event_observes_committed_state() -> None:
         "state": WeatherState(WeatherTypeEnum.CLEAR, 0.5),
     }
     observed: list[tuple[WeatherState, WeatherState]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda event: observed.append((event.weather_state, holder["state"])),
@@ -174,7 +174,7 @@ def test_weather_commit_failure_restores_state_rng_and_skips_event() -> None:
     original = WeatherState(WeatherTypeEnum.CLEAR, 0.5)
     holder = {"state": original}
     observed: list[WeatherState] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda event: observed.append(event.weather_state),
@@ -208,7 +208,7 @@ def test_weather_event_handler_failure_keeps_committed_transition() -> None:
     """確定後の天候event処理失敗は遷移成功を失敗へ変えない。"""
     original = WeatherState(WeatherTypeEnum.CLEAR, 0.5)
     holder = {"state": original}
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda _event: (_ for _ in ()).throw(
@@ -241,7 +241,7 @@ def test_weather_post_commit_failure_still_notifies_committed_transition() -> No
         "state": WeatherState(WeatherTypeEnum.CLEAR, 0.5),
     }
     observed: list[WeatherState] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphWeatherChangedEvent,
         lambda event: observed.append(event.weather_state),
@@ -271,7 +271,7 @@ def test_weather_post_commit_failure_still_notifies_committed_transition() -> No
 def test_day_night_event_observes_committed_phase() -> None:
     """昼夜eventは新しいフェーズが確定した後にだけ配送される。"""
     observed: list[tuple[str, str]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     stage = SpotGraphDayNightStageService(_day_night_cycle())
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
@@ -296,7 +296,7 @@ def test_day_night_event_observes_committed_phase() -> None:
 def test_day_night_commit_failure_restores_phase_and_skips_event() -> None:
     """昼夜commit失敗は開始前フェーズへ戻り、成功eventを配送しない。"""
     observed: list[str] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
         lambda event: observed.append(event.new_time.phase_name),
@@ -321,7 +321,7 @@ def test_day_night_commit_failure_restores_phase_and_skips_event() -> None:
 
 def test_day_night_event_handler_failure_keeps_committed_phase() -> None:
     """確定後の昼夜event処理失敗はフェーズ遷移成功を失敗へ変えない。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
         lambda _event: (_ for _ in ()).throw(
@@ -346,7 +346,7 @@ def test_day_night_event_handler_failure_keeps_committed_phase() -> None:
 def test_day_night_post_commit_failure_still_notifies_committed_phase() -> None:
     """commit済み後処理失敗でも昼夜変更を通知し、確定後例外を維持する。"""
     observed: list[str] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotGraphDayNightPhaseChangedEvent,
         lambda event: observed.append(event.new_time.phase_name),

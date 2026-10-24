@@ -5,12 +5,14 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.eventing import AggregateRoot, DomainEvent
 
 INDEX_TEXT_MAX_LENGTH = 40
 BODY_MAX_LENGTH = 400
@@ -85,68 +87,118 @@ class IndexRevision:
 
 
 @dataclass(frozen=True, kw_only=True)
-class Episode:
-    """ターンは世界の時刻ではなく Being の記憶のターン数で、環境を跨いでも進み続ける。"""
+class EpisodeRecalled(DomainEvent):
+    """``recall_count`` は呼び出したあとの回数。"""
 
+    being_id: BeingId
     episode_id: str
     handle: str
-    environment_name: str
-    written_turn: int
-    index: EpisodeIndex
-    body: str
-    recall_count: int = 0
-    last_recalled_turn: int | None = None
-    index_history: tuple[IndexRevision, ...] = ()
+    turn: int
+    recall_count: int
 
-    def __post_init__(self) -> None:
-        hex_id = _id_hex(self.episode_id)
-        if not isinstance(self.handle, str):
+
+@dataclass(frozen=True, kw_only=True)
+class EpisodeIndexRevised(DomainEvent):
+    being_id: BeingId
+    episode_id: str
+    handle: str
+    previous: EpisodeIndex
+    index: EpisodeIndex
+    turn: int
+
+
+EpisodeEvent = EpisodeRecalled | EpisodeIndexRevised
+
+
+def _require_recalls(recall_count: object, last_recalled_turn: object, written_turn: int) -> None:
+    if not isinstance(recall_count, int) or isinstance(recall_count, bool) or recall_count < 0:
+        raise EpisodeValidationException("recall_count must be int >= 0")
+    if recall_count == 0:
+        if last_recalled_turn is not None:
+            raise EpisodeValidationException("last_recalled_turn must be None before any recall")
+        return
+    if last_recalled_turn is None:
+        raise EpisodeValidationException("last_recalled_turn is required after a recall")
+    _require_turn(last_recalled_turn, "last_recalled_turn")
+    assert isinstance(last_recalled_turn, int)
+    if last_recalled_turn < written_turn:
+        raise EpisodeValidationException("last_recalled_turn must be >= written_turn")
+
+
+def _require_history(index: object, index_history: object, written_turn: int) -> None:
+    if not isinstance(index, EpisodeIndex):
+        raise EpisodeValidationException("index must be EpisodeIndex")
+    if not isinstance(index_history, tuple):
+        raise EpisodeValidationException("index_history must be tuple")
+    floor = written_turn
+    for revision in index_history:
+        if not isinstance(revision, IndexRevision):
+            raise EpisodeValidationException("index_history must hold IndexRevision")
+        if revision.revised_turn < floor:
+            raise EpisodeValidationException(
+                "index_history must be ordered by revised_turn from written_turn"
+            )
+        floor = revision.revised_turn
+
+
+class Episode(AggregateRoot[EpisodeEvent]):
+    """1 件ずつ ID を持つ、目次つきのエピソードの集約。書いた Being の ID と、目次も持つ (design_decisions D1621)。
+
+    ターンは世界の時刻ではなく Being の記憶のターン数で、環境を跨いでも進み続ける。
+    呼び出しと目次の直しは中身を書き換え、値を返さず、イベントとしてためる。決まりに反する
+    操作は例外を投げ、中身もためたイベントも変えない。本文・呼び名・書いた時は変わらない。
+    """
+
+    def __init__(
+        self,
+        *,
+        being_id: BeingId,
+        episode_id: str,
+        handle: str,
+        environment_name: str,
+        written_turn: int,
+        index: EpisodeIndex,
+        body: str,
+        recall_count: int = 0,
+        last_recalled_turn: int | None = None,
+        index_history: tuple[IndexRevision, ...] = (),
+    ) -> None:
+        super().__init__()
+        if not isinstance(being_id, BeingId):
+            raise EpisodeValidationException("being_id must be BeingId")
+        hex_id = _id_hex(episode_id)
+        if not isinstance(handle, str):
             raise EpisodeValidationException("handle must be str")
-        id_part = self.handle.removeprefix(HANDLE_PREFIX)
+        id_part = handle.removeprefix(HANDLE_PREFIX)
         if (
-            not self.handle.startswith(HANDLE_PREFIX)
+            not handle.startswith(HANDLE_PREFIX)
             or len(id_part) < HANDLE_MIN_ID_LENGTH
             or not hex_id.startswith(id_part)
         ):
             raise EpisodeValidationException(
-                f"handle {self.handle!r} does not come from episode_id {self.episode_id!r}"
+                f"handle {handle!r} does not come from episode_id {episode_id!r}"
             )
-        _require_text(self.environment_name, "environment_name")
-        _require_turn(self.written_turn, "written_turn")
-        if not isinstance(self.index, EpisodeIndex):
-            raise EpisodeValidationException("index must be EpisodeIndex")
-        _require_text(self.body, "body", max_length=BODY_MAX_LENGTH)
-        if (
-            not isinstance(self.recall_count, int)
-            or isinstance(self.recall_count, bool)
-            or self.recall_count < 0
-        ):
-            raise EpisodeValidationException("recall_count must be int >= 0")
-        if self.recall_count == 0:
-            if self.last_recalled_turn is not None:
-                raise EpisodeValidationException("last_recalled_turn must be None before any recall")
-        else:
-            if self.last_recalled_turn is None:
-                raise EpisodeValidationException("last_recalled_turn is required after a recall")
-            _require_turn(self.last_recalled_turn, "last_recalled_turn")
-            if self.last_recalled_turn < self.written_turn:
-                raise EpisodeValidationException("last_recalled_turn must be >= written_turn")
-        if not isinstance(self.index_history, tuple):
-            raise EpisodeValidationException("index_history must be tuple")
-        floor = self.written_turn
-        for revision in self.index_history:
-            if not isinstance(revision, IndexRevision):
-                raise EpisodeValidationException("index_history must hold IndexRevision")
-            if revision.revised_turn < floor:
-                raise EpisodeValidationException(
-                    "index_history must be ordered by revised_turn from written_turn"
-                )
-            floor = revision.revised_turn
+        _require_text(environment_name, "environment_name")
+        _require_turn(written_turn, "written_turn")
+        _require_text(body, "body", max_length=BODY_MAX_LENGTH)
+        _require_recalls(recall_count, last_recalled_turn, written_turn)
+        _require_history(index, index_history, written_turn)
+        self._being_id = being_id
+        self._episode_id = episode_id
+        self._handle = handle
+        self._environment_name = environment_name
+        self._written_turn = written_turn
+        self._body = body
+        self._recall_count = recall_count
+        self._last_recalled_turn = last_recalled_turn
+        self._index = index
+        self._index_history = index_history
 
     @classmethod
     def write(
         cls,
         *,
+        being_id: BeingId,
         episode_id: str,
         environment_name: str,
         written_turn: int,
@@ -156,6 +208,7 @@ class Episode:
     ) -> Episode:
         """``taken_handles`` は同じ Being がもう使っている呼び名。"""
         return cls(
+            being_id=being_id,
             episode_id=episode_id,
             handle=_handle_for(episode_id, taken_handles),
             environment_name=environment_name,
@@ -164,19 +217,83 @@ class Episode:
             body=body,
         )
 
-    def recalled_at(self, *, turn: int) -> Episode:
+    @property
+    def being_id(self) -> BeingId:
+        return self._being_id
+
+    @property
+    def episode_id(self) -> str:
+        return self._episode_id
+
+    @property
+    def handle(self) -> str:
+        return self._handle
+
+    @property
+    def environment_name(self) -> str:
+        return self._environment_name
+
+    @property
+    def written_turn(self) -> int:
+        return self._written_turn
+
+    @property
+    def index(self) -> EpisodeIndex:
+        return self._index
+
+    @property
+    def body(self) -> str:
+        return self._body
+
+    @property
+    def recall_count(self) -> int:
+        return self._recall_count
+
+    @property
+    def last_recalled_turn(self) -> int | None:
+        return self._last_recalled_turn
+
+    @property
+    def index_history(self) -> tuple[IndexRevision, ...]:
+        return self._index_history
+
+    def recall(self, *, turn: int) -> None:
         _require_turn(turn, "turn")
-        floor = self.last_recalled_turn if self.last_recalled_turn is not None else self.written_turn
+        floor = self._last_recalled_turn if self._last_recalled_turn is not None else self._written_turn
         if turn < floor:
             raise EpisodeValidationException("turn must not go back before the last known turn")
-        return replace(self, recall_count=self.recall_count + 1, last_recalled_turn=turn)
+        self._recall_count += 1
+        self._last_recalled_turn = turn
+        self.add_event(
+            EpisodeRecalled(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
+                episode_id=self._episode_id,
+                handle=self._handle,
+                turn=turn,
+                recall_count=self._recall_count,
+            )
+        )
 
-    def with_revised_index(self, index: EpisodeIndex, *, turn: int) -> Episode:
+    def revise_index(self, index: EpisodeIndex, *, turn: int) -> None:
         _require_turn(turn, "turn")
-        return replace(
-            self,
-            index=index,
-            index_history=(*self.index_history, IndexRevision(previous=self.index, revised_turn=turn)),
+        history = (*self._index_history, IndexRevision(previous=self._index, revised_turn=turn))
+        _require_history(index, history, self._written_turn)
+        previous = self._index
+        self._index = index
+        self._index_history = history
+        self.add_event(
+            EpisodeIndexRevised(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
+                episode_id=self._episode_id,
+                handle=self._handle,
+                previous=previous,
+                index=index,
+                turn=turn,
+            )
         )
 
     def follows(self, earlier: Episode) -> bool:
@@ -195,6 +312,7 @@ class Episode:
         return (
             index_kept
             and recall_kept
+            and self.being_id == earlier.being_id
             and self.episode_id == earlier.episode_id
             and self.handle == earlier.handle
             and self.environment_name == earlier.environment_name
@@ -203,10 +321,11 @@ class Episode:
             and self.recall_count >= earlier.recall_count
         )
 
+
 class EpisodeRepository(ABC):
     @abstractmethod
-    def add(self, being_id: BeingId, episode: Episode) -> None:
-        """ID か呼び名がその Being の記録と重なれば ``EpisodeConflictException`` を投げる。"""
+    def add(self, episode: Episode) -> None:
+        """エピソードが持つ Being の記録に足す。ID か呼び名がその Being の記録と重なれば ``EpisodeConflictException`` を投げる。"""
 
     @abstractmethod
     def find_by_handle(self, being_id: BeingId, handle: str) -> Episode | None: ...
@@ -216,8 +335,8 @@ class EpisodeRepository(ABC):
         """足した順に返す。"""
 
     @abstractmethod
-    def save(self, being_id: BeingId, episode: Episode) -> None:
-        """同じ ID の記録を置き換える。並びの位置は変えない。
+    def save(self, episode: Episode) -> None:
+        """エピソードが持つ Being の、同じ ID の記録を置き換える。並びの位置は変えない。
 
         記録に無ければ ``EpisodeNotFoundException``、記録からの後の版でなければ
         (``Episode.follows``) ``EpisodeConflictException`` を投げる。
@@ -225,14 +344,20 @@ class EpisodeRepository(ABC):
 
     @abstractmethod
     def replace_all_by_being(self, being_id: BeingId, episodes: Sequence[Episode]) -> None:
-        """記憶の持ち越しから戻すときに使う。空ならその Being の記録を消す。"""
+        """記憶の持ち越しから戻すときに使う。空ならその Being の記録を消す。
+
+        ``being_id`` は空のときに誰の記録を消すかに要る。別の Being のエピソードが混ざっていれば ``EpisodeConflictException`` を投げる。
+        """
 
 
 __all__ = [
     "BODY_MAX_LENGTH",
     "INDEX_TEXT_MAX_LENGTH",
     "Episode",
+    "EpisodeEvent",
     "EpisodeIndex",
+    "EpisodeIndexRevised",
+    "EpisodeRecalled",
     "EpisodeRepository",
     "IndexRevision",
 ]

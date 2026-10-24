@@ -144,6 +144,7 @@ class EpisodeWriter:
         written: list[WrittenEpisode] = []
         for draft in drafts:
             episode = Episode.write(
+                being_id=being_id,
                 episode_id=self._new_episode_id(),
                 environment_name=environment_name,
                 written_turn=written_turn,
@@ -156,7 +157,7 @@ class EpisodeWriter:
             taken.add(episode.handle)
             written.append(WrittenEpisode(episode=episode, truncated=draft.truncated))
         for w in written:
-            self._repository.add(being_id, w.episode)
+            self._repository.add(w.episode)
         return EpisodeWritingResult(written=tuple(written), dropped_count=dropped)
 
 

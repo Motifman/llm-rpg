@@ -136,7 +136,7 @@ class TestEpisodeWriterSaving:
 
         saved = repository.list_by_being(ADA)
         assert [e.index.summary for e in saved] == ["棚の紙", "金庫が開いた"]
-        assert [w.episode for w in result.written] == list(saved)
+        assert [w.episode.episode_id for w in result.written] == [e.episode_id for e in saved]
         assert saved[0].index == EpisodeIndex(summary="棚の紙", recall_when="金庫の話が出たとき")
         assert saved[0].body == "紙の番号で金庫が開いた。"
 
@@ -163,13 +163,14 @@ class TestEpisodeWriterSaving:
         """その Being がもう使っている呼び名と重なる ID なら、新しい側の呼び名を伸ばす。"""
         repository = InMemoryEpisodeRepository()
         existing = Episode.write(
+            being_id=ADA,
             episode_id="3f2a7b9c-0000-4f00-8a00-000000000099",
             environment_name="港町",
             written_turn=1,
             index=EpisodeIndex(summary="前の記憶", recall_when="前の話のとき"),
             body="前のこと。",
         )
-        repository.add(ADA, existing)
+        repository.add(existing)
         writer, _ = _writer(_Completion({"episodes": [_item(), _item()]}), repository)
 
         result = _write(writer)

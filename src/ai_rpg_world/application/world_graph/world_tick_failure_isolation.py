@@ -197,9 +197,9 @@ class WorldTickFailureIsolator:
             raise exc
 
     def after_commit_failure_observer(
-        self, *, tick_provider: Callable[[], int]
+        self, *, tick_provider: Callable[[], int | None]
     ) -> AfterCommitFailureObserver:
-        """CommandEventDispatcher の best-effort な commit 後ハンドラの失敗を受ける口を返す。"""
+        """確定後の受け手の失敗を受ける口を返す。世界を持たない配送の tick は None とする。"""
 
         def observe(
             channel: DeliveryChannel,
@@ -209,10 +209,11 @@ class WorldTickFailureIsolator:
             error: Exception,
         ) -> None:
             del guarantee, handler
+            tick = tick_provider()
             self.record_continued_failure(
                 error,
                 stage=f"after_commit.{channel.value}",
-                tick=WorldTick(tick_provider()),
+                tick=None if tick is None else WorldTick(tick),
                 target_kind="domain_event",
                 target_id=type(event).__name__,
             )

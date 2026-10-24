@@ -5,9 +5,12 @@ from ai_rpg_world.being.application.episode_index_text import (
     format_episode_index,
 )
 from ai_rpg_world.being.domain.episode import Episode, EpisodeIndex
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ISLAND = "島"
 MINE = "廃坑の山村"
+
+ADA = BeingId("being_ada")
 
 
 def _episode(
@@ -19,6 +22,7 @@ def _episode(
     recalls: int = 0,
 ) -> Episode:
     episode = Episode.write(
+        being_id=ADA,
         episode_id=f"{number:06x}00-0000-4000-8000-000000000000",
         environment_name=environment_name,
         written_turn=1,
@@ -26,7 +30,7 @@ def _episode(
         body="本文",
     )
     for turn in range(recalls):
-        episode = episode.recalled_at(turn=2 + turn)
+        episode.recall(turn=2 + turn)
     return episode
 
 

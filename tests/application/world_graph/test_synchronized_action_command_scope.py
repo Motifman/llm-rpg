@@ -186,7 +186,7 @@ def _build_world(
     delivered_messages: list[
         tuple[str, str, tuple[int, ...], str, frozenset[str], tuple[str, str]]
     ] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def committed_state() -> tuple[frozenset[str], tuple[str, str]]:
         committed_graph = graph.find_graph()

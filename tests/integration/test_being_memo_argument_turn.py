@@ -45,6 +45,20 @@ def _game(memo: Any) -> tuple[Any, _WorldLlmWiring, RecordingTraceRecorder]:
     return runtime, wiring, recorder
 
 
+def _save_todos(runtime: Any, being_id: Any, *texts: str) -> None:
+    book = MemoBook.empty(being_id)
+    for n, text in enumerate(texts):
+        book.add(
+            memo_id=f"3f2a7b{n:02x}-1d2e-4f00-8a00-000000000001",
+            kind=MemoKind.TODO,
+            text=text,
+            provenance=None,
+            turn=0,
+            environment_name="駅",
+        )
+    runtime._being_memo_store.save(book)
+
+
 def _book(runtime: Any) -> MemoBook:
     acting = runtime._acting_being_for(_ME)
     return runtime._being_memo_store.get(acting.being_id)
@@ -90,17 +104,7 @@ class TestMemoArgumentInATurn:
         operation = {"do": "add", "kind": "todo", "text": "もう一つ"}
         runtime, wiring, recorder = _game([operation])
         acting = runtime._acting_being_for(_ME)
-        book = MemoBook.empty()
-        for n in range(KIND_LIMITS[MemoKind.TODO]):
-            book = book.add(
-                memo_id=f"{n:06x}aa-1d2e-4f00-8a00-000000000000",
-                kind=MemoKind.TODO,
-                text=f"用事{n}",
-                provenance=None,
-                turn=0,
-                environment_name="駅",
-            )
-        runtime._being_memo_store.save(acting.being_id, book)
+        _save_todos(runtime, acting.being_id, *(f"用事{n}" for n in range(KIND_LIMITS[MemoKind.TODO])))
 
         result = _turn(wiring)
 
@@ -112,21 +116,11 @@ class TestMemoArgumentInATurn:
         """消す操作は、消したメモの分類と文を trace に残す。"""
         runtime, wiring, recorder = _game([{"do": "remove", "id": "m_3f2a7b"}])
         acting = runtime._acting_being_for(_ME)
-        runtime._being_memo_store.save(
-            acting.being_id,
-            MemoBook.empty().add(
-                memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
-                kind=MemoKind.TODO,
-                text="鍵を取る",
-                provenance=None,
-                turn=0,
-                environment_name="駅",
-            ),
-        )
+        _save_todos(runtime, acting.being_id, "鍵を取る")
 
         _turn(wiring)
 
-        assert _book(runtime) == MemoBook.empty()
+        assert _book(runtime).memos == ()
         (event,) = recorder.payloads(TraceEventKind.BEING_MEMO)
         assert event["applied"][0] | {"provenance": None} == {
             "index": 0, "do": "remove", "handle": "m_3f2a7b", "kind": "todo", "text": "鍵を取る", "provenance": None
@@ -145,17 +139,7 @@ class TestMemoArgumentInATurn:
         """設定を書かなくても、済んだかの知らせがメモ帳のやることを見て、行動と重なるやることを知らせる。"""
         runtime, wiring, _ = _game(None)
         acting = runtime._acting_being_for(_ME)
-        runtime._being_memo_store.save(
-            acting.being_id,
-            MemoBook.empty().add(
-                memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
-                kind=MemoKind.TODO,
-                text="事務所で鍵を取る",
-                provenance=None,
-                turn=0,
-                environment_name="駅",
-            ),
-        )
+        _save_todos(runtime, acting.being_id, "事務所で鍵を取る")
         service = wiring.memo_completion_hint_service
         assert service is not None
         service.judgment_port = None
@@ -186,17 +170,7 @@ class TestMemoArgumentInATurn:
         runtime, wiring, _ = _game(memo)
         if not added_in_the_same_call:
             acting = runtime._acting_being_for(_ME)
-            runtime._being_memo_store.save(
-                acting.being_id,
-                MemoBook.empty().add(
-                    memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
-                    kind=MemoKind.TODO,
-                    text=summary,
-                    provenance=None,
-                    turn=0,
-                    environment_name="駅",
-                ),
-            )
+            _save_todos(runtime, acting.being_id, summary)
         service = wiring.memo_completion_hint_service
         assert service is not None
         service.judgment_port = None

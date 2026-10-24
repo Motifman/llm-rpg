@@ -47,6 +47,7 @@ class _Recorder(NullTraceRecorder):
 
 def _episode() -> Episode:
     return Episode.write(
+        being_id=ADA,
         episode_id="00000100-0000-4000-8000-000000000000",
         environment_name="島",
         written_turn=1,
@@ -55,15 +56,19 @@ def _episode() -> Episode:
     )
 
 
+def _unchanged(stored: Episode | None, episode: Episode) -> bool:
+    return stored is not None and (stored.index, stored.index_history) == (episode.index, episode.index_history)
+
+
 class _RefusingRepository(InMemoryEpisodeRepository):
-    def save(self, being_id: BeingId, episode: Episode) -> None:
+    def save(self, episode: Episode) -> None:
         raise EpisodeConflictException("refused")
 
 
 def _executor(turn: int = 5, repository: InMemoryEpisodeRepository | None = None):
     repository = repository or InMemoryEpisodeRepository()
     episode = _episode()
-    repository.add(ADA, episode)
+    repository.add(episode)
     recorder = _Recorder()
     executor = BeingEpisodeIndexRevisionToolExecutor(
         repository=repository,
@@ -125,7 +130,7 @@ class TestRevisingTheIndex:
 
         assert result.success is False
         assert "ep_ffffff" in result.message
-        assert repository.find_by_handle(ADA, episode.handle) == episode
+        assert _unchanged(repository.find_by_handle(ADA, episode.handle), episode)
         assert [(p["outcome"], p["reject_reason"]) for p in _traces(recorder)] == [("rejected", "unknown_handle")]
 
     @pytest.mark.parametrize(
@@ -145,9 +150,8 @@ class TestRevisingTheIndex:
         result = _run(executor, arguments)
 
         assert (result.success, result.error_code) == (False, "INVALID_ARGUMENT")
-        assert repository.find_by_handle(ADA, episode.handle) == episode
+        assert _unchanged(repository.find_by_handle(ADA, episode.handle), episode)
         assert [(p["outcome"], p["reject_reason"]) for p in _traces(recorder)] == [("rejected", "malformed")]
-
 
     def test_a_refused_save_is_reported_as_a_failure(self) -> None:
         """保存がドメインの決まりで断られたら、手番を止めずに INVALID_STATE を返し、失敗の型を trace に残す。"""

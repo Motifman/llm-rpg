@@ -67,7 +67,7 @@ def _build_stage(
     observed_hp: list[int],
 ) -> tuple[StatusEffectsTickStageService, InMemoryPlayerStatusRepository]:
     repository = InMemoryPlayerStatusRepository(store)
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe_after_commit(event: BaseDomainEvent) -> None:
         if isinstance(event, PlayerDownedEvent):

@@ -45,6 +45,7 @@ class _Recorder(NullTraceRecorder):
 
 def _episode(number: int, *, summary: str = "金庫の番号を探した", body: str = "棚の紙に 4 桁が書いてあった。") -> Episode:
     return Episode.write(
+        being_id=ADA,
         episode_id=f"{number:06x}00-0000-4000-8000-000000000000",
         environment_name="島",
         written_turn=1,
@@ -56,7 +57,7 @@ def _episode(number: int, *, summary: str = "金庫の番号を探した", body:
 def _executor(*episodes: Episode, turn: int = 5, max_handles: int = 3):
     repository = InMemoryEpisodeRepository()
     for episode in episodes:
-        repository.add(ADA, episode)
+        repository.add(episode)
     recorder = _Recorder()
     executor = BeingEpisodeRecallToolExecutor(
         repository=repository,

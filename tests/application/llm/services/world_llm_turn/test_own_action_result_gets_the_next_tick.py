@@ -156,6 +156,7 @@ def _write_hal_episode(session: _Session) -> Episode:
     )
     store = runtime._being_episode_store
     episode = Episode.write(
+        being_id=being_id,
         episode_id="00000100-0000-4000-8000-000000000000",
         environment_name=runtime.scenario.metadata.title,
         written_turn=0,
@@ -163,7 +164,7 @@ def _write_hal_episode(session: _Session) -> Episode:
         body="峠道が雪で閉ざされたときの本文。",
         taken_handles={e.handle for e in store.list_by_being(being_id)},
     )
-    store.add(being_id, episode)
+    store.add(episode)
     return episode
 
 

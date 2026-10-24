@@ -18,6 +18,7 @@ KAI = BeingId("being_kai")
 
 def _episode(episode_id: str, body: str) -> Episode:
     return Episode.write(
+        being_id=ADA,
         episode_id=episode_id,
         environment_name="地下の金庫室",
         written_turn=2,
@@ -32,8 +33,8 @@ KEY = _episode("aa11bb22-1d2e-4f00-8a00-000000000002", "鍵は井戸の底に落
 
 def _repo() -> InMemoryEpisodeRepository:
     repo = InMemoryEpisodeRepository()
-    repo.add(ADA, VAULT)
-    repo.add(ADA, KEY)
+    repo.add(VAULT)
+    repo.add(KEY)
     return repo
 
 
@@ -61,7 +62,12 @@ class TestRecallEpisodes:
         """返るエピソードは、回数を増やしたあとの版になる。"""
         (result,) = recall_episodes(_repo(), ADA, ["ep_3f2a7b"], turn=6)
 
-        assert result.episode == VAULT.recalled_at(turn=6)
+        assert result.episode is not None
+        assert (result.episode.episode_id, result.episode.recall_count, result.episode.last_recalled_turn) == (
+            VAULT.episode_id,
+            1,
+            6,
+        )
 
     def test_unknown_handle_returns_none_and_others_are_recalled(self) -> None:
         """知らない呼び名には None が返り、ほかの呼び名は通常どおり呼び出され、知らない呼び名のせいで記録は増えない。"""
@@ -101,13 +107,14 @@ class TestRecallEpisodes:
         """2 件目だけが書いた時より前のターンになる呼び出しは EpisodeValidationException を投げ、先に呼び出せた 1 件目の回数も増えない。"""
         repo = _repo()
         late = Episode.write(
+            being_id=ADA,
             episode_id="cc33dd44-1d2e-4f00-8a00-000000000003",
             environment_name="島",
             written_turn=5,
             index=EpisodeIndex(summary="浜で火をおこした", recall_when="寒いとき"),
             body="流木を集めた。",
         )
-        repo.add(ADA, late)
+        repo.add(late)
 
         with pytest.raises(EpisodeValidationException):
             recall_episodes(repo, ADA, ["ep_aa11bb", "ep_cc33dd"], turn=3)

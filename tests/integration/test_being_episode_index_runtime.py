@@ -72,6 +72,7 @@ def _write(runtime, pid, number: int, *, summary: str, written_turn: int = 0, en
     being_id = _being_of(runtime, pid)
     store = runtime._being_episode_store
     episode = Episode.write(
+        being_id=being_id,
         episode_id=f"{number:06x}00-0000-4000-8000-000000000000",
         environment_name=environment_name or runtime.scenario.metadata.title,
         written_turn=written_turn,
@@ -79,7 +80,7 @@ def _write(runtime, pid, number: int, *, summary: str, written_turn: int = 0, en
         body=f"{summary}ときの本文。",
         taken_handles={e.handle for e in store.list_by_being(being_id)},
     )
-    store.add(being_id, episode)
+    store.add(episode)
     return episode
 
 
