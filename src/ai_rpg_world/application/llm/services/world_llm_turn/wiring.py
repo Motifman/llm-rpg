@@ -23,7 +23,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.loop_diagnosis import LoopDiagnosis
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     DEFAULT_MIN_PROBABILITY,
@@ -121,7 +120,9 @@ class WorldLlmWiring:
     runtime: Any
     observation_buffer: Any
     short_term_memory: IShortTermMemory
-    llm_client: Any = field(default_factory=StubLlmClient)
+    #: 既定値を置かない。スタブを既定にすると、本番の配線で渡し忘れても黙って
+    #: スタブで動く。スタブで回す試験と smoke_stub は、明示して渡す。
+    llm_client: Any
     llm_session_run_id: str = "interactive"
     llm_session_world_id: str = "world"
     prompt_dataset_sink: Any | None = None
