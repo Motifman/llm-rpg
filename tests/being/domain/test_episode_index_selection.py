@@ -23,6 +23,11 @@ def _episode(number: int, written_turn: int) -> Episode:
     )
 
 
+def _recalled(episode: Episode, *, turn: int) -> Episode:
+    episode.recall(turn=turn)
+    return episode
+
+
 class TestNewestFirst:
     """NewestFirst が、エピソードの一覧から、書いた時の新しい順に N 件だけを返すことを保証する。"""
 
@@ -74,7 +79,7 @@ class TestRecalledRisesToTop:
 
     def test_recalled_old_episode_rises_above_newer_ones(self) -> None:
         """ターン 1 に書いてターン 8 に呼び出したエピソードは、ターン 5 と 3 に書いた呼び出されていないエピソードより上に来る。"""
-        old = _episode(1, 1).recalled_at(turn=8)
+        old = _recalled(_episode(1, 1), turn=8)
         episodes = [old, _episode(2, 3), _episode(3, 5)]
 
         chosen = RecalledRisesToTop().select(episodes, limit=3)
@@ -83,7 +88,7 @@ class TestRecalledRisesToTop:
 
     def test_unrecalled_episodes_sink_out_of_the_n(self) -> None:
         """呼び出されないまま、書いた時が呼び出しより古いエピソードは、N 件から外れる。"""
-        recalled = _episode(1, 1).recalled_at(turn=9)
+        recalled = _recalled(_episode(1, 1), turn=9)
         newer = _episode(2, 6)
         sunk = _episode(3, 4)
 
@@ -93,7 +98,7 @@ class TestRecalledRisesToTop:
 
     def test_episode_recalled_long_ago_sinks_below_newer_writing(self) -> None:
         """前に呼び出したエピソードも、その後に書いたエピソードより下になる。"""
-        recalled = _episode(1, 1).recalled_at(turn=3)
+        recalled = _recalled(_episode(1, 1), turn=3)
         newer = _episode(2, 7)
 
         chosen = RecalledRisesToTop().select([recalled, newer], limit=2)
@@ -102,7 +107,7 @@ class TestRecalledRisesToTop:
 
     def test_later_added_comes_first_within_the_same_turn(self) -> None:
         """書いた時か呼び出した時が同じターンなら、一覧で後ろにある (後から足した) ものが先に来る。"""
-        recalled = _episode(1, 1).recalled_at(turn=4)
+        recalled = _recalled(_episode(1, 1), turn=4)
         written = _episode(2, 4)
 
         chosen = RecalledRisesToTop().select([recalled, written], limit=2)

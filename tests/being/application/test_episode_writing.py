@@ -136,7 +136,7 @@ class TestEpisodeWriterSaving:
 
         saved = repository.list_by_being(ADA)
         assert [e.index.summary for e in saved] == ["棚の紙", "金庫が開いた"]
-        assert [w.episode for w in result.written] == list(saved)
+        assert [w.episode.episode_id for w in result.written] == [e.episode_id for e in saved]
         assert saved[0].index == EpisodeIndex(summary="棚の紙", recall_when="金庫の話が出たとき")
         assert saved[0].body == "紙の番号で金庫が開いた。"
 

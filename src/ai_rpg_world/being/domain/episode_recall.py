@@ -27,7 +27,7 @@ def recall_episodes(
     *,
     turn: int,
 ) -> tuple[RecallResult, ...]:
-    """呼び出したあとの版を返す。同じ呼び名は 1 回の呼び出しで 1 度だけ数え、結果も 1 件にする。
+    """保存先から取った写しを呼び出し、書き戻して、その写しを返す。同じ呼び名は 1 回の呼び出しで 1 度だけ数え、結果も 1 件にする。
 
     そのため結果の件数は ``handles`` の件数より少ないことがある。
 
@@ -39,9 +39,9 @@ def recall_episodes(
     results = []
     for handle in unique:
         found = repository.find_by_handle(being_id, handle)
-        results.append(
-            RecallResult(handle=handle, episode=None if found is None else found.recalled_at(turn=turn))
-        )
+        if found is not None:
+            found.recall(turn=turn)
+        results.append(RecallResult(handle=handle, episode=found))
     for result in results:
         if result.episode is not None:
             repository.save(being_id, result.episode)
