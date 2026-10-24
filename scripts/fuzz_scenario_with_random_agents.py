@@ -54,6 +54,11 @@ INTERNAL_NUMBER_PATTERNS: tuple[re.Pattern[str], ...] = (
 #: 世界の tick で 1 体ぶんの例外を取りやめて run を続けたときの trace (#1558)。止まらなくても例外として数える。
 WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
 
+#: Being 側の短期記憶へ写せなかったうち、規則の崩れか想定外の例外を表す理由 (design_decisions D1824-7)。
+#: 記憶の道具や 1 手の無い結果のような、決めたとおりに写さないものは数えない。
+BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
+BROKEN_COPY_REASONS = frozenset({"memory_rule", "contract_violation", "unexpected_error"})
+
 #: ターンの文を見て、穴を見つけたら説明の文を返す検査。シナリオごとに足す。
 TurnCheck = Callable[["TurnView"], Iterable[str]]
 
@@ -414,6 +419,8 @@ def _drive(
                 )
             elif kind == WORLD_TICK_UNIT_FAILED:
                 result.findings.append(FuzzFinding("exception", int(tick or 0), f"世界の tick で 1 体ぶん取りやめた: {_compact(payload)}"))
+            elif kind == BEING_SHORT_TERM_MEMORY_NOT_COPIED and payload.get("reason") in BROKEN_COPY_REASONS:
+                result.findings.append(FuzzFinding("exception", int(tick or 0), f"Being 側の短期記憶へ写せなかった: {_compact(payload)}"))
             elif kind == "action_result":
                 swallowed = _swallowed_exception(payload)
                 if swallowed:

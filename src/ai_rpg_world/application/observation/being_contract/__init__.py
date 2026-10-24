@@ -10,6 +10,7 @@ from ai_rpg_world.application.observation.being_contract.observation_translation
     Observer,
     observation_from_action_result,
     observation_from_game,
+    observation_from_unprompted_result,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "environment_entry_for_player",
     "observation_from_action_result",
     "observation_from_game",
+    "observation_from_unprompted_result",
 ]

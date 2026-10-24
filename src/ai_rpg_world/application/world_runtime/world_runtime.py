@@ -23,10 +23,14 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
+    from ai_rpg_world.application.being.player_short_term_memory_copy import (
+        PlayerShortTermMemoryCopy,
+    )
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
     )
+    from ai_rpg_world.application.observation.being_contract import Observer
     from ai_rpg_world.application.player.services.departed_position_store import (
         DepartedPositionStore,
     )
@@ -631,9 +635,14 @@ class WorldRuntime:
     _being_memo_store: MemoBookRepository = field(
         default_factory=InMemoryMemoBookRepository, repr=False
     )
-    # #1824: Being 側の短期記憶。世界の snapshot には入らない。まだ誰も書かない。
+    # #1824: Being 側の短期記憶。世界の snapshot には入らない。今の短期記憶と並べて
+    # ``_being_short_term_memory_copy`` が書く。
     _being_short_term_memory_store: ShortTermMemoryRepository = field(
         default_factory=InMemoryShortTermMemoryRepository, repr=False
+    )
+    # create_world_runtime が組む。phase_b が 1 手を書き留める。
+    _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(
+        default=None, repr=False
     )
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
@@ -3878,6 +3887,22 @@ class WorldRuntime:
             return {int(pid): PlayerOutcomeEnum.UNRESOLVED for pid in player_ids}
         return {int(pid): registry.get_outcome(pid) for pid in player_ids}
 
+    def _being_observer(self, player_id: PlayerId) -> Observer:
+        """契約の観測に写すときの、受け取る本人の事実。盤にいない人の場所は分からないとする。"""
+        from ai_rpg_world.application.observation.being_contract import Observer
+
+        try:
+            place_name: str | None = self.get_player_spot_name(player_id)
+        except Exception:
+            place_name = None
+        minutes = _minutes_per_tick(self.scenario)
+        return Observer(
+            player_id=player_id,
+            name=self.get_player_name(player_id),
+            place_name=place_name,
+            seconds_per_tick=None if minutes is None else float(minutes * 60),
+        )
+
     def get_player_spot_name(self, player_id: PlayerId) -> str:
         graph = self._spot_graph_repo.find_graph()
         if self._player_perception_policy.is_departed(player_id):
@@ -6931,6 +6956,19 @@ def create_world_runtime(
             current_tick_provider=lambda: runtime.current_tick(),
         )
     )
+    from ai_rpg_world.application.being.player_short_term_memory_copy import (
+        PlayerShortTermMemoryCopy,
+    )
+
+    runtime._being_short_term_memory_copy = PlayerShortTermMemoryCopy(
+        store=runtime._being_short_term_memory_store,
+        being_id_of=_being_id_of,
+        turn_reader=memory_turn_clock,
+        observer_of=runtime._being_observer,
+        current_tick_provider=lambda: runtime.current_tick(),
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
+    recent_event_store.add_append_listener(runtime._being_short_term_memory_copy.on_appended)
     runtime._player_episode_writing = _build_player_episode_writing(
         config,
         runtime=runtime,

@@ -193,6 +193,9 @@ def _run_phase_b(wiring: WorldLlmWiring, phase_a: LlmPhaseAResult) -> LlmCommand
             tool_name=name,
             injected_fields=sorted(phase_a.subjective_overrides.keys()),
         )
+    short_term_memory_copy = getattr(wiring.runtime, "_being_short_term_memory_copy", None)
+    if short_term_memory_copy is not None:
+        short_term_memory_copy.note_move(player_id, name, arguments)
     # Phase 1d: ACTION 自動 trace (実行前)。runtime に trace_recorder が
     # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない world_runtime
     # 専用 wiring のための補完。

@@ -106,6 +106,17 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     time_prefix = f"[{entry.game_time_label}] " if entry.game_time_label else ""
     inner_thought = (entry.inner_thought or "").strip()
     inner_thought_line = f"\n  心の声: {inner_thought}" if inner_thought else ""
+    return f"{time_prefix}{format_action_result_body(entry)}{inner_thought_line}"
+
+
+def format_action_result_body(entry: ActionResultEntry) -> str:
+    """行動結果 1 件の行から、時刻の前置きと心の声を除いた文。
+
+    契約の観測の本文に入れる (design_decisions D1824-7)。時刻は観測の時刻、心の声は
+    1 手が持つので、Being の側から同じ行を組める。
+    """
+    if not isinstance(entry, ActionResultEntry):
+        raise TypeError("entry must be ActionResultEntry")
     if entry.success:
         # **発話だけは呼び出し行を置かない。** 本文は伏せ字になるので
         # ``speak(content=本文)`` としか書けず、直前の行が「あなたは言った」と
@@ -120,19 +131,12 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
                 entry.free_text_argument_names,
             )
         )
-        continuation_lines = call_line + inner_thought_line
         if entry.omit_result_in_prompt:
-            return f"{time_prefix}[行動] {entry.action_summary}{continuation_lines}"
+            return f"[行動] {entry.action_summary}{call_line}"
         if entry.tool_name == TOOL_NAME_SPEECH and entry.result_summary:
-            return (
-                f"{time_prefix}[行動] {entry.action_summary}"
-                f"{entry.result_summary}{continuation_lines}"
-            )
-        return (
-            f"{time_prefix}[行動] {entry.action_summary} → [結果] {entry.result_summary}"
-            f"{continuation_lines}"
-        )
-    parts = [f"{time_prefix}[行動] {entry.action_summary} → [失敗]"]
+            return f"[行動] {entry.action_summary}{entry.result_summary}{call_line}"
+        return f"[行動] {entry.action_summary} → [結果] {entry.result_summary}{call_line}"
+    parts = [f"[行動] {entry.action_summary} → [失敗]"]
     if entry.error_code is not None:
         parts.append(f"error_code={entry.error_code}")
         if entry.tool_name:
@@ -140,7 +144,7 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
         if entry.should_reschedule:
             parts.append("次tick再試行の可能性あり")
     parts.append(entry.result_summary)
-    return " | ".join(parts) + inner_thought_line
+    return " | ".join(parts)
 
 
 @dataclass(frozen=True)

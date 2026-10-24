@@ -11,6 +11,7 @@ import pytest
 
 import ai_rpg_world.application.llm.services.tool_catalog as tool_catalog
 from ai_rpg_world.application.llm import tool_constants
+from ai_rpg_world.application.llm.contracts.chunk_encoding import format_action_result_body
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.services.tool_catalog.memory import (
@@ -25,6 +26,7 @@ from ai_rpg_world.application.observation.being_contract import (
     Observer,
     observation_from_action_result,
     observation_from_game,
+    observation_from_unprompted_result,
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationCategory,
@@ -435,13 +437,13 @@ class TestActionResult:
         return ActionResultEntry(**fields)
 
     def test_failed_result_has_call_id_and_failure(self) -> None:
-        """失敗したツールの結果は、成否が失敗で、渡した呼び出しの ID が付いた観測になる。"""
+        """失敗したツールの結果は、成否が失敗で、渡した呼び出しの ID が付いた観測になる。本文は失敗の行で、error_code と道具の名前を持つ。"""
         observation = observation_from_action_result(
             self._entry(), call_id="call-9", observer=_NOAH
         )
 
         assert observation.route == OwnActionResult(call_id="call-9", succeeded=False)
-        assert observation.body == "通路が塞がっていて進めない。"
+        assert observation.body == "[行動] 通信室へ移動しようとした → [失敗] | error_code=CONNECTION_BLOCKED | tool=travel_to | 通路が塞がっていて進めない。"
 
     def test_result_is_about_self_and_addressed_to_self(self) -> None:
         """ツールの結果は、主体も情報源も本人で、自分宛てになる。"""
@@ -493,13 +495,50 @@ class TestActionResult:
 
         assert raised.value.reason is NotRepresentableReason.MISSING_TIME_LABEL
 
-    def test_blank_result_summary_falls_back_to_action_summary(self) -> None:
-        """結果の文が空なら、行動の要約を本文にする。"""
-        observation = observation_from_action_result(
-            self._entry(result_summary=""), call_id="call-9", observer=_NOAH
-        )
+    @pytest.mark.parametrize("result_summary", ["", "通信室に着いた"], ids=["blank-result", "with-result"])
+    def test_body_is_the_recent_event_line_without_time_and_inner_thought(self, result_summary: str) -> None:
+        """本文は、直近の出来事の行から時刻の前置きと心の声を除いた文 (format_action_result_body) になる。結果の文が空でも、行動の要約があれば写す (design_decisions D1824-7)。"""
+        entry = self._entry(result_summary=result_summary)
 
-        assert observation.body == "通信室へ移動しようとした"
+        observation = observation_from_action_result(entry, call_id="call-9", observer=_NOAH)
+
+        assert observation.body == format_action_result_body(entry)
+        assert "通信室へ移動しようとした" in observation.body
+
+
+class TestObservationFromUnpromptedResult:
+    """observation_from_unprompted_result が、1 手と同じ手番に届かない結果 (移動の到着など) を、呼び出しの ID を持たない経路で写すことを保証する。"""
+
+    def _entry(self, **overrides: object) -> ActionResultEntry:
+        fields: dict[str, object] = {"occurred_at": datetime(2026, 1, 1, tzinfo=timezone.utc), "action_summary": "通信室へ移動した", "result_summary": "通信室に着いた", "success": True, "tool_name": "travel_to", "game_time_label": "一日目の朝 0:10", "occurred_tick": 2}
+        return ActionResultEntry(**{**fields, **overrides})  # type: ignore[arg-type]
+
+    def test_arrival_is_seen_by_self_with_the_line_as_body(self) -> None:
+        """到着の結果は「見た・聞いた」の経路で、主体は本人、本文は行の本文、時刻は tick から秒になる。"""
+        entry = self._entry()
+
+        observation = observation_from_unprompted_result(entry, observer=_NOAH)
+
+        assert observation.route == SeenOrHeard()
+        assert (observation.subject_is_self, observation.subject_name, observation.place) == (True, _NOAH.name, _NOAH.place_name)
+        assert observation.body == format_action_result_body(entry)
+        assert observation.time == ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick)
+
+    @pytest.mark.parametrize(
+        ("overrides", "reason"),
+        [
+            ({"tool_name": "memo_add"}, NotRepresentableReason.BEING_INNER_RECORD),
+            ({"result_summary": "", "action_summary": " "}, NotRepresentableReason.EMPTY_BODY),
+            ({"game_time_label": None}, NotRepresentableReason.MISSING_TIME_LABEL),
+        ],
+        ids=["agent-side-tool", "empty", "no-time-label"],
+    )
+    def test_same_rejections_as_own_action_results(self, overrides: dict[str, object], reason: NotRepresentableReason) -> None:
+        """記憶の道具、空の本文、時刻の無い結果は、自分の行動の結果と同じ理由で拒む。"""
+        with pytest.raises(ObservationNotRepresentable) as raised:
+            observation_from_unprompted_result(self._entry(**overrides), observer=_NOAH)
+
+        assert raised.value.reason is reason
 
 
 class TestAgentSideToolResult:
@@ -560,7 +599,7 @@ class TestAgentSideToolResult:
         )
 
         assert isinstance(observation.route, OwnActionResult)
-        assert observation.body == "箱を開けた。"
+        assert "箱を開けた。" in observation.body
 
     def test_result_without_tool_name_is_still_representable(self) -> None:
         """道具の名前が無い結果 (古い snapshot から戻したものなど) は、見分けられないので写す。"""

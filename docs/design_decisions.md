@@ -8472,6 +8472,53 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **関連**: Issue #1824、design_decisions D1824-5、design_decisions D1631-5、design_decisions 27。
 
+## D1824-7. 行動の結果は環境が文にして観測の本文に入れ、構造の欄は契約に足さない
+
+**何を**: 本番で、観測と自分の行動の結果を契約の型に写し、今の短期記憶と並べて Being 側の短期記憶にも書く (#1824 の移す作業の 2 本目)。今の保存先 (`UnifiedRecentEventStore`) に追記を知らせる口を足し、写す側 (`PlayerShortTermMemoryCopy`) がそれを受ける。プロンプトの出力は変えない。
+
+今の行動の結果 (`ActionResultEntry`) の欄の扱い:
+
+| 欄 | 扱い |
+|---|---|
+| `action_summary`、`result_summary`、`error_code`、`should_reschedule` の文、`identifier_arguments` と `free_text_argument_names` (「呼び出し:」の行)、`omit_result_in_prompt`、発話の特別扱い | 環境が今と同じ規則で 1 つの文にし、観測の本文 (`body`) に入れる (`format_action_result_body`)。時刻の前置きと心の声は入れない |
+| `game_time_label` | 観測の時刻 (`ObservedTime.display`) |
+| `occurred_tick` | 観測の時刻の秒 (`ObservedTime.seconds`)。下の「時刻の秒」 |
+| `should_reschedule` | 起こしてほしいかの助言 (`wants_wake`) |
+| `success` | `OwnActionResult.succeeded` |
+| `tool_name`、引数、心の声 | 1 手 (`AgentMove`) |
+| `argument_fingerprint` | 写さない。同じ失敗の繰り返しを止める判定 (`phase_a.py`) は環境の規則で、今の保存先から読み続ける |
+| `execution_provenance` | 写さない。`execution_request_id` を、結果と 1 手を結ぶ `call_id` に使う |
+
+観測 (`ObservationEntry`) の構造の情報 (`output.structured`) も写さない。公開 SNS の投影は、環境の画面として今の保存先から読み続ける。
+
+**なぜ**: 「呼び出し:」の行や失敗の行の組み方は、道具ごとの知識 (どの引数が識別子か、発話は本文を伏せる) と、環境ごとの言葉に依る。欄のまま契約に足すと、Being がゲームの道具の作りを知ることになる。環境が部品を文として描き、Being の知識で変わる部品だけを構造で渡す (#1520)。文で持てば、Being の側からも今と同じ行を組める (時刻の前置き + 本文 + 心の声)。
+
+**退けた案**:
+- `error_code`、`action_summary` などを `OwnActionResult` の欄として足す: Being が使い道を持たない欄が契約に増える。今の Being に、失敗の種類で振る舞いを変える部品は無い。要るようになったら、そのときに文ではなく意味の欄 (失敗の種類など) として足す
+- 本文を `result_summary` だけにする (今の変換のまま): 「[行動] … → [結果] …」の形と「呼び出し:」の行が失われ、Being の側から今と同じ行を組めない
+
+**写さないもの** (`being_short_term_memory_not_copied` の trace に、理由 `reason` と種類 `event_kind` を残す):
+
+| 理由 | 何か |
+|---|---|
+| `being_inner_record` | 記憶の道具 (メモ、エピソード、状況の評価) の結果と、同じ行動の繰り返しへの警告 (種類は `loop_guard`)。Being の内側の記録で、環境で起きたことではない |
+| `empty_body` | 本文が空 |
+| `missing_time_label` | 時刻が無い。いまは死から戻った知らせ (`player_revived_post_hoc`) だけが時刻を渡していない |
+| `no_agent_move` | 1 手を出せなかった (迷った、LLM の呼び出しが落ちた、道具を選ばなかった) ときの結果。自分の行動の結果は 1 手と対にする決まり (`RememberedEvent`) なので、対にする 1 手が無い |
+| `memory_rule` | 短期記憶の決まり (手番の順など) を満たさない。D1824-5 の規則が崩れたしるし |
+| `contract_violation` | 契約の型の決まりを満たさない値が来た (引数に JSON でない値がある、など) |
+| `unexpected_error` | 上のどれでもない例外。run は止めず、例外の型を残す |
+
+**3 本目への引き継ぎ**: 【直近の出来事】を Being の側から組むと、上の表の写さないものは出なくなる。記憶の道具の結果と `no_agent_move` の行は、今のプロンプトには出ている。3 本目で、これらを出し続けるか、Being の内側の記録として別に持つかを決める。
+
+**時刻の秒**: 観測 (`ObservationEntry`) は起きた tick を持たない。取り出した時点の tick で秒を埋めると、時刻の表示 (起きた時点のラベル) とずれるので、観測の秒は分からない (`None`) とする。行動の結果は記録した tick (`occurred_tick`) を持つので秒を入れる。
+
+**1 手に結果が 2 件付くこと**: 移動の出発のように、1 手の中で行動の結果を 2 回記録する経路がある。どちらも同じ `call_id` の自分の行動の結果として写る。1 手の数を数える側は、`call_id` の重なりを数え分ける。
+
+**1 手を出さない結果**: 移動の到着と、移動が止められた知らせは、1 手と同じ手番には届かない (`execution_provenance` が無い)。契約の決まり (呼び出しの ID を持たない他の経路で届く) どおり、経路を「見た・聞いた」にして写す。D1824-5 の規則で、次の 1 手の番号になる。今の短期記憶でも、手番の間に届くので次の区切りに入る。
+
+**関連**: Issue #1824、design_decisions D1824-5、#1520、#1771。
+
 ---
 
 ## D1652. CI の uv は、配布元からではなく PyPI から固定版を入れる
