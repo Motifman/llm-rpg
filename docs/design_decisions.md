@@ -8144,7 +8144,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **何を**:
 
-- `episode_revise_index` (`BeingEpisodeIndexRevisionToolExecutor`) は、呼び名と新しい `about` (どんな記憶か)・`recall_when` (どんな時に思い出すか) を受け取り、`Episode.with_revised_index` で目次を替える。前の目次は、直したターンと一緒に `index_history` に残る。本文は変えない
+- `episode_revise_index` (`BeingEpisodeIndexRevisionToolExecutor`) は、呼び名と新しい `about` (どんな記憶か)・`recall_when` (どんな時に思い出すか) を受け取り、`Episode.revise_index` で目次を替える (D1621 で、値を返す形から集約の操作に作り直した)。前の目次は、直したターンと一緒に `index_history` に残る。本文は変えない
 - 40 字を超えた文は、書き起こし (design_decisions D1626) と同じくアプリケーション層で 40 字に切り詰めて保存し、切り詰める前の長さを trace の `truncated` に残す。ドメインは上限を超えた文を受け付けない (design_decisions D1623)
 - 知らない呼び名、空や文字列でない引数では、何も変えずに失敗を返す
 - 目次の直しは `episode_index_revision` として trace に残す (前と後の目次、ターン数、切り詰め、断った理由)
@@ -8570,11 +8570,11 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 | `fold(今のターン)` | 直近の範囲 (`recent_from` から今のターンまで。出来事の無いターンも数える) が `RECENT_TURNS` (20) に届いていれば、古い `FOLD_TURNS` (10) ターン分を外し、範囲の始まりを 10 進め、「出来事を外した」イベント (`ExperiencesFolded`。外した出来事と、そのときのいきさつ) をためる。外すターンに選んだまま結果の来ない 1 手も、結果の分からない試みとして一緒に外す。外す出来事が無ければイベントはためない |
 | `add_backstory` | 足して新しい `BACKSTORY_GENERATIONS` (3) 世代だけ残す |
 
-ためたイベントは、ゲームの集約 (`AggregateRoot`) と同じ `get_events()` / `clear_events()` で渡す。`being/` はゲームのパッケージを import できないので、`AggregateRoot` は継承せず、同じ名前のメソッドを自前で持つ。イベントを取り出して受け手 (いきさつを作る、エピソードを書き起こす) に渡すのは、イベント基盤の作り直し (#1837) のあと。
+集約はイベント基盤の共通の `AggregateRoot` (`eventing/`) を継ぎ、`add_event` でためて `get_events()` / `clear_events()` で渡す (design_decisions D1837 の 3)。イベントを取り出して受け手 (いきさつを作る、エピソードを書き起こす) に渡すのは、イベント基盤の配送ができてから (D1837 の 4・6)。
 
 保存先 (`InMemoryShortTermMemoryRepository`) は、出し入れのたびに写しを渡し、ためたイベントは保存しない。同じ集約を指し続けると、save し忘れた書き換えも保存されたように見えるため。写しを渡すのは SQLite の保存先 (`sqlite_shop_repository.py` の `copy.deepcopy`) と同じ考え方だが、出来事といきさつは中身の変わらない値なので、deepcopy せず、同じ値を持つ集約を作り直して写しにする (出来事が 2000 件の集約で、deepcopy 1 回に 25ms ほどかかった)。snapshot は取った時点で JSON にするので、あとで集約を書き換えても変わらない。
 
-イベントの型 (`ExperiencesFolded`) は、ゲームの `BaseDomainEvent` を継がない素の値にする。`being/` が `domain.common` を import できないため。イベント基盤の作り直し (#1837) の共通の基底に乗せ替えるとき型の形を変えずに済むよう、`event_id` (`uuid4().int`) と `occurred_at` (UTC) を同じ名前で持ち、Being の ID とターンを自分で持つ。ゲームの集約にある `add_event` と `warn_if_pending_events` は、取り出す側ができるまで持たない。
+イベントの型 (`ExperiencesFolded`) は、共通の `DomainEvent` (`event_id` と `occurred_at`) を継ぎ、Being の ID とターンを自分で持つ (D1837 の 2)。ゲームの `BaseDomainEvent` は継がない。`being/` は `domain.common` を import できないため。`event_id` はゲームと同じく `uuid4().int`、`occurred_at` は UTC。
 
 出来事を種類ごとに読む側 (文を作る側、snapshot の保存) は、`Experience.show_to(reader)` で種類ごとのメソッドを呼ばれる (`ExperienceReader`)。型を見分けずに済む。
 
@@ -8648,3 +8648,24 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 **どうしないと壊れるか**: 最後に例外を返さないと `CommandScope` が outbox の全行を配送済みにしてしまう。失敗があれば確定済みの業務状態は戻さず、未配送のまま残す。outbox は受け手ごとの成功を保存しないので、再送時には成功済みの再送必須の受け手も呼ばれる。受け手は従来どおり、同じイベントを繰り返し受けても結果が重複しないようにする。
 
 取引 outbox は世界と独立に起動し、対象の世界を特定する情報も持たないため、世界の trace へ混ぜない。ユーザーとの確認で、DB の隣に起動ごとの専用 JSONL ファイル (`<DB名>.outbox-*.jsonl`) を作ることを決めた。`WorldTickFailureIsolator.record_continued_failure` へつなぎ、世界の時刻は `None` とする。過去の記録を上書きしない名前を割り当て、書き込み時だけファイルを開く。停止猶予を超えて残った再送処理も記録でき、ファイルを閉じる時期と競合しない。
+
+## D1621. エピソードは、自分の目次を持つ集約にする。目次の並びは問い合わせで作る
+
+**何を**: エピソード (`being/domain/episode.py` の `Episode`) を、1 件ずつ ID を持つ集約にする。集約は自分の目次 (`EpisodeIndex`) と、直した履歴 (`IndexRevision` の並び) を持つ。呼び出し (`recall`) と目次の直し (`revise_index`) は中身を書き換え、値を返さず、`EpisodeRecalled` / `EpisodeIndexRevised` をためる。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。本文・呼び名・書いた時・書いた環境は変わらない。`EpisodeIndex` と `IndexRevision` は値のまま。
+
+目次として見せる並び (どれを何件、どの順で) は、状態として持たず、これまでどおり `EpisodeIndexSelection` が保存先の一覧から毎回作る。呼び名が同じ Being の中で重ならない決まりは、集約ではなく保存先 (`EpisodeRepository.add` と `replace_all_by_being` の `EpisodeConflictException`) に残す。
+
+保存先は出し入れのたびに写しを渡し、ためたイベントは保存しない (D1824-9 の短期記憶と同じ)。後の版でない書き戻しを断る検査 (`Episode.follows`) は残す。写しを持つ手が 2 つあると、古い写しを後から書き戻せるため。
+
+**なぜ**: CLAUDE.md の「ドメインモデルは振る舞いで設計する」(#1843) に合わせる。目次をどこが持つかは 2 案を比べた。
+
+| 案 | 持つもの | 採ったか |
+|---|---|---|
+| A. エピソードの集約が自分の目次を持つ | エピソード 1 件の中に、目次・直した履歴・呼び出しの記録 | 採った |
+| B. Being ごとの目次の集約を別に置く | 目次の集約が全件の目次と呼び出しの記録を持ち、エピソードは本文だけを持つ | 採らない |
+
+呼び出しと目次の直しは、どちらも 1 件の中で閉じる。1 件の中の決まり (直した履歴の順、呼び出しのターンが戻らない) は、その 1 件の集約に収まる。エピソードをまたぐ決まりは、いま呼び名が重ならないことだけで、それは書くときの 1 回で決まる。案 B にすると、書くたびに 2 つの集約を一緒に変える必要があり、片方だけ保存される隙ができる。snapshot のキーも変わる。
+
+**案 B が要るようになる条件**: 目次そのものに決まりができたとき。たとえば、目次に載せる件数や顔ぶれを本人が選んで固定する、目次から外す、目次の並びを本人が決める。どれも、エピソードの一覧から毎回作れない状態を目次が持つことになり、Being ごとの目次の集約が要る。
+
+**どうしないと壊れるか**: 保存先が同じ集約を指し続けると、save し忘れた呼び出しや目次の直しも保存されたように見える。呼び名の決まりを保存先から外すと、重なった呼び名で引いたときにどちらのエピソードかが決まらない。

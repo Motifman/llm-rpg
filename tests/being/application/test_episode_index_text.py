@@ -26,7 +26,7 @@ def _episode(
         body="本文",
     )
     for turn in range(recalls):
-        episode = episode.recalled_at(turn=2 + turn)
+        episode.recall(turn=2 + turn)
     return episode
 
 

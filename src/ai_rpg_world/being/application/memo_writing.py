@@ -1,7 +1,7 @@
 """1 回の行動に書かれたメモの操作を、メモ帳への 1 回の変更として当てる (#1628)。
 
 崩れた操作はその操作だけを外し、ほかの操作は当てる。外した理由は、本人に返す文と
-trace に使う。
+trace に使う。当たった操作のメモは、メモ帳がためたイベントから取る。
 """
 
 from __future__ import annotations
@@ -71,7 +71,6 @@ class RejectedMemoOperation:
 
 @dataclass(frozen=True)
 class MemoOperationsOutcome:
-    book: MemoBook
     applied: tuple[AppliedMemoOperation, ...]
     rejected: tuple[RejectedMemoOperation, ...]
 
@@ -95,7 +94,10 @@ def apply_memo_operations(
     new_memo_id: Callable[[], str],
     known_episode_handles: Collection[str] = (),
 ) -> MemoOperationsOutcome:
-    """``operations`` の数は行動の引数に書かれた配列の位置。外した操作を返すときに使う。"""
+    """``book`` の中身を書き換える。保存は呼び手がする。
+
+    ``operations`` の数は行動の引数に書かれた配列の位置。外した操作を返すときに使う。
+    """
     applied: list[AppliedMemoOperation] = []
     rejected: list[RejectedMemoOperation] = []
     for index, operation in operations:
@@ -109,7 +111,7 @@ def apply_memo_operations(
             continue
         try:
             if isinstance(operation, AddMemo):
-                book = book.add(
+                book.add(
                     memo_id=new_memo_id(),
                     kind=operation.kind,
                     text=operation.text,
@@ -118,32 +120,28 @@ def apply_memo_operations(
                     environment_name=environment_name,
                     known_episode_handles=known_episode_handles,
                 )
-                applied.append(AppliedMemoOperation(index, operation, book.memos[-1]))
             elif isinstance(operation, EditMemo):
                 target = book.find(operation.handle)
                 if target is not None and provenance is not None and target.kind is not MemoKind.FACT:
                     reject(REJECTED_PROVENANCE_OUTSIDE_FACT, kind=target.kind)
                     continue
-                book = book.edit(
+                book.edit(
                     operation.handle,
                     text=operation.text,
                     turn=turn,
                     provenance=operation.provenance,
                     known_episode_handles=known_episode_handles,
                 )
-                edited = book.find(operation.handle)
-                assert edited is not None
-                applied.append(AppliedMemoOperation(index, operation, edited))
             else:
-                book, removed = book.remove(operation.handle)
-                applied.append(AppliedMemoOperation(index, operation, removed))
+                book.remove(operation.handle)
+            applied.append(AppliedMemoOperation(index, operation, book.get_events()[-1].memo))
         except MemoLimitReachedException:
             reject(REJECTED_LIMIT_REACHED, kind=operation.kind if isinstance(operation, AddMemo) else None)
         except MemoNotFoundException:
             reject(REJECTED_NO_SUCH_MEMO, detail=getattr(operation, "handle", None))
         except MemoValidationException as exc:
             reject(REJECTED_INVALID, detail=str(exc))
-    return MemoOperationsOutcome(book=book, applied=tuple(applied), rejected=tuple(rejected))
+    return MemoOperationsOutcome(applied=tuple(applied), rejected=tuple(rejected))
 
 
 __all__ = [

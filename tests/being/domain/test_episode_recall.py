@@ -61,7 +61,12 @@ class TestRecallEpisodes:
         """返るエピソードは、回数を増やしたあとの版になる。"""
         (result,) = recall_episodes(_repo(), ADA, ["ep_3f2a7b"], turn=6)
 
-        assert result.episode == VAULT.recalled_at(turn=6)
+        assert result.episode is not None
+        assert (result.episode.episode_id, result.episode.recall_count, result.episode.last_recalled_turn) == (
+            VAULT.episode_id,
+            1,
+            6,
+        )
 
     def test_unknown_handle_returns_none_and_others_are_recalled(self) -> None:
         """知らない呼び名には None が返り、ほかの呼び名は通常どおり呼び出され、知らない呼び名のせいで記録は増えない。"""

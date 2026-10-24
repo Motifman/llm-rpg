@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     CURRENT_PAYLOAD_SCHEMA_VERSION,
     BeingMemoryPayloadFormatError,
@@ -191,14 +192,17 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         store = src_stores['being_episodes']
         first = Episode.write(episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='地下の金庫室', written_turn=3, index=EpisodeIndex(summary='金庫の番号を探した', recall_when='金庫や鍵の話が出たとき'), body='棚の裏に紙が貼ってあり、番号の半分だけが読めた。')
-        store.add(being, first.recalled_at(turn=5).recalled_at(turn=8).with_revised_index(EpisodeIndex(summary='番号の半分を見つけた', recall_when='数字を考えるとき'), turn=9))
+        first.recall(turn=5)
+        first.recall(turn=8)
+        first.revise_index(EpisodeIndex(summary='番号の半分を見つけた', recall_when='数字を考えるとき'), turn=9)
+        store.add(being, first)
         store.add(being, Episode.write(episode_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', environment_name='島', written_turn=12, index=EpisodeIndex(summary='浜で火をおこした', recall_when='寒いとき'), body='流木を集めて火をおこした。', taken_handles={first.handle}))
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
         dst_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000003', environment_name='島', written_turn=1, index=EpisodeIndex(summary='消えるはず', recall_when='消えるはず'), body='戻す前にあった記録'))
         dst_svc.restore(being, payload_json)
         restored = dst_stores['being_episodes'].list_by_being(being)
-        assert restored == store.list_by_being(being)
+        assert [being_episode_to_dict(e) for e in restored] == [being_episode_to_dict(e) for e in store.list_by_being(being)]
         assert [e.handle for e in restored] == ['ep_3f2a7b', 'ep_3f2a7bc']
 
     def test_no_being_episodes_round_trip_as_empty(self) -> None:
@@ -248,26 +252,60 @@ class TestRestoreRoundTrip:
             dst_svc.restore(being, json.dumps(payload))
         assert dst_stores['being_episodes'].list_by_being(being) == ()
 
-    def _memo_book(self) -> MemoBook:
+    def _memo_book(self, being: BeingId = BeingId('ada')) -> MemoBook:
         heard = MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from='ミオ')
-        book = MemoBook.empty().add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='事務所で鍵を取る', provenance=None, turn=2, environment_name='水門の町')
-        book = book.add(memo_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', kind=MemoKind.FACT, text='弁の目盛りが関係するかも', provenance=heard, turn=4, environment_name='廃坑の山村')
-        book = book.add(memo_id='91c0de00-1d2e-4f00-8a00-000000000003', kind=MemoKind.FACT, text='籠は 3 人まで', provenance=MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from='ep_a07c33'), turn=5, environment_name='廃坑の山村', known_episode_handles={'ep_a07c33'})
-        book = book.add(memo_id='5be41200-1d2e-4f00-8a00-000000000004', kind=MemoKind.PERSON, text='ミオは水門に詳しい', provenance=None, turn=6, environment_name='水門の町')
-        return book.edit('m_3f2a7b', text='事務所の金庫で鍵を取る', turn=7)
+        book = MemoBook.empty(being)
+        book.add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='事務所で鍵を取る', provenance=None, turn=2, environment_name='水門の町')
+        book.add(memo_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', kind=MemoKind.FACT, text='弁の目盛りが関係するかも', provenance=heard, turn=4, environment_name='廃坑の山村')
+        book.add(memo_id='91c0de00-1d2e-4f00-8a00-000000000003', kind=MemoKind.FACT, text='籠は 3 人まで', provenance=MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.SURE, source_from='ep_a07c33'), turn=5, environment_name='廃坑の山村', known_episode_handles={'ep_a07c33'})
+        book.add(memo_id='5be41200-1d2e-4f00-8a00-000000000004', kind=MemoKind.PERSON, text='ミオは水門に詳しい', provenance=None, turn=6, environment_name='水門の町')
+        book.edit('m_3f2a7b', text='事務所の金庫で鍵を取る', turn=7)
+        return book
 
     def test_being_memo_book_round_trips_with_every_field(self) -> None:
         """メモ帳は、呼び名 (伸ばした呼び名も)・分類・文・出どころ (誰から・どのエピソードから)・確かさ・書いた時・書き換えた時・環境の名前ごと、書いた順のまま capture → restore で戻り、戻す先にあったメモは残らない。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        src_stores['being_memo'].save(being, self._memo_book())
+        src_stores['being_memo'].save(self._memo_book(being))
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
-        dst_stores['being_memo'].save(being, MemoBook.empty().add(memo_id='aa11bb22-1d2e-4f00-8a00-000000000005', kind=MemoKind.TODO, text='消えるはず', provenance=None, turn=1, environment_name='島'))
+        stale = MemoBook.empty(being)
+        stale.add(memo_id='aa11bb22-1d2e-4f00-8a00-000000000005', kind=MemoKind.TODO, text='消えるはず', provenance=None, turn=1, environment_name='島')
+        dst_stores['being_memo'].save(stale)
         dst_svc.restore(being, payload_json)
         restored = dst_stores['being_memo'].get(being)
-        assert restored == self._memo_book()
+        assert restored.memos == self._memo_book(being).memos
         assert [m.handle for m in restored.memos] == ['m_3f2a7b', 'm_3f2a7bc', 'm_91c0de', 'm_5be412']
+
+    def test_capture_keeps_the_book_as_it_was_when_taken(self) -> None:
+        """capture したあとでメモ帳を書き換えて保存しても、戻すのは capture した時のメモ帳。
+
+        capture はその場で文字列にするので、ここで見るのは取った時点の中身が残ること。保存先が写しを渡すことは、保存先の試験で見る。
+        """
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['being_memo'].save(self._memo_book(being))
+        payload_json = src_svc.capture(being)
+        later = src_stores['being_memo'].get(being)
+        later.remove('m_3f2a7b')
+        src_stores['being_memo'].save(later)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, payload_json)
+
+        assert dst_stores['being_memo'].get(being).memos == self._memo_book(being).memos
+
+    def test_restored_book_belongs_to_the_restored_being(self) -> None:
+        """restore で戻したメモ帳は、戻した先の Being の ID を持ち、イベントを持たない。"""
+        (src_svc, src_stores) = _make_service()
+        being = BeingId('ada')
+        src_stores['being_memo'].save(self._memo_book(being))
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(being, src_svc.capture(being))
+
+        restored = dst_stores['being_memo'].get(being)
+        assert (restored.being_id, restored.get_events()) == (being, [])
 
     def test_empty_memo_book_round_trips_as_empty(self) -> None:
         """メモが 1 件も無い Being を capture → restore すると、戻す先のメモ帳も空になる。"""
@@ -275,43 +313,43 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
-        dst_stores['being_memo'].save(being, self._memo_book())
+        dst_stores['being_memo'].save(self._memo_book(being))
         dst_svc.restore(being, payload_json)
         assert json.loads(payload_json)['being_memo_book'] == []
-        assert dst_stores['being_memo'].get(being) == MemoBook.empty()
+        assert dst_stores['being_memo'].get(being).memos == ()
 
     def test_memo_book_beyond_the_limit_is_rejected_before_any_store_is_written(self) -> None:
         """やることが 6 件ある payload は、上限で切らずに BeingMemoryPayloadFormatError で拒み、どの store も書き換えない。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         _populate(src_stores, being)
-        src_stores['being_memo'].save(being, self._memo_book())
+        src_stores['being_memo'].save(self._memo_book(being))
         payload = json.loads(src_svc.capture(being))
         todo = payload['being_memo_book'][0]
         payload['being_memo_book'] += [dict(todo, memo_id=f'{n:06x}aa-1d2e-4f00-8a00-000000000000', handle=f'm_{n:06x}') for n in range(5)]
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
             dst_svc.restore(being, json.dumps(payload))
-        assert dst_stores['being_memo'].get(being) == MemoBook.empty()
+        assert dst_stores['being_memo'].get(being).memos == ()
 
     def test_memo_book_with_the_same_handle_twice_is_rejected(self) -> None:
         """同じ呼び名のメモが payload に 2 件あると、どちらかを選ばずに BeingMemoryPayloadFormatError で拒む。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        src_stores['being_memo'].save(being, self._memo_book())
+        src_stores['being_memo'].save(self._memo_book(being))
         payload = json.loads(src_svc.capture(being))
         twin = dict(payload['being_memo_book'][3], memo_id='5be41211-1d2e-4f00-8a00-000000000009')
         payload['being_memo_book'].append(twin)
         (dst_svc, dst_stores) = _make_service()
         with pytest.raises(BeingMemoryPayloadFormatError, match='being_memo_book'):
             dst_svc.restore(being, json.dumps(payload))
-        assert dst_stores['being_memo'].get(being) == MemoBook.empty()
+        assert dst_stores['being_memo'].get(being).memos == ()
 
     def test_memo_without_handle_is_rejected(self) -> None:
         """呼び名 (handle) の無いメモは、ID から作り直さず BeingMemoryPayloadFormatError で拒む。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        src_stores['being_memo'].save(being, self._memo_book())
+        src_stores['being_memo'].save(self._memo_book(being))
         payload = json.loads(src_svc.capture(being))
         del payload['being_memo_book'][1]['handle']
         (dst_svc, _) = _make_service()
@@ -493,7 +531,9 @@ class TestShortTermMemoryPayload:
         being = BeingId('ada')
         _populate(src_stores, being)
         src_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
-        src_stores['being_memo'].save(being, MemoBook.empty().add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='鍵を取る', provenance=None, turn=1, environment_name='島'))
+        book = MemoBook.empty(being)
+        book.add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='鍵を取る', provenance=None, turn=1, environment_name='島')
+        src_stores['being_memo'].save(book)
         src_stores['short_term'].save(_every_field_short_term_memory())
         payload = json.loads(src_svc.capture(being))
         payload['being_short_term_memory'][0]['experiences'].reverse()
@@ -503,7 +543,7 @@ class TestShortTermMemoryPayload:
             svc.restore(being, json.dumps(payload))
         assert tuple(stores['acquaintances'].list_by_being(being)) == ()
         assert tuple(stores['being_episodes'].list_by_being(being)) == ()
-        assert stores['being_memo'].get(being) == MemoBook.empty()
+        assert stores['being_memo'].get(being).memos == ()
         assert stores['short_term'].get(being).is_empty()
 
     def test_unknown_route_kind_is_rejected(self) -> None:

@@ -84,7 +84,9 @@ class BeingEpisodeIndexRevisionToolExecutor:
         index = EpisodeIndex(summary=texts["about"], recall_when=texts["recall_when"])
         try:
             turn = self.turn_reader.current_turn(acting.being_id)
-            self.repository.save(acting.being_id, episode.with_revised_index(index, turn=turn))
+            previous = episode.index
+            episode.revise_index(index, turn=turn)
+            self.repository.save(acting.being_id, episode)
         except DomainException as exc:
             _logger.warning("episode index revision failed (being_id=%s): %s", acting.being_id.value, exc)
             self._record(
@@ -99,7 +101,7 @@ class BeingEpisodeIndexRevisionToolExecutor:
             acting,
             outcome="revised",
             turn=turn,
-            before=_index_payload(episode.index),
+            before=_index_payload(previous),
             after=_index_payload(index),
             truncated=truncated,
             **base,
