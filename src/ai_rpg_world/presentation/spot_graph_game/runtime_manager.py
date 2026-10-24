@@ -199,8 +199,6 @@ class GameRuntimeManager:
     scenarios_dir: Path = field(default_factory=lambda: Path("data/scenarios"))
     characters_path: Path = field(default_factory=lambda: Path("var/characters.json"))
     runtime_config: Any | None = field(default=None, repr=False)
-    # 同じシナリオを繰り返し遊ぶときの回の番号 (#1514)。
-    round_number: int = 1
 
     _scenario_cache: dict[str, dict[str, Any]] = field(
         default_factory=dict, repr=False
@@ -408,7 +406,6 @@ class GameRuntimeManager:
             scenario_path,
             world_character=world_character,
             config=self.runtime_config,
-            round_number=self.round_number,
         )
         spawn_ids = frozenset(int(sp.player_id) for sp in runtime.scenario.player_spawns)
         llm_resolver = _WorldSpawnAllPlayersLlmResolver(spawn_player_ids=spawn_ids)

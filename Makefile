@@ -126,7 +126,6 @@ experiment-with-snapshot:
 		SNAPSHOT_SAVE_DIR=$(OUT)/snapshots
 
 # Phase 6: 別の OUT で同じ scenario を再開する shortcut。
-# 実験設定に "snapshot_load_mode": "replay" があれば、世界は戻さず記憶だけを持ち越す (#1514)。
 # 使い方:
 #   make experiment-resume SCENARIO=... OUT=var/runs/foo_resume \
 #     SNAPSHOT_LOAD_DIR=var/runs/foo/snapshots

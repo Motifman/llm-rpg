@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 # 消した部品の欄は、拒まずに捨て、捨てた件数を trace に残す。古い snapshot から
-# replay / 再開できるようにするため (#1631)。
+# 再開できるようにするため (#1631)。
 REMOVED_MEMORY_PAYLOAD_KEYS: tuple[str, ...] = (
     "afterglow_entries",
     "recall_slot_entries",

@@ -351,71 +351,19 @@ def _runtime_config_mapping_from_source(
     return rendered_values
 
 
-_SNAPSHOT_LOAD_MODES = ("continue", "replay")
+# 外した実験設定の欄。書かれていたら、黙って無視せず起動前に止める。
+_REMOVED_CONFIG_FIELDS = {
+    "snapshot_load_mode": (
+        "記憶だけを持ち越して世界を最初からやり直す replay は外しました "
+        "(design_decisions D1514 の「その後」)。snapshot からの再開は、いつも世界も記憶も続きから始めます"
+    ),
+}
 
 
-def _snapshot_load_mode_from_source(config_source: Mapping[str, Any]) -> str:
-    """snapshot の読み方を返す。``replay`` は記憶だけを持ち越し、世界は初期状態から (#1514)。"""
-    mode = config_source.get("snapshot_load_mode", "continue")
-    if mode not in _SNAPSHOT_LOAD_MODES:
-        raise ValueError(
-            "experiment config field 'snapshot_load_mode' must be one of "
-            f"{list(_SNAPSHOT_LOAD_MODES)}, got {mode!r}"
-        )
-    return str(mode)
-
-
-def _resolve_replay_round(
-    *,
-    snapshot_load_dir: Path | None,
-    scenario_path: Path,
-) -> dict[str, Any]:
-    """replay の回の番号を、前の回の run の resolved から数える。
-
-    前の回の run は snapshot ディレクトリの親とする。resolved が無いと番号を
-    決められないので止める。番号の分からない回を作らないため。
-    """
-    scenario_sha256 = _sha256_file(scenario_path)
-    if snapshot_load_dir is None:
-        return {
-            "round": 1,
-            "previous_run_dir": None,
-            "previous_scenario_sha256": None,
-            "scenario_sha256": scenario_sha256,
-        }
-    if not snapshot_load_dir.is_dir():
-        raise ValueError(f"snapshot-load-dir does not exist: {snapshot_load_dir}")
-    previous_run_dir = snapshot_load_dir.resolve().parent
-    previous_resolved_path = previous_run_dir / "experiment.config.resolved.json"
-    if not previous_resolved_path.exists():
-        raise ValueError(
-            "replay の回の番号を決められません。前の回の run に "
-            f"experiment.config.resolved.json がありません: {previous_resolved_path}"
-        )
-    previous = json.loads(previous_resolved_path.read_text(encoding="utf-8"))
-    previous_replay = previous.get("replay")
-    if previous_replay is not None and not isinstance(previous_replay, dict):
-        raise ValueError(
-            f"前の回の replay が object ではありません: {previous_replay!r} ({previous_resolved_path})"
-        )
-    previous_round = 1 if previous_replay is None else previous_replay.get("round")
-    if isinstance(previous_round, bool) or not isinstance(previous_round, int) or previous_round < 1:
-        raise ValueError(
-            f"前の回の replay.round が正の整数ではありません: {previous_round!r} "
-            f"({previous_resolved_path})"
-        )
-    if previous.get("scenario_sha256") != scenario_sha256:
-        logger.warning(
-            "replay の前の回とシナリオの中身が違います: previous=%s current=%s",
-            previous.get("scenario_sha256"),
-            scenario_sha256,
-        )
-    return {
-        "round": previous_round + 1,
-        "previous_run_dir": str(previous_run_dir),
-        "previous_scenario_sha256": previous.get("scenario_sha256"),
-        "scenario_sha256": scenario_sha256,
-    }
+def _reject_removed_config_fields(config_source: Mapping[str, Any]) -> None:
+    for field, reason in _REMOVED_CONFIG_FIELDS.items():
+        if field in config_source:
+            raise ValueError(f"experiment config field {field!r} is no longer supported: {reason}")
 
 
 _SECRET_KEY_FRAGMENTS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD")
@@ -507,8 +455,6 @@ def _write_experiment_manifest(
     max_world_ticks: int,
     snapshot_save_dir: Path | None,
     snapshot_load_dir: Path | None,
-    snapshot_load_mode: str,
-    replay: Mapping[str, Any] | None,
     no_html: bool,
     no_progress_jsonl: bool,
 ) -> tuple[Path, str]:
@@ -534,8 +480,6 @@ def _write_experiment_manifest(
         "max_world_ticks": int(max_world_ticks),
         "snapshot_save_dir": str(snapshot_save_dir) if snapshot_save_dir else None,
         "snapshot_load_dir": str(snapshot_load_dir) if snapshot_load_dir else None,
-        "snapshot_load_mode": snapshot_load_mode,
-        "replay": dict(replay) if replay is not None else None,
         "runtime_config_source": _mask_secret_values(
             dict(sorted(runtime_config_source.items()))
         ),
@@ -591,8 +535,6 @@ def _drive_scenario(
     reporter: _ExperimentProgressReporter | None = None,
     snapshot_save_dir: Path | None = None,
     snapshot_load_dir: Path | None = None,
-    snapshot_load_mode: str = "continue",
-    round_number: int = 1,
     prompt_dataset_sink: Any | None = None,
 ) -> dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
@@ -627,7 +569,6 @@ def _drive_scenario(
             scenarios_dir=scenarios_dir,
             characters_path=chars,
             runtime_config=runtime_config,
-            round_number=round_number,
         )
         char = mgr.create_character(
             CharacterCreateRequest(name=f"exp-{scenario_path.stem}")
@@ -648,7 +589,7 @@ def _drive_scenario(
             recorder.record(
                 TraceEventKind.ROUND_ASSIGNMENT,
                 tick=runtime.current_tick(),
-                round=round_number,
+                round=1,
                 seed=runtime_config.scenario_random_seed if runtime_config else None,
                 assignments=round_assignment,
             )
@@ -713,7 +654,6 @@ def _drive_scenario(
                 logger.info(
                     "loading snapshots from %s ...", snapshot_load_dir
                 )
-                replay = snapshot_load_mode == "replay"
                 restore_report = snapshot_session.restore_all_from_dir(
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
@@ -737,10 +677,6 @@ def _drive_scenario(
                         }
                         for (b, src, cur) in restore_report.cross_scenario_transfers
                     ],
-                    load_mode=snapshot_load_mode,
-                    world_snapshot_ignored=(
-                        replay and (snapshot_load_dir / "world.json").exists()
-                    ),
                     removed_memory_keys=[
                         {"being_id": b.value, "counts": counts}
                         for b, counts in restore_report.removed_memory_key_counts.items()
@@ -750,8 +686,7 @@ def _drive_scenario(
                 # Phase 9-1: world snapshot も load (= 旧 snapshot dir に
                 # world.json が無ければ no-op = 後方互換)。world snapshot は
                 # scenario fail-fast 方針なので例外は素通し。
-                # replay は世界を初期状態から始めるので world.json を読まない。
-                world_snapshot = None if replay else snapshot_session.restore_world_from_dir(
+                world_snapshot = snapshot_session.restore_world_from_dir(
                     runtime,
                     snapshot_load_dir,
                     current_scenario=scenario_path.stem,
@@ -1597,7 +1532,6 @@ def main(argv: list[str] | None = None) -> int:
             "Phase 6 / Issue #470: 実験開始前に読み込む snapshot ディレクトリ。"
             "前回 run の --snapshot-save-dir で生成された JSON を渡すと、"
             "前回の memory 状態から続きの実験が走る。"
-            "実験設定が snapshot_load_mode=replay なら、世界は戻さず記憶だけを持ち越す (#1514)。"
         ),
     )
     args = parser.parse_args(argv)
@@ -1608,7 +1542,7 @@ def main(argv: list[str] | None = None) -> int:
             config_path=args.experiment_config,
         )
         runtime_config_source = _runtime_config_mapping_from_source(config_source)
-        snapshot_load_mode = _snapshot_load_mode_from_source(config_source)
+        _reject_removed_config_fields(config_source)
     except (OSError, ValueError) as e:
         parser.error(str(e))
 
@@ -1625,16 +1559,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.scenario.exists():
         parser.error(f"scenario not found: {args.scenario}")
-
-    replay: dict[str, Any] | None = None
-    if snapshot_load_mode == "replay":
-        try:
-            replay = _resolve_replay_round(
-                snapshot_load_dir=args.snapshot_load_dir,
-                scenario_path=args.scenario,
-            )
-        except (OSError, ValueError) as e:
-            parser.error(str(e))
 
     if args.max_world_ticks is None:
         if config_source.get("max_world_ticks") is not None:
@@ -1691,8 +1615,6 @@ def main(argv: list[str] | None = None) -> int:
         max_world_ticks=args.max_world_ticks,
         snapshot_save_dir=args.snapshot_save_dir,
         snapshot_load_dir=args.snapshot_load_dir,
-        snapshot_load_mode=snapshot_load_mode,
-        replay=replay,
         no_html=args.no_html,
         no_progress_jsonl=args.no_progress_jsonl,
     )
@@ -1729,7 +1651,6 @@ def main(argv: list[str] | None = None) -> int:
             experiment_profile=config_source.get("profile"),
             experiment_manifest_path=str(manifest_path),
             experiment_manifest_sha256=manifest_sha256,
-            replay=replay,
         )
         rec.record(TraceEventKind.RUN_START, **run_start_payload)
 
@@ -1767,8 +1688,6 @@ def main(argv: list[str] | None = None) -> int:
                 reporter=reporter,
                 snapshot_save_dir=args.snapshot_save_dir,
                 snapshot_load_dir=args.snapshot_load_dir,
-                snapshot_load_mode=snapshot_load_mode,
-                round_number=replay["round"] if replay is not None else 1,
                 prompt_dataset_sink=prompt_dataset_sink,
             )
         finally:
