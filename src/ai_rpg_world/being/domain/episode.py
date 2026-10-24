@@ -90,6 +90,7 @@ class IndexRevision:
 class EpisodeRecalled(DomainEvent):
     """``recall_count`` は呼び出したあとの回数。"""
 
+    being_id: BeingId
     episode_id: str
     handle: str
     turn: int
@@ -98,6 +99,7 @@ class EpisodeRecalled(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class EpisodeIndexRevised(DomainEvent):
+    being_id: BeingId
     episode_id: str
     handle: str
     previous: EpisodeIndex
@@ -140,7 +142,7 @@ def _require_history(index: object, index_history: object, written_turn: int) ->
 
 
 class Episode(AggregateRoot[EpisodeEvent]):
-    """1 件ずつ ID を持つ、目次つきのエピソードの集約。目次もこの集約が持つ (design_decisions D1621)。
+    """1 件ずつ ID を持つ、目次つきのエピソードの集約。書いた Being の ID と、目次も持つ (design_decisions D1621)。
 
     ターンは世界の時刻ではなく Being の記憶のターン数で、環境を跨いでも進み続ける。
     呼び出しと目次の直しは中身を書き換え、値を返さず、イベントとしてためる。決まりに反する
@@ -150,6 +152,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
     def __init__(
         self,
         *,
+        being_id: BeingId,
         episode_id: str,
         handle: str,
         environment_name: str,
@@ -161,6 +164,8 @@ class Episode(AggregateRoot[EpisodeEvent]):
         index_history: tuple[IndexRevision, ...] = (),
     ) -> None:
         super().__init__()
+        if not isinstance(being_id, BeingId):
+            raise EpisodeValidationException("being_id must be BeingId")
         hex_id = _id_hex(episode_id)
         if not isinstance(handle, str):
             raise EpisodeValidationException("handle must be str")
@@ -178,6 +183,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
         _require_text(body, "body", max_length=BODY_MAX_LENGTH)
         _require_recalls(recall_count, last_recalled_turn, written_turn)
         _require_history(index, index_history, written_turn)
+        self._being_id = being_id
         self._episode_id = episode_id
         self._handle = handle
         self._environment_name = environment_name
@@ -192,6 +198,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
     def write(
         cls,
         *,
+        being_id: BeingId,
         episode_id: str,
         environment_name: str,
         written_turn: int,
@@ -201,6 +208,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
     ) -> Episode:
         """``taken_handles`` は同じ Being がもう使っている呼び名。"""
         return cls(
+            being_id=being_id,
             episode_id=episode_id,
             handle=_handle_for(episode_id, taken_handles),
             environment_name=environment_name,
@@ -208,6 +216,10 @@ class Episode(AggregateRoot[EpisodeEvent]):
             index=index,
             body=body,
         )
+
+    @property
+    def being_id(self) -> BeingId:
+        return self._being_id
 
     @property
     def episode_id(self) -> str:
@@ -256,6 +268,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
             EpisodeRecalled(
                 event_id=uuid.uuid4().int,
                 occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
                 episode_id=self._episode_id,
                 handle=self._handle,
                 turn=turn,
@@ -274,6 +287,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
             EpisodeIndexRevised(
                 event_id=uuid.uuid4().int,
                 occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
                 episode_id=self._episode_id,
                 handle=self._handle,
                 previous=previous,
@@ -298,6 +312,7 @@ class Episode(AggregateRoot[EpisodeEvent]):
         return (
             index_kept
             and recall_kept
+            and self.being_id == earlier.being_id
             and self.episode_id == earlier.episode_id
             and self.handle == earlier.handle
             and self.environment_name == earlier.environment_name
@@ -309,8 +324,8 @@ class Episode(AggregateRoot[EpisodeEvent]):
 
 class EpisodeRepository(ABC):
     @abstractmethod
-    def add(self, being_id: BeingId, episode: Episode) -> None:
-        """ID か呼び名がその Being の記録と重なれば ``EpisodeConflictException`` を投げる。"""
+    def add(self, episode: Episode) -> None:
+        """エピソードが持つ Being の記録に足す。ID か呼び名がその Being の記録と重なれば ``EpisodeConflictException`` を投げる。"""
 
     @abstractmethod
     def find_by_handle(self, being_id: BeingId, handle: str) -> Episode | None: ...
@@ -320,8 +335,8 @@ class EpisodeRepository(ABC):
         """足した順に返す。"""
 
     @abstractmethod
-    def save(self, being_id: BeingId, episode: Episode) -> None:
-        """同じ ID の記録を置き換える。並びの位置は変えない。
+    def save(self, episode: Episode) -> None:
+        """エピソードが持つ Being の、同じ ID の記録を置き換える。並びの位置は変えない。
 
         記録に無ければ ``EpisodeNotFoundException``、記録からの後の版でなければ
         (``Episode.follows``) ``EpisodeConflictException`` を投げる。
@@ -329,7 +344,10 @@ class EpisodeRepository(ABC):
 
     @abstractmethod
     def replace_all_by_being(self, being_id: BeingId, episodes: Sequence[Episode]) -> None:
-        """記憶の持ち越しから戻すときに使う。空ならその Being の記録を消す。"""
+        """記憶の持ち越しから戻すときに使う。空ならその Being の記録を消す。
+
+        ``being_id`` は空のときに誰の記録を消すかに要る。別の Being のエピソードが混ざっていれば ``EpisodeConflictException`` を投げる。
+        """
 
 
 __all__ = [

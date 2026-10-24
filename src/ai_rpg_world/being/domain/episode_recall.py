@@ -44,7 +44,7 @@ def recall_episodes(
         results.append(RecallResult(handle=handle, episode=found))
     for result in results:
         if result.episode is not None:
-            repository.save(being_id, result.episode)
+            repository.save(result.episode)
     return tuple(results)
 
 

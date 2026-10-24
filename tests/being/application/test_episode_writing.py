@@ -163,13 +163,14 @@ class TestEpisodeWriterSaving:
         """その Being がもう使っている呼び名と重なる ID なら、新しい側の呼び名を伸ばす。"""
         repository = InMemoryEpisodeRepository()
         existing = Episode.write(
+            being_id=ADA,
             episode_id="3f2a7b9c-0000-4f00-8a00-000000000099",
             environment_name="港町",
             written_turn=1,
             index=EpisodeIndex(summary="前の記憶", recall_when="前の話のとき"),
             body="前のこと。",
         )
-        repository.add(ADA, existing)
+        repository.add(existing)
         writer, _ = _writer(_Completion({"episodes": [_item(), _item()]}), repository)
 
         result = _write(writer)

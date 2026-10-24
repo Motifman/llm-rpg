@@ -86,7 +86,7 @@ class BeingEpisodeIndexRevisionToolExecutor:
             turn = self.turn_reader.current_turn(acting.being_id)
             previous = episode.index
             episode.revise_index(index, turn=turn)
-            self.repository.save(acting.being_id, episode)
+            self.repository.save(episode)
         except DomainException as exc:
             _logger.warning("episode index revision failed (being_id=%s): %s", acting.being_id.value, exc)
             self._record(

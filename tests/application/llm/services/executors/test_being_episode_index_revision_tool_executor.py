@@ -47,6 +47,7 @@ class _Recorder(NullTraceRecorder):
 
 def _episode() -> Episode:
     return Episode.write(
+        being_id=ADA,
         episode_id="00000100-0000-4000-8000-000000000000",
         environment_name="島",
         written_turn=1,
@@ -60,14 +61,14 @@ def _unchanged(stored: Episode | None, episode: Episode) -> bool:
 
 
 class _RefusingRepository(InMemoryEpisodeRepository):
-    def save(self, being_id: BeingId, episode: Episode) -> None:
+    def save(self, episode: Episode) -> None:
         raise EpisodeConflictException("refused")
 
 
 def _executor(turn: int = 5, repository: InMemoryEpisodeRepository | None = None):
     repository = repository or InMemoryEpisodeRepository()
     episode = _episode()
-    repository.add(ADA, episode)
+    repository.add(episode)
     recorder = _Recorder()
     executor = BeingEpisodeIndexRevisionToolExecutor(
         repository=repository,

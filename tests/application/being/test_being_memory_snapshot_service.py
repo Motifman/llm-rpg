@@ -191,19 +191,32 @@ class TestRestoreRoundTrip:
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         store = src_stores['being_episodes']
-        first = Episode.write(episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='地下の金庫室', written_turn=3, index=EpisodeIndex(summary='金庫の番号を探した', recall_when='金庫や鍵の話が出たとき'), body='棚の裏に紙が貼ってあり、番号の半分だけが読めた。')
+        first = Episode.write(being_id=being, episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='地下の金庫室', written_turn=3, index=EpisodeIndex(summary='金庫の番号を探した', recall_when='金庫や鍵の話が出たとき'), body='棚の裏に紙が貼ってあり、番号の半分だけが読めた。')
         first.recall(turn=5)
         first.recall(turn=8)
         first.revise_index(EpisodeIndex(summary='番号の半分を見つけた', recall_when='数字を考えるとき'), turn=9)
-        store.add(being, first)
-        store.add(being, Episode.write(episode_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', environment_name='島', written_turn=12, index=EpisodeIndex(summary='浜で火をおこした', recall_when='寒いとき'), body='流木を集めて火をおこした。', taken_handles={first.handle}))
+        store.add(first)
+        store.add(Episode.write(being_id=being, episode_id='3f2a7bcc-1d2e-4f00-8a00-000000000002', environment_name='島', written_turn=12, index=EpisodeIndex(summary='浜で火をおこした', recall_when='寒いとき'), body='流木を集めて火をおこした。', taken_handles={first.handle}))
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
-        dst_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000003', environment_name='島', written_turn=1, index=EpisodeIndex(summary='消えるはず', recall_when='消えるはず'), body='戻す前にあった記録'))
+        dst_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='aa11bb22-1d2e-4f00-8a00-000000000003', environment_name='島', written_turn=1, index=EpisodeIndex(summary='消えるはず', recall_when='消えるはず'), body='戻す前にあった記録'))
         dst_svc.restore(being, payload_json)
         restored = dst_stores['being_episodes'].list_by_being(being)
         assert [being_episode_to_dict(e) for e in restored] == [being_episode_to_dict(e) for e in store.list_by_being(being)]
         assert [e.handle for e in restored] == ['ep_3f2a7b', 'ep_3f2a7bc']
+
+    def test_restored_episodes_belong_to_the_restored_being(self) -> None:
+        """capture した payload のエピソードは持ち主を書かず、restore で戻したエピソードは戻した先の Being の ID を持つ。"""
+        (src_svc, src_stores) = _make_service()
+        ada, ben = BeingId('ada'), BeingId('ben')
+        src_stores['being_episodes'].add(Episode.write(being_id=ada, episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
+        payload_json = src_svc.capture(ada)
+        (dst_svc, dst_stores) = _make_service()
+
+        dst_svc.restore(ben, payload_json)
+
+        assert 'being_id' not in json.loads(payload_json)['being_episodes'][0]
+        assert [e.being_id for e in dst_stores['being_episodes'].list_by_being(ben)] == [ben]
 
     def test_no_being_episodes_round_trip_as_empty(self) -> None:
         """エピソードが 1 件も無い Being を capture → restore すると、戻す先の記録も空になる。"""
@@ -211,7 +224,7 @@ class TestRestoreRoundTrip:
         being = BeingId('ada')
         payload_json = src_svc.capture(being)
         (dst_svc, dst_stores) = _make_service()
-        dst_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000003', environment_name='島', written_turn=1, index=EpisodeIndex(summary='消えるはず', recall_when='消えるはず'), body='戻す前にあった記録'))
+        dst_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='aa11bb22-1d2e-4f00-8a00-000000000003', environment_name='島', written_turn=1, index=EpisodeIndex(summary='消えるはず', recall_when='消えるはず'), body='戻す前にあった記録'))
         dst_svc.restore(being, payload_json)
         assert json.loads(payload_json)['being_episodes'] == []
         assert dst_stores['being_episodes'].list_by_being(being) == ()
@@ -220,7 +233,7 @@ class TestRestoreRoundTrip:
         """本文が 401 字のエピソードが payload にあると、切り詰めずに BeingMemoryPayloadFormatError で拒む。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        src_stores['being_episodes'].add(being, Episode.write(episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
+        src_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
         payload = json.loads(src_svc.capture(being))
         payload['being_episodes'][0]['body'] = 'あ' * 401
         (dst_svc, _) = _make_service()
@@ -231,7 +244,7 @@ class TestRestoreRoundTrip:
         """呼び名 (handle) の無いエピソードは、ID から作り直さず BeingMemoryPayloadFormatError で拒む。作り直すと伸ばした呼び名が 6 文字に戻り、前の呼び名が別の記録を指す。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        src_stores['being_episodes'].add(being, Episode.write(episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
+        src_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
         payload = json.loads(src_svc.capture(being))
         del payload['being_episodes'][0]['handle']
         (dst_svc, _) = _make_service()
@@ -243,7 +256,7 @@ class TestRestoreRoundTrip:
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         _populate(src_stores, being)
-        src_stores['being_episodes'].add(being, Episode.write(episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
+        src_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', environment_name='島', written_turn=1, index=EpisodeIndex(summary='浜', recall_when='寒いとき'), body='火'))
         payload = json.loads(src_svc.capture(being))
         twin = dict(payload['being_episodes'][0], episode_id='3f2a7b00-1d2e-4f00-8a00-000000000002')
         payload['being_episodes'].append(twin)
@@ -415,7 +428,7 @@ class TestRestoreValidation:
         """being_episodes の要素がドメインの検証で弾かれると、ValueError ではなく FormatError に wrap される。"""
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
-        src_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
+        src_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
         payload = json.loads(src_svc.capture(being))
         payload['being_episodes'][0]['written_turn'] = -1
         (svc, _) = _make_service()
@@ -530,7 +543,7 @@ class TestShortTermMemoryPayload:
         (src_svc, src_stores) = _make_service()
         being = BeingId('ada')
         _populate(src_stores, being)
-        src_stores['being_episodes'].add(being, Episode.write(episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
+        src_stores['being_episodes'].add(Episode.write(being_id=being, episode_id='aa11bb22-1d2e-4f00-8a00-000000000009', environment_name='島', written_turn=1, index=EpisodeIndex(summary='s', recall_when='r'), body='b'))
         book = MemoBook.empty(being)
         book.add(memo_id='3f2a7b9c-1d2e-4f00-8a00-000000000001', kind=MemoKind.TODO, text='鍵を取る', provenance=None, turn=1, environment_name='島')
         src_stores['being_memo'].save(book)
