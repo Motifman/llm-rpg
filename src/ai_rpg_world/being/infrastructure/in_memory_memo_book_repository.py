@@ -4,25 +4,35 @@ from ai_rpg_world.being.domain.memo_book import MemoBook, MemoBookRepository
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
+def _require_book(book: object) -> MemoBook:
+    if not isinstance(book, MemoBook):
+        raise TypeError("book must be MemoBook")
+    return book
+
+
+def _copy(book: MemoBook) -> MemoBook:
+    """メモは中身の変わらない値なので、同じメモを持つ新しい集約を作れば写しになる。ためたイベントは写さない。"""
+    return MemoBook(book.being_id, memos=book.memos)
+
+
 class InMemoryMemoBookRepository(MemoBookRepository):
+    """出し入れのたびに写しを渡す。同じ集約を指し続けると、save し忘れた書き換えも保存されたように見えるため。"""
+
     def __init__(self) -> None:
         self._by_being: dict[BeingId, MemoBook] = {}
 
     def get(self, being_id: BeingId) -> MemoBook:
-        return self._by_being.get(being_id, MemoBook.empty())
+        stored = self._by_being.get(being_id)
+        return MemoBook.empty(being_id) if stored is None else _copy(stored)
 
-    def save(self, being_id: BeingId, book: MemoBook) -> None:
-        if not isinstance(book, MemoBook):
-            raise TypeError("book must be MemoBook")
-        self._by_being[being_id] = book
+    def save(self, book: MemoBook) -> None:
+        self._by_being[book.being_id] = _copy(_require_book(book))
 
-    def replace_all_by_being(self, being_id: BeingId, book: MemoBook) -> None:
-        if not isinstance(book, MemoBook):
-            raise TypeError("book must be MemoBook")
-        if not book.memos:
-            self._by_being.pop(being_id, None)
+    def replace_all_by_being(self, book: MemoBook) -> None:
+        if not _require_book(book).memos:
+            self._by_being.pop(book.being_id, None)
             return
-        self._by_being[being_id] = book
+        self.save(book)
 
 
 __all__ = ["InMemoryMemoBookRepository"]

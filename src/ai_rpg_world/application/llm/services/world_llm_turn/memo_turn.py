@@ -96,15 +96,16 @@ def apply_memo_from_call(
         environment_name = runtime.environment_name_for(player_id)
         trace["environment_name"] = environment_name
         store = runtime._being_memo_store
+        book = store.get(being_id)
         outcome = apply_memo_operations(
-            store.get(being_id),
+            book,
             read.operations,
             turn=turn,
             environment_name=environment_name,
             new_memo_id=lambda: str(uuid.uuid4()),
             known_episode_handles=_episode_handles(runtime, being_id),
         )
-        store.save(being_id, outcome.book)
+        store.save(book)
         trace["applied"] = [
             _applied_payload(a.index, a.operation, a.memo) for a in outcome.applied
         ]

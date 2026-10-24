@@ -8,13 +8,16 @@ from ai_rpg_world.being.domain.memo_book import (
     MemoProvenance,
     MemoSource,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
+ADA = BeingId("being-ada")
 HERE = "水門の町"
 MINE = "廃坑の山村"
 
 
 def _add(book: MemoBook, serial: int, kind: MemoKind, text: str, *, provenance=None, where: str = HERE) -> MemoBook:
-    return book.add(
+    """足したあとの同じメモ帳を返す。試験で足すのを続けて書くため。"""
+    book.add(
         memo_id=f"{serial:06x}aa-1d2e-4f00-8a00-000000000000",
         kind=kind,
         text=text,
@@ -23,6 +26,7 @@ def _add(book: MemoBook, serial: int, kind: MemoKind, text: str, *, provenance=N
         environment_name=where,
         known_episode_handles={"ep_a07c33"},
     )
+    return book
 
 
 class TestFormatMemoBook:
@@ -30,13 +34,13 @@ class TestFormatMemoBook:
 
     def test_empty_book_shows_every_heading_with_none(self) -> None:
         """メモが 1 件も無いとき、3 つの分類の見出しをどれも出し、その下に (なし) と書く。"""
-        assert format_memo_book(MemoBook.empty(), current_environment_name=HERE) == (
+        assert format_memo_book(MemoBook.empty(ADA), current_environment_name=HERE) == (
             "やること:\n  (なし)\n分かったこと:\n  (なし)\n人について:\n  (なし)"
         )
 
     def test_memos_are_grouped_by_kind_in_written_order(self) -> None:
         """メモは分類の見出しの下に、呼び名と文で、書いた順に並ぶ。"""
-        book = _add(MemoBook.empty(), 1, MemoKind.TODO, "事務所で鍵を取る")
+        book = _add(MemoBook.empty(ADA), 1, MemoKind.TODO, "事務所で鍵を取る")
         book = _add(book, 2, MemoKind.PERSON, "ミオは水門に詳しい")
         book = _add(book, 3, MemoKind.TODO, "水門を見に行く")
 
@@ -59,7 +63,7 @@ class TestFormatMemoBook:
             MemoProvenance(source=MemoSource.HEARD, certainty=MemoCertainty.GUESS, source_from="ミオ"),
             MemoProvenance(source=MemoSource.EPISODE, certainty=MemoCertainty.GUESS, source_from="ep_a07c33"),
         ]
-        book = MemoBook.empty()
+        book = MemoBook.empty(ADA)
         for serial, provenance in enumerate(cases, start=1):
             book = _add(book, serial, MemoKind.FACT, f"事実{serial}", provenance=provenance)
 
@@ -76,7 +80,7 @@ class TestFormatMemoBook:
     def test_memos_from_another_environment_are_grouped_under_its_name(self) -> None:
         """今と違う環境で書いたメモは、分類の中で今の環境のメモの後ろに、環境ごとの見出しでまとめて出す。"""
         sure = MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE)
-        book = _add(MemoBook.empty(), 1, MemoKind.FACT, "籠は 3 人まで", provenance=sure, where=MINE)
+        book = _add(MemoBook.empty(ADA), 1, MemoKind.FACT, "籠は 3 人まで", provenance=sure, where=MINE)
         book = _add(book, 2, MemoKind.FACT, "水門を開けると近道が沈む", provenance=sure)
         book = _add(book, 3, MemoKind.FACT, "発電機は温めてから使う", provenance=sure, where=MINE)
 

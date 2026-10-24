@@ -37,19 +37,17 @@ class TestBeingMemoBookCrossRuns:
         being_id = source.aux_being_resolver.resolve_being_id(
             source.aux_being_default_world_id, ada
         )
-        book = (
-            MemoBook.empty()
-            .add(
-                memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
-                kind=MemoKind.FACT,
-                text="浜の流木は乾いている",
-                provenance=MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE),
-                turn=2,
-                environment_name="島",
-            )
-            .edit("m_3f2a7b", text="浜の流木はよく燃える", turn=4)
+        book = MemoBook.empty(being_id)
+        book.add(
+            memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+            kind=MemoKind.FACT,
+            text="浜の流木は乾いている",
+            provenance=MemoProvenance(source=MemoSource.SELF, certainty=MemoCertainty.SURE),
+            turn=2,
+            environment_name="島",
         )
-        source._being_memo_store.save(being_id, book)
+        book.edit("m_3f2a7b", text="浜の流木はよく燃える", turn=4)
+        source._being_memo_store.save(book)
         ExperimentSnapshotSession(
             wiring_result=_wiring_stub_from_world_runtime(source),
             snapshot_dir=tmp_path,
@@ -61,4 +59,4 @@ class TestBeingMemoBookCrossRuns:
             snapshot_dir=tmp_path,
         ).restore_all_from_dir(tmp_path)
 
-        assert restored._being_memo_store.get(being_id) == book
+        assert restored._being_memo_store.get(being_id).memos == book.memos
