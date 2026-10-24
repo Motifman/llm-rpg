@@ -142,7 +142,7 @@ class TestDetectsExceptions:
 
     @pytest.mark.parametrize(
         ("reason", "reported"),
-        [("unexpected_error", True), ("memory_rule", True), ("contract_violation", True), ("no_agent_move", False), ("being_inner_record", False)],
+        [("unexpected_error", True), ("memory_rule", True), ("contract_violation", True), ("unpaired_result", True), ("being_inner_record", False), ("empty_body", False)],
     )
     def test_broken_copy_to_the_being_short_term_memory_is_reported(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str, reported: bool

@@ -17,7 +17,10 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     format_action_result_body,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.services.world_llm_turn.types import WORLD_ACTION_HESITATION
+from ai_rpg_world.application.llm.services.world_llm_turn.types import (
+    WORLD_ACTION_HESITATION,
+    WORLD_ACTION_MOMENTARY_BLANK,
+)
 from ai_rpg_world.application.observation.being_contract import Observer
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
@@ -25,8 +28,14 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
-from ai_rpg_world.being.contract import AgentMove, OccurrenceOrder, OwnActionResult, SeenOrHeard
-from ai_rpg_world.being.domain.short_term_memory import Attempt, Perception, ShortTermMemory
+from ai_rpg_world.being.contract import AgentMove, ObservedTime, OccurrenceOrder, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.domain.short_term_memory import (
+    Attempt,
+    Lapse,
+    MemoryOperationResult,
+    Perception,
+    ShortTermMemory,
+)
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
@@ -179,12 +188,12 @@ class TestNotCopied:
             (_observation(" ", type="player_spoke"), "observation", "empty_body", "player_spoke"),
             (_observation("あなたは息を吹き返した", label=None, type="player_revived_post_hoc"), "observation", "missing_time_label", "player_revived_post_hoc"),
             (_result(None, tool_name="memo_add"), "action_result", "being_inner_record", "memo_add"),
-            (_result(_provenance(), tool_name=WORLD_ACTION_HESITATION, success=False), "action_result", "no_agent_move", WORLD_ACTION_HESITATION),
+            (_result(_provenance(), tool_name=WORLD_ACTION_HESITATION, action_summary=" ", result_summary=" "), "action_result", "empty_body", WORLD_ACTION_HESITATION),
         ],
-        ids=["loop-guard", "empty-observation", "no-time-label", "memo-result", "hesitation"],
+        ids=["loop-guard", "empty-observation", "no-time-label", "memo-result-without-move", "empty-lapse"],
     )
     def test_rejected_event_is_traced_and_not_remembered(self, entry: UnifiedRecentEventEntry, source: str, reason: str, kind: str) -> None:
-        """記憶の道具や警告、空の本文、時刻の無い観測、1 手を出せなかったときの行は写さず、trace に 1 件残す。"""
+        """警告、空の本文、時刻の無い観測、1 手を持たない記憶の道具の結果、本文の無い出せなかったときの行は写さず、trace に 1 件残す。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
 
@@ -254,6 +263,73 @@ class TestNotCopied:
         world.copy.on_appended(ADA, _observation())
 
         assert world.recorder.not_copied() == [{"being_id": "being_p1", "source": "observation", "reason": "unexpected_error", "event_kind": None, "error_type": "RuntimeError"}]
+
+
+class TestMemoryOperationsAndLapses:
+    """記憶の道具の 1 手の結果と、1 手を出せなかったことを、Being 側の短期記憶に写すことを保証する (design_decisions D1824-9)。"""
+
+    def test_memory_tool_result_pairs_with_its_move(self) -> None:
+        """記憶の道具の 1 手の結果は、その 1 手と組の Attempt として、記憶の結果 (MemoryOperationResult) を持って残り、trace は増えない。"""
+        world = _World()
+        world.clock.advance_turn(ADA_BEING)
+        provenance = _provenance()
+        with execution_provenance_scope(provenance):
+            world.copy.note_move(ADA, "memo_add", {"text": "鍵を探す"})
+        result = _result(provenance, tool_name="memo_add", action_summary="メモを書いた", result_summary="メモを追加しました")
+
+        world.copy.on_appended(ADA, result)
+
+        (event,) = world.events()
+        assert isinstance(event, Attempt) and isinstance(event.result, MemoryOperationResult)
+        assert (event.turn, event.move.tool_name, event.result.call_id) == (1, "memo_add", "execution-1")
+        assert event.result.body == format_action_result_body(result.payload)
+        assert world.memory().awaiting is None
+        assert world.recorder.not_copied() == []
+
+    def test_memory_tool_result_of_another_request_is_traced_as_unpaired(self) -> None:
+        """待っている 1 手と実行の要求が違う記憶の道具の結果は、unpaired_result として残す。"""
+        world = _World()
+        world.clock.advance_turn(ADA_BEING)
+        with execution_provenance_scope(_provenance("execution-1")):
+            world.copy.note_move(ADA, "memo_add", {"text": "鍵を探す"})
+
+        world.copy.on_appended(ADA, _result(_provenance("execution-2"), tool_name="memo_add"))
+
+        assert world.events() == ()
+        assert [p["reason"] for p in world.recorder.not_copied()] == ["unpaired_result"]
+
+    @pytest.mark.parametrize("tool_name", [WORLD_ACTION_HESITATION, WORLD_ACTION_MOMENTARY_BLANK])
+    def test_lapse_line_is_kept_with_the_current_turn(self, tool_name: str) -> None:
+        """迷いと一瞬の空白の行は、今のターンの番号の Lapse として残り、待っている 1 手は変わらず、trace は増えない。秒は記録した tick から求める。"""
+        world = _World()
+        world.clock.advance_turn(ADA_BEING)
+        with execution_provenance_scope(_provenance("execution-1")):
+            world.copy.note_move(ADA, "interact", {"target": "扉"})
+        world.clock.advance_turn(ADA_BEING)
+        line = _result(_provenance("execution-2"), tool_name=tool_name, success=False)
+
+        world.copy.on_appended(ADA, line)
+
+        (event,) = world.events()
+        assert event == Lapse(
+            turn=2,
+            body=format_action_result_body(line.payload),
+            time=ObservedTime(display="1日目 朝", seconds=3 * 300),
+            order=OccurrenceOrder(environment="廃坑の山村", value=_AT.timestamp()),
+        )
+        assert world.memory().awaiting is not None and world.memory().awaiting.move.call_id == "execution-1"
+        assert world.recorder.not_copied() == []
+
+
+    def test_lapse_line_without_a_request_is_still_a_lapse(self) -> None:
+        """迷いの行は、実行の要求の ID を持たなくても、見聞きしたことではなく Lapse として残る。道具の名前で先に見分けるため。"""
+        world = _World()
+        world.clock.advance_turn(ADA_BEING)
+
+        world.copy.on_appended(ADA, _result(None, tool_name=WORLD_ACTION_HESITATION, success=False))
+
+        (event,) = world.events()
+        assert isinstance(event, Lapse) and event.turn == 1
 
 
 class TestFailuresOutsideTheTranslation:

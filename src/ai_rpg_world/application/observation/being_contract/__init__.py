@@ -8,9 +8,11 @@ from ai_rpg_world.application.observation.being_contract.observation_translation
     NotRepresentableReason,
     ObservationNotRepresentable,
     Observer,
+    lapse_body_and_time,
     observation_from_action_result,
     observation_from_game,
     observation_from_unprompted_result,
+    result_from_action_result,
 )
 
 __all__ = [
@@ -19,7 +21,9 @@ __all__ = [
     "Observer",
     "agent_move_from_tool_call",
     "environment_entry_for_player",
+    "lapse_body_and_time",
     "observation_from_action_result",
     "observation_from_game",
     "observation_from_unprompted_result",
+    "result_from_action_result",
 ]
