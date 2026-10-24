@@ -71,62 +71,10 @@ class UnifiedRecentEventStore:
             raise TypeError("entry must be ObservationEntry")
         self._append(player_id, UnifiedRecentEventEntry.from_observation(entry))
 
-    def append_action_result(
-        self,
-        player_id: PlayerId,
-        entry: ActionResultEntry,
-        *,
-        max_entries: int | None = None,
-    ) -> list[ActionResultEntry]:
+    def append_action_result(self, player_id: PlayerId, entry: ActionResultEntry) -> None:
         if not isinstance(entry, ActionResultEntry):
             raise TypeError("entry must be ActionResultEntry")
         self._append(player_id, UnifiedRecentEventEntry.from_action_result(entry))
-        return self._trim_kind(
-            self._key(player_id), "action_result", ActionResultEntry, max_entries
-        )
-
-    def _trim_kind(
-        self,
-        key: int,
-        kind: UnifiedRecentEventKind,
-        payload_type: type[_Entry],
-        max_entries: int | None,
-    ) -> list[_Entry]:
-        if max_entries is None:
-            return []
-        if max_entries <= 0:
-            raise ValueError("max_entries must be greater than 0")
-        entries = self._entries.get(key, [])
-        indices = [index for index, event in enumerate(entries) if event.kind == kind]
-        overflow_count = max(0, len(indices) - max_entries)
-        if overflow_count == 0:
-            return []
-        remove = set(indices[:overflow_count])
-        removed = [
-            payload
-            for index in indices[:overflow_count]
-            if isinstance(payload := entries[index].payload, payload_type)
-        ]
-        sizes = self._completed_turn_sizes.get(key, [])
-        if sizes:
-            removed_per_bucket = [0] * len(sizes)
-            bucket_index = 0
-            bucket_end = sizes[0]
-            for index in sorted(remove):
-                while bucket_index < len(sizes) and index >= bucket_end:
-                    bucket_index += 1
-                    if bucket_index < len(sizes):
-                        bucket_end += sizes[bucket_index]
-                if bucket_index < len(sizes):
-                    removed_per_bucket[bucket_index] += 1
-            self._completed_turn_sizes[key] = [
-                size - removed_count
-                for size, removed_count in zip(sizes, removed_per_bucket)
-            ]
-        self._entries[key] = [
-            event for index, event in enumerate(entries) if index not in remove
-        ]
-        return removed
 
     def get_timeline(
         self, player_id: PlayerId

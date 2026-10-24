@@ -20,6 +20,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.being.domain.short_term_memory import RECENT_TURNS
 
 _ISLAND = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "survival_island_v4_coop.json"
 _BASE = datetime(2026, 6, 1, tzinfo=timezone.utc)
@@ -35,11 +36,7 @@ class _Recorder(NullTraceRecorder):
 
 
 def _runtime():
-    values = {
-        "SHORT_TERM_MEMORY_TURN_CAP": "2",
-        "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": "1",
-    }
-    runtime = create_world_runtime(_ISLAND, config=ResolvedLlmRuntimeConfig.from_mapping(values=values))
+    runtime = create_world_runtime(_ISLAND, config=ResolvedLlmRuntimeConfig.from_mapping(values={}))
     recorder = _Recorder()
     runtime.set_trace_recorder(recorder)
     return runtime, recorder
@@ -69,8 +66,8 @@ class TestEpisodeWritingInTheRuntime:
         pid = runtime.get_player_ids()[0]
 
         _observe(runtime, pid, "浜で流木を拾った。", 1)
-        runtime._short_term_memory.complete_turn(pid)
-        runtime._short_term_memory.complete_turn(pid)
+        for _ in range(RECENT_TURNS):
+            runtime._short_term_memory.complete_turn(pid)
 
         episodes = runtime._being_episode_store.list_by_being(_being_of(runtime, pid))
         assert len(episodes) == 1

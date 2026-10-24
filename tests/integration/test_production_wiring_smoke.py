@@ -102,17 +102,21 @@ class TestShortTermMemoryConfigVsRuntime:
         runtime = _build_runtime()
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
-    def test_turn_window_settings_reach_the_memory(self) -> None:
-        """profile の cap / 畳む数が短期記憶に配線される。"""
-        runtime = _build_runtime(
-            ResolvedLlmRuntimeConfig.for_tests(
-                short_term_memory_turn_cap=12,
-                short_term_memory_turn_compact_count=4,
-            )
+    def test_turn_window_follows_the_domain_constants(self) -> None:
+        """短期記憶のターン数は設定ではなく、Being のドメインの定数 (RECENT_TURNS / FOLD_TURNS / BACKSTORY_GENERATIONS) に従う (design_decisions D1824-9)。"""
+        from ai_rpg_world.being.domain.short_term_memory import (
+            BACKSTORY_GENERATIONS,
+            FOLD_TURNS,
+            RECENT_TURNS,
         )
 
-        assert runtime._short_term_memory._turn_cap == 12
-        assert runtime._short_term_memory._compact_turn_count == 4
+        memory = _build_runtime()._short_term_memory
+
+        assert (memory._turn_cap, memory._compact_turn_count, memory._keep_gen) == (
+            RECENT_TURNS,
+            FOLD_TURNS,
+            BACKSTORY_GENERATIONS,
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -239,30 +243,23 @@ class TestConfigInjection:
     渡し回す形を構造で保証する。"""
 
     def test_uses_cfg(self) -> None:
-        """cfg を渡したら、その値で配線される。
+        """cfg を渡したら、runtime はその cfg の値を設定として持つ。
 
         = 設定入力経路を 1 つにする原則の構造的保証。
         """
-        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-            SummarizingShortTermMemory,
-        )
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        cfg = ResolvedLlmRuntimeConfig.for_tests(
-            short_term_memory_turn_cap=12,
-            short_term_memory_turn_compact_count=4,
-        )
+        cfg = ResolvedLlmRuntimeConfig.for_tests(being_episode_index_limit=7)
         runtime = create_world_runtime(_SCENARIO, config=cfg)
-        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
-        assert runtime._short_term_memory._turn_cap == 12
+        assert runtime._runtime_config.being_episode_index_limit == 7
 
     def test_cfg_empty_config_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """cfg 引数省略時は環境変数の SHORT_TERM_MEMORY_TURN_CAP=99 を読まず、空設定の既定の 20 ターンになる。"""
+        """cfg 引数省略時は環境変数の LLM_MODEL を読まず、空設定の既定 (モデル無し) になる。"""
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-        monkeypatch.setenv("SHORT_TERM_MEMORY_TURN_CAP", "99")
+        monkeypatch.setenv("LLM_MODEL", "openrouter/google/gemma-4-31b-it")
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert runtime._short_term_memory._turn_cap == 20
+        assert runtime._runtime_config.llm_model is None

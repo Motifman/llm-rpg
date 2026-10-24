@@ -8595,6 +8595,8 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **記憶の道具の結果と、1 手を出せなかったことを写す**: 環境の側 (`result_from_action_result`) が、記憶の道具 (メモ、エピソード、状況の評価) の結果を `MemoryOperationResult` に、それ以外を自分の行動の結果の観測に変え、写す側が `receive_result` に渡す。記憶の道具は手書きの一覧 (`observation_translation.py` の `_AGENT_SIDE_TOOLS` とメモの接頭辞) で見分け、道具のカタログで環境に働きかける道具 (world_action) でないものと一致することは試験 (`test_observation_translation.py` の `TestResultFromActionResult`) が見張る。1 手を出せなかったときに phase_b が残す行は、実行の要求の ID より先に道具の名前 (`迷い`、`一瞬の空白`) で見分け、`lapse` に渡す。1 手を持たない記憶の道具の結果は、組にする 1 手が無いので写さない (`being_inner_record`)。
 
+**定数と設定のキー**: 直近として持つターン数 (`RECENT_TURNS`、20)、一度に外すターン数 (`FOLD_TURNS`、10)、いきさつの世代数 (`BACKSTORY_GENERATIONS`、3) は、全員共通の決まりとしてドメインの定数にした。どの profile も値を変えていなかった。今の短期記憶 (`SummarizingShortTermMemory`) も同じ定数を使う。実験の設定のキー `SHORT_TERM_MEMORY_TURN_CAP` / `SHORT_TERM_MEMORY_TURN_COMPACT_COUNT` は消し、書かれていたら知らないキーとしてではなく、消したキーとして理由を添えて起動前に止める (`resolved_runtime_config.py` の `_REMOVED_RUNTIME_CONFIG_KEYS`)。行動の結果を 1 人 100 件までに削る処理 (`DefaultActionResultStore`) もなくした。直近の範囲が 20 ターンで外れるので、100 件には届かない。
+
 **まだしないこと**: `fold` はまだ誰も呼ばず、ためたイベントもまだ誰も取り出さない。そのため出来事は run の間ずっと増える (#1830 からある振る舞い)。集約を書き換えるたびに出来事の件数に比例する確かめが走るので、長い run では 1 件ごとの追記が少しずつ遅くなる。`fold` を呼ぶ PR で解消する。
 
 **関連**: Issue #1824、design_decisions D1824-5、D1824-7、D1824-8。

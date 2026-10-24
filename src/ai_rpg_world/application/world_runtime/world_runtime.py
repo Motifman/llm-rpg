@@ -4020,8 +4020,6 @@ def _build_short_term_memory(
         summary_service=summary_service,
         persona_resolver=persona_resolver,
         event_store=event_store,
-        turn_cap=cfg.short_term_memory_turn_cap,
-        compact_turn_count=cfg.short_term_memory_turn_compact_count,
         on_compacted=on_compacted,
     )
 

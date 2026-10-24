@@ -19,13 +19,9 @@ def test_stub_run_writes_episodes_on_compaction_and_on_leaving_before_the_snapsh
 
     config = json.loads((_REPO / "data/experiment_profiles/smoke_stub.json").read_text(encoding="utf-8"))
     config["profile"] = "episode_writing_stub"
-    config["max_world_ticks"] = 12
-    config["runtime_config"].update(
-        {
-            "SHORT_TERM_MEMORY_TURN_CAP": 2,
-            "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": 1,
-        }
-    )
+    # 短期記憶が古いターンを畳むのは 20 ターン目 (RECENT_TURNS)。このシナリオの 4 人は 4 tick に 1 回ずつ手番が回るので、
+    # 1 人が 21 回手番を持つ 84 tick まで回す。
+    config["max_world_ticks"] = 84
     config_path = tmp_path / "experiment.json"
     config_path.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
     snapshots = tmp_path / "snapshots"

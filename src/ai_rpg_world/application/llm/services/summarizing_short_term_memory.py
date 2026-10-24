@@ -46,15 +46,17 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder, NullTraceRecorder
+from ai_rpg_world.being.domain.short_term_memory import (
+    BACKSTORY_GENERATIONS,
+    FOLD_TURNS,
+    RECENT_TURNS,
+)
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)
-
-
-DEFAULT_L4_KEEP_GENERATIONS = 3
 
 
 # PR #449 (PR 4/6): NullObject パターンで silent None skip を排除する helper。
@@ -120,7 +122,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         *,
         summary_service: ShortTermMemorySummaryService | None = None,
         persona_resolver: PersonaResolverFn | None = None,
-        l4_keep_generations: int = DEFAULT_L4_KEEP_GENERATIONS,
+        l4_keep_generations: int = BACKSTORY_GENERATIONS,
         scheduler: IShortTermMemoryScheduler | None = None,
         # PR #435: L4 が install された瞬間に trace event を 1 件吐く。
         # 失敗時は既に DROPPED / GENERATION_FAILED が吐かれているが、成功時の
@@ -129,8 +131,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
         trace_recorder_provider: Callable[[], Any] | None = None,
         current_tick_provider: Callable[[], int | None] | None = None,
         event_store: UnifiedRecentEventStore | None = None,
-        turn_cap: int = 20,
-        compact_turn_count: int = 10,
+        turn_cap: int = RECENT_TURNS,
+        compact_turn_count: int = FOLD_TURNS,
         on_compacted: CompactionListenerFn | None = None,
     ) -> None:
         if l4_keep_generations <= 0:
@@ -548,7 +550,6 @@ def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
 
 
 __all__ = [
-    "DEFAULT_L4_KEEP_GENERATIONS",
     "PersonaResolverFn",
     "SummarizingShortTermMemory",
     "format_mid_summary_block",
