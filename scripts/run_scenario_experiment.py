@@ -548,6 +548,7 @@ def _drive_scenario(
             外側 for ループの回数だったが、``#405`` で 1 iteration = 1 world tick
             に揃ったので world tick 基準に意味論統一する。
     """
+    from contextlib import ExitStack
     from tempfile import TemporaryDirectory
 
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -563,7 +564,7 @@ def _drive_scenario(
     world_id = scenario_path.stem
     scenarios_dir = scenario_path.parent
 
-    with TemporaryDirectory() as d:
+    with TemporaryDirectory() as d, ExitStack() as cleanup:
         chars = Path(d) / "characters.json"
         mgr = GameRuntimeManager(
             scenarios_dir=scenarios_dir,
@@ -578,6 +579,7 @@ def _drive_scenario(
         )
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
+        cleanup.callback(runtime.shutdown_async_events)
         state.llm_wiring.prompt_dataset_sink = prompt_dataset_sink
         # API session の UUID ではなく実験 run 名を使い、run を跨ぐ衝突を避ける。
         state.llm_wiring.llm_session_run_id = run_id
@@ -894,6 +896,8 @@ def _drive_scenario(
         runtime.write_episodes_on_leaving(
             skip_reason="llm_unusable" if outcome in _UNUSABLE_OUTCOMES else None
         )
+
+        runtime.shutdown_async_events()
 
         # Phase 6: snapshot save。失敗しても run 自体は守る (= 例外を上位に飛ばさない)。
         # Phase 7: source_scenario を埋め込み + trace event 発行。

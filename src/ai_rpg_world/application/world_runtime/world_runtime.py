@@ -368,6 +368,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_team import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
+from ai_rpg_world.eventing import AsyncEventExecutor, AsyncFailure
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
@@ -654,6 +655,7 @@ class WorldRuntime:
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
+    _async_event_executor: AsyncEventExecutor | None = field(default=None, repr=False)
     # 記憶の部品と Jev の呼び出しの記録先 (#1617)。runtime の外で組む Jev も
     # ここを通すので、create_world_runtime 以外で組んだ runtime では None。
     _aux_llm_call_sink: Any = field(default=None, repr=False)
@@ -1034,6 +1036,42 @@ class WorldRuntime:
         if service is None:
             raise RuntimeError("MeetingCommandService is not wired")
         service.resolve_and_end(reason=reason)
+
+    @property
+    def async_event_executor(self) -> AsyncEventExecutor:
+        """受け手を登録する側が共有する、本人ごとの実行基盤を返す。"""
+        if self._async_event_executor is None:
+            raise RuntimeError("非同期の配送が組み立てられていません")
+        return self._async_event_executor
+
+    def _record_async_delivery_failure(self, failure: AsyncFailure) -> None:
+        recorder = self._trace_recorder
+        if recorder is None:
+            raise RuntimeError("非同期の配送の失敗を記録する trace がありません")
+        event = recorder.record(
+            TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED, tick=self.current_tick(),
+            reason=failure.reason, recipient_key=str(failure.key), event_id=failure.event.event_id,
+            event_type=type(failure.event).__name__,
+            handler=getattr(failure.handler, "__qualname__", type(failure.handler).__name__),
+            error_type=type(failure.error).__name__ if failure.error is not None else None,
+            error_message=str(failure.error) if failure.error is not None else None,
+        )
+        if event.seq < 0:
+            raise RuntimeError("非同期の配送の失敗が trace に保存されませんでした")
+
+    def apply_async_results(self, player_id: PlayerId) -> None:
+        """ターンの入口で、本人の ID の文字列を宛先とする結果を反映する。"""
+        if self._async_event_executor is not None:
+            acting = self._acting_being_for(player_id)
+            if acting is not None:
+                self._async_event_executor.apply_results(acting.being_id.value)
+
+    def shutdown_async_events(self) -> None:
+        """受付停止と期限付き待機の後、保存より前に完了した結果を反映する。"""
+        if self._async_event_executor is not None:
+            assert self._runtime_config is not None
+            self._async_event_executor.shutdown(timeout=self._runtime_config.async_event_shutdown_timeout_seconds)
+            self._async_event_executor.apply_all_results()
 
     def set_trace_recorder(self, recorder: Any) -> None:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
@@ -6913,6 +6951,10 @@ def create_world_runtime(
     # prompt dataset の各行も being_id を要るので、それより先に組む。
     # 用意に失敗したら起動を止める。誰を知っているかはプロンプトの前提なので、
     # 欠けたまま走ると、実験の条件が run のどこにも残らないまま変わる。
+    runtime._async_event_executor = AsyncEventExecutor(
+        failure_observer=runtime._record_async_delivery_failure,
+        max_workers=config.async_event_workers, max_pending=config.async_event_max_pending,
+    )
     runtime._wire_being_stack()
     for spawn in scenario.player_spawns:
         try:

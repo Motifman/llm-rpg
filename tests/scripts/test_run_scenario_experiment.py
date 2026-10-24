@@ -96,6 +96,9 @@ class TestOutcomeAndReason:
             def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
                 return None
 
+            def shutdown_async_events(self) -> None:
+                pass
+
             def shutdown(self, *, timeout: float) -> None:
                 assert timeout == 30.0
 
@@ -182,6 +185,9 @@ class TestOutcomeAndReason:
 
             def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
                 return None
+
+            def shutdown_async_events(self) -> None:
+                pass
 
             def shutdown(self, *, timeout: float) -> None:
                 pass
