@@ -201,7 +201,8 @@ class TestSpotGraphItemTransferServiceDrop:
         deps = transfer_service
         with pytest.raises(SlotIsEmptyError) as excinfo:
             deps["service"].drop_item(PLAYER_ID, SlotId(5))  # 5 番スロットは空
-        assert "所持品" in str(excinfo.value)
+        assert "所持アイテム" in str(excinfo.value)
+        assert "inspect_target" not in str(excinfo.value)
         assert "スロット" not in str(excinfo.value)
 
     def test_raises_drop_player_item_transfer_exception(self, transfer_service):

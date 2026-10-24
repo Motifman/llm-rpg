@@ -114,6 +114,9 @@ from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter im
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.cross_tool_mentions import (
+    without_absent_tool_mentions,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.memo_argument import (
     with_memo_schema,
 )
@@ -1684,7 +1687,11 @@ class WorldRuntime:
         # いたが、**プロンプト本文の側から同じ判断を参照できなかった**。
         # 集めた結果、状態ビルダーからも同じ答えを引ける。
         exposure = self.tool_exposure
-        spot = [defn for defn in spot if exposure.is_exposed(defn.name)]
+        spot = [
+            without_absent_tool_mentions(defn, exposure.is_exposed)
+            for defn in spot
+            if exposure.is_exposed(defn.name)
+        ]
         if tool_schema_mode == "reason_first":
             spot = [strip_reason_first_action_subjective_schema(d) for d in spot]
         return spot

@@ -65,6 +65,32 @@ _ADVERTISED_TOOLS = {"give_item", "tend_to_player"}
 _TOOL_NAMES = sorted(defn.name for defn, _ in get_spot_graph_specs())
 
 
+def _all_tool_identifiers() -> set[str]:
+    """どのカタログのツールかを問わず、ツールの名前と、接頭辞を外した名前。
+
+    今の世界のツールだけを見ると、**今の世界に無いツール**の名前を勧める文が
+    素通りする。実際 `ITEM_TRANSFER_SLOT_IS_EMPTY` が `inspect_target` を勧めていた。
+    """
+    import ai_rpg_world.application.llm.tool_constants as constants
+
+    prefixes = [
+        value for key, value in vars(constants).items()
+        if key.startswith("TOOL_NAME_PREFIX_") and isinstance(value, str) and value
+    ]
+    names: set[str] = set()
+    for key, value in vars(constants).items():
+        if key.startswith("TOOL_NAME_") and not key.startswith("TOOL_NAME_PREFIX_") and isinstance(value, str):
+            names.add(value)
+            names.update(value[len(prefix):] for prefix in prefixes if value.startswith(prefix))
+    return names
+
+
+def _names(text: str, name: str) -> bool:
+    import re
+
+    return re.search(rf"(?<![A-Za-z_]){re.escape(name)}(?![A-Za-z_])", text) is not None
+
+
 class _PromptCaptureClient:
     def __init__(self) -> None:
         self.messages = []
@@ -74,6 +100,18 @@ class _PromptCaptureClient:
         self.messages = messages
         self.tools = tools
         return {"name": "wait", "arguments": {}}
+
+
+def _payload_tools(runtime, player_id: PlayerId) -> list:
+    """1 ターン目に LLM へ渡るツールの定義 (説明文と引数の説明を含む)。"""
+    client = _PromptCaptureClient()
+    _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    ).run_phase_a(player_id)
+    return client.tools
 
 
 def _auto_prompt(runtime, player_id: PlayerId) -> tuple[str, list[str]]:
@@ -165,6 +203,21 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
         for payload_name in payload_names:
             assert f'"{payload_name}"' in prompt
 
+    @pytest.mark.parametrize("tool_name", _TOOL_NAMES)
+    def test_no_other_tool_description_names_the_disabled_tool(self, tmp_path, tool_name) -> None:
+        """1 つずつ無効化して、LLM に渡るほかのツールの説明文と引数の説明に、その名前が残らない。
+
+        プロンプト本文だけを見ていると、ツールの説明文が無いツールを勧めても
+        素通りする。実際 use_item の説明が give_item を、attack の説明が
+        travel_to を勧めていた。
+        """
+        runtime = create_world_runtime(_world_with_only(tmp_path, tool_name))
+
+        tools = _payload_tools(runtime, _MORI)
+
+        assert tools
+        assert not _names(json.dumps(tools, ensure_ascii=False), tool_name)
+
     def test_the_advertised_set_is_exactly_what_we_expect(self, tmp_path) -> None:
         """全ツールを有効にしたとき、名前が出るのは既知の集合ちょうど。
 
@@ -196,7 +249,7 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
         assert advertised == _ADVERTISED_TOOLS
 
     def test_no_remediation_text_names_a_tool(self) -> None:
-        """失敗時の対処文が、ツール識別子を名指ししない。
+        """失敗時の対処文が、どのカタログのツール識別子も名指ししない。
 
         対処文はプロンプトに載るが、**呼び出し口が 77 か所あり**露出判断を
         渡せない。名指しをやめることで、どの世界でも嘘にならないようにする。
@@ -208,9 +261,16 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
             DEFAULT_REMEDIATION_BY_ERROR_CODE,
         )
 
-        for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items():
-            for name in _TOOL_NAMES:
-                assert name not in text, (code, name, text)
+        identifiers = _all_tool_identifiers()
+        assert set(_TOOL_NAMES) <= identifiers
+        offenders = [
+            (code, name)
+            for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()
+            for name in sorted(identifiers)
+            if _names(text, name)
+        ]
+
+        assert offenders == []
 
 
 class TestTheDrillNoLongerOffersTending:
