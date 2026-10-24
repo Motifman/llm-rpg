@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 import copy
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import Enum
 from typing import Any
 
@@ -20,12 +20,13 @@ from ai_rpg_world.application.common.command_context_event_publisher import (
 )
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto, ToolRuntimeTargetDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     required_int_arg,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_DISPLAY_PHRASE_KEY,
     action_history_projection,
     action_history_projection_kwargs,
     format_action_summary_for_display,
@@ -278,6 +279,17 @@ _TEND_MESSAGES = {
     "ACTOR_IS_DOWN": "自分も倒れているので他人を介抱できない。",
     "TARGET_IS_ELIMINATED": "{name} はもう息をしていない。介抱しても戻らない。",
 }
+
+
+def _interaction_display_label(runtime_context: Any, object_id: Any, action_name: str) -> str | None:
+    """手番に見せた対象の表のうち、その物の操作の表示名。操作名は呼び出しの値で、世界の言葉ではない。"""
+    targets: Mapping[str, ToolRuntimeTargetDto] = getattr(runtime_context, "targets", None) or {}
+    for target in targets.values():
+        if target.world_object_id is not None and target.world_object_id == object_id:
+            label = dict(target.interaction_labels).get(action_name)
+            if label:
+                return label
+    return None
 
 
 def _not_wired_failure(tool: str) -> LlmCommandResultDto:
@@ -1499,12 +1511,16 @@ class SpotGraphToolExecutor:
         if self._runtime is not None:
             identifiers, free_text_names = action_history_projection(args)
             # resolver が target_label を object_id に置き換えたあとなので、対象の名前は
-            # 履歴の射影から取る。
+            # 履歴の射影から取る。表示名の句は do_interact の行と同じ「「X」で〜」にそろえる。
+            taken = _interaction_display_label(
+                runtime_context, args.get("object_id"), str(args.get("action_name", "")).strip()
+            )
+            shown = {**args, **identifiers}
+            if taken:
+                shown[ACTION_DISPLAY_PHRASE_KEY] = f"で{taken}"
             self._runtime._record_action_result(
                 PlayerId(player_id),
-                format_action_summary_for_display(
-                    TOOL_NAME_SPOT_GRAPH_INTERACT, {**args, **identifiers}
-                ),
+                format_action_summary_for_display(TOOL_NAME_SPOT_GRAPH_INTERACT, shown),
                 result.message,
                 tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
                 identifier_arguments=identifiers,
@@ -1607,11 +1623,12 @@ class SpotGraphToolExecutor:
             self._maybe_register_sync_prepare(player_id, action_name)
             # 「まだ動いていない」を必ず言う。effects の SHOW_MESSAGE で「手を
             # かけた」と返していた頃、聞き手は完了したと読んだ (run 003)。
+            taken = _interaction_display_label(runtime_context, args.get("object_id"), action_name)
             return LlmCommandResultDto(
                 success=True,
                 message=(
-                    f"「{action_name}」の側を受け持った。まだ動いていない。"
-                    "もう一方を別の誰かが同じ頃に受け持てば動く。"
+                    (f"「{taken}」を受け持った。" if taken else "自分の側を受け持った。")
+                    + "まだ動いていない。もう一方を別の誰かが同じ頃に受け持てば動く。"
                 ),
             )
         except InteractionNotAllowedException as exc:

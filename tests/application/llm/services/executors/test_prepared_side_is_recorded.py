@@ -91,7 +91,7 @@ class TestTheTakenSideIsRecorded:
         user_text = runtime.build_full_prompt(_MORI)["messages"][1]["content"]
 
         recent = user_text.split("【直近の出来事】", 1)[1].split("【", 1)[0]
-        assert "「解氷弁」に働きかけた" in recent
+        assert "「解氷弁」で解氷弁を開く準備をする" in recent
         assert "受け持った" in recent
 
     def test_a_refused_side_is_recorded_once(self) -> None:
@@ -123,3 +123,23 @@ class TestTheTakenSideIsRecorded:
         assert result.success is False
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert len(runtime._action_result_store.get_recent(_MORI, 100)[before:]) == 1
+
+
+class TestTheTakenSideIsToldByItsDisplayName:
+    """受け持ったことを伝える文が、操作名ではなく表示名で語ることを保証する。"""
+
+    def test_result_uses_the_display_label_not_the_action_name(self) -> None:
+        """弁を受け持つと、結果の文は「「解氷弁を開く準備をする」を受け持った」と表示名で語り、open_thaw_valve は出ない。"""
+        runtime = _frozen_runtime_with_mori_at_the_valve()
+        wiring = _wiring(
+            runtime,
+            {
+                "name": "interact",
+                "arguments": {"target_label": "解氷弁", "action_name": "open_thaw_valve", "inner_thought": "弁を受け持つ"},
+            },
+        )
+
+        result = wiring.run_turn(_MORI)
+
+        assert "「解氷弁を開く準備をする」を受け持った" in result.message
+        assert "open_thaw_valve" not in result.message
