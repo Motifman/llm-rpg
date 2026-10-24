@@ -21,10 +21,10 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
     WorldLlmWiring,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _SCENARIO = (
