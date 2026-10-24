@@ -132,7 +132,7 @@ def test_handoff_failure_keeps_committed_trade_and_remains_distinguishable() -> 
 
 def test_trade_read_model_handler_runs_after_trade_commit() -> None:
     """取引read model用handlerは未確定状態ではなくcommit済み取引を観測する。"""
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     setup = _build_in_memory_service(
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,

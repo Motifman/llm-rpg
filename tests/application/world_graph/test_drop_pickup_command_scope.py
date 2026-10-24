@@ -176,7 +176,7 @@ def _build_service(
     interiors.save(SPOT_ID, interior)
 
     observations: list[_CommitObservation] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe_committed(event: object) -> None:
         committed_inventory = inventories.find_by_id(PLAYER_ID)

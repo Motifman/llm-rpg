@@ -75,7 +75,7 @@ def _build_service(database, *, item_on_ground: bool = False):
         )
     interiors.save(SPOT_ID, interior)
 
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     scope_factory = CommandScopeFactory(
         SqliteUnitOfWorkTransactionFactory(database),
         sync_dispatcher=dispatcher,

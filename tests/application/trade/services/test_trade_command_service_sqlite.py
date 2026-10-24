@@ -92,7 +92,7 @@ def _build_sqlite_setup(
     status_repo = SqlitePlayerStatusWriteRepository.for_standalone_connection(conn)
     profile_repo = SqlitePlayerProfileWriteRepository.for_standalone_connection(conn)
     item_repo = SqliteItemWriteRepository.for_standalone_connection(conn)
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     for event_type in _TRADE_EVENT_TYPES:
         dispatcher.register_after_commit(
             event_type,
@@ -269,7 +269,7 @@ def test_worker_redelivers_pending_trade_event_once_and_marks_it_delivered(
     with pytest.raises(CommandPostCommitException):
         setup[0].offer_item(_seed_offer_dependencies(setup))
 
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     delivered_event_ids: list[int] = []
     best_effort_calls: list[int] = []
     dispatcher.register_after_commit(
@@ -308,7 +308,7 @@ def test_worker_keeps_pending_event_when_durable_handler_is_not_registered(
     with pytest.raises(CommandPostCommitException):
         setup[0].offer_item(_seed_offer_dependencies(setup))
 
-    worker = build_trade_outbox_worker(database, CommandEventDispatcher())
+    worker = build_trade_outbox_worker(database, CommandEventDispatcher(failure_observer=lambda *args: None))
 
     with pytest.raises(OutboxDeliveryException):
         worker.run_once()

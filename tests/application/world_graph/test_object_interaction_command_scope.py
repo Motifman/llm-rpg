@@ -234,7 +234,7 @@ def _build_service(
         lambda change: flag_notifications.append(change.flag_name)
     )
 
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     if fail_before_commit:
         dispatcher.register_required_before_commit(
             SpotObjectInteractedEvent,

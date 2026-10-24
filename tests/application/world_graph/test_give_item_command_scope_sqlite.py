@@ -69,7 +69,7 @@ def _build_service(database):
     statuses.save(create_test_status_aggregate(player_id=PLAYER_ID.value))
     statuses.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
 
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     scope_factory = CommandScopeFactory(
         SqliteUnitOfWorkTransactionFactory(database),
         sync_dispatcher=dispatcher,

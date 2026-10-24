@@ -158,7 +158,7 @@ def _build_service(publisher, *, players: tuple[PlayerId, ...] = (PLAYER_ID,)):
         if pid != PLAYER_ID:
             inventory_repo.save(PlayerInventoryAggregate.create_new_inventory(pid))
     spot_interior_repo.save(SPOT_ID, SpotInterior.empty())
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     if publisher is not None:
         for event_type in (
             PlayerDroppedItemEvent,

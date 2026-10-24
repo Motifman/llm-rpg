@@ -135,7 +135,7 @@ def _service(*, departed: bool = False, required_flag: str | None = None):
     departed_positions = DepartedPositionStore()
     if departed:
         departed_positions.place(_PLAYER_ID, _FIRST)
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

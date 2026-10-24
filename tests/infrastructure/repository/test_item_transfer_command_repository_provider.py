@@ -34,7 +34,7 @@ from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_a
 
 
 def _dispatcher() -> CommandEventDispatcher:
-    return CommandEventDispatcher()
+    return CommandEventDispatcher(failure_observer=lambda *args: None)
 
 
 class _Participant:

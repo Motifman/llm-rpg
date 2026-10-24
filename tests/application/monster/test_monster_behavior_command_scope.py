@@ -185,7 +185,7 @@ def _build():
         spot_interior_repository=interiors,
     )
     observed: list[tuple[str, float, int]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe(event: BaseDomainEvent) -> None:
         committed_monster = monsters.find_by_id(monster.monster_id)
