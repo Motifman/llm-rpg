@@ -222,7 +222,7 @@ class BeingMemorySnapshotService:
         short_term_memory = self._being_short_term_memory.get(being_id)
         payload["being_short_term_memory"] = (
             []
-            if short_term_memory == ShortTermMemory.empty()
+            if short_term_memory.is_empty()
             else [being_short_term_memory_to_dict(short_term_memory)]
         )
         # PR-F: payload key の SSOT である EXPECTED_PAYLOAD_KEYS を全て emit
@@ -337,16 +337,18 @@ class BeingMemorySnapshotService:
                 f"got {len(short_term_raw)} items"
             )
         short_term_memories = _decode_list(
-            short_term_raw, dict_to_being_short_term_memory, "being_short_term_memory"
+            short_term_raw,
+            lambda data: dict_to_being_short_term_memory(data, being_id=being_id),
+            "being_short_term_memory",
         )
         short_term_memory = (
-            short_term_memories[0] if short_term_memories else ShortTermMemory.empty()
+            short_term_memories[0] if short_term_memories else ShortTermMemory.empty(being_id)
         )
         self._memory_turn_clock.replace_all_by_being(being_id, turn=memory_turn)
         self._acquaintance.replace_all_by_being(being_id, acquaintances)
         self._being_episode.replace_all_by_being(being_id, being_episodes)
         self._being_memo.replace_all_by_being(being_id, being_memo_book)
-        self._being_short_term_memory.replace_all_by_being(being_id, short_term_memory)
+        self._being_short_term_memory.replace_all_by_being(short_term_memory)
 
 
 __all__ = [
