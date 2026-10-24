@@ -7398,7 +7398,7 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 **関連**: design_decisions D1514 / D1513 / Issue #1508。
 
-**その後**: replay を外したので (#PRNUM)、実験の入口は回の番号を数えず、いつも 1 回目として割り当てる。割り当てはシードだけで決まり、同じシードなら同じになる。`round_assignment` と、シナリオの読み込み (`ScenarioLoader`) や runtime の `round_number` の引数は残した。#1508 で回を重ねる形を作り直すとき、同じ世界から回ごとに違う割り当てを作る仕組みとして使える。`round_assignment` の trace の `round` は 1 になる。
+**その後**: replay を外したので (#PRNUM)、実験の入口は回の番号を数えず、いつも 1 回目として割り当てる。割り当てはシードだけで決まり、同じシードなら同じになる。`round_assignment` と、シナリオの読み込み (`ScenarioLoader`)・`create_world_runtime`・`world_random` の `round_number` の引数は残した。実験の入口 (`GameRuntimeManager`) は回の番号を持たず、渡さない。#1508 で回を重ねる形を作り直すとき、同じ世界から回ごとに違う割り当てを作る仕組みとして使える。`round_assignment` の trace の `round` は 1 になる。
 
 ---
 

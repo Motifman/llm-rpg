@@ -53,7 +53,7 @@ class TestReplayIsGone:
         with pytest.raises(SystemExit):
             _run(config, tmp_path / "r1")
 
-        assert not (tmp_path / "r1" / "trace.jsonl").exists()
+        assert not (tmp_path / "r1").exists()
 
     def test_resolved_and_run_start_have_no_replay_fields(self, tmp_path: Path) -> None:
         """resolved と run_start に、replay の回の番号と読み方の欄を残さない。"""
