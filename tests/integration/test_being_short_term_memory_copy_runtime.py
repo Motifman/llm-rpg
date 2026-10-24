@@ -14,7 +14,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.being.contract import OwnActionResult
+from ai_rpg_world.being.domain.short_term_memory import Attempt, Perception
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from tests.judgment_helpers import ScriptedJudgmentPort
@@ -59,8 +59,8 @@ class TestCopyInTheRuntime:
 
         being_id = runtime._acting_being_for(_ME).being_id
         own_results = [
-            e for e in runtime._being_short_term_memory_store.get(being_id).events
-            if isinstance(e.observation.route, OwnActionResult)
+            e for e in runtime._being_short_term_memory_store.get(being_id).experiences
+            if isinstance(e, Attempt)
         ]
         assert [(e.turn, e.move.tool_name, e.move.inner_thought) for e in own_results] == [
             (1, TOOL_NAME_SPOT_GRAPH_WAIT, "様子を見る"),
@@ -84,12 +84,16 @@ class TestCopyInTheRuntime:
             _turn(wiring)
 
         being_id = runtime._acting_being_for(_ME).being_id
-        events = runtime._being_short_term_memory_store.get(being_id).events
-        assert [(e.turn, type(e.observation.route).__name__, e.observation.body.split("\n")[0]) for e in events] == [
-            (1, "SeenOrHeard", "鐘が鳴った"),
-            (1, "OwnActionResult", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
-            (2, "SeenOrHeard", "扉の向こうで足音がした"),
-            (2, "OwnActionResult", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
+        experiences = runtime._being_short_term_memory_store.get(being_id).experiences
+        bodies = [
+            (e.turn, type(e).__name__, (e.observation if isinstance(e, Perception) else e.result).body.split("\n")[0])
+            for e in experiences
+        ]
+        assert bodies == [
+            (1, "Perception", "鐘が鳴った"),
+            (1, "Attempt", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
+            (2, "Perception", "扉の向こうで足音がした"),
+            (2, "Attempt", "[行動] その場で待機した → [結果] しばらく行動を控えて、様子を見た"),
         ]
 
     def test_copying_does_not_change_the_prompt(self) -> None:

@@ -57,7 +57,7 @@ WORLD_TICK_UNIT_FAILED = "world_tick_unit_failed"
 #: Being 側の短期記憶へ写せなかったうち、規則の崩れか想定外の例外を表す理由 (design_decisions D1824-7)。
 #: 記憶の道具や 1 手の無い結果のような、決めたとおりに写さないものは数えない。
 BEING_SHORT_TERM_MEMORY_NOT_COPIED = "being_short_term_memory_not_copied"
-BROKEN_COPY_REASONS = frozenset({"memory_rule", "contract_violation", "unexpected_error"})
+BROKEN_COPY_REASONS = frozenset({"memory_rule", "contract_violation", "unpaired_result", "unexpected_error"})
 
 #: ターンの文を見て、穴を見つけたら説明の文を返す検査。シナリオごとに足す。
 TurnCheck = Callable[["TurnView"], Iterable[str]]
