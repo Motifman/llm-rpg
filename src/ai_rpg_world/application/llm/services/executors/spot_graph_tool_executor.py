@@ -857,13 +857,13 @@ class SpotGraphToolExecutor:
                         "新しい発見はなかった。"
                         f"{exhausted_hint}"
                         f"既に見えているオブジェクト: {visible_objects}"
-                        " (interact するにはこのオブジェクトの名前を target_label に指定する)"
+                        " (働きかけるときは、このオブジェクトの名前を target_label に指定する)"
                     )
                 else:
                     message = (
                         "新しい発見はなかった。"
                         f"{exhausted_hint}"
-                        "(この場所に interactable なオブジェクトは無い)"
+                        "(この場所に働きかけられるオブジェクトは無い)"
                     )
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -2716,7 +2716,7 @@ class SpotGraphToolExecutor:
                 # なので相手名だけ具体化)。
                 msg = (
                     f"{target_disp} は同じ場所にいません。"
-                    f"travel_to で移動してから再度渡してください。"
+                    f"相手のいる場所へ移ってから、もう一度渡してください。"
                 )
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
