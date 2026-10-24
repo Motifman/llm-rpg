@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.being.player_short_term_memory_copy import (
         PlayerShortTermMemoryCopy,
     )
+    from ai_rpg_world.application.being.recent_events_shadow import RecentEventsShadow
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
         ResolvedLlmRuntimeConfig,
@@ -647,6 +648,8 @@ class WorldRuntime:
     _being_short_term_memory_copy: PlayerShortTermMemoryCopy | None = field(
         default=None, repr=False
     )
+    # create_world_runtime が組む。プロンプトを組むたびに【直近の出来事】を比べる。
+    _recent_events_shadow: RecentEventsShadow | None = field(default=None, repr=False)
     # reason-first 2段階 turn の有効化。True でも常時 2 段階ではなく、
     # presentation runtime_manager の Phase A 入口で既存 shared state を読んで
     # gated 発火する。下流 execution / episode / prediction 経路は mode 非分岐。
@@ -1977,6 +1980,18 @@ class WorldRuntime:
             return None
         return self._memory_turn_clock.advance_turn(acting.being_id)
 
+    def note_being_memories_restored(self, being_ids: Sequence[BeingId]) -> None:
+        """Being の記憶を snapshot から戻した。【直近の出来事】の影に知らせる。"""
+        if self._recent_events_shadow is not None:
+            for being_id in being_ids:
+                self._recent_events_shadow.note_restored(being_id)
+
+    def _on_short_term_compacted(self, player_id: PlayerId, entries: Sequence[Any]) -> None:
+        """今の短期記憶が古いターンを畳んだ。エピソードを書き、【直近の出来事】の影に知らせる。"""
+        if self._recent_events_shadow is not None:
+            self._recent_events_shadow.note_compacted(player_id)
+        self._write_compacted_episodes(player_id, entries)
+
     def _write_compacted_episodes(
         self, player_id: PlayerId, entries: Sequence[Any]
     ) -> None:
@@ -2213,6 +2228,9 @@ class WorldRuntime:
             system_prompt_builder=WorldSystemPromptBuilder(self),
             available_tools_provider=WorldAvailableToolsProvider(),
             recent_events_projection=(self._public_sns_projection.project if self._public_sns_projection else None),
+            recent_events_shadow=(
+                self._recent_events_shadow.compare if self._recent_events_shadow is not None else None
+            ),
         )
         # objective_text は scenario.metadata.llm_objective_text を 1 度だけ解決する。
         # 空のとき ValueError が立つので、prompt builder 構築時点で fail-fast。
@@ -5402,7 +5420,7 @@ def create_world_runtime(
         event_store=recent_event_store,
         aux_llm_call_sink=aux_llm_call_sink,
         # runtime はこのあとで組むが、畳むのは tick が始まってからなので間に合う。
-        on_compacted=lambda pid, entries: runtime._write_compacted_episodes(pid, entries),
+        on_compacted=lambda pid, entries: runtime._on_short_term_compacted(pid, entries),
     )
     action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
@@ -6975,6 +6993,15 @@ def create_world_runtime(
         trace_recorder_provider=lambda: runtime._trace_recorder,
     )
     recent_event_store.add_append_listener(runtime._being_short_term_memory_copy.on_appended)
+    from ai_rpg_world.application.being.recent_events_shadow import RecentEventsShadow
+
+    runtime._recent_events_shadow = RecentEventsShadow(
+        store=runtime._being_short_term_memory_store,
+        being_id_of=_being_id_of,
+        projection_active=lambda: runtime._public_sns_projection is not None,
+        current_tick_provider=lambda: runtime.current_tick(),
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+    )
     runtime._player_episode_writing = _build_player_episode_writing(
         config,
         runtime=runtime,

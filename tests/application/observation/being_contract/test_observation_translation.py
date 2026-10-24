@@ -290,20 +290,12 @@ class TestRoute:
         assert isinstance(observation.route, SeenOrHeard)
         assert observation.addressed_to_self is False
 
-    @pytest.mark.parametrize(
-        "structured",
-        [
-            {"loop_guard": True, "tool_name": "wait"},
-        ],
-    )
-    def test_being_inner_records_are_not_representable(
-        self, structured: dict[str, Any]
-    ) -> None:
-        """ループ警告は、環境からの観測ではないので変換を拒む。"""
-        with pytest.raises(ObservationNotRepresentable) as raised:
-            _translate(_output(structured, category="self_only"))
+    def test_loop_guard_warning_is_an_environment_notice_to_self(self) -> None:
+        """同じ行動の繰り返しへの警告は、出すかを環境が判定するので、自分についての環境からの知らせとして写す。送り手は分からない (design_decisions D1824-10)。"""
+        observation = _translate(_output({"loop_guard": True, "tool_name": "wait"}, category="self_only"))
 
-        assert raised.value.reason is NotRepresentableReason.BEING_INNER_RECORD
+        assert observation.route == EnvironmentNotice()
+        assert (observation.subject_is_self, observation.addressed_to_self, observation.source) == (True, True, UNKNOWN)
 
     def test_blank_prose_is_not_representable(self) -> None:
         """目撃文との重複を避けて本文を空にした観測は、必須の本文が無いので変換を拒む。"""
@@ -813,14 +805,15 @@ class TestOccurrenceOrderIsCarried:
     """写す関数が、渡された起きた順を観測にそのまま入れることを保証する (design_decisions D1824-8)。"""
 
     def test_every_translation_carries_the_given_order(self) -> None:
-        """観測、自分の行動の結果、1 手と同じ手番に届かない結果のどれも、渡した起きた順を持つ。"""
+        """観測、自分の行動の結果、1 手と同じ手番に届かない結果、繰り返しの警告のどれも、渡した起きた順を持つ。"""
         order = OccurrenceOrder(environment="浜辺の村", value=1.5)
         result = ActionResultEntry(occurred_at=datetime(2026, 1, 1, tzinfo=timezone.utc), action_summary="待った", result_summary="様子を見た", success=True, tool_name="wait", game_time_label="一日目の朝 0:10")
 
         observations = [
             observation_from_game(ObservationOutput(prose="鐘が鳴った", structured={"type": "distant_cue_appeared"}), tick=None, game_time_label="一日目の朝 0:10", observer=_NOAH, order=order),
+            observation_from_game(ObservationOutput(prose="同じ行動が続いている", structured={"loop_guard": True}), tick=None, game_time_label="一日目の朝 0:10", observer=_NOAH, order=order),
             observation_from_action_result(result, call_id="c", observer=_NOAH, order=order),
             observation_from_unprompted_result(result, observer=_NOAH, order=order),
         ]
 
-        assert [o.order for o in observations] == [order] * 3
+        assert [o.order for o in observations] == [order] * 4

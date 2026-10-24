@@ -76,7 +76,26 @@ def test_counts_unknown_fields_per_route_and_pairs_action_results(
 def test_not_representable_observations_are_counted_by_reason(
     report: ModuleType, tmp_path: Path
 ) -> None:
-    """ループ警告は変換されず、理由と種類つきで写せなかった観測に数えられる。"""
+    """本文が空の観測は変換されず、理由と種類つきで写せなかった観測に数えられる。"""
+    trace = _write_trace(
+        tmp_path,
+        [
+            _spawn(1, 2, "ノア", "浜辺"),
+            _observation(2, 1, 2, "深夜 0:05", prose=" ", structured={"type": "player_spoke"}),
+        ],
+    )
+    tally = report.Tally()
+
+    report.tally_trace(trace, tally)
+
+    assert sum(tally.converted.values()) == 0
+    assert dict(tally.not_representable) == {"empty_body: player_spoke": 1}
+
+
+def test_loop_guard_warning_is_counted_as_an_environment_notice(
+    report: ModuleType, tmp_path: Path
+) -> None:
+    """同じ行動の繰り返しへの警告は、環境からの知らせとして変換された件数に数えられる (design_decisions D1824-10)。"""
     trace = _write_trace(
         tmp_path,
         [
@@ -93,8 +112,8 @@ def test_not_representable_observations_are_counted_by_reason(
 
     report.tally_trace(trace, tally)
 
-    assert sum(tally.converted.values()) == 0
-    assert dict(tally.not_representable) == {"being_inner_record: loop_guard": 1}
+    assert dict(tally.converted) == {"EnvironmentNotice": 1}
+    assert dict(tally.not_representable) == {}
 
 
 def test_memo_tool_result_is_counted_as_not_representable(
