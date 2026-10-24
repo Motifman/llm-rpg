@@ -26,7 +26,9 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
     required_int_arg,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    action_history_projection,
     action_history_projection_kwargs,
+    format_action_summary_for_display,
 )
 from ai_rpg_world.application.llm.services.executors.interact_helpers import (
     hidden_object_interaction_failure_reason,
@@ -1488,6 +1490,23 @@ class SpotGraphToolExecutor:
                 error,
                 location="_prepare_action",
                 stage="command_scope",
+            )
+        # phase_b は成功した interact を「do_interact が記録した」とみなして汎用の
+        # 記録を飛ばす。準備の登録は do_interact を通らないので、ここで記録する。
+        if self._runtime is not None:
+            identifiers, free_text_names = action_history_projection(args)
+            # resolver が target_label を object_id に置き換えたあとなので、対象の名前は
+            # 履歴の射影から取る。
+            self._runtime._record_action_result(
+                PlayerId(player_id),
+                format_action_summary_for_display(
+                    TOOL_NAME_SPOT_GRAPH_INTERACT, {**args, **identifiers}
+                ),
+                result.message,
+                tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
+                identifier_arguments=identifiers,
+                free_text_argument_names=free_text_names,
+                **extract_subjective_action_fields(args),
             )
         return result
 

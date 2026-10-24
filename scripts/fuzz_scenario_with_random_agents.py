@@ -11,6 +11,7 @@
 - ``check``: シナリオごとに足した検査 (``extra_checks``) が文を返した
 - ``unreadable_candidates``: 候補表にスタブが読み戻せない行があった。でたらめな行動が黙って減る
 - ``stranger_name``: 手番の人が名前を知らない相手の名前が、その人への文に出た (#1581)
+- ``unrecorded_action``: 1 手を出したのに、どこにも行動の結果が記録されなかった。本人の【直近の出来事】に出ない
 
 漏れは、メッセージの本文とツール定義の説明文の両方で探す。Issue にしてまだ直っていない穴は
 ``KNOWN_HOLES`` に書く。見つけても run を失敗にせず、Issue 番号を添えて出す。
@@ -411,12 +412,15 @@ def _drive(
         )
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
+        recorded_by_player = _count_recorded_action_results(runtime)
+        recorded_before_action: dict[int, int] = {}
 
         def on_trace(kind: str, tick: int | None, player_id: int | None, payload: Mapping[str, Any]) -> None:
             if kind == "action":
                 result.actions.append(
                     FuzzAction(int(tick or 0), int(player_id or 0), str(payload.get("tool")), dict(payload.get("arguments") or {}))
                 )
+                recorded_before_action[int(player_id or 0)] = recorded_by_player.get(int(player_id or 0), 0)
             elif kind == WORLD_TICK_UNIT_FAILED:
                 result.findings.append(FuzzFinding("exception", int(tick or 0), f"世界の tick で 1 体ぶん取りやめた: {_compact(payload)}"))
             elif kind == BEING_SHORT_TERM_MEMORY_NOT_COPIED and payload.get("reason") in BROKEN_COPY_REASONS:
@@ -425,6 +429,15 @@ def _drive(
                 swallowed = _swallowed_exception(payload)
                 if swallowed:
                     result.findings.append(FuzzFinding("swallowed_exception", int(tick or 0), f"{payload.get('tool')}: {swallowed}"))
+                before = recorded_before_action.pop(int(player_id or 0), None)
+                if before is not None and recorded_by_player.get(int(player_id or 0), 0) == before:
+                    result.findings.append(
+                        FuzzFinding(
+                            "unrecorded_action",
+                            int(tick or 0),
+                            f"{payload.get('tool')} (success={payload.get('success')}): 行動の結果がどこにも記録されなかった",
+                        )
+                    )
 
         class _Recorder(NullTraceRecorder):
             def record(self, kind, *, tick=None, player_id=None, **payload):  # type: ignore[override]
@@ -495,6 +508,20 @@ def _drive(
             engine_logger.removeHandler(errors)
             engine_logger.setLevel(saved_level)
         result.findings += [FuzzFinding("logged_error", t, d) for t, d in errors.records]
+
+
+def _count_recorded_action_results(runtime: Any) -> dict[int, int]:
+    """行動の結果の記録先に積まれた件数を、人ごとに数える。記録先への入口はここ 1 つ。"""
+    store = runtime._action_result_store
+    counts: dict[int, int] = {}
+    append = store.append
+
+    def counting_append(player_id: Any, *args: Any, **kwargs: Any) -> Any:
+        counts[int(player_id.value)] = counts.get(int(player_id.value), 0) + 1
+        return append(player_id, *args, **kwargs)
+
+    store.append = counting_append
+    return counts
 
 
 def _unknown_names(runtime: Any, viewer: int) -> dict[str, str]:
