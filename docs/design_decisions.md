@@ -7368,7 +7368,7 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 記憶に世界の tick を書く欄を足すと、前の回の tick が新しい回の記録より新しく見える問題がまた起きる。記憶の欄は Being のターン数で持つ。
 
-**その後**: replay (`snapshot_load_mode: "replay"`) は外した (#PRNUM)。
+**その後**: replay (`snapshot_load_mode: "replay"`) は外した (#1832)。
 - 使う profile も run も無かった。
 - 同じ Being が新しい環境に入る形は、#1771 の環境への出入りで扱う。
 - 短期記憶を Being の側へ移すと、replay では前の回の出来事が次の回の直近の出来事に残る。続きからの再開では、残るのが正しい。
@@ -7398,7 +7398,7 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 **関連**: design_decisions D1514 / D1513 / Issue #1508。
 
-**その後**: replay を外したので (#PRNUM)、実験の入口は回の番号を数えず、いつも 1 回目として割り当てる。割り当てはシードだけで決まり、同じシードなら同じになる。`round_assignment` と、シナリオの読み込み (`ScenarioLoader`)・`create_world_runtime`・`world_random` の `round_number` の引数は残した。実験の入口 (`GameRuntimeManager`) は回の番号を持たず、渡さない。#1508 で回を重ねる形を作り直すとき、同じ世界から回ごとに違う割り当てを作る仕組みとして使える。`round_assignment` の trace の `round` は 1 になる。
+**その後**: replay を外したので (#1832)、実験の入口は回の番号を数えず、いつも 1 回目として割り当てる。割り当てはシードだけで決まり、同じシードなら同じになる。`round_assignment` と、シナリオの読み込み (`ScenarioLoader`)・`create_world_runtime`・`world_random` の `round_number` の引数は残した。実験の入口 (`GameRuntimeManager`) は回の番号を持たず、渡さない。#1508 で回を重ねる形を作り直すとき、同じ世界から回ごとに違う割り当てを作る仕組みとして使える。`round_assignment` の trace の `round` は 1 になる。
 
 ---
 
@@ -7420,7 +7420,7 @@ JSONへまとめる。SNS有効の再開でこの状態やworld.jsonが無けれ
 
 **関連**: design_decisions D1514 / D1514-2 / Issue #1508。
 
-**その後**: replay を外したので (#PRNUM)、実験の入口からは 1 回目の種だけを使う。1 回目は回の番号を入れる前と同じ種なので、続きからの再開を含めて結果は変わらない。`world_random` の `round_number` の引数は、D1514-2 の「その後」と同じ理由で残した。
+**その後**: replay を外したので (#1832)、実験の入口からは 1 回目の種だけを使う。1 回目は回の番号を入れる前と同じ種なので、続きからの再開を含めて結果は変わらない。`world_random` の `round_number` の引数は、D1514-2 の「その後」と同じ理由で残した。
 
 ---
 
