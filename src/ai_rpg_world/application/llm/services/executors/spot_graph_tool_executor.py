@@ -546,8 +546,6 @@ class SpotGraphToolExecutor:
         action 成功時の後処理として呼ぶ。保存に失敗しても親 action は倒さず、
         確定済みの処理に続く後処理の失敗として trace に残す (design_decisions
         D1558-2)。trace の記録先を持たない実行器では WARNING のログに残す。
-        fail_fast と、記録先があるのに記録できなかったときは D1558-2 どおり投げ直し、
-        親 action の ``except`` が失敗の結果として返す。
         """
         if amount <= 0:
             return
@@ -574,9 +572,19 @@ class SpotGraphToolExecutor:
                 "fatigue was not saved (player_id=%s); continuing", player_id, exc_info=exc
             )
             return
-        self._runtime._record_world_tick_follow_up_failure(
-            exc, stage="action.fatigue", target_kind="player", target_id=player_id, player_id=player_id
-        )
+        try:
+            self._runtime._record_world_tick_follow_up_failure(
+                exc, stage="action.fatigue", target_kind="player", target_id=player_id, player_id=player_id
+            )
+        except Exception as stop:
+            # fail_fast の投げ直しも、記録できなかった失敗も、ツールの中からは run を止められない
+            # (phase_b が例外を失敗の結果に変えて続ける)。失敗の結果を返すと、確定済みの行動を
+            # LLM がもう一度出して二重に実行するので、行動は成功のまま返す。
+            logger.error(
+                "fatigue failure could not stop the run (player_id=%s); the action stays committed",
+                player_id,
+                exc_info=stop,
+            )
 
     def _recover_fatigue_safe(self, player_id: int, amount: int) -> None:
         """疲労回復を best-effort で適用する (PR β)。保存の失敗の残し方は ``_apply_fatigue_safe`` と同じ。"""

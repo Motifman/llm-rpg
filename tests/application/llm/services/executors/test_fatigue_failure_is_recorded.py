@@ -17,6 +17,10 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_WAIT
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
+from ai_rpg_world.application.world_graph.world_tick_failure_isolation import (
+    WorldTickFailureIsolator,
+    WorldTickFailurePolicy,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
@@ -113,3 +117,20 @@ class TestFatigueSaveFailureThroughTheTool:
         assert result.success is True
         failures = [e for e in recorder.events if e.kind == TraceEventKind.WORLD_TICK_UNIT_FAILED]
         assert [f.payload["stage"] for f in failures] == ["action.fatigue"]
+
+    def test_under_fail_fast_wait_still_succeeds_and_the_failure_is_recorded(self, monkeypatch) -> None:
+        """fail_fast でも、確定済みの wait は成功の結果を返す (失敗を返すと LLM が行動を繰り返す)。疲労の段の失敗は 1 件残る。"""
+        runtime, executor, recorder = _executor_whose_status_save_fails(monkeypatch)
+        monkeypatch.setattr(
+            runtime,
+            "_world_tick_failure_isolator",
+            WorldTickFailureIsolator(
+                policy=WorldTickFailurePolicy.FAIL_FAST, trace_recorder_provider=lambda: recorder
+            ),
+        )
+
+        result = executor.get_handlers()[TOOL_NAME_SPOT_GRAPH_WAIT](1, {})
+
+        assert result.success is True
+        failures = [e for e in recorder.events if e.kind == TraceEventKind.WORLD_TICK_UNIT_FAILED]
+        assert [(f.payload["stage"], f.payload["policy"]) for f in failures] == [("action.fatigue", "fail_fast")]
