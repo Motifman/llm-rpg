@@ -36,10 +36,14 @@ from ai_rpg_world.being.domain.memo_book import (
     MemoSource,
 )
 from ai_rpg_world.being.domain.short_term_memory import (
+    Attempt,
     Backstory,
-    RememberedEvent,
+    Lapse,
+    MemoryOperationResult,
+    Perception,
     ShortTermMemory,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.exception import DomainException
 
 
@@ -277,16 +281,99 @@ def _dict_to_move(data: dict[str, Any]) -> AgentMove:
     )
 
 
+def _time_to_dict(time: ObservedTime) -> dict[str, Any]:
+    return {"display": time.display, "seconds": time.seconds}
+
+
+def _dict_to_time(data: dict[str, Any]) -> ObservedTime:
+    return ObservedTime(display=data["display"], seconds=data["seconds"])
+
+
+class _ExperienceToDict:
+    def perceived(self, perception: Perception) -> dict[str, Any]:
+        return {
+            "kind": "perception",
+            "turn": perception.turn,
+            "observation": _observation_to_dict(perception.observation),
+        }
+
+    def attempted(self, attempt: Attempt, result: Observation) -> dict[str, Any]:
+        return {**self.attempted_without_result(attempt), "result": {"observation": _observation_to_dict(result)}}
+
+    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationResult) -> dict[str, Any]:
+        return {
+            **self.attempted_without_result(attempt),
+            "result": {
+                "memory_operation": {
+                    "call_id": result.call_id,
+                    "body": result.body,
+                    "time": _time_to_dict(result.time),
+                    "order": _order_to_dict(result.order),
+                }
+            },
+        }
+
+    def attempted_without_result(self, attempt: Attempt) -> dict[str, Any]:
+        return {"kind": "attempt", "turn": attempt.turn, "move": _move_to_dict(attempt.move), "result": None}
+
+    def lapsed(self, lapse: Lapse) -> dict[str, Any]:
+        return {
+            "kind": "lapse",
+            "turn": lapse.turn,
+            "body": lapse.body,
+            "time": _time_to_dict(lapse.time),
+            "order": _order_to_dict(lapse.order),
+        }
+
+
+def _dict_to_attempt_result(data: dict[str, Any] | None) -> Observation | MemoryOperationResult | None:
+    if data is None:
+        return None
+    if "observation" in data:
+        return _dict_to_observation(data["observation"])
+    operation = data["memory_operation"]
+    return MemoryOperationResult(
+        call_id=operation["call_id"],
+        body=operation["body"],
+        time=_dict_to_time(operation["time"]),
+        order=_dict_to_order(operation["order"]),
+    )
+
+
+def _dict_to_attempt(data: dict[str, Any]) -> Attempt:
+    return Attempt(turn=data["turn"], move=_dict_to_move(data["move"]), result=_dict_to_attempt_result(data["result"]))
+
+
+def _dict_to_experience(data: dict[str, Any]) -> Perception | Attempt | Lapse:
+    kind = data["kind"]
+    if kind == "perception":
+        return Perception(turn=data["turn"], observation=_dict_to_observation(data["observation"]))
+    if kind == "attempt":
+        return _dict_to_attempt(data)
+    if kind == "lapse":
+        return Lapse(
+            turn=data["turn"],
+            body=data["body"],
+            time=_dict_to_time(data["time"]),
+            order=_dict_to_order(data["order"]),
+        )
+    raise KeyError(f"unknown experience kind {kind!r}")
+
+
+def _event_to_experience(data: dict[str, Any]) -> Perception | Attempt:
+    """短期記憶を集約に作り直す前の形 (観測と、自分の行動の結果なら 1 手) を読む (design_decisions D1824-9)。"""
+    observation = _dict_to_observation(data["observation"])
+    if data["move"] is None:
+        return Perception(turn=data["turn"], observation=observation)
+    return Attempt(turn=data["turn"], move=_dict_to_move(data["move"]), result=observation)
+
+
 def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
+    to_dict = _ExperienceToDict()
     return {
-        "events": [
-            {
-                "turn": event.turn,
-                "observation": _observation_to_dict(event.observation),
-                "move": None if event.move is None else _move_to_dict(event.move),
-            }
-            for event in memory.events
-        ],
+        "experiences": [experience.show_to(to_dict) for experience in memory.experiences],
+        "recent_from": memory.recent_from,
+        "awaiting": None if memory.awaiting is None else _move_and_turn_to_dict(memory.awaiting),
         "backstories": [
             {"flow": b.flow, "mood": b.mood, "written_turn": b.written_turn}
             for b in memory.backstories
@@ -294,21 +381,29 @@ def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:
     }
 
 
-def dict_to_being_short_term_memory(data: dict[str, Any]) -> ShortTermMemory:
+def _move_and_turn_to_dict(attempt: Attempt) -> dict[str, Any]:
+    return {"turn": attempt.turn, "move": _move_to_dict(attempt.move)}
+
+
+def dict_to_being_short_term_memory(data: dict[str, Any], *, being_id: BeingId) -> ShortTermMemory:
     try:
+        experiences = (
+            tuple(_event_to_experience(event) for event in data["events"])
+            if "events" in data
+            else tuple(_dict_to_experience(experience) for experience in data["experiences"])
+        )
+        awaiting = data.get("awaiting")
         return ShortTermMemory(
-            events=tuple(
-                RememberedEvent(
-                    turn=event["turn"],
-                    observation=_dict_to_observation(event["observation"]),
-                    move=None if event["move"] is None else _dict_to_move(event["move"]),
-                )
-                for event in data["events"]
-            ),
+            being_id,
+            experiences=experiences,
             backstories=tuple(
                 Backstory(flow=b["flow"], mood=b["mood"], written_turn=b["written_turn"])
                 for b in data["backstories"]
             ),
+            recent_from=data.get("recent_from", 1),
+            awaiting=None
+            if awaiting is None
+            else Attempt(turn=awaiting["turn"], move=_dict_to_move(awaiting["move"])),
         )
     except DomainException as exc:
         raise ValueError(f"invalid being short-term memory payload: {exc}") from exc

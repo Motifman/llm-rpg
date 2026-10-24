@@ -1,20 +1,34 @@
-"""Being の短期記憶。直近の出来事と、それより前の流れをつなぐいきさつ。
+"""Being の短期記憶。直近の出来事と、それより前の流れをつなぐいきさつ (#1824)。
 
 出来事は環境との契約の型 (観測と 1 手) で持ち、ゲームの型を持たない。
 """
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Final, Protocol, TypeVar
 
-from ai_rpg_world.being.contract import AgentMove, Observation, OwnActionResult, Route
+from ai_rpg_world.being.contract import (
+    AgentMove,
+    Observation,
+    ObservedTime,
+    OccurrenceOrder,
+    OwnActionResult,
+)
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
-BACKSTORY_GENERATIONS = 3
+RECENT_TURNS: Final = 20
+FOLD_TURNS: Final = 10
+BACKSTORY_GENERATIONS: Final = 3
+
+_T_co = TypeVar("_T_co", covariant=True)
 
 
 def _require_turn(value: object, field_name: str) -> int:
@@ -23,43 +37,146 @@ def _require_turn(value: object, field_name: str) -> int:
     return value
 
 
-def turn_for_event(route: Route, *, current_turn: int) -> int:
-    """出来事に付ける手番の番号 (design_decisions D1824-5)。
+def _require_text(value: object, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ShortTermMemoryValidationException(f"{field_name} must be non-blank str")
 
-    観測は 1 手を受け取る前に届き、次の 1 手がそれを見る。自分の行動の結果は、
-    時計がその 1 手の番号まで進んだあとに届く。
-    """
-    _require_turn(current_turn, "current_turn")
-    if isinstance(route, OwnActionResult):
-        if current_turn == 0:
-            raise ShortTermMemoryValidationException("an own action result needs a move before it")
-        return current_turn
-    return current_turn + 1
+
+def _require_order(value: object) -> None:
+    if value is not None and not isinstance(value, OccurrenceOrder):
+        raise ShortTermMemoryValidationException("order must be OccurrenceOrder or None")
+
+
+class ExperienceReader(Protocol[_T_co]):
+    """出来事を種類ごとに読む側。文を作る側や保存の側が、出来事の型を見分けずに済む。"""
+
+    def perceived(self, perception: Perception) -> _T_co: ...
+
+    def attempted(self, attempt: Attempt, result: Observation) -> _T_co: ...
+
+    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationResult) -> _T_co: ...
+
+    def attempted_without_result(self, attempt: Attempt) -> _T_co: ...
+
+    def lapsed(self, lapse: Lapse) -> _T_co: ...
+
+
+class Experience(ABC):
+    """短期記憶に残る出来事。``turn`` は、その出来事を見る、または起こした 1 手の番号 (design_decisions D1824-5)。"""
+
+    turn: int
+
+    @property
+    @abstractmethod
+    def order(self) -> OccurrenceOrder | None: ...
+
+    @abstractmethod
+    def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co: ...
 
 
 @dataclass(frozen=True, kw_only=True)
-class RememberedEvent:
-    """``move`` は、自分の行動の結果を生んだ 1 手。それ以外の経路では持たない。"""
+class Perception(Experience):
+    """自分の行動の結果以外の経路で届いた観測。"""
 
     turn: int
     observation: Observation
-    move: AgentMove | None = None
 
     def __post_init__(self) -> None:
         _require_turn(self.turn, "turn")
         if not isinstance(self.observation, Observation):
             raise ShortTermMemoryValidationException("observation must be Observation")
-        route = self.observation.route
-        if not isinstance(route, OwnActionResult):
-            if self.move is not None:
-                raise ShortTermMemoryValidationException("only an own action result carries a move")
-            return
+        if isinstance(self.observation.route, OwnActionResult):
+            raise ShortTermMemoryValidationException("an own action result belongs to an attempt")
+
+    @property
+    def order(self) -> OccurrenceOrder | None:
+        return self.observation.order
+
+    def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co:
+        return reader.perceived(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MemoryOperationResult:
+    """記憶の道具 (メモ、エピソード、状況の評価) の 1 手に、Being の記憶が返した結果。"""
+
+    call_id: str
+    body: str
+    time: ObservedTime
+    order: OccurrenceOrder | None = None
+
+    def __post_init__(self) -> None:
+        _require_text(self.call_id, "call_id")
+        _require_text(self.body, "body")
+        if not isinstance(self.time, ObservedTime):
+            raise ShortTermMemoryValidationException("time must be ObservedTime")
+        _require_order(self.order)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Attempt(Experience):
+    """Being が選んだ 1 手と、その結果。結果が無いのは、結果を待っているか、来ないまま次の 1 手を選んだとき。"""
+
+    turn: int
+    move: AgentMove
+    result: Observation | MemoryOperationResult | None = None
+
+    def __post_init__(self) -> None:
+        _require_turn(self.turn, "turn")
         if not isinstance(self.move, AgentMove):
-            raise ShortTermMemoryValidationException("an own action result needs the move that caused it")
-        if self.move.call_id != route.call_id:
+            raise ShortTermMemoryValidationException("move must be AgentMove")
+        if self.result is not None and _call_id_of(self.result) != self.move.call_id:
             raise ShortTermMemoryValidationException(
-                f"move {self.move.call_id!r} does not match result {route.call_id!r}"
+                f"result {_call_id_of(self.result)!r} does not answer move {self.move.call_id!r}"
             )
+
+    @property
+    def order(self) -> OccurrenceOrder | None:
+        return None if self.result is None else self.result.order
+
+    def answered_by(self, result: Observation | MemoryOperationResult, *, turn: int) -> Attempt:
+        if _call_id_of(result) != self.move.call_id:
+            raise ShortTermMemoryUnpairedResultException(
+                f"result {_call_id_of(result)!r} does not answer the awaiting move {self.move.call_id!r}"
+            )
+        return Attempt(turn=turn, move=self.move, result=result)
+
+    def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co:
+        if self.result is None:
+            return reader.attempted_without_result(self)
+        if isinstance(self.result, MemoryOperationResult):
+            return reader.attempted_memory_operation(self, self.result)
+        return reader.attempted(self, self.result)
+
+
+def _call_id_of(result: object) -> str:
+    if isinstance(result, MemoryOperationResult):
+        return result.call_id
+    if isinstance(result, Observation) and isinstance(result.route, OwnActionResult):
+        return result.route.call_id
+    raise ShortTermMemoryValidationException(
+        "a result must be an own action result or a memory operation result"
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class Lapse(Experience):
+    """1 手を出せなかったこと (迷った、LLM の呼び出しが失敗した、道具を選ばず文章を返した)。"""
+
+    turn: int
+    body: str
+    time: ObservedTime
+    order: OccurrenceOrder | None = None
+
+    def __post_init__(self) -> None:
+        _require_turn(self.turn, "turn")
+        _require_text(self.body, "body")
+        if not isinstance(self.time, ObservedTime):
+            raise ShortTermMemoryValidationException("time must be ObservedTime")
+        _require_order(self.order)
+
+    def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co:
+        return reader.lapsed(self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -78,63 +195,240 @@ class Backstory:
         _require_turn(self.written_turn, "written_turn")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
+class ExperiencesFolded:
+    """直近の範囲から古いターンの出来事を外した。受け手は、外した出来事からエピソードを書き起こし、いきさつを作り直す。
+
+    ``event_id`` と ``occurred_at`` は、イベント基盤の作り直し (#1837) の共通の基底に乗せ替えるときに型の形を変えずに済むよう、同じ名前で持つ。
+    """
+
+    event_id: int
+    occurred_at: datetime
+    being_id: BeingId
+    turn: int
+    folded: tuple[Experience, ...]
+    backstories: tuple[Backstory, ...]
+
+
 class ShortTermMemory:
-    """Being ごとに 1 つ。持ち主の ``BeingId`` は持たず、保存の側が Being ごとに分ける。"""
+    """Being ごとに 1 つある、直近の出来事といきさつを持つ集約 (design_decisions D1824-9)。
 
-    events: tuple[RememberedEvent, ...] = ()
-    backstories: tuple[Backstory, ...] = ()
+    操作は中身を書き換え、値を返さない。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。
+    ``recent_from`` は直近の範囲の始まりのターン。``awaiting`` は結果を待っている 1 手。
+    """
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.events, tuple) or not all(
-            isinstance(e, RememberedEvent) for e in self.events
-        ):
-            raise ShortTermMemoryValidationException("events must be a tuple of RememberedEvent")
-        if not isinstance(self.backstories, tuple) or not all(
-            isinstance(b, Backstory) for b in self.backstories
-        ):
-            raise ShortTermMemoryValidationException("backstories must be a tuple of Backstory")
-        turns = [e.turn for e in self.events]
-        if turns != sorted(turns):
-            raise ShortTermMemoryValidationException("events must be in turn order")
-        if len(self.backstories) > BACKSTORY_GENERATIONS:
-            raise ShortTermMemoryValidationException(
-                f"at most {BACKSTORY_GENERATIONS} backstories, got {len(self.backstories)}"
-            )
-        written = [b.written_turn for b in self.backstories]
-        if written != sorted(written):
-            raise ShortTermMemoryValidationException("backstories must be in written order")
+    def __init__(
+        self,
+        being_id: BeingId,
+        *,
+        experiences: tuple[Experience, ...] = (),
+        backstories: tuple[Backstory, ...] = (),
+        recent_from: int = 1,
+        awaiting: Attempt | None = None,
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise ShortTermMemoryValidationException("being_id must be BeingId")
+        self._being_id = being_id
+        self._events: list[ExperiencesFolded] = []
+        self._become(experiences, backstories, recent_from, awaiting)
 
     @classmethod
-    def empty(cls) -> ShortTermMemory:
-        return cls()
+    def empty(cls, being_id: BeingId) -> ShortTermMemory:
+        return cls(being_id)
 
-    def remember(self, event: RememberedEvent) -> ShortTermMemory:
-        return ShortTermMemory(events=(*self.events, event), backstories=self.backstories)
+    @property
+    def being_id(self) -> BeingId:
+        return self._being_id
 
-    def add_backstory(self, backstory: Backstory) -> ShortTermMemory:
-        kept = (*self.backstories, backstory)[-BACKSTORY_GENERATIONS:]
-        return ShortTermMemory(events=self.events, backstories=kept)
+    @property
+    def experiences(self) -> tuple[Experience, ...]:
+        """覚えた順 (ターンの順) の出来事。プロンプトに出す順は ``recent()``。"""
+        return self._experiences
+
+    @property
+    def backstories(self) -> tuple[Backstory, ...]:
+        return self._backstories
+
+    @property
+    def recent_from(self) -> int:
+        return self._recent_from
+
+    @property
+    def awaiting(self) -> Attempt | None:
+        return self._awaiting
+
+    def is_empty(self) -> bool:
+        return (
+            not self._experiences
+            and not self._backstories
+            and self._recent_from == 1
+            and self._awaiting is None
+        )
+
+    def perceive(self, observation: Observation, *, current_turn: int) -> None:
+        """観測は 1 手を選ぶ前に届き、次の 1 手がそれを見る。"""
+        turn = _require_turn(current_turn, "current_turn") + 1
+        experiences = self._with(Perception(turn=turn, observation=observation))
+        self._become(experiences, self._backstories, self._recent_from, self._awaiting)
+
+    def act(self, move: AgentMove, *, current_turn: int) -> None:
+        """前の 1 手の結果がまだ来ていなければ、前の 1 手を結果の分からない試みとして残す。"""
+        attempt = Attempt(turn=_require_turn(current_turn, "current_turn"), move=move)
+        experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
+        self._become(experiences, self._backstories, self._recent_from, attempt)
+
+    def receive_result(self, result: Observation | MemoryOperationResult, *, current_turn: int) -> None:
+        if self._awaiting is None:
+            raise ShortTermMemoryUnpairedResultException(
+                f"no move is awaiting the result {_call_id_of(result)!r}"
+            )
+        attempt = self._awaiting.answered_by(result, turn=_require_turn(current_turn, "current_turn"))
+        self._become(self._with(attempt), self._backstories, self._recent_from, None)
+
+    def lapse(
+        self,
+        *,
+        body: str,
+        time: ObservedTime,
+        current_turn: int,
+        order: OccurrenceOrder | None = None,
+    ) -> None:
+        lapse = Lapse(turn=_require_turn(current_turn, "current_turn"), body=body, time=time, order=order)
+        self._become(self._with(lapse), self._backstories, self._recent_from, self._awaiting)
+
+    def recent(self) -> tuple[Experience, ...]:
+        """ターンの順に、同じ環境が続く間は起きた順に並べる。起きた順を持たない出来事は動かさない。"""
+        ordered: list[Experience] = []
+        run: list[Experience] = []
+        for experience in self._experiences:
+            if run and not _same_environment(run[-1], experience):
+                ordered.extend(_in_occurrence_order(run))
+                run = []
+            run.append(experience)
+        ordered.extend(_in_occurrence_order(run))
+        return tuple(ordered)
+
+    def fold(self, *, current_turn: int) -> None:
+        """直近の範囲が ``RECENT_TURNS`` に届いていれば、古い ``FOLD_TURNS`` ターン分を外し、``ExperiencesFolded`` をためる。
+
+        範囲は ``recent_from`` から今のターンまでで、出来事の無いターンも 1 つと数える。
+        外すターンに選んだまま結果の来ない 1 手は、結果の分からない試みとして一緒に外す。
+        外す出来事が無ければ、範囲だけを進めてイベントはためない。
+        """
+        if _require_turn(current_turn, "current_turn") - self._recent_from + 1 < RECENT_TURNS:
+            return
+        recent_from = self._recent_from + FOLD_TURNS
+        experiences, awaiting = self._experiences, self._awaiting
+        if awaiting is not None and awaiting.turn < recent_from:
+            experiences, awaiting = self._with(awaiting), None
+        folded = tuple(e for e in experiences if e.turn < recent_from)
+        kept = tuple(e for e in experiences if e.turn >= recent_from)
+        self._become(kept, self._backstories, recent_from, awaiting)
+        if not folded:
+            return
+        self._events.append(
+            ExperiencesFolded(
+                event_id=uuid.uuid4().int,
+                occurred_at=datetime.now(timezone.utc),
+                being_id=self._being_id,
+                turn=current_turn,
+                folded=folded,
+                backstories=self._backstories,
+            )
+        )
+
+    def add_backstory(self, backstory: Backstory) -> None:
+        backstories = (*self._backstories, backstory)[-BACKSTORY_GENERATIONS:]
+        self._become(self._experiences, backstories, self._recent_from, self._awaiting)
+
+    def get_events(self) -> list[ExperiencesFolded]:
+        """まだ渡していないイベント。ゲームの ``AggregateRoot`` と同じ口にそろえる。"""
+        return list(self._events)
+
+    def clear_events(self) -> None:
+        self._events.clear()
+
+    def _with(self, experience: Experience) -> tuple[Experience, ...]:
+        """同じ番号の出来事のあと、次の番号の出来事の前に入れる。"""
+        index = sum(1 for e in self._experiences if e.turn <= experience.turn)
+        return (*self._experiences[:index], experience, *self._experiences[index:])
+
+    def _become(
+        self,
+        experiences: tuple[Experience, ...],
+        backstories: tuple[Backstory, ...],
+        recent_from: int,
+        awaiting: Attempt | None,
+    ) -> None:
+        """決まりを確かめてから書き換える。決まりに反すれば何も変えずに例外を投げる。"""
+        if not isinstance(experiences, tuple) or not all(isinstance(e, Experience) for e in experiences):
+            raise ShortTermMemoryValidationException("experiences must be a tuple of Experience")
+        if not isinstance(backstories, tuple) or not all(isinstance(b, Backstory) for b in backstories):
+            raise ShortTermMemoryValidationException("backstories must be a tuple of Backstory")
+        if _require_turn(recent_from, "recent_from") < 1:
+            raise ShortTermMemoryValidationException("recent_from must be >= 1")
+        turns = [e.turn for e in experiences]
+        if turns != sorted(turns):
+            raise ShortTermMemoryValidationException("experiences must be in turn order")
+        if turns and turns[0] < recent_from:
+            raise ShortTermMemoryValidationException("experiences must be within the recent range")
+        if awaiting is not None and (not isinstance(awaiting, Attempt) or awaiting.result is not None):
+            raise ShortTermMemoryValidationException("awaiting must be an Attempt without result")
+        if awaiting is not None and awaiting.turn < recent_from:
+            raise ShortTermMemoryValidationException("awaiting must be within the recent range")
+        if len(backstories) > BACKSTORY_GENERATIONS:
+            raise ShortTermMemoryValidationException(
+                f"at most {BACKSTORY_GENERATIONS} backstories, got {len(backstories)}"
+            )
+        written = [b.written_turn for b in backstories]
+        if written != sorted(written):
+            raise ShortTermMemoryValidationException("backstories must be in written order")
+        self._experiences = experiences
+        self._backstories = backstories
+        self._recent_from = recent_from
+        self._awaiting = awaiting
+
+
+def _same_environment(left: Experience, right: Experience) -> bool:
+    return (
+        left.order is not None
+        and right.order is not None
+        and left.order.environment == right.order.environment
+    )
+
+
+def _in_occurrence_order(run: list[Experience]) -> list[Experience]:
+    if len(run) < 2:
+        return run
+    return sorted(run, key=lambda experience: experience.order)  # type: ignore[arg-type, return-value]
 
 
 class ShortTermMemoryRepository(ABC):
     @abstractmethod
     def get(self, being_id: BeingId) -> ShortTermMemory:
-        """まだ何も覚えていない Being には空の短期記憶を返す。"""
+        """まだ何も覚えていない Being には空の短期記憶を返す。返した集約を書き換えても、``save`` するまで保存先は変わらない。"""
 
     @abstractmethod
-    def save(self, being_id: BeingId, memory: ShortTermMemory) -> None: ...
+    def save(self, memory: ShortTermMemory) -> None:
+        """保存したあとで渡した集約を書き換えても、保存先は変わらない。"""
 
     @abstractmethod
-    def replace_all_by_being(self, being_id: BeingId, memory: ShortTermMemory) -> None:
+    def replace_all_by_being(self, memory: ShortTermMemory) -> None:
         """記憶の持ち越しから戻すときに使う。空ならその Being の記録を消す。"""
 
 
 __all__ = [
     "BACKSTORY_GENERATIONS",
+    "FOLD_TURNS",
+    "RECENT_TURNS",
+    "Attempt",
     "Backstory",
-    "RememberedEvent",
+    "Experience",
+    "ExperienceReader",
+    "ExperiencesFolded",
+    "Lapse",
+    "MemoryOperationResult",
+    "Perception",
     "ShortTermMemory",
     "ShortTermMemoryRepository",
-    "turn_for_event",
 ]

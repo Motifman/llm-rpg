@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     format_action_result_body,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.services.world_llm_turn.types import WORLD_ACTION_HESITATION
 from ai_rpg_world.application.observation.being_contract import Observer
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
@@ -25,6 +26,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import NullTraceRecorder
 from ai_rpg_world.being.contract import AgentMove, OccurrenceOrder, OwnActionResult, SeenOrHeard
+from ai_rpg_world.being.domain.short_term_memory import Attempt, Perception, ShortTermMemory
 from ai_rpg_world.being.infrastructure.in_memory_memory_turn_clock import InMemoryMemoryTurnClock
 from ai_rpg_world.being.infrastructure.in_memory_short_term_memory_repository import (
     InMemoryShortTermMemoryRepository,
@@ -75,8 +77,11 @@ class _World:
             raise self.observer_error
         return Observer(player_id=player_id, name="エイダ", place_name="坑道の入口", seconds_per_tick=300)
 
+    def memory(self) -> ShortTermMemory:
+        return self.store.get(ADA_BEING)
+
     def events(self) -> tuple[Any, ...]:
-        return self.store.get(ADA_BEING).events
+        return self.memory().recent()
 
 
 def _observation(prose: str = "ミオが坑道から戻ってきた", *, label: str | None = "1日目 朝", **structured: Any) -> UnifiedRecentEventEntry:
@@ -95,44 +100,59 @@ def _provenance(request_id: str = "execution-1") -> ExecutionProvenance:
 
 
 class TestCopyOneTurn:
-    """PlayerShortTermMemoryCopy が、1 回の手番で今の短期記憶に入った出来事を、D1824-5 の番号を付けて Being 側の短期記憶に写すことを保証する。"""
+    """PlayerShortTermMemoryCopy が、1 回の手番で今の短期記憶に入った出来事を、Being 側の短期記憶に頼んで残すことを保証する (design_decisions D1824-5、D1824-9)。"""
 
     def test_observation_seen_before_the_move_gets_the_next_move_number(self) -> None:
-        """時計が 0 のときに取り出された観測は、それを見る 1 手の番号 1 で写る。観測は起きた tick を持たないので、時刻は表示だけで秒は分からない。"""
+        """時計が 0 のときに取り出された観測は、それを見る 1 手の番号 1 の Perception で残る。観測は起きた tick を持たないので、時刻は表示だけで秒は分からない。"""
         world = _World()
 
         world.copy.on_appended(ADA, _observation())
 
         (event,) = world.events()
-        assert (event.turn, event.observation.body, event.move) == (1, "ミオが坑道から戻ってきた", None)
+        assert isinstance(event, Perception)
+        assert (event.turn, event.observation.body) == (1, "ミオが坑道から戻ってきた")
         assert (event.observation.time.display, event.observation.time.seconds) == ("1日目 朝", None)
 
+    def test_noted_move_waits_for_its_result(self) -> None:
+        """1 手を受け取ると、実行の要求の ID を call_id にした 1 手が、時計の番号で結果を待つ。"""
+        world = _World()
+        world.clock.advance_turn(ADA_BEING)
+
+        with execution_provenance_scope(_provenance()):
+            world.copy.note_move(ADA, "interact", {"target": "扉", "inner_thought": "鍵を探そう", "expected_result": "開く"})
+
+        move = AgentMove(call_id="execution-1", tool_name="interact", arguments={"target": "扉"}, expectation="開く", inner_thought="鍵を探そう")
+        assert world.memory().awaiting == Attempt(turn=1, move=move)
+
     def test_own_result_pairs_with_the_noted_move_of_the_same_request(self) -> None:
-        """1 手を受け取って時計が 1 に進んだあと、同じ実行の要求の結果は、その 1 手と対になって番号 1 で写る。"""
+        """1 手を受け取って時計が 1 に進んだあと、同じ実行の要求の結果は、その 1 手と組の Attempt として番号 1 で残る。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
         provenance = _provenance()
         with execution_provenance_scope(provenance):
-            world.copy.note_move(ADA, "interact", {"target": "扉", "inner_thought": "鍵を探そう", "expected_result": "開く"})
+            world.copy.note_move(ADA, "interact", {"target": "扉"})
         result = _result(provenance)
 
         world.copy.on_appended(ADA, result)
 
         (event,) = world.events()
-        assert event.turn == 1
-        assert event.observation.route == OwnActionResult(call_id="execution-1", succeeded=True)
-        assert event.observation.body == format_action_result_body(result.payload)
-        assert event.move == AgentMove(call_id="execution-1", tool_name="interact", arguments={"target": "扉"}, expectation="開く", inner_thought="鍵を探そう")
+        assert isinstance(event, Attempt) and event.result is not None
+        assert (event.turn, event.move.call_id) == (1, "execution-1")
+        assert event.result.route == OwnActionResult(call_id="execution-1", succeeded=True)
+        assert event.result.body == format_action_result_body(result.payload)
+        assert world.memory().awaiting is None
 
     def test_result_that_arrives_without_a_move_is_seen_at_the_next_move(self) -> None:
-        """移動の到着のように実行の要求を持たない結果は、「見た・聞いた」の経路で、次の 1 手の番号で写る。"""
+        """移動の到着のように実行の要求を持たない結果は、組にする 1 手の無い結果ではなく、「見た・聞いた」の Perception として次の 1 手の番号で残る。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
 
         world.copy.on_appended(ADA, _result(None, tool_name="travel_to", action_summary="通信室へ移動した", result_summary="通信室に着いた"))
 
         (event,) = world.events()
-        assert (event.turn, event.observation.route, event.move) == (2, SeenOrHeard(), None)
+        assert isinstance(event, Perception)
+        assert (event.turn, event.observation.route) == (2, SeenOrHeard())
+        assert world.recorder.not_copied() == []
 
     def test_a_whole_turn_keeps_one_number_and_the_order_it_arrived(self) -> None:
         """観測、1 手の結果、後から届く到着の順に入ると、前の 2 つは番号 1、到着は番号 2 で、届いた順に並ぶ。"""
@@ -145,12 +165,12 @@ class TestCopyOneTurn:
         world.copy.on_appended(ADA, _result(provenance))
         world.copy.on_appended(ADA, _result(None, tool_name="travel_to"))
 
-        assert [e.turn for e in world.events()] == [1, 1, 2]
+        assert [(type(e), e.turn) for e in world.events()] == [(Perception, 1), (Attempt, 1), (Perception, 2)]
         assert world.recorder.not_copied() == []
 
 
 class TestNotCopied:
-    """写せない出来事は Being 側の短期記憶に入れず、理由と種類を being_short_term_memory_not_copied の trace に残すことを保証する (design_decisions D1824-7)。"""
+    """写せない出来事は Being 側の短期記憶に入れず、理由と種類を being_short_term_memory_not_copied の trace に残すことを保証する (design_decisions D1824-7、D1824-9)。"""
 
     @pytest.mark.parametrize(
         ("entry", "source", "reason", "kind"),
@@ -159,12 +179,12 @@ class TestNotCopied:
             (_observation(" ", type="player_spoke"), "observation", "empty_body", "player_spoke"),
             (_observation("あなたは息を吹き返した", label=None, type="player_revived_post_hoc"), "observation", "missing_time_label", "player_revived_post_hoc"),
             (_result(None, tool_name="memo_add"), "action_result", "being_inner_record", "memo_add"),
-            (_result(_provenance(), tool_name="hesitation", success=False), "action_result", "no_agent_move", "hesitation"),
+            (_result(_provenance(), tool_name=WORLD_ACTION_HESITATION, success=False), "action_result", "no_agent_move", WORLD_ACTION_HESITATION),
         ],
-        ids=["loop-guard", "empty-observation", "no-time-label", "memo-result", "no-move"],
+        ids=["loop-guard", "empty-observation", "no-time-label", "memo-result", "hesitation"],
     )
     def test_rejected_event_is_traced_and_not_remembered(self, entry: UnifiedRecentEventEntry, source: str, reason: str, kind: str) -> None:
-        """記憶の道具や警告、空の本文、時刻の無い観測、1 手の無い結果は写さず、trace に 1 件残す。"""
+        """記憶の道具や警告、空の本文、時刻の無い観測、1 手を出せなかったときの行は写さず、trace に 1 件残す。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
 
@@ -174,8 +194,8 @@ class TestNotCopied:
         assert world.recorder.not_copied() == [{"being_id": "being_p1", "source": source, "reason": reason, "event_kind": kind}]
         assert [(t, p) for k, t, p, _ in world.recorder.events] == [(3, 1)]
 
-    def test_result_of_another_request_is_not_paired_with_the_noted_move(self) -> None:
-        """書き留めた 1 手と実行の要求が違う結果は、対にする 1 手が無いものとして写さない。"""
+    def test_result_of_another_request_is_traced_as_unpaired(self) -> None:
+        """待っている 1 手と実行の要求が違う結果は、組にする 1 手の無い結果 (unpaired_result) として残し、待っている 1 手は変わらない。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
         with execution_provenance_scope(_provenance("execution-1")):
@@ -184,10 +204,25 @@ class TestNotCopied:
         world.copy.on_appended(ADA, _result(_provenance("execution-2")))
 
         assert world.events() == ()
-        assert [p["reason"] for p in world.recorder.not_copied()] == ["no_agent_move"]
+        assert world.memory().awaiting is not None and world.memory().awaiting.move.call_id == "execution-1"
+        assert [p["reason"] for p in world.recorder.not_copied()] == ["unpaired_result"]
+
+    def test_second_result_of_the_same_request_is_traced_as_unpaired(self) -> None:
+        """同じ実行の要求の結果が 2 件届くと、2 件目は組にする 1 手が無いので unpaired_result として残す。"""
+        world = _World()
+        world.clock.advance_turn(ADA_BEING)
+        provenance = _provenance()
+        with execution_provenance_scope(provenance):
+            world.copy.note_move(ADA, "interact", {"target": "扉"})
+        world.copy.on_appended(ADA, _result(provenance))
+
+        world.copy.on_appended(ADA, _result(provenance))
+
+        assert len(world.events()) == 1
+        assert [p["reason"] for p in world.recorder.not_copied()] == ["unpaired_result"]
 
     def test_move_with_non_json_argument_is_traced_as_contract_violation(self) -> None:
-        """JSON でない値を引数に持つ 1 手は契約の型にならないので、contract_violation として残し、その結果も 1 手の無い結果になる。"""
+        """JSON でない値を引数に持つ 1 手は契約の型にならないので contract_violation として残し、その結果も組にする 1 手の無い結果になる。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
         provenance = _provenance()
@@ -195,10 +230,10 @@ class TestNotCopied:
             world.copy.note_move(ADA, "interact", {"target": object()})
         world.copy.on_appended(ADA, _result(provenance))
 
-        assert [(p["source"], p["reason"]) for p in world.recorder.not_copied()] == [("move", "contract_violation"), ("action_result", "no_agent_move")]
+        assert [(p["source"], p["reason"]) for p in world.recorder.not_copied()] == [("move", "contract_violation"), ("action_result", "unpaired_result")]
 
-    def test_event_numbered_before_the_last_one_is_traced_as_memory_rule(self) -> None:
-        """時計を進めたあとに観測が入り (番号 2)、そのあとで番号 1 の結果が来ると、手番の順が崩れるので memory_rule として残す。"""
+    def test_result_after_the_next_turn_observation_goes_before_it(self) -> None:
+        """時計を進めたあとに観測が入り (番号 2)、そのあとで番号 1 の結果が来ても、結果は番号 1 として観測より前に入る。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
         provenance = _provenance()
@@ -208,8 +243,8 @@ class TestNotCopied:
 
         world.copy.on_appended(ADA, _result(provenance))
 
-        assert [e.turn for e in world.events()] == [2]
-        assert [p["reason"] for p in world.recorder.not_copied()] == ["memory_rule"]
+        assert [(type(e), e.turn) for e in world.memory().experiences] == [(Attempt, 1), (Perception, 2)]
+        assert world.recorder.not_copied() == []
 
     def test_unexpected_error_does_not_stop_the_turn(self) -> None:
         """思わぬ例外が起きても外へ投げず、unexpected_error と例外の型を残す。"""
@@ -256,7 +291,7 @@ class TestOccurrenceOrder:
         world.copy.on_appended(ADA, _result(provenance, occurred_at=_AT + timedelta(seconds=1)))
         world.copy.on_appended(ADA, _result(None, occurred_at=_AT + timedelta(seconds=2)))
 
-        orders = [event.observation.order for event in world.events()]
+        orders = [event.order for event in world.memory().experiences]
 
         assert orders == [
             OccurrenceOrder(environment="廃坑の山村", value=(_AT + timedelta(seconds=s)).timestamp()) for s in (0, 1, 2)

@@ -145,6 +145,12 @@ class ShortTermMemoryValidationException(BeingDomainException, ValidationExcepti
     error_code = "BEING.SHORT_TERM_MEMORY_VALIDATION"
 
 
+class ShortTermMemoryUnpairedResultException(BeingDomainException, BusinessRuleException):
+    """結果を待っている 1 手が無いか、結果の呼び出しの ID が待っている 1 手と違う。"""
+
+    error_code = "BEING.SHORT_TERM_MEMORY_UNPAIRED_RESULT"
+
+
 __all__ = [
     "BeingAlreadyAttachedException",
     "BeingAttachmentValidationException",
@@ -162,5 +168,6 @@ __all__ = [
     "MemoLimitReachedException",
     "MemoNotFoundException",
     "MemoValidationException",
+    "ShortTermMemoryUnpairedResultException",
     "ShortTermMemoryValidationException",
 ]

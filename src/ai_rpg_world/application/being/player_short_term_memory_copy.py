@@ -13,6 +13,10 @@ from typing import Any
 from ai_rpg_world.application.common.execution_provenance import current_execution_provenance
 from ai_rpg_world.application.llm.contracts.chunk_encoding import UnifiedRecentEventEntry
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+from ai_rpg_world.application.llm.services.world_llm_turn.types import (
+    WORLD_ACTION_HESITATION,
+    WORLD_ACTION_MOMENTARY_BLANK,
+)
 from ai_rpg_world.application.observation.being_contract import (
     ObservationNotRepresentable,
     Observer,
@@ -24,14 +28,11 @@ from ai_rpg_world.application.observation.being_contract import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.contract import AgentMove, ContractViolation, Observation, OccurrenceOrder
+from ai_rpg_world.being.contract import ContractViolation, OccurrenceOrder
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
-from ai_rpg_world.being.domain.short_term_memory import (
-    RememberedEvent,
-    ShortTermMemoryRepository,
-    turn_for_event,
-)
+from ai_rpg_world.being.domain.short_term_memory import ShortTermMemory, ShortTermMemoryRepository
 from ai_rpg_world.domain.being.exception.being_exceptions import (
+    ShortTermMemoryUnpairedResultException,
     ShortTermMemoryValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -40,9 +41,14 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 _logger = logging.getLogger(__name__)
 
 REASON_NO_AGENT_MOVE = "no_agent_move"
+REASON_UNPAIRED_RESULT = "unpaired_result"
 REASON_MEMORY_RULE = "memory_rule"
 REASON_CONTRACT_VIOLATION = "contract_violation"
 REASON_UNEXPECTED_ERROR = "unexpected_error"
+
+
+# 1 手を出せなかったときに、環境が結果の代わりに残す行の道具の名前 (phase_b)。
+_LAPSE_TOOL_NAMES = frozenset({WORLD_ACTION_HESITATION, WORLD_ACTION_MOMENTARY_BLANK})
 
 
 class _NoAgentMove(Exception):
@@ -70,20 +76,22 @@ class PlayerShortTermMemoryCopy:
         self._environment_of = environment_of
         self._current_tick_provider = current_tick_provider
         self._trace_recorder_provider = trace_recorder_provider
-        self._moves: dict[PlayerId, AgentMove] = {}
 
     def note_move(self, player_id: PlayerId, tool_name: str, arguments: Mapping[str, Any]) -> None:
-        """実行中の要求の ID を ``call_id`` にして書き留める。結果と 1 手はこの ID で結ぶ。"""
-        self._moves.pop(player_id, None)
+        """実行中の要求の ID を ``call_id`` にした 1 手を、結果を待つ 1 手として短期記憶に頼む。"""
         being_id: BeingId | None = None
         try:
             being_id = self._being_id_of(player_id)
             provenance = current_execution_provenance()
             if being_id is None or provenance is None:
                 return
-            self._moves[player_id] = agent_move_from_tool_call(
-                tool_name, arguments, call_id=provenance.execution_request_id
-            )
+            move = agent_move_from_tool_call(tool_name, arguments, call_id=provenance.execution_request_id)
+            current_turn = self._turn_reader.current_turn(being_id)
+            memory = self._store.get(being_id)
+            memory.act(move, current_turn=current_turn)
+            self._store.save(memory)
+        except ShortTermMemoryValidationException:
+            self._not_copied(player_id, being_id, source="move", reason=REASON_MEMORY_RULE, event_kind=tool_name)
         except (ContractViolation, ValueError):
             self._not_copied(player_id, being_id, source="move", reason=REASON_CONTRACT_VIOLATION, event_kind=tool_name)
         except Exception as exc:
@@ -97,16 +105,15 @@ class PlayerShortTermMemoryCopy:
             being_id = self._being_id_of(player_id)
             if being_id is None:
                 return
-            observation, move = self._translate(player_id, entry.payload)
-            turn = turn_for_event(observation.route, current_turn=self._turn_reader.current_turn(being_id))
-            memory = self._store.get(being_id).remember(
-                RememberedEvent(turn=turn, observation=observation, move=move)
-            )
-            self._store.save(being_id, memory)
+            memory = self._store.get(being_id)
+            self._remember(memory, player_id, being_id, entry.payload)
+            self._store.save(memory)
         except ObservationNotRepresentable as exc:
             self._not_copied(player_id, being_id, source=source, reason=exc.reason.value, event_kind=exc.kind)
         except _NoAgentMove:
             self._not_copied(player_id, being_id, source=source, reason=REASON_NO_AGENT_MOVE, event_kind=kind)
+        except ShortTermMemoryUnpairedResultException:
+            self._not_copied(player_id, being_id, source=source, reason=REASON_UNPAIRED_RESULT, event_kind=kind)
         except ShortTermMemoryValidationException:
             self._not_copied(player_id, being_id, source=source, reason=REASON_MEMORY_RULE, event_kind=kind)
         except ContractViolation:
@@ -133,37 +140,40 @@ class PlayerShortTermMemoryCopy:
             error_type=type(exc).__name__,
         )
 
-    def _translate(
-        self, player_id: PlayerId, payload: ObservationEntry | ActionResultEntry
-    ) -> tuple[Observation, AgentMove | None]:
+    def _remember(
+        self,
+        memory: ShortTermMemory,
+        player_id: PlayerId,
+        being_id: BeingId,
+        payload: ObservationEntry | ActionResultEntry,
+    ) -> None:
+        current_turn = self._turn_reader.current_turn(being_id)
         observer = self._observer_of(player_id)
         # 今の短期記憶は occurred_at で並べ直すので、同じ値を起きた順にする (design_decisions D1824-8)。
         order = OccurrenceOrder(environment=self._environment_of(player_id), value=payload.occurred_at.timestamp())
         if isinstance(payload, ObservationEntry):
-            return (
-                observation_from_game(
-                    payload.output,
-                    # 観測は起きた tick を持たない。取り出した時点の tick で埋めると、時刻の
-                    # 表示とずれるので、秒は分からないとする (design_decisions D1824-7)。
-                    tick=None,
-                    game_time_label=payload.game_time_label,
-                    observer=observer,
-                    order=order,
-                ),
-                None,
+            observation = observation_from_game(
+                payload.output,
+                # 観測は起きた tick を持たない。取り出した時点の tick で埋めると、時刻の
+                # 表示とずれるので、秒は分からないとする (design_decisions D1824-7)。
+                tick=None,
+                game_time_label=payload.game_time_label,
+                observer=observer,
+                order=order,
             )
+            memory.perceive(observation, current_turn=current_turn)
+            return
         provenance = payload.execution_provenance
         if provenance is None:
-            return observation_from_unprompted_result(payload, observer=observer, order=order), None
-        move = self._moves.get(player_id)
-        if move is None or move.call_id != provenance.execution_request_id:
-            # 記憶の道具の結果は、1 手が無いことより先に、Being の内側の記録として拒む。
-            observation_from_action_result(payload, call_id=provenance.execution_request_id, observer=observer)
-            raise _NoAgentMove
-        return (
-            observation_from_action_result(payload, call_id=move.call_id, observer=observer, order=order),
-            move,
+            observation = observation_from_unprompted_result(payload, observer=observer, order=order)
+            memory.perceive(observation, current_turn=current_turn)
+            return
+        result = observation_from_action_result(
+            payload, call_id=provenance.execution_request_id, observer=observer, order=order
         )
+        if payload.tool_name in _LAPSE_TOOL_NAMES:
+            raise _NoAgentMove
+        memory.receive_result(result, current_turn=current_turn)
 
     def _not_copied(self, player_id: PlayerId, being_id: BeingId | None, **payload: Any) -> None:
         try:
