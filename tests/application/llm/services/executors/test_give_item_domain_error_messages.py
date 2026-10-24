@@ -90,10 +90,10 @@ class TestGiveItemTargetIsSelf:
 
 
 class TestGiveItemTargetNotInSameSpot:
-    """相手が別 spot にいる → travel_to を示唆する。"""
+    """相手が別 spot にいる → ツールの名前を出さずに、相手の場所へ移ることを示唆する。"""
 
     def test_message_target_travel_included(self) -> None:
-        """message に相手名と travelto が含まれる。"""
+        """message に相手名と「移る」示唆が含まれ、travel_to の名前は出ない (無効にした世界で打てない手を勧めない)。"""
         stub = MagicMock()
         stub.give_item.side_effect = TargetNotInSameSpotError()
         executor = _make_executor(stub)
@@ -112,7 +112,8 @@ class TestGiveItemTargetNotInSameSpot:
         assert result.error_code == "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
         # executor が args から相手名を埋め直している
         assert "ノア" in result.message
-        assert "travel_to" in result.message or "移動" in result.message
+        assert "移って" in result.message
+        assert "travel_to" not in result.message
         # 英語や内部 ID が漏れていない
         assert "player_id" not in result.message.lower()
 

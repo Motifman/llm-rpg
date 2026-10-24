@@ -350,8 +350,9 @@ class TestExploreEmptyMessageAugmented:
         # F2: 単純な「新しい発見はなかった」だけではなく、可視オブジェクトを列挙
         assert '"操作盤"' in result.message
         assert "OBJ1" not in result.message
-        # 「target_label に指定」のヒントも含まれる
+        # 「target_label に指定」のヒントも含まれ、interact の名前は出ない
         assert "target_label" in result.message
+        assert "interact" not in result.message
 
     def test_empty_discoveries_says_current_spot_is_exhausted_when_no_discoverable_remains(
         self,
