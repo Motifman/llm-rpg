@@ -230,3 +230,19 @@ class TestPlayerSpeechApplicationService:
             svc.speak(SpeakCommand(speaker_player_id=1, content="help", channel=SpeechChannel.SAY))
 
         pub.publish_all.assert_not_called()
+
+    def test_speak_when_downed_keeps_domain_error_code(self):
+        """ダウン状態で断られた SpeechCommandException は、ドメイン例外の error_code (PLAYER.DOWNED) を引き継ぐ。"""
+        status = _make_status(1, spot_id=1)
+        status._is_down = True
+        repo = MagicMock()
+        repo.find_by_id.return_value = status
+        svc = PlayerSpeechApplicationService(
+            player_status_repository=repo,
+            event_publisher=MagicMock(),
+        )
+
+        with pytest.raises(SpeechCommandException) as caught:
+            svc.speak(SpeakCommand(speaker_player_id=1, content="help", channel=SpeechChannel.SAY))
+
+        assert caught.value.error_code == "PLAYER.DOWNED"

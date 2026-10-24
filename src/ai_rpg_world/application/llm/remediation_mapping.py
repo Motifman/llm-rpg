@@ -99,6 +99,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "MERCHANT_TRADE_FAILED": "取引が成立しませんでした。『商人:』に出ている品名と価格、自分の所持金と持ち物を確認してから、もう一度指定してください。",
     "GIVE_ITEM_TARGET_DEAD": "死亡している相手はアイテムを受け取れません。生存していて同じ場所にいる別の相手を選んでください。",
     "GIVE_ITEM_TARGET_DOWN": "倒れている相手はアイテムを受け取れません。先に相手を助け起こすか、生存して動ける別の相手を選んでください。",
+    "SPEAKER_DOWN": "倒れている間は声を出せません。いまの発言は誰にも届いていません。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
     "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。inspect_target で自分の所持品を確認し、所持品欄に表示されているアイテム名を指定してください。",

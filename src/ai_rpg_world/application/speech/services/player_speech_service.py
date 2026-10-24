@@ -56,9 +56,9 @@ class PlayerSpeechApplicationService:
         except SpeechApplicationException:
             raise
         except (PlayerDownedException, SpeechValidationException) as e:
-            raise SpeechCommandException(str(e), **context) from e
+            raise SpeechCommandException(str(e), error_code=e.error_code, **context) from e
         except DomainException as e:
-            raise SpeechCommandException(str(e), **context) from e
+            raise SpeechCommandException(str(e), error_code=e.error_code, **context) from e
         except Exception as e:
             self._logger.error(
                 "Unexpected error in %s: %s",
