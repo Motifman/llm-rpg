@@ -448,9 +448,10 @@ class TestPrepareActionRejectsAnUndeclaredName:
         assert "right" in result.message
 
     def test_a_declared_name_still_succeeds(self) -> None:
-        """宣言済みの名前は従来どおり成功する (正の対照)。
+        """宣言済みの名前は従来どおり成功する (正の対照)。成功の文は操作名を語らない。
 
-        これが無いと「常に失敗させる」実装でも上の 3 件が通ってしまう。
+        これが無いと「常に失敗させる」実装でも上の 3 件が通ってしまう。操作名は
+        呼び出しの値で、受け持ったことを伝える文に出すと本人の経験として記憶へ流れる。
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
@@ -459,7 +460,8 @@ class TestPrepareActionRejectsAnUndeclaredName:
         )
 
         assert result.success is True, result.message
-        assert "left" in result.message
+        assert "受け持った" in result.message
+        assert "left" not in result.message
 
 
 class TestPrepareActionDoesNotSucceedWhenItCannotRegister:

@@ -192,10 +192,12 @@ def scenario_action_names(scenario_path: Path) -> frozenset[str]:
 
 
 def find_action_names_in_action_lines(text: str, action_names: Iterable[str]) -> list[str]:
-    """行動の行のうち、行動の要約 (``[行動]`` から ``→`` まで) に操作名が出ている行を返す (#1564)。
+    """行動の行のうち、行動の要約か成功の結果に操作名が出ている行を返す (#1564)。
 
     操作名はツールに渡す値として候補の行や呼び出しの続き行にも出るので、``find_leaks`` では漏れにしない。
-    本人の経験として記憶へ流れる要約の側にだけ出てはいけない (design_decisions 57)。
+    本人の経験として記憶へ流れる要約 (``[行動]`` から ``→`` まで) と、世界で起きたことを語る成功の結果
+    (``[結果]`` の後) には出てはいけない (design_decisions 57)。失敗の結果は、本人が渡した値や渡せる値を
+    示すので拾わない。
     """
     pattern = _identifier_pattern(action_names)
     if pattern is None:
@@ -203,7 +205,11 @@ def find_action_names_in_action_lines(text: str, action_names: Iterable[str]) ->
     found: list[str] = []
     for line in text.splitlines():
         _, marker, rest = line.partition("[行動] ")
-        if marker and pattern.search(rest.split(" → ", 1)[0]):
+        if not marker:
+            continue
+        summary, _, outcome = rest.partition(" → ")
+        succeeded = outcome.partition("[結果] ")[2]
+        if pattern.search(summary) or pattern.search(succeeded):
             found.append(line.strip())
     return found
 

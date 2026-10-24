@@ -91,7 +91,7 @@ class TestTheTakenSideIsRecorded:
         user_text = runtime.build_full_prompt(_MORI)["messages"][1]["content"]
 
         recent = user_text.split("【直近の出来事】", 1)[1].split("【", 1)[0]
-        assert "「解氷弁」に働きかけた" in recent
+        assert "「解氷弁」で解氷弁を開く準備をする" in recent
         assert "受け持った" in recent
 
     def test_a_refused_side_is_recorded_once(self) -> None:
@@ -123,3 +123,51 @@ class TestTheTakenSideIsRecorded:
         assert result.success is False
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert len(runtime._action_result_store.get_recent(_MORI, 100)[before:]) == 1
+
+    def test_the_refusal_advice_names_no_action(self) -> None:
+        """2 つ目の弁を断られたときの対処文は、どちらの操作名も出さない (他の人に頼む言葉にそのまま使われる)。"""
+        runtime = _frozen_runtime_with_mori_at_the_valve()
+        _wiring(
+            runtime,
+            {
+                "name": "interact",
+                "arguments": {"target_label": "解氷弁", "action_name": "open_thaw_valve", "inner_thought": "弁を受け持つ"},
+            },
+        ).run_turn(_MORI)
+        graph = runtime._spot_graph_repo.find_graph()
+        graph.teleport_entity(
+            EntityId.create(int(_MORI)), SpotId.create(runtime.id_mapper.get_int("spot", "machine_room"))
+        )
+        runtime._spot_graph_repo.save(graph)
+
+        result = _wiring(
+            runtime,
+            {
+                "name": "interact",
+                "arguments": {"target_label": "送油弁", "action_name": "open_oil_feed_valve", "inner_thought": "もう一方も"},
+            },
+        ).run_turn(_MORI)
+
+        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "open_thaw_valve" not in result.remediation
+        assert "open_oil_feed_valve" not in result.remediation
+
+
+class TestTheTakenSideIsToldByItsDisplayName:
+    """受け持ったことを伝える文が、操作名ではなく表示名で語ることを保証する。"""
+
+    def test_result_uses_the_display_label_not_the_action_name(self) -> None:
+        """弁を受け持つと、結果の文は「「解氷弁を開く準備をする」を受け持った」と表示名で語り、open_thaw_valve は出ない。"""
+        runtime = _frozen_runtime_with_mori_at_the_valve()
+        wiring = _wiring(
+            runtime,
+            {
+                "name": "interact",
+                "arguments": {"target_label": "解氷弁", "action_name": "open_thaw_valve", "inner_thought": "弁を受け持つ"},
+            },
+        )
+
+        result = wiring.run_turn(_MORI)
+
+        assert "「解氷弁を開く準備をする」を受け持った" in result.message
+        assert "open_thaw_valve" not in result.message
