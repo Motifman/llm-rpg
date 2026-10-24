@@ -168,17 +168,16 @@ def _populate_runtime_state(runtime: Any) -> None:
     )
     runtime._player_acquaintances.record_meeting(player_id, "リン")
 
-    runtime._being_memo_store.save(
-        being_id,
-        MemoBook.empty().add(
-            memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
-            kind=MemoKind.TODO,
-            text="再開後も忘れてはいけない作業",
-            provenance=None,
-            turn=2,
-            environment_name="島",
-        ),
+    book = MemoBook.empty(being_id)
+    book.add(
+        memo_id="3f2a7b9c-1d2e-4f00-8a00-000000000001",
+        kind=MemoKind.TODO,
+        text="再開後も忘れてはいけない作業",
+        provenance=None,
+        turn=2,
+        environment_name="島",
     )
+    runtime._being_memo_store.save(book)
 
 
 def _world_snapshot_payload(runtime: Any, session: ExperimentSnapshotSession) -> dict[str, Any]:
