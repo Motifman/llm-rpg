@@ -127,7 +127,7 @@ def _build(slots: tuple[MonsterSpawnSlot, ...]) -> _Harness:
         spot_graph_repository=graph,
     )
     observed: list[tuple[str, int, int, tuple[str, ...]]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe(event: BaseDomainEvent) -> None:
         observed.append(

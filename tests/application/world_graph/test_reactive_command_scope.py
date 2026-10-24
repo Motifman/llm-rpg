@@ -194,7 +194,7 @@ def _build_world(*, object_state: dict | None = None):
         random_source=random.Random(17),
     )
     observed: list[tuple[str, dict, tuple[str, str]]] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe(event: BaseDomainEvent) -> None:
         interior = interiors.find_by_spot_id(SPOT_ID)

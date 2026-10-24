@@ -110,7 +110,7 @@ def _stage(
     *,
     observer=None,
 ) -> TradeOfferExpiryStage:
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     if observer is not None:
         dispatcher.register_after_commit(
             TradeOfferExpiredEvent,
@@ -343,7 +343,7 @@ def test_provider_rejects_a_pending_store_outside_the_transaction() -> None:
     data_store = InMemoryDataStore()
     transaction_store = InMemoryPendingTradeOfferStore()
     provider_store = InMemoryPendingTradeOfferStore()
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

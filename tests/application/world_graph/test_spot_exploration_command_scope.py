@@ -147,7 +147,7 @@ def _build_service(*, inventory_slots: int = 20) -> tuple[
     item_specs = _ItemSpecRepository()
     progress = InMemorySpotExplorationProgressStore()
     observed: list[object] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         SpotExploredEvent,
         observed.append,

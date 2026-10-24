@@ -131,7 +131,7 @@ def transfer_service():
     inventory.acquire_item(instance_id, item_spec_id_value=item_spec.item_spec_id.value)
     inventory_repo.save(inventory)
     spot_interior_repo.save(SPOT_ID, SpotInterior.empty())
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     scope_factory = CommandScopeFactory(
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,

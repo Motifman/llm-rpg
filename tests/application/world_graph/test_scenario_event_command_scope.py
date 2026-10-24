@@ -307,7 +307,7 @@ def _build(
     progress = InMemorySpotGraphScenarioEventProgressStore()
     messages: list[str] = []
     observed_event_types: list[str] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
     dispatcher.register_after_commit(
         BaseDomainEvent,
         lambda event: observed_event_types.append(type(event).__name__),

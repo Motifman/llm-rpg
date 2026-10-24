@@ -129,7 +129,7 @@ def _build_scoped_service(*, fail_second_save: bool = False):
     statuses.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
 
     observations: list[_CommitObservation] = []
-    dispatcher = CommandEventDispatcher()
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: None)
 
     def observe_committed(_: object) -> None:
         committed_sender = inventories.find_by_id(PLAYER_ID)

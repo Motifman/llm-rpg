@@ -3,38 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from enum import Enum
 from typing import Any, Protocol, TypeVar
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.domain.common.domain_event import DomainEvent
-
-
-class DeliveryChannel(str, Enum):
-    """commit後handlerの用途を表す。"""
-
-    OBSERVATION = "observation"
-    READ_MODEL = "read_model"
-    INTEGRATION = "integration"
-    AUXILIARY = "auxiliary"
-
-
-class DeliveryGuarantee(str, Enum):
-    """commit後handlerの失敗に必要な配送保証を表す。"""
-
-    DURABLE_RETRY = "durable_retry"
-    BEST_EFFORT = "best_effort"
-
+from ai_rpg_world.eventing.delivery import AfterCommitFailureObserver as AfterCommitFailureObserver
+from ai_rpg_world.eventing.delivery import AfterCommitHandler as AfterCommitHandler
+from ai_rpg_world.eventing.delivery import DeliveryChannel as DeliveryChannel
+from ai_rpg_world.eventing.delivery import DeliveryGuarantee as DeliveryGuarantee
 
 RequiredBeforeCommitHandler = Callable[[DomainEvent, CommandContext[Any]], None]
-AfterCommitHandler = Callable[[DomainEvent], None]
 # 登録時に event_type と handler の型を結ぶ。結ばないと、handler の中で
 # そのイベント固有の属性を読めない (基底型として渡ってくる)。
 _Event = TypeVar("_Event", bound=DomainEvent)
-AfterCommitFailureObserver = Callable[
-    [DeliveryChannel, DeliveryGuarantee, DomainEvent, object, Exception],
-    None,
-]
 
 
 class CommandEventHandlerRegistrarPort(Protocol):
