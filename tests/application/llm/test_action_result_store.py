@@ -15,7 +15,7 @@ class TestDefaultActionResultStore:
 
     @pytest.fixture
     def store(self):
-        return DefaultActionResultStore(max_entries_per_player=10)
+        return DefaultActionResultStore()
 
     def test_append_and_get_recent_returns_appended(self, store):
         """append した行動結果が get_recent で取得できる"""
@@ -92,19 +92,14 @@ class TestDefaultActionResultStore:
         got = store.get_recent(player_id, 1)
         assert got[0].occurred_at == at
 
-    def test_sliding_trim_to_max_entries(self):
-        """max_entries_per_player を超えると古いものが捨てられる"""
-        store = DefaultActionResultStore(max_entries_per_player=3)
+    def test_results_are_not_trimmed_by_count(self):
+        """行動の結果は件数で削らない。101 件足すと 101 件とも返る。古い出来事を外すのは短期記憶のターンの範囲の規則 (design_decisions D1824-9)。"""
+        store = DefaultActionResultStore()
         player_id = PlayerId(1)
-        for i in range(5):
+        for i in range(101):
             store.append(player_id, f"a_{i}", f"r_{i}")
-        got = store.get_recent(player_id, 10)
-        assert len(got) == 3
-
-    def test_init_max_entries_zero_raises_value_error(self):
-        """max_entries_per_player が 0 以下で ValueError"""
-        with pytest.raises(ValueError, match="max_entries_per_player must be greater than 0"):
-            DefaultActionResultStore(max_entries_per_player=0)
+        got = store.get_recent(player_id, 200)
+        assert len(got) == 101
 
     def test_append_player_id_none_raises_type_error(self, store):
         """append に player_id が None のとき TypeError"""

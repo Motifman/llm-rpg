@@ -294,14 +294,7 @@ Phase 1/2 で実装する `RollingSummaryShortTermMemory` は **wiring を整え
   検証が崩れる
 - まず episodic を固めてから rolling を入れる順序にする
 
-config 例 (案):
-```json
-{
-  "SHORT_TERM_MEMORY_KIND": "sliding_window",
-  "SHORT_TERM_MEMORY_TURN_CAP": 20,
-  "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": 10
-}
-```
+この案の config のキー (短期記憶の種類とターン数) は、今は無い。ターン数は Being のドメインの定数になった (design_decisions D1824-9)。
 
 wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingShortTermMemory`
 を作っても scenario が明示しなければ instantiate しない。

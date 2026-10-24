@@ -25,7 +25,7 @@
 - **trace イベント**: 新しい判断・書き込みには `TraceEventKind`
   (`application/trace/events.py:21`) に定数を足し payload を残す
 - **feature flag**: 新機構は env フラグで default OFF
-  (`application/llm/wiring/feature_flags.py` の既存パターンに倣う)
+  (このとき倣った `application/llm/wiring/feature_flags.py` は、短期記憶のターン数を設定から消したときに無くなった。今の設定の入口は `resolved_runtime_config.py`)
 - **ドメイン例外**: `domain/` 配下は各コンテキストのドメイン例外を使う
 - 1 PR = 1 目的、200〜400 行目安。旧計画との名前対応は下表に固定する
 

@@ -32,8 +32,8 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
    (PR #434 ポリシー継承)
 3. **外側 shell を読まない**: ``from_mapping`` は引数 mapping だけを読む
 4. **trace 表現**: ``to_trace_dict()`` で run_start payload に書ける dict を返す
-5. **既存 resolver の活用**: 内部で既存 ``resolve_short_term_memory_turn_window`` 等を
-   呼ぶ薄いラッパー (= 段階移行可能 / behavior 等価)
+5. **既存 resolver の活用**: 内部で既存の resolver を呼ぶ薄いラッパー
+   (= 段階移行可能 / behavior 等価)
 
 # 将来計画
 
@@ -81,8 +81,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "OPENROUTER_QUANTIZATION",
     "PROMPT_DATASET_CAPTURE_FAILURE_POLICY",
     "SCENARIO_RANDOM_SEED",
-    "SHORT_TERM_MEMORY_TURN_CAP",
-    "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_TARGET_LABEL_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_API_KEY_ENV",
@@ -97,6 +95,16 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "WORLD_TICK_FAILURE_POLICY",
 })
+
+#: 消した設定のキーと、消した理由。書かれていたら、知らないキーとしてではなく理由を添えて止める。
+_REMOVED_RUNTIME_CONFIG_KEYS: dict[str, str] = {
+    key: (
+        "直近の出来事として持つターン数と一度に外すターン数は、全員共通のドメインの定数 "
+        "(being/domain/short_term_memory.py の RECENT_TURNS / FOLD_TURNS) になった "
+        "(design_decisions D1824-9)"
+    )
+    for key in ("SHORT_TERM_MEMORY_TURN_CAP", "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT")
+}
 
 #: profile / runtime_config に書かせない秘密。値そのものは env からだけ読む。
 #: profile は run の記録として ``experiment.config.source.json`` に残るため、
@@ -183,9 +191,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_semantic_repeat_window: int
 
 
-    short_term_memory_turn_cap: int = 20
-    short_term_memory_turn_compact_count: int = 10
-
     # #1623: 目次に載せる件数 N と、1 回に呼び出せる件数 M。
     being_episode_index_limit: int = _DEFAULT_BEING_EPISODE_INDEX_LIMIT
     being_episode_recall_max_handles: int = _DEFAULT_BEING_EPISODE_RECALL_MAX_HANDLES
@@ -214,16 +219,6 @@ class ResolvedLlmRuntimeConfig:
         enum 的フィールドは、どの構築経路でも未知値が silent に通らないよう
         本メソッドで一括検証する (codex PR #557 レビュー反映)。
         """
-        if (
-            self.short_term_memory_turn_cap <= 0
-            or self.short_term_memory_turn_compact_count <= 0
-            or self.short_term_memory_turn_compact_count
-            >= self.short_term_memory_turn_cap
-        ):
-            raise ValueError(
-                "short-term memory turn window requires "
-                "0 < compact_count < cap"
-            )
         if self.llm_reasoning_effort not in _VALID_REASONING_EFFORTS:
             raise ValueError(
                 f"llm_reasoning_effort={self.llm_reasoning_effort!r} is not recognized. "
@@ -254,29 +249,17 @@ class ResolvedLlmRuntimeConfig:
         """設定値から全フィールドを resolve する (PR 2/6 の核心)。
 
         - ``values`` 省略時は空設定として扱う。環境変数は読まない
-        - 各フィールドは既存 resolver (``feature_flags.resolve_*`` /
-          ``_llm_client_factory`` の値) を呼ぶ薄いラッパー
+        - 各フィールドは既存 resolver (``_llm_client_factory`` の値など) を呼ぶ薄いラッパー
         - 不正値は各 resolver が ``ValueError`` を投げる (PR #434 fail-fast 継承)
 
         Raises:
             ValueError: values のいずれかが不正値のとき
         """
-        # 既存 resolver の import は関数内で行い、循環参照を避ける
-        from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_short_term_memory_turn_window,
-        )
-
         source: Mapping[str, str] = values if values is not None else {}
         _validate_runtime_config_keys(source)
 
-        # 既存 resolver は env=None だと os.environ を読むものがあるため、
-        # ここでは必ず明示 mapping を渡す。実験設定の入力経路を
+        # resolver には必ず明示 mapping を渡す。実験設定の入力経路を
         # profile/config → 本 DTO の 1 本に固定するため。
-        (
-            short_term_memory_turn_cap,
-            short_term_memory_turn_compact_count,
-        ) = resolve_short_term_memory_turn_window(env=source)
-
         # LLM client kind (factory と同じロジックで解決)
         llm_client_kind = _resolve_llm_client_kind(source)
         llm_model = _strip_or_none(source.get("LLM_MODEL"))
@@ -408,8 +391,6 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(f"WORLD_TICK_FAILURE_POLICY: {exc}") from exc
 
         return cls(
-            short_term_memory_turn_cap=short_term_memory_turn_cap,
-            short_term_memory_turn_compact_count=short_term_memory_turn_compact_count,
             llm_client_kind=llm_client_kind,
             llm_model=llm_model,
             llm_api_key=llm_api_key,
@@ -470,8 +451,6 @@ class ResolvedLlmRuntimeConfig:
             )
         """
         defaults: dict[str, Any] = dict(
-            short_term_memory_turn_cap=20,
-            short_term_memory_turn_compact_count=10,
             llm_client_kind="stub",
             llm_model=None,
             llm_api_key=None,
@@ -610,6 +589,10 @@ _FALSY = frozenset({"0", "false", "no", "off"})
 
 def _validate_runtime_config_keys(source: Mapping[str, str]) -> None:
     """profile/runtime_config の typo と秘密値混入を入口で止める。"""
+    removed = sorted(set(source) & set(_REMOVED_RUNTIME_CONFIG_KEYS))
+    if removed:
+        reasons = "; ".join(f"{key}: {_REMOVED_RUNTIME_CONFIG_KEYS[key]}" for key in removed)
+        raise ValueError(f"removed runtime_config key(s): {removed}. 消してください ({reasons})")
     env_only = sorted(set(source) & _SECRET_ENV_ONLY_KEYS)
     if env_only:
         raise ValueError(

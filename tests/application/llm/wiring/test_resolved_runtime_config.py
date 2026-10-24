@@ -97,33 +97,21 @@ class TestReasonFirstTwoStepConfig:
         cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
         assert cfg.to_trace_dict()['reason_first_two_step_enabled'] is True
 
-class TestShortTermMemoryTurnWindow:
-    """自分のターン単位の窓設定を、全構築経路で同じ不変条件に保つ。"""
+class TestRemovedShortTermMemoryTurnWindowKeys:
+    """短期記憶のターン数の設定のキーは消した。書かれていたら、実験を始める前に理由を添えて止めることを保証する (design_decisions D1824-9)。"""
 
-    def test_defaults_keep_twenty_turns_and_compact_ten(self) -> None:
-        """未指定時は cap 20 / 畳む数 10 を使う。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
-        assert cfg.short_term_memory_turn_cap == 20
-        assert cfg.short_term_memory_turn_compact_count == 10
-
-    def test_mapping_rejects_compaction_that_would_empty_the_window(self) -> None:
-        """畳む数が cap 以上なら、実験開始前に設定を拒否する。"""
-        with pytest.raises(ValueError, match='must be smaller'):
-            ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '4', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '4'})
-
-    def test_direct_construction_cannot_bypass_turn_window_invariant(self) -> None:
-        """for_tests でも畳んだ直後に窓を空にする値は指定できない。"""
-        with pytest.raises(ValueError, match='compact_count < cap'):
-            ResolvedLlmRuntimeConfig.for_tests(short_term_memory_turn_cap=4, short_term_memory_turn_compact_count=4)
+    @pytest.mark.parametrize("key", ["SHORT_TERM_MEMORY_TURN_CAP", "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT"])
+    def test_removed_key_is_rejected_with_the_reason(self, key: str) -> None:
+        """消したキーを書くと、知らないキーとしてではなく、消したキーとして ValueError になり、ドメインの定数の名前を示す。"""
+        with pytest.raises(ValueError, match=f"removed runtime_config key.*{key}.*RECENT_TURNS / FOLD_TURNS"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={key: "20"})
 
 class TestFromEnvExplicit:
     """設定値明示で全フィールドが正しく resolve される。"""
 
     def test_all_config_resolve(self) -> None:
         """全フィールド明示設定で resolve。"""
-        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'SHORT_TERM_MEMORY_TURN_CAP': '24', 'SHORT_TERM_MEMORY_TURN_COMPACT_COUNT': '8', 'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'SCENARIO_RANDOM_SEED': '42'})
-        assert cfg.short_term_memory_turn_cap == 24
-        assert cfg.short_term_memory_turn_compact_count == 8
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={'LLM_CLIENT': 'litellm', 'LLM_MODEL': 'openrouter/google/gemma-4-31b-it', 'OPENAI_API_BASE': 'https://openrouter.ai/api/v1', 'LLM_REQUEST_TIMEOUT_SECONDS': '60', 'LLM_REASONING_EFFORT': 'low', 'LLM_WALL_TIME_CAP_SECONDS': '65', 'LLM_RATE_LIMIT_RETRY_ATTEMPTS': '2', 'LLM_RATE_LIMIT_RETRY_BASE_SLEEP': '1.5', 'OPENROUTER_PROVIDER': 'Parasail', 'OPENROUTER_QUANTIZATION': 'fp8', 'SCENARIO_RANDOM_SEED': '42'})
         assert cfg.llm_client_kind == 'litellm'
         assert cfg.llm_model == 'openrouter/google/gemma-4-31b-it'
         assert cfg.llm_api_key is None
@@ -261,9 +249,9 @@ class TestFromMappingIgnoresOsEnviron:
 
     def test_values_os_environ(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """values 省略時も os environ を読まない。"""
-        monkeypatch.setenv('SHORT_TERM_MEMORY_TURN_CAP', '99')
+        monkeypatch.setenv('LLM_MODEL', 'openrouter/google/gemma-4-31b-it')
         cfg = ResolvedLlmRuntimeConfig.from_mapping()
-        assert cfg.short_term_memory_turn_cap == 20
+        assert cfg.llm_model is None
 
 class TestImmutability:
     """frozen dataclass: 構築後の改変を防ぐ (= hash 可能 / 共有 safe)。"""
@@ -306,7 +294,6 @@ class TestToTraceDict:
         """全フィールドが dict に出る。"""
         cfg = ResolvedLlmRuntimeConfig.for_tests(llm_client_kind='litellm', llm_model='openrouter/google/gemma-4-31b-it')
         d = cfg.to_trace_dict()
-        assert d['short_term_memory_turn_cap'] == 20
         assert d['llm_client_kind'] == 'litellm'
         assert d['llm_model'] == 'openrouter/google/gemma-4-31b-it'
         assert 'typed_judgment_provider' in d

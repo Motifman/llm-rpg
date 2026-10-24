@@ -15,15 +15,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class DefaultActionResultStore(IActionResultStore):
     """プレイヤーごとに行動結果をリストで保持する in-memory 実装。"""
 
-    def __init__(
-        self,
-        max_entries_per_player: int = 100,
-        *,
-        event_store: UnifiedRecentEventStore | None = None,
-    ) -> None:
-        if max_entries_per_player <= 0:
-            raise ValueError("max_entries_per_player must be greater than 0")
-        self._max_entries = max_entries_per_player
+    def __init__(self, *, event_store: UnifiedRecentEventStore | None = None) -> None:
         self._event_store = event_store or UnifiedRecentEventStore()
 
     def _key(self, player_id: PlayerId) -> int:
@@ -105,9 +97,7 @@ class DefaultActionResultStore(IActionResultStore):
             occurred_tick=occurred_tick,
             execution_provenance=execution_provenance,
         )
-        self._event_store.append_action_result(
-            player_id, entry, max_entries=self._max_entries
-        )
+        self._event_store.append_action_result(player_id, entry)
 
     def get_recent(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
         if not isinstance(player_id, PlayerId):
