@@ -1607,9 +1607,10 @@ class SpotGraphToolExecutor:
                         f"「{action_name}」は別の参加者が準備する必要がある。"
                     ),
                     error_code="INTERACTION_PRECONDITION_FAILED",
+                    # 対処文は他の人に頼む言葉にそのまま使われるので、操作名を出さない。
                     remediation=(
-                        f"別の参加者に「{action_name}」の準備を頼み、"
-                        f"自分は「{conflicting_action}」の準備を続けてください。"
+                        f"別の参加者に{self._quoted_display_label(runtime_context, args, action_name)}を頼み、"
+                        "自分はすでに受け持った側を続けてください。"
                     ),
                 )
             registry = PreparedActionRegistry(self._svc.world_flags)
@@ -1818,6 +1819,11 @@ class SpotGraphToolExecutor:
             )
         if events:
             self._event_publisher.publish_all(events)
+
+    @staticmethod
+    def _quoted_display_label(runtime_context: Any, args: dict[str, Any], action_name: str) -> str:
+        label = _interaction_display_label(runtime_context, args.get("object_id"), action_name)
+        return f"「{label}」" if label else "この操作"
 
     def _prepared_role_already_held_by_player(
         self, player_id: int, action_name: str
