@@ -197,3 +197,47 @@ def test_open_turn_entries_return_only_what_arrived_after_the_last_closed_turn()
 
     assert [entry.kind for entry in entries] == ["action_result", "observation"]
     assert store.open_turn_entries(PlayerId(8)) == []
+
+
+class TestAppendListeners:
+    """追記を知らせる口 (add_append_listener) が、時系列に入った出来事を入れた順に、2 つ目の書き手 (design_decisions D1824-7) へ渡すことを保証する。"""
+
+    def test_listener_receives_observations_and_action_results_in_order(self) -> None:
+        """観測と行動の結果を足すと、知らせる口に、追記した時系列の 1 件ずつがその順で届く。"""
+        store = UnifiedRecentEventStore()
+        received: list[tuple[PlayerId, str]] = []
+        store.add_append_listener(lambda pid, entry: received.append((pid, entry.kind)))
+
+        store.append_observation(_PLAYER, _observation(1, "扉が開いた"))
+        store.append_action_result(_PLAYER, _action(2, "扉を通った"))
+
+        assert received == [(_PLAYER, "observation"), (_PLAYER, "action_result")]
+        assert [e.kind for e in store.get_timeline(_PLAYER)] == ["observation", "action_result"]
+
+    def test_pending_and_replaced_entries_are_not_announced(self) -> None:
+        """未処理の観測の預かりと、snapshot から戻す置き換えは、時系列への追記ではないので知らせない。"""
+        store = UnifiedRecentEventStore()
+        received: list[object] = []
+        store.add_append_listener(lambda pid, entry: received.append(entry))
+
+        store.append_pending_observation(_PLAYER, _observation(1, "扉が開いた"))
+        store.replace_observations(_PLAYER, [_observation(2, "鐘が鳴った")])
+
+        assert received == []
+
+    def test_removed_listener_is_no_longer_called(self) -> None:
+        """外した口には、そのあとの追記を知らせない。"""
+        store = UnifiedRecentEventStore()
+        received: list[object] = []
+        listener = lambda pid, entry: received.append(entry)  # noqa: E731
+        store.add_append_listener(listener)
+
+        store.remove_append_listener(listener)
+        store.append_observation(_PLAYER, _observation(1, "扉が開いた"))
+
+        assert received == []
+
+    def test_non_callable_listener_is_rejected(self) -> None:
+        """呼べない値を知らせる口に渡すと TypeError を投げる。"""
+        with pytest.raises(TypeError):
+            UnifiedRecentEventStore().add_append_listener("not callable")  # type: ignore[arg-type]

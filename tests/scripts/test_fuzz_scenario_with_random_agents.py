@@ -140,6 +140,30 @@ class TestDetectsExceptions:
         assert "RuntimeError" in exceptions[0].detail
         assert result.reached_tick == 6
 
+    @pytest.mark.parametrize(
+        ("reason", "reported"),
+        [("unexpected_error", True), ("memory_rule", True), ("contract_violation", True), ("no_agent_move", False), ("being_inner_record", False)],
+    )
+    def test_broken_copy_to_the_being_short_term_memory_is_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str, reported: bool
+    ) -> None:
+        """Being 側の短期記憶へ写せなかった trace のうち、規則の崩れか想定外の例外だけを例外として出し、決めたとおりに写さないものは出さない (design_decisions D1824-7)。"""
+        original = WorldRuntime.advance_tick
+
+        def advance_tick_that_fails_a_copy(self, *args, **kwargs):
+            if self.current_tick() == 2:
+                self._trace_recorder.record(
+                    "being_short_term_memory_not_copied", tick=2, being_id="being_w1_p1", source="observation", reason=reason, event_kind=None
+                )
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(WorldRuntime, "advance_tick", advance_tick_that_fails_a_copy)
+
+        result = run_random_agents(_small_scenario(tmp_path), seed=0, max_world_ticks=4)
+
+        exceptions = [f for f in result.findings if f.kind == "exception"]
+        assert [(f.tick, reason in f.detail) for f in exceptions] == ([(2, True)] if reported else [])
+
     def test_exception_swallowed_inside_a_tool_is_reported(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
