@@ -26,12 +26,11 @@ jobs:
           # pyproject.toml の対応下限。下限で通らない退行は上位版だけでは拾えない。
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        # setup-uv は uv 本体を配布元から取りに行き、そこで時間切れになって
+        # job が止まったり 3 分待たされたりした (design_decisions D1652)。
+        # PyPI から入れる。版は全 job で同じものに固定する。
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra export
@@ -60,12 +59,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra dev
@@ -85,12 +80,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra dev
@@ -125,12 +116,8 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.28"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+      - name: Install uv
+        run: python -m pip install uv==0.11.28
 
       - name: Install locked dependencies
         run: uv sync --locked --extra export
