@@ -95,6 +95,49 @@ class ObservedTime:
             raise ContractViolation("seconds must be a finite number or None")
 
 
+@dataclass(frozen=True, eq=True, order=False)
+class OccurrenceOrder:
+    """その環境の中で、観測や結果のもとになったことが起きた順 (design_decisions D1824-8)。
+
+    同じ環境の中でだけ大小を比べられる。環境ごとに時計が違うので、別の環境の値と大小を
+    比べると ``ContractViolation`` を投げる。``ObservedTime.seconds`` と違って時刻の差は
+    表さず、順だけを表す。
+    """
+
+    environment: str
+    value: float
+
+    def __post_init__(self) -> None:
+        require_text(self.environment, "environment")
+        if (
+            isinstance(self.value, bool)
+            or not isinstance(self.value, (int, float))
+            or not math.isfinite(self.value)
+        ):
+            raise ContractViolation("value must be a finite number")
+
+    def _require_same_environment(self, other: object) -> OccurrenceOrder:
+        if not isinstance(other, OccurrenceOrder):
+            raise ContractViolation("an occurrence order compares only with another occurrence order")
+        if other.environment != self.environment:
+            raise ContractViolation(
+                f"orders of {self.environment!r} and {other.environment!r} are not comparable"
+            )
+        return other
+
+    def __lt__(self, other: object) -> bool:
+        return self.value < self._require_same_environment(other).value
+
+    def __le__(self, other: object) -> bool:
+        return self.value <= self._require_same_environment(other).value
+
+    def __gt__(self, other: object) -> bool:
+        return self.value > self._require_same_environment(other).value
+
+    def __ge__(self, other: object) -> bool:
+        return self.value >= self._require_same_environment(other).value
+
+
 KNOWN_IF_POSSIBLE_FIELDS: Final = ("subject_name", "source", "place", "addressed_to_self")
 
 
@@ -123,6 +166,7 @@ class Observation:
     wants_wake: bool | None = None
     body_if_subject_unknown: str | None = None
     withheld_if_subject_unknown: bool = False
+    order: OccurrenceOrder | None = None
 
     def __post_init__(self) -> None:
         require_text(self.body, "body")
@@ -145,6 +189,8 @@ class Observation:
                 raise ContractViolation(
                     "body_if_subject_unknown needs a known subject other than self"
                 )
+        if self.order is not None and not isinstance(self.order, OccurrenceOrder):
+            raise ContractViolation("order must be OccurrenceOrder or None")
         require_bool(self.withheld_if_subject_unknown, "withheld_if_subject_unknown")
         if self.withheld_if_subject_unknown:
             if self.subject_is_self:

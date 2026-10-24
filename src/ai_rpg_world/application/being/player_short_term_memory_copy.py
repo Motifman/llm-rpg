@@ -24,7 +24,7 @@ from ai_rpg_world.application.observation.being_contract import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from ai_rpg_world.being.contract import AgentMove, ContractViolation, Observation
+from ai_rpg_world.being.contract import AgentMove, ContractViolation, Observation, OccurrenceOrder
 from ai_rpg_world.being.domain.memory_turn_clock import MemoryTurnReader
 from ai_rpg_world.being.domain.short_term_memory import (
     RememberedEvent,
@@ -59,6 +59,7 @@ class PlayerShortTermMemoryCopy:
         being_id_of: Callable[[PlayerId], BeingId | None],
         turn_reader: MemoryTurnReader,
         observer_of: Callable[[PlayerId], Observer],
+        environment_of: Callable[[PlayerId], str],
         current_tick_provider: Callable[[], int | None],
         trace_recorder_provider: Callable[[], ITraceRecorder | None],
     ) -> None:
@@ -66,6 +67,7 @@ class PlayerShortTermMemoryCopy:
         self._being_id_of = being_id_of
         self._turn_reader = turn_reader
         self._observer_of = observer_of
+        self._environment_of = environment_of
         self._current_tick_provider = current_tick_provider
         self._trace_recorder_provider = trace_recorder_provider
         self._moves: dict[PlayerId, AgentMove] = {}
@@ -135,6 +137,8 @@ class PlayerShortTermMemoryCopy:
         self, player_id: PlayerId, payload: ObservationEntry | ActionResultEntry
     ) -> tuple[Observation, AgentMove | None]:
         observer = self._observer_of(player_id)
+        # 今の短期記憶は occurred_at で並べ直すので、同じ値を起きた順にする (design_decisions D1824-8)。
+        order = OccurrenceOrder(environment=self._environment_of(player_id), value=payload.occurred_at.timestamp())
         if isinstance(payload, ObservationEntry):
             return (
                 observation_from_game(
@@ -144,18 +148,22 @@ class PlayerShortTermMemoryCopy:
                     tick=None,
                     game_time_label=payload.game_time_label,
                     observer=observer,
+                    order=order,
                 ),
                 None,
             )
         provenance = payload.execution_provenance
         if provenance is None:
-            return observation_from_unprompted_result(payload, observer=observer), None
+            return observation_from_unprompted_result(payload, observer=observer, order=order), None
         move = self._moves.get(player_id)
         if move is None or move.call_id != provenance.execution_request_id:
             # 記憶の道具の結果は、1 手が無いことより先に、Being の内側の記録として拒む。
             observation_from_action_result(payload, call_id=provenance.execution_request_id, observer=observer)
             raise _NoAgentMove
-        return observation_from_action_result(payload, call_id=move.call_id, observer=observer), move
+        return (
+            observation_from_action_result(payload, call_id=move.call_id, observer=observer, order=order),
+            move,
+        )
 
     def _not_copied(self, player_id: PlayerId, being_id: BeingId | None, **payload: Any) -> None:
         try:

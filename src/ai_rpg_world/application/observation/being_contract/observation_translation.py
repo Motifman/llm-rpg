@@ -26,6 +26,7 @@ from ai_rpg_world.being.contract import (
     EnvironmentNotice,
     Observation,
     ObservedTime,
+    OccurrenceOrder,
     OwnActionResult,
     OwnBodyState,
     Route,
@@ -130,6 +131,7 @@ def observation_from_game(
     tick: int | None,
     game_time_label: str | None,
     observer: Observer,
+    order: OccurrenceOrder | None = None,
 ) -> Observation:
     structured = output.structured
     kind = _kind(structured)
@@ -167,28 +169,38 @@ def observation_from_game(
             isinstance(output.if_subject_unknown, WithheldFromStrangers)
             and not subject_is_self
         ),
+        order=order,
     )
 
 
 def observation_from_action_result(
-    entry: ActionResultEntry, *, call_id: str, observer: Observer
+    entry: ActionResultEntry,
+    *,
+    call_id: str,
+    observer: Observer,
+    order: OccurrenceOrder | None = None,
 ) -> Observation:
     """``call_id`` は、この結果を生んだエージェントの 1 手が発行した ID。
 
     本文は直近の出来事の行から時刻と心の声を除いた文 (design_decisions D1824-7)。
     """
     return _observation_from_result(
-        entry, route=OwnActionResult(call_id=call_id, succeeded=entry.success), observer=observer
+        entry,
+        route=OwnActionResult(call_id=call_id, succeeded=entry.success),
+        observer=observer,
+        order=order,
     )
 
 
-def observation_from_unprompted_result(entry: ActionResultEntry, *, observer: Observer) -> Observation:
+def observation_from_unprompted_result(
+    entry: ActionResultEntry, *, observer: Observer, order: OccurrenceOrder | None = None
+) -> Observation:
     """移動の到着のように、1 手と同じ手番に届かない結果。呼び出しの ID を持たない経路で写す。"""
-    return _observation_from_result(entry, route=SeenOrHeard(), observer=observer)
+    return _observation_from_result(entry, route=SeenOrHeard(), observer=observer, order=order)
 
 
 def _observation_from_result(
-    entry: ActionResultEntry, *, route: Route, observer: Observer
+    entry: ActionResultEntry, *, route: Route, observer: Observer, order: OccurrenceOrder | None
 ) -> Observation:
     if _is_agent_side_tool(entry.tool_name):
         raise ObservationNotRepresentable(
@@ -212,6 +224,7 @@ def _observation_from_result(
         place=_known(observer.place_name),
         addressed_to_self=True,
         wants_wake=entry.should_reschedule,
+        order=order,
     )
 
 
