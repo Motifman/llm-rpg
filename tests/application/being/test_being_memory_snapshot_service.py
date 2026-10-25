@@ -35,7 +35,8 @@ from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Backstory,
     Lapse,
-    MemoryOperationResult,
+    MemoryOperationOutcome,
+    ObservedOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -469,9 +470,9 @@ def _every_field_short_term_memory(being: BeingId = BeingId('ada')) -> ShortTerm
         Perception(turn=11, observation=observation(ToldOrWritten(), subject_name='カイト', withheld_if_subject_unknown=True, wants_wake=False)),
         Perception(turn=11, observation=observation(OwnBodyState(), body='少し空腹だ', subject_is_self=True)),
         Perception(turn=11, observation=observation(EnvironmentNotice(), body='日が暮れた', order=OccurrenceOrder(environment='廃坑の山村', value=1729000000.25))),
-        Attempt(turn=11, move=AgentMove(call_id='call-1', tool_name='interact', arguments={'target': '扉', 'options': {'force': True, 'tries': [1, 2.5, None, 'again']}}, expectation='扉が開く', inner_thought='鍵が要るかもしれない'), result=observation(OwnActionResult(call_id='call-1', succeeded=False), body='扉は開かなかった', subject_is_self=True, addressed_to_self=True)),
-        Attempt(turn=12, move=AgentMove(call_id='call-2', tool_name='speak', arguments={}), result=observation(OwnActionResult(call_id='call-2', succeeded=True), body='挨拶した', subject_is_self=True, order=OccurrenceOrder(environment='廃坑の山村', value=1729000001.5))),
-        Attempt(turn=13, move=AgentMove(call_id='call-3', tool_name='memo_add', arguments={'text': '鍵を探す'}), result=MemoryOperationResult(call_id='call-3', body='[行動] メモを書いた → [結果] メモを追加しました', time=ObservedTime(display='1日目 昼', seconds=43200.0), order=OccurrenceOrder(environment='廃坑の山村', value=1729000002.0))),
+        Attempt(turn=11, move=AgentMove(call_id='call-1', tool_name='interact', arguments={'target': '扉', 'options': {'force': True, 'tries': [1, 2.5, None, 'again']}}, expectation='扉が開く', inner_thought='鍵が要るかもしれない'), result=ObservedOutcome(observation(OwnActionResult(call_id='call-1', succeeded=False), body='扉は開かなかった', subject_is_self=True, addressed_to_self=True))),
+        Attempt(turn=12, move=AgentMove(call_id='call-2', tool_name='speak', arguments={}), result=ObservedOutcome(observation(OwnActionResult(call_id='call-2', succeeded=True), body='挨拶した', subject_is_self=True, order=OccurrenceOrder(environment='廃坑の山村', value=1729000001.5)))),
+        Attempt(turn=13, move=AgentMove(call_id='call-3', tool_name='memo_add', arguments={'text': '鍵を探す'}), result=MemoryOperationOutcome(call_id='call-3', body='[行動] メモを書いた → [結果] メモを追加しました', time=ObservedTime(display='1日目 昼', seconds=43200.0), order=OccurrenceOrder(environment='廃坑の山村', value=1729000002.0))),
         Attempt(turn=14, move=AgentMove(call_id='call-4', tool_name='interact', arguments={'target': '弁'})),
         Lapse(turn=15, body='[行動] 迷い → [失敗] | 決められなかった', time=ObservedTime(display='1日目 昼'), order=OccurrenceOrder(environment='廃坑の山村', value=1729000003.0)),
     )
@@ -641,9 +642,9 @@ class TestOccurrenceOrderPayload:
         svc.restore(being, json.dumps(payload))
 
         restored = [
-            e.observation if isinstance(e, Perception) else e.result
+            e.observation if isinstance(e, Perception) else e.result.observation
             for e in stores['short_term'].get(being).experiences
-            if isinstance(e, Perception) or isinstance(getattr(e, 'result', None), Observation)
+            if isinstance(e, Perception) or isinstance(getattr(e, 'result', None), ObservedOutcome)
         ]
         assert len(restored) == len(popped)
         assert all(o.order is None for o in restored)

@@ -9,7 +9,7 @@ from ai_rpg_world.being.contract import Observation, ObservedTime
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Lapse,
-    MemoryOperationResult,
+    MemoryOperationOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -31,7 +31,7 @@ class _Line:
     def attempted(self, attempt: Attempt, result: Observation) -> str | None:
         return _line(result.time, result.body, attempt.move.inner_thought)
 
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationResult) -> str | None:
+    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> str | None:
         return _line(result.time, result.body, attempt.move.inner_thought)
 
     def attempted_without_result(self, attempt: Attempt) -> str | None:

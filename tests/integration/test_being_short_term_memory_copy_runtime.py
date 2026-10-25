@@ -22,7 +22,7 @@ from ai_rpg_world.being.domain.short_term_memory import (
     RECENT_TURNS,
     Attempt,
     Lapse,
-    MemoryOperationResult,
+    MemoryOperationOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -100,7 +100,7 @@ class TestCopyInTheRuntime:
         being_id = runtime._acting_being_for(_ME).being_id
         experiences = runtime._being_short_term_memory_store.get(being_id).experiences
         bodies = [
-            (e.turn, type(e).__name__, (e.observation if isinstance(e, Perception) else e.result).body.split("\n")[0])
+            (e.turn, type(e).__name__, (e.observation if isinstance(e, Perception) else e.result.observation).body.split("\n")[0])
             for e in experiences
         ]
         assert bodies == [
@@ -135,7 +135,7 @@ class TestMemoryOperationsAndLapsesInTheRuntime:
         being_id = runtime._acting_being_for(_ME).being_id
         (attempt,) = [e for e in runtime._being_short_term_memory_store.get(being_id).experiences if isinstance(e, Attempt)]
         assert (attempt.turn, attempt.move.tool_name) == (1, TOOL_NAME_EPISODE_RECALL)
-        assert isinstance(attempt.result, MemoryOperationResult)
+        assert isinstance(attempt.result, MemoryOperationOutcome)
         assert recorder.payloads(TraceEventKind.BEING_SHORT_TERM_MEMORY_NOT_COPIED) == []
 
     def test_turn_without_a_tool_call_is_kept_as_a_lapse(self) -> None:

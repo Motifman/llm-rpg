@@ -55,7 +55,7 @@ class ExperienceReader(Protocol[_T_co]):
 
     def attempted(self, attempt: Attempt, result: Observation) -> _T_co: ...
 
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationResult) -> _T_co: ...
+    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> _T_co: ...
 
     def attempted_without_result(self, attempt: Attempt) -> _T_co: ...
 
@@ -97,8 +97,50 @@ class Perception(Experience):
         return reader.perceived(self)
 
 
+class Outcome(ABC):
+    """Being が選んだ 1 手の結果。読む側には、結果の種類に合うメソッドで渡す。"""
+
+    @property
+    @abstractmethod
+    def order(self) -> OccurrenceOrder | None: ...
+
+    @abstractmethod
+    def answers(self, call_id: str) -> bool:
+        """呼び出しの ID が ``call_id`` の 1 手に答えた結果か。"""
+
+    def fits(self, call_id: str) -> bool:
+        """呼び出しの ID が ``call_id`` の 1 手の結果として持てるか。"""
+        return self.answers(call_id)
+
+    @abstractmethod
+    def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co: ...
+
+
+@dataclass(frozen=True)
+class ObservedOutcome(Outcome):
+    """環境 (ゲーム) が返した、自分の行動の結果の観測。"""
+
+    observation: Observation
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.observation, Observation) or not isinstance(
+            self.observation.route, OwnActionResult
+        ):
+            raise ShortTermMemoryValidationException("an observed outcome must be an own action result")
+
+    @property
+    def order(self) -> OccurrenceOrder | None:
+        return self.observation.order
+
+    def answers(self, call_id: str) -> bool:
+        return self.observation.route.call_id == call_id  # type: ignore[union-attr]
+
+    def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co:
+        return reader.attempted(attempt, self.observation)
+
+
 @dataclass(frozen=True, kw_only=True)
-class MemoryOperationResult:
+class MemoryOperationOutcome(Outcome):
     """記憶の道具 (メモ、エピソード、状況の評価) の 1 手に、Being の記憶が返した結果。"""
 
     call_id: str
@@ -113,51 +155,66 @@ class MemoryOperationResult:
             raise ShortTermMemoryValidationException("time must be ObservedTime")
         _require_order(self.order)
 
+    def answers(self, call_id: str) -> bool:
+        return self.call_id == call_id
+
+    def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co:
+        return reader.attempted_memory_operation(attempt, self)
+
+
+@dataclass(frozen=True)
+class UnknownOutcome(Outcome):
+    """結果が分からない。結果を待っている間と、来ないまま次の 1 手を選んだとき。どの 1 手にも答えていない。"""
+
+    @property
+    def order(self) -> OccurrenceOrder | None:
+        return None
+
+    def answers(self, call_id: str) -> bool:
+        return False
+
+    def fits(self, call_id: str) -> bool:
+        return True
+
+    def show_to(self, attempt: Attempt, reader: ExperienceReader[_T_co]) -> _T_co:
+        return reader.attempted_without_result(attempt)
+
 
 @dataclass(frozen=True, kw_only=True)
 class Attempt(Experience):
-    """Being が選んだ 1 手と、その結果。結果が無いのは、結果を待っているか、来ないまま次の 1 手を選んだとき。"""
+    """Being が選んだ 1 手と、その結果。"""
 
     turn: int
     move: AgentMove
-    result: Observation | MemoryOperationResult | None = None
+    result: Outcome = UnknownOutcome()
 
     def __post_init__(self) -> None:
         _require_turn(self.turn, "turn")
         if not isinstance(self.move, AgentMove):
             raise ShortTermMemoryValidationException("move must be AgentMove")
-        if self.result is not None and _call_id_of(self.result) != self.move.call_id:
+        if not isinstance(self.result, Outcome):
+            raise ShortTermMemoryValidationException("result must be Outcome")
+        if not self.result.fits(self.move.call_id):
             raise ShortTermMemoryValidationException(
-                f"result {_call_id_of(self.result)!r} does not answer move {self.move.call_id!r}"
+                f"{self.result!r} does not answer move {self.move.call_id!r}"
             )
 
     @property
     def order(self) -> OccurrenceOrder | None:
-        return None if self.result is None else self.result.order
+        return self.result.order
 
-    def answered_by(self, result: Observation | MemoryOperationResult, *, turn: int) -> Attempt:
-        if _call_id_of(result) != self.move.call_id:
+    def is_answered(self) -> bool:
+        return self.result.answers(self.move.call_id)
+
+    def answered_by(self, result: Outcome, *, turn: int) -> Attempt:
+        if not result.answers(self.move.call_id):
             raise ShortTermMemoryUnpairedResultException(
-                f"result {_call_id_of(result)!r} does not answer the awaiting move {self.move.call_id!r}"
+                f"{result!r} does not answer the awaiting move {self.move.call_id!r}"
             )
         return Attempt(turn=turn, move=self.move, result=result)
 
     def show_to(self, reader: ExperienceReader[_T_co]) -> _T_co:
-        if self.result is None:
-            return reader.attempted_without_result(self)
-        if isinstance(self.result, MemoryOperationResult):
-            return reader.attempted_memory_operation(self, self.result)
-        return reader.attempted(self, self.result)
-
-
-def _call_id_of(result: object) -> str:
-    if isinstance(result, MemoryOperationResult):
-        return result.call_id
-    if isinstance(result, Observation) and isinstance(result.route, OwnActionResult):
-        return result.route.call_id
-    raise ShortTermMemoryValidationException(
-        "a result must be an own action result or a memory operation result"
-    )
+        return self.result.show_to(self, reader)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -273,11 +330,9 @@ class ShortTermMemory(AggregateRoot[ExperiencesFolded]):
         experiences = self._experiences if self._awaiting is None else self._with(self._awaiting)
         self._become(experiences, self._backstories, self._recent_from, attempt)
 
-    def receive_result(self, result: Observation | MemoryOperationResult, *, current_turn: int) -> None:
+    def receive_result(self, result: Outcome, *, current_turn: int) -> None:
         if self._awaiting is None:
-            raise ShortTermMemoryUnpairedResultException(
-                f"no move is awaiting the result {_call_id_of(result)!r}"
-            )
+            raise ShortTermMemoryUnpairedResultException(f"no move is awaiting {result!r}")
         attempt = self._awaiting.answered_by(result, turn=_require_turn(current_turn, "current_turn"))
         self._become(self._with(attempt), self._backstories, self._recent_from, None)
 
@@ -361,7 +416,7 @@ class ShortTermMemory(AggregateRoot[ExperiencesFolded]):
             raise ShortTermMemoryValidationException("experiences must be in turn order")
         if turns and turns[0] < recent_from:
             raise ShortTermMemoryValidationException("experiences must be within the recent range")
-        if awaiting is not None and (not isinstance(awaiting, Attempt) or awaiting.result is not None):
+        if awaiting is not None and (not isinstance(awaiting, Attempt) or awaiting.is_answered()):
             raise ShortTermMemoryValidationException("awaiting must be an Attempt without result")
         if awaiting is not None and awaiting.turn < recent_from:
             raise ShortTermMemoryValidationException("awaiting must be within the recent range")
@@ -416,8 +471,11 @@ __all__ = [
     "ExperienceReader",
     "ExperiencesFolded",
     "Lapse",
-    "MemoryOperationResult",
+    "MemoryOperationOutcome",
+    "ObservedOutcome",
+    "Outcome",
     "Perception",
     "ShortTermMemory",
     "ShortTermMemoryRepository",
+    "UnknownOutcome",
 ]
