@@ -401,8 +401,7 @@ class PlayerObservationFormatter:
         # 渡すと、Gemma 等の小さい LLM が「自分を三人称で語る主体」と誤認識
         # し、自分や相手を「Bさん」のように呼ぶループに陥る経路になっていた
         # (R1_default LOSE の主因)。
-        # ``speech_recipient_strategy.py`` の設計コメントでも「自分が言った
-        # 内容を観測として持つかは formatter 側で制御可」と委ねられており、
+        # 配信先に話者本人も含まれるため、ここで三人称の通知を抑える。
         # formatter が「持たせない」と判断するのが正しい責務分担。
         is_self = event.aggregate_id.value == recipient_id.value
         if is_self:
