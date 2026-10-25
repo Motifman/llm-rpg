@@ -1,5 +1,8 @@
 # Stage 0a — ドメインイベント配信サイトの機械的棚卸し表
 
+> 一部失効した計画・記録（2026-10-25、Issue #1862）。棚卸し当時のタイル採集などの参照を含む。現在の配信箇所の一覧として使わず、イベント基盤の計画自体の進捗とは区別する。
+> 以下の本文は当時の記録として保存する。現行構成は[世界の現在の構成](../game/world_architecture.md)を参照。
+
 > 状態: **完了 (コード変更ゼロ)**。日付: 2026-07-20。
 > 親計画: [domain_event_dispatch_refactor_plan.md](./domain_event_dispatch_refactor_plan.md)
 > 方法: `publish` / `publish_all` / `get_events` / `clear_events` /
