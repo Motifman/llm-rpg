@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.being_episode_recall_tool_executor import (
@@ -55,7 +56,7 @@ def _episode(number: int, *, summary: str = "金庫の番号を探した", body:
 
 
 def _executor(*episodes: Episode, turn: int = 5, max_handles: int = 3):
-    repository = InMemoryEpisodeRepository()
+    repository = InMemoryEpisodeRepository(handoff=discard_events)
     for episode in episodes:
         repository.add(episode)
     recorder = _Recorder()

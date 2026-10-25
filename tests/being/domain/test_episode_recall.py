@@ -11,6 +11,7 @@ from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeValidationException,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from tests.event_handoff_helpers import discard_events
 
 ADA = BeingId("being_ada")
 KAI = BeingId("being_kai")
@@ -32,7 +33,7 @@ KEY = _episode("aa11bb22-1d2e-4f00-8a00-000000000002", "鍵は井戸の底に落
 
 
 def _repo() -> InMemoryEpisodeRepository:
-    repo = InMemoryEpisodeRepository()
+    repo = InMemoryEpisodeRepository(handoff=discard_events)
     repo.add(VAULT)
     repo.add(KEY)
     return repo

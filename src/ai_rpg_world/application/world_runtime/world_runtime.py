@@ -370,6 +370,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_team import (
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 from ai_rpg_world.eventing import AsyncEventExecutor, AsyncFailure
+from ai_rpg_world.eventing.dispatcher import EventDispatcher
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
@@ -5937,8 +5938,36 @@ def create_world_runtime(
         current_tick_provider=lambda: runtime.current_tick(),
     )
 
+    # Being の保存先は、保存するときにためたイベントをこの配り手に渡す (design_decisions D1837 の 6)。
+    from ai_rpg_world.application.being.short_term_memory_event_traces import (
+        ShortTermMemoryEventTraces,
+    )
+    from ai_rpg_world.being.domain.short_term_memory import FoldForced, StaleBackstoryDiscarded
+    from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
+
+    being_dispatcher: EventDispatcher[None] = EventDispatcher(failure_observer=_record_after_commit_failure)
+    short_term_memory_event_traces = ShortTermMemoryEventTraces(
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    being_dispatcher.register_after_commit(
+        FoldForced,
+        short_term_memory_event_traces.fold_forced,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    being_dispatcher.register_after_commit(
+        StaleBackstoryDiscarded,
+        short_term_memory_event_traces.backstory_discarded,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+
     runtime: WorldRuntime = WorldRuntime(
         scenario=scenario,
+        _being_episode_store=InMemoryEpisodeRepository(handoff=being_dispatcher.handoff),
+        _being_memo_store=InMemoryMemoBookRepository(handoff=being_dispatcher.handoff),
+        _being_short_term_memory_store=InMemoryShortTermMemoryRepository(handoff=being_dispatcher.handoff),
         _aux_llm_call_sink=aux_llm_call_sink,
         _meeting_enabled=scenario.meeting_enabled,
         _interaction_cooldown_store=interaction_cooldown_store,
