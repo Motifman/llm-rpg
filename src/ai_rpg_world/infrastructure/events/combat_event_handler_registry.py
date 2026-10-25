@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from ai_rpg_world.application.common.event_delivery import CommandEventHandlerRegistrarPort
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
@@ -84,6 +85,37 @@ class CombatEventHandlerRegistry:
             MonsterRespawnedEvent,
             self._create_event_handler(self._monster_spawned_map_placement_handler.handle),
             is_synchronous=True,
+        )
+
+    def register_command_handlers(self, registrar: CommandEventHandlerRegistrarPort) -> None:
+        """既存の同期処理を、同じ対応と順序で確定前の必須処理へ登録する。"""
+        registrar.register_required_before_commit(
+            HitBoxHitRecordedEvent,
+            lambda event, _context: self._hit_box_damage_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            HitBoxHitRecordedEvent,
+            lambda event, _context: self._combat_aggro_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterDiedEvent,
+            lambda event, _context: self._monster_death_reward_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterDiedEvent,
+            lambda event, _context: self._monster_death_hunger_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterDiedEvent,
+            lambda event, _context: self._monster_died_map_removal_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterSpawnedEvent,
+            lambda event, _context: self._monster_spawned_map_placement_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterRespawnedEvent,
+            lambda event, _context: self._monster_spawned_map_placement_handler.handle(event),
         )
 
     def _create_event_handler(

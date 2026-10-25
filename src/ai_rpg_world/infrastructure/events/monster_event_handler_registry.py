@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from ai_rpg_world.application.common.event_delivery import CommandEventHandlerRegistrarPort
 from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
     MonsterDecidedToInteractHandler,
 )
@@ -62,6 +63,25 @@ class MonsterEventHandlerRegistry:
             MonsterFedEvent,
             self._create_event_handler(self._monster_fed_handler.handle),
             is_synchronous=True,
+        )
+
+    def register_command_handlers(self, registrar: CommandEventHandlerRegistrarPort) -> None:
+        """既存の同期処理を、同じ対応と順序で確定前の必須処理へ登録する。"""
+        registrar.register_required_before_commit(
+            MonsterDecidedToMoveEvent,
+            lambda event, _context: self._monster_decided_to_move_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterDecidedToUseSkillEvent,
+            lambda event, _context: self._monster_decided_to_use_skill_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterDecidedToInteractEvent,
+            lambda event, _context: self._monster_decided_to_interact_handler.handle(event),
+        )
+        registrar.register_required_before_commit(
+            MonsterFedEvent,
+            lambda event, _context: self._monster_fed_handler.handle(event),
         )
 
     def _create_event_handler(

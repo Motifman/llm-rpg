@@ -8757,6 +8757,14 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 **どうしないと壊れるか**: `tests/being/infrastructure` の 3 つの保存先の `TestHandoff` と、`tests/integration/test_being_event_handoff_runtime.py` が見張る。
 
+### その後: 休眠している文脈の登録 (グループ A)
+
+戦闘の 7 件、モンスターの 4 件は、すべて従来 `is_synchronous=True` だった。既存のイベント型・受け手の `handle`・同じイベント内の登録順を保ち、`register_command_handlers` から確定前の必須処理へ登録する。確定後へ移す登録は 0 件なので、新しい通知や再送の扱いは足さない。古い `register_handlers` と受け手のクラスは、全グループの移行が済むまで残す。
+
+この二つの登録と十個の受け手を本番で組み立てる箇所は、src と scripts の参照を調べた範囲では無い。試験の経路は座標付きの物理マップを使い、本番の空間グラフ上の戦闘と同じ組み立てではない。これを理由に関連ドメイン全体を不要とはみなさず、決めたこと 5 に従って対応を残す。本番に戻す際は、11 件それぞれについて「失敗したら世界があってはいけない状態になるか」を確認し、そうでなければ確定後へ移す。集約に入れられる規則は集約へ戻す。
+
+ユーザーと相談して A を二本に分ける。前半は登録と `CommandScope` の対応・順序・ロールバックの試験を作る。後半は、古い組み立てが残る試験用の三ファイル (`test_combat_handlers.py`、`test_world_simulation_service.py`、`support/world_simulation_builders.py`) を完全に移す。現時点の `create_with_event_publisher` は計 6 箇所、A の古い登録呼び出しは計 4 箇所。処理途中の同期配送と、混在するグループ B の登録も扱う必要があるため、前半で完了扱いにしない。
+
 ## D1621. エピソードは、自分の目次を持つ集約にする。目次の並びは問い合わせで作る
 
 **何を**: エピソード (`being/domain/episode.py` の `Episode`) を、1 件ずつ ID を持つ集約にする。集約は、書いた Being の ID と、自分の目次 (`EpisodeIndex`) と、直した履歴 (`IndexRevision` の並び) を持つ。呼び出し (`recall`) と目次の直し (`revise_index`) は中身を書き換え、値を返さず、`EpisodeRecalled` / `EpisodeIndexRevised` をためる。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。本文・呼び名・書いた時・書いた環境は変わらない。`EpisodeIndex` と `IndexRevision` は値のまま。
