@@ -40,7 +40,7 @@ class WorldRuntimeQueryAdapter:
     """get_player_current_state 1 メソッドだけを満たす duck-type adapter。
 
     DefaultPromptBuilder は world_query_service の 1 メソッドしか呼ばないため、
-    WorldQueryService 本体を構築する代わりにこの adapter を渡す
+    タイル用の問い合わせ本体を構築する代わりにこの adapter を渡す
     (Issue #227 HIGH-3 Part 2 で isinstance チェックを hasattr に緩めたため)。
 
     内部では runtime._build_minimal_player_state_dto を呼び、world_runtime 固有の

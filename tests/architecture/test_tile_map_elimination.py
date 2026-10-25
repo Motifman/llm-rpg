@@ -123,3 +123,25 @@ def test_production_prompt_builder_injects_ui_context() -> None:
     ]
     assert calls
     assert all(any(kw.arg == "ui_context_builder" for kw in call.keywords) for call in calls)
+
+
+@pytest.mark.parametrize("relative_path", [
+    "application/world/services/world_query_service.py",
+    "application/world/services/player_current_state_builder.py",
+    "application/world/services/visible_tile_map_builder.py",
+    "application/world/services/player_location_query_service.py",
+    "application/world/services/spot_context_query_service.py",
+    "application/world/services/available_moves_query_service.py",
+    "application/world/services/visible_context_query_service.py",
+    "application/world/services/visible_object_read_model_builder.py",
+    "application/world/services/player_runtime_context_builder.py",
+    "application/world/services/player_supplemental_context_builder.py",
+    "application/world/services/attention_level_service.py",
+    "application/world/services/transition_condition_evaluator.py",
+    "application/world/services/gateway_based_connected_spots_provider.py",
+    "application/world/world_query_wiring.py",
+    "application/llm/services/current_state_formatter.py",
+])
+def test_tile_query_modules_are_removed(relative_path: str) -> None:
+    """旧タイル用の問い合わせ・整形・配線の実装ファイルは存在しない。"""
+    assert not (_REPO_ROOT / "src/ai_rpg_world" / relative_path).exists()
