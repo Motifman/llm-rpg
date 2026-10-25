@@ -195,7 +195,6 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 - Python 3.10 以上、インデントはスペース 4 つ、関数とモジュールは `snake_case`、クラスは `PascalCase`
 - 公開 API には型注釈を必須とする
 - テストはパッケージ構造を `tests/` 配下に鏡写しで配置する (例: `tests/domain/shop/value_object/test_shop_id.py`)
-- コミットメッセージは Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)
 - 秘密情報は `.env` のみに置く (`.env.example` からコピー)。コミット禁止
 - LLM クライアントは `litellm` 抽象を経由する
 
@@ -264,23 +263,11 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 
 回答・ドキュメント・PR 本文・コミットメッセージなど人間に読ませる文章は日本語で書きます。
 
-### よく使う訳語
-
-| 英語表現 | 日本語訳 |
-|---|---|
-| primitive | 基盤機能 |
-| cross-instance interaction | 二者間の相互作用 |
-| acting / target | 使う側 / 使われる側 |
-| wiring | 配線 / 接続 |
-| silent failure | 静かな失敗 |
-| boundary | 入口 / 境界 |
-| guard | ガード |
-
 ## コミットメッセージ
 
 「なぜこの変更をしたか」を必ず本文に書きます。diff で分かる「何を変えたか」ではなく、「なぜ変えたか・なぜこの方法か」を残してください。
 
-- 件名: 50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
+- 件名: Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)。50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
 - 本文: 解決したかった問題、検討した代替案と却下理由、副作用や注意点、関連 issue 番号
 - `update` / `fix bug` / `修正` のような情報量ゼロの件名は禁止
 
