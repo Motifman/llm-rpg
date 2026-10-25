@@ -8548,14 +8548,14 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 ## D1824-9. 短期記憶は、出来事の種類ごとの型と、規則を持つ集約で持つ
 
-**何を**: Being の短期記憶 (`being/domain/short_term_memory.py`) を、値を持つだけの型から、規則を持つ集約 (`ShortTermMemory`) に作り直す。集約は持ち主の `BeingId` を持つ実体で、操作は自分の中身を書き換え、値を返さない。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。出来事、`MemoryOperationResult`、`Backstory`、`OccurrenceOrder` は値のまま (中身の変わらない frozen dataclass)。
+**何を**: Being の短期記憶 (`being/domain/short_term_memory.py`) を、値を持つだけの型から、規則を持つ集約 (`ShortTermMemory`) に作り直す。集約は持ち主の `BeingId` を持つ実体で、操作は自分の中身を書き換え、値を返さない。決まりに反する操作は例外を投げ、中身もためたイベントも変えない。出来事、1 手の結果 (`Outcome` の 3 つの型)、`Backstory`、`OccurrenceOrder` は値のまま (中身の変わらない frozen dataclass。`Outcome` 自体は共通の口だけを決める抽象クラス)。
 
 出来事 (`Experience`) は種類ごとに型を分ける。
 
 | 型 | 中身 |
 |---|---|
 | `Perception` | 自分の行動の結果以外の経路で届いた観測 1 つ |
-| `Attempt` | Being が選んだ 1 手と、その結果。結果は、ゲームの行動なら自分の行動の結果の観測、記憶の道具なら記憶の結果 (`MemoryOperationResult`)、どちらも無ければ結果の分からない試み |
+| `Attempt` | Being が選んだ 1 手と、その結果 (`Outcome`)。結果は、ゲームの行動なら自分の行動の結果の観測 (`ObservedOutcome`)、記憶の道具なら記憶の結果 (`MemoryOperationOutcome`)、どちらも無ければ結果の分からない結果 (`UnknownOutcome`) |
 | `Lapse` | 1 手を出せなかったこと (迷った、LLM の呼び出しが失敗した、道具を選ばず文章を返した) |
 
 規則は集約の振る舞いに置く。
@@ -8578,6 +8578,18 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 
 出来事を種類ごとに読む側 (文を作る側、snapshot の保存) は、`Experience.show_to(reader)` で種類ごとのメソッドを呼ばれる (`ExperienceReader`)。型を見分けずに済む。
 
+**1 手の結果を型で包む**: 試みの結果は、Being の側の型 `Outcome` で持つ。種類は 3 つで、どれも、どの 1 手に答えたか (`answers`)、起きた順 (`order`)、読む側への渡し方 (`show_to`) を自分で持つ。
+
+| 型 | 中身 | 答える 1 手 |
+|---|---|---|
+| `ObservedOutcome` | 環境 (ゲーム) が返した、自分の行動の結果の観測 | 観測の呼び出しの ID の 1 手 |
+| `MemoryOperationOutcome` | 記憶の道具の 1 手に、Being の記憶が返した結果 | 自分の呼び出しの ID の 1 手 |
+| `UnknownOutcome` | 結果が分からない (待っている間と、来ないまま次の 1 手を選んだとき) | どの 1 手にも答えない |
+
+試みを作るときは、結果がその 1 手のものとして持てるか (`fits`) を確かめる。`UnknownOutcome` はどの 1 手の結果としても持てるが、どの 1 手にも答えていない。結果を受け取るとき (`receive_result`) は答えているか (`answers`) を確かめるので、`UnknownOutcome` を渡すと組にする 1 手の無い結果になる。結果を待っている 1 手は、答えられていない試み (`Attempt.is_answered()` が偽) で持つ。
+
+結果が無いことを `None` ではなく `UnknownOutcome` で表す。`Attempt` の中に、結果の種類を `isinstance` で見分ける分岐も、`None` の分岐も置かないため。自分の行動の結果の観測 (`Observation`) は環境との契約の型で、Being の都合のメソッドを足せないので、`ObservedOutcome` で包む。記憶の道具の結果は、共通の型ができたので名前を `MemoryOperationResult` から `MemoryOperationOutcome` に改めた。snapshot の形は変えていない。
+
 結果を待つ 1 手と範囲の始まりのターンは、集約に持ち、snapshot に入れる。集約に作り直す前の snapshot (観測と 1 手の組の並び) は、1 手の無い出来事を `Perception`、1 手のある出来事を結果つきの `Attempt` として読む。
 
 写す側 (`PlayerShortTermMemoryCopy`) は、Being を引き、ゲームの型を契約の型に変え、集約に頼んで保存し、失敗を trace に残すだけにする。今の時計の番号から出来事の番号を決める自由関数 (`turn_for_event`) と、書き留めた 1 手の dict は消した。
@@ -8593,7 +8605,7 @@ CRITICAL に絞っていたため一度も拾えていなかった (正の対照
 - 待っている 1 手を出来事に先に入れ、結果が来たら差し替える: 出来事が後から書き換わり、`recent()` の結果が結果の届く前後で変わる
 - 集約も中身の変わらない値 (frozen dataclass) にし、操作が新しい集約を返す: ID を持ち時間とともに変わる実体に値の作り方を当てることになり、イベントを出すには操作が「新しい集約とイベントの組」を返す不自然な形になる。最初はこの形で作り、誤りとして作り直した (#1841 を閉じた)
 
-**記憶の道具の結果と、1 手を出せなかったことを写す**: 環境の側 (`result_from_action_result`) が、記憶の道具 (メモ、エピソード、状況の評価) の結果を `MemoryOperationResult` に、それ以外を自分の行動の結果の観測に変え、写す側が `receive_result` に渡す。記憶の道具は手書きの一覧 (`observation_translation.py` の `_AGENT_SIDE_TOOLS` とメモの接頭辞) で見分け、道具のカタログで環境に働きかける道具 (world_action) でないものと一致することは試験 (`test_observation_translation.py` の `TestResultFromActionResult`) が見張る。1 手を出せなかったときに phase_b が残す行は、実行の要求の ID より先に道具の名前 (`迷い`、`一瞬の空白`) で見分け、`lapse` に渡す。1 手を持たない記憶の道具の結果は、組にする 1 手が無いので写さない (`being_inner_record`)。
+**記憶の道具の結果と、1 手を出せなかったことを写す**: 環境の側 (`result_from_action_result`) が、記憶の道具 (メモ、エピソード、状況の評価) の結果を `MemoryOperationOutcome` に、それ以外を自分の行動の結果の観測 (`ObservedOutcome`) に変え、写す側が `receive_result` に渡す。記憶の道具は手書きの一覧 (`observation_translation.py` の `_AGENT_SIDE_TOOLS` とメモの接頭辞) で見分け、道具のカタログで環境に働きかける道具 (world_action) でないものと一致することは試験 (`test_observation_translation.py` の `TestResultFromActionResult`) が見張る。1 手を出せなかったときに phase_b が残す行は、実行の要求の ID より先に道具の名前 (`迷い`、`一瞬の空白`) で見分け、`lapse` に渡す。1 手を持たない記憶の道具の結果は、組にする 1 手が無いので写さない (`being_inner_record`)。
 
 **定数と設定のキー**: 直近として持つターン数 (`RECENT_TURNS`、20)、一度に外すターン数 (`FOLD_TURNS`、10)、いきさつの世代数 (`BACKSTORY_GENERATIONS`、3) は、全員共通の決まりとしてドメインの定数にした。どの profile も値を変えていなかった。今の短期記憶 (`SummarizingShortTermMemory`) も同じ定数を使う。実験の設定のキー `SHORT_TERM_MEMORY_TURN_CAP` / `SHORT_TERM_MEMORY_TURN_COMPACT_COUNT` は消し、書かれていたら知らないキーとしてではなく、消したキーとして理由を添えて起動前に止める (`resolved_runtime_config.py` の `_REMOVED_RUNTIME_CONFIG_KEYS`)。行動の結果を 1 人 100 件までに削る処理 (`DefaultActionResultStore`) もなくした。直近の範囲が 20 ターンで外れるので、100 件には届かない。
 

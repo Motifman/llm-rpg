@@ -39,9 +39,12 @@ from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Backstory,
     Lapse,
-    MemoryOperationResult,
+    MemoryOperationOutcome,
+    ObservedOutcome,
+    Outcome,
     Perception,
     ShortTermMemory,
+    UnknownOutcome,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.exception import DomainException
@@ -304,7 +307,7 @@ class _ExperienceToDict:
     def attempted(self, attempt: Attempt, result: Observation) -> dict[str, Any]:
         return {**self.attempted_without_result(attempt), "result": {"observation": _observation_to_dict(result)}}
 
-    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationResult) -> dict[str, Any]:
+    def attempted_memory_operation(self, attempt: Attempt, result: MemoryOperationOutcome) -> dict[str, Any]:
         return {
             **self.attempted_without_result(attempt),
             "result": {
@@ -330,13 +333,13 @@ class _ExperienceToDict:
         }
 
 
-def _dict_to_attempt_result(data: dict[str, Any] | None) -> Observation | MemoryOperationResult | None:
+def _dict_to_attempt_result(data: dict[str, Any] | None) -> Outcome:
     if data is None:
-        return None
+        return UnknownOutcome()
     if "observation" in data:
-        return _dict_to_observation(data["observation"])
+        return ObservedOutcome(_dict_to_observation(data["observation"]))
     operation = data["memory_operation"]
-    return MemoryOperationResult(
+    return MemoryOperationOutcome(
         call_id=operation["call_id"],
         body=operation["body"],
         time=_dict_to_time(operation["time"]),
@@ -369,7 +372,7 @@ def _event_to_experience(data: dict[str, Any]) -> Perception | Attempt:
     observation = _dict_to_observation(data["observation"])
     if data["move"] is None:
         return Perception(turn=data["turn"], observation=observation)
-    return Attempt(turn=data["turn"], move=_dict_to_move(data["move"]), result=observation)
+    return Attempt(turn=data["turn"], move=_dict_to_move(data["move"]), result=ObservedOutcome(observation))
 
 
 def being_short_term_memory_to_dict(memory: ShortTermMemory) -> dict[str, Any]:

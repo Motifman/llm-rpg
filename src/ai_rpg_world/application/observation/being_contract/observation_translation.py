@@ -34,7 +34,11 @@ from ai_rpg_world.being.contract import (
     ToldOrWritten,
     UnknownValue,
 )
-from ai_rpg_world.being.domain.short_term_memory import MemoryOperationResult
+from ai_rpg_world.being.domain.short_term_memory import (
+    MemoryOperationOutcome,
+    ObservedOutcome,
+    Outcome,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -210,15 +214,17 @@ def result_from_action_result(
     call_id: str,
     observer: Observer,
     order: OccurrenceOrder | None = None,
-) -> Observation | MemoryOperationResult:
+) -> Outcome:
     """1 手の結果。記憶の道具 (メモ、エピソード、状況の評価) なら Being の記憶が返した結果、それ以外は自分の行動の結果の観測 (design_decisions D1824-9)。
 
     記憶の道具は手書きの一覧で見分ける。道具のカタログの分類 (world_action でないもの) と一致することは試験が見張る。
     """
     if not _is_agent_side_tool(entry.tool_name):
-        return observation_from_action_result(entry, call_id=call_id, observer=observer, order=order)
+        return ObservedOutcome(
+            observation_from_action_result(entry, call_id=call_id, observer=observer, order=order)
+        )
     body, time = _body_and_time(entry, observer=observer)
-    return MemoryOperationResult(call_id=call_id, body=body, time=time, order=order)
+    return MemoryOperationOutcome(call_id=call_id, body=body, time=time, order=order)
 
 
 def lapse_body_and_time(entry: ActionResultEntry, *, observer: Observer) -> tuple[str, ObservedTime]:

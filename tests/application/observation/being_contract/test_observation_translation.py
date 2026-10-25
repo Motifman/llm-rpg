@@ -46,7 +46,7 @@ from ai_rpg_world.being.contract import (
     SeenOrHeard,
     ToldOrWritten,
 )
-from ai_rpg_world.being.domain.short_term_memory import MemoryOperationResult
+from ai_rpg_world.being.domain.short_term_memory import MemoryOperationOutcome, ObservedOutcome
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _NOAH = Observer(
@@ -607,7 +607,7 @@ class TestAgentSideToolResult:
 
 
 class TestResultFromActionResult:
-    """1 手の結果を、環境に働きかける道具なら自分の行動の結果の観測に、記憶の道具なら記憶の結果 (MemoryOperationResult) に写す規則を保証する (design_decisions D1824-9)。"""
+    """1 手の結果を、環境に働きかける道具なら自分の行動の結果の観測に、記憶の道具なら記憶の結果 (MemoryOperationOutcome) に写す規則を保証する (design_decisions D1824-9)。"""
 
     def _entry(self, tool_name: str | None, **overrides: Any) -> ActionResultEntry:
         fields: dict[str, Any] = {
@@ -629,9 +629,10 @@ class TestResultFromActionResult:
         for name, category in _catalogued_tool_definitions().items():
             result = result_from_action_result(self._entry(name), call_id="c", observer=_NOAH, order=order)
             if category is ToolCategory.WORLD_ACTION:
-                assert result.route == OwnActionResult(call_id="c", succeeded=True), name  # type: ignore[union-attr]
+                assert isinstance(result, ObservedOutcome), name
+                assert result.observation.route == OwnActionResult(call_id="c", succeeded=True), name
             else:
-                assert isinstance(result, MemoryOperationResult), name
+                assert isinstance(result, MemoryOperationOutcome), name
                 assert (result.call_id, result.order) == ("c", order), name
 
     def test_memory_operation_result_keeps_the_line_body_and_time(self) -> None:
@@ -640,7 +641,7 @@ class TestResultFromActionResult:
 
         result = result_from_action_result(entry, call_id="c", observer=_NOAH)
 
-        assert result == MemoryOperationResult(
+        assert result == MemoryOperationOutcome(
             call_id="c",
             body=format_action_result_body(entry),
             time=ObservedTime(display="一日目の朝 0:10", seconds=2 * _NOAH.seconds_per_tick),  # type: ignore[operator]

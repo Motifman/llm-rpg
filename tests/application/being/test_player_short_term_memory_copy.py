@@ -32,7 +32,8 @@ from ai_rpg_world.being.contract import AgentMove, ObservedTime, OccurrenceOrder
 from ai_rpg_world.being.domain.short_term_memory import (
     Attempt,
     Lapse,
-    MemoryOperationResult,
+    MemoryOperationOutcome,
+    ObservedOutcome,
     Perception,
     ShortTermMemory,
 )
@@ -145,10 +146,10 @@ class TestCopyOneTurn:
         world.copy.on_appended(ADA, result)
 
         (event,) = world.events()
-        assert isinstance(event, Attempt) and event.result is not None
+        assert isinstance(event, Attempt) and isinstance(event.result, ObservedOutcome)
         assert (event.turn, event.move.call_id) == (1, "execution-1")
-        assert event.result.route == OwnActionResult(call_id="execution-1", succeeded=True)
-        assert event.result.body == format_action_result_body(result.payload)
+        assert event.result.observation.route == OwnActionResult(call_id="execution-1", succeeded=True)
+        assert event.result.observation.body == format_action_result_body(result.payload)
         assert world.memory().awaiting is None
 
     def test_result_that_arrives_without_a_move_is_seen_at_the_next_move(self) -> None:
@@ -268,7 +269,7 @@ class TestMemoryOperationsAndLapses:
     """記憶の道具の 1 手の結果と、1 手を出せなかったことを、Being 側の短期記憶に写すことを保証する (design_decisions D1824-9)。"""
 
     def test_memory_tool_result_pairs_with_its_move(self) -> None:
-        """記憶の道具の 1 手の結果は、その 1 手と組の Attempt として、記憶の結果 (MemoryOperationResult) を持って残り、trace は増えない。"""
+        """記憶の道具の 1 手の結果は、その 1 手と組の Attempt として、記憶の結果 (MemoryOperationOutcome) を持って残り、trace は増えない。"""
         world = _World()
         world.clock.advance_turn(ADA_BEING)
         provenance = _provenance()
@@ -279,7 +280,7 @@ class TestMemoryOperationsAndLapses:
         world.copy.on_appended(ADA, result)
 
         (event,) = world.events()
-        assert isinstance(event, Attempt) and isinstance(event.result, MemoryOperationResult)
+        assert isinstance(event, Attempt) and isinstance(event.result, MemoryOperationOutcome)
         assert (event.turn, event.move.tool_name, event.result.call_id) == (1, "memo_add", "execution-1")
         assert event.result.body == format_action_result_body(result.payload)
         assert world.memory().awaiting is None

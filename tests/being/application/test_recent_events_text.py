@@ -12,7 +12,7 @@ from ai_rpg_world.being.contract import (
     OwnActionResult,
     SeenOrHeard,
 )
-from ai_rpg_world.being.domain.short_term_memory import MemoryOperationResult, ShortTermMemory
+from ai_rpg_world.being.domain.short_term_memory import MemoryOperationOutcome, ObservedOutcome, ShortTermMemory
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 ADA = BeingId("being_p1")
@@ -39,7 +39,8 @@ def _move(call_id: str, *, inner_thought: str | None = None) -> AgentMove:
 def _answered(memory: ShortTermMemory, call_id: str, body: str, *, turn: int, inner_thought: str | None = None, order: OccurrenceOrder | None = None) -> None:
     memory.act(_move(call_id, inner_thought=inner_thought), current_turn=turn)
     memory.receive_result(
-        _observation(body, route=OwnActionResult(call_id=call_id, succeeded=True), order=order), current_turn=turn
+        ObservedOutcome(_observation(body, route=OwnActionResult(call_id=call_id, succeeded=True), order=order)),
+        current_turn=turn,
     )
 
 
@@ -73,7 +74,7 @@ class TestRecentEventsText:
         memory = ShortTermMemory.empty(ADA)
         memory.act(_move("call-1", inner_thought="思い出そう"), current_turn=1)
         memory.receive_result(
-            MemoryOperationResult(call_id="call-1", body="[行動] 思い出した → [結果] 鍵は事務所", time=ObservedTime(display="1日目 昼")),
+            MemoryOperationOutcome(call_id="call-1", body="[行動] 思い出した → [結果] 鍵は事務所", time=ObservedTime(display="1日目 昼")),
             current_turn=1,
         )
 
