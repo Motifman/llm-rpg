@@ -7,8 +7,6 @@ from threading import Lock
 from typing import Any
 from uuid import uuid4
 
-from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
@@ -125,8 +123,6 @@ class InMemoryDataStore:
         self.next_monster_id = 1
         self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
         self.spawn_tables: dict[SpotId, SpotSpawnTable] = {}
-        self.hit_boxes: dict[HitBoxId, HitBoxAggregate] = {}
-        self.next_hit_box_id = 1
         self.spots: dict[SpotId, Spot] = {}
         self.location_establishments: dict[LocationSlotId, LocationEstablishmentAggregate] = {}
 
@@ -346,7 +342,6 @@ class InMemoryDataStore:
         self.next_monster_id = 1
         self.next_world_object_id = 100000
         self.spawn_tables.clear()
-        self.hit_boxes.clear()
         self.spots.clear()
         self.location_establishments.clear()
         self.spot_interiors.clear()

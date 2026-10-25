@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import pytest
 
-from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -661,33 +660,15 @@ class TestMonsterAggregate(MonsterAggregateFixtures):
                 monster.apply_damage(1, WorldTick(11))
 
     class TestCombatOrchestration:
-        def test_application_style_damage_flow_success(self, monster: MonsterAggregate, spot_id: SpotId):
+        def test_apply_damage_records_current_hp(self, monster: MonsterAggregate, spot_id: SpotId):
+            """HPが100のとき42のダメージを受けると、HPが58になり被害の出来事が残る。"""
             # Given
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            attacker_stats = BaseStats(
-                max_hp=100,
-                max_mp=30,
-                attack=50,
-                defense=5,
-                speed=12,
-                critical_rate=0.0,
-                evasion_rate=0.0,
-            )
             monster.clear_events()
-
-            # When (アプリケーション層の責務を模した流れ)
-            with patch("random.random", return_value=0.9):
-                damage = CombatLogicService.calculate_damage(
-                    attacker_stats=attacker_stats,
-                    defender_stats=monster.template.base_stats,
-                )
-            if damage.is_evaded:
-                monster.record_evasion()
-            else:
-                monster.apply_damage(damage.value, WorldTick(10))
+            monster.apply_damage(42, WorldTick(10))
 
             # Then
-            assert monster.hp.value == 58  # (50 - 15/2) => int(42.5) = 42
+            assert monster.hp.value == 58
             events = monster.get_events()
             assert len(events) == 1
             event = events[0]
