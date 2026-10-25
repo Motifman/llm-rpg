@@ -52,13 +52,6 @@ class DirectionEnum(Enum):
         return Facing.from_delta(dx, dy, dz).to_direction()
 
 
-class EnvironmentTypeEnum(Enum):
-    """環境の種類（天候の影響を左右する）"""
-    OUTDOOR = "OUTDOOR"      # 屋外（天候の影響をフルに受ける）
-    INDOOR = "INDOOR"        # 屋内（天候の影響を受けない）
-    UNDERGROUND = "UNDERGROUND" # 地下（天候の影響を受けず、独自の環境変化がある可能性がある）
-
-
 class EstablishmentType(Enum):
     """ロケーションに割り当て可能な施設の種類"""
     SHOP = "SHOP"
