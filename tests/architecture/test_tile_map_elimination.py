@@ -73,10 +73,10 @@ def test_prompt_limits_have_no_tile_settings() -> None:
 
 
 def test_current_state_query_has_no_tile_settings() -> None:
-    """現在状態の問い合わせにはプレイヤーと移動先取得の指定だけがあり、タイル用の設定は無い。"""
+    """現在状態の問い合わせにはプレイヤーの指定だけがあり、タイル用の設定は無い。"""
     from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
     assert {field.name for field in fields(GetPlayerCurrentStateQuery)} == {
-        "player_id", "include_available_moves",
+        "player_id",
     }
 
 
