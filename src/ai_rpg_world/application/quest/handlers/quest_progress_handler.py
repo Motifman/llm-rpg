@@ -15,22 +15,9 @@ from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
 )
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-from ai_rpg_world.domain.player.repository.player_inventory_repository import (
-    PlayerInventoryRepository,
-)
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
-from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-)
 
 
 class _AsyncQuestProgressHandler:
@@ -103,39 +90,6 @@ class PlayerDownedQuestProgressHandler(
         self._execute(
             lambda: self._reaction_service.process_player_downed(event),
             handler_name="quest_progress_player_downed",
-        )
-
-
-class ItemTakenFromChestQuestProgressHandler(
-    _AsyncQuestProgressHandler,
-    EventHandler[ItemTakenFromChestEvent],
-):
-    def handle(self, event: ItemTakenFromChestEvent) -> None:
-        self._execute(
-            lambda: self._reaction_service.process_item_taken_from_chest(event),
-            handler_name="quest_progress_item_taken_from_chest",
-        )
-
-
-class LocationEnteredQuestProgressHandler(
-    _AsyncQuestProgressHandler,
-    EventHandler[LocationEnteredEvent],
-):
-    def handle(self, event: LocationEnteredEvent) -> None:
-        self._execute(
-            lambda: self._reaction_service.process_location_entered(event),
-            handler_name="quest_progress_location_entered",
-        )
-
-
-class GatewayTriggeredQuestProgressHandler(
-    _AsyncQuestProgressHandler,
-    EventHandler[GatewayTriggeredEvent],
-):
-    def handle(self, event: GatewayTriggeredEvent) -> None:
-        self._execute(
-            lambda: self._reaction_service.process_gateway_triggered(event),
-            handler_name="quest_progress_gateway_triggered",
         )
 
 
