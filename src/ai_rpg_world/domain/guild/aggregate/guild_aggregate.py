@@ -49,6 +49,10 @@ class GuildAggregate(AggregateRoot):
     def spot_id(self) -> SpotId:
         return self._spot_id
 
+    def is_at_spot(self, spot_id: SpotId | None) -> bool:
+        """指定スポットがギルドの所在地かを判定する。未配置は所在地ではない。"""
+        return self._spot_id == spot_id
+
     @property
     def location_area_id(self) -> LocationAreaId:
         return self._location_area_id
