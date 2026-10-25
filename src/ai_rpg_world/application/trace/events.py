@@ -25,6 +25,7 @@ class TraceEventKind:
     残すため (JSONL なので緩く)。よく使う既知値だけここに集める。
     """
 
+    ASYNC_EVENT_DELIVERY_FAILED = "async_event_delivery_failed"
     RUN_START = "run_start"
     RUN_END = "run_end"
     TICK_START = "tick_start"

@@ -46,6 +46,9 @@ class _Runtime:
     def write_episodes_on_leaving(self, *, skip_reason: str | None = None) -> None:
         return None
 
+    def shutdown_async_events(self) -> None:
+        return None
+
     def shutdown(self, *, timeout: float) -> None:
         return None
 

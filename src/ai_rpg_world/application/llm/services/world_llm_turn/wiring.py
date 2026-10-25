@@ -277,6 +277,9 @@ class WorldLlmWiring:
         return self.run_phase_b(phase_a)
 
     def run_phase_a(self, player_id: PlayerId) -> LlmPhaseAResult:
+        apply_results = getattr(self.runtime, "apply_async_results", None)
+        if callable(apply_results):
+            apply_results(player_id)
         return run_phase_a(self, player_id)
 
     def run_phase_b(self, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
