@@ -80,16 +80,7 @@ def repos() -> tuple[
     data_store = InMemoryDataStore()
     data_store.clear_all()
 
-    def create_uow() -> InMemoryUnitOfWork:
-        return InMemoryUnitOfWork(
-            unit_of_work_factory=create_uow,
-            data_store=data_store,
-        )
-
-    uow, _ = InMemoryUnitOfWork.create_with_event_publisher(
-        unit_of_work_factory=create_uow,
-        data_store=data_store,
-    )
+    uow = InMemoryUnitOfWork(data_store=data_store)
     inv_repo = InMemoryPlayerInventoryRepository(data_store, uow)
     item_repo = InMemoryItemRepository(data_store, uow)
     service = PlayerInventoryQueryService(inv_repo, item_repo)

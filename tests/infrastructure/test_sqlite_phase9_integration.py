@@ -6,6 +6,8 @@ import sqlite3
 
 import pytest
 
+from ai_rpg_world.application.common.aggregate_event_sink import CommandContextAggregateEventSink
+from ai_rpg_world.application.common.command_scope import CommandScope
 from ai_rpg_world.application.social.social_sqlite_wiring import (
     attach_social_sqlite_repositories,
 )
@@ -24,8 +26,10 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.infrastructure.unit_of_work.sqlite_transactional_scope_factory import (
-    create_sqlite_scope_with_event_publisher,
+from ai_rpg_world.eventing import DeliveryChannel, DeliveryGuarantee, DomainEvent
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import CommandEventDispatcher
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    SqliteUnitOfWorkTransactionAdapter,
 )
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import (
     SqliteUnitOfWork,
@@ -104,21 +108,33 @@ def test_cross_bundle_rollback_reverts_uncommitted_writes(tmp_path) -> None:
 
 
 def test_event_sink_collects_events_inside_sqlite_scope() -> None:
+    """SQLite の保存時に収集したイベントは、確定するまで届かず確定後に届く。"""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    scope, _publisher = create_sqlite_scope_with_event_publisher(connection=conn)
-
-    with scope:
-        social = attach_social_sqlite_repositories(scope.connection, event_sink=scope)
-        social.users.save(
-            UserAggregate.create_new_user(
-                user_id=UserId(10),
-                user_name="phase9",
-                display_name="Phase 9",
-                bio="integration",
+    dispatcher = CommandEventDispatcher(failure_observer=lambda *args: pytest.fail("配送失敗"))
+    received: list[DomainEvent] = []
+    dispatcher.register_after_commit(
+        DomainEvent, received.append,
+        channel=DeliveryChannel.INTEGRATION, guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    transaction = SqliteUnitOfWork(connection=conn)
+    scope = CommandScope(
+        SqliteUnitOfWorkTransactionAdapter(transaction),
+        sync_dispatcher=dispatcher, after_commit_handoff=dispatcher,
+    )
+    try:
+        with scope as context:
+            sink = CommandContextAggregateEventSink(context, is_active=transaction.is_in_transaction)
+            social = attach_social_sqlite_repositories(transaction.connection, event_sink=sink)
+            social.users.save(
+                UserAggregate.create_new_user(
+                    user_id=UserId(10),
+                    user_name="phase9",
+                    display_name="Phase 9",
+                    bio="integration",
+                )
             )
-        )
-
-        pending, processed_count = scope.get_pending_events_since(0)
-        assert processed_count >= 1
-        assert len(pending) >= 1
+            assert received == []
+        assert len(received) >= 1
+    finally:
+        conn.close()

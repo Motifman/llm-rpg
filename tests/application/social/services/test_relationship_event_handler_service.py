@@ -74,7 +74,6 @@ class TestRelationshipEventHandlerService:
         return user
 
 
-
     def test_handle_user_blocked_no_relations(self, service, user_repository, user1, user2):
         """ユーザーブロック時の関係解除 - 関係が存在しない場合"""
         # 関係が存在しないことを確認
@@ -179,7 +178,7 @@ class TestRelationshipEventHandlerServiceImprovements:
     @pytest.fixture
     def unit_of_work_improvements(self):
         """テスト用のUnit of Work"""
-        return InMemoryUnitOfWork(unit_of_work_factory=lambda: InMemoryUnitOfWork(unit_of_work_factory=lambda: InMemoryUnitOfWork()))
+        return InMemoryUnitOfWork()
 
     @pytest.fixture
     def user_repository_improvements(self, unit_of_work_improvements):

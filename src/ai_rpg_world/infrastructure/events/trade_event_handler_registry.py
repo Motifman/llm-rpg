@@ -1,5 +1,3 @@
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.event_delivery import (
     CommandEventHandlerRegistrarPort,
@@ -7,9 +5,6 @@ from ai_rpg_world.application.common.event_delivery import (
     DeliveryGuarantee,
 )
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
-from ai_rpg_world.domain.common.domain_event import DomainEvent
-from ai_rpg_world.domain.common.event_handler import EventHandler
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
     TradeCancelledEvent,
@@ -17,39 +12,12 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
 )
 
-if TYPE_CHECKING:
-    from ai_rpg_world.domain.common.event_handler import EventHandler
-
 
 class TradeEventHandlerRegistry:
     """取引イベントハンドラの登録"""
 
     def __init__(self, trade_event_handler: TradeEventHandler):
         self._trade_event_handler = trade_event_handler
-
-    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
-        """全イベントハンドラをEventPublisherに登録"""
-
-        event_publisher.register_handler(
-            TradeOfferedEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_offered),
-            is_synchronous=False,
-        )
-        event_publisher.register_handler(
-            TradeAcceptedEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_accepted),
-            is_synchronous=False,
-        )
-        event_publisher.register_handler(
-            TradeCancelledEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_cancelled),
-            is_synchronous=False,
-        )
-        event_publisher.register_handler(
-            TradeDeclinedEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_declined),
-            is_synchronous=False,
-        )
 
     def register_command_handlers(
         self,
@@ -80,16 +48,3 @@ class TradeEventHandlerRegistry:
             channel=DeliveryChannel.READ_MODEL,
             guarantee=DeliveryGuarantee.DURABLE_RETRY,
         )
-
-    def _create_event_handler(
-        self, handler_method: Callable[[Any], None]
-    ) -> "EventHandler[Any]":
-        """イベントハンドラオブジェクトを作成"""
-        class EventHandlerImpl(EventHandler[Any]):
-            def __init__(self, method: Callable[[Any], None]) -> None:
-                self._method = method
-
-            def handle(self, event: Any) -> None:
-                self._method(event)
-
-        return EventHandlerImpl(handler_method)

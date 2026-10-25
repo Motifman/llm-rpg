@@ -2,7 +2,6 @@ import pytest
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
@@ -16,9 +15,7 @@ class TestInMemoryItemRepository:
     def setup(self):
         data_store = InMemoryDataStore()
         data_store.clear_all()
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
-        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(unit_of_work_factory=create_uow, data_store=data_store)
+        uow = InMemoryUnitOfWork(data_store=data_store)
         repo = InMemoryItemRepository(data_store, uow)
         return repo, data_store, uow
 

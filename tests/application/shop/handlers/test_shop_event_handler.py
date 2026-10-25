@@ -35,7 +35,7 @@ class TestShopEventHandler:
     def setup_handler(self):
         """ハンドラとリポジトリをセットアップ"""
         def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+            return InMemoryUnitOfWork()
 
         summary_repo = InMemoryShopSummaryReadModelRepository()
         listing_repo = InMemoryShopListingReadModelRepository()
