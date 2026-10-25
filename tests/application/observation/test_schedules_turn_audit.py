@@ -12,9 +12,6 @@ audit 表 (#404 後続):
 | PlayerRevivedEvent (self) | True | 行動再開した瞬間 |
 | InventorySlotOverflowEvent | True | アイテム消失リスク (致命) |
 | MonsterRespawnedEvent | True | 敵が再出現 = spawned と同等 |
-| HarvestCancelledEvent | True | 予約行動が失敗 |
-| HarvestCompletedEvent | True | 採集完了で再び動ける |
-| LocationEnteredEvent (self, 特殊 location) | True | summit / shore 等の到達 |
 | PlayerDroppedItemEvent | True | 目の前に資材が現れた = 拾える |
 | PlayerPickedUpItemEvent | True | 狙っていた資材が消えた = 計画変更 |
 | PlayerGaveItemEvent | True | 受け手は所持品が増えた = 次の手が変わる |
@@ -34,9 +31,6 @@ from ai_rpg_world.application.observation.services.formatters._formatter_context
 from ai_rpg_world.application.observation.services.formatters._spot_graph_object_handler import (
     SpotGraphObjectHandler,
 )
-from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
-    HarvestObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
     MonsterObservationFormatter,
 )
@@ -46,12 +40,8 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.world_formatter import (
-    WorldObservationFormatter,
-)
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.event.monster_events import MonsterRespawnedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.event.inventory_events import (
@@ -59,14 +49,7 @@ from ai_rpg_world.domain.player.event.inventory_events import (
 )
 from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-)
-from ai_rpg_world.domain.world.event.map_events import LocationEnteredEvent
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
@@ -134,38 +117,6 @@ class TestMonsterFormatterAudit:
         assert out.schedules_turn is True
 
 
-class TestHarvestFormatterAudit:
-    """``harvest_formatter`` audit 修正の回帰テスト。"""
-
-    def test_harvest_cancelled_schedules_turn_true(self) -> None:
-        """予約行動失敗 → 別行動を選ばせる。"""
-        formatter = HarvestObservationFormatter(_context())
-        event = HarvestCancelledEvent.create(
-            aggregate_id=WorldObjectId.create(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId.create(1),
-            target_id=WorldObjectId.create(2),
-            reason="resource_depleted",
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert out.schedules_turn is True
-
-    def test_harvest_completed_schedules_turn_true(self) -> None:
-        """予約行動完了 → 次の行動を選ばせる。"""
-        formatter = HarvestObservationFormatter(_context())
-        event = HarvestCompletedEvent.create(
-            aggregate_id=WorldObjectId.create(1),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId.create(1),
-            target_id=WorldObjectId.create(2),
-            loot_table_id=LootTableId.create(1),
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert out.schedules_turn is True
-
-
 class TestItemTransferAudit:
     """アイテム移動 3 種 (drop / pickup / give) の起床経路の回帰テスト。
 
@@ -224,26 +175,5 @@ class TestItemTransferAudit:
             ),
             PlayerId(2),
         )
-        assert out is not None
-        assert out.schedules_turn is True
-
-
-class TestWorldFormatterAudit:
-    """``world_formatter`` audit 修正の回帰テスト。"""
-
-    def test_self_location_entered_schedules_turn_true(self) -> None:
-        """summit / shore 等の特殊 location 到着 → 即起床。"""
-        formatter = WorldObservationFormatter(_context())
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(1),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId.create(1),
-            name="頂上",
-            description="島の頂",
-            player_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert out.schedules_turn is True

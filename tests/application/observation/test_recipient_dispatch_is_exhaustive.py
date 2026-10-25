@@ -63,7 +63,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDiedEvent,
     MonsterEvadedEvent,
-    MonsterFedEvent,
     MonsterHealedEvent,
     MonsterSpawnedEvent,
 )
@@ -147,8 +146,6 @@ _SPOT_GRAPH_EXPECTED = {
 }
 
 _DEFAULT_EXPECTED = {
-    "LocationEnteredEvent": "_resolve_location_entered",
-    "LocationExitedEvent": "_resolve_location_exited",
     "PlayerLocationChangedEvent": "_resolve_player_location_changed",
     "PlayerDownedEvent": "_deliver_to_everyone_known",
     "PlayerRevivedEvent": "_deliver_to_everyone_known",
@@ -161,10 +158,6 @@ _DEFAULT_EXPECTED = {
     "ItemEquippedEvent": "_deliver_only_to_the_subject",
     "ItemUnequippedEvent": "_deliver_only_to_the_subject",
     "InventorySlotOverflowEvent": "_deliver_only_to_the_subject",
-    "ItemTakenFromChestEvent": "_deliver_only_to_the_acting_player",
-    "ItemStoredInChestEvent": "_resolve_item_stored_in_chest",
-    "ResourceHarvestedEvent": "_deliver_only_to_the_player_behind_the_actor",
-    "WorldObjectInteractedEvent": "_deliver_only_to_the_player_behind_the_actor",
     "SpotWeatherChangedEvent": "_resolve_spot_weather_changed",
 }
 
@@ -175,8 +168,6 @@ _MONSTER_EXPECTED = {
     "MonsterDamagedEvent": "_deliver_damage_to_the_spot_and_the_attacker",
     "MonsterEvadedEvent": "_deliver_to_everyone_at_the_monsters_spot",
     "MonsterHealedEvent": "_deliver_to_everyone_at_the_monsters_spot",
-    "MonsterFedEvent": "_deliver_to_everyone_at_the_actors_spot",
-    "ActorStateChangedEvent": "_deliver_to_everyone_at_the_actors_spot",
 }
 
 #: 表引きを採用した strategy。移植したら 1 行足す。
@@ -194,8 +185,8 @@ _TABLE_DRIVEN = [
         strategy_class=DefaultRecipientStrategy,
         rules=_DEFAULT_RULES,
         expected_rules=_DEFAULT_EXPECTED,
-        # player_audience_query, world_object_to_player_resolver
-        extra_dependencies=(MagicMock, MagicMock),
+        # player_audience_query
+        extra_dependencies=(MagicMock,),
     ),
     _TableDrivenStrategy(
         key="monster",
@@ -203,9 +194,8 @@ _TABLE_DRIVEN = [
         rules=_MONSTER_RULES,
         expected_rules=_MONSTER_EXPECTED,
         delivers_to_nobody=_MONSTER_NOBODY,
-        # player_audience_query, physical_map_repository,
-        # world_object_to_player_resolver
-        extra_dependencies=(MagicMock, MagicMock, MagicMock),
+        # player_audience_query, world_object_to_player_resolver
+        extra_dependencies=(MagicMock, MagicMock),
     ),
 ]
 
@@ -359,7 +349,7 @@ class TestEventsDeliveredToNobodyReturnNoRecipients:
         ids=lambda t: t.__name__,
     )
     def test_resolving_returns_no_recipients(self, event_type: type) -> None:
-        """宣言した 8 型すべてで ``resolve()`` が空リストを返す。
+        """宣言した型すべてで ``resolve()`` が空リストを返す。
 
         宣言は表にあるだけでは効かない。実行時の分岐
         (``if type(event) in _DELIVERS_TO_NOBODY``) を通ることを、型ごとに確かめる。
@@ -369,7 +359,7 @@ class TestEventsDeliveredToNobodyReturnNoRecipients:
         audience = MagicMock()
         audience.players_at_spot.return_value = [PlayerId(1), PlayerId(2)]
         strategy = MonsterRecipientStrategy(
-            ObservedEventRegistry(), audience, MagicMock(), MagicMock()
+            ObservedEventRegistry(), audience, MagicMock()
         )
 
         recipients = strategy.resolve(event_type.__new__(event_type))
@@ -380,15 +370,13 @@ class TestEventsDeliveredToNobodyReturnNoRecipients:
 class TestMonsterRulesComputeRealRecipients:
     """monster の各配信規則が、実際に誰を選ぶか。"""
 
-    def _strategy(self, audience, monster_spot=None, actor_spot=None):
+    def _strategy(self, audience, monster_spot=None):
         monster_repo = MagicMock()
         monster_repo.find_by_id.return_value = (
             MagicMock(spot_id=monster_spot) if monster_spot is not None else None
         )
-        physical_map = MagicMock()
-        physical_map.find_spot_id_by_object_id.return_value = actor_spot
         return MonsterRecipientStrategy(
-            ObservedEventRegistry(), audience, physical_map, MagicMock(), monster_repo
+            ObservedEventRegistry(), audience, MagicMock(), monster_repo
         )
 
     def test_spawn_uses_the_spot_on_the_event(self) -> None:
@@ -448,19 +436,6 @@ class TestMonsterRulesComputeRealRecipients:
         recipients = strategy.resolve(event)
 
         assert [p.value for p in recipients] == [1, 5]
-
-    def test_fed_looks_the_spot_up_from_the_actor(self) -> None:
-        """採食は ``actor_id`` の world object から場所を引く。"""
-        audience = MagicMock()
-        audience.players_at_spot.return_value = [PlayerId(8)]
-        strategy = self._strategy(audience, actor_spot=SpotId(2))
-        event = MonsterFedEvent.__new__(MonsterFedEvent)
-        object.__setattr__(event, "actor_id", MagicMock())
-
-        recipients = strategy.resolve(event)
-
-        assert [p.value for p in recipients] == [8]
-        audience.players_at_spot.assert_called_once_with(SpotId(2))
 
     def test_nobody_is_reached_when_the_spot_cannot_be_resolved(self) -> None:
         """場所が判らないときは誰にも届けない (リポジトリ未注入の経路)。"""

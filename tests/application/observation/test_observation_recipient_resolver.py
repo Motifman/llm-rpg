@@ -1,6 +1,5 @@
 """ObservationRecipientResolver のテスト（正常・観測対象外・境界・例外）"""
 
-from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,19 +20,10 @@ from ai_rpg_world.application.observation.services.player_audience_query_service
 from ai_rpg_world.application.observation.services.recipient_strategies import (
     DefaultRecipientStrategy,
 )
-from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
-    WorldObjectToPlayerResolver,
-)
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
-from ai_rpg_world.domain.combat.event.combat_events import HitBoxMovedEvent
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
-from ai_rpg_world.domain.conversation.event.conversation_event import ConversationStartedEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
-from ai_rpg_world.domain.monster.event.monster_events import MonsterDamagedEvent
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
@@ -44,7 +34,6 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerLocationChangedEvent,
     PlayerRevivedEvent,
 )
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
@@ -58,63 +47,18 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
-from ai_rpg_world.domain.skill.event.skill_events import SkillUsedEvent
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, InteractionTypeEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.event.map_events import (
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
-
-
-def _create_player_object(player_id: int, x: int = 0, y: int = 0) -> WorldObject:
-    """プレイヤー用 WorldObject（ActorComponent に player_id を持つ）"""
-    return WorldObject(
-        object_id=WorldObjectId.create(player_id),
-        coordinate=Coordinate(x, y, 0),
-        object_type=ObjectTypeEnum.PLAYER,
-        component=ActorComponent(
-            direction=DirectionEnum.SOUTH,
-            player_id=PlayerId(player_id),
-        ),
-    )
-
-
-def _make_minimal_map(spot_id: int, objects: list) -> PhysicalMapAggregate:
-    """1タイルのみの最小マップ（object 配置用）"""
-    coord = Coordinate(0, 0, 0)
-    tiles = {coord: Tile(coord, TerrainType.grass())}
-    return PhysicalMapAggregate(
-        spot_id=SpotId(spot_id),
-        tiles=tiles,
-        objects=objects,
-    )
 
 
 def _make_status(player_id: int, spot_id: int = 1) -> PlayerStatusAggregate:
@@ -146,14 +90,9 @@ class TestObservationRecipientResolver:
         return InMemoryPlayerStatusRepository(data_store=data_store)
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def resolver(self, status_repo, physical_map_repo):
+    def resolver(self, status_repo):
         return create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
 
     def test_resolve_player_location_changed_includes_actor_and_players_at_target_spot(
@@ -225,20 +164,6 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(event)
         assert len(ids) == 1
         assert ids[0].value == 5
-    def test_resolve_item_taken_from_chest_returns_player_id_value(self, resolver):
-        """ItemTakenFromChestEvent: player_id_value が配信先"""
-        event = ItemTakenFromChestEvent.create(
-            aggregate_id=SpotId(1),
-            aggregate_type="PhysicalMap",
-            spot_id=SpotId(1),
-            chest_id=WorldObjectId(10),
-            actor_id=WorldObjectId(1),
-            item_instance_id=ItemInstanceId(100),
-            player_id_value=7,
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 1
-        assert ids[0].value == 7
 
     def test_resolve_spot_weather_changed_returns_players_at_spot(self, resolver, status_repo):
         """SpotWeatherChangedEvent: その spot にいるプレイヤーが配信先"""
@@ -307,186 +232,18 @@ class TestObservationRecipientResolver:
 
     # --- WorldObjectId → PlayerId 解決（ResourceHarvested / LocationExited / WorldObjectInteracted）---
 
-    def test_resolve_resource_harvested_returns_player_when_actor_is_on_map(
-        self, resolver, physical_map_repo
-    ):
-        """ResourceHarvestedEvent: actor_id がマップ上のプレイヤーならそのプレイヤーが配信先"""
-        player_oid = WorldObjectId.create(1)
-        spot_id = 10
-        physical_map_repo.save(
-            _make_minimal_map(spot_id, [_create_player_object(1)])
-        )
-        event = ResourceHarvestedEvent.create(
-            aggregate_id=WorldObjectId(999),
-            aggregate_type="WorldObject",
-            object_id=WorldObjectId(999),
-            actor_id=player_oid,
-            loot_table_id=LootTableId(1),
-            obtained_items=[],
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 1
-        assert ids[0].value == 1
-
-    def test_resolve_resource_harvested_returns_empty_when_actor_on_map(
-        self, resolver
-    ):
-        """ResourceHarvestedEvent: actor_id がどのマップにもいなければ配信先なし"""
-        event = ResourceHarvestedEvent.create(
-            aggregate_id=WorldObjectId(999),
-            aggregate_type="WorldObject",
-            object_id=WorldObjectId(999),
-            actor_id=WorldObjectId(99999),
-            loot_table_id=LootTableId(1),
-            obtained_items=[],
-        )
-        ids = resolver.resolve(event)
-        assert ids == []
-
-    def test_resolve_location_entered_returns_player_id_and_players_at_spot(
-        self, resolver, status_repo
-    ):
-        """LocationEnteredEvent: player_id_value と同一スポットのプレイヤーが配信先"""
-        status_repo.save(_make_status(1, spot_id=5))
-        status_repo.save(_make_status(2, spot_id=5))
-        status_repo.save(_make_status(3, spot_id=5))
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(1),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(1),
-            name="町の広場",
-            description="賑やかな中央広場。",
-            player_id_value=1,
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 3
-        assert {p.value for p in ids} == {1, 2, 3}
-
-    def test_resolve_location_entered_without_player_id_value_returns_only_players_at_spot(
-        self, resolver, status_repo
-    ):
-        """LocationEnteredEvent: player_id_value が None のとき、同一スポットのプレイヤーのみ"""
-        status_repo.save(_make_status(2, spot_id=7))
-        status_repo.save(_make_status(3, spot_id=7))
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(2),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(2),
-            spot_id=SpotId(7),
-            object_id=WorldObjectId(999),
-            name="洞窟",
-            description="薄暗い洞窟。",
-            player_id_value=None,
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 2
-        assert {p.value for p in ids} == {2, 3}
-
-    def test_resolve_location_entered_deduplicates_when_player_in_both_sources(
-        self, resolver, status_repo
-    ):
-        """LocationEnteredEvent: 本人が同一スポットにもいる場合、重複なく1回のみ"""
-        status_repo.save(_make_status(1, spot_id=10))
-        status_repo.save(_make_status(2, spot_id=10))
-        event = LocationEnteredEvent.create(
-            aggregate_id=LocationAreaId(1),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(1),
-            spot_id=SpotId(10),
-            object_id=WorldObjectId.create(1),
-            name="宿屋",
-            description="",
-            player_id_value=1,
-        )
-        ids = resolver.resolve(event)
-        values = [p.value for p in ids]
-        assert 1 in values
-        assert 2 in values
-        assert values.count(1) == 1
-        assert len(ids) == 2
-
-    def test_resolve_location_exited_returns_player_when_object_is_player_on_map(
-        self, resolver, physical_map_repo
-    ):
-        """LocationExitedEvent: object_id がマップ上のプレイヤーならそのプレイヤーが配信先"""
-        physical_map_repo.save(
-            _make_minimal_map(5, [_create_player_object(3)])
-        )
-        event = LocationExitedEvent.create(
-            aggregate_id=LocationAreaId(1),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(1),
-            spot_id=SpotId(5),
-            object_id=WorldObjectId.create(3),
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 1
-        assert ids[0].value == 3
-
-    def test_resolve_location_exited_returns_empty_when_object_on_map(
-        self, resolver
-    ):
-        """LocationExitedEvent: object_id がマップにいなければ配信先なし"""
-        event = LocationExitedEvent.create(
-            aggregate_id=LocationAreaId(1),
-            aggregate_type="LocationArea",
-            location_id=LocationAreaId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(88888),
-        )
-        ids = resolver.resolve(event)
-        assert ids == []
-
-    def test_resolve_world_object_interacted_returns_player_when_actor_is_on_map(
-        self, resolver, physical_map_repo
-    ):
-        """WorldObjectInteractedEvent: actor_id がマップ上のプレイヤーならそのプレイヤーが配信先"""
-        physical_map_repo.save(
-            _make_minimal_map(7, [_create_player_object(2)])
-        )
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(100),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId.create(2),
-            target_id=WorldObjectId(100),
-            interaction_type=InteractionTypeEnum.OPEN_CHEST,
-            data={},
-        )
-        ids = resolver.resolve(event)
-        assert len(ids) == 1
-        assert ids[0].value == 2
-
-    def test_resolve_world_object_interacted_returns_empty_when_actor_on_map(
-        self, resolver
-    ):
-        """WorldObjectInteractedEvent: actor_id がマップにいなければ配信先なし"""
-        event = WorldObjectInteractedEvent.create(
-            aggregate_id=WorldObjectId(100),
-            aggregate_type="WorldObject",
-            actor_id=WorldObjectId(77777),
-            target_id=WorldObjectId(100),
-            interaction_type=InteractionTypeEnum.OPEN_CHEST,
-            data={},
-        )
-        ids = resolver.resolve(event)
-        assert ids == []
-
     # --- 例外ケース（リポジトリが例外を投げた場合は伝播）---
 
     def test_resolve_when_player_audience_query_raises_propagates(
-        self, physical_map_repo, data_store
+        self, data_store
     ):
         """PlayerAudienceQuery.players_at_spot が例外を投げた場合、その例外が伝播する"""
         audience_query = MagicMock()
         audience_query.players_at_spot.side_effect = RuntimeError("find_all failed")
-        world_object_resolver = WorldObjectToPlayerResolver(physical_map_repo)
         registry = ObservedEventRegistry()
         default_strategy = DefaultRecipientStrategy(
             observed_event_registry=registry,
             player_audience_query=audience_query,
-            world_object_to_player_resolver=world_object_resolver,
         )
         resolver = ObservationRecipientResolver(strategies=[default_strategy])
         event = SpotWeatherChangedEvent.create(
@@ -512,15 +269,7 @@ class TestDefaultRecipientStrategy:
         return InMemoryPlayerStatusRepository(data_store=data_store)
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def world_object_resolver(self, physical_map_repo):
-        return WorldObjectToPlayerResolver(physical_map_repo)
-
-    @pytest.fixture
-    def strategy(self, status_repo, world_object_resolver):
+    def strategy(self, status_repo):
         audience_query = PlayerAudienceQueryService(
             player_status_repository=status_repo,
         )
@@ -528,7 +277,6 @@ class TestDefaultRecipientStrategy:
         return DefaultRecipientStrategy(
             observed_event_registry=registry,
             player_audience_query=audience_query,
-            world_object_to_player_resolver=world_object_resolver,
         )
 
     def test_supports_player_location_changed_event(self, strategy):
@@ -665,40 +413,6 @@ class TestDefaultRecipientStrategy:
         ids = resolver.resolve(event)
 
         assert {pid.value for pid in ids} == {1, 2, 3}
-
-
-class TestWorldObjectToPlayerResolver:
-    """WorldObjectToPlayerResolver の単体テスト（正常・対象不在・例外）"""
-
-    @pytest.fixture
-    def data_store(self):
-        return InMemoryDataStore()
-
-    @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def resolver(self, physical_map_repo):
-        return WorldObjectToPlayerResolver(physical_map_repo)
-
-    def test_resolve_player_id_returns_player_when_object_on_map(
-        self, resolver, physical_map_repo
-    ):
-        """マップ上にプレイヤーオブジェクトがある場合その PlayerId を返す（正常系）"""
-        physical_map_repo.save(
-            _make_minimal_map(10, [_create_player_object(3)])
-        )
-        pid = resolver.resolve_player_id(WorldObjectId.create(3))
-        assert pid is not None
-        assert pid.value == 3
-
-    def test_resolve_player_id_returns_None_when_object_on_any_map(
-        self, resolver
-    ):
-        """どのマップにも存在しない object_id の場合は None（境界）"""
-        pid = resolver.resolve_player_id(WorldObjectId(99999))
-        assert pid is None
 
 
 class TestObservationRecipientResolverPerceptionPlane:

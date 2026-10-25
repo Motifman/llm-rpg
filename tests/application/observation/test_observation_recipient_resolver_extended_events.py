@@ -5,13 +5,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
+    ObservationRecipientResolver,
     create_observation_recipient_resolver,
 )
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxCreatedEvent,
-    HitBoxHitRecordedEvent,
+from ai_rpg_world.application.observation.services.observed_event_registry import ObservedEventRegistry
+from ai_rpg_world.application.observation.services.player_audience_query_service import PlayerAudienceQueryService
+from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
+    MonsterRecipientStrategy,
 )
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.application.observation.services.recipient_strategies.pursuit_recipient_strategy import (
+    PursuitRecipientStrategy,
+)
 from ai_rpg_world.domain.conversation.event.conversation_event import ConversationStartedEvent
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
@@ -87,22 +91,13 @@ from ai_rpg_world.domain.skill.event.skill_events import (
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_guild_repository import (
     InMemoryGuildRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
@@ -110,26 +105,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
 )
-
-
-def _create_player_object(player_id: int, x: int = 0, y: int = 0) -> WorldObject:
-    return WorldObject(
-        object_id=WorldObjectId.create(player_id),
-        coordinate=Coordinate(x, y, 0),
-        object_type=ObjectTypeEnum.PLAYER,
-        component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(player_id)),
-    )
-
-
-def _make_minimal_map(spot_id: int, objects: list[WorldObject]) -> PhysicalMapAggregate:
-    tiles = {Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass())}
-    for obj in objects:
-        tiles.setdefault(obj.coordinate, Tile(obj.coordinate, TerrainType.grass()))
-    return PhysicalMapAggregate(
-        spot_id=SpotId(spot_id),
-        tiles=tiles,
-        objects=objects,
-    )
 
 
 def _make_status(
@@ -188,7 +163,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_conversation_started_delivers_to_speaker_only(self):
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
         )
         event = ConversationStartedEvent.create(
             aggregate_id=PlayerId(1),
@@ -203,7 +177,6 @@ class TestObservationRecipientResolverExtendedEvents:
         """囁きは宛先プレイヤーのみ配信先になる"""
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
         )
         event = PlayerSpokeEvent.create(
             aggregate_id=PlayerId(1),
@@ -227,7 +200,6 @@ class TestObservationRecipientResolverExtendedEvents:
         status_repo.save(_make_status(4, 1, Coordinate(10, 0, 0)))
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=MagicMock(),
         )
         event = PlayerSpokeEvent.create(
             aggregate_id=PlayerId(1),
@@ -250,7 +222,6 @@ class TestObservationRecipientResolverExtendedEvents:
         status_repo.save(_make_status(2, 1, Coordinate(10, 0, 0)))  # 距離10、SAYでは届かないがSHOUT(15)では届く
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=MagicMock(),
         )
         event = PlayerSpokeEvent.create(
             aggregate_id=PlayerId(1),
@@ -266,12 +237,10 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_quest_issued_public_delivers_to_all_known_players(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         status_repo.save(_make_status(1, 1))
         status_repo.save(_make_status(2, 2))
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
         event = QuestIssuedEvent.create(
             aggregate_id=QuestId(1),
@@ -285,7 +254,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_quest_issued_guild_scope_resolves_members_with_real_guild_repository(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         guild_repo = InMemoryGuildRepository(data_store=data_store)
         guild = GuildAggregate.create_guild(
             guild_id=GuildId(10),
@@ -299,7 +267,6 @@ class TestObservationRecipientResolverExtendedEvents:
         guild_repo.save(guild)
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
             guild_repository=guild_repo,
         )
         event = QuestIssuedEvent.create(
@@ -314,7 +281,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_quest_pending_approval_uses_real_guild_repository_with_int_guild_id(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         guild_repo = InMemoryGuildRepository(data_store=data_store)
         guild = GuildAggregate.create_guild(
             guild_id=GuildId(7),
@@ -328,7 +294,6 @@ class TestObservationRecipientResolverExtendedEvents:
         guild_repo.save(guild)
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
             guild_repository=guild_repo,
         )
         event = QuestPendingApprovalEvent.create(
@@ -344,7 +309,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_quest_cancelled_reads_related_players_from_quest_repository(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         quest_repo = InMemoryQuestRepository(data_store=data_store)
         quest = QuestAggregate.issue_quest(
             quest_id=QuestId(5),
@@ -357,7 +321,6 @@ class TestObservationRecipientResolverExtendedEvents:
         quest_repo.save(quest)
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
             quest_repository=quest_repo,
         )
         event = QuestCancelledEvent.create(
@@ -369,12 +332,10 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_shop_item_listed_delivers_players_at_event_spot(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         status_repo.save(_make_status(1, 5))
         status_repo.save(_make_status(2, 5))
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
         event = ShopItemListedEvent.create(
             aggregate_id=ShopId(1),
@@ -392,11 +353,9 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_shop_item_unlisted_delivers_players_at_event_spot(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         status_repo.save(_make_status(4, 5))
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
         event = ShopItemUnlistedEvent.create(
             aggregate_id=ShopId(1),
@@ -411,7 +370,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_shop_item_purchased_delivers_buyer_and_seller(self):
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
         )
         event = ShopItemPurchasedEvent.create(
             aggregate_id=ShopId(1),
@@ -428,12 +386,10 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_guild_created_delivers_creator_and_players_at_spot(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         status_repo.save(_make_status(1, 9))
         status_repo.save(_make_status(2, 9))
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
         )
         event = GuildCreatedEvent.create(
             aggregate_id=GuildId(1),
@@ -450,7 +406,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_guild_disbanded_delivers_all_members_when_repository_available(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
         guild_repo = InMemoryGuildRepository(data_store=data_store)
         guild = GuildAggregate.create_guild(
             guild_id=GuildId(1),
@@ -464,7 +419,6 @@ class TestObservationRecipientResolverExtendedEvents:
         guild_repo.save(guild)
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
             guild_repository=guild_repo,
         )
         event = GuildDisbandedEvent.create(
@@ -477,7 +431,6 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_guild_role_changed_without_repository_falls_back_to_actor_pair(self):
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
         )
         event = GuildRoleChangedEvent.create(
             aggregate_id=GuildId(1),
@@ -492,19 +445,16 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_monster_damaged_delivers_players_at_spot_and_attacker(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        physical_map_repo.save(_make_minimal_map(2, [_create_player_object(1)]))
         status_repo.save(_make_status(1, 2))
         status_repo.save(_make_status(3, 2))
         monster_repo = MagicMock()
         monster = MagicMock()
         monster.spot_id = SpotId(2)
         monster_repo.find_by_id.return_value = monster
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
-            monster_repository=monster_repo,
-        )
+        resolver = ObservationRecipientResolver(strategies=[MonsterRecipientStrategy(
+            ObservedEventRegistry(), PlayerAudienceQueryService(status_repo),
+            MagicMock(resolve_player_id=MagicMock(return_value=PlayerId(1))), monster_repo,
+        )])
         event = MonsterDamagedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -543,49 +493,9 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_internal_monster_events_return_empty(self, event_factory):
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             monster_repository=MagicMock(),
         )
         assert resolver.resolve(event_factory()) == []
-
-    def test_hit_box_hit_recorded_delivers_owner_and_target_players(self):
-        data_store = InMemoryDataStore()
-        status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        physical_map_repo.save(
-            _make_minimal_map(1, [_create_player_object(1, x=0), _create_player_object(2, x=1)])
-        )
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
-        )
-        event = HitBoxHitRecordedEvent.create(
-            aggregate_id=HitBoxId(1),
-            aggregate_type="HitBoxAggregate",
-            owner_id=WorldObjectId.create(1),
-            target_id=WorldObjectId.create(2),
-            hit_coordinate=Coordinate(0, 0, 0),
-        )
-        assert {p.value for p in resolver.resolve(event)} == {1, 2}
-
-    def test_hit_box_created_is_internal_and_returns_empty(self):
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
-        )
-        event = HitBoxCreatedEvent.create(
-            aggregate_id=HitBoxId(1),
-            aggregate_type="HitBoxAggregate",
-            spot_id=SpotId(1),
-            owner_id=WorldObjectId.create(1),
-            initial_coordinate=Coordinate(0, 0, 0),
-            duration=3,
-            power_multiplier=1.0,
-            shape_cell_count=1,
-            effect_count=0,
-            activation_tick=1,
-        )
-        assert resolver.resolve(event) == []
 
     def test_skill_used_delivers_to_owner_when_loadout_repo_available(self):
         loadout_repo = MagicMock()
@@ -594,7 +504,6 @@ class TestObservationRecipientResolverExtendedEvents:
         loadout_repo.find_by_id.return_value = loadout
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             skill_loadout_repository=loadout_repo,
         )
         event = SkillUsedEvent.create(
@@ -614,7 +523,6 @@ class TestObservationRecipientResolverExtendedEvents:
         progress_repo.find_by_id.return_value = progress
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             skill_deck_progress_repository=progress_repo,
         )
         event = SkillDeckLeveledUpEvent.create(
@@ -646,33 +554,17 @@ class TestObservationRecipientResolverExtendedEvents:
     def test_internal_skill_events_return_empty(self, event):
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             skill_loadout_repository=MagicMock(),
             skill_deck_progress_repository=MagicMock(),
         )
         assert resolver.resolve(event) == []
 
     def test_pursuit_started_delivers_actor_only_when_target_is_not_player(self):
-        data_store = InMemoryDataStore()
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        physical_map_repo.save(
-            _make_minimal_map(
-                1,
-                [
-                    _create_player_object(1),
-                    WorldObject(
-                        object_id=WorldObjectId.create(999),
-                        coordinate=Coordinate(1, 0, 0),
-                        object_type=ObjectTypeEnum.NPC,
-                        component=ActorComponent(direction=DirectionEnum.SOUTH),
-                    ),
-                ],
-            )
-        )
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=physical_map_repo,
-        )
+        players = {WorldObjectId(1): PlayerId(1)}
+        object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
+        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
+            ObservedEventRegistry(), object_resolver,
+        )])
         event = PursuitStartedEvent.create(
             aggregate_id=WorldObjectId.create(1),
             aggregate_type="PlayerStatusAggregate",
@@ -722,25 +614,19 @@ class TestObservationRecipientResolverExtendedEvents:
         ],
     )
     def test_pursuit_lifecycle_events_deliver_actor_and_target_players(self, event):
-        data_store = InMemoryDataStore()
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        physical_map_repo.save(
-            _make_minimal_map(1, [_create_player_object(1), _create_player_object(2, 1, 0)])
-        )
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=physical_map_repo,
-        )
+        players = {WorldObjectId(1): PlayerId(1), WorldObjectId(2): PlayerId(2)}
+        object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
+        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
+            ObservedEventRegistry(), object_resolver,
+        )])
         assert {p.value for p in resolver.resolve(event)} == {1, 2}
 
     def test_pursuit_updated_deduplicates_when_actor_and_target_are_same_player(self):
-        data_store = InMemoryDataStore()
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        physical_map_repo.save(_make_minimal_map(1, [_create_player_object(1)]))
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=physical_map_repo,
-        )
+        players = {WorldObjectId(1): PlayerId(1)}
+        object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
+        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
+            ObservedEventRegistry(), object_resolver,
+        )])
         event = PursuitUpdatedEvent.create(
             aggregate_id=WorldObjectId.create(1),
             aggregate_type="PlayerStatusAggregate",
@@ -782,26 +668,11 @@ class TestObservationRecipientResolverExtendedEvents:
         ],
     )
     def test_pursuit_events_keep_visibility_actor_only_when_target_is_not_player(self, event):
-        data_store = InMemoryDataStore()
-        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        physical_map_repo.save(
-            _make_minimal_map(
-                1,
-                [
-                    _create_player_object(1),
-                    WorldObject(
-                        object_id=WorldObjectId.create(999),
-                        coordinate=Coordinate(1, 0, 0),
-                        object_type=ObjectTypeEnum.NPC,
-                        component=ActorComponent(direction=DirectionEnum.SOUTH),
-                    ),
-                ],
-            )
-        )
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=physical_map_repo,
-        )
+        players = {WorldObjectId(1): PlayerId(1)}
+        object_resolver = MagicMock(resolve_player_id=MagicMock(side_effect=players.get))
+        resolver = ObservationRecipientResolver(strategies=[PursuitRecipientStrategy(
+            ObservedEventRegistry(), object_resolver,
+        )])
         assert [p.value for p in resolver.resolve(event)] == [1]
 
     def test_public_quest_resolution_propagates_status_repository_error(self):
@@ -809,7 +680,6 @@ class TestObservationRecipientResolverExtendedEvents:
         status_repo.find_all.side_effect = RuntimeError("find_all failed")
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=MagicMock(),
         )
         event = QuestIssuedEvent.create(
             aggregate_id=QuestId(1),
@@ -826,7 +696,6 @@ class TestObservationRecipientResolverExtendedEvents:
         guild_repo.find_by_id.side_effect = RuntimeError("guild lookup failed")
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             guild_repository=guild_repo,
         )
         event = QuestPendingApprovalEvent.create(
@@ -845,7 +714,6 @@ class TestObservationRecipientResolverExtendedEvents:
         monster_repo.find_by_id.side_effect = RuntimeError("monster lookup failed")
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             monster_repository=monster_repo,
         )
         event = MonsterDamagedEvent.create(
@@ -863,7 +731,6 @@ class TestObservationRecipientResolverExtendedEvents:
         loadout_repo.find_by_id.side_effect = RuntimeError("loadout lookup failed")
         resolver = create_observation_recipient_resolver(
             player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
             skill_loadout_repository=loadout_repo,
         )
         event = SkillUsedEvent.create(

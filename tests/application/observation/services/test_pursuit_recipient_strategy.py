@@ -10,9 +10,6 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 from ai_rpg_world.application.observation.services.recipient_strategies.pursuit_recipient_strategy import (
     PursuitRecipientStrategy,
 )
-from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
-    WorldObjectToPlayerResolver,
-)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
@@ -24,19 +21,9 @@ from ai_rpg_world.domain.pursuit.event.pursuit_events import (
 )
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
-)
 
 
 def _build_pursuit_snapshot(
@@ -63,46 +50,16 @@ def _build_pursuit_last_known(
     )
 
 
-def _create_player_object(player_id: int, x: int = 0, y: int = 0) -> WorldObject:
-    """プレイヤー用 WorldObject"""
-    return WorldObject(
-        object_id=WorldObjectId.create(player_id),
-        coordinate=Coordinate(x, y, 0),
-        object_type=ObjectTypeEnum.PLAYER,
-        component=ActorComponent(
-            direction=DirectionEnum.SOUTH,
-            player_id=PlayerId(player_id),
-        ),
-    )
-
-
-def _make_minimal_map(spot_id: int, objects: list) -> PhysicalMapAggregate:
-    """複数タイルの最小マップ"""
-    tiles = {}
-    for i in range(max(len(objects) + 1, 2)):
-        coord = Coordinate(i, 0, 0)
-        tiles[coord] = Tile(coord, TerrainType.grass())
-    return PhysicalMapAggregate(
-        spot_id=SpotId(spot_id),
-        tiles=tiles,
-        objects=objects,
-    )
-
-
 class TestPursuitRecipientStrategyNormal:
     """PursuitRecipientStrategy 正常系テスト"""
 
     @pytest.fixture
-    def data_store(self):
-        return InMemoryDataStore()
+    def resolved_players(self):
+        return {}
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
-
-    @pytest.fixture
-    def world_object_resolver(self, physical_map_repo):
-        return WorldObjectToPlayerResolver(physical_map_repo)
+    def world_object_resolver(self, resolved_players):
+        return MagicMock(resolve_player_id=MagicMock(side_effect=resolved_players.get))
 
     @pytest.fixture
     def strategy(self, world_object_resolver):
@@ -111,16 +68,11 @@ class TestPursuitRecipientStrategyNormal:
             world_object_to_player_resolver=world_object_resolver,
         )
 
-    def test_pursuit_started_returns_actor_and_target_when_both_on_map(
-        self, strategy, physical_map_repo
+    def test_pursuit_started_returns_actor_and_target_when_both_resolved(
+        self, strategy, resolved_players
     ):
-        """PursuitStartedEvent: actor と target がマップ上にいるとき両方が配信先"""
-        physical_map_repo.save(
-            _make_minimal_map(1, [
-                _create_player_object(3, 0, 0),
-                _create_player_object(7, 1, 0),
-            ])
-        )
+        """PursuitStartedEvent: actor と target が解決できるとき両方が配信先"""
+        resolved_players.update({WorldObjectId(3): PlayerId(3), WorldObjectId(7): PlayerId(7)})
         event = PursuitStartedEvent.create(
             aggregate_id=WorldObjectId(1),
             aggregate_type="Actor",
@@ -133,11 +85,9 @@ class TestPursuitRecipientStrategyNormal:
         assert len(result) == 2
         assert {p.value for p in result} == {3, 7}
 
-    def test_pursuit_updated_returns_actor_when_on_map(self, strategy, physical_map_repo):
-        """PursuitUpdatedEvent: actor がマップ上にいるときそのプレイヤーが配信先"""
-        physical_map_repo.save(
-            _make_minimal_map(2, [_create_player_object(5, 0, 0)])
-        )
+    def test_pursuit_updated_returns_actor_when_resolved(self, strategy, resolved_players):
+        """PursuitUpdatedEvent: actor が解決できるときそのプレイヤーが配信先"""
+        resolved_players.update({WorldObjectId(5): PlayerId(5)})
         event = PursuitUpdatedEvent.create(
             aggregate_id=WorldObjectId(2),
             aggregate_type="Actor",
@@ -149,11 +99,9 @@ class TestPursuitRecipientStrategyNormal:
         assert len(result) == 1
         assert result[0].value == 5
 
-    def test_pursuit_failed_returns_actor_when_on_map(self, strategy, physical_map_repo):
-        """PursuitFailedEvent: actor がマップ上にいるときそのプレイヤーが配信先"""
-        physical_map_repo.save(
-            _make_minimal_map(3, [_create_player_object(2, 0, 0)])
-        )
+    def test_pursuit_failed_returns_actor_when_resolved(self, strategy, resolved_players):
+        """PursuitFailedEvent: actor が解決できるときそのプレイヤーが配信先"""
+        resolved_players.update({WorldObjectId(2): PlayerId(2)})
         event = PursuitFailedEvent.create(
             aggregate_id=WorldObjectId(3),
             aggregate_type="Actor",
@@ -166,16 +114,11 @@ class TestPursuitRecipientStrategyNormal:
         assert len(result) == 1
         assert result[0].value == 2
 
-    def test_pursuit_cancelled_returns_actor_and_target_when_both_on_map(
-        self, strategy, physical_map_repo
+    def test_pursuit_cancelled_returns_actor_and_target_when_both_resolved(
+        self, strategy, resolved_players
     ):
-        """PursuitCancelledEvent: actor と target がマップ上にいるとき両方が配信先"""
-        physical_map_repo.save(
-            _make_minimal_map(4, [
-                _create_player_object(1, 0, 0),
-                _create_player_object(9, 1, 0),
-            ])
-        )
+        """PursuitCancelledEvent: actor と target が解決できるとき両方が配信先"""
+        resolved_players.update({WorldObjectId(1): PlayerId(1), WorldObjectId(9): PlayerId(9)})
         event = PursuitCancelledEvent.create(
             aggregate_id=WorldObjectId(4),
             aggregate_type="Actor",
@@ -193,19 +136,15 @@ class TestPursuitRecipientStrategyExceptions:
     """PursuitRecipientStrategy 例外・境界テスト"""
 
     @pytest.fixture
-    def data_store(self):
-        return InMemoryDataStore()
+    def resolved_players(self):
+        return {}
 
     @pytest.fixture
-    def physical_map_repo(self, data_store):
-        return InMemoryPhysicalMapRepository(data_store=data_store)
+    def world_object_resolver(self, resolved_players):
+        return MagicMock(resolve_player_id=MagicMock(side_effect=resolved_players.get))
 
-    @pytest.fixture
-    def world_object_resolver(self, physical_map_repo):
-        return WorldObjectToPlayerResolver(physical_map_repo)
-
-    def test_pursuit_started_returns_empty_when_neither_on_map(self, world_object_resolver):
-        """PursuitStartedEvent: actor も target もマップにいないとき空リスト"""
+    def test_pursuit_started_returns_empty_when_neither_resolved(self, world_object_resolver):
+        """PursuitStartedEvent: actor も target も解決できないとき空リスト"""
         strategy = PursuitRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
             world_object_to_player_resolver=world_object_resolver,

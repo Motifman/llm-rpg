@@ -5438,20 +5438,11 @@ def create_world_runtime(
     )
 
     # ── 観測パイプライン構築 ──
-    # Issue #227 PR-5 (tile-map 除去): physical_map_repository=None で resolver を
-    # 組み立てる。tile-map 依存の strategy (Pursuit / Monster / Combat / Harvest /
-    # Default の世界座標フォールバック) は world_runtime では関連 event が発火しないため
-    # inert で、resolver 内部の NullWorldObjectToPlayerResolver で安全に処理される。
-    # PlayerSpokeEvent は SpotGraphSpeechRecipientStrategy (hop-based) で処理される。
-    #
-    # WARN: 将来 tile-map ベースの event (Pursuit/Monster/Combat/Harvest 等) を
-    # world_runtime に持ち込む場合は、physical_map_repository を実装した上で渡す必要がある。
     obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
         player_life_query=player_life_query,
         player_perception_policy=player_perception_policy,
         departed_position_store=departed_position_store,
-        physical_map_repository=None,
         spot_graph_repository=spot_graph_repo,
     )
 

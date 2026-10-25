@@ -7,7 +7,6 @@ from typing import Any
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
-    IWorldObjectToPlayerResolver,
 )
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
@@ -38,13 +37,7 @@ from ai_rpg_world.domain.player.event.status_events import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.map_events import (
-    ItemStoredInChestEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
@@ -56,7 +49,7 @@ logger = logging.getLogger(__name__)
 class DefaultRecipientStrategy(IRecipientResolutionStrategy):
     """
     既存の観測対象イベントすべてに対する配信先解決。
-    Gateway / マップ / プレイヤー状態 / インベントリ系を一括で扱う。
+    天候・プレイヤー状態・所持品の観測先を決める。
     """
 
     _STRATEGY_KEY = "default"
@@ -65,12 +58,10 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        world_object_to_player_resolver: IWorldObjectToPlayerResolver,
         spot_graph_repository: ISpotGraphRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
-        self._world_object_to_player_resolver = world_object_to_player_resolver
         self._spot_graph_repository = spot_graph_repository
         self._verify_the_registry_and_the_rules_agree()
 
@@ -133,23 +124,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         """
         add(event.aggregate_id)
 
-    def _deliver_only_to_the_acting_player(self, event: Any, add: _Add) -> None:
-        """行為したプレイヤーだけに届ける (``player_id_value`` が行為者)。"""
-        add(PlayerId(event.player_id_value))
-
-    def _deliver_only_to_the_player_behind_the_actor(
-        self, event: Any, add: _Add
-    ) -> None:
-        """``actor_id`` の world object に対応するプレイヤーだけに届ける。
-
-        対応するプレイヤーが居ない (monster 等の) 場合は誰にも届けない。
-        """
-        player_id = self._world_object_to_player_resolver.resolve_player_id(
-            event.actor_id
-        )
-        if player_id is not None:
-            add(player_id)
-
     def _deliver_to_everyone_known(self, event: Any, add: _Add) -> None:
         """本人と、既知の全プレイヤーに届ける。
 
@@ -162,33 +136,11 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         for player_id in self._player_audience_query.all_known_players():
             add(player_id)
 
-    def _resolve_location_entered(
-        self, event: LocationEnteredEvent, add: Callable[[PlayerId], None]
-    ) -> None:
-        if event.player_id_value is not None:
-            add(PlayerId(event.player_id_value))
-        for pid in self._player_audience_query.players_at_spot(event.spot_id):
-            add(pid)
-
-    def _resolve_location_exited(self, event: LocationExitedEvent, add: Callable[[PlayerId], None]) -> None:
-        pid = self._world_object_to_player_resolver.resolve_player_id(
-            event.object_id
-        )
-        if pid is not None:
-            add(pid)
-
     def _resolve_player_location_changed(
         self, event: PlayerLocationChangedEvent, add: Callable[[PlayerId], None]
     ) -> None:
         add(event.aggregate_id)
         for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
-            add(pid)
-
-    def _resolve_item_stored_in_chest(
-        self, event: ItemStoredInChestEvent, add: Callable[[PlayerId], None]
-    ) -> None:
-        add(PlayerId(event.player_id_value))
-        for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
     def _resolve_spot_weather_changed(
@@ -243,9 +195,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
 _RECIPIENT_RULES: RuleTable = {
     # --- 場所の出入り ---
     # 入った本人と、その場に居た全員。すれ違いが見えるように両方へ。
-    LocationEnteredEvent: DefaultRecipientStrategy._resolve_location_entered,
-    # 出ていく側は本人だけ。残った側は EnteredEvent で相手の到着を知る。
-    LocationExitedEvent: DefaultRecipientStrategy._resolve_location_exited,
     PlayerLocationChangedEvent: DefaultRecipientStrategy._resolve_player_location_changed,
 
     # --- 重大な状態変化は位置に関わらず全員へ ---
@@ -262,16 +211,6 @@ _RECIPIENT_RULES: RuleTable = {
     ItemEquippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     ItemUnequippedEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
     InventorySlotOverflowEvent: DefaultRecipientStrategy._deliver_only_to_the_subject,
-
-    # --- 保管庫 ---
-    # 取り出しは本人だけ。中身が減ったことは開けた人しか知らない。
-    ItemTakenFromChestEvent: DefaultRecipientStrategy._deliver_only_to_the_acting_player,
-    # 預け入れは本人とその場の全員へ。「誰かが何かを置いた」は同席者に見える。
-    ItemStoredInChestEvent: DefaultRecipientStrategy._resolve_item_stored_in_chest,
-
-    # --- world object を介した行為 (actor が player でないこともある) ---
-    ResourceHarvestedEvent: DefaultRecipientStrategy._deliver_only_to_the_player_behind_the_actor,
-    WorldObjectInteractedEvent: DefaultRecipientStrategy._deliver_only_to_the_player_behind_the_actor,
 
     # --- 天候 ---
     # 屋内は空が見えないので配らない (spot graph の is_outdoor で判定)。

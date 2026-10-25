@@ -1,7 +1,5 @@
 """スポットグラフモードの発話配信・フォーマット"""
 
-from unittest.mock import MagicMock
-
 import pytest
 from tests.application.observation.test_observation_recipient_resolver_extended_events import (
     _make_status,
@@ -76,7 +74,6 @@ class TestSpotGraphSpeechRecipientResolver:
         spot_repo = InMemorySpotGraphRepository(graph)
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=MagicMock(),
             spot_graph_repository=spot_repo,
         )
         event = PlayerSpokeEvent.create(
@@ -99,7 +96,6 @@ class TestSpotGraphSpeechRecipientResolver:
         spot_repo = InMemorySpotGraphRepository(g)
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
-            physical_map_repository=MagicMock(),
             spot_graph_repository=spot_repo,
         )
         event = PlayerSpokeEvent.create(

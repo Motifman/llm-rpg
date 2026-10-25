@@ -11,12 +11,8 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     BehaviorStuckEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
-    MonsterDecidedToInteractEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
     MonsterEvadedEvent,
-    MonsterFedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
@@ -54,14 +50,6 @@ class MonsterObservationFormatter:
             return self._format_monster_healed(event, recipient_player_id)
         if isinstance(event, MonsterMpRecoveredEvent):
             return self._format_monster_mp_recovered(event, recipient_player_id)
-        if isinstance(event, MonsterDecidedToMoveEvent):
-            return self._format_monster_decided_to_move(event, recipient_player_id)
-        if isinstance(event, MonsterDecidedToUseSkillEvent):
-            return self._format_monster_decided_to_use_skill(event, recipient_player_id)
-        if isinstance(event, MonsterDecidedToInteractEvent):
-            return self._format_monster_decided_to_interact(event, recipient_player_id)
-        if isinstance(event, MonsterFedEvent):
-            return self._format_monster_fed(event, recipient_player_id)
         if isinstance(event, ActorStateChangedEvent):
             return self._format_actor_state_changed(event, recipient_player_id)
         if isinstance(event, TargetSpottedEvent):
@@ -147,28 +135,6 @@ class MonsterObservationFormatter:
         self, event: MonsterMpRecoveredEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         return None
-
-    def _format_monster_decided_to_move(
-        self, event: MonsterDecidedToMoveEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
-        return None
-
-    def _format_monster_decided_to_use_skill(
-        self, event: MonsterDecidedToUseSkillEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
-        return None
-
-    def _format_monster_decided_to_interact(
-        self, event: MonsterDecidedToInteractEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
-        return None
-
-    def _format_monster_fed(
-        self, event: MonsterFedEvent, recipient_id: PlayerId
-    ) -> ObservationOutput | None:
-        prose = "モンスターが採食しました。"
-        structured: dict[str, Any] = {"type": "monster_fed"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_actor_state_changed(
         self, event: ActorStateChangedEvent, recipient_id: PlayerId

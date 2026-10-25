@@ -1,9 +1,6 @@
 """観測用イベントハンドラを EventPublisher に登録する Registry"""
 
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxHitRecordedEvent,
-)
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.conversation.event.conversation_event import (
@@ -25,7 +22,6 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDamagedEvent,
     MonsterDiedEvent,
     MonsterEvadedEvent,
-    MonsterFedEvent,
     MonsterHealedEvent,
     MonsterRespawnedEvent,
     MonsterSpawnedEvent,
@@ -93,19 +89,8 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeDeclinedEvent,
     TradeOfferedEvent,
 )
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-    HarvestStartedEvent,
-)
 from ai_rpg_world.domain.world.event.map_events import (
-    ItemStoredInChestEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
@@ -159,9 +144,6 @@ _OBSERVED_EVENT_TYPES = (
     GuildBankWithdrawnEvent,
     GuildDisbandedEvent,
     # --- 採集 ---
-    HarvestStartedEvent,
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
     # --- モンスター ---
     MonsterSpawnedEvent,
     MonsterDamagedEvent,
@@ -169,10 +151,8 @@ _OBSERVED_EVENT_TYPES = (
     MonsterRespawnedEvent,
     MonsterEvadedEvent,
     MonsterHealedEvent,
-    MonsterFedEvent,
     ActorStateChangedEvent,
     # --- 戦闘 ---
-    HitBoxHitRecordedEvent,
     # --- スキル ---
     SkillEquippedEvent,
     SkillUnequippedEvent,
@@ -185,19 +165,13 @@ _OBSERVED_EVENT_TYPES = (
     SkillEvolutionAcceptedEvent,
     SkillEvolutionRejectedEvent,
     # --- 既存 ---
-    LocationEnteredEvent,
-    LocationExitedEvent,
     PlayerLocationChangedEvent,
     PlayerDownedEvent,
     PlayerRevivedEvent,
     PlayerLevelUpEvent,
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
-    ItemTakenFromChestEvent,
-    ItemStoredInChestEvent,
-    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemRemovedFromInventoryEvent,

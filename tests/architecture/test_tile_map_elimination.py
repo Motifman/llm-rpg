@@ -13,7 +13,6 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-
 def test_spot_graph_wiring_module_is_removed() -> None:
     """退役したスポット用の配線モジュールは読み込めない。"""
     with pytest.raises(ImportError):
@@ -34,14 +33,14 @@ def test_full_wiring_is_retired_from_package() -> None:
     assert "create_llm_agent_wiring" not in getattr(wiring_pkg, "__all__", ())
 
 
-def test_create_observation_recipient_resolver_physical_map_repository_is_optional() -> None:
-    """観測の配信先の組み立てでは、物理マップの保存先を省略できる。"""
+def test_create_observation_recipient_resolver_has_no_tile_repositories() -> None:
+    """観測の配信先の組み立ては、物理マップと当たり判定の保存先を受け取らない。"""
     from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
         create_observation_recipient_resolver,
     )
     sig = inspect.signature(create_observation_recipient_resolver)
-    param = sig.parameters["physical_map_repository"]
-    assert param.default is None
+    assert "physical_map_repository" not in sig.parameters
+    assert "hit_box_repository" not in sig.parameters
 
 
 @pytest.mark.parametrize("relative_path", [
@@ -81,14 +80,12 @@ def test_current_state_query_has_no_tile_settings() -> None:
     }
 
 
-
 def test_spot_graph_augmenting_world_query_module_is_removed() -> None:
     """退役したスポットの状態を追加する問い合わせモジュールは読み込めない。"""
     with pytest.raises(ImportError):
         importlib.import_module(
             "ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query"
         )
-
 
 
 def test_world_runtime_does_not_import_in_memory_physical_map_repository() -> None:
