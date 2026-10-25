@@ -89,7 +89,7 @@ def test_run_phase_b_forwards_success_and_error_code_on_failure(
     ), f"error_code が forward されていない: {spy.last_kwargs}"
 
 
-def test_run_phase_b_forwards_success_True_on_success(
+def test_run_phase_b_forwards_success_true_on_success(
     clean_runtime_env,
 ) -> None:
     """成功時も ``success=True`` が forward されている (cross_tick 側で

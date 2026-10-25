@@ -105,17 +105,17 @@ def _derive_delta(
     """
     keys = set(old_state.keys()) | set(new_state.keys())
     out: list[StateDeltaEntry] = []
-    _SENTINEL = object()
+    missing = object()
     for key in sorted(keys, key=str):
-        b = old_state.get(key, _SENTINEL)
-        a = new_state.get(key, _SENTINEL)
+        b = old_state.get(key, missing)
+        a = new_state.get(key, missing)
         if b == a:
             continue
         out.append(
             StateDeltaEntry(
                 key=str(key),
-                before=None if b is _SENTINEL else b,
-                after=None if a is _SENTINEL else a,
+                before=None if b is missing else b,
+                after=None if a is missing else a,
             )
         )
     return tuple(out)

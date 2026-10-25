@@ -164,9 +164,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         # きっかけを作る。None なら警告 prefix は出ない (= 既存挙動)。
         if tool_call_loop_guard is not None:
             from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
-                ToolCallLoopGuardService as _TCLGS,
+                ToolCallLoopGuardService,
             )
-            if not isinstance(tool_call_loop_guard, _TCLGS):
+            if not isinstance(tool_call_loop_guard, ToolCallLoopGuardService):
                 raise TypeError(
                     "tool_call_loop_guard must be ToolCallLoopGuardService or None"
                 )

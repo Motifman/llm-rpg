@@ -30,7 +30,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 class TestEventCarriesFailureReason:
     """`SpotObjectInteractionFailedEvent.failure_reason` を保持できる。"""
 
-    def test_default_None(self) -> None:
+    def test_default_none(self) -> None:
         ev = SpotObjectInteractionFailedEvent.create(
             aggregate_id=SpotGraphId.create(1),
             aggregate_type="SpotGraphAggregate",

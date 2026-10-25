@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.application.world_graph import interaction_condition_hint_text as H
+from ai_rpg_world.application.world_graph import interaction_condition_hint_text as hint_text
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -71,7 +71,7 @@ class TestTheEnumBackedTablesCoverTheirEnums:
 
         組が空だと以下の網羅試験は「対象 0 件で成功」になる。
         """
-        assert H.ENUM_BACKED_LABEL_TABLES, (
+        assert hint_text.ENUM_BACKED_LABEL_TABLES, (
             "ENUM_BACKED_LABEL_TABLES が空です。表を足したらここにも足してください。"
         )
 
@@ -87,12 +87,12 @@ class TestTheEnumBackedTablesCoverTheirEnums:
         """
         defined = {
             name
-            for name, value in vars(H).items()
+            for name, value in vars(hint_text).items()
             if name.endswith("_LABELS") and isinstance(value, dict)
         }
-        scanned_ids = {id(table) for _enum, table in H.ENUM_BACKED_LABEL_TABLES}
+        scanned_ids = {id(table) for _enum, table in hint_text.ENUM_BACKED_LABEL_TABLES}
         unscanned = sorted(
-            name for name in defined if id(getattr(H, name)) not in scanned_ids
+            name for name in defined if id(getattr(hint_text, name)) not in scanned_ids
         )
 
         assert not unscanned, (
@@ -106,13 +106,13 @@ class TestTheEnumBackedTablesCoverTheirEnums:
         値を 1 つ足して表に載せ忘れると、その値だけ生値がプロンプトへ出る。
         `world_vocabulary` の PITCH_BLACK 事故と同じ形。
         """
-        for enum_cls, table in H.ENUM_BACKED_LABEL_TABLES:
+        for enum_cls, table in hint_text.ENUM_BACKED_LABEL_TABLES:
             missing = sorted(e.value for e in enum_cls if e.value not in table)
             assert missing == [], (enum_cls.__name__, missing)
 
     def test_no_table_keeps_a_stale_key(self) -> None:
         """表に、enum から消えた値のキーが残っていない。"""
-        for enum_cls, table in H.ENUM_BACKED_LABEL_TABLES:
+        for enum_cls, table in hint_text.ENUM_BACKED_LABEL_TABLES:
             known = {e.value for e in enum_cls}
             stale = sorted(set(table) - known)
             assert stale == [], (enum_cls.__name__, stale)
@@ -130,7 +130,7 @@ class TestTheEnumBackedTablesCoverTheirEnums:
         )
 
         shared = {enum_cls.__name__: set(table) for enum_cls, table in DISPLAY_TABLES}
-        for enum_cls, table in H.ENUM_BACKED_LABEL_TABLES:
+        for enum_cls, table in hint_text.ENUM_BACKED_LABEL_TABLES:
             name = enum_cls.__name__
             if name not in shared:
                 continue
@@ -156,7 +156,7 @@ class TestAnUnknownValueNeverLeaksIntoTheHint:
             )
         )
 
-        hints = H.declarative_condition_hints(interaction)
+        hints = hint_text.declarative_condition_hints(interaction)
 
         assert hints == (), hints
 
@@ -169,7 +169,7 @@ class TestAnUnknownValueNeverLeaksIntoTheHint:
             )
         )
 
-        hints = H.declarative_condition_hints(interaction)
+        hints = hint_text.declarative_condition_hints(interaction)
 
         assert hints == (), hints
 
@@ -185,7 +185,7 @@ class TestAnUnknownValueNeverLeaksIntoTheHint:
             )
         )
 
-        hints = H.declarative_condition_hints(interaction)
+        hints = hint_text.declarative_condition_hints(interaction)
 
         assert len(hints) == 1
         assert "雨" in hints[0]
@@ -209,7 +209,7 @@ class TestTimeOfDayLabelComesFromTheScenario:
         「未明のみ」と出る。コード側の表には ``predawn`` が無かったので、以前は
         ``"predawnのみ"`` と生値が出ていた。
         """
-        hints = H.declarative_condition_hints(
+        hints = hint_text.declarative_condition_hints(
             self._time_condition("predawn"),
             time_of_day_phase_label_resolver=lambda name: {"predawn": "未明"}.get(name),
         )
@@ -220,7 +220,7 @@ class TestTimeOfDayLabelComesFromTheScenario:
 
     def test_an_undeclared_phase_drops_the_hint(self) -> None:
         """宣言に無いフェーズはヒントを落とす。生値を出さない。"""
-        hints = H.declarative_condition_hints(
+        hints = hint_text.declarative_condition_hints(
             self._time_condition("dawn"),
             time_of_day_phase_label_resolver=lambda name: {"predawn": "未明"}.get(name),
         )
@@ -233,7 +233,7 @@ class TestTimeOfDayLabelComesFromTheScenario:
         コード側に既定の表を持たない、という判断をここで固定する。表を戻すと
         シナリオが宣言した呼び名と二重管理になり、また腐る。
         """
-        hints = H.declarative_condition_hints(self._time_condition("night"))
+        hints = hint_text.declarative_condition_hints(self._time_condition("night"))
 
         assert hints == (), hints
 
@@ -242,7 +242,7 @@ class TestTimeOfDayLabelComesFromTheScenario:
 
         表を戻したら落とす。時刻帯の呼び名の所有者はシナリオである。
         """
-        assert not hasattr(H, "_TIME_OF_DAY_PHASE_LABELS"), (
+        assert not hasattr(hint_text, "_TIME_OF_DAY_PHASE_LABELS"), (
             "時刻帯の呼び名表がコードに戻っています。"
             " シナリオの day_night phases の display_text を使ってください。"
         )

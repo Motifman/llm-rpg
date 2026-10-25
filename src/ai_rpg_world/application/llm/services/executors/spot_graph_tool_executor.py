@@ -522,8 +522,7 @@ class SpotGraphToolExecutor:
         if self._player_status_repository is None:
             return None
         try:
-            from ai_rpg_world.domain.player.value_object.player_id import PlayerId as _PID
-            return self._player_status_repository.find_by_id(_PID(player_id))
+            return self._player_status_repository.find_by_id(PlayerId(player_id))
         except Exception:
             return None
 

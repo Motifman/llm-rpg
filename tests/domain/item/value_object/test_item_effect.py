@@ -115,7 +115,7 @@ class TestCompositeItemEffect:
         composite = CompositeItemEffect(effects=(heal_effect,))
         assert composite.effects == (heal_effect,)
 
-    def test_effects_None_raises(self):
+    def test_effects_none_raises(self):
         """effects が None の場合は ItemEffectValidationException"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             CompositeItemEffect(effects=None)  # type: ignore[arg-type]

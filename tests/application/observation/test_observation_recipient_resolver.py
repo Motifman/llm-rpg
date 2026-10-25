@@ -302,7 +302,7 @@ class TestDefaultRecipientStrategy:
         )
         assert strategy.supports(event) is True
 
-    def test_supports_returns_False_for_unknown_event(self, strategy):
+    def test_supports_returns_false_for_unknown_event(self, strategy):
         """未知のイベントでは supports が False"""
         class UnknownEvent:
             pass

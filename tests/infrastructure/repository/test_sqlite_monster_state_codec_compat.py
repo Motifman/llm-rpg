@@ -36,7 +36,7 @@ def legacy_row() -> sqlite3.Row:
 class TestLegacySchemaCompat:
     """v24 未適用 row でも codec ヘルパが None を返す (KeyError を握りつぶす)。"""
 
-    def test_optional_spot_id_returns_None_for_missing_column(
+    def test_optional_spot_id_returns_none_for_missing_column(
         self, legacy_row: sqlite3.Row,
     ) -> None:
         result = _optional_spot_id(
@@ -44,13 +44,13 @@ class TestLegacySchemaCompat:
         )
         assert result is None
 
-    def test_optional_tick_returns_None_for_missing_column(
+    def test_optional_tick_returns_none_for_missing_column(
         self, legacy_row: sqlite3.Row,
     ) -> None:
         assert _optional_tick(legacy_row, "behavior_flee_until_tick") is None
         assert _optional_tick(legacy_row, "behavior_chase_started_at_tick") is None
 
-    def test_decode_attacker_ref_returns_None_for_missing_column(
+    def test_decode_attacker_ref_returns_none_for_missing_column(
         self, legacy_row: sqlite3.Row,
     ) -> None:
         assert _decode_attacker_ref(legacy_row) is None
@@ -79,7 +79,7 @@ class TestCorruptionLogging:
         cur = conn.execute("SELECT * FROM corrupt")
         return cur.fetchone()
 
-    def test_player_kind_with_null_id_returns_None_and_logs_error(
+    def test_player_kind_with_null_id_returns_none_and_logs_error(
         self, corrupt_kind_only_row: sqlite3.Row, caplog,
     ) -> None:
         """kind=player + player_id=NULL は None を返し、error ログを出す。"""
@@ -92,7 +92,7 @@ class TestCorruptionLogging:
             for record in caplog.records
         )
 
-    def test_unknown_kind_returns_None_and_logs_error(self, caplog) -> None:
+    def test_unknown_kind_returns_none_and_logs_error(self, caplog) -> None:
         """`kind` が想定外の文字列なら None を返して error ログ。"""
         import logging
 

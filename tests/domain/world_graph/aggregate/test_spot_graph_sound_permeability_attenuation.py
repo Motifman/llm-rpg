@@ -72,15 +72,15 @@ def _node(
     )
 
 
-def _build_AB(
+def _build_ab(
     *,
-    intensity_B: SoundIntensityEnum,
+    intensity_b: SoundIntensityEnum,
     passage: Passage,
 ) -> tuple[SpotGraphAggregate, EntityId]:
-    """A (SILENT) ←→ B (intensity_B) で接続だけ差し替えるヘルパー。"""
+    """A (SILENT) ←→ B (intensity_b) で接続だけ差し替えるヘルパー。"""
     g = SpotGraphAggregate.empty(GRAPH_ID)
     g.add_spot(_node(SPOT_A))
-    g.add_spot(_node(SPOT_B, intensity=intensity_B, ambient="B音"))
+    g.add_spot(_node(SPOT_B, intensity=intensity_b, ambient="B音"))
     g.add_connection(SpotConnection(
         connection_id=ConnectionId.create(10),
         from_spot_id=SPOT_A, to_spot_id=SPOT_B,
@@ -121,8 +121,8 @@ class TestAdjacentMovingOccupants:
         self, permeability: float, moving_count: int, expected: int | None,
     ) -> None:
         """通りやすい接続は人数、中程度は在否、壁は在否も伏せる。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
+        graph, listener = _build_ab(
+            intensity_b=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=permeability),
         )
         moving = frozenset(EntityId.create(20 + i) for i in range(moving_count))
@@ -142,8 +142,8 @@ class TestAdjacentMovingOccupants:
         self, with_self_connection: bool,
     ) -> None:
         """自己接続があっても、聞き手の現在地を隣接の気配として報告しない。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
+        graph, listener = _build_ab(
+            intensity_b=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=1.0),
         )
 
@@ -166,8 +166,8 @@ class TestAdjacentMovingOccupants:
 
     def test_non_adjacent_spot_is_not_reported(self) -> None:
         """接続のない地点に居る人の気配は観測しない。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
+        graph, listener = _build_ab(
+            intensity_b=SoundIntensityEnum.SILENT,
             passage=Passage.open(sound_permeability=1.0),
         )
         spot_c = SpotId.create(3)
@@ -214,8 +214,8 @@ class TestOpenPassage1Hop:
 
     def test_wall_broken_loud_moderate(self) -> None:
         """WALLBROKENLOUD も MODERATE に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.BROKEN),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -225,8 +225,8 @@ class TestOpenPassage1Hop:
 
     def test_door_open_moderate_faint(self) -> None:
         """DOOROPENMODERATE は FAINT に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.MODERATE,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.OPEN),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -240,8 +240,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 
     def test_door_closed_loud_faint(self) -> None:
         """DOORCLOSEDLOUD は FAINT に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.door(DoorStateEnum.CLOSED),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -251,8 +251,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 
     def test_door_closed_moderate_silent_does_not_trigger(self) -> None:
         """DOORCLOSEDMODERATE は SILENT で発火しない。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.MODERATE,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.MODERATE,
             passage=Passage.door(DoorStateEnum.CLOSED),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -260,8 +260,8 @@ class TestClosedDoorAndCrackedWall2Hops:
 
     def test_wall_cracked_loud_faint(self) -> None:
         """WALLCRACKEDLOUD は FAINT に減衰。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.CRACKED),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())
@@ -275,8 +275,8 @@ class TestIntactWall3Hops:
 
     def test_wall_intact_loud_silent_does_not_trigger(self) -> None:
         """WALLINTACTLOUD は SILENT で発火しない。"""
-        g, eid = _build_AB(
-            intensity_B=SoundIntensityEnum.LOUD,
+        g, eid = _build_ab(
+            intensity_b=SoundIntensityEnum.LOUD,
             passage=Passage.wall(WallStateEnum.INTACT),
         )
         g.emit_listen_carefully(eid, moving_entity_ids=frozenset())

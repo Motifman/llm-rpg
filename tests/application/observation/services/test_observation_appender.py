@@ -59,7 +59,7 @@ class TestObservationAppenderNormal:
         assert entries[0].output == output
         assert entries[0].game_time_label == game_time_label
 
-    def test_append_with_game_time_label_None(self, appender, buffer):
+    def test_append_with_game_time_label_none(self, appender, buffer):
         """game_time_label が None でも正常に追加される"""
         player_id = PlayerId(2)
         output = ObservationOutput(

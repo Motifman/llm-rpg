@@ -235,7 +235,7 @@ class TestSurvivalProgress:
         out = em._extract_survival_progress(events)
         assert out["signal_fire_lit_tick"] == 70
 
-    def test_signal_fire_None_when_lit(self, em) -> None:
+    def test_signal_fire_none_when_lit(self, em) -> None:
         events = [
             {"kind": "action_result", "tick": 10,
              "payload": {"tool": "spot_graph_interact", "success": True,

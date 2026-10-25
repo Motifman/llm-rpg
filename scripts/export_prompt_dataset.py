@@ -295,9 +295,9 @@ def _request_kwargs(call: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
-    Dataset, pq = _load_export_dependencies()
+    dataset_cls, pq = _load_export_dependencies()
     path.parent.mkdir(parents=True, exist_ok=True)
-    dataset = Dataset.from_list([_json_stringify_nested(row) for row in rows])
+    dataset = dataset_cls.from_list([_json_stringify_nested(row) for row in rows])
     pq.write_table(dataset.data.table, path, compression="zstd")
 
 

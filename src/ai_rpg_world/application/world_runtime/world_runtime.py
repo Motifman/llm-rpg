@@ -5016,9 +5016,9 @@ def create_world_runtime(
         dict lookup なので毎 prompt 構築で叩いても問題なし。
         """
         from ai_rpg_world.domain.item.value_object.item_instance_id import (
-            ItemInstanceId as _IID,
+            ItemInstanceId,
         )
-        item = item_repo.find_by_id(_IID(item_instance_id_value))
+        item = item_repo.find_by_id(ItemInstanceId(item_instance_id_value))
         return dict(item.state) if item is not None else None
 
     def _build_inventory(pid: PlayerId) -> tuple[Any, ...]:

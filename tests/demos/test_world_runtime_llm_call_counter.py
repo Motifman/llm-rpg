@@ -4,7 +4,7 @@ progress.jsonl の可観測性フィールド (``llm_calls`` / ``travel_active``
 runtime の counter / aggregator を experiment progress reporter が
 sample することで実現する。本テストは:
 
-- ``bump_llm_call_count`` × N → ``pop_llm_call_count`` で N が返り、再度
+- ``bump_llm_call_count`` × call_count → ``pop_llm_call_count`` で call_count が返り、再度
   pop すると 0 (= read-and-reset セマンティクス) になる
 - ``count_traveling_players`` が is_traveling な player 数を正しく数える
 - 並列 bump (ThreadPoolExecutor 経由) でも値が落ちない
@@ -50,17 +50,17 @@ class TestLlmCallCounter:
     def test_column_bump_value_does_not_crash(self, runtime) -> None:
         """ThreadPoolExecutor で 4 worker × 250 bump = 1000 件。Lock 不在で
         ++int が race するパスを検知する。"""
-        N = 1000
-        WORKERS = 4
-        per_worker = N // WORKERS
-        with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        call_count = 1000
+        workers = 4
+        per_worker = call_count // workers
+        with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = [
                 ex.submit(lambda: [runtime.bump_llm_call_count() for _ in range(per_worker)])
-                for _ in range(WORKERS)
+                for _ in range(workers)
             ]
             for f in futures:
                 f.result()
-        assert runtime.pop_llm_call_count() == per_worker * WORKERS
+        assert runtime.pop_llm_call_count() == per_worker * workers
 
 
 class TestCountTravelingPlayers:

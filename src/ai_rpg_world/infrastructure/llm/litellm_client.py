@@ -419,7 +419,7 @@ class LiteLLMClient(
         try:
             from litellm import Timeout as LitellmTimeout
         except ImportError:  # pragma: no cover
-            LitellmTimeout = Exception  # type: ignore
+            LitellmTimeout = Exception  # type: ignore  # noqa: N806
 
         # **executor を `with` で囲まない。** `with` の退出は
         # `shutdown(wait=True)` なので、cap で例外を投げても下位の call が

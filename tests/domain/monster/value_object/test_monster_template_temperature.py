@@ -56,7 +56,7 @@ class TestTemperatureSeverity:
 class TestDefaults:
     """default では comfort 全範囲 + damage=0 で従来挙動互換。"""
 
-    def test_default_min_is_FREEZING(self) -> None:
+    def test_default_min_is_freezing(self) -> None:
         t = _base_template()
         assert t.min_comfortable_temperature == TemperatureEnum.FREEZING
         assert t.max_comfortable_temperature == TemperatureEnum.HOT

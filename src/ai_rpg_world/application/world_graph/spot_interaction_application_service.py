@@ -1630,10 +1630,9 @@ class SpotInteractionApplicationService:
             from ai_rpg_world.domain.combat.value_object.status_effect import (
                 StatusEffect,
             )
-            from ai_rpg_world.domain.common.value_object import WorldTick as _WT
             status = player_status_repository.find_by_id(player_id)
             if status is not None:
-                effective_tick = current_tick or _WT(0)
+                effective_tick = current_tick or WorldTick(0)
                 for status_spec in result.status_effect_specs:
                     try:
                         effect_type = StatusEffectType(status_spec.effect_type_name)
@@ -1645,7 +1644,7 @@ class SpotInteractionApplicationService:
                             status_spec.effect_type_name, int(player_id),
                         )
                         continue
-                    expiry_tick = _WT(effective_tick.value + max(0, status_spec.duration_ticks))
+                    expiry_tick = WorldTick(effective_tick.value + max(0, status_spec.duration_ticks))
                     status.add_status_effect(StatusEffect(
                         effect_type=effect_type,
                         value=status_spec.value,
@@ -1689,9 +1688,9 @@ class SpotInteractionApplicationService:
             # 同 def を参照しているので default SAME_SPOT は安全。万一見つから
             # なければ default フォールバック。
             from ai_rpg_world.domain.world_graph.enum.witness_policy import (
-                WitnessPolicy as _WP,
+                WitnessPolicy,
             )
-            witness_policy = _WP.SAME_SPOT
+            witness_policy = WitnessPolicy.SAME_SPOT
             witness_observation_message = ""
             new_obj = result.new_interior.get_object(object_id)
             if new_obj is not None:

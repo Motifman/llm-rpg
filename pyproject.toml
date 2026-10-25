@@ -60,8 +60,12 @@ line-length = 120
 [tool.ruff.lint]
 # 既定のルールセットは 15,000 件以上を報告する。緑にできた分類だけを
 # ここへ足し、CI を常に緑に保つ。分類を増やす PR と、違反を潰す PR は分ける。
-select = ["E9", "F811", "F821", "I", "RUF", "UP"]
+select = ["E9", "F811", "F821", "I", "N", "RUF", "UP"]
 ignore = [
+    # 例外の名前の末尾を Error にする。このリポジトリは XxxException で揃えていて、
+    # ドメイン例外の基底 (<Context>DomainException) もこの形で名前を付けている。
+    "N818",
+
     # Union[X, Y] を X | Y にする。実行時に評価される位置 (型エイリアスの代入、
     # 基底クラスの添字) で使われている 5 件が残っており、変換すると
     # types.UnionType になって typing.Union と挙動が分かれる。1 件ずつ確かめて

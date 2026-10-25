@@ -143,7 +143,7 @@ def formatter(ctx):
 
 
 class TestEntityEnteredSpot:
-    def test_self_returns_None(self, formatter):
+    def test_self_returns_none(self, formatter):
         event = EntityEnteredSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -196,7 +196,7 @@ class TestEntityEnteredSpot:
         # 共通フィールド (spot_id_value) は乗る
         assert result.structured["spot_id_value"] == SPOT_A.value
 
-    def test_initial_placement_self_returns_None(self, formatter):
+    def test_initial_placement_self_returns_none(self, formatter):
         event = EntityEnteredSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -208,7 +208,7 @@ class TestEntityEnteredSpot:
 
 
 class TestEntityLeftSpot:
-    def test_self_returns_None_2(self, formatter):
+    def test_self_returns_none_2(self, formatter):
         event = EntityLeftSpotEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -292,7 +292,7 @@ class TestEntityLeftSpot:
 
 
 class TestSpotObjectInteracted:
-    def test_self_returns_None_3(self, formatter):
+    def test_self_returns_none_3(self, formatter):
         event = SpotObjectInteractedEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -424,7 +424,7 @@ class TestPlayerPickedUpItem:
 
 
 class TestSpotExplored:
-    def test_self_returns_None_4(self, formatter):
+    def test_self_returns_none_4(self, formatter):
         event = SpotExploredEvent.create(
             aggregate_id=GRAPH_ID,
             aggregate_type="SpotGraphAggregate",
@@ -597,8 +597,8 @@ class TestConnectionStateChangedPositionAware:
 
     def test_recipient_at_adjacent_spot_gets_sound_only_prose(self):
         """隣接 spot にいる observer は音だけ伝わる: 通行可否情報は得られない。"""
-        SPOT_NEIGHBOR = SpotId(99)
-        ctx = self._build_ctx_with_position(SPOT_NEIGHBOR)
+        spot_neighbor = SpotId(99)
+        ctx = self._build_ctx_with_position(spot_neighbor)
         formatter = SpotGraphObservationFormatter(ctx)
         event = ConnectionStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -679,7 +679,7 @@ class TestSpotObjectStateChanged:
 class TestSpotObjectStateChangedActorExclusion:
     """Phase 4-E: actor_entity_id が自分のとき formatter が None を返す (二重ガード)。"""
 
-    def test_actor_self_returns_None(self, formatter):
+    def test_actor_self_returns_none(self, formatter):
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
         event = SpotObjectStateChangedEvent.create(
             aggregate_id=GRAPH_ID,
@@ -740,7 +740,7 @@ class TestSpotPlayerStateChangedInSpot:
         assert "posture" in result.prose
         assert "kneeling" in result.prose
 
-    def test_actor_self_returns_None_2(self, formatter):
+    def test_actor_self_returns_none_2(self, formatter):
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
             SpotPlayerStateChangedInSpotEvent,
         )
@@ -758,5 +758,5 @@ class TestSpotPlayerStateChangedInSpot:
 
 
 class TestUnknownEvent:
-    def test_returns_None_for_unhandled_event(self, formatter):
+    def test_returns_none_for_unhandled_event(self, formatter):
         assert formatter.format("not an event", PLAYER_1) is None
