@@ -64,7 +64,6 @@ _STANCE: dict[str, str] = {
     # ── 現行経路から到達しない (旧実装) ──────────────────────────
     "application/shop/services/shop_command_service.py": _NOT_REACHABLE,
     "application/trade/services/trade_command_service.py": _NOT_REACHABLE,
-    "application/conversation/services/conversation_command_service.py": _NOT_REACHABLE,
     # ── 付与の実装そのもの ────────────────────────────────────────
     "application/world_graph/spot_inventory_helpers.py": _INFRASTRUCTURE,
 }

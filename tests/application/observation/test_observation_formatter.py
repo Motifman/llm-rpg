@@ -14,10 +14,6 @@ from ai_rpg_world.domain.combat.event.combat_events import (
 )
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
@@ -553,45 +549,6 @@ class TestObservationFormatter:
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
 
-    def test_format_conversation_started_uses_fallback_npc_name_when_repository_none(self, formatter):
-        """ConversationStartedEvent: monster_repository がないと NPC 名はフォールバック"""
-        event = ConversationStartedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="Conversation",
-            npc_id_value=999,
-            dialogue_tree_id_value=1,
-            entry_node_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "会話を始めました" in out.prose
-        assert "誰か" in out.prose
-        assert out.observation_category == "self_only"
-        assert out.breaks_movement is True
-
-    def test_format_conversation_started_uses_monster_repository_when_available(self):
-        """ConversationStartedEvent: monster_repository で NPC 名が解決できる"""
-        monster_repo = MagicMock()
-        npc = MagicMock()
-        npc.template.name = "老人"
-        monster_repo.find_by_world_object_id.return_value = npc
-        formatter = ObservationFormatter(
-            spot_repository=None,
-            player_profile_repository=None,
-            monster_repository=monster_repo,
-        )
-        event = ConversationStartedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="Conversation",
-            npc_id_value=10,
-            dialogue_tree_id_value=1,
-            entry_node_id_value=1,
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "老人" in out.prose
-        assert out.structured.get("npc_name") == "老人"
-
     def test_format_skill_equipped_uses_fallback_when_skill_spec_repository_none(self, formatter):
         """SkillEquippedEvent: skill_spec_repository がないとスキル名はフォールバック"""
         event = SkillEquippedEvent.create(
@@ -981,24 +938,6 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1), attention_level="invalid")  # type: ignore[arg-type]
         assert out is not None
         assert out.observation_category == "self_only"
-
-    def test_format_conversation_ended_includes_rewards_and_unlocks(self, formatter):
-        """ConversationEndedEvent: outcome / 報酬 / 解放件数を要約する"""
-        event = ConversationEndedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="Conversation",
-            npc_id_value=10,
-            end_node_id_value=1,
-            outcome="依頼を受けた",
-            rewards_claimed_gold=20,
-            rewards_claimed_items=[(1, 2)],
-            quest_unlocked_ids=[1, 2],
-        )
-        out = formatter.format(event, PlayerId(1))
-        assert out is not None
-        assert "依頼を受けた" in out.prose
-        assert "20ゴールド" in out.prose
-        assert "新しいクエストが2件" in out.prose
 
     def test_format_quest_issued_includes_reward_summary(self, formatter):
         """QuestIssuedEvent: 報酬概要がプローズに含まれる"""

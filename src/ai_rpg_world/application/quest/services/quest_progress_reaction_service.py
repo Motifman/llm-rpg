@@ -3,9 +3,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-)
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -97,16 +94,6 @@ class QuestProgressReactionService:
                 item_spec_id_value,
             ),
             completion_log="Quest completed (OBTAIN_ITEM)",
-        )
-
-    def process_conversation_ended(self, event: ConversationEndedEvent) -> None:
-        self._process_accepted_quests(
-            acceptor_id=event.aggregate_id,
-            advance=lambda quest: quest.advance_objective(
-                QuestObjectiveType.TALK_TO_NPC,
-                event.npc_id_value,
-            ),
-            completion_log="Quest completed (TALK_TO_NPC)",
         )
 
     def _process_accepted_quests(

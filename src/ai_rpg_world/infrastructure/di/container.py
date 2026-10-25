@@ -11,10 +11,6 @@ import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
-from ai_rpg_world.application.conversation.conversation_sqlite_wiring import (
-    ConversationSqliteRepositories,
-    attach_conversation_sqlite_repositories,
-)
 from ai_rpg_world.application.guild.guild_sqlite_wiring import (
     GuildSqliteRepositories,
     attach_guild_sqlite_repositories,
@@ -255,7 +251,6 @@ class SqliteGameDependencyInjectionContainer:
         self._guild: GuildSqliteRepositories | None = None
         self._quest: QuestSqliteRepositories | None = None
         self._skill: SkillSqliteRepositories | None = None
-        self._conversation: ConversationSqliteRepositories | None = None
         self._social: SocialSqliteRepositories | None = None
         self._trade_command_repositories: TradeCommandRepositories | None = None
 
@@ -308,13 +303,6 @@ class SqliteGameDependencyInjectionContainer:
         if self._skill is None:
             self._skill = attach_skill_sqlite_repositories(self._get_connection())
         return self._skill
-
-    def get_conversation_repositories(self) -> ConversationSqliteRepositories:
-        if self._conversation is None:
-            self._conversation = attach_conversation_sqlite_repositories(
-                self._get_connection()
-            )
-        return self._conversation
 
     def get_social_repositories(self) -> SocialSqliteRepositories:
         if self._social is None:

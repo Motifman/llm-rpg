@@ -16,7 +16,6 @@ from ai_rpg_world.application.observation.services.recipient_strategies.monster_
 from ai_rpg_world.application.observation.services.recipient_strategies.pursuit_recipient_strategy import (
     PursuitRecipientStrategy,
 )
-from ai_rpg_world.domain.conversation.event.conversation_event import ConversationStartedEvent
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.event.guild_event import (
@@ -160,18 +159,6 @@ def _make_pursuit_target_snapshot(
 
 
 class TestObservationRecipientResolverExtendedEvents:
-    def test_conversation_started_delivers_to_speaker_only(self):
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-        )
-        event = ConversationStartedEvent.create(
-            aggregate_id=PlayerId(1),
-            aggregate_type="Conversation",
-            npc_id_value=10,
-            dialogue_tree_id_value=1,
-            entry_node_id_value=1,
-        )
-        assert [p.value for p in resolver.resolve(event)] == [1]
 
     def test_player_spoke_whisper_delivers_to_target_only(self):
         """囁きは宛先プレイヤーのみ配信先になる"""

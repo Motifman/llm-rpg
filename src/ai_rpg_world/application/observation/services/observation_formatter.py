@@ -8,9 +8,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import IObservati
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
-    ConversationObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
 )
@@ -136,7 +133,6 @@ class ObservationFormatter(IObservationFormatter):
             event_removal_messages=dict(event_removal_messages or {}),
         )
         self._formatters: list[_EventFormatter] = [
-            ConversationObservationFormatter(self._context),
             QuestObservationFormatter(self._context),
             ShopObservationFormatter(self._context),
             TradeObservationFormatter(self._context),

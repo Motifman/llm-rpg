@@ -20,7 +20,6 @@ from ai_rpg_world.application.observation.services.player_audience_query_service
     PlayerAudienceQueryService,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies import (
-    ConversationRecipientStrategy,
     DefaultRecipientStrategy,
     GuildRecipientStrategy,
     MonsterRecipientStrategy,
@@ -207,9 +206,6 @@ def create_observation_recipient_resolver(
         spot_graph_repository=spot_graph_repository,
     )
     strategies: list[IRecipientResolutionStrategy] = [
-        ConversationRecipientStrategy(
-            observed_event_registry=observed_event_registry,
-        ),
         QuestRecipientStrategy(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
