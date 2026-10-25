@@ -6,43 +6,26 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     BehaviorStateEnum,
     DeathCauseEnum,
-    EcologyTypeEnum,
     MonsterStatusEnum,
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     MonsterCreatedEvent,
     MonsterDamagedEvent,
-    MonsterDecidedToInteractEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
     MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
     MonsterSpawnedEvent,
-    TargetLostEvent,
-    TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
     MonsterAlreadySpawnedException,
     MonsterNotDeadException,
     MonsterNotSpawnedException,
-    MonsterPursuitException,
     MonsterRespawnIntervalNotMetException,
 )
-from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
-    StateTransitionResult,
-)
-from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
-    AttackedTransitionResult,
-    EventSpec,
-    MonsterBehaviorStateMachine,
-    TransitionApplicationOutput,
-)
-from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES, FeedMemory
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
@@ -55,12 +38,6 @@ from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import Monst
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
-    PursuitFailureReason,
-)
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitFailedEvent,
-)
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,
 )
@@ -130,7 +107,6 @@ class MonsterAggregate(AggregateRoot):
             behavior_state if behavior_state is not None else MonsterBehaviorState.create_idle()
         )
         self._feed_memory = feed_memory if feed_memory is not None else FeedMemory.empty()
-        self._behavior_state_machine = MonsterBehaviorStateMachine()
 
         if status == MonsterStatusEnum.DEAD and spawned_at_tick is None:
             self._lifecycle_state = MonsterLifecycleState.create_for_unspawned(
@@ -609,13 +585,8 @@ class MonsterAggregate(AggregateRoot):
     ) -> None:
         """スポットグラフ世界用の「攻撃を受けた」記録 API。
 
-        Phase 3b: tick だけ残す版を導入
-        Phase 4a: `attacker_ref` (player or monster) も残す版に拡張
-
-        2D マップ世界の `record_attacked_by` は coordinate と behavior_state
-        machine 連携を要求するため、スポットグラフ世界では使えなかった。
-        本 API は coordinate 非依存・state machine 非依存で「最後に攻撃を
-        受けた tick + 誰に攻撃されたか」を残す最小実装。
+        最後に攻撃を受けた時刻と攻撃者を記録する。
+        反撃・逃走の判断はスポットの行動処理が行う。
 
         ALIVE 状態でない場合は no-op（既に死んでいる相手の攻撃記録は意味が
         ないため）。`attacker_ref=None` なら従来通り tick だけ更新。
@@ -889,7 +860,7 @@ class MonsterAggregate(AggregateRoot):
         """時間経過による処理（自然回復など）。
 
         regen_stats はアプリ層で compute_effective_stats により算出して渡す。
-        regen_rate はアプリ層で MonsterConfigService 等から取得して渡す。集約は値のみで計算する。
+        regen_rate は呼び出し側が指定した回復率を使う。集約は渡された値のみで計算する。
         """
         if (
             self._lifecycle_state.status == MonsterStatusEnum.ALIVE
@@ -1029,45 +1000,6 @@ class MonsterAggregate(AggregateRoot):
             return
         self._lifecycle_state = self._lifecycle_state.decrease_hunger(hunger_decrease)
 
-    def record_attacked_by(
-        self,
-        attacker_id: WorldObjectId,
-        attacker_coordinate: Coordinate,
-        current_tick: WorldTick,
-    ) -> None:
-        """
-        外部から攻撃されたことを記録し、行動状態を更新する（被弾時のターゲット認識）。
-        生態タイプ・成長段階に応じて CHASE / FLEE 等に遷移する。
-        """
-        if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
-            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
-        if self._coordinate is None:
-            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
-
-        transition = self._behavior_state_machine.compute_attacked_transition(
-            attacker_id=attacker_id,
-            attacker_coordinate=attacker_coordinate,
-            ecology_type=self._template.ecology_type,
-            hp_percentage=(
-                self._lifecycle_state.hp.value / self._lifecycle_state.hp.max_hp if self._lifecycle_state.hp.max_hp > 0 else 1.0
-            ),
-            effective_flee_threshold=self.get_effective_flee_threshold(current_tick),
-            allow_chase=self.get_allow_chase(current_tick),
-            current_behavior_state=self._behavior_state.state,
-            behavior_initial_position=self._behavior_state.initial_position,
-            ambush_chase_range=self._template.ambush_chase_range,
-        )
-        if transition.no_transition:
-            return
-        self._behavior_state = self._behavior_state.with_attacked(transition)
-        if transition.clear_pursuit:
-            self._clear_pursuit_state()
-        elif transition.sync_pursuit:
-            self._sync_active_pursuit_state(
-                target_id=attacker_id,
-                coordinate=attacker_coordinate,
-                observed_at_tick=current_tick,
-            )
 
     def die_from_old_age(self, current_tick: WorldTick) -> bool:
         """
@@ -1106,30 +1038,6 @@ class MonsterAggregate(AggregateRoot):
         """リスポーン時に使用する座標（初期スポーン位置）を返す。未スポーン時は None。"""
         return self._initial_spawn_coordinate
 
-    def to_behavior_state_snapshot(
-        self, actor_coordinate: Coordinate, current_tick: WorldTick
-    ) -> BehaviorStateSnapshot:
-        """
-        状態遷移の入力用に、現在の行動状態のスナップショットを返す。
-        phase_thresholds / flee_threshold はテンプレート・成長段階から取得する。
-        """
-        hp_percentage = (
-            self._lifecycle_state.hp.value / self._lifecycle_state.hp.max_hp if self._lifecycle_state.hp.max_hp > 0 else 1.0
-        )
-        phase_thresholds = (
-            tuple(self._template.phase_thresholds)
-            if self._template.phase_thresholds
-            else ()
-        )
-        flee_threshold = self.get_effective_flee_threshold(current_tick)
-        return BehaviorStateSnapshot(
-            state=self._behavior_state.state,
-            target_id=self._behavior_state.target_id,
-            last_known_target_position=self._behavior_state.last_known_position,
-            hp_percentage=hp_percentage,
-            phase_thresholds=phase_thresholds,
-            flee_threshold=flee_threshold,
-        )
 
     def _ensure_can_perform_behavior(self) -> None:
         """状態遷移・アクション記録の前提条件（ALIVE・スポーン済み・spot_id あり）を検証する。"""
@@ -1146,79 +1054,6 @@ class MonsterAggregate(AggregateRoot):
                 f"Monster {self._monster_id} has no spot_id, cannot perform behavior"
             )
 
-    def _build_pursuit_target_snapshot(
-        self, target_id: WorldObjectId, coordinate: Coordinate
-    ) -> PursuitTargetSnapshot:
-        if self._spot_id is None:
-            raise MonsterNotSpawnedException(
-                f"Monster {self._monster_id} has no spot_id, cannot build pursuit snapshot"
-            )
-        return PursuitTargetSnapshot(
-            target_id=target_id,
-            spot_id=self._spot_id,
-            coordinate=coordinate,
-        )
-
-    def _build_pursuit_last_known(
-        self,
-        target_id: WorldObjectId,
-        coordinate: Coordinate,
-        observed_at_tick: WorldTick | None,
-    ) -> PursuitLastKnownState:
-        if self._spot_id is None:
-            raise MonsterNotSpawnedException(
-                f"Monster {self._monster_id} has no spot_id, cannot build pursuit last-known state"
-            )
-        return PursuitLastKnownState(
-            target_id=target_id,
-            spot_id=self._spot_id,
-            coordinate=coordinate,
-            observed_at_tick=observed_at_tick,
-        )
-
-    def _sync_active_pursuit_state(
-        self,
-        target_id: WorldObjectId,
-        coordinate: Coordinate,
-        observed_at_tick: WorldTick | None,
-    ) -> None:
-        current = self._pursuit_state
-        if isinstance(current, PursuitState):
-            current = MonsterPursuitState(pursuit=current)
-        snapshot = self._build_pursuit_target_snapshot(target_id, coordinate)
-        last_known = self._build_pursuit_last_known(
-            target_id=target_id,
-            coordinate=coordinate,
-            observed_at_tick=observed_at_tick,
-        )
-        self._pursuit_state = current.with_sync(
-            actor_id=self._world_object_id,
-            target_id=target_id,
-            target_snapshot=snapshot,
-            last_known=last_known,
-        )
-
-    def _preserve_pursuit_last_known(
-        self,
-        target_id: WorldObjectId,
-        coordinate: Coordinate,
-        observed_at_tick: WorldTick | None,
-    ) -> None:
-        current = self._pursuit_state
-        if isinstance(current, PursuitState):
-            current = MonsterPursuitState(pursuit=current)
-        fallback_snapshot = self._build_pursuit_target_snapshot(target_id, coordinate)
-        last_known = self._build_pursuit_last_known(
-            target_id=target_id,
-            coordinate=coordinate,
-            observed_at_tick=observed_at_tick,
-        )
-        self._pursuit_state = current.with_preserve_last_known(
-            actor_id=self._world_object_id,
-            target_id=target_id,
-            last_known=last_known,
-            target_snapshot=fallback_snapshot,
-        )
 
     def _clear_pursuit_state(self) -> None:
         if isinstance(self._pursuit_state, MonsterPursuitState):
@@ -1226,202 +1061,6 @@ class MonsterAggregate(AggregateRoot):
         else:
             self._pursuit_state = MonsterPursuitState()
 
-    def _emit_behavior_event(self, ev_spec: "EventSpec") -> None:
-        """EventSpec に従ってイベントを発行する。"""
-        if ev_spec.kind == "target_spotted":
-            self.add_event(
-                TargetSpottedEvent.create(
-                    aggregate_id=self._world_object_id,
-                    aggregate_type="Actor",
-                    actor_id=self._world_object_id,
-                    target_id=ev_spec.target_id,
-                    coordinate=ev_spec.coordinate,
-                )
-            )
-        elif ev_spec.kind == "target_lost":
-            self.add_event(
-                TargetLostEvent.create(
-                    aggregate_id=self._world_object_id,
-                    aggregate_type="Actor",
-                    actor_id=self._world_object_id,
-                    target_id=ev_spec.target_id,
-                    last_known_coordinate=ev_spec.last_known_coordinate,
-                )
-            )
-        elif ev_spec.kind == "actor_state_changed":
-            self.add_event(
-                ActorStateChangedEvent.create(
-                    aggregate_id=self._world_object_id,
-                    aggregate_type="Actor",
-                    actor_id=self._world_object_id,
-                    old_state=ev_spec.old_state,
-                    new_state=ev_spec.new_state,
-                )
-            )
-
-    def fail_pursuit(
-        self,
-        reason: PursuitFailureReason,
-        *,
-        current_tick: WorldTick | None = None,
-    ) -> None:
-        """共有 pursuit 語彙でモンスター追跡を失敗終了する。"""
-        current_state = self._pursuit_state
-        if not self.has_active_pursuit or current_state is None:
-            raise MonsterPursuitException(
-                "Cannot fail pursuit when no active pursuit exists."
-            )
-
-        last_known = current_state.last_known
-        target_snapshot = current_state.target_snapshot
-        if last_known is None:
-            coordinate = self._behavior_state.last_known_position
-            target_id = current_state.target_id
-            if coordinate is None or target_id is None:
-                raise MonsterPursuitException(
-                    "Cannot fail pursuit without last-known state."
-                )
-            last_known = self._build_pursuit_last_known(
-                target_id=target_id,
-                coordinate=coordinate,
-                observed_at_tick=current_tick,
-            )
-
-        self.add_event(
-            PursuitFailedEvent.create(
-                aggregate_id=self._world_object_id,
-                aggregate_type="MonsterAggregate",
-                actor_id=self._world_object_id,
-                target_id=current_state.target_id,
-                failure_reason=reason,
-                last_known=last_known,
-                target_snapshot=target_snapshot,
-            )
-        )
-        self._behavior_state = self._behavior_state.with_target_cleared()
-        self._clear_pursuit_state()
-
-    def apply_behavior_transition(
-        self, result: StateTransitionResult, current_tick: WorldTick
-    ) -> None:
-        """
-        状態遷移結果を自身の _behavior_* に反映し、イベントを集約内で生成・add_event する。
-        行動の遷移内容を受け取り、状態を更新してイベントを発行する。
-        """
-        self._ensure_can_perform_behavior()
-        hp_percentage = (
-            self._lifecycle_state.hp.value / self._lifecycle_state.hp.max_hp if self._lifecycle_state.hp.max_hp > 0 else 1.0
-        )
-        output = self._behavior_state_machine.apply_transition(
-            result=result,
-            current_state=self._behavior_state.state,
-            current_target_id=self._behavior_state.target_id,
-            current_last_known_position=self._behavior_state.last_known_position,
-            hp_percentage=hp_percentage,
-            effective_flee_threshold=self.get_effective_flee_threshold(current_tick),
-            allow_chase=self.get_allow_chase(current_tick),
-        )
-        self._behavior_state = self._behavior_state.with_transition(output)
-        if output.clear_pursuit:
-            self._clear_pursuit_state()
-        if output.sync_pursuit is not None:
-            tid, coord = output.sync_pursuit
-            self._sync_active_pursuit_state(
-                target_id=tid,
-                coordinate=coord,
-                observed_at_tick=current_tick,
-            )
-        if output.preserve_pursuit_last_known is not None:
-            tid, coord = output.preserve_pursuit_last_known
-            self._preserve_pursuit_last_known(
-                target_id=tid,
-                coordinate=coord,
-                observed_at_tick=current_tick,
-            )
-        for ev_spec in output.events:
-            self._emit_behavior_event(ev_spec)
-
-    def apply_territory_return_if_needed(self, actor_coordinate: Coordinate) -> None:
-        """
-        テリトリを超えていたら RETURN に遷移する（Monster の責務）。
-        アプリ層で apply_behavior_transition の後に呼ぶ。
-        """
-        self._ensure_can_perform_behavior()
-        if not self._behavior_state_machine.should_return_to_territory(
-            actor_coordinate=actor_coordinate,
-            behavior_initial_position=self._behavior_state.initial_position,
-            territory_radius=self._template.territory_radius,
-            current_state=self._behavior_state.state,
-        ):
-            return
-        old_state = self._behavior_state.state
-        self._behavior_state = self._behavior_state.with_territory_return()
-        self._clear_pursuit_state()
-        self.add_event(
-            ActorStateChangedEvent.create(
-                aggregate_id=self._world_object_id,
-                aggregate_type="Actor",
-                actor_id=self._world_object_id,
-                old_state=old_state,
-                new_state=BehaviorStateEnum.RETURN,
-            )
-        )
-
-    def record_move(
-        self, coordinate: Coordinate, current_tick: WorldTick
-    ) -> None:
-        """決まった移動先を記録し MonsterDecidedToMoveEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""
-        self._ensure_can_perform_behavior()
-        self.add_event(
-            MonsterDecidedToMoveEvent.create(
-                aggregate_id=self._monster_id,
-                aggregate_type="MonsterAggregate",
-                actor_id=self._world_object_id,
-                coordinate={
-                    "x": coordinate.x,
-                    "y": coordinate.y,
-                    "z": coordinate.z,
-                },
-                spot_id=self._spot_id,
-                current_tick=current_tick,
-            )
-        )
-
-    def record_use_skill(
-        self,
-        skill_slot_index: int,
-        target_id: WorldObjectId | None,
-        current_tick: WorldTick,
-    ) -> None:
-        """決まったスキル使用を記録し MonsterDecidedToUseSkillEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""
-        self._ensure_can_perform_behavior()
-        self.add_event(
-            MonsterDecidedToUseSkillEvent.create(
-                aggregate_id=self._monster_id,
-                aggregate_type="MonsterAggregate",
-                actor_id=self._world_object_id,
-                skill_slot_index=skill_slot_index,
-                target_id=target_id,
-                spot_id=self._spot_id,
-                current_tick=current_tick,
-            )
-        )
-
-    def record_interact(
-        self, target_id: WorldObjectId, current_tick: WorldTick
-    ) -> None:
-        """決まったインタラクト対象を記録し MonsterDecidedToInteractEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""
-        self._ensure_can_perform_behavior()
-        self.add_event(
-            MonsterDecidedToInteractEvent.create(
-                aggregate_id=self._monster_id,
-                aggregate_type="MonsterAggregate",
-                actor_id=self._world_object_id,
-                target_id=target_id,
-                spot_id=self._spot_id,
-                current_tick=current_tick,
-            )
-        )
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId) -> None:
         """リスポーンさせる"""
