@@ -113,14 +113,9 @@ class TestWorldRuntimeDispatchTable:
         state = _create_session(monkeypatch, tmp_path)
         publisher = state.runtime._speech_event_publisher
         assert publisher is not None, "pipeline_event_publisher が runtime に保存されていない"
-        # PipelineEventPublisher は InMemoryEventPublisher を委譲経由で保持しており、
-        # register_handler で登録された handler を _handlers に持つ。
-        # 直接 attribute は internal だが、テスト目的でアクセス。
-        from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
-        assert isinstance(publisher, PipelineEventPublisher)
         assert not any(
-            event_type is ConsumableUsedEvent
-            for event_type, _handler in publisher._side_handlers
+            registration.event_type is ConsumableUsedEvent
+            for registration in publisher._dispatcher._after_commit
         )
         factory = state.runtime._use_item_command_scope_factory
         dispatcher = factory._sync_dispatcher
