@@ -21,11 +21,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
 from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
-from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.quest.aggregate.quest_aggregate import (
@@ -84,71 +79,6 @@ class QuestProgressReactionService:
                 victim_player_id_value,
             ),
             completion_log="Quest completed (KILL_PLAYER)",
-        )
-
-    def process_item_taken_from_chest(self, event: ItemTakenFromChestEvent) -> None:
-        acceptor_id = PlayerId.create(event.player_id_value)
-        spot_id_value = event.spot_id.value
-        chest_id_value = event.chest_id.value
-        self._process_accepted_quests(
-            acceptor_id=acceptor_id,
-            advance=lambda quest: quest.advance_objective(
-                QuestObjectiveType.TAKE_FROM_CHEST,
-                spot_id_value,
-                target_id_secondary=chest_id_value,
-            ),
-            completion_log="Quest completed (TAKE_FROM_CHEST)",
-        )
-
-    def process_location_entered(self, event: LocationEnteredEvent) -> None:
-        if event.player_id_value is None:
-            return
-
-        acceptor_id = PlayerId.create(event.player_id_value)
-        spot_id_value = event.spot_id.value
-        location_id_value = event.location_id.value
-
-        def advance(quest: "QuestAggregate") -> bool:
-            any_advanced = False
-            if quest.advance_objective(QuestObjectiveType.REACH_SPOT, spot_id_value):
-                any_advanced = True
-            if quest.advance_objective(
-                QuestObjectiveType.REACH_LOCATION,
-                location_id_value,
-                target_id_secondary=spot_id_value,
-            ):
-                any_advanced = True
-            return any_advanced
-
-        self._process_accepted_quests(
-            acceptor_id=acceptor_id,
-            advance=advance,
-            completion_log="Quest completed (REACH_SPOT/REACH_LOCATION)",
-        )
-
-    def process_gateway_triggered(self, event: GatewayTriggeredEvent) -> None:
-        if event.player_id_value is None:
-            return
-
-        acceptor_id = PlayerId.create(event.player_id_value)
-        target_spot_id_value = event.target_spot_id.value
-        spot_id_value = event.spot_id.value
-
-        def advance(quest: "QuestAggregate") -> bool:
-            if quest.advance_objective(
-                QuestObjectiveType.REACH_SPOT,
-                target_spot_id_value,
-            ):
-                return True
-            return quest.advance_objective(
-                QuestObjectiveType.REACH_SPOT,
-                spot_id_value,
-            )
-
-        self._process_accepted_quests(
-            acceptor_id=acceptor_id,
-            advance=advance,
-            completion_log="Quest completed (REACH_SPOT gateway)",
         )
 
     def process_item_added_to_inventory(self, event: ItemAddedToInventoryEvent) -> None:

@@ -3,10 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     ConversationEndedQuestProgressHandler,
-    GatewayTriggeredQuestProgressHandler,
     ItemAddedToInventoryQuestProgressHandler,
-    ItemTakenFromChestQuestProgressHandler,
-    LocationEnteredQuestProgressHandler,
     MonsterDiedQuestProgressHandler,
     PlayerDownedQuestProgressHandler,
 )
@@ -19,11 +16,6 @@ from ai_rpg_world.domain.conversation.event.conversation_event import (
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.event_handler import EventHandler
@@ -36,17 +28,11 @@ class QuestEventHandlerRegistry:
         self,
         monster_died_handler: MonsterDiedQuestProgressHandler,
         player_downed_handler: PlayerDownedQuestProgressHandler,
-        item_taken_from_chest_handler: ItemTakenFromChestQuestProgressHandler,
-        location_entered_handler: LocationEnteredQuestProgressHandler,
-        gateway_triggered_handler: GatewayTriggeredQuestProgressHandler,
         item_added_to_inventory_handler: ItemAddedToInventoryQuestProgressHandler,
         conversation_ended_handler: ConversationEndedQuestProgressHandler,
     ):
         self._monster_died_handler = monster_died_handler
         self._player_downed_handler = player_downed_handler
-        self._item_taken_from_chest_handler = item_taken_from_chest_handler
-        self._location_entered_handler = location_entered_handler
-        self._gateway_triggered_handler = gateway_triggered_handler
         self._item_added_to_inventory_handler = item_added_to_inventory_handler
         self._conversation_ended_handler = conversation_ended_handler
 
@@ -60,21 +46,6 @@ class QuestEventHandlerRegistry:
         event_publisher.register_handler(
             PlayerDownedEvent,
             self._create_event_handler(self._player_downed_handler.handle),
-            is_synchronous=False,
-        )
-        event_publisher.register_handler(
-            ItemTakenFromChestEvent,
-            self._create_event_handler(self._item_taken_from_chest_handler.handle),
-            is_synchronous=False,
-        )
-        event_publisher.register_handler(
-            LocationEnteredEvent,
-            self._create_event_handler(self._location_entered_handler.handle),
-            is_synchronous=False,
-        )
-        event_publisher.register_handler(
-            GatewayTriggeredEvent,
-            self._create_event_handler(self._gateway_triggered_handler.handle),
             is_synchronous=False,
         )
         event_publisher.register_handler(
