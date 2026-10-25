@@ -7,12 +7,12 @@
 新機能を実装する前に必ず参照してください。
 
 - **[docs/design_decisions.md](docs/design_decisions.md)** — 過去の実験で生まれた個別の設計判断 (プレフィックスキャッシュ不変 / 詰み回避 / ラベルから名前への切替 / 静かな失敗の構造的対処 / エージェントごとの待ち時間タイマー など)
-- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性 / 協調の圧力)
+- **[docs/agent_design_principles.md](docs/agent_design_principles.md)** — 「ゲーム内で生きる AI エージェント」を作る上位方針 (疎結合 / 観測駆動 / 質感優先 / 自己の継続性 / 失敗の質感 / 静かな失敗の回避 / 他者からの可視性 / 協調を促すと固まる圧力も上がる)
 - **[docs/working_habits_that_actually_hold.md](docs/working_habits_that_actually_hold.md)** — 対策が実際に機能する形 (判断を挟むと壊れる / 検査が狙ったものを見ていない / 一次情報に当たらない)。**同じ失敗を繰り返したときに読む**
 
 必要なときに読む資料:
 
-- [docs/agents_reaching_past_the_world.md](docs/agents_reaching_past_the_world.md) — エージェントが世界に無い行為を試みた run の記録。世界に無い行為を足すかどうかを決めるときに読む
+- [docs/agents_reaching_past_the_world.md](docs/agents_reaching_past_the_world.md) — エージェントが世界に無い行為を試みた run の記録。それを直すかどうかを決めるときに読み、直さないと決めたら理由をここに残す
 - [docs/trace_observability_review.md](docs/trace_observability_review.md) — 新しい実験機能を足すときの、trace の観測性の見方
 
 「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい設計判断は `docs/design_decisions/D<issue番号>.md` に、1件1ファイルで作成してください。同じIssueで複数ある場合は `D1448-2.md` のように分け、見出しのIDもファイル名に合わせます。並行するPRが同じファイルの末尾へ追記して競合するのを防ぐため、共有索引の `docs/design_decisions.md` は新規追加時に変更しません。既存の判断を更新する場合はその個別ファイルを編集します。詳細は [設計判断の追加・更新方法](docs/design_decisions.md) を参照してください。
@@ -124,11 +124,11 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 
 現在の実装への入口と、旧タイルマップから残した領域は [世界の現在の構成](docs/game/world_architecture.md) を参照してください。
 
-### 文脈の境界
+### 領域の境界
 
-境界を守れている文脈は Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とは `being/contract` の型だけで結びます。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
+境界を守れている領域は Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とは `being/contract` の型だけで結びます。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
 
-Being の記憶の保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。
+`BeingId` をキーに持つ保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。足す前に保存した snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足します (D1824-6)。
 
 ゲームの側は、`domain/` の下に領域ごとのフォルダ (`world_graph`、`player`、`monster` など) がありますが、境界はまだ守れていません。境界の引き直しは、シナリオエンジンのモデリング (#1339) で行います。
 
