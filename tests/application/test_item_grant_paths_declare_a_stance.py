@@ -57,7 +57,6 @@ _STANCE: dict[str, str] = {
     "application/world_graph/spot_graph_scenario_event_stage_service.py": _DROP,
     "application/world_graph/player_interaction_application_service.py": _DROP,
     "application/quest/services/quest_progress_reaction_service.py": _NOT_REACHABLE,
-    "domain/world/service/harvest_domain_service.py": _NOT_REACHABLE,
     # 起動時の初期所持品は、枠を超えたら**読み込みの時点で落とす**。作者の
     # 誤りであって世界の出来事ではないので、地面に落とす形にはしない。
     "application/world_runtime/world_runtime.py": _REFUSE,
