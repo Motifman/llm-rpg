@@ -1,9 +1,6 @@
 """spot-graph 専用のモンスター動的 spawn ステージサービス (Phase B-2b)。
 
-タイルマップ時代の `MonsterSpawnSlotService` は physical_map_repository に
-依存しており、world_runtime / spot-graph 世界 (physical_map_repository=None)
-では発火しない。本サービスは physical_map に一切触れず、spot_graph_repository
-だけで完結する spawn / despawn 経路を提供する。
+本サービスは spot_graph_repository だけで出現・退場の経路を提供する。
 
 挙動:
 - placement.spawn_condition が None または `is_always` → 何もしない

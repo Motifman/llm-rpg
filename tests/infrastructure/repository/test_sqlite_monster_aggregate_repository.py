@@ -24,9 +24,6 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.sqlite_monster_aggregate_repository import (
     SqliteMonsterAggregateRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_physical_map_repository import (
-    SqlitePhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 
 
@@ -286,20 +283,36 @@ class TestSqliteMonsterAggregateRepository:
         spot1 = repo.find_by_spot_id(SpotId(1))
         assert {m.monster_id for m in spot1} == {MonsterId(1), MonsterId(2)}
 
-    def test_world_object_id_sequence_is_shared_with_physical_map(
+    def test_world_object_id_sequence_is_shared_between_repository_instances(
         self, sqlite_conn: sqlite3.Connection
     ) -> None:
+        """同じ接続の複数のモンスター保存先で採番しても、物体IDは重複しない。"""
         uow = SqliteUnitOfWork(connection=sqlite_conn)
         with uow:
-            map_repo = SqlitePhysicalMapRepository.for_shared_unit_of_work(uow.connection)
+            first_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
             monster_repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(
                 uow.connection
             )
-            first = map_repo.generate_world_object_id()
+            first = first_repo.generate_world_object_id_for_npc()
             second = monster_repo.generate_world_object_id_for_npc()
 
         assert first.value == 100000
         assert second.value == 100001
+
+    def test_world_object_id_sequence_rolls_back(self, sqlite_conn: sqlite3.Connection) -> None:
+        """物体ID採番後に処理を中断すると、次の確定単位で同じIDを採番できる。"""
+        uow = SqliteUnitOfWork(connection=sqlite_conn)
+        with pytest.raises(RuntimeError, match="abort"):
+            with uow:
+                repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
+                generated = repo.generate_world_object_id_for_npc()
+                assert generated.value == 100000
+                raise RuntimeError("abort")
+
+        with uow:
+            repo = SqliteMonsterAggregateRepository.for_shared_unit_of_work(uow.connection)
+            generated_after_rollback = repo.generate_world_object_id_for_npc()
+        assert generated_after_rollback.value == 100000
 
     def test_monster_id_sequence_rolls_back(self, sqlite_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=sqlite_conn)
