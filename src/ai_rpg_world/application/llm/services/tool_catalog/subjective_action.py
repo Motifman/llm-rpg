@@ -9,7 +9,6 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
-    TOOL_NAME_NO_OP,
 )
 
 SUBJECTIVE_ACTION_FIELDS = ("inner_thought",)
@@ -64,8 +63,6 @@ def is_subjective_action_tool(tool_name: str) -> bool:
     """世界へ作用する主観入力付き tool かどうか。"""
 
     if not isinstance(tool_name, str):
-        return False
-    if tool_name == TOOL_NAME_NO_OP:
         return False
     return bool(tool_name)
 

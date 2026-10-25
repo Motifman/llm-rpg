@@ -16,7 +16,6 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
 from ai_rpg_world.application.llm.services.quest_objective_target_resolver import (
     QuestObjectiveTargetResolver,
 )
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -79,9 +78,6 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             raise TypeError("runtime_context must be ToolRuntimeContextDto")
 
         args = arguments or {}
-
-        if tool_name == TOOL_NAME_NO_OP:
-            return {}
 
         for resolver in self._resolvers:
             result = resolver.resolve_args(tool_name, args, runtime_context)

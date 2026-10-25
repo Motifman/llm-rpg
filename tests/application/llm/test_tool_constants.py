@@ -2,7 +2,6 @@
 
 
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_NO_OP,
     TOOL_NAME_PREFIX_COMBAT,
     TOOL_NAME_PREFIX_CONVERSATION,
     TOOL_NAME_PREFIX_DESCRIPTIONS,
@@ -41,11 +40,6 @@ class TestToolNamePrefixes:
 
 class TestToolNames:
     """ツール名がプレフィックス付きであること"""
-
-    def test_no_op_has_world_prefix(self):
-        """no_op は world_ プレフィックスを持つ"""
-        assert TOOL_NAME_NO_OP.startswith(TOOL_NAME_PREFIX_WORLD)
-        assert TOOL_NAME_NO_OP == "world_no_op"
 
 
     def test_speech_tool_name_is_speak(self):

@@ -65,7 +65,6 @@ TOOL_NAME_PREFIX_DESCRIPTIONS: list[tuple[str, str]] = [
 ]
 
 # --- ツール名（プレフィックス付き） ---
-TOOL_NAME_NO_OP = TOOL_NAME_PREFIX_WORLD + "no_op"
 # Issue #264 後続: 旧 SAY/WHISPER の 2 tool を廃止し、``channel`` 引数を持つ
 # 単一 ``speak`` tool に統合した (SHOUT も同時に LLM へ公開)。
 # ``channel`` は arguments で "whisper" / "say" / "shout" のいずれかを指定する。

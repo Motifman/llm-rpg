@@ -34,7 +34,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_GUILD_DISBAND,
-    TOOL_NAME_NO_OP,
     TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SPEECH,
@@ -248,7 +247,7 @@ class TestDefaultToolArgumentResolverInputValidation:
         resolver = DefaultToolArgumentResolver()
         with pytest.raises(TypeError, match="arguments must be dict or None"):
             resolver.resolve(
-                TOOL_NAME_NO_OP,
+                TOOL_NAME_SPEECH,
                 "invalid",  # type: ignore[arg-type]
                 _make_context(),
             )
@@ -257,14 +256,10 @@ class TestDefaultToolArgumentResolverInputValidation:
         resolver = DefaultToolArgumentResolver()
         with pytest.raises(TypeError, match="runtime_context must be ToolRuntimeContextDto"):
             resolver.resolve(
-                TOOL_NAME_NO_OP,
+                TOOL_NAME_SPEECH,
                 {},
                 None,  # type: ignore[arg-type]
             )
-
-
-class TestDefaultToolArgumentResolverConversationAdvance:
-    """conversation_advance の例外ケース"""
 
 
 def _make_shop_guild_trade_context() -> ToolRuntimeContextDto:
