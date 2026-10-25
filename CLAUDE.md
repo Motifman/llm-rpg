@@ -195,7 +195,6 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 - Python 3.10 以上、インデントはスペース 4 つ、関数とモジュールは `snake_case`、クラスは `PascalCase`
 - 公開 API には型注釈を必須とする
 - テストはパッケージ構造を `tests/` 配下に鏡写しで配置する (例: `tests/domain/shop/value_object/test_shop_id.py`)
-- コミットメッセージは Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)
 - 秘密情報は `.env` のみに置く (`.env.example` からコピー)。コミット禁止
 - LLM クライアントは `litellm` 抽象を経由する
 
@@ -209,7 +208,7 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
   - 状態を変える操作は値を返さない。外したもの・起きたことを伝えたいときは、返さずにドメインイベントとしてためる。読むだけの問い合わせとファクトリは値を返してよい
   - ID を持つ集約を値の変わらない形 (frozen dataclass) で作らない。値オブジェクト・ドメインイベント・snapshot の中身は値の変わらない形でよい
 - 新しく足す型と、この節に沿って作り直す型は、ドメインの言葉で名前を付ける。このリポジトリで別の意味を持つ語 (Event はドメインイベントと trace が使っている。Entry、Record も同じ) と重ねない。修飾語で区別するより、中身を一語で言える名前を探す。処理の段階や番号 (phase_a など) で名前を付けない。既存の名前は、作り直すついででなければ改名しない
-- 新しく足す、またはこの節に沿って作り直す application 層 (`being/application` を含む) のユースケースは、ドメインでしていることを動詞句で名前にする (例: `AddEpisodesToMemory`。`FoodSpoilageStageService` を `SpoilAgedFood` に改める予定)。ユースケースは application 層で 1 つの操作を受け持つクラスで、ドメインサービス・リポジトリ・イベントの受け手は含まない。ユースケースの名前に Service・Manager・Keeper・StageService のような中身を言わない語を付けない。保存の言葉 (save、load) は、保存先 (リポジトリ、snapshot のファイル) への読み書きにだけ使う
+- 新しく足す、またはこの節に沿って作り直す application 層 (`being/application` を含む) のユースケースは、ドメインでしていることを動詞句で名前にする (例: `AddEpisodesToMemory`。`FoodSpoilageStageService` を `SpoilAgedFood` に改める予定)。ユースケースは application 層で 1 つの操作を受け持つクラスで、ドメインサービス・リポジトリ・イベントハンドラは含まない。ユースケースの名前に Service・Manager・Keeper・StageService のような中身を言わない語を付けない。保存の言葉 (save、load) は、保存先 (リポジトリ、snapshot のファイル) への読み書きにだけ使う
 - 新しい集約・値オブジェクトを足す PR では、自己レビューでこの節を見る
 
 ### ドメイン層では組み込み例外ではなくドメイン例外を投げる
@@ -264,37 +263,11 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 
 回答・ドキュメント・PR 本文・コミットメッセージなど人間に読ませる文章は日本語で書きます。
 
-### 日本語の中に英語を織り交ぜない
-
-概念や判断の説明文に英語をそのまま混ぜないでください。
-
-- **NG**: 「ambiguous な仕様」「stochastic な揺らぎ」「robust な実装」「test が flaky」
-- **OK**: 「曖昧な仕様」「確率的な揺らぎ」「壊れにくい実装」「テストが不安定」
-
-例外として以下はそのまま英語で残します。
-
-- コード上の識別子: 関数名・変数名・型名・enum 値・API パス (`ItemSpecId`, `apply_effects` など)。grep やコード参照との対応関係を保つため
-- 訳すと逆に分かりにくい既存技術用語: 初出に日本語の補足を添えれば使用可 (例: 「プレフィックスキャッシュ (prefix cache)」)
-
-書いたら必ず推敲し、英語混じりや依頼の範囲外の固有名詞が紛れていないか確認してください。
-
-### よく使う訳語
-
-| 英語表現 | 日本語訳 |
-|---|---|
-| primitive | 基盤機能 |
-| cross-instance interaction | 二者間の相互作用 |
-| acting / target | 使う側 / 使われる側 |
-| wiring | 配線 / 接続 |
-| silent failure | 静かな失敗 |
-| boundary | 入口 / 境界 |
-| guard | ガード |
-
 ## コミットメッセージ
 
 「なぜこの変更をしたか」を必ず本文に書きます。diff で分かる「何を変えたか」ではなく、「なぜ変えたか・なぜこの方法か」を残してください。
 
-- 件名: 50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
+- 件名: Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)。50 文字以内、動詞始まり (例: `fix: Safari でログインリダイレクトが動くよう修正`)
 - 本文: 解決したかった問題、検討した代替案と却下理由、副作用や注意点、関連 issue 番号
 - `update` / `fix bug` / `修正` のような情報量ゼロの件名は禁止
 
