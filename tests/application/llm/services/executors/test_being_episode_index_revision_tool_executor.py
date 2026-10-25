@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.being_episode_index_revision_tool_executor import (
@@ -66,7 +67,7 @@ class _RefusingRepository(InMemoryEpisodeRepository):
 
 
 def _executor(turn: int = 5, repository: InMemoryEpisodeRepository | None = None):
-    repository = repository or InMemoryEpisodeRepository()
+    repository = repository or InMemoryEpisodeRepository(handoff=discard_events)
     episode = _episode()
     repository.add(episode)
     recorder = _Recorder()

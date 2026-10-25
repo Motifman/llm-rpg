@@ -339,7 +339,7 @@ class EpisodeRepository(ABC):
         """エピソードが持つ Being の、同じ ID の記録を置き換える。並びの位置は変えない。
 
         記録に無ければ ``EpisodeNotFoundException``、記録からの後の版でなければ
-        (``Episode.follows``) ``EpisodeConflictException`` を投げる。
+        (``Episode.follows``) ``EpisodeConflictException`` を投げる。ためたイベントは取り出して配り手に渡す。
         """
 
     @abstractmethod

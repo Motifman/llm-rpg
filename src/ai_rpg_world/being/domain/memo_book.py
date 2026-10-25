@@ -330,7 +330,7 @@ class MemoBookRepository(ABC):
 
     @abstractmethod
     def save(self, book: MemoBook) -> None:
-        """保存したあとで渡した集約を書き換えても、保存先は変わらない。"""
+        """保存したあとで渡した集約を書き換えても、保存先は変わらない。ためたイベントは取り出して配り手に渡す。"""
 
     @abstractmethod
     def replace_all_by_being(self, book: MemoBook) -> None:

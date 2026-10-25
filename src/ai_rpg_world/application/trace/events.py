@@ -192,6 +192,12 @@ class TraceEventKind:
     # current_line / being_line (whole のときの、同じ位置の Being の側の出来事。無ければ None) /
     # current_line_count / being_line_count (出来事の数) も持つ。
     RECENT_EVENTS_SHADOW_MISMATCH = "recent_events_shadow_mismatch"
+    # Being の短期記憶の直近の範囲が上限に届き、いきさつを待たずに古いターンを外した (#1824、design_decisions D1824-11)。
+    # payload: being_id / turn (外したときのターン) / until_turn (外した範囲の終わり) / dropped_count (外した出来事の数)。
+    BEING_SHORT_TERM_MEMORY_FOLD_FORCED = "being_short_term_memory_fold_forced"
+    # 届いたいきさつが、Being が持ついきさつと同じか前の範囲までだったので入れなかった (design_decisions D1824-11)。
+    # payload: being_id / until_turn (届いたいきさつの範囲の終わり) / latest_until_turn (持っているいきさつの範囲の終わり)。
+    BEING_BACKSTORY_DISCARDED = "being_backstory_discarded"
     # エピソードの目次を 1 ターンのプロンプトに出した (#1623)。プロンプトを組むたびに 1 件。
     # payload: being_id / order (並べ方) / limit (N) / total_count (記録の件数) /
     # shown_handles (出した呼び名、出した順)。

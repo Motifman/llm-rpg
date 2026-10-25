@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from tests.event_handoff_helpers import discard_events
 
 from ai_rpg_world.application.being._memory_payload_codecs import being_episode_to_dict
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
@@ -53,9 +54,9 @@ _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 def _make_service() -> tuple[BeingMemorySnapshotService, dict[str, object]]:
     """新しい in-memory store 群を構築し、service と store ハンドルを返す。"""
     acquaintances = InMemoryAcquaintanceRepository()
-    being_episodes = InMemoryEpisodeRepository()
-    being_memo = InMemoryMemoBookRepository()
-    short_term = InMemoryShortTermMemoryRepository()
+    being_episodes = InMemoryEpisodeRepository(handoff=discard_events)
+    being_memo = InMemoryMemoBookRepository(handoff=discard_events)
+    short_term = InMemoryShortTermMemoryRepository(handoff=discard_events)
     svc = BeingMemorySnapshotService(acquaintance_store=acquaintances, being_episode_store=being_episodes, being_memo_store=being_memo, memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=short_term)
     return (svc, {'acquaintances': acquaintances, 'being_episodes': being_episodes, 'being_memo': being_memo, 'short_term': short_term})
 
@@ -450,7 +451,7 @@ class TestConstructor:
     def test_short_term_memory_store_of_wrong_type_raises_type_error(self) -> None:
         """短期記憶の store に ShortTermMemoryRepository でない値を渡すと TypeError を投げる。"""
         with pytest.raises(TypeError, match='being_short_term_memory_store'):
-            BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(), being_memo_store=InMemoryMemoBookRepository(), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryMemoBookRepository())
+            BeingMemorySnapshotService(acquaintance_store=InMemoryAcquaintanceRepository(), being_episode_store=InMemoryEpisodeRepository(handoff=discard_events), being_memo_store=InMemoryMemoBookRepository(handoff=discard_events), memory_turn_clock=InMemoryMemoryTurnClock(), being_short_term_memory_store=InMemoryMemoBookRepository(handoff=discard_events))
 
 
 class TestPayloadKeyTables:

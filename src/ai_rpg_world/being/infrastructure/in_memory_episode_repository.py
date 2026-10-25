@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from ai_rpg_world.being.domain.episode import Episode, EpisodeRepository
+from ai_rpg_world.being.infrastructure.event_handoff import EventHandoff, save_and_hand_off
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     EpisodeConflictException,
     EpisodeNotFoundException,
@@ -36,16 +37,24 @@ def _copy(episode: Episode) -> Episode:
 
 
 class InMemoryEpisodeRepository(EpisodeRepository):
-    """出し入れのたびに写しを渡す。同じ集約を指し続けると、save し忘れた書き換えも保存されたように見えるため。"""
+    """出し入れのたびに写しを渡す。同じ集約を指し続けると、save し忘れた書き換えも保存されたように見えるため。
 
-    def __init__(self) -> None:
+    保存した集約がためたイベントは、``handoff`` に渡す。
+    """
+
+    def __init__(self, *, handoff: EventHandoff | None = None) -> None:
         self._by_being: dict[BeingId, dict[str, Episode]] = {}
+        self._handoff = handoff
 
     def add(self, episode: Episode) -> None:
         being_id = episode.being_id
         book = self._by_being.get(being_id, {})
         _require_no_overlap([*book.values(), episode])
-        self._by_being[being_id] = {**book, episode.episode_id: _copy(episode)}
+
+        def store() -> None:
+            self._by_being[being_id] = {**book, episode.episode_id: _copy(episode)}
+
+        save_and_hand_off(episode, self._handoff, store)
 
     def find_by_handle(self, being_id: BeingId, handle: str) -> Episode | None:
         for episode in self._by_being.get(being_id, {}).values():
@@ -66,7 +75,11 @@ class InMemoryEpisodeRepository(EpisodeRepository):
             raise EpisodeConflictException(
                 f"{episode.episode_id!r} is not a later version of the saved episode"
             )
-        book[episode.episode_id] = _copy(episode)
+
+        def store() -> None:
+            book[episode.episode_id] = _copy(episode)
+
+        save_and_hand_off(episode, self._handoff, store)
 
     def replace_all_by_being(self, being_id: BeingId, episodes: Sequence[Episode]) -> None:
         strangers = [e.episode_id for e in episodes if e.being_id != being_id]
@@ -76,7 +89,12 @@ class InMemoryEpisodeRepository(EpisodeRepository):
         if not episodes:
             self._by_being.pop(being_id, None)
             return
+        pending = [e for e in episodes if e.get_events()]
+        if pending and self._handoff is None:
+            raise RuntimeError(f"{len(pending)} episode(s) have pending events but the repository has no handoff")
         self._by_being[being_id] = {e.episode_id: _copy(e) for e in episodes}
+        for episode in pending:
+            save_and_hand_off(episode, self._handoff, lambda: None)
 
 
 __all__ = ["InMemoryEpisodeRepository"]
