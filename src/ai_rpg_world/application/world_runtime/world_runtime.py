@@ -4842,7 +4842,7 @@ def create_world_runtime(
         overflow_sink=ground_overflow_sink,
     )
     # spot-graph 世界専用の drop/pickup サービス。
-    # tile-map 時代の ItemDroppedFromInventoryDropHandler は
+    # タイルマップで品を落とす旧受け手は
     # physical_map 依存で world_runtime では発火しないため、本サービスが
     # SpotInterior.ground_items に直接書き込んで spot-graph 経路で
     # 拾えるようにする。LLM tool 配線とイベント/観測統合はフォロー

@@ -56,8 +56,6 @@ _STANCE: dict[str, str] = {
     "application/world_graph/spot_exploration_application_service.py": _DROP,
     "application/world_graph/spot_graph_scenario_event_stage_service.py": _DROP,
     "application/world_graph/player_interaction_application_service.py": _DROP,
-    "application/world/handlers/item_taken_from_chest_handler.py": _NOT_REACHABLE,
-    "application/world/handlers/monster_death_reward_handler.py": _NOT_REACHABLE,
     "application/world/services/place_object_service.py": _NOT_REACHABLE,
     "application/quest/services/quest_progress_reaction_service.py": _NOT_REACHABLE,
     "domain/world/service/harvest_domain_service.py": _NOT_REACHABLE,

@@ -45,6 +45,8 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
+    MonsterDecidedToMoveEvent,
+    MonsterDecidedToUseSkillEvent,
     TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
@@ -262,48 +264,17 @@ class TestWorldSimulationApplicationService:
             SkillToHitBoxDomainService(),
         )
         monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
-        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
-            MonsterDecidedToInteractHandler,
-        )
-        from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
-        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
-            MonsterDecidedToUseSkillHandler,
-        )
-        from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
         from ai_rpg_world.application.world.services.monster_action_resolver import (
             create_monster_action_resolver_factory,
         )
         from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
         from ai_rpg_world.domain.world.service.skill_selection_policy import FirstInRangeSkillPolicy
-        from ai_rpg_world.infrastructure.events.monster_event_handler_registry import MonsterEventHandlerRegistry
 
         hit_box_factory = HitBoxFactory()
         monster_action_resolver_factory = create_monster_action_resolver_factory(
             caching_pathfinding,
             FirstInRangeSkillPolicy(),
         )
-        monster_decided_to_move_handler = MonsterDecidedToMoveHandler(
-            physical_map_repository=repository,
-            monster_repository=monster_repo,
-        )
-        monster_decided_to_use_skill_handler = MonsterDecidedToUseSkillHandler(
-            physical_map_repository=repository,
-            monster_repository=monster_repo,
-            monster_skill_execution_domain_service=monster_skill_execution_domain_service,
-            hit_box_factory=hit_box_factory,
-            hit_box_repository=hit_box_repo,
-            skill_loadout_repository=skill_loadout_repo,
-        )
-        monster_decided_to_interact_handler = MonsterDecidedToInteractHandler(
-            physical_map_repository=repository,
-        )
-        monster_fed_handler = MonsterFedHandler(monster_repository=monster_repo)
-        MonsterEventHandlerRegistry(
-            monster_decided_to_move_handler,
-            monster_decided_to_use_skill_handler,
-            monster_decided_to_interact_handler,
-            monster_fed_handler,
-        ).register_handlers(event_publisher)
 
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
@@ -1104,9 +1075,9 @@ class TestWorldSimulationApplicationService:
 
         service._movement_service.tick_movement_in_current_unit_of_work.assert_not_called()
 
-    def test_tick_updates_autonomous_actors(self, setup_service):
-        """tickによって自律行動アクター（モンスター）の行動が計画・実行されること（アクティブスポットのみ更新）"""
-        service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+    def test_tick_publishes_monster_move_decision(self, setup_service):
+        """プレイヤーがいるスポットで移動を決めると、移動先を含むイベントが発行される。"""
+        service, _, repository, _, _, _, _, event_publisher, monster_repo, skill_loadout_repo = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1145,16 +1116,18 @@ class TestWorldSimulationApplicationService:
         monster_repo.save(monster)
         skill_loadout_repo.save(loadout)
 
-        # リゾルバが MOVE(2,3) を返すようにモック（decide → 移動イベント → ハンドラで座標更新）
+        # 移動の意思決定からイベントが出るところまでを確かめる。
         move_action = BehaviorAction.move(Coordinate(2, 3))
         fake_resolver = mock.Mock()
         fake_resolver.resolve_action.return_value = move_action
         with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
             service.tick()
 
-        updated_map = repository.find_by_spot_id(spot_id)
-        updated_actor = updated_map.get_object(actor_id)
-        assert updated_actor.coordinate == Coordinate(2, 3)
+        moves = [event for event in event_publisher.get_published_events()
+                 if isinstance(event, MonsterDecidedToMoveEvent)]
+        assert len(moves) == 1
+        assert moves[0].actor_id == actor_id
+        assert moves[0].coordinate == {"x": 2, "y": 3, "z": 0}
 
     def test_tick_publishes_behavior_events_from_monster_aggregate(self, setup_service):
         """tick で自律アクターがモンスターの場合、行動イベントがモンスター集約経由で発行されること（Map に積まれない）"""
@@ -1589,8 +1562,8 @@ class TestWorldSimulationApplicationService:
         assert updated_actor.busy_until == WorldTick(20)
 
     def test_tick_handles_actor_error_gracefully(self, setup_service):
-        """1つのモンスターでエラーが発生しても他のモンスターの更新が継続されること"""
-        service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+        """1体の観測作成が失敗しても、別のモンスターの移動決定イベントは発行される。"""
+        service, _, repository, _, _, _, _, event_publisher, monster_repo, skill_loadout_repo = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1648,9 +1621,11 @@ class TestWorldSimulationApplicationService:
             with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
                 service.tick()
 
-        updated_map = repository.find_by_spot_id(spot_id)
-        assert updated_map.get_object(actor1_id).coordinate == Coordinate(2, 2)
-        assert updated_map.get_object(actor2_id).coordinate == Coordinate(3, 4)
+        moves = [event for event in event_publisher.get_published_events()
+                 if isinstance(event, MonsterDecidedToMoveEvent)]
+        assert len(moves) == 1
+        assert moves[0].actor_id == actor2_id
+        assert moves[0].coordinate == {"x": 3, "y": 4, "z": 0}
 
     def test_tick_domain_exception_converted_to_application_exception(self, setup_service):
         """tick内でDomainExceptionが発生した場合、ApplicationExceptionに変換されて送出されること"""
@@ -2382,9 +2357,9 @@ class TestWorldSimulationApplicationService:
         # まだ移動していないはず
         assert updated.current_coordinate == Coordinate(0, 0, 0)
 
-    def test_tick_executes_monster_skill(self, setup_service):
-        """tickによってモンスターがスキルを使用し、HitBoxが生成されること"""
-        service, _, repository, _, _, hit_box_repo, _, _, monster_repo, skill_loadout_repo = setup_service
+    def test_tick_publishes_monster_skill_decision(self, setup_service):
+        """プレイヤーがいるスポットでスキル使用を決めると、使うスロットを含むイベントが発行される。"""
+        service, _, repository, _, _, _, _, event_publisher, monster_repo, skill_loadout_repo = setup_service
         
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(10) for y in range(10)]
@@ -2442,7 +2417,7 @@ class TestWorldSimulationApplicationService:
         monster.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(0))
         monster_repo.save(monster)
         
-        # リゾルバが USE_SKILL を返すようにモック（decide が MonsterDecidedToUseSkillEvent を発行しハンドラが実行）
+        # スキル使用の意思決定からイベントが出るところまでを確かめる。
         use_skill_action = BehaviorAction(
             action_type=BehaviorActionType.USE_SKILL,
             coordinate=None,
@@ -2453,14 +2428,11 @@ class TestWorldSimulationApplicationService:
         with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
             service.tick()
         
-        # HitBox が 1 つ生成されていること
-        active = hit_box_repo.find_active_by_spot_id(spot_id)
-        assert len(active) == 1
-        assert active[0].owner_id == monster_obj_id
-        assert active[0].skill_id == "1"
-        # モンスターの MP 消費
-        updated_monster = monster_repo.find_by_world_object_id(monster_obj_id)
-        assert updated_monster.mp.value == 90
+        skills = [event for event in event_publisher.get_published_events()
+                  if isinstance(event, MonsterDecidedToUseSkillEvent)]
+        assert len(skills) == 1
+        assert skills[0].actor_id == monster_obj_id
+        assert skills[0].skill_slot_index == 0
 
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)
@@ -3257,50 +3229,6 @@ class TestWorldSimulationApplicationService:
 
             assert npc_on_inactive_id not in build_observation_actor_ids
             assert WorldObjectId(1) in build_observation_actor_ids
-
-        def test_single_map_with_player_behaves_as_before(self, setup_service):
-            """プレイヤーとモンスターが1体いるマップでは decide → 移動イベント → ハンドラで座標が更新されること"""
-            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
-            spot_id = SpotId(1)
-            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
-            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-            actor_id = WorldObjectId(1)
-            physical_map.add_object(WorldObject(
-                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=PlayerId(100)),
-            ))
-            physical_map.add_object(WorldObject(
-                actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
-            ))
-            repository.save(physical_map)
-
-            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
-            skill_loadout_repo.save(loadout)
-            template = MonsterTemplate(
-                template_id=MonsterTemplateId(1),
-                name="M",
-                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
-                reward_info=RewardInfo(0, 0),
-                respawn_info=RespawnInfo(1, True),
-                race=Race.HUMAN,
-                faction=MonsterFactionEnum.ENEMY,
-                description="M",
-                skill_ids=[],
-            )
-            monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
-            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
-            monster_repo.save(monster)
-
-            # リゾルバが MOVE を返すようにモック（decide → MonsterDecidedToMoveEvent → ハンドラで移動）
-            move_action = BehaviorAction.move(Coordinate(2, 3))
-            fake_resolver = mock.Mock()
-            fake_resolver.resolve_action.return_value = move_action
-            with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
-                service.tick()
-
-            updated = repository.find_by_spot_id(spot_id)
-            assert updated.get_object(actor_id).coordinate == Coordinate(2, 3)
 
         def test_active_spot_save_called_once_per_active_map(self, setup_service):
             """アクティブなスポットごとに save が1回だけ呼ばれること（境界）"""

@@ -16,8 +16,6 @@ from ai_rpg_world.application.world.exceptions.command.chest_command_exception i
     ItemNotInPlayerInventoryException,
     PlayerInventoryNotFoundException,
 )
-from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
-from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
 from ai_rpg_world.application.world.services.chest_command_service import ChestCommandService
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
@@ -35,12 +33,12 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     InteractionTypeEnum,
     ObjectTypeEnum,
 )
+from ai_rpg_world.domain.world.event.map_events import ItemStoredInChestEvent, ItemTakenFromChestEvent
 from ai_rpg_world.domain.world.exception.map_exception import MapDomainException
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.infrastructure.events.map_interaction_event_handler_registry import MapInteractionEventHandlerRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
@@ -78,14 +76,6 @@ class TestChestCommandService:
         )
         inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
         map_repo = InMemoryPhysicalMapRepository(data_store, uow)
-        item_repo = Mock()
-        item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
-        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, item_repo, uow)
-        registry = MapInteractionEventHandlerRegistry(
-            item_stored_in_chest_handler=item_stored_handler,
-            item_taken_from_chest_handler=item_taken_handler,
-        )
-        registry.register_handlers(event_publisher)
         uow._event_publisher = event_publisher
         return uow, map_repo, inventory_repo
 
@@ -120,7 +110,7 @@ class TestChestCommandService:
         return pmap, actor_id, chest_id
 
     def test_store_item_in_chest_success(self, service, unit_of_work, map_with_chest_and_actor):
-        """収納成功: マップのチェストにアイテムが入り、インベントリから削除されること"""
+        """所持している品を収納すると、宝箱に入り、収納イベントが発行される。"""
         uow, map_repo, inventory_repo = unit_of_work
         pmap, actor_id, chest_id = map_with_chest_and_actor
         player_id = PlayerId.create(1)
@@ -142,8 +132,10 @@ class TestChestCommandService:
         loaded_map = map_repo.find_by_spot_id(SpotId(1))
         chest_obj = loaded_map.get_object(chest_id)
         assert chest_obj.component.has_item(item_id) is True
-        loaded_inv = inventory_repo.find_by_id(player_id)
-        assert loaded_inv.has_item(item_id) is False
+        events = [event for event in uow._event_publisher.get_published_events()
+                  if isinstance(event, ItemStoredInChestEvent)]
+        assert len(events) == 1
+        assert events[0].item_instance_id == item_id
 
     def test_store_item_in_chest_raises_when_map_not_found(self, service, unit_of_work):
         """マップが見つからない場合は ChestNotFoundException"""
@@ -201,7 +193,7 @@ class TestChestCommandService:
             service.store_item_in_chest(command)
 
     def test_take_item_from_chest_success(self, service, unit_of_work, map_with_chest_and_actor):
-        """取得成功: チェストからアイテムが減り、インベントリに追加されること"""
+        """宝箱にある品を取得すると、宝箱から取り除かれ、取得イベントが発行される。"""
         uow, map_repo, inventory_repo = unit_of_work
         pmap, actor_id, chest_id = map_with_chest_and_actor
         item_id = ItemInstanceId.create(50)
@@ -225,8 +217,10 @@ class TestChestCommandService:
         loaded_map = map_repo.find_by_spot_id(SpotId(1))
         chest_after = loaded_map.get_object(chest_id)
         assert chest_after.component.has_item(item_id) is False
-        loaded_inv = inventory_repo.find_by_id(player_id)
-        assert loaded_inv.has_item(item_id) is True
+        events = [event for event in uow._event_publisher.get_published_events()
+                  if isinstance(event, ItemTakenFromChestEvent)]
+        assert len(events) == 1
+        assert events[0].item_instance_id == item_id
 
     def test_take_item_from_chest_raises_when_map_not_found(self, service, unit_of_work):
         """マップが見つからない場合は ChestNotFoundException"""
