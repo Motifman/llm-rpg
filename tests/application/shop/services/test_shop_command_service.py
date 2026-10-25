@@ -1,5 +1,6 @@
 """ShopCommandServiceのテスト"""
 import pytest
+from tests.support.command_scope_stack import CommandScopeTestStack
 
 from ai_rpg_world.application.shop.contracts.commands import (
     CloseShopCommand,
@@ -61,7 +62,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
     InMemoryPlayerStatusRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_shop_repository import InMemoryShopRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 def _listing_proj_from_item(item: ItemAggregate) -> ShopListingProjection:
@@ -110,13 +110,8 @@ class TestShopCommandService:
     @pytest.fixture
     def setup_service(self):
         """サービスとリポジトリのセットアップ"""
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        unit_of_work, _ = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
         data_store = InMemoryDataStore()
+        unit_of_work = event_publisher = CommandScopeTestStack(data_store)
 
         shop_repository = InMemoryShopRepository(data_store, unit_of_work)
         inventory_repository = InMemoryPlayerInventoryRepository(data_store, unit_of_work)

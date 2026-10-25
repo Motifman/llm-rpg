@@ -344,13 +344,14 @@ def test_foreign_namespace_target_does_not_create_a_reply(h):
 
 def test_existing_command_emitters_supply_identity_and_source_metadata():
     """旧サービスの実際のフォロー・いいねも発生時の不変IDと出典を渡せるが、新publishは経由しない。"""
+    from tests.support.command_scope_stack import CommandScopeTestStack
+
     from ai_rpg_world.application.social.contracts.commands import CreatePostCommand, FollowUserCommand, LikePostCommand
     from ai_rpg_world.application.social.services.post_command_service import PostCommandService
     from ai_rpg_world.application.social.services.user_command_service import UserCommandService
-    from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
     store = InMemoryDataStore()
     store.sns_users.clear(); store.sns_username_to_user_id.clear(); store.posts.clear(); store.replies.clear()
-    unit_of_work, publisher = InMemoryUnitOfWork.create_with_event_publisher(data_store=store)
+    unit_of_work = publisher = CommandScopeTestStack(store)
     users = InMemorySnsUserRepository(store, unit_of_work)
     posts = InMemoryPostRepository(store, unit_of_work)
     for number in (1, 2):
