@@ -17,35 +17,14 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
-    """SpotGraphCurrentStateFormatter は spot_graph_snapshot と
-    current_game_time_label しか見ないが、PlayerCurrentStateDto は他に
-    多数の必須フィールドを持つので合理的な空デフォルトで埋める。
-    """
+    """現行のスポット状態を現在状態DTOへ載せる。"""
     return PlayerCurrentStateDto(
         player_id=1,
         player_name="tester",
         current_spot_id=1,
-        current_spot_name="dummy",
-        current_spot_description="",
-        x=0,
-        y=0,
-        z=0,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="CLEAR",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 

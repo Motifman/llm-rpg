@@ -17,7 +17,6 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(
@@ -33,23 +32,6 @@ def _make_dto(
         player_id=1,
         player_name="tester",
         current_spot_id=1,
-        current_spot_name="dummy",
-        current_spot_description="",
-        x=0,
-        y=0,
-        z=0,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="CLEAR",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
         tick_budget_remaining=tick_budget_remaining,
         minutes_per_tick=minutes_per_tick,

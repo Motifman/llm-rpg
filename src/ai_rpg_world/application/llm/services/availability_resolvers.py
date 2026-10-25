@@ -43,22 +43,6 @@ class EpisodeRecallAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
-class WhisperAvailabilityResolver(IAvailabilityResolver):
-    """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
-
-    def is_available(
-        self,
-        context: PlayerCurrentStateDto | None,
-    ) -> bool:
-        if context is None:
-            return False
-        visible = _world(context).visible_objects or []
-        return any(
-            obj.object_kind == "player" and not obj.is_self
-            for obj in visible
-        )
-
-
 class SayAvailabilityResolver(IAvailabilityResolver):
     """発言ツールは、現在状態が取得できているときに利用可能。"""
 

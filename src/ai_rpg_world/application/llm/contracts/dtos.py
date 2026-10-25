@@ -636,4 +636,4 @@ class LlmUiContextDto:
 
 
 # ToolAvailabilityContext は PlayerCurrentStateDto をそのまま利用する。
-# ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
+# 利用可否判定には場所の文脈・補助情報・アプリ状態を、スポットの表示には spot_graph_snapshot を使う。

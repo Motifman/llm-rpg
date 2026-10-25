@@ -19,7 +19,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphSubLocationEntry,
     SpotGraphWeatherEntry,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
@@ -27,23 +26,6 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
         player_id=1,
         player_name="P",
         current_spot_id=snap.current_spot_id,
-        current_spot_name=snap.current_spot_name,
-        current_spot_description=snap.current_spot_description,
-        x=None,
-        y=None,
-        z=None,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=0,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=snap,
     )
 
@@ -301,23 +283,6 @@ def test_spot_graph_formatter_rejects_missing_snapshot() -> None:
         player_id=1,
         player_name="P",
         current_spot_id=1,
-        current_spot_name="広場",
-        current_spot_description="",
-        x=1,
-        y=2,
-        z=0,
-        current_player_count=0,
-        current_player_ids=set(),
-        connected_spot_ids=set(),
-        connected_spot_names=set(),
-        weather_type="晴れ",
-        weather_intensity=0.0,
-        current_terrain_type=None,
-        visible_objects=[],
-        view_distance=3,
-        available_moves=None,
-        total_available_moves=None,
-        attention_level=AttentionLevel.FULL,
         spot_graph_snapshot=None,
     )
     with pytest.raises(ValueError, match="spot_graph_snapshot is required"):
