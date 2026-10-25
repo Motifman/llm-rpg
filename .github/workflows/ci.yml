@@ -68,6 +68,9 @@ jobs:
       - name: Run ruff
         run: uv run --frozen ruff check src tests scripts
 
+      - name: Check ruff format
+        run: uv run --frozen ruff format --check src tests scripts
+
   typecheck:
     # mypy の型検査。ruff とは別 job にする。静的検査の中でも、型の不整合と
     # 書き方の違反は原因も直し方も違うので、job 名で切り分けられるようにする。

@@ -10,8 +10,8 @@ help:
 	@echo "  make install      - 依存関係をインストール"
 	@echo "  make dev-install  - 開発用依存関係をインストール"
 	@echo "  make test         - テストを実行"
-	@echo "  make lint         - ruff で静的検査 (対象ルールは pyproject.toml)"
-	@echo "  make lint-fix     - ruff の自動修正を適用"
+	@echo "  make lint         - ruff で静的検査と書式の確認 (対象ルールは pyproject.toml)"
+	@echo "  make lint-fix     - ruff の自動修正と書式の整形を適用"
 	@echo "  make typecheck    - mypy で型検査 (対象は pyproject.toml の files)"
 	@echo "  make test-cov     - カバレッジ付きでテストを実行"
 	@echo "  make test-html    - HTMLカバレッジレポートを生成"
@@ -42,9 +42,11 @@ test:
 # 静的検査。検査対象のルールは pyproject.toml の [tool.ruff.lint] にある。
 lint:
 	uv run --extra dev ruff check src tests scripts
+	uv run --extra dev ruff format --check src tests scripts
 
 lint-fix:
 	uv run --extra dev ruff check --fix src tests scripts
+	uv run --extra dev ruff format src tests scripts
 
 # 型検査。検査対象の文脈は pyproject.toml の [tool.mypy] files にある。
 typecheck:
