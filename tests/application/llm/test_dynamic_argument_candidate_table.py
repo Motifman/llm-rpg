@@ -299,27 +299,6 @@ def test_vote_keeps_abstention_when_no_player_target_exists() -> None:
     assert '- vote.target_player_label: ""' in snapshot["rendered"]
 
 
-def test_exact_label_specs_follow_the_resolver_target_kinds() -> None:
-    """会話・観察・採集中断は各resolverが受ける対象種別だけを候補にする。"""
-    context = ToolRuntimeContextDto(
-        targets={
-            "P1": ToolRuntimeTargetDto(label="P1", kind="player", display_name="仲間"),
-            "N1": ToolRuntimeTargetDto(label="N1", kind="npc", display_name="案内人"),
-            "R1": ToolRuntimeTargetDto(label="R1", kind="resource", display_name="薬草群"),
-        }
-    )
-
-    snapshot = build_dynamic_argument_candidate_snapshot(
-        context, {"conversation_advance", "world_inspect_target", "harvest_cancel"}
-    )
-    candidates = {
-        (entry["tool"], entry["argument"]): entry["values"]
-        for entry in snapshot["entries"]
-    }
-
-    assert candidates[("conversation_advance", "target_label")] == ["N1"]
-    assert candidates[("world_inspect_target", "target_label")] == ["N1", "R1"]
-    assert candidates[("harvest_cancel", "target_label")] == ["R1"]
 
 
 def test_candidate_table_is_inserted_immediately_before_action_instruction() -> None:

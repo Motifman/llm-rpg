@@ -9,7 +9,7 @@ API:
         core=PromptBuilderCoreServices(...),     # 必須インフラ
         sections=PromptSectionProviders(...),    # オプション section 群
         limits=PromptLimits(...),                # 数値設定・action_instruction
-        ui_context_builder=None,
+        ui_context_builder=ui_context_builder,
         current_tick_provider=None,
     )
 
@@ -19,7 +19,7 @@ API:
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -35,9 +35,6 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
-)
-from ai_rpg_world.domain.player.repository.player_profile_repository import (
-    PlayerProfileRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

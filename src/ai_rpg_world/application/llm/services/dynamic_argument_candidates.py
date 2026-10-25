@@ -24,39 +24,6 @@ from ai_rpg_world.application.llm.services._argument_resolvers.target_lookup imp
 # runtime_context のラベルを require_target_type で直接引くツール。値には
 # display_name ではなく、実際に resolver が受理する label を載せる。
 _EXACT_LABEL_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
-    "world_inspect_item": (("inventory_item_label", ("inventory_item",)),),
-    "world_inspect_target": (("target_label", ("npc", "monster", "chest", "door", "resource", "object")),),
-    "world_interact": (("target_label", ("npc", "chest", "door", "object")),),
-    "harvest_start": (("target_label", ("resource",)),),
-    "harvest_cancel": (("target_label", ("active_harvest", "resource")),),
-    "world_change_attention": (("level_label", ("attention_level",)),),
-    "conversation_advance": (
-        ("target_label", ("npc",)),
-        ("choice_label", ("conversation_choice",)),
-    ),
-    "world_place_object": (("inventory_item_label", ("inventory_item",)),),
-    "world_drop_item": (("inventory_item_label", ("inventory_item",)),),
-    "world_chest_store": (
-        ("target_label", ("chest",)),
-        ("inventory_item_label", ("inventory_item",)),
-    ),
-    "world_chest_take": (
-        ("target_label", ("chest",)),
-        ("chest_item_label", ("chest_item",)),
-    ),
-    "move_to_destination": (("destination_label", ("destination",)),),
-    "world_pursue_target": (("target_label", ("player", "npc", "monster")),),
-    "combat_use_skill": (
-        ("skill_label", ("skill",)),
-        ("target_label", ("player", "npc", "monster")),
-    ),
-    "skill_equip": (
-        ("skill_label", ("skill_equip_candidate",)),
-        ("slot_label", ("skill_equip_slot",)),
-    ),
-    "skill_accept_proposal": (("proposal_label", ("skill_proposal",)),),
-    "skill_reject_proposal": (("proposal_label", ("skill_proposal",)),),
-    "skill_activate_awakened_mode": (("awakened_action_label", ("awakened_action",)),),
     "quest_accept": (("quest_label", ("quest",)),),
     "quest_cancel": (("quest_label", ("quest",)),),
     "quest_approve": (("quest_label", ("quest",)),),
@@ -108,8 +75,6 @@ _DISPLAY_NAME_SPECS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
 
 
 _OPTIONAL_ARGUMENTS = {
-    ("combat_use_skill", "target_label"),
-    ("conversation_advance", "choice_label"),
     ("quest_issue", "guild_label"),
     ("speak", "target_label"),
     ("trade_accept", "offerer_player_label"),

@@ -5,7 +5,6 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 )
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     NoOpAvailabilityResolver,
-    SetDestinationAvailabilityResolver,
     WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.services.available_tools_provider import (
@@ -38,15 +37,11 @@ from ai_rpg_world.application.llm.services.tool_catalog import (
 from ai_rpg_world.application.llm.services.tool_command_mapper import (
     ToolCommandMapper,
 )
-from ai_rpg_world.application.llm.services.ui_context_builder import (
-    DefaultLlmUiContextBuilder,
-)
 
 __all__ = [
     "DefaultActionResultStore",
     "DefaultAvailableToolsProvider",
     "DefaultCurrentStateFormatter",
-    "DefaultLlmUiContextBuilder",
     "DefaultGameToolRegistry",
     "DefaultToolArgumentResolver",
     "DefaultPromptBuilder",
@@ -55,7 +50,6 @@ __all__ = [
     "SetBasedLlmPlayerResolver",
     "NoOpAvailabilityResolver",
     "SectionBasedContextFormatStrategy",
-    "SetDestinationAvailabilityResolver",
     "StubLlmClient",
     "ToolCommandMapper",
     "WhisperAvailabilityResolver",

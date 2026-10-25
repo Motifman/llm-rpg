@@ -5,12 +5,10 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import IToolArgumentResolver
 from ai_rpg_world.application.llm.services._argument_resolvers import (
-    CombatSkillArgumentResolver,
     GuildShopTradeArgumentResolver,
-    MovementArgumentResolver,
     QuestArgumentResolver,
+    SpeechArgumentResolver,
     SpotGraphArgumentResolver,
-    WorldArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
@@ -62,9 +60,7 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         )
         self._resolvers: list[_ArgumentResolver] = [
             SpotGraphArgumentResolver(),
-            MovementArgumentResolver(),
-            WorldArgumentResolver(),
-            CombatSkillArgumentResolver(),
+            SpeechArgumentResolver(),
             QuestArgumentResolver(objective_resolver),
             GuildShopTradeArgumentResolver(),
         ]

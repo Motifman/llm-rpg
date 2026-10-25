@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
+    ILlmUiContextBuilder,
     IRecentEventsFormatter,
     IShortTermMemory,
     ISystemPromptBuilder,
@@ -72,7 +73,7 @@ class TestPromptBuilderLoopWarningPrefix:
 
     def test_loop_guard_uninjected_empty_string(self) -> None:
         """tool_call_loop_guard=None なら警告 prefix は出ない (= 既存挙動)。"""
-        builder = DefaultPromptBuilder(_make_core())
+        builder = DefaultPromptBuilder(_make_core(), ui_context_builder=MagicMock(spec=ILlmUiContextBuilder))
         assert builder._build_loop_warning_prefix(_pid(1)) == ""
 
     def test_one_empty_string(self) -> None:
@@ -80,7 +81,7 @@ class TestPromptBuilderLoopWarningPrefix:
         buf = DefaultObservationContextBuffer()
         guard = ToolCallLoopGuardService(buf, lambda: None)
         guard.record_and_check(_pid(1), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
-        builder = DefaultPromptBuilder(_make_core(), tool_call_loop_guard=guard)
+        builder = DefaultPromptBuilder(_make_core(), ui_context_builder=MagicMock(spec=ILlmUiContextBuilder), tool_call_loop_guard=guard)
         assert builder._build_loop_warning_prefix(_pid(1)) == ""
 
     def test_two_tool_count_prefix_included(self) -> None:
@@ -90,7 +91,7 @@ class TestPromptBuilderLoopWarningPrefix:
         pid = _pid(1)
         guard.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         guard.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
-        builder = DefaultPromptBuilder(_make_core(), tool_call_loop_guard=guard)
+        builder = DefaultPromptBuilder(_make_core(), ui_context_builder=MagicMock(spec=ILlmUiContextBuilder), tool_call_loop_guard=guard)
         prefix = builder._build_loop_warning_prefix(pid)
         assert TOOL_NAME_SPOT_GRAPH_TRAVEL_TO in prefix
         assert "2" in prefix
@@ -103,11 +104,24 @@ class TestPromptBuilderLoopWarningPrefix:
         guard = ToolCallLoopGuardService(buf, lambda: None)
         guard.record_and_check(_pid(1), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         guard.record_and_check(_pid(1), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
-        builder = DefaultPromptBuilder(_make_core(), tool_call_loop_guard=guard)
+        builder = DefaultPromptBuilder(_make_core(), ui_context_builder=MagicMock(spec=ILlmUiContextBuilder), tool_call_loop_guard=guard)
         # player 2 はまだ何もしていない
         assert builder._build_loop_warning_prefix(_pid(2)) == ""
 
     def test_guard_raises_type_error(self) -> None:
         """型違いの guard を渡したら TypeError。"""
         with pytest.raises(TypeError):
-            DefaultPromptBuilder(_make_core(), tool_call_loop_guard="not a guard")  # type: ignore[arg-type]
+            DefaultPromptBuilder(_make_core(), ui_context_builder=MagicMock(spec=ILlmUiContextBuilder), tool_call_loop_guard="not a guard")  # type: ignore[arg-type]
+
+
+def test_prompt_builder_requires_ui_context_builder() -> None:
+    """UI構築器を省略すると、存在しないタイル実装へ戻らず構築時に拒否する。"""
+    with pytest.raises(TypeError, match="ui_context_builder"):
+        DefaultPromptBuilder(_make_core())
+
+
+@pytest.mark.parametrize("invalid_builder", [None, "invalid"])
+def test_prompt_builder_rejects_invalid_ui_context_builder(invalid_builder) -> None:
+    """UI構築器にNoneか別の型を渡すと、構築時にTypeErrorで拒否する。"""
+    with pytest.raises(TypeError, match="ui_context_builder"):
+        DefaultPromptBuilder(_make_core(), ui_context_builder=invalid_builder)
