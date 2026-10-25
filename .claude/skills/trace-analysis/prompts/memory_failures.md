@@ -14,7 +14,7 @@
 - `short_term_summary_generated`: L4 short-term summary 更新
 - `short_term_long_summary_generated`: L5 long summary 生成。L5 は #1824 で消したので、それより後の trace には出ない (出ないのが正常)
 - `being_memo`: メモ帳への書き込み。`payload.applied` / `payload.rejected`
-- `episode_writing`: 目次つきのエピソードの書き起こし。`payload.trigger` (compaction / leaving) / `payload.outcome` (written / failed / skipped) / `payload.episodes`
+- `episode_writing`: 目次つきのエピソードの書き起こし。`payload.trigger` (compaction / leaving / fold) / `payload.outcome` (written / failed / skipped) / `payload.episodes`。fold (Being の短期記憶が古いターンのいきさつを頼んだとき) は `player_id` を持たず `payload.being_id` で引く。fold で書けなかったときは `outcome: failed` ではなく `async_event_delivery_failed` (`payload.event_type` が `FoldRequested`) に残る
 - `episode_index_shown`: 毎ターンのプロンプトに出した目次。`payload.shown_handles` / `payload.total_count`
 - `episode_recall`: 呼び名でエピソードを呼び出した。`payload.outcome` (recalled / rejected / failed) / `payload.results`
 - `episode_index_revision`: 本人が目次を直した。`payload.before` / `payload.after`

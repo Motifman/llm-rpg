@@ -171,7 +171,11 @@ class TraceEventKind:
     # appearance (それまでの呼び方) / how (「名乗り」か「呼びかけ」)。
     NAME_LEARNED = "name_learned"
     # 目次つきのエピソードを書き起こした (#1626)。1 回の書き起こしごとに 1 件。
-    # payload: being_id / trigger (compaction か leaving) / event_count /
+    # trigger が fold (Being の短期記憶が古いターンのいきさつを頼んだとき。design_decisions
+    # D1824-14) なら player_id を持たない。書けなかったときは async_event_delivery_failed に残る。
+    # event_count は、fold なら頼んだ範囲の出来事の数 (行にならない結果の来ない 1 手も数える)、
+    # それ以外なら【直近の出来事】の行の数。
+    # payload: being_id / trigger (compaction か leaving か fold) / event_count /
     # outcome (written / failed / skipped) / episode_count / dropped_count /
     # written_turn / environment_name / episodes: list[{handle, summary,
     # recall_when, body_length, truncated: {鍵: 切り詰める前の長さ}}] /

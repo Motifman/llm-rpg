@@ -4130,6 +4130,64 @@ def _wire_backstory_writing(
     )
 
 
+def _wire_episode_writing(
+    cfg: ResolvedLlmRuntimeConfig,
+    *,
+    runtime: WorldRuntime,
+    dispatcher: EventDispatcher[None],
+    being_id_of: Callable[[PlayerId], BeingId | None],
+    persona_of_player: Callable[[int], tuple[str, str]],
+) -> None:
+    """短期記憶が古いターンのいきさつを頼んだとき、その範囲のエピソードを非同期の配送で書き起こし、その Being のターンの始めに記憶に加える (design_decisions D1824-14)。"""
+    from ai_rpg_world.application.being.being_episode_writing import (
+        BeingEpisodeWriting,
+        WriterCircumstances,
+    )
+    from ai_rpg_world.application.observation.being_contract import (
+        environment_entry_for_player,
+    )
+    from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
+    from ai_rpg_world.being.domain.short_term_memory import FoldRequested
+    from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
+    from ai_rpg_world.eventing import AsyncDelivery
+    from ai_rpg_world.eventing.delivery import DeliveryChannel, DeliveryGuarantee
+
+    def _circumstances_of(being_id: BeingId) -> WriterCircumstances:
+        for player_id in runtime.get_player_ids():
+            if being_id_of(player_id) == being_id:
+                self_name, persona = persona_of_player(int(player_id.value))
+                environment = environment_entry_for_player(runtime.scenario, player_id)
+                return WriterCircumstances(
+                    self_name=self_name, persona=persona, environment_name=environment.environment_name
+                )
+        raise LookupError(f"no player acts as {being_id.value}")
+
+    writing = BeingEpisodeWriting(
+        writer=LlmEpisodeWriter(_episode_writing_completion(cfg, runtime=runtime)),
+        add_episodes=AddEpisodesToMemory(runtime._being_episode_store),
+        circumstances_of=_circumstances_of,
+        trace_recorder_provider=lambda: runtime._trace_recorder,
+        current_tick_provider=lambda: runtime.current_tick(),
+    )
+    dispatcher.register_after_commit(
+        FoldRequested,
+        writing.note,
+        channel=DeliveryChannel.AUXILIARY,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    dispatcher.register_after_commit(
+        FoldRequested,
+        writing.write,
+        channel=DeliveryChannel.AUXILIARY,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+        asynchronous=AsyncDelivery(
+            executor=runtime.async_event_executor,
+            recipient_key=lambda event: event.being_id.value,
+            apply_result=writing.apply,
+        ),
+    )
+
+
 def _build_persona_resolver(
     *,
     scenario: Any,
@@ -4183,6 +4241,24 @@ def _record_meetings_at_spawn(
                     acquaintances.record_meeting(PlayerId(spawn.player_id), other.name)
 
 
+def _episode_writing_completion(cfg: ResolvedLlmRuntimeConfig, *, runtime: WorldRuntime) -> Any:
+    """#1626: 書き起こしの LLM の呼び出しの口を組む。LiteLLM が組めなければ起動を止める。"""
+    from ai_rpg_world.application.llm.services.stub_episode_writing_completion import (
+        StubEpisodeWritingCompletion,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_config,
+    )
+    from ai_rpg_world.being.infrastructure.llm_episode_writer import EpisodeWritingCompletion
+
+    if cfg.llm_client_kind != "litellm":
+        return StubEpisodeWritingCompletion()
+    client = create_llm_client_from_config(cfg, aux_call_sink=runtime._aux_llm_call_sink)
+    if not isinstance(client, EpisodeWritingCompletion):
+        raise RuntimeError("episode writing needs an LLM client that can write episodes")
+    return client
+
+
 def _build_player_episode_writing(
     cfg: ResolvedLlmRuntimeConfig,
     *,
@@ -4190,37 +4266,17 @@ def _build_player_episode_writing(
     turn_reader: MemoryTurnReader,
     persona_of: Callable[[int], tuple[str, str]],
 ) -> Any:
-    """#1626: 書き起こしの部品を組む。LiteLLM が組めなければ起動を止める。"""
+    """#1626: 今の短期記憶を畳むときと、環境を離れるときの書き起こしの部品を組む。"""
     from ai_rpg_world.application.being.player_episode_writing import (
         PlayerEpisodeWriting,
-    )
-    from ai_rpg_world.application.llm.services.stub_episode_writing_completion import (
-        StubEpisodeWritingCompletion,
-    )
-    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
-        create_llm_client_from_config,
     )
     from ai_rpg_world.application.observation.being_contract import (
         environment_entry_for_player,
     )
     from ai_rpg_world.being.application.episode_writing import AddEpisodesToMemory
-    from ai_rpg_world.being.infrastructure.llm_episode_writer import (
-        EpisodeWritingCompletion,
-        LlmEpisodeWriter,
-    )
+    from ai_rpg_world.being.infrastructure.llm_episode_writer import LlmEpisodeWriter
 
-    completion: EpisodeWritingCompletion
-    if cfg.llm_client_kind == "litellm":
-        client = create_llm_client_from_config(
-            cfg, aux_call_sink=runtime._aux_llm_call_sink
-        )
-        if not isinstance(client, EpisodeWritingCompletion):
-            raise RuntimeError(
-                "episode writing needs an LLM client that can write episodes"
-            )
-        completion = client
-    else:
-        completion = StubEpisodeWritingCompletion()
+    completion = _episode_writing_completion(cfg, runtime=runtime)
 
     def _being_id_of(player_id: PlayerId) -> BeingId | None:
         acting = runtime._acting_being_for(player_id)
@@ -7121,6 +7177,13 @@ def create_world_runtime(
         persona_of=persona_of_player,
     )
     _wire_backstory_writing(
+        config,
+        runtime=runtime,
+        dispatcher=being_dispatcher,
+        being_id_of=_being_id_of,
+        persona_of_player=persona_of_player,
+    )
+    _wire_episode_writing(
         config,
         runtime=runtime,
         dispatcher=being_dispatcher,

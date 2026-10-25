@@ -147,3 +147,61 @@ class TestBackstoryWritingInTheRuntime:
         assert (memory.backstories, memory.request is not None) == ((), True)
         assert len(recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)) == 1
         assert recorder.payloads(TraceEventKind.BEING_BACKSTORY_WRITTEN) == []
+
+
+class TestEpisodeWritingInTheRuntime:
+    """本番の runtime で、短期記憶が古いターンのいきさつを頼んだとき、その範囲のエピソードが裏で書き起こされ、その Being のターンの始めに記憶に加わることを保証する (design_decisions D1824-14)。"""
+
+    @staticmethod
+    def _fold(runtime, being_id, *, turns: range, fold_at: int) -> None:
+        store = runtime._being_short_term_memory_store
+        memory = store.get(being_id)
+        for turn in turns:
+            memory.perceive(_seen(), current_turn=turn)
+        memory.fold(current_turn=fold_at)
+        store.save(memory)
+
+    def test_requested_range_is_written_as_episodes_at_the_turn_entry(self) -> None:
+        """古いターンのいきさつを頼んで保存すると、その範囲のエピソード (スタブ) が、その Being の結果を反映したときに記憶に加わり、episode_writing が trigger=fold で残る。反映するまでは加わらない。"""
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._fold(runtime, being_id, turns=range(0, 20), fold_at=20)
+        runtime.async_event_executor.shutdown(timeout=5)
+        assert runtime._being_episode_store.list_by_being(being_id) == ()
+
+        runtime.apply_async_results(player)
+
+        (episode,) = runtime._being_episode_store.list_by_being(being_id)
+        assert (episode.body.startswith("(スタブ) "), episode.written_turn) == (True, 20)
+        (payload,) = [p for p in recorder.payloads(TraceEventKind.EPISODE_WRITING) if p["trigger"] == "fold"]
+        assert (payload["being_id"], payload["outcome"], payload["episode_count"]) == (being_id.value, "written", 1)
+
+    def test_backstory_requested_again_does_not_write_episodes_again(self) -> None:
+        """いきさつが届かずに同じ範囲を頼み直しても、エピソードは書き起こし直さず、書き起こしの失敗も残らない。"""
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._fold(runtime, being_id, turns=range(0, 20), fold_at=20)
+        self._fold(runtime, being_id, turns=range(20, 30), fold_at=30)
+        runtime.async_event_executor.shutdown(timeout=5)
+
+        runtime.apply_async_results(player)
+
+        assert len(runtime._being_episode_store.list_by_being(being_id)) == 1
+        assert recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED) == []
+
+    def test_failed_writing_reaches_the_trace_and_adds_nothing(self, monkeypatch) -> None:
+        """LLM の応答が崩れてエピソードを書けなければ async_event_delivery_failed が残り、記憶には何も加わらない。"""
+        monkeypatch.setattr(
+            "ai_rpg_world.application.llm.services.stub_episode_writing_completion.StubEpisodeWritingCompletion.complete_episode_writing_json",
+            lambda self, messages: "JSON ではない応答",
+        )
+        runtime, recorder, being_id = _runtime()
+        player = runtime.get_player_ids()[0]
+        self._fold(runtime, being_id, turns=range(0, 20), fold_at=20)
+        runtime.async_event_executor.shutdown(timeout=5)
+
+        runtime.apply_async_results(player)
+
+        assert runtime._being_episode_store.list_by_being(being_id) == ()
+        (failure,) = recorder.payloads(TraceEventKind.ASYNC_EVENT_DELIVERY_FAILED)
+        assert failure["event_type"] == "FoldRequested"
