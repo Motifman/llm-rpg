@@ -50,7 +50,7 @@ body:
     attributes:
       label: 設計原則と制約
       description: 関連する設計判断、守るべき入口、互換性、性能、運用上の制約を書いてください。
-      placeholder: docs/design_decisions.md の #…、docs/agent_design_principles.md の…に従う。
+      placeholder: docs/design_decisions/D<issue番号>.md、docs/agent_design_principles.md の該当箇所に従う。
     validations:
       required: true
 

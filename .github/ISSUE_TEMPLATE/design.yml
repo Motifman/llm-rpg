@@ -69,5 +69,5 @@ body:
     attributes:
       label: 完了時の記録
       options:
-        - label: 新しい設計判断を `docs/design_decisions.md` または該当文書へ反映する
+        - label: 新しい設計判断を `docs/design_decisions/D<issue番号>.md` または該当文書へ反映する
           required: true
