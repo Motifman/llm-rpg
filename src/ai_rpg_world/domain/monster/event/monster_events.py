@@ -69,34 +69,6 @@ class MonsterMpRecoveredEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     current_mp: int
 
 
-@dataclass(frozen=True)
-class MonsterFedEvent(BaseDomainEvent[WorldObjectId, str]):
-    """モンスターが Harvestable で採食したイベント。ハンドラが record_feed と餌場記憶を更新する。"""
-    actor_id: WorldObjectId
-    target_id: WorldObjectId
-    target_coordinate: Coordinate
-
-    @classmethod
-    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
-    # 原理的に非互換になる。狭めているのは、このイベントが必要とする 3 つの
-    # 値を呼び出し側で検査させるため。
-    def create(  # type: ignore[override]
-        cls,
-        aggregate_id: WorldObjectId,
-        aggregate_type: str,
-        actor_id: WorldObjectId,
-        target_id: WorldObjectId,
-        target_coordinate: Coordinate,
-    ) -> "MonsterFedEvent":
-        return super().create(
-            aggregate_id=aggregate_id,
-            aggregate_type=aggregate_type,
-            actor_id=actor_id,
-            target_id=target_id,
-            target_coordinate=target_coordinate,
-        )
-
-
 # モンスターの行動状態変化イベント（Monster 集約から発行）
 @dataclass(frozen=True)
 class ActorStateChangedEvent(BaseDomainEvent[WorldObjectId, str]):
