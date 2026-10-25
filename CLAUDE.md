@@ -86,7 +86,7 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 
 ### プロンプトの本文にツールの名前を書くとき
 
-そのツールを出すかどうかの判断 (`src/ai_rpg_world/application/llm/tool_exposure.py`) を通す。ツールの一覧から消したのに本文が勧め続けると、エージェントは無いツールを呼ぶ。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、ツールを 1 つずつ無効にして、プロンプトに名前が残らないことを総当たりで見張る。
+そのツールがこの世界で使えるかを `ToolExposure.is_exposed` (`src/ai_rpg_world/application/llm/tool_exposure.py`) で確かめ、使えるときだけ書く。ツールの一覧から消したのに本文が勧め続けると、エージェントは無いツールを呼ぶ。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、ツールを 1 つずつ無効にして、プロンプトに名前が残らないことを総当たりで見張る。
 
 ## セットアップとテスト実行
 
@@ -124,13 +124,13 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 
 現在の実装への入口と、旧タイルマップから残した領域は [世界の現在の構成](docs/game/world_architecture.md) を参照してください。
 
-### 領域の境界
+### Bounded Context
 
-境界を守れている領域は Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とは `being/contract` の型だけで結びます。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
+Bounded Context として境界を守れているのは Being だけです。経験を持つ主体の記憶の本体は、`domain/` の外のトップレベルのパッケージ `src/ai_rpg_world/being/` にあります。知り合い・目次つきのエピソード・メモ帳・短期記憶を持ち、環境 (ゲーム) とやりとりするときは `being/contract` の型だけを使います。ゲームのパッケージを import しないことは `tests/architecture/test_being_package_import_boundary.py` が見張ります (移し替え #1469 が終わるまでは `domain/being` だけを一時的に許す)。
 
 `BeingId` をキーに持つ保存先を足すときは、同じ PR で Being の snapshot (`BeingMemorySnapshotService`) まで配線します。配線を忘れると、run を止めて再開したときに記憶が静かに途切れます。キーを足すところまでやって読み書きを忘れた場合は起動時に止まりますが、キーごと忘れた場合はどの検査も気づきません (`docs/design_decisions.md` の #27)。足す前に保存した snapshot も読めるようにするなら、`ADDED_PAYLOAD_KEYS` にも足します (D1824-6)。
 
-ゲームの側は、`domain/` の下に領域ごとのフォルダ (`world_graph`、`player`、`monster` など) がありますが、境界はまだ守れていません。境界の引き直しは、シナリオエンジンのモデリング (#1339) で行います。
+ゲームの側は、`domain/` の下をフォルダ (`world_graph`、`player`、`monster` など) に分けていますが、Bounded Context としての境界はまだ守れていません。境界の引き直しは、シナリオエンジンのモデリング (#1339) で行います。
 
 エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換され短期記憶へ入る (短期記憶を畳むときと環境を離れるときに、本人がエピソードを書き起こす) → WebSocket で観戦者に配信。詳細は `application/llm/services/world_llm_turn/` (Phase A / B とツールの実行) と `application/llm/services/prompt_builder.py`。
 
