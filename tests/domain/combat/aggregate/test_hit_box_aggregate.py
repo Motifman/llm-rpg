@@ -498,3 +498,39 @@ class TestHitBoxAggregate:
             assert len(events) == 1
             assert isinstance(events[0], HitBoxDeactivatedEvent)
             assert events[0].reason == "expired"
+
+
+def test_hit_box_get_aggregated_events_deduplicates_same_payload() -> None:
+    """同じ移動内容のイベントが2件あるとき、集約した結果には1件だけ残る。"""
+    hit_box_id = HitBoxId.create(1)
+
+    hit_box = HitBoxAggregate.create(
+        hit_box_id=hit_box_id,
+        spot_id=SpotId(1),
+        owner_id=WorldObjectId(99),
+        shape=HitBoxShape.single_cell(),
+        initial_coordinate=Coordinate(0, 0, 0),
+        start_tick=WorldTick(0),
+        duration=10,
+    )
+    hit_box.clear_events()
+
+    moved_a = HitBoxMovedEvent.create(
+        aggregate_id=hit_box_id,
+        aggregate_type="HitBoxAggregate",
+        from_coordinate=Coordinate(0, 0, 0),
+        to_coordinate=Coordinate(1, 0, 0),
+    )
+    moved_b = HitBoxMovedEvent.create(
+        aggregate_id=hit_box_id,
+        aggregate_type="HitBoxAggregate",
+        from_coordinate=Coordinate(0, 0, 0),
+        to_coordinate=Coordinate(1, 0, 0),
+    )
+
+    # 直接イベントを追加（本来は内部メソッド経由だが集約ロジックのテストのため）
+    hit_box.add_event(moved_a)
+    hit_box.add_event(moved_b)
+
+    aggregated = hit_box.get_aggregated_events()
+    assert len(aggregated) == 1
