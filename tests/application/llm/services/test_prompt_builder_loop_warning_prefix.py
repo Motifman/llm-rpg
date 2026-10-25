@@ -40,13 +40,23 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
-from ai_rpg_world.application.world.services.world_query_service import (
-    WorldQueryService,
-)
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+class _CurrentStateSource:
+    def __init__(self) -> None:
+        self.queries: list[GetPlayerCurrentStateQuery] = []
+
+    def get_player_current_state(
+        self, query: GetPlayerCurrentStateQuery
+    ) -> PlayerCurrentStateDto | None:
+        self.queries.append(query)
+        return None
 
 
 def _make_core() -> PromptBuilderCoreServices:
@@ -54,7 +64,7 @@ def _make_core() -> PromptBuilderCoreServices:
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
         short_term_memory=MagicMock(spec=IShortTermMemory),
         recent_event_store=UnifiedRecentEventStore(),
-        world_query_service=MagicMock(spec=WorldQueryService),
+        world_query_service=_CurrentStateSource(),
         player_profile_repository=MagicMock(spec=PlayerProfileRepository),
         current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
         recent_events_formatter=MagicMock(spec=IRecentEventsFormatter),
@@ -125,3 +135,28 @@ def test_prompt_builder_rejects_invalid_ui_context_builder(invalid_builder) -> N
     """UI構築器にNoneか別の型を渡すと、構築時にTypeErrorで拒否する。"""
     with pytest.raises(TypeError, match="ui_context_builder"):
         DefaultPromptBuilder(_make_core(), ui_context_builder=invalid_builder)
+
+
+def test_prompt_builder_uses_only_current_state_source() -> None:
+    """現在状態の取得だけを持つ依存先でも、未配置を示すプロンプトを構築できる。"""
+    from ai_rpg_world.application.being.acting_being import ActingBeing
+    from ai_rpg_world.application.llm.services.prompt_builder import MESSAGE_WHEN_PLAYER_NOT_PLACED
+    from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import SpotGraphUiContextBuilder
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+    core = _make_core()
+    profile = core.player_profile_repository.find_by_id.return_value
+    profile.name.value = "旅人"
+    profile.role.value = "citizen"
+    profile.race.value = "human"
+    profile.element.value = "neutral"
+    core.observation_buffer.drain.return_value = []
+    core.context_format_strategy.format.side_effect = lambda **kwargs: kwargs["current_state_text"]
+    core.system_prompt_builder.build.return_value = "世界の説明"
+    builder = DefaultPromptBuilder(core, ui_context_builder=SpotGraphUiContextBuilder())
+
+    result = builder.build(ActingBeing(_pid(1), BeingId("test-being")))
+
+    assert core.world_query_service.queries == [GetPlayerCurrentStateQuery(player_id=1)]
+    assert MESSAGE_WHEN_PLAYER_NOT_PLACED in result["messages"][1]["content"]
+    core.current_state_formatter.format.assert_not_called()

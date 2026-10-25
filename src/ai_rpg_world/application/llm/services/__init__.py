@@ -13,9 +13,6 @@ from ai_rpg_world.application.llm.services.available_tools_provider import (
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
-from ai_rpg_world.application.llm.services.current_state_formatter import (
-    DefaultCurrentStateFormatter,
-)
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
@@ -41,7 +38,6 @@ from ai_rpg_world.application.llm.services.tool_command_mapper import (
 __all__ = [
     "DefaultActionResultStore",
     "DefaultAvailableToolsProvider",
-    "DefaultCurrentStateFormatter",
     "DefaultGameToolRegistry",
     "DefaultToolArgumentResolver",
     "DefaultPromptBuilder",
